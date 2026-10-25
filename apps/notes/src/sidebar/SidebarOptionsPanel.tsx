@@ -22,14 +22,14 @@ import {
   BEAT_OCTAVES_MAX,
   BEAT_OCTAVES_MIN,
   BEAT_CONTRAST_MAX,
-  DEFAULT_SHADE_BLUR_PX,
-  DEFAULT_SHADE_SPREAD_PX,
+  DEFAULT_EDGE_BLUR_PX,
+  DEFAULT_EDGE_SPREAD_PX,
   DEFAULT_VISUALIZER_CARET,
   FALL_MAX_SEC,
   FALL_MIN_SEC,
   DEFAULT_VISUALIZER_CHANNEL,
-  SHADE_BLUR_MAX_PX,
-  SHADE_SPREAD_MAX_PX,
+  EDGE_BLUR_MAX_PX,
+  EDGE_SPREAD_MAX_PX,
   SOURCE_SLIDER_MAX,
   SOURCE_SLIDER_MIN,
   sourceAtSlider,
@@ -1059,8 +1059,8 @@ export function SidebarOptionsPanel({
       )
     }
 
-    // One band block's toggle and six sliders: the same for the shade and the outline, plus the shade's spread and blur.
-    const renderBeatChannel = (key: 'shade' | 'outline', label: string, effect: string) => {
+    // One band block's toggle and six sliders: the same for the edge and the pane, plus the edge's spread and blur.
+    const renderBeatChannel = (key: 'edge' | 'pane', label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
       const slider = (field: Exclude<keyof VisualizerChannel, 'source' | 'shape' | 'fallSec'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
@@ -1084,7 +1084,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={key === 'shade' ? [2, 2, 2, 2] : [2, 2, 2]}>
+            <OptionsSliderRows rows={key === 'edge' ? [2, 2, 2, 2] : [2, 2, 2]}>
               {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
               {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
                   kick at the left end, the snare at the centre, the hat at the right,
@@ -1113,32 +1113,32 @@ export function SidebarOptionsPanel({
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
               {renderFallSliders(`beat-${key}`, label, channel, DEFAULT_VISUALIZER_CHANNEL, 'each hit', set)}
               {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}
-              {key === 'shade' && [
+              {key === 'edge' && [
                   <CompactScrollbarSlider
                     key="spread"
-                    id="beat-shade-spread"
+                    id="beat-edge-spread"
                     min={0}
-                    max={SHADE_SPREAD_MAX_PX}
+                    max={EDGE_SPREAD_MAX_PX}
                     step={1}
-                    value={visualizer.shade.spreadPx}
+                    value={visualizer.edge.spreadPx}
                     trackLabel="spread"
-                    tooltipLabel="Pixels: how far the shade reaches in from the editor's edges before it starts to fade"
-                    ariaLabel="Shade: spread in pixels"
-                    defaultValue={DEFAULT_SHADE_SPREAD_PX}
-                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, shade: { ...prev.shade, spreadPx: Math.round(value) } }))}
+                    tooltipLabel="Pixels: how far the edge reaches in from the editor's edges before it starts to fade"
+                    ariaLabel="Edge: spread in pixels"
+                    defaultValue={DEFAULT_EDGE_SPREAD_PX}
+                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, spreadPx: Math.round(value) } }))}
                   />,
                   <CompactScrollbarSlider
                     key="blur"
-                    id="beat-shade-blur"
+                    id="beat-edge-blur"
                     min={0}
-                    max={SHADE_BLUR_MAX_PX}
+                    max={EDGE_BLUR_MAX_PX}
                     step={1}
-                    value={visualizer.shade.blurPx}
+                    value={visualizer.edge.blurPx}
                     trackLabel="blur"
-                    tooltipLabel="Pixels: how soft the shade's inner edge is; 0 is a hard edge"
-                    ariaLabel="Shade: blur in pixels"
-                    defaultValue={DEFAULT_SHADE_BLUR_PX}
-                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, shade: { ...prev.shade, blurPx: Math.round(value) } }))}
+                    tooltipLabel="Pixels: how soft the edge fades inward; 0 is a hard line"
+                    ariaLabel="Edge: blur in pixels"
+                    defaultValue={DEFAULT_EDGE_BLUR_PX}
+                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, blurPx: Math.round(value) } }))}
                   />,
               ]}
             </OptionsSliderRows>
@@ -3199,13 +3199,13 @@ export function SidebarOptionsPanel({
           <StagedColorRow
             label="Visualizer colours"
             targets={[
-              { id: 'shade', color: visualizer.shade.color, glyph: 'fa-solid fa-square', tooltip: 'Shade colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, shade: { ...prev.shade, color: css } })) },
-              { id: 'outline', color: visualizer.outline.color, glyph: 'fa-regular fa-square', tooltip: 'Outline colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, outline: { ...prev.outline, color: css } })) },
+              { id: 'edge', color: visualizer.edge.color, glyph: 'fa-solid fa-square', tooltip: 'Edge colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } })) },
+              { id: 'pane', color: visualizer.pane.color, glyph: 'fa-regular fa-square', tooltip: 'Pane colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } })) },
             ]}
           />
           {visualizer.caret.followsMusic && renderBeatCaret()}
-          {renderBeatChannel('shade', 'Shade', 'the active editor\'s inner shade shows')}
-          {renderBeatChannel('outline', 'Outline', 'the box outlines show')}
+          {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
+          {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
       </AccordionSection>
       ) : null}
 

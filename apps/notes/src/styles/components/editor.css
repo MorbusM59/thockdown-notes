@@ -518,20 +518,20 @@
   box-shadow: var(--box-shadow-active-editor);
 }
 
-/* The visualizer's shade and outline blocks (Options > Visualizer;
+/* The visualizer's edge and pane blocks (Options > Visualizer;
    flow/useBeatFeedback.ts). Each is a layer of its own over the active editor
-   whose opacity is its block's value (--beat-shade, --beat-outline, set on the
+   whose opacity is its block's value (--beat-edge, --beat-pane, set on the
    element alone), present only on the active editor and only while its block
-   follows the music (`html[data-beat-shade]`, `html[data-beat-outline]`), and
+   follows the music (`html[data-beat-edge]`, `html[data-beat-pane]`), and
    only then promoted (will-change), so the per-frame change is a compositor
    opacity rather than a repaint of the editor's area. Both sit at the shell
    level, outside the edit pane's texture mask, which is what keeps the
    promotion from pulling the pane into a squashed overlap layer (the trap
    .thockdown-block-caret's note describes). Their colours are the layout's
-   (--beat-shade-color, --beat-outline-color); the shade's geometry is the
-   layout's too (--beat-shade-spread, --beat-shade-blur), written only when its
+   (--beat-edge-color, --beat-pane-color); the edge's geometry is the
+   layout's too (--beat-edge-spread, --beat-edge-blur), written only when its
    slider moves, so a beat never changes anything but the opacity. */
-.editor-beat-shade {
+.editor-beat-edge {
   display:        none;
   position:       absolute;
   inset:          0;
@@ -539,28 +539,38 @@
   pointer-events: none;
   z-index:        4;
   box-shadow:
-    inset 0 0 calc(var(--beat-shade-blur, 32px) / 8) var(--beat-shade-spread, 0px) var(--beat-shade-color),
-    inset 0 0 var(--beat-shade-blur, 32px) var(--beat-shade-spread, 0px) color-mix(in srgb, var(--beat-shade-color) 45%, transparent);
-  opacity:        var(--beat-shade, 0);
+    inset 0 0 calc(var(--beat-edge-blur, 32px) / 8) var(--beat-edge-spread, 0px) var(--beat-edge-color),
+    inset 0 0 var(--beat-edge-blur, 32px) var(--beat-edge-spread, 0px) color-mix(in srgb, var(--beat-edge-color) 45%, transparent);
+  opacity:        var(--beat-edge, 0);
 }
 
-/* The box outlines: a copy of the grid's outline pattern, whose box, tile and
-   phase useBeatGridMirror keeps equal to the real grid's (which sits in the
-   edit pane, where a layer of its own would pull the text into an overlap
-   layer). Clipped to the editor's rounded shape by its own radius. */
-.editor-beat-outline {
-  display:        none;
-  position:       absolute;
-  pointer-events: none;
-  z-index:        4;
-  opacity:        var(--beat-outline, 0);
+/* The pane. Without a grid on screen (render view, an empty slot, a mode
+   that empties it) it is a flat wash of its colour over the whole editor.
+   With one (.has-grid, the edit view) it is a copy of the grid's outline
+   pattern instead, whose box, tile and phase useBeatGridMirror keeps equal
+   to the real grid's (which sits in the edit pane, where a layer of its own
+   would pull the text into an overlap layer); that inline box overrides the
+   inset. Either way only the opacity follows the music. */
+.editor-beat-pane {
+  display:          none;
+  position:         absolute;
+  inset:            0;
+  border-radius:    inherit;
+  pointer-events:   none;
+  z-index:          4;
+  opacity:          var(--beat-pane, 0);
+  background-color: var(--beat-pane-color);
+}
+
+.editor-beat-pane.has-grid {
+  background-color: transparent;
   background-image:
-    repeating-linear-gradient(to right, var(--beat-outline-color) 0, var(--beat-outline-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, var(--beat-outline-color) 0, var(--beat-outline-color) 3px, transparent 3px, transparent var(--editor-line-height));
+    repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
 }
 
-html[data-beat-shade] .editor-section-column.is-active .editor-beat-shade,
-html[data-beat-outline] .editor-section-column.is-active .editor-beat-outline {
+html[data-beat-edge] .editor-section-column.is-active .editor-beat-edge,
+html[data-beat-pane] .editor-section-column.is-active .editor-beat-pane {
   display:     block;
   will-change: opacity;
 }

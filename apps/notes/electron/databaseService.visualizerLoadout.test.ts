@@ -20,8 +20,8 @@ describe('DatabaseService visualizer loadout', () => {
   // Every field different from NEUTRAL_BASE's, so a dropped one shows.
   const visualizer: VisualizerSettings = {
     caret: { followsMusic: true, effect: -0.3, shape: 0.4, fallSec: 0.6 },
-    shade: { effect: -0.7, source: 'snare', frequencyHz: 90, octaves: 2, groove: 0.7, contrast: 0.2, shape: -0.8, fallSec: 0.15, color: 'rgba(12, 34, 56, 0.5)', spreadPx: 14, blurPx: 70 },
-    outline: { effect: 0.5, source: 'hat', frequencyHz: 8000, octaves: 0.5, groove: 0.35, contrast: 0.6, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },
+    edge: { effect: -0.7, source: 'snare', frequencyHz: 90, octaves: 2, groove: 0.7, contrast: 0.2, shape: -0.8, fallSec: 0.15, color: 'rgba(12, 34, 56, 0.5)', spreadPx: 14, blurPx: 70 },
+    pane: { effect: 0.5, source: 'hat', frequencyHz: 8000, octaves: 0.5, groove: 0.35, contrast: 0.6, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },
   }
 
   const activeLight = (service: DatabaseService): UiLayoutLoadout => {

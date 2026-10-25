@@ -265,13 +265,13 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Settings panel → Visualizer.
 
-*The caret, the active editor's shade and the box outlines follow the music you are playing.*
+*The caret, the active editor's edge and its pane follow the music you are playing.*
 
 - Its switch in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) turns it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
 - Everything else belongs to the layout, so each layout can have its own visualizer.
-- Caret, shade and outline are three separate blocks. The caret takes part only while the basketball at the end of its blink buttons (Settings panel → Caret) is on: then, while music plays and a beat is found, it stops blinking and holds steady, and the music dips it on the beat. Without a beat it blinks as selected.
+- Caret, edge and pane are three separate blocks. The edge is a soft inner shadow along the editor's border. The pane is drawn over the box grid in the edit view, and as an even wash of its colour over the whole editor in any view without a grid. The caret takes part only while the basketball at the end of its blink buttons (Settings panel → Caret) is on: then, while music plays and a beat is found, it stops blinking and holds steady, and the music dips it on the beat. Without a beat it blinks as selected.
 - Each block has its own **effect**: right of the slider's centre a hit adds the block; left of centre the block is inverted, so it rests at full strength while music plays and a hit takes it away; at the centre it is off. Each also has its **freq**, what it follows: the **kick** drum at the left end of the slider, the **snare** (claps and rim shots too) at the centre, the **hat** (any short bright hit) at the right end, or in between the level of one band of the music, with **width** setting how wide that band is. On a drum the same slider is **groove**: how steadily the block keeps to the drum's pattern. At the left it shows only what it hears; at the right every hit of the pattern lands, even one drowned by a guitar, and a one-off is ignored. When the drum stops, the block stops at any groove. Then **contrast**, how far the band must rise above the music around it before it responds; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
-- The shade's and the outline's colours are set with the swatches above the blocks, the same way as the cursor's and caret's.
+- The edge's and the pane's colours are set with the swatches above the blocks, the same way as the cursor's and caret's.
 - It switches itself off while nothing is playing.
 
 ### [Speed Reading](#speed-reading)

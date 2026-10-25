@@ -13,10 +13,10 @@
  *   It runs only while its switch is on (`VisualizerCaret.followsMusic`),
  *   and the attribute is set only while that clock HAS a beat (music
  *   playing, a tempo found): at any other moment the caret blinks.
- * - `--beat-shade`, the opacity of the active editor's beat shade
- *   (`.editor-beat-shade`, shown and promoted under `html[data-beat-shade]`).
- * - `--beat-outline`, the opacity of the box outlines' copy
- *   (`.editor-beat-outline`, shown and promoted under `html[data-beat-outline]`).
+ * - `--beat-edge`, the opacity of the active editor's beat edge
+ *   (`.editor-beat-edge`, shown and promoted under `html[data-beat-edge]`).
+ * - `--beat-pane`, the opacity of the pane (the box outlines' copy, or a flat wash where there is no grid)
+ *   (`.editor-beat-pane`, shown and promoted under `html[data-beat-pane]`).
  *
  * An inverted block (a negative effect) rests at its full effect while music plays and a hit
  * (or, for the caret, a beat) takes it away; with nothing playing every block is off either way, so an
@@ -24,7 +24,7 @@
  * effect subscribes nothing and keeps its ordinary look; the `<html>`
  * attributes change once when a block is switched, never per frame. The two
  * coloured blocks' colours are static between edits and are set once on
- * `<html>` (`--beat-shade-color`, `--beat-shade-spread`, `--beat-shade-blur`, `--beat-outline-color`).
+ * `<html>` (`--beat-edge-color`, `--beat-edge-spread`, `--beat-edge-blur`, `--beat-pane-color`).
  */
 
 import { useEffect, useRef } from 'react'
@@ -37,7 +37,7 @@ import { setFlowStyle } from './flowStyle'
 
 type BlockName = keyof VisualizerSettings
 
-/** What a block subscribes with: a band channel for the shade and outline, the caret's two fields for the caret's clock. */
+/** What a block subscribes with: a band channel for the edge and pane, the caret's two fields for the caret's clock. */
 type BlockSettings = VisualizerChannel | VisualizerCaret
 
 interface BlockSubscription<T> {
@@ -93,19 +93,19 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
 
 export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings): void {
   useBeatBlock('caret', visualizer.caret, enabled && visualizer.caret.followsMusic, subscribeClock)
-  useBeatBlock('shade', visualizer.shade, enabled, subscribeBand)
-  useBeatBlock('outline', visualizer.outline, enabled, subscribeBand)
-  const shadeColor = visualizer.shade.color
-  const shadeSpreadPx = visualizer.shade.spreadPx
-  const shadeBlurPx = visualizer.shade.blurPx
-  const outlineColor = visualizer.outline.color
+  useBeatBlock('edge', visualizer.edge, enabled, subscribeBand)
+  useBeatBlock('pane', visualizer.pane, enabled, subscribeBand)
+  const edgeColor = visualizer.edge.color
+  const edgeSpreadPx = visualizer.edge.spreadPx
+  const edgeBlurPx = visualizer.edge.blurPx
+  const paneColor = visualizer.pane.color
   useEffect(() => {
     const root = document.documentElement.style
-    root.setProperty('--beat-shade-color', shadeColor)
-    root.setProperty('--beat-shade-spread', `${shadeSpreadPx}px`)
-    root.setProperty('--beat-shade-blur', `${shadeBlurPx}px`)
-    root.setProperty('--beat-outline-color', outlineColor)
-  }, [shadeColor, shadeSpreadPx, shadeBlurPx, outlineColor])
+    root.setProperty('--beat-edge-color', edgeColor)
+    root.setProperty('--beat-edge-spread', `${edgeSpreadPx}px`)
+    root.setProperty('--beat-edge-blur', `${edgeBlurPx}px`)
+    root.setProperty('--beat-pane-color', paneColor)
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

@@ -286,16 +286,17 @@ export function SectionEditorArea({
   // chapter of the guide is sealed too, not just its root.
   const isSealedNote = isSealedNoteId(menuIdentityNoteId) || isSealedNoteId(activeNoteId)
 
-  // The beat pulse's shade reads --beat-shade, set on it alone (flow/flowStyle.ts).
-  const [beatShadeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
-  // The box outlines' copy, on a layer of its own beside the shade's
-  // (flow/useBeatGridMirror.ts); it reads --beat-outline.
-  const { gridRef: beatGridRef, mirrorRef: beatMirrorRef } = useBeatGridMirror()
-  const [beatOutlineRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
-  const setBeatOutlineEl = useCallback((el: HTMLDivElement | null) => {
-    beatOutlineRef(el)
+  // The visualizer's edge reads --beat-edge, set on it alone (flow/flowStyle.ts).
+  const [beatEdgeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  // The visualizer's pane, on a layer of its own beside the edge's; it reads
+  // --beat-pane. In the edit view it is the box outlines' copy
+  // (flow/useBeatGridMirror.ts), anywhere else a flat wash.
+  const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode)
+  const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
+    beatPaneRef(el)
     beatMirrorRef(el)
-  }, [beatOutlineRef, beatMirrorRef])
+  }, [beatPaneRef, beatMirrorRef])
   const setStageEl = useCallback((el: HTMLDivElement | null) => {
     sectionContainerRef.current = el
   }, [sectionContainerRef])
@@ -555,8 +556,8 @@ export function SectionEditorArea({
             </div>
           </div>
         </div>
-        <div ref={beatShadeRef} className="editor-beat-shade" aria-hidden="true" />
-        <div ref={setBeatOutlineEl} className="editor-beat-outline" aria-hidden="true" />
+        <div ref={beatEdgeRef} className="editor-beat-edge" aria-hidden="true" />
+        <div ref={setBeatPaneEl} className={`editor-beat-pane${beatPaneHasGrid ? ' has-grid' : ''}`} aria-hidden="true" />
       </main>
       <aside className={`editor-scrollbar-slot${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}${isPreviewMode ? ' is-preview-mode' : ''}`}>
         <div className="editor-scrollbar-slot-inner" aria-hidden={modeStatus ? undefined : true}>

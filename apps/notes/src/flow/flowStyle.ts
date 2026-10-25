@@ -1,7 +1,7 @@
 /**
  * The flow's and the beat pulse's CSS variables (`--flow-trail-source`,
  * `--flow-trail-source-saturation`, `--flow-caret-effect`, `--beat-caret`,
- * `--beat-shade`, `--beat-outline`), written onto the elements that read them rather than onto
+ * `--beat-edge`, `--beat-pane`), written onto the elements that read them rather than onto
  * `<html>`.
  *
  * They change on every frame the meter moves. A custom property is inherited
@@ -10,7 +10,7 @@
  * while the reader typed -- measured at 16ms a frame on a 3,000-element page
  * against 0.1ms for the same write on the one element that uses it. The
  * readers are four leaves per editor (the caret, the trail's source, the
- * beat shade and the beat outline), so
+ * beat edge and the beat pane), so
  * each registers itself (`flowStyleTarget`) and receives the current values
  * on registration and every change after it.
  */
