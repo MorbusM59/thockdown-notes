@@ -1048,7 +1048,8 @@ export function SidebarOptionsPanel({
         id={`${id}-fall`}
         min={Math.log(FALL_MIN_SEC)}
         max={Math.log(FALL_MAX_SEC)}
-        step={0.01}
+        // A step that puts the default length exactly on the grid counted from the minimum, so a reset lands on it.
+        step={Math.log(defaults.fallSec / FALL_MIN_SEC) / 90}
         value={Math.log(fall.fallSec)}
         trackLabel="fall"
         tooltipLabel={`Milliseconds: how long ${what} takes to fall to nothing. A hit always lands at once`}
