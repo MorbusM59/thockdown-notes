@@ -852,8 +852,10 @@ describe('DrumTracker with groove', () => {
       const { hits } = play({ samples: track.samples, kicks: track.snares }, 0.5, { groove }, 'snare')
       return accents.map((t) => hitFor(t, hits)?.response ?? 0)
     }
-    // Groove 0 is the evidence with the pattern as its filter: nothing off the pattern passes.
-    expect(responses(0)).toEqual([0, 0])
+    // Groove 0 is the evidence: the snare's sound is found off the pattern
+    // too (the learned counter, `DrumTracker.counterHit`), and the top of
+    // the groove holds the pattern over it as over any one-off.
+    for (const response of responses(0)) expect(response).toBeGreaterThan(0.95)
     for (const response of responses(0.5)) expect(response).toBeGreaterThan(0.95)
     expect(responses(1)).toEqual([0, 0])
     const held = grooveScore(track, 'snare', regular, track.snares, 1)
@@ -1060,3 +1062,260 @@ describe('DrumTracker grid through an arrangement', () => {
     expect(lockedAfterDrop).toBe(true)
   })
 })
+
+/** A counter hit the fixed snare recipe (`VOICES.snare`) does not describe. */
+type CounterSound = 'clap' | 'rim' | 'stab' | 'lofi' | 'bright' | 'snare'
+
+/**
+ * Plays one counter hit of `kind` at `t0` into `out`, `gain` its loudness:
+ * - CLAP: three bursts of noise 10ms apart and a short tail, all between 1 and 3kHz.
+ * - RIM: a short tonal click, two partials at 520Hz and 830Hz ringing 12ms, with a 2ms tick.
+ * - STAB: a synth chord (E4, G#4, B4 sawtooths to 2.5kHz), 2ms attack, 100ms decay.
+ * - LOFI: a snare lowpassed under 1.2kHz: its 190Hz body and noise through four poles at 1kHz.
+ * - BRIGHT: a snare of noise above 6kHz only, decaying over 80ms.
+ * - SNARE: the kit's own snare (`addSnare`), which the recipe describes.
+ */
+function counterVoice(kind: CounterSound, seed: number): (out: Float32Array, t0: number, gain: number) => void {
+  const rand = noise(seed)
+  const band = darkNoise(3000, brightNoise(1000, 2, noise(seed + 1)))
+  const low = darkNoise(1000, darkNoise(1000, noise(seed + 2)))
+  const high = brightNoise(6000, 3, noise(seed + 3))
+  const snareNoise = brightNoise(1000, 2, noise(seed + 4))
+  return (out, t0, gain) => {
+    if (kind === 'snare') {
+      addSnare(out, t0, gain, snareNoise)
+      return
+    }
+    const length = kind === 'stab' ? 0.3 : 0.4
+    for (let i = 0; i < length * RATE; i++) {
+      const at = Math.round(t0 * RATE) + i
+      if (at >= out.length) break
+      const t = i / RATE
+      let s = 0
+      if (kind === 'clap') {
+        let bursts = 0
+        for (let b = 0; b < 3; b++) if (t >= 0.01 * b) bursts += Math.exp(-(t - 0.01 * b) / 0.004)
+        s = 1.6 * band() * (bursts + 0.5 * Math.exp(-t / 0.06))
+      } else if (kind === 'rim') {
+        s = 0.7 * (Math.sin(2 * Math.PI * 520 * t) + 0.6 * Math.sin(2 * Math.PI * 830 * t)) * Math.exp(-t / 0.012) + 0.3 * rand() * Math.exp(-t / 0.002)
+      } else if (kind === 'stab') {
+        for (const f of [330, 415, 494]) for (let h = 1; f * h < 2500; h++) s += Math.sin(2 * Math.PI * f * h * t) / h
+        s *= 0.12 * Math.min(1, t / 0.002) * Math.exp(-t / 0.1)
+      } else if (kind === 'lofi') {
+        s = 0.5 * Math.sin(2 * Math.PI * 190 * t) * Math.exp(-t / 0.08) + 3 * low() * Math.exp(-t / 0.1)
+      } else {
+        s = 0.9 * high() * Math.exp(-t / 0.08)
+      }
+      out[at] += gain * s
+    }
+  }
+}
+
+interface CounterKit {
+  kicks: number[]
+  /** Sixteenths of the counter hit, at full strength. */
+  counter: number[]
+  /** Sixteenths of GHOST counter hits, a quarter of the strength (not scored as the counter). */
+  ghosts?: number[]
+  hats: number[]
+  busy?: boolean
+  /** A reese bass (two detuned sawtooths, 41 and 43Hz, held) instead of the off-beat bass line. */
+  reese?: boolean
+  sound: (bar: number) => CounterSound
+  gain?: (bar: number, s: number) => number
+  /** Extra hits of the counter's sound per bar, off its pattern (a fill, a roll), scored as snares, at `fillGain` (0.8). */
+  fill?: (bar: number) => number[]
+  fillGain?: number
+  /** Extra kicks and (loud) hats per bar, off the pattern: not snares. */
+  extraKicks?: (bar: number) => number[]
+  extraHats?: (bar: number) => number[]
+}
+
+/** A kit whose counter is a `sound` hit, over a bass line, hats and kicks, with strummed guitars and a voice when `busy`. */
+function counterKit(seconds: number, bpm: number, options: CounterKit) {
+  const out = new Float32Array(Math.round(seconds * RATE))
+  const rand = noise(9)
+  const click = darkNoise(3000, noise(17))
+  const hatNoise = brightNoise(7000, 3, noise(15))
+  const voices = new Map<CounterSound, ReturnType<typeof counterVoice>>()
+  const voiceOf = (kind: CounterSound) => {
+    if (!voices.has(kind)) voices.set(kind, counterVoice(kind, 31 + voices.size * 7))
+    return voices.get(kind)!
+  }
+  const sixteenth = 60 / bpm / 4
+  const played = { kicks: [] as number[], snares: [] as number[], hats: [] as number[], ghosts: [] as number[] }
+  const sorted = (times: number[]) => [...times].sort((a, b) => a - b)
+  for (let bar = 0; bar * 16 * sixteenth < seconds; bar++) {
+    const at = (s: number) => (bar * 16 + s) * sixteenth
+    for (const s of [...options.kicks, ...(options.extraKicks?.(bar) ?? [])]) { addMixedKick(out, at(s), click); played.kicks.push(at(s)) }
+    for (const s of options.fill?.(bar) ?? []) { voiceOf(options.sound(bar))(out, at(s), options.fillGain ?? 0.8); played.snares.push(at(s)) }
+    for (const s of options.extraHats?.(bar) ?? []) { addHat(out, at(s), 0.5, hatNoise); played.hats.push(at(s)) }
+    for (const s of options.counter) { voiceOf(options.sound(bar))(out, at(s), options.gain?.(bar, s) ?? 1); played.snares.push(at(s)) }
+    for (const s of options.ghosts ?? []) { voiceOf(options.sound(bar))(out, at(s), 0.25); played.ghosts.push(at(s)) }
+    for (const s of options.hats) { addHat(out, at(s), 0.35 + 0.1 * rand(), hatNoise); played.hats.push(at(s)) }
+    if (!options.reese) {
+      for (let beat = 0; beat < 4; beat++) {
+        const t0 = at(beat * 4 + 2)
+        for (let i = 0; i < 2 * sixteenth * RATE; i++) {
+          const k = Math.round(t0 * RATE) + i
+          if (k >= out.length) break
+          const t = i / RATE
+          out[k] += 0.35 * Math.min(1, t / 0.04) * Math.sin(2 * Math.PI * 49 * t)
+        }
+      }
+    }
+  }
+  if (options.reese) {
+    // Held through each bar, a new note every bar, swelling in over 50ms.
+    const notes = [41, 49, 37, 44]
+    const barSamples = 16 * sixteenth * RATE
+    for (let i = 0; i < out.length; i++) {
+      const bar = Math.floor(i / barSamples)
+      const f = notes[bar % notes.length]
+      const t = (i - bar * barSamples) / RATE
+      const saw = (hz: number) => 2 * ((hz * t) % 1) - 1
+      out[i] += 0.25 * Math.min(1, t / 0.05) * (saw(f) + saw(f * 1.04))
+    }
+  }
+  if (options.busy) addBusyMids(out, bpm)
+  const within = (times: number[]) => times.filter((t) => t < seconds)
+  return { samples: out, kicks: sorted(within(played.kicks)), snares: sorted(within(played.snares)), hats: sorted(within(played.hats)), ghosts: within(played.ghosts) }
+}
+
+/** The snare's share of `times` drawing a hit above 0.3 and the strays, as `scoreDrum`, plus the response at each of `times`. */
+function counterScore(track: ReturnType<typeof counterKit>, options: PlayOptions = {}, from = 10, to = 34) {
+  const { hits, tracker } = play({ samples: track.samples, kicks: track.snares }, 0.5, options, 'snare')
+  const all = [...track.snares, ...track.ghosts]
+  const due = track.snares.filter((t) => t > from && t < to)
+  const found = due.filter((t) => (hitFor(t, hits)?.response ?? 0) > 0.3).length / due.length
+  const full = due.filter((t) => (hitFor(t, hits)?.response ?? 0) > 0.95).length / due.length
+  const strays = hits.filter((h) => h.at > from && h.at < to && h.response > 0.3 && !all.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))
+  return { found, full, strays, hits, tracker }
+}
+
+/** Logs a counter test's numbers when MEASURE is set, for the record of what each case measured. */
+function report(name: string, result: { found: number; full: number; strays: unknown[]; tracker: DrumTracker }): void {
+  if (process.env.MEASURE) console.log(`MEASURE ${name}: found ${result.found.toFixed(2)} full ${result.full.toFixed(2)} strays ${result.strays.length} grid ${result.tracker.tempoBpm.toFixed(1)} cycle ${result.tracker.counterCycleBeats}`)
+}
+
+const EIGHTHS = [0, 2, 4, 6, 8, 10, 12, 14]
+const SIXTEENTHS = [...Array(16).keys()]
+
+describe('DrumTracker on counter hits the snare recipe does not describe', () => {
+  it.each([
+    ['clap', false], ['clap', true], ['rim', false], ['rim', true], ['stab', false], ['stab', true],
+    ['lofi', false], ['lofi', true], ['bright', false], ['bright', true],
+  ] as Array<[CounterSound, boolean]>)('finds every %s on 2 and 4 (busy mids: %s), at full strength and nowhere else', (kind, busy) => {
+    const track = counterKit(40, 110, { kicks: [0, 8, 10], counter: [4, 12], hats: EIGHTHS, busy, sound: () => kind })
+    const result = counterScore(track)
+    report(`${kind}${busy ? ' busy' : ''}`, result)
+    expect(result.found).toBeGreaterThanOrEqual(0.95)
+    expect(result.full).toBeGreaterThanOrEqual(0.9)
+    // A stab is a chord in the voice's own band, and two of the voice's
+    // sharpest syllables (of some sixty) read as one: the one case here the
+    // sound alone cannot settle.
+    expect(result.strays.length).toBeLessThanOrEqual(kind === 'stab' && busy ? 2 : 0)
+  }, 60_000)
+
+  it.each([170, 172, 175])('finds the snare of a drum and bass two-step at %s, at whichever octave the grid reads it', (bpm) => {
+    for (const [name, kicks] of [['two-step', [0, 10]], ['with a ghost kick', [0, 9, 10]]] as Array<[string, number[]]>) {
+      for (const kind of ['snare', 'clap'] as CounterSound[]) {
+        const track = counterKit(40, bpm, { kicks, counter: [4, 12], hats: EIGHTHS, sound: () => kind })
+        const result = counterScore(track)
+        report(`dnb ${bpm} ${name} ${kind}`, result)
+        expect(result.found, `${name} ${kind}`).toBeGreaterThanOrEqual(0.95)
+        expect(result.full, `${name} ${kind}`).toBeGreaterThanOrEqual(0.9)
+        expect(result.strays.map((h) => h.at.toFixed(2)), `${name} ${kind}`).toEqual([])
+      }
+    }
+  }, 120_000)
+
+  it('finds the snare of a busy break over a reese bass, ghost notes weaker than the backbeat', () => {
+    const track = counterKit(40, 172, { kicks: [0, 2, 10, 11], counter: [4, 12], ghosts: [7, 9, 15], hats: SIXTEENTHS, reese: true, sound: () => 'snare' })
+    const result = counterScore(track)
+    report('amen over reese', result)
+    expect(result.found).toBeGreaterThanOrEqual(0.95)
+    expect(result.full).toBeGreaterThanOrEqual(0.9)
+    expect(result.strays.map((h) => h.at.toFixed(2))).toEqual([])
+    const ghosts = track.ghosts.filter((t) => t > 10 && t < 34).map((t) => hitFor(t, result.hits)?.response ?? 0)
+    expect(Math.max(...ghosts)).toBeLessThan(0.95)
+  }, 60_000)
+
+  it('finds a half-time counter on 3 alone', () => {
+    const track = counterKit(40, 140, { kicks: [0, 10], counter: [8], hats: EIGHTHS, busy: true, sound: () => 'clap' })
+    const result = counterScore(track)
+    report('half time', result)
+    expect(result.found).toBeGreaterThanOrEqual(0.95)
+    expect(result.strays.map((h) => h.at.toFixed(2))).toEqual([])
+  }, 60_000)
+
+  it('never learns a counter in four on the floor with nothing between the kicks', () => {
+    // What the snare shows here is the recipe's alone, as before the counter
+    // existed (it takes this kit's kicks for snares: its click reaches the
+    // snare's noise bands); the counter adds nothing to it.
+    for (const busy of [false, true]) {
+      const track = counterKit(40, 126, { kicks: [0, 4, 8, 12], counter: [], hats: [2, 6, 10, 14], busy, sound: () => 'clap' })
+      const tracker = new DrumTracker(RATE)
+      const cursor = new DrumCursor()
+      const learned: number[] = []
+      for (let fed = 0; fed < track.samples.length; fed += 800) {
+        const end = Math.min(track.samples.length, fed + 800)
+        tracker.feed(track.samples.subarray(fed, end), 0, (end - 1) / RATE)
+        tracker.hitBetween('snare', cursor, end / RATE - 5, 0.5)
+        if (tracker.counterCycleBeats > 0) learned.push(end / RATE)
+      }
+      expect(learned.slice(0, 3).map((t) => t.toFixed(2)), `busy ${busy}`).toEqual([])
+    }
+  }, 60_000)
+
+  it('finds the counter of a slow syncopated groove the grid can read at either octave', () => {
+    const track = counterKit(40, 79, { kicks: [0, 3, 6, 10, 11], counter: [4, 12], hats: EIGHTHS, busy: true, sound: () => 'lofi' })
+    const result = counterScore(track)
+    report('79 syncopated', result)
+    expect(result.found).toBeGreaterThanOrEqual(0.95)
+    // One kick of the pair on 10 and 11 whose click a strum lifted to the
+    // counter's typical hit (of some thirty kicks off the pattern).
+    expect(result.strays.length).toBeLessThanOrEqual(1)
+  }, 60_000)
+
+  it('follows the counter from one sound to another at a change of section', () => {
+    const bpm = 110
+    const track = counterKit(40, bpm, { kicks: [0, 8, 10], counter: [4, 12], hats: EIGHTHS, busy: true, sound: (bar) => (bar < 10 ? 'clap' : 'rim') })
+    const result = counterScore(track)
+    report('section change', result)
+    expect(result.found).toBeGreaterThanOrEqual(0.9)
+    expect(result.strays.map((h) => h.at.toFixed(2))).toEqual([])
+  }, 60_000)
+
+  it('keeps the counter while the media time jitters and frames are lost', () => {
+    const track = counterKit(40, 110, { kicks: [0, 8, 10], counter: [4, 12], hats: EIGHTHS, busy: true, sound: () => 'clap' })
+    const result = counterScore(track, { stampJitterSec: 0.01, loseEvery: 41 })
+    report('jitter and loss', result)
+    expect(result.found).toBeGreaterThanOrEqual(0.8)
+    expect(result.strays.map((h) => h.at.toFixed(2))).toEqual([])
+  }, 60_000)
+
+  it('keeps every counter at full strength after one far louder than the rest', () => {
+    const track = counterKit(40, 110, { kicks: [0, 8, 10], counter: [4, 12], hats: EIGHTHS, busy: true, sound: () => 'clap', gain: (bar, s) => (bar === 8 && s === 4 ? 3 : 1) })
+    const result = counterScore(track)
+    report('loud outlier', result)
+    expect(result.found).toBeGreaterThanOrEqual(0.95)
+    expect(result.full).toBeGreaterThanOrEqual(0.9)
+    expect(result.strays.map((h) => h.at.toFixed(2))).toEqual([])
+  }, 60_000)
+
+  it('finds the counter\'s sound off its pattern, in a fill and a roll, but never a kick or a hat there', () => {
+    const track = counterKit(40, 110, {
+      kicks: [0, 8, 10], counter: [4, 12], hats: EIGHTHS, busy: true, sound: () => 'clap',
+      // A fill every fourth bar ending in a roll; in the bar after each, a kick and a loud hat where the fill's hits were.
+      fill: (bar) => (bar % 4 === 3 ? [7, 13, 14, 15] : []),
+      extraKicks: (bar) => (bar % 4 === 1 ? [7, 13, 14] : []),
+      extraHats: (bar) => (bar % 4 === 1 ? [15] : []),
+    })
+    const result = counterScore(track)
+    report('fill and roll', result)
+    expect(result.found).toBeGreaterThanOrEqual(0.9)
+    expect(result.strays.map((h) => h.at.toFixed(2))).toEqual([])
+  }, 60_000)
+})
+

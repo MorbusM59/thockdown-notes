@@ -13,7 +13,7 @@
  * Several readers may follow one drum; each keeps its own place in the hits
  * (`DrumCursor`).
  *
- * Four stages, each answering a question the one before cannot:
+ * Five stages, each answering a question the one before cannot:
  *
  * 1. ONSET STRENGTH, at a fixed rate (`HOP` samples, ~5ms), independent of
  *    the display's frame rate. A kick and a bass line share the sub band,
@@ -74,6 +74,30 @@
  *    (its strongest slot's) when within `STEADY_DB` of it, so identical
  *    kicks pulse identically wherever in the bar they land, and otherwise
  *    the lesser of the two.
+ *
+ * 5. THE SNARE'S OWN SOUND (`learnCounter`, snare only). The snare recipe
+ *    (`VOICES.snare`) describes a generic snare, and a clap, a bright stab
+ *    or a lofi snare climbs in other bands, so whole tracks lost 2 and 4.
+ *    Instead the track TEACHES the sound: on the tempo grid, a counter
+ *    position (a cycle of one, two or four beats and an offset, sixteenths,
+ *    or thirty-seconds on a grid read at half tempo) is the one whose hits
+ *    climb clearly above the positions half a cycle away (per-band two-hop
+ *    spectral flux of the raw hop energy, `OnsetBand.hopLevel`), and whose
+ *    side does not carry the kick (Goto 2001's backbeat-against-kick
+ *    reading; the bar-pattern search of Krebs, Boeck and Widmer 2013). No
+ *    beat is assumed to hold a kick, so a drum-and-bass two-step learns its
+ *    snare at either tempo reading, and a four-on-the-floor track, whose
+ *    positions are all alike, learns nothing. The bands that climb make a
+ *    PROFILE, re-learned every pattern pass and held `COUNTER_HOLD_SEC`
+ *    through windows that find none. The positions only teach: a hit that
+ *    sounds like the profile is the snare ANYWHERE (fills, rolls, ghost
+ *    notes at their own strength), unless a band outside the profile
+ *    climbs with it (`isForeign`: a kick or a hat). A recipe hit that does
+ *    not sound like the profile and does not recur a bar on is a FRILL,
+ *    shown at `FRILL_WEIGHT` so the snare outshines it rather than it being
+ *    dropped. `hitBetween` takes the larger of the counter's, the recipe's
+ *    and the frill's answer: that max is the seam where a later blend of
+ *    the band-delta and pattern readings would go.
  *
  * A hit's response is its strength in dB against the window's strong hits
  * (`TOP_SHARE` of them), over a floor `contrast` sets: contrast 0 shows
@@ -452,6 +476,82 @@ const VOICES: Record<Drum, VoiceSpec> = {
   },
 }
 
+/**
+ * The bank the snare's COUNTER PROFILE is learned over (`DrumTracker.learnCounter`),
+ * each a band and the envelope it is read with: from a snare's body to the top
+ * of a bright one. Only 400Hz and 800Hz are filters of their own, the gap a
+ * rim shot or a lo-fi snare lives in; the rest are bands the voices filter
+ * already, the hat's at its own envelope. What the profile reads of a band is
+ * its energy hop by hop (`OnsetBand.hopLevel`), which no envelope touches, so
+ * sharing them costs nothing.
+ */
+const COUNTER_BANDS: ReadonlyArray<readonly [BandSpec, number]> = [
+  [VOICES.kick.onset[1], ENVELOPE_HOPS], [VOICES.snare.onset[0], ENVELOPE_HOPS], [[400, 1.4, 1], ENVELOPE_HOPS], [[800, 1.4, 1], ENVELOPE_HOPS],
+  [VOICES.snare.onset[1], ENVELOPE_HOPS], [VOICES.kick.onset[2], ENVELOPE_HOPS], [VOICES.snare.onset[2], ENVELOPE_HOPS],
+  [VOICES.hat.onset[0], VOICES.hat.envelopeHops], [VOICES.hat.onset[1], VOICES.hat.envelopeHops],
+]
+/**
+ * The positions a beat of the grid is cut into to look for the counter
+ * (`DrumTracker.learnCounter`): its sixteenths, or on a grid slow enough to be
+ * reading the track at half its tempo (COUNTER_OFFBEAT_MAX_BPM), its
+ * thirty-seconds, which are the track's sixteenths.
+ */
+const COUNTER_STEPS_PER_BEAT = 4
+/** The quantile of a band's climbs over every position in the window read as its LOUD climbs, and the share of it the counter's typical climb needs there. */
+const COUNTER_LOUD_QUANTILE = 0.9
+const COUNTER_PRESENCE = 0.3
+/** A position counts as a kick's (`DrumTracker.learnCounter`) where the kick's onset reaches this share of its loud ones (COUNTER_LOUD_QUANTILE). */
+const COUNTER_KICK_SHARE = 0.5
+/** The share of the counter's typical score a hit of its sound landing with a kick needs (`DrumTracker.counterHit`). */
+const COUNTER_WITH_KICK = 0.75
+/** How much more kick (its strength) the counter's positions may carry than their reference's and still be the counter: a clap on every other kick of four on the floor is the same kick. */
+const COUNTER_KICK_TOLERANCE = 1.25
+/** The fewest bands a counter's profile spans. */
+const COUNTER_MIN_BANDS = 2
+/**
+ * The counter's candidate cycles, in beats of the grid (`DrumTracker.findCounter`):
+ * every second beat (a backbeat) and every fourth (half time, or a backbeat
+ * read at double tempo); on a grid slow enough to be reading the track at
+ * half its tempo, every beat as well (its backbeat then falls on each).
+ */
+const COUNTER_CYCLES = [2, 4]
+const COUNTER_SLOW_CYCLES = [1, 2, 4]
+/** A band belongs to the counter's profile when it climbs on the counter at least this many times as far as on the positions half a cycle away. */
+const COUNTER_BAND_RATIO = 2
+/**
+ * The share of its strength a snare the recipe finds is shown at where it does
+ * not sound like the learned counter (`DrumTracker.hitBetween`): a frill, kept
+ * so the flicker still follows it, under the counter's full hits.
+ */
+const FRILL_WEIGHT = 0.25
+/** How far past its typical climb on the counter a band outside the profile may climb at a hit of the counter's sound (`DrumTracker.isForeign`). */
+const COUNTER_FOREIGN_RATIO = 2
+/** Two counter candidates whose margins are within this of each other are told apart by the shorter cycle: a backbeat's every-second-beat rather than its every-fourth. */
+const COUNTER_MARGIN_TIE = 0.15
+/** How long a learned counter is kept through windows that show none, in seconds (`DrumTracker.learnCounter`). */
+const COUNTER_HOLD_SEC = 10
+/** A band whose typical counter climb is under this share of the loudest profile band's (-10dB) is left out of the profile. */
+const COUNTER_BAND_FLOOR = 0.1
+/** Quantile of a set of occurrences read as "typical when played": high enough that a break's empty bars do not set it, low enough that one outlier does not. */
+const COUNTER_QUANTILE = 0.75
+/** The least share of the counter's typical score (`COUNTER_QUANTILE`) a hit of its sound needs. */
+const COUNTER_SHARE = 0.4
+/** How much more often the counter positions carry the sound than the positions half a cycle away (as shares of each) for the counter to exist. */
+const COUNTER_MARGIN = 0.7
+/** A band's reading is capped at this multiple of its typical counter climb, so one band (a crash in the top one) cannot make a sound the counter's. */
+const COUNTER_BAND_CAP = 2
+/** The slowest grid on which the counter may sit on the off-beat (the track then being twice as fast as read): twice it is MAX_BPM. */
+const COUNTER_OFFBEAT_MAX_BPM = MAX_BPM / 2
+/** A hit within this many dB of the counter's typical one is shown at full strength (as STEADY_DB for a slot). */
+const COUNTER_STEADY_DB = 3
+
+/** The `q` quantile (0..1, nearest rank) of the first `n` of `values`, which it sorts in place; 0 when `n` is 0. */
+function quantile(values: Float64Array, n: number, q: number): number {
+  if (n <= 0) return 0
+  const head = values.subarray(0, n).sort()
+  return head[Math.min(n - 1, Math.floor(q * (n - 1) + 0.5))]
+}
+
 /** The REFERENCE_RANK largest of `keys`, largest first (all of them, while fewer). */
 function topKeys(keys: readonly number[]): number[] {
   return [...keys].sort((a, b) => b - a).slice(0, REFERENCE_RANK)
@@ -466,6 +566,7 @@ class OnsetBand {
   /** Per stage of the cascade: x1, x2, y1, y2. */
   private readonly state: Float64Array
   private hopEnergy = 0
+  private lastHopEnergy = 0
   private readonly recentEnergy: Float64Array
   private readonly recentLevel: Float64Array
   /** The envelope's level at the last hop closed. */
@@ -544,10 +645,16 @@ class OnsetBand {
     return this.lastLevel
   }
 
+  /** The energy of the hop closeHop last closed alone, unaveraged. */
+  get hopLevel(): number {
+    return this.lastHopEnergy
+  }
+
   closeHop(index: number): number {
     const envelopeHops = this.envelopeHops
     const riseHops = this.recentLevel.length
-    this.recentEnergy[index % envelopeHops] = this.hopEnergy / HOP
+    this.lastHopEnergy = this.hopEnergy / HOP
+    this.recentEnergy[index % envelopeHops] = this.lastHopEnergy
     this.hopEnergy = 0
     let energy = 0
     const filled = Math.min(index + 1, envelopeHops)
@@ -631,6 +738,9 @@ export class DrumCursor {
    */
   shownAt = -Infinity
   suppliedAt = -Infinity
+  /** The snare only (`DrumTracker.counterHit`): the last hop the counter profile was looked at up to, and the hop of the last snare shown from either source. */
+  counterLastPeak = NaN
+  snareShownAt = -Infinity
   /**
    * With groove above 0: the drum has stopped (a break) -- an established
    * slot came round and nothing climbed in the drum's own bands there. The
@@ -844,6 +954,50 @@ export class DrumTracker {
    * music had played before the restart.
    */
   private epoch = nextEpoch++
+  /** The bands of COUNTER_BANDS, as indices into `bands`. */
+  private readonly counterBands: number[]
+  /** Per hop (in the ring) and counter band, the band's raw rise: `counterRise[slot * B + b]`. */
+  private readonly counterRise: Float32Array
+  /**
+   * The learned COUNTER PROFILE (`learnCounter`): per counter band its weight
+   * (summing to 1; all 0 while no counter is learned) and its typical climb on
+   * the counter; the counter's cycle and offset in half beats from `phase`;
+   * the typical score of its hits and the least score one needs.
+   */
+  private readonly counterWeight: Float64Array
+  private readonly counterTypical: Float64Array
+  private counterValid = false
+  private counterCycle = 0
+  /** Whether the learned counter's positions usually carry a kick too (`soundsLikeCounter`). */
+  private counterKicked = false
+  /** The positions per beat the counter's cycle and offset count in (`COUNTER_STEPS_PER_BEAT`). */
+  private counterSteps = COUNTER_STEPS_PER_BEAT
+  private counterOffset = 0
+  private counterLevel = 0
+  private counterThreshold = 0
+  /** `learnCounter`'s scratch: per half-beat position, each band's climb there; and one candidate's profile. */
+  private readonly occurrenceRise: Float64Array
+  private readonly candidateWeight: Float64Array
+  private readonly candidateTypical: Float64Array
+  private readonly candidateUsual: Float64Array
+  /** Per counter band, how far it typically climbs at the counter or its reference, whichever is further: what a band outside the profile may reach at a hit (`isForeign`). */
+  private readonly counterUsual: Float64Array
+  private readonly scores = new Float64Array(CAPACITY)
+  private readonly kickOccurrence = new Float64Array(CAPACITY)
+  /** `findCounter`'s scratch: each position's place in the longest cycle, and one candidate's counter, reference and kick positions. */
+  private readonly positionResidue = new Int32Array(CAPACITY)
+  private readonly counterPositions = new Int32Array(CAPACITY)
+  private readonly referencePositions = new Int32Array(CAPACITY)
+  private readonly kickPositions = new Int32Array(CAPACITY)
+  private readonly bandLoud = new Float64Array(COUNTER_BANDS.length)
+  /** The absolute hop the counter was last found at (`learnCounter`), and the profile kept while a new window is searched. */
+  private counterLearnedAt = -Infinity
+  private readonly keptWeight = new Float64Array(COUNTER_BANDS.length)
+  private readonly keptTypical = new Float64Array(COUNTER_BANDS.length)
+  private readonly keptUsual = new Float64Array(COUNTER_BANDS.length)
+  private readonly keptScalars = new Float64Array(3)
+  /** Per counter band, its last three hops' energies, newest first, for the flux. */
+  private readonly counterHopEnergy = new Float64Array(3 * COUNTER_BANDS.length)
   /** Brings the input to ANALYSIS_RATE; null when it is already there. */
   private readonly resampler: StreamResampler | null
 
@@ -867,6 +1021,16 @@ export class DrumTracker {
     const voiceOf = (spec: VoiceSpec) => new Voice(spec, spec.onset.map((band) => bandOf(band, spec.envelopeHops)), spec.exclude.map((band) => bandOf(band)))
     this.voices = { kick: voiceOf(VOICES.kick), snare: voiceOf(VOICES.snare), hat: voiceOf(VOICES.hat) }
     this.voices.kick.followed = true
+    this.counterBands = COUNTER_BANDS.map(([band, envelopeHops]) => bandOf(band, envelopeHops))
+    const b = this.counterBands.length
+    this.counterRise = new Float32Array(CAPACITY * b)
+    this.counterWeight = new Float64Array(b)
+    this.counterTypical = new Float64Array(b)
+    this.occurrenceRise = new Float64Array(CAPACITY * b)
+    this.candidateWeight = new Float64Array(b)
+    this.candidateTypical = new Float64Array(b)
+    this.candidateUsual = new Float64Array(b)
+    this.counterUsual = new Float64Array(b)
     this.rises = new Float64Array(this.bands.length)
     this.rawRises = new Float64Array(this.bands.length)
   }
@@ -894,6 +1058,9 @@ export class DrumTracker {
     this.gridDriveAt = -Infinity
     this.memoryWeight = 0
     this.barPhase = NaN
+    this.counterValid = false
+    this.counterWeight.fill(0)
+    this.counterLearnedAt = -Infinity
     this.resumedAt = -Infinity
     this.gapFrom = -Infinity
     this.epoch = nextEpoch++
@@ -1011,6 +1178,24 @@ export class DrumTracker {
       voice.density[at] = this.rawRises[onsetBands[top]] / spec.onset[top][0]
       voice.lowDensity[at] = this.rawRises[onsetBands[0]] / spec.onset[0][0]
       for (let k = 0; k < excludeBands.length; k++) voice.excludeLevel[k][at] = this.bands[excludeBands[k]].level / spec.exclude[k][0]
+    }
+    // The counter bands' raw rises, none in a gap's silence or the climb from it (as `settle` reads them).
+    const index = this.start + this.count
+    const blind = index >= this.gapFrom && index - this.resumedAt < 2 * ENVELOPE_HOPS
+    const bandCount = this.counterBands.length
+    const recent = this.counterHopEnergy
+    for (let b = 0; b < bandCount; b++) {
+      // The band's SPECTRAL FLUX over two hops against the two before: an
+      // attack within a hop or two (a snare's, a clap's, a stab's) reads its
+      // whole level, a sound swelling in over several hops (a voice) only a
+      // share of it, which the kick's eight-hop envelope cannot tell apart.
+      const e = this.bands[this.counterBands[b]].hopLevel
+      const o = b * 3
+      const flux = e + recent[o] - recent[o + 1] - recent[o + 2]
+      recent[o + 2] = recent[o + 1]
+      recent[o + 1] = recent[o]
+      recent[o] = e
+      this.counterRise[at * bandCount + b] = blind ? 0 : Math.max(0, flux / 2)
     }
     this.count++
     for (const voice of Object.values(this.voices)) if (voice.settleHops > 0) this.settle(voice, this.start + this.count - 1 - voice.settleHops)
@@ -1334,6 +1519,280 @@ export class DrumTracker {
     this.memoryWeight = keep * this.memoryWeight + 1
     for (const voice of Object.values(this.voices)) if (voice.followed) this.learnPattern(voice, keep)
     for (const voice of Object.values(this.voices)) if (voice.followed && voice.excludeBands.length > 0) this.learnColour(voice)
+    if (this.voices.snare.followed) this.learnCounter()
+  }
+
+  /**
+   * Learns the snare's COUNTER PROFILE from the window: where in the bar the
+   * track's counter hit (snare, clap, rim, stab, whatever punches against the
+   * kick) recurs, and what it sounds like in COUNTER_BANDS.
+   *
+   * The window is cut into the grid's half beats and each band's largest climb
+   * near each is read. A CANDIDATE counter is every half beat in a cycle, at
+   * one offset: every second beat (2 and 4, a backbeat), every fourth beat
+   * (3 alone, half time; or 2 and 4 of a grid read at double tempo), or every
+   * off-beat (2 and 4 of a grid read at HALF tempo, so only on a grid no
+   * faster than COUNTER_OFFBEAT_MAX_BPM; faster, the off-beat is a hat). Its
+   * REFERENCE is the positions half a cycle away: what the counter is
+   * measured against, never assumed to be the kick (a two-step's second kick
+   * is not on 3). A band is the counter's where it climbs COUNTER_BAND_RATIO
+   * times as far on the counter as on the reference (each at the
+   * COUNTER_QUANTILE of its occurrences), weighted by how much further; so a
+   * kick, a hat or a strum that lands on both says nothing, and four on the
+   * floor with nothing between the kicks has no counter at all. A candidate
+   * EXISTS when its score (`counterScore`) reaches the threshold on at least
+   * COUNTER_MARGIN more of its own positions than of its reference's; of
+   * those, the one with the widest margin is the counter.
+   *
+   * This is the bar inference of Goto (2001), who read the measure from where
+   * the snare recurs against the kick, and the rhythmic patterns of Krebs,
+   * Böck and Widmer (2013), who learn per bar position what each band's onset
+   * looks like -- cut down to what a causal per-hop tracker affords: the
+   * tempo grid is given, so only the counter's cycle and offset are chosen,
+   * by contrast rather than a trained model, and the per-band profile is
+   * learned from the track itself, which is what makes a clap, a rim shot or
+   * a lowpassed snare as much a counter as a textbook snare.
+   *
+   * The positions only teach the profile. A hit is found by its SOUND wherever
+   * it lands (`counterHit`), so a fill or a roll of the same snare is a snare.
+   */
+  private learnCounter(): void {
+    // A window that shows no counter keeps the last one for COUNTER_HOLD_SEC:
+    // the profile is a sound, found wherever it lands, so a fill or a voice
+    // blurring the contrast for a few bars does not unlearn it, and a track
+    // whose snare has stopped simply has no hits of it.
+    const now = this.start + this.count
+    const held = this.counterValid && (now - this.counterLearnedAt) * this.hopSec < COUNTER_HOLD_SEC
+    const learned = this.findCounter()
+    if (learned) this.counterLearnedAt = now
+    else if (held) this.restoreCounter()
+    else {
+      this.counterValid = false
+      this.counterWeight.fill(0)
+    }
+  }
+
+  /**
+   * Looks for the counter in the window (`learnCounter`), and on finding one
+   * stores it, keeping the profile it replaces for `restoreCounter`; false
+   * where the window shows none.
+   */
+  private findCounter(): boolean {
+    this.keptWeight.set(this.counterWeight)
+    this.keptTypical.set(this.counterTypical)
+    this.keptUsual.set(this.counterUsual)
+    this.keptScalars[0] = this.counterLevel
+    this.keptScalars[1] = this.counterThreshold
+    this.keptScalars[2] = this.counterKicked ? 1 : 0
+    this.counterValid = false
+    const period = this.period
+    if (Number.isNaN(period)) return false
+    const slow = 60 / (period * this.hopSec) <= COUNTER_OFFBEAT_MAX_BPM
+    const steps = slow ? 2 * COUNTER_STEPS_PER_BEAT : COUNTER_STEPS_PER_BEAT
+    const step = period / steps
+    const bandCount = this.counterBands.length
+    const snap = SNAP_HOPS
+    const end = this.start + this.count - this.peakHops - 1
+    const first = Math.ceil((this.start + snap - this.phase) / step)
+    const last = Math.floor((end - snap - this.phase) / step)
+    const positions = last - first + 1
+    if (positions < 8 * steps) return false
+    const occ = this.occurrenceRise
+    for (let p = 0; p < positions; p++) {
+      const centre = Math.round(this.phase + (first + p) * step)
+      for (let b = 0; b < bandCount; b++) {
+        let most = 0
+        for (let j = centre - snap; j <= centre + snap; j++) most = Math.max(most, this.counterRise[((this.head + j - this.start) % CAPACITY) * bandCount + b])
+        occ[p * bandCount + b] = most
+      }
+      let kick = 0
+      // The kick's STRENGTH (its sub and body alone): its onset reads the
+      // click band too, which a clap landing on the kick lifts.
+      for (let j = centre - snap; j <= centre + snap; j++) kick = Math.max(kick, this.strengthAt(this.voices.kick, j))
+      this.kickOccurrence[p] = kick
+    }
+    for (let p = 0; p < positions; p++) this.scores[p] = this.kickOccurrence[p]
+    const kickLoud = quantile(this.scores, positions, COUNTER_LOUD_QUANTILE)
+    // Each band's loud climbs over the whole window: a counter is among them.
+    const loud = this.bandLoud
+    for (let b = 0; b < bandCount; b++) {
+      for (let p = 0; p < positions; p++) this.scores[p] = occ[p * bandCount + b]
+      loud[b] = quantile(this.scores, positions, COUNTER_LOUD_QUANTILE)
+    }
+    // Every offset in quarter beats: the grid's phase is the comb of beats
+    // that collects the most kick, which in a syncopated groove can sit an
+    // eighth or a sixteenth off the bar's beats (a two-step read at 86 puts
+    // its second kick a quarter of a grid beat after the beat).
+    const cycles = slow ? COUNTER_SLOW_CYCLES : COUNTER_CYCLES
+    const longest = cycles[cycles.length - 1] * steps
+    // Each position's place in the longest cycle, which every shorter one divides.
+    const residue = this.positionResidue
+    for (let p = 0; p < positions; p++) residue[p] = (((first + p) % longest) + longest) % longest
+    let bestMargin = -Infinity
+    let bestContrast = 0
+    const weight = this.candidateWeight
+    const typical = this.candidateTypical
+    const values = this.scores
+    const counterAt = this.counterPositions
+    const referenceAt = this.referencePositions
+    const kickAt = this.kickPositions
+    const scoreAt = (p: number): number => {
+      let s = 0
+      for (let b = 0; b < bandCount; b++) if (weight[b] > 0) s += weight[b] * Math.min(COUNTER_BAND_CAP, occ[p * bandCount + b] / typical[b])
+      return s
+    }
+    // Candidates come shortest cycle first (`learnCounter`'s tie rule reads it).
+    for (const beats of cycles) {
+      const cycle = beats * steps
+      for (let offset = 0; offset < cycle; offset++) {
+        const opposite = (offset + cycle / 2) % cycle
+        let counters = 0
+        let references = 0
+        let kicks = 0
+        for (let p = 0; p < positions; p++) {
+          const at = residue[p] % cycle
+          if (at === offset) counterAt[counters++] = p
+          else {
+            if (at === opposite) referenceAt[references++] = p
+            if (this.kickOccurrence[p] >= COUNTER_KICK_SHARE * kickLoud) kickAt[kicks++] = p
+          }
+        }
+        if (counters < 4 || references < 4) continue
+        // The counter is what punches AGAINST the kick: of a candidate and its
+        // reference, the side the kick lands on more is the reference, whatever
+        // else lands there. Without this, kicks on 1 and 3 against a clap on 2
+        // and 4 is the same contrast read the other way round.
+        for (let i = 0; i < counters; i++) values[i] = this.kickOccurrence[counterAt[i]]
+        const kickOnCounter = quantile(values, counters, COUNTER_QUANTILE)
+        for (let i = 0; i < references; i++) values[i] = this.kickOccurrence[referenceAt[i]]
+        if (kickOnCounter > COUNTER_KICK_TOLERANCE * quantile(values, references, COUNTER_QUANTILE)) continue
+        let loudest = 0
+        for (let b = 0; b < bandCount; b++) {
+          for (let i = 0; i < counters; i++) values[i] = occ[counterAt[i] * bandCount + b]
+          const c = quantile(values, counters, COUNTER_QUANTILE)
+          for (let i = 0; i < references; i++) values[i] = occ[referenceAt[i] * bandCount + b]
+          let r = quantile(values, references, COUNTER_QUANTILE)
+          // And against the kicks wherever else in the bar they land: a
+          // syncopated kick off the reference climbs in its click's bands just
+          // as one on it does, and what the kick does is not the counter.
+          for (let i = 0; i < kicks; i++) values[i] = occ[kickAt[i] * bandCount + b]
+          r = Math.max(r, quantile(values, kicks, COUNTER_QUANTILE))
+          // A ratio of two small numbers (the tail of something else a
+          // sixteenth on) says nothing: the counter's climb must be among the
+          // band's loud ones in the window.
+          weight[b] = c > 0 && c >= COUNTER_BAND_RATIO * r && c >= COUNTER_PRESENCE * loud[b] ? 1 - r / c : 0
+          typical[b] = c
+          this.candidateUsual[b] = Math.max(c, r)
+          if (weight[b] > 0) loudest = Math.max(loudest, c)
+        }
+        // A band the counter barely reaches (the tail of a lowpassed snare in
+        // the top bands) is a ratio of two small numbers, which a strum
+        // decides; and a punch is not a tone: one band alone is as likely a
+        // hat's or a voice's ripple as a hit.
+        let total = 0
+        let bands = 0
+        for (let b = 0; b < bandCount; b++) {
+          if (typical[b] < COUNTER_BAND_FLOOR * loudest) weight[b] = 0
+          if (weight[b] > 0) bands++
+          total += weight[b]
+        }
+        if (bands < COUNTER_MIN_BANDS) continue
+        for (let b = 0; b < bandCount; b++) weight[b] /= total
+        for (let i = 0; i < counters; i++) values[i] = scoreAt(counterAt[i])
+        const level = quantile(values, counters, COUNTER_QUANTILE)
+        for (let i = 0; i < references; i++) values[i] = scoreAt(referenceAt[i])
+        const high = quantile(values, references, COUNTER_QUANTILE)
+        if (level <= 0) continue
+        const threshold = level * Math.max(COUNTER_SHARE, (high / level) ** (2 / 3))
+        let onCounter = 0
+        let onReference = 0
+        for (let i = 0; i < counters; i++) if (scoreAt(counterAt[i]) >= threshold) onCounter++
+        for (let i = 0; i < references; i++) if (scoreAt(referenceAt[i]) >= threshold) onReference++
+        const margin = onCounter / counters - onReference / references
+        const contrast = level / (high + 1e-12)
+        // Candidates come shortest cycle first, so a longer one has to explain
+        // the window clearly better: on a backbeat, every fourth beat is as
+        // clean a contrast as every second while saying half as much.
+        if (margin < COUNTER_MARGIN) continue
+        if (this.counterValid && (cycle > this.counterCycle ? margin < bestMargin + COUNTER_MARGIN_TIE : margin < bestMargin || (margin === bestMargin && contrast <= bestContrast))) continue
+        bestMargin = margin
+        bestContrast = contrast
+        this.counterValid = true
+        this.counterKicked = kickOnCounter >= COUNTER_KICK_SHARE * kickLoud
+        this.counterCycle = cycle
+        this.counterSteps = steps
+        this.counterOffset = offset
+        this.counterLevel = level
+        this.counterThreshold = threshold
+        this.counterWeight.set(weight)
+        this.counterTypical.set(typical)
+        this.counterUsual.set(this.candidateUsual)
+      }
+    }
+    return this.counterValid
+  }
+
+  /** Puts back the profile `findCounter` replaced, still valid. */
+  private restoreCounter(): void {
+    this.counterWeight.set(this.keptWeight)
+    this.counterTypical.set(this.keptTypical)
+    this.counterUsual.set(this.keptUsual)
+    this.counterLevel = this.keptScalars[0]
+    this.counterThreshold = this.keptScalars[1]
+    this.counterKicked = this.keptScalars[2] > 0
+    this.counterValid = true
+  }
+
+  /** The counter profile's score at absolute hop `index` (`learnCounter`), 0 outside the window. */
+  private counterScore(index: number): number {
+    const k = index - this.start
+    if (k < 0 || k >= this.count) return 0
+    const bandCount = this.counterBands.length
+    const base = ((this.head + k) % CAPACITY) * bandCount
+    let s = 0
+    for (let b = 0; b < bandCount; b++) {
+      const w = this.counterWeight[b]
+      if (w > 0) s += w * Math.min(COUNTER_BAND_CAP, this.counterRise[base + b] / this.counterTypical[b])
+    }
+    return s
+  }
+
+  /**
+   * The strength (0..1, against the counter's typical hit) of a hit of the
+   * learned counter's SOUND peaking at hop `index`, wherever in the bar it
+   * lands, or 0: the counter profile's score is the largest within PEAK_SEC
+   * either side and reaches the learned threshold, which lies above what the
+   * reference positions (the kicks, and whatever lands with them) score.
+   */
+  private counterHit(index: number): number {
+    if (!this.counterValid || index + this.peakHops >= this.start + this.count) return 0
+    const value = this.counterScore(index)
+    if (!this.soundsLikeCounter(value, index) || this.isForeign(index)) return 0
+    for (let j = index - this.peakHops; j <= index + this.peakHops; j++) {
+      if (j === index) continue
+      const other = this.counterScore(j)
+      if (other > value || (other === value && j < index)) return 0
+    }
+    return Math.min(1, value / this.counterLevel)
+  }
+
+  /**
+   * Whether media time `time` is on the learned counter's positions (within
+   * SNAP_HOPS and two hops of one), on the grid as it stands; for tests and
+   * diagnostics. Detection never asks this: a hit is found by its sound
+   * wherever it lands (`counterHit`).
+   */
+  isOnCounter(time: number): boolean {
+    if (!this.counterValid) return false
+    const index = (time - this.originTime) / this.hopSec
+    const step = this.period / this.counterSteps
+    const m = Math.round((index - this.phase) / step)
+    return Math.abs(index - (this.phase + m * step)) <= SNAP_HOPS + 2 && ((((m - this.counterOffset) % this.counterCycle) + this.counterCycle) % this.counterCycle) === 0
+  }
+
+  /** The learned counter's cycle in beats of the grid (1, 2 or 4), 0 while none is learned. For tests and diagnostics. */
+  get counterCycleBeats(): number {
+    return this.counterValid ? this.counterCycle / this.counterSteps : 0
   }
 
   /**
@@ -1675,6 +2134,8 @@ export class DrumTracker {
       cursor.suppliedAt = -Infinity
       cursor.resting = false
       cursor.resumedAt = -Infinity
+      cursor.counterLastPeak = NaN
+      cursor.snareShownAt = -Infinity
     }
     const previous = cursor.lastAsked
     cursor.lastAsked = time
@@ -1695,25 +2156,150 @@ export class DrumTracker {
     const g = Math.max(0, Math.min(1, groove))
     if (g > 0) this.recordHeard(voice, Math.floor(to))
     let strength = 0
+    let peakAt = -Infinity
+    let frillStrength = 0
     for (let k = Math.max(Math.floor(from) + 1, Number.isNaN(cursor.lastPeak) ? -Infinity : cursor.lastPeak + 1); k <= Math.floor(to); k++) {
       const value = g > 0 ? this.grooveStrength(voice, cursor, k, g) : this.acceptedStrength(voice, k)
       if (value <= 0) continue
       cursor.lastPeak = k
-      strength = Math.max(strength, value)
+      let frill = false
+      if (voice === this.voices.snare && this.counterValid) {
+        // A hit the learned counter's sound finds is the counter's to show
+        // (`counterResponse`), at its strength rather than the recipe's.
+        if (this.isCounterHitNear(k)) continue
+        // One the recipe takes that does not sound like the counter, and does
+        // not land where the counter recurs, is a FRILL: a ghost, a rim, a
+        // kick's body the recipe took for a snare. Kept, at FRILL_WEIGHT, so
+        // the counter outshines it. One where the counter recurs is the
+        // counter masked (a strum over a lo-fi snare's thin top), and is shown
+        // as the recipe hears it.
+        frill = !this.soundsLikeCounter(this.counterNear(k), k) && !this.isCounterRecurring(cursor, k)
+      }
+      if (voice === this.voices.snare && k - cursor.snareShownAt < this.occurrenceSpan()) continue
+      if (frill) frillStrength = Math.max(frillStrength, value)
+      else strength = Math.max(strength, value)
+      peakAt = k
     }
-    if (strength <= 0) return 0
-    // In dB against the strong hits, so a hit that reads somewhat weaker
-    // (interfering with the bass line's tail, say) still reads as one.
-    const strong = voice.strongHit > 0 ? voice.strongHit : strength
-    // The pattern's full hit is the drum's level NOW, and the strong hits'
-    // remembered level can stand above it for a while after the drum played
-    // louder (it fades over STRONG_HIT_HALF_LIFE_SEC). The groove measures
-    // against the pattern's full hit in the share it shows the pattern, so
-    // at its top a hit the pattern carries shows in full.
-    const top = g > 0 && voice.level > 0 ? (1 - g) * strong + g * Math.min(strong, voice.level) : strong
-    const floorDb = -(1 - contrast) * CONTRAST_RANGE_DB
-    const db = 10 * Math.log10(strength / top)
-    return Math.max(0, Math.min(1, (db - floorDb) / -floorDb))
+    const counter = voice === this.voices.snare ? this.counterResponse(cursor, from, to, contrast, g) : 0
+    if (strength > 0 || frillStrength > 0) cursor.snareShownAt = Math.max(cursor.snareShownAt, peakAt)
+    if (strength <= 0 && frillStrength <= 0) return counter
+    const response = (value: number): number => {
+      if (value <= 0) return 0
+      // In dB against the strong hits, so a hit that reads somewhat weaker
+      // (interfering with the bass line's tail, say) still reads as one.
+      const strong = voice.strongHit > 0 ? voice.strongHit : value
+      // The pattern's full hit is the drum's level NOW, and the strong hits'
+      // remembered level can stand above it for a while after the drum played
+      // louder (it fades over STRONG_HIT_HALF_LIFE_SEC). The groove measures
+      // against the pattern's full hit in the share it shows the pattern, so
+      // at its top a hit the pattern carries shows in full.
+      const top = g > 0 && voice.level > 0 ? (1 - g) * strong + g * Math.min(strong, voice.level) : strong
+      const floorDb = -(1 - contrast) * CONTRAST_RANGE_DB
+      const db = 10 * Math.log10(value / top)
+      return Math.max(0, Math.min(1, (db - floorDb) / -floorDb))
+    }
+    return Math.max(counter, response(strength), FRILL_WEIGHT * response(frillStrength))
+  }
+
+  /**
+   * Whether the sound at hop `index` climbs, in a band ABOVE the profile's
+   * lowest that is not itself in the profile, COUNTER_FOREIGN_RATIO times as
+   * far as the counter positions typically do there: something else (a
+   * voice, a strum's upper partials) with the counter's colour in part of
+   * the spectrum. Bands below the profile are not asked, as a kick landing
+   * with the counter climbs there.
+   */
+  private isForeign(index: number): boolean {
+    const k = index - this.start
+    const bandCount = this.counterBands.length
+    const base = ((this.head + k) % CAPACITY) * bandCount
+    for (let b = 0; b < bandCount; b++) {
+      if (this.counterWeight[b] <= 0 && this.counterRise[base + b] > COUNTER_FOREIGN_RATIO * this.counterUsual[b]) return true
+    }
+    return false
+  }
+
+  /**
+   * Whether a counter profile score `value` at hop `index` is the counter's
+   * sound: it reaches the learned threshold, and landing with a kick, where
+   * the kick's own climb in the profile's bands (its click) is part of what
+   * is measured, it reads as the counter's typical hit (COUNTER_WITH_KICK of
+   * it) rather than merely passing -- unless the counter itself usually lands
+   * with a kick (a clap on two and four of four on the floor), whose typical
+   * hit already holds that click. One rule for the counter's own hits
+   * (`counterHit`) and for the recipe's (`hitBetween`'s frills).
+   */
+  private soundsLikeCounter(value: number, index: number): boolean {
+    if (value < this.counterThreshold) return false
+    return this.counterKicked || value >= COUNTER_WITH_KICK * this.counterLevel || !this.isKickNear(index)
+  }
+
+  /** Whether the kick's evidence (`acceptedStrength`) accepts a hit within an occurrence's reach of hop `index`. */
+  private isKickNear(index: number): boolean {
+    const span = this.occurrenceSpan()
+    const kick = this.voices.kick
+    for (let j = index - span; j <= index + span; j++) if (this.acceptedStrength(kick, j) > 0) return true
+    return false
+  }
+
+  /**
+   * Whether a counter hit at hop `index` RECURS, as the groove's proof asks of
+   * a slot (header, GROOVE, PROVEN): another peaked within an occurrence's
+   * reach a bar before. A grid that flips octave between updates halves or
+   * doubles the bar, and a backbeat (every half bar) recurs at either. Not
+   * half a bar, where a two-step's second kick finds the snare; not two bars,
+   * where the bar after a fill finds the fill. Or the groove's
+   * snare reader is in a break or within two bars of one ending, where the
+   * evidence alone is shown. Asked of the hits themselves, not of positions,
+   * which are relabelled whenever the grid re-phases.
+   */
+  private isCounterRecurring(cursor: DrumCursor, index: number): boolean {
+    const bar = BEATS_PER_BAR * this.period
+    if (cursor.resting || index - cursor.resumedAt < 2 * bar) return true
+    return this.isCounterHitNear(Math.round(index - bar))
+  }
+
+  /** Whether a counter hit (`counterHit`) peaks within an occurrence's reach of hop `index`. */
+  private isCounterHitNear(index: number): boolean {
+    const span = this.occurrenceSpan()
+    for (let j = index - span; j <= index + span; j++) if (this.counterHit(j) > 0) return true
+    return false
+  }
+
+  /** The largest counter profile score within two hops of `index`: what the sound at a recipe's hit there scores as the counter. */
+  private counterNear(index: number): number {
+    let most = 0
+    for (let j = index - 2; j <= index + 2; j++) most = Math.max(most, this.counterScore(j))
+    return most
+  }
+
+  /**
+   * The snare's response from the learned counter's SOUND (`counterHit`)
+   * between hops `from` and `to`, at any groove: a hit within COUNTER_STEADY_DB
+   * of the counter's typical one is shown in full, a fainter one (a ghost
+   * note) on the contrast's scale. Groove-independent, so a higher groove
+   * never shows fewer. Not shown within an occurrence's reach of a snare
+   * already shown from either source (`DrumCursor.snareShownAt`).
+   */
+  private counterResponse(cursor: DrumCursor, from: number, to: number, contrast: number, g: number): number {
+    if (!this.counterValid) return 0
+    let response = 0
+    const span = this.occurrenceSpan()
+    for (let k = Math.max(Math.floor(from) + 1, Number.isNaN(cursor.counterLastPeak) ? -Infinity : cursor.counterLastPeak + 1); k <= Math.floor(to); k++) {
+      const value = this.counterHit(k)
+      if (value <= 0) continue
+      cursor.counterLastPeak = k
+      if (k - cursor.snareShownAt < span) continue
+      cursor.snareShownAt = k
+      const db = 10 * Math.log10(value)
+      const floorDb = -(1 - contrast) * CONTRAST_RANGE_DB
+      // A hit of the counter's sound that does not recur (a fill, an accent)
+      // is the groove's ONE-OFF (header, GROOVE): in full to the middle of
+      // the groove, gone at its top, where the pattern is held over it.
+      const share = g > 0 && !this.isCounterRecurring(cursor, k) ? Math.min(1, 2 * (1 - g)) : 1
+      response = Math.max(response, share * (db >= -COUNTER_STEADY_DB ? 1 : Math.max(0, Math.min(1, (db - floorDb) / -floorDb))))
+    }
+    return response
   }
 
   /**
