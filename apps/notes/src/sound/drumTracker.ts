@@ -84,12 +84,20 @@
  *
  * - EVIDENCE E: the strongest hit stage 4 accepts on that slot near it.
  * - CLIMBED: the drum's own bands rose there as a hit of it does
- *   (`hasClimbed`: the shape and strength tests of stage 4 without the
- *   slot's and without the exclusion), so a hat a strum masks still climbs.
- * - PROVEN: they climbed on that slot one or two bars before: the slot is in
- *   the pattern being played now, not a one-off. A DRUM SLOT is one whose
- *   onset peaks the evidence mostly accepts (`isDrumSlot`), not the bass's
- *   or a kick's body's; only those are played from the pattern alone.
+ *   (`climbAt`: the shape and strength tests of stage 4 without the slot's
+ *   and without the exclusion), so a hat a strum masks still climbs, and
+ *   wherever E > 0 this reads CLIMBED. Tri-state: a span outside the settled
+ *   window (not decoded yet, or forgotten) is UNKNOWN, never "not playing".
+ * - PROVEN: they climbed on that slot a half, one, one and a half or two
+ *   bars before, so a grid that flips between a tempo and its double (79 and
+ *   158 BPM) still proves a slot that repeats every bar of either. A slot the
+ *   evidence accepted more than once in the window is never treated as a
+ *   one-off either way.
+ * - A DRUM SLOT is one on which the evidence accepts most of the onset
+ *   peaks and a hit in most of the window's bars (`isDrumSlot`), not the
+ *   bass's or a kick's body's; only those are played from the pattern
+ *   alone, and only where the evidence accepted a hit on it within the last
+ *   four bars (so music ahead of the drums does not start the pattern).
  * - A BREAK starts at a proven drum slot with no evidence where the bands
  *   climbed neither there nor on that slot a bar on (the window reaches
  *   seconds past the listener, so a masked hit is told from a stopped drum
@@ -100,10 +108,18 @@
  * The strength shown, with X the slot's EXPECTED strength (the drum's full
  * hit, or a ghost slot's remembered strength; `expectedStrength`):
  *
- *   proven drum slot, playing   (1 - g) E + g X     at E's peak, or when due
+ *   proven drum slot, playing   max(E, (1 - g) E + g X)  at E's peak, or when due
  *   proven, not a drum slot     E
- *   not proven (a one-off)      E min(1, 2(1 - g))  in full to the middle, gone at the top
+ *   recurring but not proven    E
+ *   a one-off                   E min(1, 2(1 - g))  in full to the middle, gone at the top
  *   onset off every slot        A min(1, 2g, 2(1 - g))
+ *
+ * So a hit the evidence shows on the pattern is never shown weaker at a
+ * higher groove. Nothing fires twice: a slot due with no evidence is not
+ * shown within an occurrence's reach of a hit already shown on it, and
+ * evidence is not shown within that of a hit the pattern supplied
+ * (`DrumCursor.answered`, `expected`), while two distinct accepted peaks
+ * are each shown, as at groove 0.
  *
  * where A is an ACCENT: an onset peak on no slot, shaped like the drum's
  * full hit and within ACCENT_DB of it (`accentStrength`). Stage 4 never shows
@@ -288,7 +304,11 @@ const CONFIRM_HOPS = 3
  * top.
  */
 const TILT_SHARE = 0.5
-/** The share of a slot's onset peaks the evidence must accept for the groove to play it (`isDrumSlot`). */
+/** What `DrumTracker.climbAt` reads at a slot: the drum's bands climbed, they did not, or the window does not reach that far. */
+const CLIMBED = 1
+const FLAT = 0
+const UNKNOWN = -1
+/** The share of a slot's onset peaks, and of the window's bars, on which the evidence must accept a hit for the groove to play the slot (`isDrumSlot`). */
 const DRUM_SLOT_ACCEPTANCE = 0.5
 /** How far below the drum's full hit an ACCENT (an onset off every slot) may measure, in dB (`accentStrength`). */
 const ACCENT_DB = 3
@@ -531,12 +551,18 @@ export class DrumCursor {
   lastPeak = NaN
   epoch = -1
   /**
-   * With groove above 0 (`DrumTracker.hitBetween`): the hop of the last slot
-   * OCCURRENCE (a slot's first hop in one bar) this reader was answered for,
-   * so an occurrence answered early, at evidence ahead of the slot, is not
-   * answered again when the scan reaches the slot itself.
+   * With groove above 0 (`DrumTracker.hitBetween`): per pattern position,
+   * the hop of the last hit this reader was shown on it, from evidence or
+   * from the pattern (`answered`), and of the last shown from the pattern
+   * alone (`expected`). A slot due with no evidence is not shown within
+   * `occurrenceSpan` of a hit already shown on it, and evidence is not
+   * shown within that of a hit the pattern already supplied for it -- so
+   * one occurrence never fires twice -- while two distinct onset peaks the
+   * evidence accepts are each shown, as at groove 0. Two slots close
+   * together each keep their own.
    */
-  lastOccurrence = NaN
+  readonly answered = new Float64Array(PATTERN_BINS).fill(-Infinity)
+  readonly expected = new Float64Array(PATTERN_BINS).fill(-Infinity)
   /**
    * With groove above 0: the drum has stopped (a break) -- an established
    * slot came round and nothing climbed in the drum's own bands there. The
@@ -586,8 +612,12 @@ class Voice {
   readonly slotPosition = new Float32Array(PATTERN_BINS)
   /** The share of the window's onset peaks on each slot that the evidence accepts (`acceptedStrength`): whether the slot is this drum's (`DrumTracker.isDrumSlot`). */
   readonly slotAcceptance = new Float32Array(PATTERN_BINS)
+  /** How many hits the evidence accepts on each slot in the window. */
+  readonly slotAccepted = new Float64Array(PATTERN_BINS)
+  /** How many hits the evidence accepts on each slot per bar of the window. */
+  readonly slotAcceptedPerBar = new Float32Array(PATTERN_BINS)
   /** The strengths of the hits the evidence accepted in the window at the last `learnPattern`, the first `acceptedCount` of them. */
-  readonly acceptedStrengths = new Float32Array(CAPACITY)
+  readonly acceptedStrengths = new Float64Array(CAPACITY)
   acceptedCount = 0
   /** The onset of the bar's strongest remembered slot: what this drum looks like in this track. */
   shape = 0
@@ -640,6 +670,8 @@ class Voice {
     this.onsetMemory.fill(0)
     this.slotPosition.fill(0)
     this.slotAcceptance.fill(0)
+    this.slotAcceptedPerBar.fill(0)
+    this.slotAccepted.fill(0)
     this.acceptedCount = 0
     this.shape = 0
     this.level = 0
@@ -718,8 +750,6 @@ export class DrumTracker {
    * music had played before the restart.
    */
   private epoch = nextEpoch++
-  /** The slot the last positive `acceptedStrength` matched its peak to, so the groove can tell which occurrence a hit belongs to without allocating. */
-  private acceptedSlot = -1
   /** Brings the input to ANALYSIS_RATE; null when it is already there. */
   private readonly resampler: StreamResampler | null
 
@@ -1291,15 +1321,20 @@ export class DrumTracker {
     // What the evidence accepts in the window, now that the bar it is judged
     // by is learned: how often per slot (`isDrumSlot`), and each hit's
     // strength, for the strong hits' level (`updateGrid`).
-    const accepted = new Float64Array(PATTERN_BINS)
+    const accepted = voice.slotAccepted
+    accepted.fill(0)
     voice.acceptedCount = 0
     for (let k = this.start; k < this.start + this.count; k++) {
       const strength = this.acceptedStrength(voice, k)
       if (strength <= 0) continue
-      accepted[this.acceptedSlot]++
+      accepted[this.acceptedSlotOf(voice, k)]++
       voice.acceptedStrengths[voice.acceptedCount++] = strength
     }
-    for (let b = 0; b < PATTERN_BINS; b++) voice.slotAcceptance[b] = matches[b] > 0 ? accepted[b] / matches[b] : 0
+    const bars = this.count / (BEATS_PER_BAR * this.period)
+    for (let b = 0; b < PATTERN_BINS; b++) {
+      voice.slotAcceptance[b] = matches[b] > 0 ? accepted[b] / matches[b] : 0
+      voice.slotAcceptedPerBar[b] = accepted[b] / bars
+    }
   }
 
   /**
@@ -1372,7 +1407,6 @@ export class DrumTracker {
     if (!this.isOnsetPeak(voice, index)) return 0
     const slot = this.nearestSlot(index, voice.slotOnset)
     if (slot < 0) return 0
-    this.acceptedSlot = slot
     // Read over the same reach a hit is matched within, so the memory moves
     // with a slot that moves a bin between folds.
     const reach = this.slotReach()
@@ -1406,6 +1440,11 @@ export class DrumTracker {
     // the same hit weaker for where in the bar it fell.
     const level = voice.level
     return Math.abs(10 * Math.log10(measured / level)) <= STEADY_DB ? level : Math.min(measured, level)
+  }
+
+  /** The slot `acceptedStrength` judges a peak at `index` against (whether or not it accepts it), or -1. */
+  private acceptedSlotOf(voice: Voice, index: number): number {
+    return this.nearestSlot(index, voice.slotOnset)
   }
 
   /** True when a voice's onset at `index` is the largest within a sixteenth's half either side (ties to the earlier). */
@@ -1465,7 +1504,8 @@ export class DrumTracker {
       cursor.epoch = this.epoch
       cursor.lastAsked = NaN
       cursor.lastPeak = NaN
-      cursor.lastOccurrence = NaN
+      cursor.answered.fill(-Infinity)
+      cursor.expected.fill(-Infinity)
       cursor.resting = false
       cursor.resumedAt = -Infinity
     }
@@ -1513,26 +1553,37 @@ export class DrumTracker {
    * GROOVE), or 0. A slot's OCCURRENCE (one bar's turn of it) is answered
    * once: where the evidence's hit for it peaks when there is one, so the
    * groove never moves a heard hit, and otherwise when the slot is DUE (its
-   * learned position, `slotPosition`). An onset peak off every slot is
-   * answered as an ACCENT.
+   * learned position, `slotPosition`). Once per occurrence, by construction
+   * (`DrumCursor.answered`, `wasAnswered`), whichever of the two comes first.
+   * An onset peak off every slot is answered as an ACCENT.
    */
   private grooveStrength(voice: Voice, cursor: DrumCursor, index: number, g: number): number {
     const evidence = this.acceptedStrength(voice, index)
     if (evidence > 0) {
-      const slot = this.acceptedSlot
-      const occurrence = this.occurrenceNear(voice, slot, index)
-      if (!Number.isNaN(occurrence) && occurrence === cursor.lastOccurrence) return 0
-      return this.answerOccurrence(voice, cursor, Number.isNaN(occurrence) ? index : occurrence, slot, g)
+      const slot = this.acceptedSlotOf(voice, index)
+      const due = this.occurrenceNear(voice, slot, index)
+      const occurrence = Number.isNaN(due) ? index : due
+      if (Math.abs(index - cursor.expected[slot]) < this.occurrenceSpan()) return 0
+      return this.answerOccurrence(voice, cursor, occurrence, slot, g, index, false)
     }
     const due = this.slotDueAt(voice, index)
     if (due >= 0) {
-      if (index === cursor.lastOccurrence) return 0
+      if (this.wasAnswered(cursor, due, index)) return 0
       // A hit the evidence accepts still to come is answered where it peaks.
       if (this.evidenceFor(voice, due, index + 1, index + this.occurrenceSpan()) > 0) return 0
-      return this.answerOccurrence(voice, cursor, index, due, g)
+      return this.answerOccurrence(voice, cursor, index, due, g, index, true)
     }
     if (cursor.resting) return 0
     return this.accentStrength(voice, index) * Math.min(1, 2 * g, 2 * (1 - g))
+  }
+
+  /**
+   * Whether `cursor` was shown a hit on slot `slot` within `occurrenceSpan`
+   * of hop `occurrence`: the reach of one occurrence's evidence either side
+   * of its due hop.
+   */
+  private wasAnswered(cursor: DrumCursor, slot: number, occurrence: number): boolean {
+    return Math.abs(occurrence - cursor.answered[slot]) < this.occurrenceSpan()
   }
 
   /** How far either side of a slot's due hop its occurrence's hit is looked for, in hops: a snap and a bin. */
@@ -1572,43 +1623,65 @@ export class DrumTracker {
     let evidence = 0
     for (let j = from; j <= to; j++) {
       const value = this.acceptedStrength(voice, j)
-      if (value > evidence && this.acceptedSlot === slot) evidence = value
+      if (value > evidence && this.acceptedSlotOf(voice, j) === slot) evidence = value
     }
     return evidence
   }
 
   /**
    * Whether a slot is THIS drum's: the evidence accepts at least
-   * DRUM_SLOT_ACCEPTANCE of the onset peaks landing on it. The off-beat's
-   * bass makes kick slots too, and a kick's body snare slots, which the
-   * evidence turns away hit by hit and the pattern must not play.
+   * DRUM_SLOT_ACCEPTANCE of the onset peaks landing on it, and a hit on it
+   * in at least that share of the window's bars. The off-beat's bass makes
+   * kick slots too, and a kick's body snare slots, which the evidence turns
+   * away hit by hit; and before a drum comes in, a slot a strum made can
+   * hold one accepted peak of the few it matched. The pattern plays neither.
    */
   private isDrumSlot(voice: Voice, slot: number): boolean {
-    return voice.slotAcceptance[slot] >= DRUM_SLOT_ACCEPTANCE
+    return voice.slotAcceptance[slot] >= DRUM_SLOT_ACCEPTANCE && voice.slotAcceptedPerBar[slot] >= DRUM_SLOT_ACCEPTANCE
   }
 
   /**
    * One occurrence of a slot, due at hop `occurrence`, answered now (header,
    * GROOVE). It reads the strongest accepted hit belonging to it (the
    * EVIDENCE); whether the drum's own bands climbed there as a hit of it
-   * does (CLIMBED, `hasClimbed`); whether they climbed there one or two bars
-   * before (PROVEN: the slot is in the pattern being played now, not a
-   * one-off); and whether the slot is the drum's at all (`isDrumSlot`),
-   * since only those are played from the pattern alone.
+   * does (`climbAt`; an accepted hit is such a climb by definition); whether
+   * they climbed on the slot in the bars before (PROVEN: the slot is in the
+   * pattern being played now, not a one-off); and whether the slot is the
+   * drum's at all (`isDrumSlot`), since only those are played from the
+   * pattern alone.
    */
-  private answerOccurrence(voice: Voice, cursor: DrumCursor, occurrence: number, slot: number, g: number): number {
-    cursor.lastOccurrence = occurrence
+  private answerOccurrence(voice: Voice, cursor: DrumCursor, occurrence: number, slot: number, g: number, shownAt: number, fromPattern: boolean): number {
+    const strength = this.judgeOccurrence(voice, cursor, occurrence, slot, g)
+    // Only a hit SHOWN answers the occurrence: one judged empty at its due
+    // hop may still be answered by its evidence a few hops on, once the bar
+    // it is judged by has been learned again (every GRID_EVERY_HOPS).
+    if (strength > 0) {
+      cursor.answered[slot] = shownAt
+      if (fromPattern) cursor.expected[slot] = shownAt
+    }
+    return strength
+  }
+
+  /** `answerOccurrence`'s judgement, without recording it. */
+  private judgeOccurrence(voice: Voice, cursor: DrumCursor, occurrence: number, slot: number, g: number): number {
     const span = this.occurrenceSpan()
     const evidence = this.evidenceFor(voice, slot, occurrence - span, occurrence + span)
-    const bar = Math.round(BEATS_PER_BAR * this.period)
-    const proven = this.hasClimbed(voice, occurrence - bar) || this.hasClimbed(voice, occurrence - 2 * bar)
+    const bar = BEATS_PER_BAR * this.period
+    // Looked for half a bar, a bar, a bar and a half and two bars back: the
+    // grid's period can flip to half or double the beat between updates
+    // (a 79 BPM groove read at 158 and back), which halves or doubles the
+    // bar, and a pattern that repeats every bar of one octave repeats every
+    // half or every second bar of the other.
+    let proven = false
+    for (let m = 1; m <= 4 && !proven; m++) proven = this.climbAt(voice, Math.round(occurrence - (m * bar) / 2), slot) === CLIMBED
     const drumSlot = this.isDrumSlot(voice, slot)
     // Where the drum's bands did not climb, the window ahead (which reaches
     // seconds past the listener) says why: if they climb on this slot a bar
     // on, this one was masked or played too softly to read and the pattern
     // carries it; if not, the drum has stopped or left this slot, and a
-    // BREAK starts here, before anything is shown for it.
-    const playing = this.hasClimbed(voice, occurrence) || this.hasClimbed(voice, occurrence + bar)
+    // BREAK starts here, before anything is shown for it. A bar on that is
+    // not decoded yet (just after a seek) is unknown, never "stopped".
+    const playing = evidence > 0 || this.climbAt(voice, occurrence, slot) === CLIMBED || this.climbAt(voice, Math.round(occurrence + bar), slot) !== FLAT
     // A FULL hit the evidence accepts ends a break (`acceptedStrength`
     // reports one at the drum's level): a faint one is as likely the bass
     // line going on through it.
@@ -1622,12 +1695,22 @@ export class DrumTracker {
       // Until two bars have passed since a break there is nothing to prove
       // the pattern by, and the break's override goes on.
       if (occurrence - cursor.resumedAt < 2 * bar) return evidence
+      // A slot the evidence accepted a hit on more than once in the window
+      // recurs, whatever its climbs read (a grid that flipped octave between
+      // updates can put the bars before it anywhere): never taken away.
+      if (voice.slotAccepted[slot] >= 2) return evidence
       // A one-off: shown in full up to the middle of the groove, then less
       // and less, and not at all at its top.
       return evidence * Math.min(1, 2 * (1 - g))
     }
     if (!(drumSlot && playing)) return evidence
-    return (1 - g) * evidence + g * this.expectedStrength(voice, slot)
+    // Played from the pattern alone only where the evidence accepted a hit
+    // on this slot within the last four bars: a slot the window learned from
+    // music ahead of the drums (a strum in the hat's band) is not the drum
+    // playing yet.
+    if (evidence <= 0 && this.evidenceFor(voice, slot, Math.round(occurrence - 4 * bar), occurrence - span - 1) <= 0) return 0
+    // Never below the evidence: holding the pattern adds, it does not take a played hit away.
+    return Math.max(evidence, (1 - g) * evidence + g * this.expectedStrength(voice, slot))
   }
 
   /**
@@ -1637,37 +1720,53 @@ export class DrumTracker {
    * (ghost) one.
    */
   private expectedStrength(voice: Voice, slot: number): number {
-    const reach = this.slotReach()
-    let remembered = 0
-    for (let d = -reach; d <= reach; d++) remembered = Math.max(remembered, voice.slotMemory[(slot + d + PATTERN_BINS) % PATTERN_BINS])
+    const remembered = this.rememberedAt(voice, slot)
     const level = voice.level
     if (remembered <= 0 || level <= 0) return 0
     return Math.abs(10 * Math.log10(remembered / level)) <= STEADY_DB ? level : Math.min(remembered, level)
   }
 
+  /** A slot's remembered strength, read over the reach a hit is matched within (as `acceptedStrength` reads it). */
+  private rememberedAt(voice: Voice, slot: number): number {
+    const reach = this.slotReach()
+    let remembered = 0
+    for (let d = -reach; d <= reach; d++) remembered = Math.max(remembered, voice.slotMemory[(slot + d + PATTERN_BINS) % PATTERN_BINS])
+    return remembered
+  }
+
   /**
-   * Whether the drum's own bands CLIMBED as a hit of it does within SNAP_HOPS
-   * of hop `index` (false for NaN or outside the settled window): the
-   * evidence's tests of a hit's shape and strength, without the slot's and
-   * without the exclusion. Its onset BEFORE any exclusion (a hat under a
-   * strum is excluded by its colour, yet its bands climbed) reaches the
-   * share of its shape a hit needs (`shapeShare`); and for a drum whose
-   * onset is normalised (`VoiceSpec.raw` false) its strength reaches
-   * PRESENCE_SHARE of its full hit, since its band references fade through a
-   * break and a bass line going on under the kick's slots climbs ever
-   * nearer a kick's onset while its strength stays a bass note's.
+   * Whether the drum's own bands CLIMBED on slot `slot` as a hit of it does,
+   * within `occurrenceSpan` of hop `index` (the span an occurrence's
+   * evidence is looked for in): CLIMBED, FLAT, or UNKNOWN where part of that
+   * span lies outside the settled window (not decoded yet, or forgotten).
+   * The tests are `acceptedStrength`'s, less the ones about the peak and the
+   * slot's sharpness: an onset BEFORE any exclusion (a hat under a strum is
+   * excluded by its colour, yet its bands climbed) of at least `shapeShare`
+   * of the drum's shape, and for a drum whose onset is normalised
+   * (`VoiceSpec.raw` false) a strength of at least PRESENCE_SHARE of what
+   * the slot remembers. So wherever the evidence accepts a hit on the slot,
+   * this reads CLIMBED. The strength test matters through a break: a
+   * normalised onset's band references fade, and a bass line going on under
+   * the kick's slots climbs ever nearer a kick's onset while its strength
+   * stays a bass note's.
    */
-  private hasClimbed(voice: Voice, index: number): boolean {
+  private climbAt(voice: Voice, index: number, slot: number): number {
+    const span = this.occurrenceSpan()
     const needed = voice.spec.shapeShare * voice.shape
-    const strong = voice.spec.raw ? 0 : PRESENCE_SHARE * voice.level
+    const strong = voice.spec.raw ? 0 : PRESENCE_SHARE * this.rememberedAt(voice, slot)
     const onsets = voice.excludeBands.length > 0 ? voice.rawOnset : voice.onset
-    for (let j = index - SNAP_HOPS; j <= index + SNAP_HOPS; j++) {
+    const settled = this.count - voice.settleHops
+    let unknown = false
+    for (let j = index - span; j <= index + span; j++) {
       const k = j - this.start
-      if (k < 0 || k >= this.count - voice.settleHops) continue
+      if (k < 0 || k >= settled) {
+        unknown = true
+        continue
+      }
       const at = (this.head + k) % CAPACITY
-      if (onsets[at] >= needed && voice.strength[at] >= strong) return true
+      if (onsets[at] >= needed && voice.strength[at] >= strong) return CLIMBED
     }
-    return false
+    return unknown ? UNKNOWN : FLAT
   }
 
   /**
