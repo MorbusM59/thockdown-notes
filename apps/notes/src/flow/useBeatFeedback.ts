@@ -9,7 +9,7 @@
  *   and the value takes that share off its opacity. Unlike the other two it
  *   follows no band and no detected hit: it dips on every beat of a steady
  *   clock that follows the music's tempo (`subscribeMusicClock`), each dip
- *   as heavy as its `mass` makes it.
+ *   falling on its own shape and length.
  * - `--beat-shade`, the opacity of the active editor's beat shade
  *   (`.editor-beat-shade`, shown and promoted under `html[data-beat-shade]`).
  * - `--beat-outline`, the opacity of the box outlines' copy

@@ -24,8 +24,8 @@
  * no hit: it pulses on a steady `BeatClock` (`beatClock.ts`) steered by the
  * drum analysis's tempo grid, so it keeps time through fills and breaks and
  * glides to each new tempo of a compilation. Its pulse is the same fall a
- * hit makes (`mass`, through `fallOf`), restarted on every beat and never
- * longer than one.
+ * hit makes (`pulseCurve`), restarted on every beat and never longer than
+ * one.
  *
  * A level band is measured by `BandLevelMeter` (a bandpass and an RMS).
  * A channel whose source is a DRUM (kick, snare or hat) follows that drum's
@@ -51,8 +51,7 @@
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerChannel as BeatChannel, VisualizerCaret, VisualizerDrum } from '@thockdown/look/visualizer'
-import { fallOf } from '@thockdown/look/visualizer'
-import { fadeCurve } from '../flow/flowTrail'
+import { pulseCurve } from '@thockdown/look/visualizer'
 import { BandLevelMeter, LEVEL_FLOOR_DB } from './bandLevel'
 import { BeatClock } from './beatClock'
 import { DrumCursor, DrumTracker } from './drumTracker'
@@ -87,7 +86,7 @@ interface Band {
   meter: BandLevelMeter | null
   /** A drum channel's place in the shared tracker's hits; null for a band. */
   cursor: DrumCursor | null
-  /** The last peak of the response and the listener time it was reached at, for the fall (`mass`, through `fallOf`). */
+  /** The last peak of the response and the listener time it was reached at, for the fall (`pulseCurve`). */
   peak: number
   peakTime: number
   /** Ring of readings: media time and level in dB, oldest at `head`. */
@@ -101,12 +100,10 @@ interface Band {
 
 const bands = new Set<Band>()
 
-/** A CLOCK subscriber (the caret's): a steady beat and the fall its mass makes, worked out when the mass changes. */
+/** A CLOCK subscriber (the caret's): a steady beat and the fall each beat makes. */
 interface Clock {
   clock: BeatClock
-  mass: number
-  fallSec: number
-  fallShape: number
+  caret: VisualizerCaret
   listener: BeatListener
   published: number
 }
@@ -247,10 +244,9 @@ function respond(band: Band, listenerTime: number): number {
     ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast) : 0)
     : stretched(band, listenerTime)
   // The fall: a response never drops faster than its last peak fades, on
-  // flow's fade curve, as long and shaped as the block's mass makes it. A
-  // rise is taken at once.
-  const { fallSec, fallShape } = fallOf(band.channel.mass)
-  const held = band.peak * fadeCurve(listenerTime - band.peakTime, fallSec, fallShape)
+  // the block's own curve and length. A rise is taken at once.
+  const { fallSec, shape } = band.channel
+  const held = band.peak * pulseCurve((listenerTime - band.peakTime) / fallSec, shape)
   if (raw >= held) {
     band.peak = raw
     band.peakTime = listenerTime
@@ -259,14 +255,15 @@ function respond(band: Band, listenerTime: number): number {
   return held
 }
 
-/** A clock's response: the fall of its mass, restarted on each of its beats and cut at the next. */
+/** A clock's response: its fall, restarted on each of its beats and cut at the next. */
 function pulse(subscriber: Clock, listenerTime: number): number {
   const { clock } = subscriber
   const tracker = drums?.tracker
   clock.advance(listenerTime, tracker ? tracker.gridPeriodSec : NaN, tracker ? tracker.gridBeatTime : NaN)
   const phase = clock.phase
   if (Number.isNaN(phase)) return 0
-  return fadeCurve(phase * clock.period, Math.min(subscriber.fallSec, clock.period), subscriber.fallShape)
+  const { fallSec, shape } = subscriber.caret
+  return pulseCurve((phase * clock.period) / Math.min(fallSec, clock.period), shape)
 }
 
 /** A level band's response: its level at `listenerTime`, stretched over the window around it. */
@@ -320,14 +317,20 @@ function outputLatencySec(): number {
 
 /**
  * The position the LISTENER is at, for drawing: the element's position run on
- * the audio context's clock, which is smooth, and steered toward each report
- * rather than set to it. The element reports its position in steps (a chunk
- * of the graph's pulls at a time), and taking each report as it comes jumps
- * the time back and forth by up to a chunk several times a second; a fall
- * read off a time that jumps is drawn in steps. A report further off than
- * `SNAP_SEC` is a seek and is taken at once; anything nearer closes a share
- * of the gap per report, and the time never runs backwards. Reset while the
- * music is stopped, as the context's clock runs on through a pause.
+ * the FRAME's clock (the `requestAnimationFrame` timestamp, the moment the
+ * frame is shown), and steered toward each report rather than set to it.
+ * The element reports its position in steps (a chunk of the graph's pulls at
+ * a time), and taking each report as it comes jumps the time back and forth
+ * by up to a chunk several times a second; a fall read off a time that jumps
+ * is drawn in steps. The audio context's clock stood here as the time between
+ * reports and steps the same way: it advances once per audio callback (ten
+ * milliseconds and more, far more over Bluetooth), so frames between two
+ * callbacks read one time, and a fall drawn off it repeated a value and then
+ * jumped. The frame's clock advances by exactly one frame per frame. A report
+ * further off than `SNAP_SEC` is a seek and is taken at once; anything nearer
+ * closes a share of the gap per report, and the time never runs backwards.
+ * Reset while the music is stopped, as the frame's clock runs on through a
+ * pause.
  */
 class SmoothClock {
   private static readonly SNAP_SEC = 0.5
@@ -360,13 +363,13 @@ class SmoothClock {
 
 const listenerClock = new SmoothClock()
 
-function tick(): void {
+function tick(frameTimeMs: number): void {
   frame = null
   if (!musicPlayerService.isPlaying || document.hidden || subscriberCount() === 0) {
     stop()
     return
   }
-  const now = outputContext().currentTime
+  const now = frameTimeMs / 1000
   const listenerTime = listenerClock.read(musicPlayerService.currentTime, now)
   // Where the listener would be had nothing jumped: carried on by the
   // clock from the last frame, or where it was when the music stopped.
@@ -408,7 +411,7 @@ export interface MusicBandSubscription {
 }
 
 export interface MusicClockSubscription {
-  /** Follows a new mass (and effect, which the clock does not read); nothing starts over, as the beat does not depend on either. */
+  /** Follows a new fall (and effect, which the clock does not read); nothing starts over, as the beat does not depend on either. */
   update: (caret: VisualizerCaret) => void
   unsubscribe: () => void
 }
@@ -472,17 +475,12 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
   return { update, unsubscribe }
 }
 
-/** Pulses on a steady beat that follows the music's tempo (the header's CLOCK); of `caret` only `mass` is read. */
+/** Pulses on a steady beat that follows the music's tempo (the header's CLOCK); of `caret` only the fall is read. */
 export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener): MusicClockSubscription {
-  const subscriber: Clock = { clock: new BeatClock(), mass: NaN, fallSec: 0, fallShape: 0, listener, published: 0 }
+  const subscriber: Clock = { clock: new BeatClock(), caret, listener, published: 0 }
   const update = (next: VisualizerCaret) => {
-    if (next.mass === subscriber.mass) return
-    subscriber.mass = next.mass
-    const fall = fallOf(next.mass)
-    subscriber.fallSec = fall.fallSec
-    subscriber.fallShape = fall.fallShape
+    subscriber.caret = next
   }
-  update(caret)
   clocks.add(subscriber)
   added()
   const unsubscribe = () => {
