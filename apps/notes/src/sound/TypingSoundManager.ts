@@ -561,7 +561,7 @@ export class TypingSoundManager {
   private applyContextState(): void {
     if (this.enabled) {
       void this.ensureContextRunning()
-    } else if (this.audioContext && this.audioContext.state === 'running') {
+    } else if (this.audioContext && this.audioContext.state !== 'closed') {
       void this.audioContext.suspend()
     }
   }
@@ -1217,6 +1217,9 @@ export class TypingSoundManager {
     } catch {
       // If resume fails, the next user gesture may still allow playback.
     }
+    // Switched off while the resume was in flight (a quick on-off, or a
+    // sound already past its own enabled check): put it back to sleep.
+    if (!this.enabled) this.applyContextState()
   }
 
   private createAudioContext(): AudioContext {

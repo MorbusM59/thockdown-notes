@@ -11,7 +11,7 @@ const FEATURE_PRESENTATION: Record<FeatureId, { icon: string; label: string }> =
   spellCheck: { icon: 'fa-solid fa-spell-check', label: 'Spell check' },
   customCursor: { icon: 'fa-solid fa-computer-mouse', label: 'Custom cursor' },
   keySounds: { icon: 'fa-solid fa-keyboard', label: 'Keystroke sounds' },
-  visualizer: { icon: 'fa-solid fa-drum', label: 'Visualizer: the caret, the active editor\'s shade and the box outlines follow the playing music' },
+  visualizer: { icon: 'fa-solid fa-drum', label: 'Visualizer' },
   glaze: { icon: 'fa-solid fa-wand-magic-sparkles', label: 'Glaze' },
   caretBlink: { icon: 'fa-solid fa-i-cursor', label: 'Caret blink' },
 }
