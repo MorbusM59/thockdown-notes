@@ -26,6 +26,13 @@ describe('sanitizeVisualizer', () => {
   })
 })
 
+it('keeps a drum\'s groove beside the band\'s width, bounded, and reads a layout saved before groove at 0', () => {
+  const v = sanitizeVisualizer({ shade: { source: 'hat', octaves: 2, groove: 0.8 }, outline: { source: 'kick', octaves: 3, groove: 7 } }, false)
+  expect(v.shade).toMatchObject({ octaves: 2, groove: 0.8 })
+  expect(v.outline).toMatchObject({ octaves: 3, groove: 1 })
+  expect(sanitizeVisualizer({ shade: { source: 'snare', octaves: 2 } }, false).shade.groove).toBe(0)
+})
+
 it('reads a layout saved before the source existed', () => {
   const v = sanitizeVisualizer({ outline: { frequencyHz: 0 }, shade: { frequencyHz: 440 } }, false)
   expect(v.outline.source).toBe('kick')

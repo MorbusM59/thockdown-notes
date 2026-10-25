@@ -1101,7 +1101,11 @@ export function SidebarOptionsPanel({
                 }}
                 onCommit={(value) => set(sourceAtSlider(value, channel.frequencyHz))}
               />
-              {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is; a drum does not use it', 'band width in octaves', 1)}
+              {/* One slot, two settings, each kept while the other shows: a band's
+                  width, or a drum's groove (visualizer.ts, `groove`). */}
+              {channel.source === 'band'
+                ? slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)
+                : slider('groove', 'groove', 0, 1, 0.01, 'How steadily it holds the learned pattern against what it hears. At the left it shows only the hits it hears; towards the middle it also shows an accent off the pattern; at the right every hit of the pattern lands at full strength, even one drowned by another instrument, and a one-off is ignored. A break stops it at any setting', 'groove')}
               {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
               {slider('mass', 'mass', 0, 1, 0.01, 'How heavy each hit is: light flickers with every hit and is gone at once, heavy carries each hit and lets go slowly. A hit always lands at once', 'mass')}
               {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}

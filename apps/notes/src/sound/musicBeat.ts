@@ -34,7 +34,10 @@
  * (`drumTracker.ts`), which finds the tempo and each drum's hits in the same
  * look-ahead window; each channel holds only its place in the hits (a
  * `DrumCursor`) and asks, per frame, whether its drum was heard since it
- * last asked. The decoded samples carry exact media times, so the tracker's
+ * last asked, at its own GROOVE (how steadily the answer holds the drum's
+ * learned pattern against what is heard; `drumTracker.ts`'s header), read
+ * live from the channel, so changing it restarts nothing and two channels
+ * following one drum at two grooves each get their own. The decoded samples carry exact media times, so the tracker's
  * sample count and the music agree by construction.
  *
  * What the listener HEARS trails the element's media time by the output's
@@ -244,7 +247,7 @@ function percentile(band: Band, share: number): number {
 function respond(band: Band, listenerTime: number): number {
   const drum = drumOf(band.channel)
   const raw = drum
-    ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast) : 0)
+    ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast, band.channel.groove) : 0)
     : stretched(band, listenerTime)
   // The fall: a response never drops faster than its last peak fades, on
   // flow's fade curve, as long and shaped as the block's mass makes it. A

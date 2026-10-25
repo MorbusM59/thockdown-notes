@@ -151,6 +151,8 @@ interface PlayOptions {
   stampJitterSec?: number
   /** Every this many frames, the frame's samples are lost and only their count is reported. */
   loseEvery?: number
+  /** How steadily the answer holds the learned pattern (`DrumTracker.hitBetween`). */
+  groove?: number
 }
 
 /**
@@ -160,7 +162,7 @@ interface PlayOptions {
  * feed. Returns every hit reported, with its media time and response.
  */
 function play(track: Track, contrast: number, options: PlayOptions = {}, drum: Drum = 'kick'): { hits: Array<{ at: number; response: number }>; tracker: DrumTracker } {
-  const { lagSec = 5, stampJitterSec = 0, loseEvery = 0 } = options
+  const { lagSec = 5, stampJitterSec = 0, loseEvery = 0, groove = 0 } = options
   const tracker = new DrumTracker(RATE)
   const cursor = new DrumCursor()
   const rand = noise(3)
@@ -182,7 +184,7 @@ function play(track: Track, contrast: number, options: PlayOptions = {}, drum: D
     fed = end
     const heard = end / RATE - lagSec
     if (heard <= 0) continue
-    const response = tracker.hitBetween(drum, cursor, heard, contrast)
+    const response = tracker.hitBetween(drum, cursor, heard, contrast, groove)
     if (response > 0) hits.push({ at: heard, response })
   }
   return { hits, tracker }
@@ -430,6 +432,12 @@ interface Kit {
   hats: number[]
   /** Clap-like snares: noise only, no body (a clap or a rim shot's crack). */
   clap?: boolean
+  /** Where no drum plays, in seconds (the bass line goes on): a break. */
+  silent?: [number, number]
+  /** The hats from a bar on, replacing `hats`: a change of pattern. */
+  hatsFrom?: { bar: number; hats: number[] }
+  /** One-off extra snares, as [bar, sixteenth]. */
+  accents?: Array<[number, number]>
 }
 
 /**
@@ -447,13 +455,16 @@ function kit(seconds: number, bpm: number, groove: Kit): { samples: Float32Array
   const played = { kicks: [] as number[], snares: [] as number[], hats: [] as number[] }
   for (let bar = 0; bar * 16 * sixteenth < seconds; bar++) {
     const at = (s: number) => (bar * 16 + s) * sixteenth
-    for (const s of groove.kicks) { addMixedKick(out, at(s), click); played.kicks.push(at(s)) }
-    for (const s of groove.snares) {
+    const plays = (s: number) => !groove.silent || at(s) < groove.silent[0] || at(s) >= groove.silent[1]
+    const hats = groove.hatsFrom && bar >= groove.hatsFrom.bar ? groove.hatsFrom.hats : groove.hats
+    const accents = (groove.accents ?? []).filter(([b]) => b === bar).map(([, s]) => s)
+    for (const s of groove.kicks.filter(plays)) { addMixedKick(out, at(s), click); played.kicks.push(at(s)) }
+    for (const s of [...groove.snares, ...accents].filter(plays)) {
       if (groove.clap) addHat(out, at(s), 0, hatNoise)
       addSnare(out, at(s), 1, snareNoise)
       played.snares.push(at(s))
     }
-    for (const s of groove.hats) { addHat(out, at(s), 0.35 + 0.1 * rand(), hatNoise); played.hats.push(at(s)) }
+    for (const s of hats.filter(plays)) { addHat(out, at(s), 0.35 + 0.1 * rand(), hatNoise); played.hats.push(at(s)) }
     for (let beat = 0; beat < 4; beat++) {
       const t0 = at(beat * 4 + 2)
       for (let i = 0; i < 2 * sixteenth * RATE; i++) {
@@ -627,6 +638,165 @@ describe('DrumTracker on identical hits', () => {
     // the note reads a few dB short of an identical kick's over silence.
     expect(responses.filter((r) => r > 0.99).length / responses.length).toBeGreaterThan(0.95)
   })
+})
+
+/** The hats of a kit clear of its snares' ring, which the snare wins (VOICES). */
+function freeHats(track: ReturnType<typeof kit>): number[] {
+  return track.hats.filter((h) => !track.snares.some((s) => h > s - 0.001 && h < s + SNARE_RING_SEC))
+}
+
+/**
+ * One drum of a kit played at `groove`: the share of `times` between `from`
+ * and `to` drawing a hit above 0.3, the share drawing a FULL one (above
+ * 0.95), and the hits above 0.3 that matched nothing in `played`.
+ */
+function grooveScore(track: { samples: Float32Array }, drum: Drum, times: number[], played: number[], groove: number, from = 10, to = 34, options: PlayOptions = {}) {
+  const { hits } = play({ samples: track.samples, kicks: times }, 0.5, { ...options, groove }, drum)
+  const due = times.filter((t) => t > from && t < to)
+  const found = due.filter((t) => (hitFor(t, hits)?.response ?? 0) > 0.3).length / due.length
+  const full = due.filter((t) => (hitFor(t, hits)?.response ?? 0) > 0.95).length / due.length
+  const strays = hits.filter((h) => h.at > from && h.at < to && h.response > 0.3 && !played.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))
+  return { hits, found, full, strays }
+}
+
+describe('DrumTracker with groove', () => {
+  it('lands the hats a strummed guitar masks at full groove, at full strength and nowhere off the pattern', () => {
+    for (const [bpm, groove] of [
+      [110, { kicks: [0, 8, 10], snares: [4, 12], hats: [2, 6, 10, 14] }],
+      [124, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [...Array(16).keys()] }],
+    ] as Array<[number, Kit]>) {
+      const track = kit(40, bpm, groove)
+      addBusyMids(track.samples, bpm)
+      const evidence = grooveScore(track, 'hat', freeHats(track), track.hats, 0)
+      const held = grooveScore(track, 'hat', freeHats(track), track.hats, 1)
+      // Measured: 0.86 and 0.91 found by the evidence alone, 1.0 and 0.99 held.
+      expect(evidence.found, `${bpm}`).toBeLessThan(0.95)
+      expect(held.found, `${bpm}`).toBeGreaterThan(0.98)
+      expect(held.full, `${bpm}`).toBeGreaterThan(0.98)
+      // The groove adds nothing off the pattern: the one stray at 110 is the
+      // evidence's own (a voice syllable in the last of a snare's noise).
+      expect(held.strays.length, `${bpm}`).toBeLessThanOrEqual(evidence.strays.length)
+    }
+  }, 60_000)
+
+  it('stops within a beat of a two-bar break, while the bass and the mids go on, and resumes on the first hit after it', () => {
+    const bpm = 110
+    const bar = 240 / bpm
+    const silent: [number, number] = [10 * bar, 12 * bar]
+    const track = kit(40, bpm, { kicks: [0, 8, 10], snares: [4, 12], hats: [0, 2, 4, 6, 8, 10, 12, 14], silent })
+    addBusyMids(track.samples, bpm)
+    for (const drum of ['kick', 'snare', 'hat'] as const) {
+      const times = { kick: track.kicks, snare: track.snares, hat: track.hats }[drum]
+      const evidence = play({ samples: track.samples, kicks: times }, 0.5, {}, drum).hits
+      const { hits } = play({ samples: track.samples, kicks: times }, 0.5, { groove: 1 }, drum)
+      // Nothing at all from the moment the drum stops: a break is seen before
+      // anything is shown for it (the window reaches past the listener).
+      expect(hits.filter((h) => h.at > silent[0] - EARLY_SEC && h.at < silent[1] - EARLY_SEC && h.response > 0.3), drum).toEqual([])
+      // The first hit after it that the evidence shows is shown, and nothing before it.
+      const first = times.find((t) => t >= silent[1] && (hitFor(t, evidence)?.response ?? 0) > 0.3)!
+      expect(hitFor(first, hits)?.response ?? 0, drum).toBeGreaterThan(0.3)
+      expect(hits.filter((h) => h.at >= silent[1] - EARLY_SEC && h.at < first - EARLY_SEC && h.response > 0.3), drum).toEqual([])
+    }
+  }, 60_000)
+
+  it('keeps a house breakdown dark, whose bass goes on in the kick\'s own band', () => {
+    const track = house(40, 124, 14, 22)
+    const { hits } = play(track, 0.5, { groove: 1 })
+    expect(hits.filter((h) => h.at > 14.1 && h.at < 21.9)).toEqual([])
+    expect(score(track, hits, 24, 34, 0.75).found).toBe(1)
+  })
+
+  it('adopts a new pattern within two bars, and lets go of one the drum has left', () => {
+    const bpm = 124
+    const bar = 240 / bpm
+    const eighths = [0, 2, 4, 6, 8, 10, 12, 14]
+    const sixteenths = [...Array(16).keys()]
+    const kicks = [0, 4, 8, 12]
+    const offBeat = (t: number) => Math.round(t / (bar / 16)) % 2 === 1
+    // Eighths, then sixteenths from bar 10: every new off-beat sixteenth shows from bar 12.
+    const denser = kit(40, bpm, { kicks, snares: [4, 12], hats: eighths, hatsFrom: { bar: 10, hats: sixteenths } })
+    const added = freeHats(denser).filter((t) => t >= 12 * bar && offBeat(t))
+    expect(grooveScore(denser, 'hat', added, denser.hats, 1).found).toBe(1)
+    // Sixteenths, then eighths from bar 10: nothing is shown where the hats stopped.
+    const sparser = kit(40, bpm, { kicks, snares: [4, 12], hats: sixteenths, hatsFrom: { bar: 10, hats: eighths } })
+    expect(grooveScore(sparser, 'hat', sparser.hats, sparser.hats, 1, 9 * bar).strays).toEqual([])
+  }, 60_000)
+
+  it('shows a one-off syncopated snare at a middle groove and holds the pattern over it at full groove', () => {
+    const bpm = 110
+    const track = kit(40, bpm, { kicks: [0, 8, 10], snares: [4, 12], hats: [0, 2, 4, 6, 8, 10, 12, 14], accents: [[8, 7], [12, 7]] })
+    const accents = [8, 12].map((b) => ((b * 16 + 7) * 15) / bpm)
+    const regular = track.snares.filter((t) => !accents.some((accent) => Math.abs(t - accent) < 0.001))
+    const responses = (groove: number) => {
+      const { hits } = play({ samples: track.samples, kicks: track.snares }, 0.5, { groove }, 'snare')
+      return accents.map((t) => hitFor(t, hits)?.response ?? 0)
+    }
+    // Groove 0 is the evidence with the pattern as its filter: nothing off the pattern passes.
+    expect(responses(0)).toEqual([0, 0])
+    for (const response of responses(0.5)) expect(response).toBeGreaterThan(0.95)
+    expect(responses(1)).toEqual([0, 0])
+    const held = grooveScore(track, 'snare', regular, track.snares, 1)
+    expect(held.found).toBe(1)
+    expect(held.full).toBe(1)
+  }, 60_000)
+
+  it('holds the hats and kicks while the media time jitters and frames are lost', () => {
+    const track = kit(40, 110, { kicks: [0, 8, 10], snares: [4, 12], hats: [2, 6, 10, 14] })
+    addBusyMids(track.samples, 110)
+    const options = { stampJitterSec: 0.01, loseEvery: 41 }
+    const hats = grooveScore(track, 'hat', freeHats(track), track.hats, 1, 10, 34, options)
+    // Measured 0.68 by the evidence alone, 0.93 held: a hat in a lost frame
+    // whose slot a bar on is lost as well cannot be told from a break.
+    expect(hats.found).toBeGreaterThan(0.9)
+    expect(hats.strays.length).toBeLessThanOrEqual(2)
+    const kicks = grooveScore(track, 'kick', track.kicks, track.kicks, 1, 10, 34, options)
+    expect(kicks.found).toBeGreaterThan(0.85)
+    expect(kicks.strays.length).toBeLessThanOrEqual(1)
+  }, 60_000)
+
+  it('follows a change of tempo and pattern in a long track', () => {
+    const a = kit(40, 110, { kicks: [0, 8, 10], snares: [4, 12], hats: [0, 2, 4, 6, 8, 10, 12, 14] })
+    const b = kit(40, 128, { kicks: [0, 4, 8, 12], snares: [4, 12], hats: [2, 6, 10, 14] })
+    const samples = new Float32Array(a.samples.length + b.samples.length)
+    samples.set(a.samples)
+    samples.set(b.samples, a.samples.length)
+    addBusyMids(samples, 120)
+    const joined = (first: number[], second: number[]) => [...first, ...second.map((t) => t + 40)]
+    const track = { samples, kicks: joined(a.kicks, b.kicks), snares: joined(a.snares, b.snares), hats: joined(a.hats, b.hats) }
+    // The second half, from once the new tempo has filled the window.
+    const kicks = grooveScore(track, 'kick', track.kicks, track.kicks, 1, 55, 74)
+    expect(kicks.found).toBeGreaterThan(0.9)
+    expect(kicks.strays).toEqual([])
+    const hats = grooveScore(track, 'hat', freeHats(track), track.hats, 1, 55, 74)
+    expect(hats.found).toBeGreaterThan(0.9)
+    expect(hats.strays.length).toBeLessThanOrEqual(1)
+  }, 60_000)
+
+  it('answers two readers of one drum, each at its own groove, as if each read alone', () => {
+    const track = kit(30, 110, { kicks: [0, 8, 10], snares: [4, 12], hats: [2, 6, 10, 14] })
+    addBusyMids(track.samples, 110)
+    const alone = (groove: number) => play({ samples: track.samples, kicks: [] }, 0.5, { groove }, 'hat').hits
+    const tracker = new DrumTracker(RATE)
+    const readers = [{ groove: 0, cursor: new DrumCursor(), hits: [] as Array<{ at: number; response: number }> }, { groove: 1, cursor: new DrumCursor(), hits: [] as Array<{ at: number; response: number }> }]
+    const rand = noise(3)
+    let fed = 0
+    let frame = 0
+    while (fed < track.samples.length) {
+      frame++
+      const end = Math.min(track.samples.length, fed + (frame % 97 === 0 ? 2400 : Math.round(800 + 120 * rand())))
+      tracker.feed(track.samples.subarray(fed, end), 0, (end - 1) / RATE)
+      fed = end
+      const heard = end / RATE - 5
+      if (heard <= 0) continue
+      for (const reader of readers) {
+        const response = tracker.hitBetween('hat', reader.cursor, heard, 0.5, reader.groove)
+        if (response > 0) reader.hits.push({ at: heard, response })
+      }
+    }
+    expect(readers[0].hits).toEqual(alone(0))
+    expect(readers[1].hits).toEqual(alone(1))
+    expect(readers[1].hits).not.toEqual(readers[0].hits)
+  }, 60_000)
 })
 
 describe('DrumCursor', () => {

@@ -28,12 +28,21 @@ export interface VisualizerChannel {
    * plays and a hit takes it away. Zero: off.
    */
   effect: number
-  /** What it follows: a band (`frequencyHz`, `octaves`) or a drum. */
+  /** What it follows: a band (`frequencyHz`, `octaves`) or a drum (`groove`). */
   source: VisualizerSource
   /** The centre of the band, in Hz; kept while a drum is followed, so going back to the band finds it where it was. */
   frequencyHz: number
   /** The band's width, in octaves, between its half-power points. */
   octaves: number
+  /**
+   * For a drum, 0..1: how steadily it holds the pattern the drum has been
+   * playing against what it hears (the notes app's `sound/drumTracker.ts`,
+   * GROOVE). 0 shows only the hits it hears, the pattern a filter; 1 lands
+   * every hit of the pattern at full strength, masked or not, ignores a
+   * one-off off it, and stops through a break. Kept while a band is
+   * followed, as `octaves` is kept while a drum is.
+   */
+  groove: number
   /**
    * Where the response starts, as a share of the surrounding ten seconds of
    * the band: higher keeps only the biggest hits.
@@ -117,11 +126,18 @@ function massOfFallSec(fallSec: number): number {
   return Math.log(fallSec / FALL_LIGHT_SEC) / Math.log(FALL_HEAVY_SEC / FALL_LIGHT_SEC)
 }
 
+/**
+ * A drum's groove where a layout has none: 0, the drum as it was followed
+ * before groove was a setting, so a layout saved then looks exactly as it did.
+ */
+const DEFAULT_GROOVE = 0
+
 export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   effect: 0.6,
   source: 'kick',
   frequencyHz: 70,
   octaves: 1,
+  groove: DEFAULT_GROOVE,
   contrast: 0.5,
   mass: 0.5,
 }
@@ -179,6 +195,7 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
     source: SOURCES.includes(source.source as VisualizerSource) ? source.source as VisualizerSource : legacySource(source.frequencyHz, d.source),
     frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
     octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
+    groove: bounded(source.groove, 0, 1, d.groove),
     contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
     mass: sanitizeMass(source, d.mass),
   }
