@@ -44,7 +44,7 @@ describe('the progress track', () => {
     const columns = 40
     const seen = new Set<number>()
     for (let i = 0; i <= 1000; i += 1) {
-      const column = playheadColumn(columns, i / 1000)
+      const column = playheadColumn(columns, (i / 1000) * 180, 180)
       expect(column).not.toBeNull()
       expect(column!).toBeGreaterThanOrEqual(2)
       expect(column!).toBeLessThanOrEqual(columns - 3)
@@ -56,7 +56,12 @@ describe('the progress track', () => {
   it('puts the playhead on the box that was pressed', () => {
     const columns = 37
     for (let column = 2; column <= columns - 3; column += 1) {
-      expect(playheadColumn(columns, columnToFraction(columns, column)!)).toBe(column)
+      const startSec = columnToFraction(columns, column)! * 180
+      expect(playheadColumn(columns, startSec, 180)).toBe(column)
+      // A seek reported a little short of where it was sent still lands on the box pressed.
+      expect(playheadColumn(columns, startSec - 0.02, 180)).toBe(column)
+      // The end of the box before is still that box.
+      expect(playheadColumn(columns, startSec - 0.2, 180)).toBe(Math.max(2, column - 1))
     }
   })
 

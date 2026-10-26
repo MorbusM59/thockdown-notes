@@ -163,7 +163,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     // playhead has crossed into another box, which is seconds apart.
     const moveGap = () => {
       const duration = musicPlayerService.currentDurationSec
-      setGapColumn(readNowPlaying().song && duration > 0 ? playheadColumn(columns, musicPlayerService.currentTime / duration) : null)
+      setGapColumn(readNowPlaying().song ? playheadColumn(columns, musicPlayerService.currentTime, duration) : null)
     }
 
     const draw = () => {

@@ -84,15 +84,30 @@ export function trackSpan(columns: number): { first: number; count: number } {
   return { first: 2, count: Math.max(0, columns - 4) }
 }
 
-/** Which box of the track is left empty for the playhead at `fraction` of the song, or null when there is no track. */
-export function playheadColumn(columns: number, fraction: number): number | null {
+/**
+ * How far before a box's start the playhead may read and still count as in
+ * that box (at most a quarter of a box). A seek to a box's start lands the
+ * media a hair early (to the packet or sample before), and without this the
+ * playhead first showed the box before the one pressed.
+ */
+export const PLAYHEAD_TOLERANCE_SEC = 0.05
+
+/**
+ * Which box of the track is left empty for the playhead at `timeSec` into a
+ * song `durationSec` long, or null when there is no track. Box k holds
+ * `[k, k + 1)` of the track's `count` equal shares of the song, each start
+ * widened back by `PLAYHEAD_TOLERANCE_SEC`.
+ */
+export function playheadColumn(columns: number, timeSec: number, durationSec: number): number | null {
   const { first, count } = trackSpan(columns)
-  if (count <= 0 || !Number.isFinite(fraction)) return null
-  const share = Math.max(0, Math.min(1, fraction))
-  return first + Math.min(count - 1, Math.floor(share * count))
+  if (count <= 0 || !(durationSec > 0) || !Number.isFinite(timeSec)) return null
+  const boxSec = durationSec / count
+  const tolerance = Math.min(PLAYHEAD_TOLERANCE_SEC, boxSec / 4)
+  const box = Math.floor((Math.max(0, timeSec) + tolerance) / boxSec)
+  return first + Math.min(count - 1, box)
 }
 
-/** Where in the song a press on track box `column` travels to: the start of that box's share, so the playhead lands on the box pressed. */
+/** Where in the song a press on track box `column` travels to, as a fraction: the start of that box's share, so the playhead lands on the box pressed. */
 export function columnToFraction(columns: number, column: number): number | null {
   const { first, count } = trackSpan(columns)
   if (count <= 0 || column < first || column >= first + count) return null
