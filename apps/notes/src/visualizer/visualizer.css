@@ -101,6 +101,8 @@
   pointer-events: auto;
   background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
   box-shadow: var(--box-shadow-inverted-filtered);
+  outline: 1px solid var(--color-grid-bg);
+  border: none;
 }
 
 /* Square, unlike the empty state's circle (editor.css rounds its stripes). */
