@@ -101,10 +101,12 @@
   pointer-events: auto;
   background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
   box-shadow: var(--box-shadow-inverted-filtered);
-  /* The empty state's own rounding, on the plate and its stripes alike (editor.css). */
-  border-radius: calc(var(--border-radius-regular) *6);
 }
 
+/* Square, unlike the empty state's circle (editor.css rounds its stripes). */
+.visualizer-cutout::before {
+  border-radius: 0;
+}
 
 /* Each swayed layer is promoted once and only moved after that, so a frame
    of the sway composites and never repaints. */

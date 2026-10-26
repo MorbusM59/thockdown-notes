@@ -249,13 +249,21 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   }, [boxPx, columns])
 
   const box = boxPx
+  // The cutout covers the inside of its boxes: a box's first pixel row and
+  // column are the grid line it shares with the box before, so the cutout
+  // starts one pixel in and is one pixel smaller, leaving that line drawn.
+  const cutoutRect = {
+    left: originXPx + cutout.column * box + 1,
+    top: originYPx + cutout.row * box + 1,
+    size: Math.max(0, cutout.size * box - 1),
+  }
   // The outline grid has a hole where the cutout is, so the beat pane's
   // copy of it (useBeatGridMirror.ts, drawn above the scene) leaves the
   // cutout alone.
   const cutoutHole: CSSProperties = cutout.size > 0 ? {
     maskImage: 'linear-gradient(#000, #000), linear-gradient(#000, #000)',
-    maskSize: `100% 100%, ${cutout.size * box}px ${cutout.size * box}px`,
-    maskPosition: `0 0, ${originXPx + cutout.column * box}px ${originYPx + cutout.row * box}px`,
+    maskSize: `100% 100%, ${cutoutRect.size}px ${cutoutRect.size}px`,
+    maskPosition: `0 0, ${cutoutRect.left}px ${cutoutRect.top}px`,
     maskRepeat: 'no-repeat',
     maskComposite: 'exclude',
   } : {}
@@ -320,10 +328,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
             <div
               className="visualizer-cutout"
               style={{
-                left: originXPx + cutout.column * box,
-                top: rowTop(cutout.row),
-                width: cutout.size * box,
-                height: cutout.size * box,
+                left: cutoutRect.left,
+                top: cutoutRect.top,
+                width: cutoutRect.size,
+                height: cutoutRect.size,
                 '--empty-state-scene-mask': sceneMaskUrl,
               } as CSSProperties}
               onClick={onCutoutClick}
