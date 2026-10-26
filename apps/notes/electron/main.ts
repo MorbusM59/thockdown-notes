@@ -1,3 +1,4 @@
+import { installHangLog } from './hangLog'
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell, screen } from 'electron'
 import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
@@ -1554,6 +1555,8 @@ async function createWindow() {
   // get registered. Catch them directly at the native input level instead --
   // this fires before the renderer's own keydown handling, so it can't be
   // swallowed by the app's global shortcut interception either.
+  installHangLog(win, resolveDataRoot());
+
   win.webContents.on('before-input-event', (_event, input) => {
     if (input.type !== 'keyDown') return
     const isDevToolsShortcut = input.key === 'F12'
