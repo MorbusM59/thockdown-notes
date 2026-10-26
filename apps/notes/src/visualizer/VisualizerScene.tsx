@@ -17,7 +17,8 @@
  *
  * ONE FRAME LOOP, while the scene is mounted: it reads the analysers, moves
  * the bars, draws them into one canvas only when a box actually changed,
- * moves the progress track's gap when the playhead crosses into another box,
+ * says when the playhead crosses into another box (the gap itself is state,
+ * so React draws it and a re-render cannot leave it stale),
  * and sways the glaze. With the OS asking for reduced motion the glaze holds
  * still, and once the music is stopped and every bar has fallen the loop
  * stops altogether until the music plays again. A hidden window gets no
@@ -120,7 +121,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   const credits = nowPlaying.song ? creditsLine(songArtistText(nowPlaying.song), songAlbumText(nowPlaying.song), columns) : ''
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const gapRef = useRef<HTMLDivElement | null>(null)
+  const [gapColumn, setGapColumn] = useState<number | null>(null)
 
   // The frame loop. Rebuilt when the layout changes, since the number of
   // bands is the number of columns and the canvas is sized to the strip.
@@ -158,16 +159,11 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     const onResize = () => { amplitudePx = swayAmplitudePx(window.innerWidth, window.innerHeight) }
     window.addEventListener('resize', onResize)
 
-    let shownGap: number | null | undefined
+    // The gap is React's to draw (`gapColumn`); the loop only says when the
+    // playhead has crossed into another box, which is seconds apart.
     const moveGap = () => {
       const duration = musicPlayerService.currentDurationSec
-      const column = readNowPlaying().song && duration > 0 ? playheadColumn(columns, musicPlayerService.currentTime / duration) : null
-      if (column === shownGap) return
-      shownGap = column
-      const gap = gapRef.current
-      if (!gap) return
-      gap.style.display = column === null ? 'none' : ''
-      if (column !== null) gap.style.left = `${originXPx + column * boxPx}px`
+      setGapColumn(readNowPlaying().song && duration > 0 ? playheadColumn(columns, musicPlayerService.currentTime / duration) : null)
     }
 
     const draw = () => {
@@ -240,7 +236,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       unsubscribeSong()
       reducedMotion.removeEventListener('change', wake)
     }
-  }, [scene, columns, stripRows, boxPx, originXPx])
+  }, [scene, columns, stripRows, boxPx])
 
   const handleProgressPress = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -285,7 +281,9 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
               {track.count > 0 && (
                 <div className="visualizer-lit" style={{ left: originXPx + track.first * box, top: rowTop(layout.progressRow), width: track.count * box, height: box }} />
               )}
-              <div ref={gapRef} className="visualizer-track-gap" style={{ top: rowTop(layout.progressRow), width: box, height: box, display: 'none' }} />
+              {gapColumn !== null && (
+                <div className="visualizer-track-gap" style={{ left: originXPx + gapColumn * box, top: rowTop(layout.progressRow), width: box, height: box }} />
+              )}
               <div className="visualizer-lit" style={{ left: originXPx + (columns - 1) * box, top: rowTop(layout.progressRow), width: box, height: box }} />
             </>
           )}
