@@ -43,11 +43,17 @@ import {
 
 /** The empty state's diameter (`--circle-diameter`, editor.css), which the cutout matches. */
 const EMPTY_SCENE_DIAMETER_PX = 220
+/**
+ * The scene's boxes are as wide as the editor's would be with this much
+ * x-box padding, whatever the reader's own x-box setting, and as tall as
+ * they are wide.
+ */
+export const VISUALIZER_GLYPH_SIDE_GAP_PX = 4
 /** The longest step a frame may take, so a frame after a stall does not drop every bar at once. */
 const MAX_FRAME_SEC = 0.1
 
 export type VisualizerSceneProps = {
-  /** The editor's real box width at the reader's settings; the scene's boxes are this wide and this tall. */
+  /** The scene's box: the editor's box width at the reader's font, at `VISUALIZER_GLYPH_SIDE_GAP_PX` of x-box padding; this wide and this tall. */
   boxPx: number
   fontFamily: string
   fontSizePx: number

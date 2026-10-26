@@ -7,9 +7,9 @@ import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
 import { getEmptyStateSceneMaskUrl } from '../editor/EmptyStateScene'
-import { VisualizerScene } from '../visualizer/VisualizerScene'
+import { VISUALIZER_GLYPH_SIDE_GAP_PX, VisualizerScene } from '../visualizer/VisualizerScene'
 import type { EditorAdapter, EditorBindings, EditorSelectionState } from '../editor/EditorContract'
-import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
+import { cellWidthForGlyph, type EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -570,7 +570,7 @@ export function SectionEditorArea({
             </div>
             {isVisualizerMode ? (
               <VisualizerScene
-                boxPx={editorRuntimeMetrics.cellWidthPx}
+                boxPx={cellWidthForGlyph(editorRuntimeMetrics.glyphWidthPx, VISUALIZER_GLYPH_SIDE_GAP_PX)}
                 fontFamily={editorFontFamily}
                 fontSizePx={editorRuntimeMetrics.fontSizePx}
                 sceneMaskUrl={emptyStateSceneMaskUrl}

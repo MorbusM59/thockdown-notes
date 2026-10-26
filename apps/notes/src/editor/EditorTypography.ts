@@ -140,6 +140,11 @@ export function measureMonospaceGlyphWidthPx(fontFamily: string, fontSizePx: num
   return width;
 }
 
+/** The grid's horizontal pitch for a glyph `glyphWidthPx` wide with `glyphSideGapPx` of x-box padding on each side. */
+export function cellWidthForGlyph(glyphWidthPx: number, glyphSideGapPx: number): number {
+  return Math.max(1, Math.round(glyphWidthPx + (glyphSideGapPx * 2)));
+}
+
 export function resolveEditorRuntimeMetrics(
   style: EditorStyleKey,
   fontSizePxInput: number = DEFAULT_EDITOR_FONT_SIZE_PX,
@@ -169,7 +174,7 @@ export function resolveEditorRuntimeMetrics(
   // pattern drift/shift as it tiles across the width instead of staying
   // pixel-perfect -- same root cause as the lineHeightPx rounding, just on
   // the other axis.
-  const cellWidthPx = Math.max(1, Math.round(glyphWidthPx + (safeGlyphSideGapPx * 2)));
+  const cellWidthPx = cellWidthForGlyph(glyphWidthPx, safeGlyphSideGapPx);
 
   return {
     fontSizePx,
