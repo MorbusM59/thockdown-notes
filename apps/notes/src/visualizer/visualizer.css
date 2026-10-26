@@ -7,6 +7,13 @@
   display: none;
 }
 
+/* The beat edge reads larger over a full screen: twice the layout's blur and
+   10px more spread (editor.css, .editor-beat-edge). */
+.app-grid.is-visualizer .editor-beat-edge {
+  --beat-edge-blur-scale: 2;
+  --beat-edge-spread-extra: 10px;
+}
+
 /* The slot's own contents stay mounted and laid out underneath, so the note
    returns exactly as it was, but are not drawn. Opacity, not visibility: a
    descendant can set `visibility: visible` and show through (the edit view's
