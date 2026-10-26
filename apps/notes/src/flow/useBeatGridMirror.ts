@@ -16,13 +16,14 @@
  * index.css describes). So the block draws a COPY at shell level, on a
  * layer of its own outside the pane, and this keeps the copy's box, tile size
  * and phase equal to the real grid's: re-read when either box resizes or the
- * grid's inline style (its half-cell phase) changes, never per frame.
+ * grid's inline style (its half-cell phase, or a mask cutting a hole in it)
+ * changes, never per frame.
  */
 
 import { useEffect, useState } from 'react'
 
 /** The inline properties `sync` writes, removed again when the grid goes so the flat pane fills the shell. */
-const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--editor-cell-width', '--editor-line-height', 'background-size', 'background-position']
+const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--editor-cell-width', '--editor-line-height', 'background-size', 'background-position', 'mask-image', 'mask-size', 'mask-position', 'mask-repeat', 'mask-composite']
 
 export function useBeatGridMirror(isGridView: boolean): {
   gridRef: (el: HTMLDivElement | null) => void
@@ -56,6 +57,14 @@ export function useBeatGridMirror(isGridView: boolean): {
       mirror.style.setProperty('--editor-line-height', lineHeight ?? cellWidth)
       mirror.style.backgroundSize = style.backgroundSize
       mirror.style.backgroundPosition = style.backgroundPosition
+      // A hole in the grid (the visualizer's cutout, VisualizerScene.tsx) is
+      // a hole in the copy too. Copied from the grid's own inline style, so
+      // a grid without one leaves the copy unmasked.
+      for (const property of ['mask-image', 'mask-size', 'mask-position', 'mask-repeat', 'mask-composite']) {
+        const value = grid.style.getPropertyValue(property)
+        if (value) mirror.style.setProperty(property, value)
+        else mirror.style.removeProperty(property)
+      }
     }
     sync()
     const resize = new ResizeObserver(sync)

@@ -253,6 +253,16 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   }, [boxPx, columns])
 
   const box = boxPx
+  // The outline grid has a hole where the cutout is, so the beat pane's
+  // copy of it (useBeatGridMirror.ts, drawn above the scene) leaves the
+  // cutout alone.
+  const cutoutHole: CSSProperties = cutout.size > 0 ? {
+    maskImage: 'linear-gradient(#000, #000), linear-gradient(#000, #000)',
+    maskSize: `100% 100%, ${cutout.size * box}px ${cutout.size * box}px`,
+    maskPosition: `0 0, ${originXPx + cutout.column * box}px ${originYPx + cutout.row * box}px`,
+    maskRepeat: 'no-repeat',
+    maskComposite: 'exclude',
+  } : {}
   const track = trackSpan(columns)
   const rowTop = (row: number) => originYPx + row * box
   const style = {
@@ -293,7 +303,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
           <div
             ref={gridOutlineRef}
             className="visualizer-grid thockdown-grid-outline-lines"
-            style={{ backgroundPosition: `${originXPx - 1}px ${originYPx - 1}px` }}
+            style={{ backgroundPosition: `${originXPx - 1}px ${originYPx - 1}px`, ...cutoutHole }}
           />
           <div className="visualizer-grid thockdown-grid-lines" style={{ backgroundPosition: `${originXPx}px ${originYPx}px`, zIndex: 4 }} />
 
