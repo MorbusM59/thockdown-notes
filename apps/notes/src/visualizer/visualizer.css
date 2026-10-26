@@ -8,9 +8,12 @@
 }
 
 /* The slot's own contents stay mounted and laid out underneath, so the note
-   returns exactly as it was, but are not drawn. */
+   returns exactly as it was, but are not drawn. Opacity, not visibility: a
+   descendant can set `visibility: visible` and show through (the edit view's
+   root does, inline, CM6Editor.tsx), while no descendant can undo an
+   ancestor's opacity. A layer at opacity 0 is not drawn. */
 .editor-stage.is-visualizer > :not(.visualizer-scene) {
-  visibility: hidden;
+  opacity: 0;
 }
 
 .editor-stage .visualizer-scene {
