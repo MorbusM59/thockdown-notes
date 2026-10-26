@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import { SpectrumBallistics, litRows } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
 import { MusicBreath, applySway, breathScales, swayAmplitudePx } from './parallaxSway'
@@ -56,13 +57,6 @@ export type VisualizerSceneProps = {
   onCutoutClick: () => void
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
   gridOutlineRef: (element: HTMLDivElement | null) => void
-}
-
-function songTitle(song: ReturnType<typeof readNowPlaying>['song']): string {
-  if (!song) return ''
-  if (song.title) return song.title
-  const base = song.filePath.split(/[\\/]/).pop() ?? ''
-  return base.replace(/\.[^.]+$/, '')
 }
 
 function useBoxSize(element: HTMLElement | null): { width: number; height: number } {
@@ -116,8 +110,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   const { columns, originXPx, originYPx, stripRows, spectrumTopRow, cutout } = layout
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-  const title = fitToRow(songTitle(nowPlaying.song), columns)
-  const credits = creditsLine(nowPlaying.song?.artist ?? '', '', columns)
+  const title = nowPlaying.song ? fitToRow(songTitleText(nowPlaying.song), columns) : ''
+  const credits = nowPlaying.song ? creditsLine(songArtistText(nowPlaying.song), songAlbumText(nowPlaying.song), columns) : ''
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const gapRef = useRef<HTMLDivElement | null>(null)

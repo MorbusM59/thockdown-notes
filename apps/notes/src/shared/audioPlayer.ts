@@ -80,10 +80,12 @@ export type MusicSongEntry = {
   priority: number;
   /** 1–10; affects how quickly the song regains priority. */
   favorability: number;
-  /** Derived from filename when added; empty string if unknown. */
+  /** From the file's tags (electron/audioTags.ts); empty when the file has none. Shown through `songTitleText`. */
   title: string;
-  /** Derived from filename or ID3 metadata; empty string if unknown. */
+  /** From the file's tags; empty when the file has none. Shown through `songArtistText`. */
   artist: string;
+  /** From the file's tags; empty when the file has none. Shown through `songAlbumText`. */
+  album: string;
   /** Total duration in seconds (0 when unknown, filled lazily by renderer). */
   durationSec: number;
 };
@@ -186,3 +188,27 @@ export const PLAYLIST_SLOT_THEMES: Record<PlaylistButtonSlot, string> = {
   5: 'Electronic',
   6: 'Lounge',
 };
+
+/**
+ * How a song's tags are shown, the same everywhere (the music bar, the OS
+ * media controls, the visualizer). A missing artist or album says so in
+ * words; a missing title falls back to where the file is, as
+ * `... | folder | folder | file.mp3` (the leading `...` only when the path
+ * goes further up), so two untitled songs are still told apart.
+ */
+export const SONG_PATH_SEPARATOR = ' | ';
+
+export function songTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath'>): string {
+  if (song.title) return song.title;
+  const parts = song.filePath.split(/[\\/]/).filter((part) => part.length > 0);
+  const shown = parts.slice(-3);
+  return (parts.length > shown.length ? ['...', ...shown] : shown).join(SONG_PATH_SEPARATOR);
+}
+
+export function songArtistText(song: Pick<MusicSongEntry, 'artist'>): string {
+  return song.artist || 'no artist';
+}
+
+export function songAlbumText(song: Pick<MusicSongEntry, 'album'>): string {
+  return song.album || 'no album';
+}

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
+import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -802,7 +803,7 @@ export const AudioControls = memo(function AudioControls({
     const session = navigator.mediaSession
     if (!session) return
     session.metadata = currentSong
-      ? new MediaMetadata({ title: currentSong.title || '?', artist: currentSong.artist, album: 'Thockdown Notes' })
+      ? new MediaMetadata({ title: songTitleText(currentSong), artist: songArtistText(currentSong), album: songAlbumText(currentSong) })
       : null
   }, [currentSong])
 
@@ -823,7 +824,7 @@ export const AudioControls = memo(function AudioControls({
   // ---------------------------------------------------------------- song label
 
   const songLabel = currentSong
-    ? `${currentSong.favorability} | ${currentSong.title || '?'}${currentSong.artist ? ` (${currentSong.artist})` : ''}`
+    ? `${currentSong.favorability} | ${songTitleText(currentSong)} (${songArtistText(currentSong)})`
     : 'No song'
 
   // ---------------------------------------------------------------- sound options
