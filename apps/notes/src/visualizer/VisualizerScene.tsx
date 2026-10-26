@@ -66,6 +66,15 @@ export type VisualizerSceneProps = {
   gridOutlineRef: (element: HTMLDivElement | null) => void
 }
 
+/** The lit runs of the track: all of it, or the boxes before and after `gap`. */
+function trackRuns(track: { first: number; count: number }, gap: number | null): Array<{ first: number; count: number }> {
+  const end = track.first + track.count
+  const runs = gap === null || gap < track.first || gap >= end
+    ? [track]
+    : [{ first: track.first, count: gap - track.first }, { first: gap + 1, count: end - gap - 1 }]
+  return runs.filter((run) => run.count > 0)
+}
+
 function useBoxSize(element: HTMLElement | null): { width: number; height: number } {
   const [size, setSize] = useState({ width: 0, height: 0 })
   useEffect(() => {
@@ -286,12 +295,13 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
           {layout.progressRow !== null && columns >= 2 && (
             <>
               <div className="visualizer-lit" style={{ left: originXPx, top: rowTop(layout.progressRow), width: box, height: box }} />
-              {track.count > 0 && (
-                <div className="visualizer-lit" style={{ left: originXPx + track.first * box, top: rowTop(layout.progressRow), width: track.count * box, height: box }} />
-              )}
-              {gapColumn !== null && (
-                <div className="visualizer-track-gap" style={{ left: originXPx + gapColumn * box, top: rowTop(layout.progressRow), width: box, height: box }} />
-              )}
+              {/* The track is drawn as the lit runs either side of the
+                  playhead's box, so that box is truly missing: painting the
+                  strip's colour over a lit track let the caret colour show
+                  through wherever the strip's colour is translucent. */}
+              {trackRuns(track, gapColumn).map((run) => (
+                <div key={run.first} className="visualizer-lit" style={{ left: originXPx + run.first * box, top: rowTop(layout.progressRow!), width: run.count * box, height: box }} />
+              ))}
               <div className="visualizer-lit" style={{ left: originXPx + (columns - 1) * box, top: rowTop(layout.progressRow), width: box, height: box }} />
             </>
           )}

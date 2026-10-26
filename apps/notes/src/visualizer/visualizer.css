@@ -42,7 +42,6 @@
 .visualizer-strip,
 .visualizer-letter-box,
 .visualizer-lit,
-.visualizer-track-gap,
 .visualizer-spectrum {
   z-index: 1;
 }
@@ -66,11 +65,6 @@
 
 .visualizer-lit {
   background-color: var(--color-caret);
-}
-
-/* The playhead's box: the track with one box missing. */
-.visualizer-track-gap {
-  background-color: var(--color-bg-leading);
 }
 
 .visualizer-scene > .visualizer-grid {
