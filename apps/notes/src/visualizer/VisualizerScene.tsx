@@ -31,7 +31,7 @@ import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import { SpectrumBallistics, litRows } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
-import { MusicBreath, applySway, breathScales, swayAmplitudePx } from './parallaxSway'
+import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
   computeVisualizerLayout,
   creditsLine,
@@ -166,10 +166,6 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     const restyle = new MutationObserver(readColor)
     restyle.observe(shell, { attributes: true, attributeFilter: ['style'] })
 
-    let amplitudePx = swayAmplitudePx(window.innerWidth, window.innerHeight)
-    const onResize = () => { amplitudePx = swayAmplitudePx(window.innerWidth, window.innerHeight) }
-    window.addEventListener('resize', onResize)
-
     // The gap is React's to draw (`gapColumn`); the loop only says when the
     // playhead has crossed into another box, which is seconds apart.
     const moveGap = () => {
@@ -220,7 +216,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       const { amplitude, speed } = breathScales(breath.step(tap ? tap.bassPower(levels) : 0, dt))
       if (!still) {
         phaseSec += dt * speed
-        applySway(phaseSec, amplitudePx * amplitude)
+        applySway(phaseSec, amplitude)
       }
       // Nothing left to move: the music is stopped, the bars have fallen and
       // the glaze holds still. Woken again by the music or the motion setting.
@@ -242,7 +238,6 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       if (frame !== null) cancelAnimationFrame(frame)
       tap?.stop()
       restyle.disconnect()
-      window.removeEventListener('resize', onResize)
       unsubscribePlaying()
       unsubscribeSong()
       reducedMotion.removeEventListener('change', wake)

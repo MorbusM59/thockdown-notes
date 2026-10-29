@@ -21,8 +21,6 @@
  * nothing: the gradients are rasterized once and only composited again.
  */
 
-/** How far the nearest layer travels from rest, as a share of the slot's shorter side. */
-export const SWAY_AMPLITUDE_SHARE = 0.035
 /** The part of each layer's motion that is its own rather than the camera's. */
 const OWN_SHARE = 0.18
 /** Vertical motion relative to horizontal: a sway, wider than it is tall. */
@@ -33,9 +31,14 @@ const PERIODS_Y = [31, 13.3] as const
 const WEIGHTS = [0.7, 0.3] as const
 const GOLDEN = 0.6180339887498949
 
-/** The nearest layer's amplitude for a slot of `widthPx` by `heightPx`. */
-export function swayAmplitudePx(widthPx: number, heightPx: number): number {
-  return SWAY_AMPLITUDE_SHARE * Math.min(widthPx, heightPx)
+/**
+ * Layer `index`'s depth (0 the nearest, at 1) for a range spread of `spread`
+ * (0 to 1, Options > Visualizer > Immersive): each layer travels
+ * `1 - spread / 2` as far as the one in front of it, so at 0 every layer has
+ * the nearest's range and at 1 each has half the range of the one in front.
+ */
+export function swayDepth(index: number, spread: number): number {
+  return (1 - spread / 2) ** index
 }
 
 /** How far a layer must reach past the slot on every side so its sway never shows an edge. */
@@ -89,10 +92,13 @@ export class MusicBreath {
   }
 }
 
-/** The sway's width and speed for a breath: calm (0.6 and 0.8) in silence, 1 at the music's usual level, at most 1.5 and 1.3. */
+/** The widest the music ever makes the sway, as a share of the set range: what a layer's overscan has to cover. */
+export const BREATH_AMPLITUDE_MAX = 1.5
+
+/** The sway's width and speed for a breath: calm (0.6 and 0.8) in silence, 1 at the music's usual level, at most `BREATH_AMPLITUDE_MAX` and 1.3. */
 export function breathScales(breath: number): { amplitude: number; speed: number } {
   return {
-    amplitude: Math.min(1.5, 0.6 + 0.4 * breath),
+    amplitude: Math.min(BREATH_AMPLITUDE_MAX, 0.6 + 0.4 * breath),
     speed: Math.min(1.3, 0.8 + 0.2 * breath),
   }
 }
@@ -104,6 +110,12 @@ export function breathScales(breath: number): { amplitude: number; speed: number
  */
 type SwayLayer = { element: HTMLElement; index: number; depth: number }
 const layers = new Set<SwayLayer>()
+/** The nearest layer's range in px at the music's usual level: the reader's setting, published by the component that draws the layers. */
+let rangePx = 0
+
+export function setSwayRange(px: number): void {
+  rangePx = px
+}
 
 export function registerSwayLayer(element: HTMLElement, index: number, depth: number): () => void {
   const layer = { element, index, depth }
@@ -114,8 +126,9 @@ export function registerSwayLayer(element: HTMLElement, index: number, depth: nu
   }
 }
 
-/** Moves every registered layer to where the sway is at `phaseSec`. */
-export function applySway(phaseSec: number, amplitudePx: number): void {
+/** Moves every registered layer to where the sway is at `phaseSec`, with the music's breath widening it by `breathAmplitude`. */
+export function applySway(phaseSec: number, breathAmplitude: number): void {
+  const amplitudePx = rangePx * breathAmplitude
   for (const layer of layers) {
     const { x, y } = swayOffset(layer.index, layer.depth, phaseSec, amplitudePx)
     layer.element.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`

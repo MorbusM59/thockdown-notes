@@ -3,9 +3,11 @@
  * the layout's linear stacks and radial sources at full count
  * (`visualizerGlazeSettings`), at the strength set under Options > Visualizer
  * > Immersive, each stack on an element of its own at its own depth, so they
- * can shift against each other. The spread there gives each element its
- * share of that strength by its place in the stack (`glazeLayerShare`), as
- * the element's opacity, so a change of spread re-draws no gradient. The radial sources move
+ * can shift against each other. The glaze spread there gives each linear
+ * stack its share of that strength by its place among the stacks
+ * (`glazeLayerShare`), as the element's opacity, so a change of spread
+ * re-draws no gradient; the sway range and its spread set how far each layer
+ * travels (`swayDepth`). The radial sources move
  * as one, behind the stacks, or in front of them when the layout puts
  * radial above linear. Gloom and sheen stay with the ordinary glaze and do
  * not move.
@@ -16,27 +18,21 @@
  * moved by `parallaxSway.ts`'s `applySway`, which the scene's loop calls.
  */
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeLayers, buildRadialGlazeLayers } from '@thockdown/look/loadoutTheme'
-import { registerSwayLayer, swayAmplitudePx, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
-/** Depth of the nearest and the farthest layer; the rest are spaced evenly between. */
-const NEAREST = 1
-const FARTHEST = 0.25
-
-type Layer = { key: string; kind: 'linear' | 'radial'; image: string; depth: number; index: number }
-
-function useWindowOverscanPx(): number {
-  const [overscan, setOverscan] = useState(() => swayOverscanPx(swayAmplitudePx(window.innerWidth, window.innerHeight)))
-  useEffect(() => {
-    const onResize = () => setOverscan(swayOverscanPx(swayAmplitudePx(window.innerWidth, window.innerHeight)))
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  return overscan
-}
+/**
+ * `index` counts from the nearest layer; `linearPosition` places a linear
+ * stack among the linear stacks alone (0 the farthest, 1 the nearest), and is
+ * null for the radial sources, which the glaze spread does not touch: they
+ * blend by colour-dodge and the stacks by luminosity, so sharing strength
+ * between the two kinds would turn the picture brighter or darker rather
+ * than deeper.
+ */
+type Layer = { key: string; kind: 'linear' | 'radial'; image: string; depth: number; index: number; linearPosition: number | null }
 
 function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: number; opacity: number }) {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -55,7 +51,9 @@ function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: numbe
 }
 
 export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; immersive: VisualizerImmersive }) {
-  const overscan = useWindowOverscanPx()
+  // The widest the music ever carries the nearest layer, which no layer exceeds.
+  const overscan = swayOverscanPx(immersive.swayRangePx * BREATH_AMPLITUDE_MAX)
+  useEffect(() => setSwayRange(immersive.swayRangePx), [immersive.swayRangePx])
   const layers = useMemo<Layer[]>(() => {
     const settings = visualizerGlazeSettings(glaze, immersive.glazeStrength)
     // Nearest first: the top linear stack (each list is in stacking order,
@@ -64,9 +62,13 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     const radialImages = buildRadialGlazeLayers(settings)
     const radial = radialImages.length > 0 ? [{ kind: 'radial' as const, image: radialImages.join(', ') }] : []
     const nearestFirst = glaze.radialAboveLinear ? [...radial, ...linear] : [...linear, ...radial]
-    const step = nearestFirst.length > 1 ? (NEAREST - FARTHEST) / (nearestFirst.length - 1) : 0
-    return nearestFirst.map((layer, index) => ({ ...layer, key: `${layer.kind}-${index}`, index, depth: NEAREST - step * index }))
-  }, [glaze, immersive.glazeStrength])
+    let linearIndex = 0
+    return nearestFirst.map((layer, index) => {
+      // A lone stack is the nearest, so it keeps its share at either end of the spread.
+      const linearPosition = layer.kind === 'linear' ? (linear.length > 1 ? 1 - linearIndex++ / (linear.length - 1) : 1) : null
+      return { ...layer, key: `${layer.kind}-${index}`, index, depth: swayDepth(index, immersive.swaySpread), linearPosition }
+    })
+  }, [glaze, immersive.glazeStrength, immersive.swaySpread])
 
   // Drawn farthest first, so the nearest is on top within its kind (the
   // kinds' own order is the stack's z-index rule, as in the ordinary glaze).
@@ -77,8 +79,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
           key={layer.key}
           layer={layer}
           overscan={overscan}
-          // A lone layer is the nearest, so it keeps its share at either end of the spread.
-          opacity={glazeLayerShare(layers.length > 1 ? (layer.depth - FARTHEST) / (NEAREST - FARTHEST) : 1, immersive.glazeSpread)}
+          opacity={layer.linearPosition === null ? 1 : glazeLayerShare(layer.linearPosition, immersive.glazeSpread)}
         />
       ))}
     </div>

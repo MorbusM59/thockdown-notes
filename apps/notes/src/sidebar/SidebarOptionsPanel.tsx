@@ -29,6 +29,7 @@ import {
   DEFAULT_VISUALIZER_PANE,
   DEFAULT_VISUALIZER_IMMERSIVE,
   IMMERSIVE_GLAZE_STRENGTH_MAX,
+  IMMERSIVE_SWAY_RANGE_MAX_PX,
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
   SOURCE_SLIDER_MAX,
@@ -3212,7 +3213,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Immersive</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive settings">
-            <OptionsSliderRows rows={[2]}>
+            <OptionsSliderRows rows={[2, 2]}>
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -3238,6 +3239,32 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.glazeSpread}
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeSpread: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-range"
+                min={0}
+                max={IMMERSIVE_SWAY_RANGE_MAX_PX}
+                step={1}
+                value={visualizer.immersive.swayRangePx}
+                trackLabel="range"
+                tooltipLabel="px the nearest glaze layer sways from rest in the visualizer mode, at the music's usual loudness (louder passages widen it, silence calms it)"
+                ariaLabel="Immersive: how far the nearest glaze layer sways, in pixels"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayRangePx}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayRangePx: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-spread"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.swaySpread}
+                trackLabel="depth"
+                tooltipLabel="How much less each glaze layer sways than the one in front of it: at the left every layer sways as far as the nearest, at the right each sways half as far as the one in front"
+                ariaLabel="Immersive: how much less each glaze layer sways than the one in front of it"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swaySpread}
+                formatValue={(value) => value.toFixed(2)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
               />
             </OptionsSliderRows>
           </div>

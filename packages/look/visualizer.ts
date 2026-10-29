@@ -111,17 +111,23 @@ export interface VisualizerSettings {
 /**
  * The glaze the visualizer mode sways (apps/notes's VisualizerGlaze.tsx):
  * every linear stack and radial source of the layout's glaze, each drawn at
- * `glazeStrength` (in place of the layout's own linear and radial strengths)
- * times its share under `glazeSpread`, `glazeLayerShare`.
+ * `glazeStrength` (in place of the layout's own linear and radial strengths),
+ * a linear stack times its share under `glazeSpread` (`glazeLayerShare`), and
+ * swaying as far as `swayRangePx` and `swaySpread` say.
  */
 export interface VisualizerImmersive {
   glazeStrength: number
-  /** -1 to 1: 0 draws every layer at full strength; -1 ramps from nothing at the farthest to full at the nearest; 1 the reverse. */
+  /** -1 to 1, the linear stacks only: 0 draws every stack at full strength; -1 ramps from nothing at the farthest to full at the nearest; 1 the reverse. */
   glazeSpread: number
+  /** How far the nearest layer sways from rest, in px, at the music's usual level. */
+  swayRangePx: number
+  /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
+  swaySpread: number
 }
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0 }
+export const IMMERSIVE_SWAY_RANGE_MAX_PX = 200
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -327,6 +333,8 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
   return {
     glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
+    swayRangePx: Math.round(bounded(source.swayRangePx, 0, IMMERSIVE_SWAY_RANGE_MAX_PX, d.swayRangePx)),
+    swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
   }
 }
 
