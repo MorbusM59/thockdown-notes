@@ -1,3 +1,4 @@
+// verify: reads-repository (scripts/verify.mjs, "what a module reads from disk")
 // THE STRATEGY REPORT: how far each kind of player gets, where it dies, what
 // it earns on the way, and which choices it actually makes.
 //

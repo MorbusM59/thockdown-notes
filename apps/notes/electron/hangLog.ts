@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
 /**
  * Records why the window stopped responding, to a file that survives the
  * hang: `<data root>/logs/hang.log`.

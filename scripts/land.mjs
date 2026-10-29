@@ -3,7 +3,10 @@
 //
 //   1. The branch must be committed, pushed and a clean descendant of
 //      origin/main (a fast-forward), as the git workflow already requires.
-//   2. `npm run verify` must pass.
+//   2. `npm run verify` must pass, SCOPED to what the branch changed since
+//      origin/main (scripts/verify.mjs says exactly what that cuts and why it
+//      leaves no hole). `npm run land -- --full` runs the full check instead,
+//      for a checkpoint; CI runs the full check on main after every landing.
 //   3. LOW IMPACT (scripts/impact.mjs): main is fast-forwarded to the branch
 //      and pushed.
 //      HIGH IMPACT: nothing is pushed to main. The branch goes through a pull
@@ -39,7 +42,8 @@ const ff = spawnSync('git', ['merge-base', '--is-ancestor', 'origin/main', 'HEAD
 if (ff.status !== 0) fail('not a fast-forward of origin/main: merge origin/main into the branch, or open a pull request')
 if (git('rev-parse', 'origin/main') === head) fail('nothing to land: main is already at HEAD')
 
-const verify = spawnSync('npm', ['run', 'verify'], { stdio: 'inherit', shell: process.platform === 'win32' })
+const scoped = process.argv.includes('--full') ? [] : ['--', '--since', 'origin/main']
+const verify = spawnSync('npm', ['run', 'verify', ...scoped], { stdio: 'inherit', shell: process.platform === 'win32' })
 if (verify.status !== 0) fail('verify failed; nothing was landed')
 
 const hits = highImpactPaths(changedPaths('origin/main', 'HEAD'))

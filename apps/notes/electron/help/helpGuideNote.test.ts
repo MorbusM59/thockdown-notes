@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a test reads from disk")
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'

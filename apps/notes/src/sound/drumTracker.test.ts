@@ -1,3 +1,4 @@
+// verify: reads-siblings (scripts/verify.mjs, "what a test reads from disk")
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { DrumCursor, DrumTracker, type Drum } from './drumTracker'
