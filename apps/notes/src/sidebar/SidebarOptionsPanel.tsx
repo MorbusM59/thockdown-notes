@@ -27,6 +27,8 @@ import {
   FALL_MIN_SEC,
   DEFAULT_VISUALIZER_EDGE,
   DEFAULT_VISUALIZER_PANE,
+  DEFAULT_VISUALIZER_IMMERSIVE,
+  IMMERSIVE_GLAZE_STRENGTH_MAX,
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
   SOURCE_SLIDER_MAX,
@@ -3206,6 +3208,39 @@ export function SidebarOptionsPanel({
           {visualizer.caret.followsMusic && renderBeatCaret()}
           {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
           {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
+          <div className="utility-setting-button-row" role="group" aria-label="Immersive controls">
+            <OptionsSubsectionLabel>Immersive</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Immersive settings">
+            <OptionsSliderRows rows={[2]}>
+              <CompactScrollbarSlider
+                id="visualizer-glaze-strength"
+                min={0}
+                max={IMMERSIVE_GLAZE_STRENGTH_MAX}
+                step={0.005}
+                value={visualizer.immersive.glazeStrength}
+                trackLabel="glaze"
+                tooltipLabel="Strength of the glaze that sways in the visualizer mode (F3): every linear and radial layer of this layout's glaze, at this strength"
+                ariaLabel="Immersive: strength of the visualizer's glaze"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.glazeStrength}
+                formatValue={(value) => value.toFixed(3)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeStrength: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-glaze-spread"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.glazeSpread}
+                trackLabel="spread"
+                tooltipLabel="How the visualizer's glaze strength is shared between its layers by depth: the centre gives every layer all of it; left fades the farthest out and keeps the nearest, right the reverse"
+                ariaLabel="Immersive: spread of the visualizer's glaze strength across its layers, negative favours the nearest"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.glazeSpread}
+                formatValue={(value) => value.toFixed(2)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeSpread: value } }))}
+              />
+            </OptionsSliderRows>
+          </div>
       </AccordionSection>
       ) : null}
 

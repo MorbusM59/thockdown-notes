@@ -1,8 +1,11 @@
 /**
  * The glaze the visualizer mode sways (parallaxSway.ts says how it moves):
  * the layout's linear stacks and radial sources at full count
- * (`visualizerGlazeSettings`), each stack on an element of its own at its
- * own depth, so they can shift against each other. The radial sources move
+ * (`visualizerGlazeSettings`), at the strength set under Options > Visualizer
+ * > Immersive, each stack on an element of its own at its own depth, so they
+ * can shift against each other. The spread there gives each element its
+ * share of that strength by its place in the stack (`glazeLayerShare`), as
+ * the element's opacity, so a change of spread re-draws no gradient. The radial sources move
  * as one, behind the stacks, or in front of them when the layout puts
  * radial above linear. Gloom and sheen stay with the ordinary glaze and do
  * not move.
@@ -15,6 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
+import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeLayers, buildRadialGlazeLayers } from '@thockdown/look/loadoutTheme'
 import { registerSwayLayer, swayAmplitudePx, swayOverscanPx } from './parallaxSway'
 
@@ -34,7 +38,7 @@ function useWindowOverscanPx(): number {
   return overscan
 }
 
-function SwayLayer({ layer, overscan }: { layer: Layer; overscan: number }) {
+function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: number; opacity: number }) {
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const element = ref.current
@@ -45,15 +49,15 @@ function SwayLayer({ layer, overscan }: { layer: Layer; overscan: number }) {
     <div
       ref={ref}
       className={`glaze-overlay-layer glaze-overlay-layer-${layer.kind} visualizer-glaze-layer`}
-      style={{ backgroundImage: layer.image, inset: -overscan } as CSSProperties}
+      style={{ backgroundImage: layer.image, inset: -overscan, opacity } as CSSProperties}
     />
   )
 }
 
-export function VisualizerGlaze({ glaze }: { glaze: GlazeSettings }) {
+export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; immersive: VisualizerImmersive }) {
   const overscan = useWindowOverscanPx()
   const layers = useMemo<Layer[]>(() => {
-    const settings = visualizerGlazeSettings(glaze)
+    const settings = visualizerGlazeSettings(glaze, immersive.glazeStrength)
     // Nearest first: the top linear stack (each list is in stacking order,
     // the first drawn on top), unless radial sits above linear.
     const linear = buildLinearGlazeLayers(settings).map((image) => ({ kind: 'linear' as const, image }))
@@ -62,13 +66,21 @@ export function VisualizerGlaze({ glaze }: { glaze: GlazeSettings }) {
     const nearestFirst = glaze.radialAboveLinear ? [...radial, ...linear] : [...linear, ...radial]
     const step = nearestFirst.length > 1 ? (NEAREST - FARTHEST) / (nearestFirst.length - 1) : 0
     return nearestFirst.map((layer, index) => ({ ...layer, key: `${layer.kind}-${index}`, index, depth: NEAREST - step * index }))
-  }, [glaze])
+  }, [glaze, immersive.glazeStrength])
 
   // Drawn farthest first, so the nearest is on top within its kind (the
   // kinds' own order is the stack's z-index rule, as in the ordinary glaze).
   return (
     <div className={`glaze-overlay-stack visualizer-glaze${glaze.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
-      {[...layers].reverse().map((layer) => <SwayLayer key={layer.key} layer={layer} overscan={overscan} />)}
+      {[...layers].reverse().map((layer) => (
+        <SwayLayer
+          key={layer.key}
+          layer={layer}
+          overscan={overscan}
+          // A lone layer is the nearest, so it keeps its share at either end of the spread.
+          opacity={glazeLayerShare(layers.length > 1 ? (layer.depth - FARTHEST) / (NEAREST - FARTHEST) : 1, immersive.glazeSpread)}
+        />
+      ))}
     </div>
   )
 }

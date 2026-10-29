@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
@@ -174,4 +174,20 @@ it('every block\'s default fall survives the fall slider\'s reset', () => {
     expect(snapped).toBeCloseTo(fall, 12)
     expect(Math.round(snapped * 1000)).toBe(Math.round(fall * 1000))
   }
+})
+
+describe('glazeLayerShare', () => {
+  it('gives every layer all of the strength at the centre and ramps by depth at either end', () => {
+    for (const position of [0, 0.3, 1]) expect(glazeLayerShare(position, 0)).toBe(1)
+    expect(glazeLayerShare(0, -1)).toBe(0)
+    expect(glazeLayerShare(1, -1)).toBe(1)
+    expect(glazeLayerShare(0, 1)).toBe(1)
+    expect(glazeLayerShare(1, 1)).toBe(0)
+    expect(glazeLayerShare(0, -0.5)).toBeCloseTo(0.5)
+  })
+
+  it('bounds a saved immersive block and defaults a missing one', () => {
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1 })
+    expect(sanitizeVisualizer({}, false).immersive).toEqual(DEFAULT_VISUALIZER_IMMERSIVE)
+  })
 })

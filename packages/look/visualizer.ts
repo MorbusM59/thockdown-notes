@@ -104,6 +104,35 @@ export interface VisualizerSettings {
    * editor. A response draws it.
    */
   pane: VisualizerColorChannel
+  /** The visualizer mode's own look (F3), as opposed to the beat's effects on the editor. */
+  immersive: VisualizerImmersive
+}
+
+/**
+ * The glaze the visualizer mode sways (apps/notes's VisualizerGlaze.tsx):
+ * every linear stack and radial source of the layout's glaze, each drawn at
+ * `glazeStrength` (in place of the layout's own linear and radial strengths)
+ * times its share under `glazeSpread`, `glazeLayerShare`.
+ */
+export interface VisualizerImmersive {
+  glazeStrength: number
+  /** -1 to 1: 0 draws every layer at full strength; -1 ramps from nothing at the farthest to full at the nearest; 1 the reverse. */
+  glazeSpread: number
+}
+
+export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0 }
+
+/**
+ * A swayed layer's share of the glaze strength, from its place in the stack
+ * (`position`: 0 the farthest, 1 the nearest) and the spread. At 0 every layer
+ * has all of it; towards -1 the share blends to `position` (nothing at the
+ * back, all at the front); towards 1 to `1 - position` (the reverse).
+ */
+export function glazeLayerShare(position: number, spread: number): number {
+  const ramp = spread < 0 ? position : 1 - position
+  const amount = Math.abs(spread)
+  return 1 - amount + amount * ramp
 }
 
 export const BEAT_FREQUENCY_MIN_HZ = 20
@@ -204,6 +233,7 @@ export function defaultVisualizer(inverted: boolean): VisualizerSettings {
     // alphas 200 and 25 of the picker's 255, not the light ones inverted.
     edge: { ...DEFAULT_VISUALIZER_EDGE, color: inverted ? 'rgba(0, 0, 0, 0.784)' : 'rgba(0, 0, 0, 1)' },
     pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.098)' : 'rgba(255, 255, 255, 0.499)' },
+    immersive: DEFAULT_VISUALIZER_IMMERSIVE,
   }
 }
 
@@ -292,6 +322,14 @@ function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): Visualiz
   }
 }
 
+function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerImmersive {
+  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive, unknown>>
+  return {
+    glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
+    glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
+  }
+}
+
 /** What the edge and the pane were saved as before they had those names: `shade` and `outline`. */
 type LegacyBlockName = 'shade' | 'outline'
 
@@ -311,6 +349,7 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCare
     caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
     edge: sanitizeEdgeChannel(source.edge ?? source.shade, d.edge),
     pane: sanitizeColorChannel(source.pane ?? source.outline, d.pane),
+    immersive: sanitizeImmersive(source.immersive, d.immersive),
   }
 }
 

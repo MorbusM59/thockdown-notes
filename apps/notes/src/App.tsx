@@ -8944,7 +8944,7 @@ ${markdownHtml}
           glaze={isVisualizerMode ? { ...theme.glaze, linear: 'none', radial: 'none' } : theme.glaze}
           radialAboveLinear={glazeSettings.radialAboveLinear}
         />
-        {isVisualizerMode ? <VisualizerGlaze glaze={glazeSettings} /> : null}
+        {isVisualizerMode ? <VisualizerGlaze glaze={glazeSettings} immersive={visualizer.immersive} /> : null}
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
             it like MouseCursorOverlay) deliberately -- unlike the cursor
             overlay, tooltips should still pick up this wrapper's own

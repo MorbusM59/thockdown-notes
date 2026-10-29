@@ -71,22 +71,19 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
     sheenOpacity: clamp(toFinite(source.sheenOpacity, fallback.sheenOpacity), 0, GLAZE_SHEEN_OPACITY_MAX),
   };
 }
-/** The least strength a swayed layer has in the notes app's visualizer mode. */
-export const VISUALIZER_GLAZE_MIN_OPACITY = 0.1;
-
 /**
  * The glaze the notes app's visualizer mode sways: the layout's own seeds
- * and shapes, with every linear stack and every radial source on, each at
- * least `VISUALIZER_GLAZE_MIN_OPACITY` strong, so the mode always has
- * something to move whatever the layout set. Gloom and sheen are not swayed
- * and are left exactly as the layout has them.
+ * and shapes, with every linear stack and every radial source on, all at
+ * `strength` (the visualizer's own setting, `VisualizerImmersive`), whatever
+ * the layout's linear and radial strengths are. Gloom and sheen are not
+ * swayed and are left exactly as the layout has them.
  */
-export function visualizerGlazeSettings(settings: GlazeSettings): GlazeSettings {
+export function visualizerGlazeSettings(settings: GlazeSettings, strength: number): GlazeSettings {
   return {
     ...settings,
     linearStackCount: GLAZE_LINEAR_STACK_MAX,
     radialCount: GLAZE_RADIAL_COUNT_MAX,
-    linearOpacity: Math.max(settings.linearOpacity, VISUALIZER_GLAZE_MIN_OPACITY),
-    radialOpacity: Math.max(settings.radialOpacity, VISUALIZER_GLAZE_MIN_OPACITY),
+    linearOpacity: strength,
+    radialOpacity: strength,
   };
 }
