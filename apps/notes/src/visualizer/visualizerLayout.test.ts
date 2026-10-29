@@ -14,6 +14,11 @@ describe('computeVisualizerLayout', () => {
       const layout = computeVisualizerLayout(w, h, box, 220)
       expect(layout.originYPx + layout.rows * box).toBeLessThanOrEqual(h)
       expect(layout.originXPx + layout.columns * box).toBeLessThanOrEqual(w)
+      // Centred: the two margins differ by at most the odd pixel.
+      expect(w - layout.originXPx - layout.columns * box - layout.originXPx).toBeGreaterThanOrEqual(0)
+      expect(w - layout.originXPx - layout.columns * box - layout.originXPx).toBeLessThanOrEqual(1)
+      expect(h - layout.originYPx - layout.rows * box - layout.originYPx).toBeGreaterThanOrEqual(0)
+      expect(h - layout.originYPx - layout.rows * box - layout.originYPx).toBeLessThanOrEqual(1)
       expect(layout.stripRows).toBeLessThan(layout.spectrumTopRow + 1)
       expect(2 * layout.stripRows).toBeLessThan(Math.max(1, layout.rows))
       const { row, size, column } = layout.cutout

@@ -4,10 +4,13 @@
  * (visualizerLayout.test.ts); `VisualizerScene.tsx` draws what this returns.
  *
  * THE BOX IS SQUARE: as wide as the editor's real box at the reader's
- * settings, and exactly as tall as it is wide. The grid is phase-anchored the
- * way the editor's is (half a box in from the top-left, rounded to a whole
- * pixel, CM6Editor.tsx's halfCellWidthPx), so the far edges cut a box off
- * wherever the screen happens to end. Only FULL boxes are counted and used.
+ * settings, and exactly as tall as it is wide. The grid is CENTRED: as many
+ * full boxes as the screen holds on each axis, and what is left over split
+ * evenly between the two edges (the extra pixel of an odd remainder goes to
+ * the far edge). The editor anchors its grid half a box in from the top-left
+ * instead (CM6Editor.tsx's halfCellWidthPx), which keeps text in place as a
+ * pane resizes; a full-screen scene has no text to keep in place, so it is
+ * framed by the screen instead. Only FULL boxes are counted and used.
  *
  * TWO STRIPS OF EQUAL HEIGHT frame the scene: the spectrum at the bottom and
  * the now-playing strip at the top. Their height is the spectrum's ceiling,
@@ -50,9 +53,10 @@ export type VisualizerLayout = {
 /** The scene's layout for a `widthPx` by `heightPx` slot with square boxes of `boxPx`, and a cutout of about `cutoutPx`. */
 export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx: number, cutoutPx: number): VisualizerLayout {
   const box = Math.max(1, boxPx)
-  const origin = Math.round(box / 2)
-  const columns = Math.max(0, Math.floor((widthPx - origin) / box))
-  const rows = Math.max(0, Math.floor((heightPx - origin) / box))
+  const columns = Math.max(0, Math.floor(widthPx / box))
+  const rows = Math.max(0, Math.floor(heightPx / box))
+  const originXPx = Math.floor((widthPx - columns * box) / 2)
+  const originYPx = Math.floor((heightPx - rows * box) / 2)
   const ceiling = Math.min(MAX_STRIP_ROWS, Math.floor((MAX_STRIP_SHARE * heightPx) / box))
   // Both strips have to fit with at least a row between them.
   const stripRows = Math.max(0, Math.min(ceiling, Math.floor((rows - 1) / 2)))
@@ -71,7 +75,7 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
     size,
   }
 
-  return { boxPx: box, originXPx: origin, originYPx: origin, columns, rows, stripRows, progressRow, titleRow, creditsRow, spectrumTopRow, cutout }
+  return { boxPx: box, originXPx, originYPx, columns, rows, stripRows, progressRow, titleRow, creditsRow, spectrumTopRow, cutout }
 }
 
 /**
