@@ -29,7 +29,6 @@
   z-index: 12;
   overflow: hidden;
   outline: none;
-  background-color: var(--color-bg-regular);
 }
 
 .visualizer-scene > * {
@@ -53,6 +52,13 @@
 .visualizer-strip.is-top {
   top: 0;
   background-color: var(--color-bg-leading);
+}
+/* The three zones sit side by side on the stage's own background, exactly as
+   the editor's zone divs do (CM6Editor.tsx), never stacked on a regular-colour
+   backdrop: a translucent zone colour over another zone colour comes out a
+   different colour from the editor's. */
+.visualizer-strip.is-middle {
+  background-color: var(--color-bg-regular);
 }
 .visualizer-strip.is-bottom {
   bottom: 0;
