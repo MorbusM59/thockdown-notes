@@ -16,10 +16,10 @@
  * the now-playing strip at the top. Their height is the spectrum's ceiling,
  * at most `MAX_STRIP_ROWS` boxes and at most `MAX_STRIP_SHARE` of the
  * screen's height. The top strip's rows, counted from the first full row:
- * the progress track, a gap, the title, a gap, the credits (the artist, then
- * `CREDITS_GAP_BOXES` empty boxes, then the album). A strip too short for
- * all five drops the credits first and then the title; the progress track
- * always stays.
+ * the credits (the artist, then `CREDITS_GAP_BOXES` empty boxes, then the
+ * album), a gap, the progress track, a gap, the title. A strip too short for
+ * all five drops the credits first and then the title, and the progress track
+ * moves up to the first row; it always stays.
  *
  * THE CUTOUT is the empty scene's square, centred, as many whole boxes wide
  * as the empty state's own diameter (`--circle-diameter`) rounds to, so it is
@@ -61,9 +61,9 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   // Both strips have to fit with at least a row between them.
   const stripRows = Math.max(0, Math.min(ceiling, Math.floor((rows - 1) / 2)))
 
-  const progressRow = stripRows >= 1 ? 0 : null
-  const titleRow = stripRows >= 3 ? 2 : null
-  const creditsRow = stripRows >= 5 ? 4 : null
+  const creditsRow = stripRows >= 5 ? 0 : null
+  const progressRow = stripRows < 1 ? null : creditsRow === null ? 0 : 2
+  const titleRow = stripRows >= 3 ? progressRow! + 2 : null
   const spectrumTopRow = rows - stripRows
 
   const middleRows = rows - 2 * stripRows
@@ -128,14 +128,28 @@ export function progressPress(columns: number, column: number): ProgressPress {
   return fraction === null ? { kind: 'none' } : { kind: 'seek', fraction }
 }
 
+/** A run of text on a row, one character per box from `column`, every box (a space's included) lit behind it. */
+export interface RowText {
+  column: number
+  text: string
+}
+
 /**
- * The credits row's characters, one per box: the artist, `CREDITS_GAP_BOXES`
- * empty boxes, the album, cut at the row's last box. An empty part is left
- * out with its gap. A space is an empty box.
+ * The credits row: the artist, then `CREDITS_GAP_BOXES` EMPTY boxes, then the
+ * album, cut at the row's last box. Two runs rather than one string, because
+ * a space inside a name is a lit box and the gap between the two is not. An
+ * empty part is left out with its gap.
  */
-export function creditsLine(artist: string, album: string, columns: number): string {
-  const parts = [artist.trim(), album.trim()].filter((part) => part.length > 0)
-  return fitToRow(parts.join(' '.repeat(CREDITS_GAP_BOXES)), columns)
+export function creditsLine(artist: string, album: string, columns: number): RowText[] {
+  const runs: RowText[] = []
+  let column = 0
+  for (const part of [artist.trim(), album.trim()]) {
+    if (part.length === 0) continue
+    const text = fitToRow(part, columns - column)
+    if (text.length > 0) runs.push({ column, text })
+    column += Array.from(part).length + CREDITS_GAP_BOXES
+  }
+  return runs
 }
 
 /** `text` cut to `columns` characters (by code point, so a character outside the BMP is not split). */

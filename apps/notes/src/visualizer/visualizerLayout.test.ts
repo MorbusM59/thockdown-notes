@@ -32,7 +32,7 @@ describe('computeVisualizerLayout', () => {
 
   it('drops the credits, then the title, as the strip gets shorter', () => {
     const at = (stripRowsWanted: number) => computeVisualizerLayout(2000, (stripRowsWanted * 20) / 0.2 + 1, 20, 220)
-    expect(at(5)).toMatchObject({ progressRow: 0, titleRow: 2, creditsRow: 4 })
+    expect(at(5)).toMatchObject({ creditsRow: 0, progressRow: 2, titleRow: 4 })
     expect(at(4)).toMatchObject({ progressRow: 0, titleRow: 2, creditsRow: null })
     expect(at(2)).toMatchObject({ progressRow: 0, titleRow: null, creditsRow: null })
   })
@@ -81,9 +81,10 @@ describe('the progress track', () => {
 
 describe('creditsLine', () => {
   it('separates artist and album by three boxes and cuts at the row', () => {
-    expect(creditsLine('Artist', 'Album', 40)).toBe('Artist   Album')
-    expect(creditsLine('Artist', '', 40)).toBe('Artist')
-    expect(creditsLine('', 'Album', 40)).toBe('Album')
-    expect(creditsLine('Artist', 'Album', 8)).toBe('Artist  ')
+    expect(creditsLine('An Artist', 'Album', 40)).toEqual([{ column: 0, text: 'An Artist' }, { column: 12, text: 'Album' }])
+    expect(creditsLine('Artist', '', 40)).toEqual([{ column: 0, text: 'Artist' }])
+    expect(creditsLine('', 'Album', 40)).toEqual([{ column: 0, text: 'Album' }])
+    expect(creditsLine('Artist', 'Album', 8)).toEqual([{ column: 0, text: 'Artist' }])
+    expect(creditsLine('Artist', 'Album', 11)).toEqual([{ column: 0, text: 'Artist' }, { column: 9, text: 'Al' }])
   })
 })

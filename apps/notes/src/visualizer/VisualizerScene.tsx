@@ -35,6 +35,7 @@ import { MusicBreath, applySway, breathScales, swayAmplitudePx } from './paralla
 import {
   computeVisualizerLayout,
   creditsLine,
+  type RowText,
   fitToRow,
   playheadColumn,
   progressPress,
@@ -86,35 +87,35 @@ function useBoxSize(element: HTMLElement | null): { width: number; height: numbe
   return size
 }
 
-/** Boxes of one row of letters: a box behind each character that is not a space. */
-function LetterBoxes({ text, row, layout }: { text: string; row: number; layout: VisualizerLayout }) {
+/** Boxes behind one row's runs of text: one per character, a space's included. */
+function LetterBoxes({ runs, row, layout }: { runs: RowText[]; row: number; layout: VisualizerLayout }) {
   const { boxPx, originXPx, originYPx } = layout
   return (
     <>
-      {Array.from(text).map((char, column) => (char === ' ' ? null : (
+      {runs.map((run) => (
         <div
-          key={column}
+          key={run.column}
           className="visualizer-letter-box"
-          style={{ left: originXPx + column * boxPx, top: originYPx + row * boxPx, width: boxPx, height: boxPx }}
+          style={{ left: originXPx + run.column * boxPx, top: originYPx + row * boxPx, width: Array.from(run.text).length * boxPx, height: boxPx }}
         />
-      )))}
+      ))}
     </>
   )
 }
 
-function Letters({ text, row, layout }: { text: string; row: number; layout: VisualizerLayout }) {
+function Letters({ runs, row, layout }: { runs: RowText[]; row: number; layout: VisualizerLayout }) {
   const { boxPx, originXPx, originYPx } = layout
   return (
     <>
-      {Array.from(text).map((char, column) => (char === ' ' ? null : (
+      {runs.flatMap((run) => Array.from(run.text).map((char, index) => (char === ' ' ? null : (
         <div
-          key={column}
+          key={run.column + index}
           className="visualizer-letter"
-          style={{ left: originXPx + column * boxPx, top: originYPx + row * boxPx, width: boxPx, height: boxPx, lineHeight: `${boxPx}px` }}
+          style={{ left: originXPx + (run.column + index) * boxPx, top: originYPx + row * boxPx, width: boxPx, height: boxPx, lineHeight: `${boxPx}px` }}
         >
           {char}
         </div>
-      )))}
+      ))))}
     </>
   )
 }
@@ -126,8 +127,9 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   const { columns, originXPx, originYPx, stripRows, spectrumTopRow, cutout } = layout
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-  const title = nowPlaying.song ? fitToRow(songTitleText(nowPlaying.song), columns) : ''
-  const credits = nowPlaying.song ? creditsLine(songArtistText(nowPlaying.song), songAlbumText(nowPlaying.song), columns) : ''
+  const titleText = nowPlaying.song ? fitToRow(songTitleText(nowPlaying.song), columns) : ''
+  const title: RowText[] = titleText.length > 0 ? [{ column: 0, text: titleText }] : []
+  const credits = nowPlaying.song ? creditsLine(songArtistText(nowPlaying.song), songAlbumText(nowPlaying.song), columns) : []
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [gapColumn, setGapColumn] = useState<number | null>(null)
@@ -306,8 +308,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
               <div className="visualizer-lit" style={{ left: originXPx + (columns - 1) * box, top: rowTop(layout.progressRow), width: box, height: box }} />
             </>
           )}
-          {layout.titleRow !== null && <LetterBoxes text={title} row={layout.titleRow} layout={layout} />}
-          {layout.creditsRow !== null && <LetterBoxes text={credits} row={layout.creditsRow} layout={layout} />}
+          {layout.titleRow !== null && <LetterBoxes runs={title} row={layout.titleRow} layout={layout} />}
+          {layout.creditsRow !== null && <LetterBoxes runs={credits} row={layout.creditsRow} layout={layout} />}
 
           {stripRows > 0 && (
             <canvas
@@ -324,8 +326,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
           />
           <div className="visualizer-grid thockdown-grid-lines" style={{ backgroundPosition: `${originXPx}px ${originYPx}px`, zIndex: 4 }} />
 
-          {layout.titleRow !== null && <Letters text={title} row={layout.titleRow} layout={layout} />}
-          {layout.creditsRow !== null && <Letters text={credits} row={layout.creditsRow} layout={layout} />}
+          {layout.titleRow !== null && <Letters runs={title} row={layout.titleRow} layout={layout} />}
+          {layout.creditsRow !== null && <Letters runs={credits} row={layout.creditsRow} layout={layout} />}
 
           {layout.progressRow !== null && (
             <div
