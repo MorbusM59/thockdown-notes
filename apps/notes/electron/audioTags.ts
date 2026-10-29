@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
 /**
  * Reads a song's title, artist and album from the tags in its file, for the
  * music library (databaseService.ts's `addMusicSongs` and its backfill).
