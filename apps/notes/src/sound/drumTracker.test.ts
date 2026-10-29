@@ -481,6 +481,33 @@ function kit(seconds: number, bpm: number, groove: Kit): { samples: Float32Array
   return { samples: out, kicks: within(played.kicks), snares: within(played.snares), hats: within(played.hats) }
 }
 
+const CHORDS = [[82, 123, 165, 207], [110, 165, 220, 277], [98, 147, 196, 247], [73, 110, 147, 185]]
+const strums = new Map<number[], Float64Array>()
+
+/**
+ * The strings of one strum of `chord` over 0.6s, each a sawtooth to 4kHz
+ * starting a few ms after the last. It depends on the chord alone, so it is
+ * computed once per chord: summed per strum, its harmonics were nearly all of
+ * the time this file takes.
+ */
+function strum(chord: number[]): Float64Array {
+  let strings = strums.get(chord)
+  if (strings) return strings
+  strings = new Float64Array(Math.ceil(0.6 * RATE))
+  for (let i = 0; i < strings.length; i++) {
+    const t = i / RATE
+    let s = 0
+    for (let n = 0; n < chord.length; n++) {
+      const ts = t - 0.006 * n
+      if (ts < 0) continue
+      for (let h = 1; chord[n] * h < 4000; h++) s += Math.sin(2 * Math.PI * chord[n] * h * ts) / h
+    }
+    strings[i] = s
+  }
+  strums.set(chord, strings)
+  return strings
+}
+
 /**
  * What a song puts in the mids over a kit: a strummed chord on every eighth
  * (sawtooth strings to 4kHz with a pick's click, each strum landing a little
@@ -493,23 +520,16 @@ function addBusyMids(out: Float32Array, bpm: number): void {
   const pick = darkNoise(4000, brightNoise(800, 1, noise(23)))
   const voice = darkNoise(3500, brightNoise(300, 1, noise(25)))
   const eighth = 60 / bpm / 2
-  const chords = [[82, 123, 165, 207], [110, 165, 220, 277], [98, 147, 196, 247], [73, 110, 147, 185]]
   for (let e = 0; e * eighth < out.length / RATE; e++) {
     const t0 = e * eighth + 0.004 + 0.012 * Math.abs(rand())
-    const chord = chords[Math.floor(e / 8) % chords.length]
+    const chord = CHORDS[Math.floor(e / 8) % CHORDS.length]
     const gain = 0.12 + 0.05 * rand()
-    for (let i = 0; i < 0.6 * RATE; i++) {
+    const strings = strum(chord)
+    for (let i = 0; i < strings.length; i++) {
       const at = Math.round(t0 * RATE) + i
       if (at >= out.length) break
       const t = i / RATE
-      let s = 0
-      for (let n = 0; n < chord.length; n++) {
-        // Strummed: each string a few ms after the last.
-        const ts = t - 0.006 * n
-        if (ts < 0) continue
-        for (let h = 1; chord[n] * h < 4000; h++) s += Math.sin(2 * Math.PI * chord[n] * h * ts) / h
-      }
-      out[at] += gain * (0.25 * s * Math.min(1, t / 0.003) * Math.exp(-t / 0.25) + 0.6 * pick() * Math.exp(-t / 0.01))
+      out[at] += gain * (0.25 * strings[i] * Math.min(1, t / 0.003) * Math.exp(-t / 0.25) + 0.6 * pick() * Math.exp(-t / 0.01))
     }
   }
   // The voice: syllables 80-400ms long, each its own loudness, with breaths between phrases.
