@@ -765,19 +765,22 @@ let nextEpoch = 0
 
 /**
  * Where the peak of a sampled curve lies between whole samples, from the
- * sample `c` and its neighbours `l` and `r`: the vertex of the parabola
- * through the three, as an offset from `c`'s position. Only a LOCAL MAXIMUM
- * has a vertex beside it: the tempo's lag is chosen by its comb score, not
- * by the autocorrelation itself, so `c` can sit on a slope, where the
- * parabola's vertex lies arbitrarily far away (at near-zero curvature, past
- * zero) and a period refined onto it went negative, after which every comb
- * stepping by the period never ended. On a local maximum the offset is
- * within half a sample by construction: `|l - r| <= |l - 2c + r|` whenever
- * `c >= l` and `c >= r`. Anywhere else the sample itself is the answer.
+ * sample `c` and its neighbours `l` and `r`, as an offset from `c`'s
+ * position: the maximum of the parabola through the three ON THE INTERVAL
+ * THEY SPAN, -1 to 1. The tempo's lag is chosen by its comb score rather than
+ * by the autocorrelation itself, so `c` often sits on the slope beside the
+ * peak, and the true peak a little past a neighbour is then the right answer.
+ * But the parabola's vertex is only meaningful where the fit was sampled:
+ * at near-zero curvature it lies arbitrarily far away, and a period refined
+ * onto it went negative, after which every comb stepping by the period never
+ * ended. Restricted to the sampled interval, a concave parabola peaks at its
+ * vertex or at the nearer end; a flat or convex one says nothing about a
+ * peak, and the sample itself is the answer.
  */
 export function peakOffset(l: number, c: number, r: number): number {
   const curvature = l - 2 * c + r
-  return c >= l && c >= r && curvature < 0 ? (0.5 * (l - r)) / curvature : 0
+  if (!(curvature < 0)) return 0
+  return Math.max(-1, Math.min(1, (0.5 * (l - r)) / curvature))
 }
 
 export class DrumCursor {

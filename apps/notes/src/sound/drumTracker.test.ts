@@ -714,7 +714,9 @@ function playFrames(samples: Float32Array, feed: (chunk: Float32Array, endTime: 
 
 describe('DrumTracker with groove', () => {
   it('is the tracker as it was before groove existed at groove 0, response for response', () => {
-    // Captured from main's tracker (43031195) on the same tracks, frames and contrast.
+    // Captured from main's tracker (43031195) on the same tracks, frames and contrast;
+    // the hip-hop entries re-captured when tempo refinement stopped extrapolating
+    // past its three samples (same hits, strengths moved by about 1%).
     const fixture = JSON.parse(readFileSync(new URL('./drumTracker.groove0.fixture.json', import.meta.url), 'utf8')) as Record<string, Array<[number, number]>>
     for (const [name, samples] of groove0Tracks()) {
       for (const drum of ['kick', 'snare', 'hat'] as const) {
@@ -1410,7 +1412,7 @@ describe('DrumTracker on counter hits the snare recipe does not describe', () =>
 
 
 describe('peakOffset', () => {
-  it('stays within half a sample whatever the three samples are', () => {
+  it('stays within the sampled interval whatever the three samples are', () => {
     const next = noise(7)
     for (let i = 0; i < 100000; i++) {
       // Slopes with near-zero curvature included: the hang's own shape.
@@ -1420,7 +1422,7 @@ describe('peakOffset', () => {
       for (const [a, b, d] of [[l, c, r], [next(), next(), next()]]) {
         const offset = peakOffset(a, b, d)
         expect(Number.isFinite(offset)).toBe(true)
-        expect(Math.abs(offset)).toBeLessThanOrEqual(0.5)
+        expect(Math.abs(offset)).toBeLessThanOrEqual(1)
       }
     }
   })
