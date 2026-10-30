@@ -1448,8 +1448,10 @@ export class DrumTracker {
       const d = tempoPulse[k] - mean
       zero += d * d
     }
-    if (zero <= 0) {
+    if (!(zero > 0)) {
       // Silence: nothing to estimate from, and the grid holds as for any unconfident window.
+      // Written so a NaN (one non-finite sample reaching the pulse) is silence too: past this
+      // line every lag's score would be NaN, no lag would win, and the period would be -1.
       this.confidence = 0
       return
     }
