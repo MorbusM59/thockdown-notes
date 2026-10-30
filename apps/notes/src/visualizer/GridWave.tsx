@@ -28,9 +28,9 @@ import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 
 /** A wave's length, in boxes, from one band's peak to the next. */
-const PERIOD_BOXES = 12
+const PERIOD_BOXES = 128
 /** Seconds a band takes to travel one period. */
-const PERIOD_SEC = 3
+const PERIOD_SEC = 6
 
 interface SceneBox { left: number; top: number; width: number; height: number }
 
