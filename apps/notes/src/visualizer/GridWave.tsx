@@ -18,9 +18,9 @@
 import type { CSSProperties } from 'react'
 
 /** A wave's length, in boxes, from one band's peak to the next. */
-const PERIOD_BOXES = 12
+const PERIOD_BOXES = 128
 /** Seconds a band takes to travel one period. */
-const PERIOD_SEC = 3
+const PERIOD_SEC = 6
 
 export function GridWave({ boxPx, originXPx, originYPx }: { boxPx: number; originXPx: number; originYPx: number }) {
   const periodPx = PERIOD_BOXES * boxPx
