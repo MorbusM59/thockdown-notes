@@ -1,7 +1,7 @@
 // verify: reads-siblings (scripts/verify.mjs, "what a test reads from disk")
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { DrumCursor, DrumTracker, type Drum } from './drumTracker'
+import { DrumCursor, DrumTracker, peakOffset, type Drum } from './drumTracker'
 
 const RATE = 48000
 
@@ -1408,3 +1408,25 @@ describe('DrumTracker on counter hits the snare recipe does not describe', () =>
   }, 60_000)
 })
 
+
+describe('peakOffset', () => {
+  it('stays within half a sample whatever the three samples are', () => {
+    const next = noise(7)
+    for (let i = 0; i < 100000; i++) {
+      // Slopes with near-zero curvature included: the hang's own shape.
+      const l = next()
+      const c = l + next() * 1e-3
+      const r = c + (c - l) + next() * 1e-9 * (i % 3)
+      for (const [a, b, d] of [[l, c, r], [next(), next(), next()]]) {
+        const offset = peakOffset(a, b, d)
+        expect(Number.isFinite(offset)).toBe(true)
+        expect(Math.abs(offset)).toBeLessThanOrEqual(0.5)
+      }
+    }
+  })
+
+  it('finds the vertex of a local maximum', () => {
+    // y = -(x - 0.25)^2 at x = -1, 0, 1
+    expect(peakOffset(-1.5625, -0.0625, -0.5625)).toBeCloseTo(0.25, 12)
+  })
+})

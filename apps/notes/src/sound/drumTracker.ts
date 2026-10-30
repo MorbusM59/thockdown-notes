@@ -763,6 +763,23 @@ export type DrumRestart = 'gap' | 'drift'
 /** The next run's `epoch`, shared by every tracker. */
 let nextEpoch = 0
 
+/**
+ * Where the peak of a sampled curve lies between whole samples, from the
+ * sample `c` and its neighbours `l` and `r`: the vertex of the parabola
+ * through the three, as an offset from `c`'s position. Only a LOCAL MAXIMUM
+ * has a vertex beside it: the tempo's lag is chosen by its comb score, not
+ * by the autocorrelation itself, so `c` can sit on a slope, where the
+ * parabola's vertex lies arbitrarily far away (at near-zero curvature, past
+ * zero) and a period refined onto it went negative, after which every comb
+ * stepping by the period never ended. On a local maximum the offset is
+ * within half a sample by construction: `|l - r| <= |l - 2c + r|` whenever
+ * `c >= l` and `c >= r`. Anywhere else the sample itself is the answer.
+ */
+export function peakOffset(l: number, c: number, r: number): number {
+  const curvature = l - 2 * c + r
+  return c >= l && c >= r && curvature < 0 ? (0.5 * (l - r)) / curvature : 0
+}
+
 export class DrumCursor {
   lastAsked = NaN
   lastPeak = NaN
@@ -1477,11 +1494,7 @@ export class DrumTracker {
       }
     }
     // Parabolic refinement: a period between two whole hops is the norm (128 BPM at 48kHz is 87.9 hops).
-    const l = raw[best - 1]
-    const c = raw[best]
-    const r = raw[best + 1]
-    const curvature = l - 2 * c + r
-    const period = best + (curvature < 0 ? (0.5 * (l - r)) / curvature : 0)
+    const period = best + peakOffset(raw[best - 1], raw[best], raw[best + 1])
     // Confidence in the quantity that chose the period: the comb's mean
     // against the signal's energy. The autocorrelation at one period alone
     // reads a break, whose kicks do not repeat every beat, as no beat at all.
