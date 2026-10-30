@@ -116,17 +116,25 @@
   will-change: transform;
 }
 
-/* The smooth wave (GridWave.tsx): masked to the grid lines exactly as
-   `.thockdown-grid-lines` draws them (index.css), above them and below the
-   letters. */
-.visualizer-scene > .visualizer-grid-wave {
+/* The smooth wave (GridWave.tsx): portalled into .app-saturate-wrapper and
+   painted just above the glaze (.glaze-overlay-stack, z-index 6000), masked
+   to the scene's grid lines with the centre cutout left out. */
+.visualizer-scene > .visualizer-grid-wave-anchor {
   inset: 0;
-  z-index: 4;
+  pointer-events: none;
+}
+
+.visualizer-grid-wave {
+  position: fixed;
+  z-index: 6001;
   overflow: hidden;
-  mask-image:
-    repeating-linear-gradient(to right, #000 0, #000 1px, transparent 1px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, #000 0, #000 1px, transparent 1px, transparent var(--editor-line-height));
-  mask-size: var(--editor-cell-width) var(--editor-line-height);
+  pointer-events: none;
+}
+
+.visualizer-grid-wave-lines {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 .visualizer-grid-wave-bands {

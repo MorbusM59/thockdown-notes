@@ -321,7 +321,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
             style={{ backgroundPosition: `${originXPx - 1}px ${originYPx - 1}px`, ...cutoutHole }}
           />
           <div className="visualizer-grid thockdown-grid-lines" style={{ backgroundPosition: `${originXPx}px ${originYPx}px`, zIndex: 4 }} />
-          <GridWave boxPx={box} originXPx={originXPx} originYPx={originYPx} />
+          <GridWave boxPx={box} originXPx={originXPx} originYPx={originYPx} cutout={cutout.size > 0 ? cutoutRect : null} />
 
           {layout.titleRow !== null && <Letters runs={title} row={layout.titleRow} layout={layout} />}
           {layout.creditsRow !== null && <Letters runs={credits} row={layout.creditsRow} layout={layout} />}
