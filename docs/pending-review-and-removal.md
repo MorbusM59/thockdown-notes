@@ -559,25 +559,6 @@ and the old folder is gone). Then the module, its test and the call go, and
 **Noticed.** Written with the move itself, as the one piece of it that is
 transitional by design.
 
-### The Cursor and Caret sections' own staged-colour handlers
-
-**What.** `App.tsx`'s cursor and caret HSVA staging, drag, wheel and
-copy-hold handlers (`startCaretHsvaDrag`, `applyCaretColorToTarget`,
-`startCaretColorCopyHold` and their cursor twins), passed down to
-`SidebarOptionsPanel` as props.
-
-**Why it is suspect.** `apps/notes/src/sidebar/StagedColorRow.tsx` is the same
-closed loop (targets, staged H/S/V/A, click to apply, hold right-click to
-copy) as one component holding its own staging; the Visualizer section uses
-it. Two copies of one interaction drift.
-
-**What would have to be true to remove it.** That `StagedColorRow` covers what
-the two sections do that it does not yet (the caret's extra targets and
-anything reading the staged colour from outside the section). Then both
-sections become a target list and the App.tsx handlers and props go.
-
-**Noticed.** Written with `StagedColorRow`, for the Visualizer section.
-
 ### The drum tracker's stamp averaging and lost-sample handling
 
 **What it is.** `DrumTracker.feed`'s `endTime` alignment, averaged over

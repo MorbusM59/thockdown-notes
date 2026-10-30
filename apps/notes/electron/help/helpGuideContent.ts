@@ -822,9 +822,12 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Colors.
 
-*A "paint bucket" system for recoloring and retexturing individual UI elements.*
+*One staged colour, shown at the top of every section that has colours.*
 
-- Click a source swatch — or an active color, or a texture preview — to pick it up, then click any target swatch (UI elements, text colors, textures) to apply it there.
+- Click a colour to apply the staged colour to it; hold right-click on a colour to copy it into the staging.
+- The H, S, V and A letters choose which channels a click applies and a copy takes; Shift adds or removes one. The colour button selects all four.
+- Right-click a slider to type a value.
+- Surface textures: click a surface to edit its texture; hold right-click on another surface to copy its texture to it; click the preview to apply the staged colour.
 
 ### [Borders](#borders-and-spacing)
 

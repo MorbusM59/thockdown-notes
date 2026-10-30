@@ -434,12 +434,6 @@
   filter: var(--filter-primed-delete);
 }
 
-/* HSVA drag cursor override */
-body.hsva-dragging,
-body.hsva-dragging * {
-  cursor: none !important;
-}
-
 /* The caret's follow-the-music switch while it is on but cannot act (the
    Visualizer's drum button is off, or the caret block's effect is at its
    centre): visibly not in effect, as a dimmed audio level is. */

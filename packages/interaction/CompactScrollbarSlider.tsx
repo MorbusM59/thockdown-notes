@@ -49,6 +49,21 @@ type CompactScrollbarSliderProps = {
    * only changes what is read out.
    */
   formatValue?: (value: number) => string
+  /**
+   * What a right click does: `reset` returns to `defaultValue`, `type` opens a
+   * field inside the slider's own box for typing a value in. The field takes
+   * the box's exact size, so opening it cannot move the layout; Enter commits,
+   * Escape or leaving the field cancels.
+   */
+  secondaryPress?: 'reset' | 'type'
+  /** A CSS background for the rail, for a slider whose track can show what it sets (a hue ramp). */
+  trackBackground?: string
+  /**
+   * Shows the slider as not in effect while leaving it fully usable -- for a
+   * value that is still edited but that a press elsewhere will not apply.
+   * Unlike `disabled`, input is not ignored.
+   */
+  dimmed?: boolean
   onCommit: (value: number) => void
 }
 
@@ -65,8 +80,12 @@ export function CompactScrollbarSlider({
   defaultValue,
   disabled = false,
   formatValue,
+  secondaryPress = 'reset',
+  trackBackground,
+  dimmed = false,
   onCommit,
 }: CompactScrollbarSliderProps) {
+  const [entry, setEntry] = useState<string | null>(null)
   /** The kind of pointer that last pressed the slider: a `contextmenu` cannot say whether it came from a mouse. */
   const pressPointerTypeRef = useRef('mouse')
   const railRef = useRef<HTMLDivElement | null>(null)
@@ -121,8 +140,16 @@ export function CompactScrollbarSlider({
 
     event.preventDefault()
     event.stopPropagation()
-    nudgeBy(dominantDelta > 0 ? -step : step)
+    // Shift moves ten steps at a time, as PageUp/PageDown do.
+    const stepSize = event.shiftKey ? step * 10 : step
+    nudgeBy(dominantDelta > 0 ? -stepSize : stepSize)
   }, [disabled, nudgeBy, step])
+
+  const commitEntry = (text: string) => {
+    setEntry(null)
+    const parsed = Number.parseFloat(text.replace(',', '.'))
+    if (Number.isFinite(parsed)) onCommit(snapValue(parsed))
+  }
 
   useNonPassiveWheel(shellRef, handleWheel)
 
@@ -138,7 +165,7 @@ export function CompactScrollbarSlider({
       aria-valuenow={Number(formatCompactSettingNumber(value, step))}
       aria-valuetext={formatValue ? formatValue(value) : undefined}
       aria-disabled={disabled || undefined}
-      className={`utility-setting-scrollbar-shell${isDragging ? ' is-dragging' : ''}${disabled ? ' is-disabled' : ''}`}
+      className={`utility-setting-scrollbar-shell${isDragging ? ' is-dragging' : ''}${disabled ? ' is-disabled' : ''}${dimmed ? ' is-dimmed' : ''}`}
       data-live-tooltip={`${tooltipLabel ?? trackLabel}: ${formatValue ? formatValue(value) : formatCompactSettingNumber(value, step)}`}
       ref={shellRef}
       onKeyDown={(event) => {
@@ -200,10 +227,38 @@ export function CompactScrollbarSlider({
         // was holding to adjust.
         if (pressPointerTypeRef.current !== 'mouse') return
         if (disabled) return
+        if (secondaryPress === 'type') {
+          setEntry(formatCompactSettingNumber(value, step))
+          return
+        }
         if (defaultValue !== undefined) onCommit(snapValue(defaultValue))
       }}
     >
-      <div className="utility-setting-scrollbar-rail" ref={railRef} aria-hidden="true">
+      {entry !== null ? (
+        <input
+          className="utility-setting-scrollbar-entry"
+          aria-label={ariaLabel}
+          inputMode="decimal"
+          spellCheck={false}
+          autoFocus
+          value={entry}
+          onFocus={(event) => event.currentTarget.select()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => setEntry(event.target.value.replace(/[^0-9.,-]/g, ''))}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commitEntry(entry)
+            } else if (event.key === 'Escape' || event.key === 'Tab') {
+              event.preventDefault()
+              setEntry(null)
+            }
+          }}
+          onBlur={() => setEntry(null)}
+        />
+      ) : null}
+      <div className="utility-setting-scrollbar-rail" ref={railRef} aria-hidden="true" style={trackBackground ? { background: trackBackground } : undefined}>
         <span className="utility-setting-scrollbar-track-label">{trackLabel}</span>
         <div
           className="utility-setting-scrollbar-thumb"

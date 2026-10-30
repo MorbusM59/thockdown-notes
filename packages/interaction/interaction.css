@@ -221,6 +221,37 @@
   cursor:  default;
 }
 
+/* A value still edited but not applied by the next press (a colour channel
+   outside the channel mask). Lighter than .is-disabled: it still takes input. */
+.utility-setting-scrollbar-shell.is-dimmed {
+  opacity: 0.55;
+}
+
+/* Typed entry (secondaryPress="type"): fills the slider's own box exactly, at
+   a font sized to that box, so opening it cannot move anything around it. */
+.utility-setting-scrollbar-entry {
+  position:      absolute;
+  inset:         0;
+  z-index:       2;
+  width:         100%;
+  height:        100%;
+  box-sizing:    border-box;
+  margin:        0;
+  padding:       0 var(--spacing-small);
+  border:        1px solid var(--btn-border-active);
+  border-radius: var(--border-radius-regular);
+  background:    var(--color-background-light);
+  color:         var(--color-text-80);
+  font-size:     calc(100cqh - 4px);
+  line-height:   1;
+  text-align:    center;
+  outline:       none;
+}
+
+.utility-setting-scrollbar-shell {
+  container-type: size;
+}
+
 /* =============================================================================
    Sidebar
    ============================================================================= */
@@ -357,14 +388,6 @@
 }
 
 /* Color & texture picker system */
-.options-color-layout {
-  display:    flex;
-  align-items: stretch;
-  gap:        var(--toolbar-options-gap);
-  min-height: 0;
-  height:     auto;
-  overflow:   visible;
-}
 
 .options-color-grid {
   display: grid;
@@ -372,8 +395,7 @@
   flex:    0 0 auto;
 }
 
-.options-element-grid,
-.options-texture-grid {
+.options-element-grid {
   grid-auto-columns: var(--color-grid-cell);
   grid-auto-rows:    var(--color-grid-cell);
   grid-auto-flow:    column;
@@ -402,18 +424,6 @@
   grid-template-columns: repeat(6, var(--color-grid-cell));
 }
 
-.options-hsva-grid {
-  grid-template-columns: repeat(3, var(--color-grid-cell));
-  grid-template-rows:    repeat(2, var(--color-grid-cell));
-  grid-auto-flow:        column;
-}
-
-.options-color-separator {
-  width:       1px;
-  background:  #ccc;
-  align-self:  stretch;
-}
-
 /* Swatch base */
 .options-color-swatch {
   width:      100%;
@@ -424,16 +434,19 @@
 }
 
 .options-element-grid .options-color-swatch,
-.options-texture-grid .options-color-swatch {
+.options-color-target,
+.options-color-picker-current {
   position:   relative;
   background: transparent;
   overflow:   hidden;
 }
 
+.options-color-target::before,
+.options-color-target::after,
+.options-color-picker-current::before,
+.options-color-picker-current::after,
 .options-element-grid .options-color-swatch::before,
-.options-element-grid .options-color-swatch::after,
-.options-texture-grid .options-color-swatch::before,
-.options-texture-grid .options-color-swatch::after {
+.options-element-grid .options-color-swatch::after {
   content:        '';
   position:       absolute;
   inset:          0;
@@ -442,13 +455,15 @@
   z-index:        0;
 }
 
-.options-element-grid .options-color-swatch::before,
-.options-texture-grid .options-color-swatch::before {
+.options-color-target::before,
+.options-color-picker-current::before,
+.options-element-grid .options-color-swatch::before {
   background: var(--color-background-light);
 }
 
-.options-element-grid .options-color-swatch::after,
-.options-texture-grid .options-color-swatch::after {
+.options-color-target::after,
+.options-color-picker-current::after,
+.options-element-grid .options-color-swatch::after {
   background: var(--options-swatch-color, transparent);
 }
 
@@ -456,15 +471,16 @@
    color layers above (::before/::after) paint on top of it and hide it.
    Re-apply the shadow on ::after, the topmost of the two layers, so it
    remains visible over the swatch color. */
+.options-color-target[data-pressed]::after,
+.options-color-picker-current.is-active::after,
+.options-color-picker-current[data-pressed]::after,
 .options-element-grid .options-color-swatch.is-active::after,
-.options-element-grid .options-color-swatch[data-pressed]::after,
-.options-texture-grid .options-color-swatch.is-active::after,
-.options-texture-grid .options-color-swatch[data-pressed]::after {
+.options-element-grid .options-color-swatch[data-pressed]::after {
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
-.options-element-grid .options-color-swatch > *,
-.options-texture-grid .options-color-swatch > * {
+.options-color-target > *,
+.options-element-grid .options-color-swatch > * {
   position: relative;
   z-index:  1;
 }
@@ -504,6 +520,25 @@
 
 .options-caret-preset-btn {
   width: 100%;
+}
+
+.options-mouse-target-grid {
+  grid-column:           span 2;
+  grid-row:              span 2;
+  display:               grid;
+  grid-template-columns: repeat(2, var(--color-grid-cell));
+  grid-auto-rows:        var(--color-grid-cell);
+  gap:                   var(--color-grid-gap);
+}
+
+.options-mouse-center-grid.options-mouse-center-grid-wide {
+  grid-column: span 4;
+}
+
+/* Fills the rest of the Caret section's first row after its two colour
+   targets, so the sliders below start on a row of their own. */
+.options-caret-target-spacer {
+  grid-column: span 4;
 }
 
 .options-mouse-center-grid {
@@ -549,37 +584,10 @@
 }
 
 /* HSVA controls */
-.options-hsva-control {
-  cursor:     ns-resize;
-  transition: none;
-}
-
-.options-hsva-alpha {
-  background: var(--color-background-light);
-  padding:    0;
-}
-
-.options-hsva-ghost { display: inline-block; }
-
-.options-hsva-glyph,
-.options-hsva-ghost {
-  line-height: 1;
-}
-
-.options-hsva-ghost::before,
-.options-hsva-glyph::before {
-  display: block;
-}
 
 /* Mouse options: cursor toggle + local HSVA staging row (row 1: toggle,
    1-cell gap, H/S/V/A) over the 3 target swatches (row 2, each spanning 2 of
    the same 6 columns) -- reuses the HSVA grid's 32px cell sizing. */
-.options-mouse-color-grid {
-  display: grid;
-  grid-template-columns: repeat(6, var(--color-grid-cell));
-  grid-auto-rows: var(--color-grid-cell);
-  gap: var(--color-grid-gap);
-}
 
 /* Mouse options slider rows: full-width sliders (not 32px swatch cells), so
    columns are fractional -- .options-glaze-cell-span-2/-3 (grid-column: span
@@ -590,33 +598,93 @@
   gap: var(--toolbar-options-gap);
 }
 
-.options-active-color {
-  grid-row:     span 2;
-  aspect-ratio: auto;
-  justify-self: center;
-  align-self:   center;
-  transition:   none;
+/* Colour picker row (apps/notes/src/colorPicker/ColorPickerRow.tsx): one row
+   of the six-column grid -- the staged colour, the 2x2 channel toggles, and
+   two stacks of two sliders, each stack two columns wide. */
+.options-color-picker-row {
+  display:               grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
+  grid-template-rows:    var(--color-grid-cell);
+  gap:                   var(--color-grid-gap);
+  margin-bottom:         var(--color-grid-gap);
 }
 
-/* Texture picker */
-.options-texture-settings {
-  display:           grid;
-  grid-template-columns: repeat(3, var(--color-grid-cell));
+.options-color-picker-toggles {
+  display:               grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows:    repeat(2, 1fr);
+  gap:                   2px;
+  min-width:             0;
+  min-height:            0;
+}
+
+.options-color-picker-toggle {
+  width:       100%;
+  height:      100%;
+  min-width:   0;
+  min-height:  0;
+  padding:     0;
+  font-size:   calc(9px * var(--ui-font-scale));
+  font-weight: 600;
+  line-height: 1;
+  color:       var(--color-text-60);
+}
+
+.options-color-picker-toggle.is-active {
+  color:      var(--color-text-80);
+  box-shadow: var(--box-shadow-inverted-harsh-active);
+}
+
+.options-color-picker-sliders {
+  grid-column:    span 2;
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--color-grid-gap);
+  min-width:      0;
+}
+
+.options-color-picker-sliders .utility-setting-scrollbar-shell {
+  height: calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
+}
+
+/* Surface textures (apps/notes/src/colorPicker/SurfaceTexturePicker.tsx):
+   two rows of the six-column grid -- the four surfaces in a 2x2, the 2x2
+   preview, then the seed over the granularity/smoothness stack. */
+.options-surface-textures {
+  display:               grid;
+  grid-template-columns: repeat(6, var(--color-grid-cell));
   grid-template-rows:    repeat(2, var(--color-grid-cell));
-  gap:               var(--color-grid-gap);
-  width:     calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
-  min-width: calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
-  max-width: calc((var(--color-grid-cell) * 3) + (var(--color-grid-gap) * 2));
-  flex:      0 0 auto;
+  gap:                   var(--color-grid-gap);
 }
 
-.options-texture-seed-slot {
-  grid-column:    2 / span 2;
+.options-surface-texture-preview {
+  grid-column: 3 / span 2;
+  grid-row:    1 / span 2;
+  width:       100%;
+  height:      100%;
+}
+
+.options-surface-texture-seed {
+  position:       relative;
+  container-type: size;
+  grid-column:    5 / span 2;
   grid-row:       1;
-  height:         100%;
-  display:        block;
 }
 
+.options-surface-texture-sliders {
+  grid-column:    5 / span 2;
+  grid-row:       2;
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--color-grid-gap);
+  min-width:      0;
+}
+
+.options-surface-texture-sliders .utility-setting-scrollbar-shell {
+  height: calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
+}
+
+/* Seed buttons (the texture's and the glaze's) and the texture preview */
 .options-seed-editor {
   width:       100%;
   height:         100%;
@@ -642,52 +710,11 @@
   box-shadow:      var(--box-shadow-inverted-light);
 }
 
-.options-texture-preview-row {
-  grid-row:        1 / span 2;
-  grid-column:     1;
-  min-width:       0;
-  min-height:      0;
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-}
-
-.options-texture-control-btn,
-.options-texture-preview-row .options-texture-preview {
-  width: 100%;
-}
-
-.options-texture-control-btn {
-  min-width:      0;
-  min-height:     0;
-  padding:        var(--spacing-small);
-  display:        inline-flex;
-  flex-direction: column;
-  align-items:    center;
-  justify-content: center;
-  gap:            var(--spacing-small);
-}
-
-.options-texture-control-btn-granularity {
-  grid-column: 2;
-  grid-row:    2;
-}
-
-.options-texture-control-btn-smoothness {
-  grid-column: 3;
-  grid-row:    2;
-}
-
 .options-texture-preview {
   position:   relative;
   overflow:   hidden;
   border:     1px solid var(--btn-border-default);
   background: none;
-}
-
-.options-texture-preview.is-active {
-  border-color: var(--btn-border-active);
-  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 .options-texture-preview::before,

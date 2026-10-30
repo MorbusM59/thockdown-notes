@@ -54,12 +54,7 @@ import { resolveIdentityLabel } from './shared/tabLabels'
 import { formatIdWithSigil } from './shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
-  type RgbaColor,
-  type HsvaColor,
-  parseCssColorToRgba,
   rgbaToCssColor,
-  rgbaToHex,
-  rgbaToHsva,
   hsvaToRgba,
 } from '@thockdown/look/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
@@ -268,7 +263,7 @@ import {
   TEXTURE_VSTEPS_MAX,
 } from '@thockdown/look/textureTypes'
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
-import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
+import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
@@ -323,11 +318,7 @@ const EMPTY_MAP = new Map<string, NotePrimedAction>()
 const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
 const DEFAULT_BORDER_ALPHA_PERCENT = 100
 const DEFAULT_BOX_SHADOW_ALPHA_PERCENT = 100
-const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
-// Holding a swatch to copy its colour is "I meant this one" -- the app's
-// CONFIRM threshold (`shared/holdTiming.ts`), which also announces the
-// completion in the cursor. Was 300ms of its own.
-const COLOR_BUTTON_ARM_HOLD_MS = HOLD_CONFIRM_MS
+const TEXTURE_FALLBACK_SURFACE: TextureSurfaceKey = 'appGrid'
 
 /** The font sizes that are remembered per size mode (see fontSizesByMode in App). */
 interface FontSizeSet {
@@ -425,9 +416,6 @@ type ViewStyleKey =
   | 'bubblerone'
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
-type HsvaControlKey = 'h' | 's' | 'v' | 'a'
-type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
-type CaretColorTargetKey = 'outline' | 'halo'
 
 // Fallbacks for chrome reading through the section registry before any
 // section has registered -- never actually hit in practice (registration
@@ -459,32 +447,6 @@ const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
   matrix: { filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 0.8633, filterColorize: 0 },
 }
 
-
-type HsvaDragState = {
-  control: HsvaControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type TextureControlKey = 'granularity' | 'smoothness'
-
-type TextureControlDragState = {
-  control: TextureControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type ColorArmSource =
-  | { kind: 'hsva'; key: HsvaControlKey }
-  | { kind: 'active-color' }
-  | { kind: 'texture-preview' }
-
-type ElementPreviewCopySource =
-  | { kind: 'element'; key: HighlightColorKey }
-  | { kind: 'texture'; key: TextureSurfaceKey }
-  | { kind: 'text'; key: EditorTextColorTargetKey }
 
 type SidebarViewState = {
   scrollTop: number
@@ -697,12 +659,8 @@ function cloneTextureMaterials(source: Partial<TextureMaterialsBySurface> | null
   }
 }
 
-function cloneTextureMaterial(source: unknown, fallback: TextureMaterialSettings = DEFAULT_TEXTURE_MATERIALS[TEXTURE_PREVIEW_SURFACE]): TextureMaterialSettings {
+function cloneTextureMaterial(source: unknown, fallback: TextureMaterialSettings = DEFAULT_TEXTURE_MATERIALS[TEXTURE_FALLBACK_SURFACE]): TextureMaterialSettings {
   return normalizeTextureMaterial(source, fallback)
-}
-
-function toTexturePreviewMaterial(source: unknown): TextureMaterialSettings {
-  return normalizeTextureMaterial(source, DEFAULT_TEXTURE_MATERIALS[TEXTURE_PREVIEW_SURFACE])
 }
 
 function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
@@ -877,20 +835,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
 
 function buildUiLoadoutSignature(loadout: UiLayoutLoadout): string {
   return stableStringify(normalizeUiLoadoutForSignature(loadout))
-}
-
-function areHsvaEqual(a: HsvaColor, b: HsvaColor): boolean {
-  return a.h === b.h && a.s === b.s && a.v === b.v && a.a === b.a
-}
-
-function areTextureMaterialsEqual(a: TextureMaterialSettings, b: TextureMaterialSettings): boolean {
-  return (
-    a.enabled === b.enabled
-    && a.seed === b.seed
-    && a.granularity === b.granularity
-    && a.vSteps === b.vSteps
-    && areHsvaEqual(a.color, b.color)
-  )
 }
 
 const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
@@ -1419,7 +1363,6 @@ function App() {
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const documentReplaceInputRef = useRef<HTMLInputElement | null>(null)
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
-  const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeLinearSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeRadialSeedInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNoteSummaries] = useState<NoteSummary[]>([])
@@ -1516,29 +1459,6 @@ function App() {
   const [caretEffectStrengthPercent, setCaretEffectStrengthPercent] = useState(DEFAULT_CARET_SETTINGS.effectStrengthPercent)
   // The visualizer's blocks, part of the layout (Options > Visualizer).
   const [visualizer, setVisualizer] = useState<VisualizerSettings>(() => defaultVisualizer(false))
-  // Staged HSVA for the Caret section's own H/S/V/A drag controls -- a closed
-  // loop over that section's two targets (outline, halo), exactly like
-  // cursorColorHsva is for the Mouse section's four. See that state's comment.
-  const [caretColorHsva, setCaretColorHsva] = useState<HsvaColor>(() => {
-    const seed = parseCssColorToRgba(DEFAULT_CARET_SETTINGS.outlineColor) ?? { r: 120, g: 115, b: 112, a: 1 }
-    return rgbaToHsva(seed)
-  })
-  const [caretHsvaDragState, setCaretHsvaDragState] = useState<HsvaDragState | null>(null)
-  const caretColorArmTimerRef = useRef<(() => void) | null>(null)
-  // Local "staged" HSVA color for the Mouse options row-1 H/S/V/A drag
-  // controls -- deliberately not tied to the app-wide activeColorHsva/
-  // primedColorSource rig (that system arms a swatch anywhere in the app;
-  // this one is a closed loop scoped to the 3 row-2 targets below it).
-  // Seeded from a real color, same as activeColorHsva below -- HSV is
-  // degenerate at v=0 (pure black regardless of h/s), so starting there
-  // like a naive {h:0,s:0,v:0,a:1} would make the saturation control look
-  // broken (dragging it produces no visible change until v is raised).
-  const [cursorColorHsva, setCursorColorHsva] = useState<HsvaColor>(() => {
-    const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 1 }
-    return rgbaToHsva(seed)
-  })
-  const [cursorHsvaDragState, setCursorHsvaDragState] = useState<HsvaDragState | null>(null)
-  const cursorColorArmTimerRef = useRef<(() => void) | null>(null)
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
@@ -2213,9 +2133,6 @@ function App() {
   }))
   const [textureEnabled] = useState(true)
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
-  const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
-  const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
-  const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
   const [glazeSettings, setGlazeSettings] = useState<GlazeSettings>(() => DEFAULT_GLAZE_SETTINGS)
   const [glazeLinearSeedInput, setGlazeLinearSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.linearSeed))
   const [isGlazeLinearSeedEditing, setIsGlazeLinearSeedEditing] = useState(false)
@@ -2279,14 +2196,6 @@ function App() {
     positionSec: 0,
     wasPlaying: false,
   })
-  const [primedColorSource, setPrimedColorSource] = useState<ColorArmSource>({ kind: 'active-color' })
-  const [activeColorHsva, setActiveColorHsva] = useState<HsvaColor>(() => {
-    const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
-    return rgbaToHsva(seed)
-  })
-  const [hsvaDragState, setHsvaDragState] = useState<HsvaDragState | null>(null)
-  const [textureControlDragState, setTextureControlDragState] = useState<TextureControlDragState | null>(null)
-  const colorArmTimerRef = useRef<(() => void) | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
@@ -2348,22 +2257,10 @@ function App() {
     surface: 'editorRenderText',
     material: textureMaterials.editorRenderText,
   })
-  const texturePreviewCss = useTextureSurface({
-    enabled: true,
-    surface: TEXTURE_PREVIEW_SURFACE,
-    material: texturePreviewMaterial,
-    usePersistentCache: false,
-  })
-  const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
-  const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
-  const activeColorHex = useMemo(() => rgbaToHex(activeColorRgba), [activeColorRgba])
-  const texturePreviewRgba = useMemo(() => hsvaToRgba(texturePreviewMaterial.color), [texturePreviewMaterial.color])
-  const texturePreviewHex = useMemo(() => rgbaToHex(texturePreviewRgba), [texturePreviewRgba])
   const appGridTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.appGrid.color)), [textureMaterials.appGrid.color])
   const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
   const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
   const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
-  const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
   // Everything the visual loadout decides about the look, in one place
   // (shared/loadoutTheme.ts), which the mobile app uses as well.
   const theme = useMemo(() => themeFrame({
@@ -2451,30 +2348,6 @@ function App() {
     textureMaterials,
   ])
 
-  const hsvaDisplayColors = useMemo(() => {
-    const hColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 1, v: 1, a: 1 }))
-    const sColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: activeColorHsva.s, v: 1, a: 1 }))
-    const vColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 0, v: activeColorHsva.v, a: 1 }))
-    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 0, v: 0, a: activeColorHsva.a }))
-    return { hColor, sColor, vColor, aGhostColor }
-  }, [activeColorHsva])
-
-  const cursorHsvaDisplayColors = useMemo(() => {
-    const hColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 1, v: 1, a: 1 }))
-    const sColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: cursorColorHsva.s, v: 1, a: 1 }))
-    const vColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 0, v: cursorColorHsva.v, a: 1 }))
-    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 0, v: 0, a: cursorColorHsva.a }))
-    return { hColor, sColor, vColor, aGhostColor }
-  }, [cursorColorHsva])
-
-  const caretHsvaDisplayColors = useMemo(() => {
-    const hColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 1, v: 1, a: 1 }))
-    const sColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: caretColorHsva.s, v: 1, a: 1 }))
-    const vColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 0, v: caretColorHsva.v, a: 1 }))
-    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 0, v: 0, a: caretColorHsva.a }))
-    return { hColor, sColor, vColor, aGhostColor }
-  }, [caretColorHsva])
-
   const customCursorSettings: CustomCursorSettings = useMemo(() => ({
     // Never on Linux, whatever the setting says (shared/platform.ts).
     enabled: customCursorEnabled && !IS_LINUX_DESKTOP,
@@ -2532,77 +2405,16 @@ function App() {
     })
   }, [])
 
-  const applyTexturePreviewToSurface = useCallback((surface: TextureSurfaceKey) => {
-    const preview = cloneTextureMaterial(texturePreviewMaterial)
-    setTextureMaterials((previous) => {
-      const next = cloneTextureMaterials(previous)
-      next[surface] = {
-        ...preview,
-        enabled: true,
-      }
-      return next
-    })
-  }, [texturePreviewMaterial])
-
-  const updateHighlightColor = useCallback((key: HighlightColorKey, color: RgbaColor) => {
-    setHighlightColors((previous) => ({
-      ...previous,
-      [key]: rgbaToCssColor(color),
-    }))
+  const setHighlightColorCss = useCallback((key: HighlightColorKey, css: string) => {
+    setHighlightColors((previous) => (previous[key] === css ? previous : { ...previous, [key]: css }))
   }, [])
 
-  const resolveEditorTextColor = useCallback((source: Record<EditorTextColorTargetKey, string>, key: EditorTextColorTargetKey): RgbaColor => {
-    return parseCssColorToRgba(source[key])
-      ?? parseCssColorToRgba(DEFAULT_EDITOR_TEXT_COLORS[key])
-      ?? { r: 0, g: 0, b: 0, a: 1 }
+  const setEditorTextColorCss = useCallback((target: EditorTextColorTargetKey, css: string) => {
+    setEditorTextColors((previous) => (previous[target] === css ? previous : { ...previous, [target]: css }))
   }, [])
 
-  const updateEditorTextColor = useCallback((target: EditorTextColorTargetKey, color: RgbaColor) => {
-    setEditorTextColors((previous) => ({
-      ...previous,
-      [target]: rgbaToCssColor(color),
-    }))
-  }, [])
-
-  const applyHsvaValueToEditorText = useCallback((sourceKey: HsvaControlKey, targetKey: EditorTextColorTargetKey) => {
-    setEditorTextColors((previous) => {
-      const target = resolveEditorTextColor(previous, targetKey)
-      const targetHsva = rgbaToHsva(target)
-      const sourceValue = activeColorHsva[sourceKey]
-
-      const nextHsva: HsvaColor = {
-        ...targetHsva,
-        [sourceKey]: sourceKey === 'h'
-          ? Math.max(0, Math.min(360, sourceValue))
-          : Math.max(0, Math.min(1, sourceValue)),
-      }
-
-      return {
-        ...previous,
-        [targetKey]: rgbaToCssColor(hsvaToRgba(nextHsva)),
-      }
-    })
-  }, [activeColorHsva, resolveEditorTextColor])
-
-  const applyActiveColorToEditorText = useCallback((targetKey: EditorTextColorTargetKey) => {
-    setEditorTextColors((previous) => ({
-      ...previous,
-      [targetKey]: activeColorCss,
-    }))
-  }, [activeColorCss])
-
-  const updateTextureColor = useCallback((surface: TextureSurfaceKey, color: RgbaColor, enabled = true) => {
-    const nextHsva = rgbaToHsva(color)
-    updateTextureMaterial(surface, (current) => ({
-      ...current,
-      enabled: enabled,
-      color: {
-        h: nextHsva.h,
-        s: nextHsva.s,
-        v: nextHsva.v,
-        a: nextHsva.a,
-      },
-    }))
+  const setTextureMaterial = useCallback((surface: TextureSurfaceKey, material: TextureMaterialSettings) => {
+    updateTextureMaterial(surface, () => cloneTextureMaterial(material))
   }, [updateTextureMaterial])
 
   const applyDarkModePreset = useCallback((key: DarkModeKey) => {
@@ -3039,8 +2851,6 @@ function App() {
 
   const applyEntryToLiveState = useCallback((entry: UiLoadoutEntry) => {
     applyUiLayoutLoadout(entry.payload)
-    const caretColorRgba = parseCssColorToRgba(entry.payload.highlightColors.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
-    setActiveColorHsva(rgbaToHsva(caretColorRgba))
   }, [applyUiLayoutLoadout])
 
   const selectLoadoutPreset = useCallback(async (id: number) => {
@@ -3209,566 +3019,6 @@ function App() {
     })
   }, [uiLoadoutEntries, applyEntryToLiveState])
 
-  const clearColorArmTimer = useCallback(() => {
-    if (colorArmTimerRef.current === null) return
-    colorArmTimerRef.current()
-    colorArmTimerRef.current = null
-  }, [])
-
-  const resolveHighlightColor = useCallback((source: HighlightColors, key: HighlightColorKey): RgbaColor => {
-    return parseCssColorToRgba(source[key])
-      ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[key])
-      ?? { r: 233, g: 230, b: 227, a: 1 }
-  }, [])
-
-  const resolveTextureColor = useCallback((source: TextureMaterialsBySurface, surface: TextureSurfaceKey): RgbaColor => {
-    return hsvaToRgba(source[surface].color)
-  }, [])
-
-  const applyHsvaValueToElement = useCallback((sourceKey: HsvaControlKey, targetKey: HighlightColorKey) => {
-    setHighlightColors((previous) => {
-      const target = resolveHighlightColor(previous, targetKey)
-      const targetHsva = rgbaToHsva(target)
-      const sourceValue = activeColorHsva[sourceKey]
-
-      const nextHsva: HsvaColor = {
-        ...targetHsva,
-        [sourceKey]: sourceKey === 'h'
-          ? Math.max(0, Math.min(360, sourceValue))
-          : Math.max(0, Math.min(1, sourceValue)),
-      }
-
-      return {
-        ...previous,
-        [targetKey]: rgbaToCssColor(hsvaToRgba(nextHsva)),
-      }
-    })
-  }, [activeColorHsva, resolveHighlightColor])
-
-  const applyHsvaValueToTexture = useCallback((sourceKey: HsvaControlKey, targetSurface: TextureSurfaceKey) => {
-    const target = resolveTextureColor(textureMaterials, targetSurface)
-    const targetHsva = rgbaToHsva(target)
-    const sourceValue = activeColorHsva[sourceKey]
-
-    const nextHsva: HsvaColor = {
-      ...targetHsva,
-      [sourceKey]: sourceKey === 'h'
-        ? Math.max(0, Math.min(360, sourceValue))
-        : Math.max(0, Math.min(1, sourceValue)),
-    }
-
-    updateTextureColor(targetSurface, hsvaToRgba(nextHsva))
-  }, [activeColorHsva, resolveTextureColor, textureMaterials, updateTextureColor])
-
-  const applyActiveColorToElement = useCallback((targetKey: HighlightColorKey) => {
-    setHighlightColors((previous) => ({
-      ...previous,
-      [targetKey]: activeColorCss,
-    }))
-  }, [activeColorCss])
-
-  const applyActiveColorToTexture = useCallback((targetSurface: TextureSurfaceKey) => {
-    updateTextureColor(targetSurface, activeColorRgba, false)
-  }, [activeColorRgba, updateTextureColor])
-
-  useEffect(() => {
-    setTexturePreviewMaterial((current) => ({
-      ...current,
-      color: areHsvaEqual(current.color, activeColorHsva)
-        ? current.color
-        : {
-            h: activeColorHsva.h,
-            s: activeColorHsva.s,
-            v: activeColorHsva.v,
-            a: activeColorHsva.a,
-          },
-    }))
-  }, [activeColorHsva])
-
-  const copyElementValuesToPreviews = useCallback((source: ElementPreviewCopySource) => {
-    if (source.kind === 'element') {
-      const rgba = resolveHighlightColor(highlightColors, source.key)
-      const hsva = rgbaToHsva(rgba)
-      setActiveColorHsva((previous) => (areHsvaEqual(previous, hsva) ? previous : hsva))
-      return
-    }
-
-    if (source.kind === 'text') {
-      const rgba = resolveEditorTextColor(editorTextColors, source.key)
-      const hsva = rgbaToHsva(rgba)
-      setActiveColorHsva((previous) => (areHsvaEqual(previous, hsva) ? previous : hsva))
-      return
-    }
-
-    const material = cloneTextureMaterial(textureMaterials[source.key])
-    setTexturePreviewMaterial((previous) => (areTextureMaterialsEqual(previous, material) ? previous : material))
-    setActiveColorHsva((previous) => (areHsvaEqual(previous, material.color) ? previous : {
-      h: material.color.h,
-      s: material.color.s,
-      v: material.color.v,
-      a: material.color.a,
-    }))
-  }, [editorTextColors, highlightColors, resolveEditorTextColor, resolveHighlightColor, textureMaterials])
-
-  const startColorArmHold = useCallback((source: ColorArmSource, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearColorArmTimer()
-
-    colorArmTimerRef.current = armHold(() => {
-      setPrimedColorSource(source)
-      colorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearColorArmTimer])
-
-  const startElementPreviewCopyHold = useCallback((source: ElementPreviewCopySource, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearColorArmTimer()
-
-    colorArmTimerRef.current = armHold(() => {
-      copyElementValuesToPreviews(source)
-      colorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearColorArmTimer, copyElementValuesToPreviews])
-
-  const updateHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
-    setActiveColorHsva((previous) => {
-      if (control === 'h') {
-        const nextHue = Math.max(0, Math.min(360, rawValue))
-        return {
-          ...previous,
-          h: nextHue,
-        }
-      }
-
-      const normalized = Math.max(0, Math.min(1, rawValue / 255))
-      return {
-        ...previous,
-        [control]: normalized,
-      }
-    })
-  }, [])
-
-  const getWheelStepDirection = useCallback((event: React.WheelEvent<HTMLElement>) => {
-    const dominantDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
-    if (dominantDelta === 0) return 0
-    return dominantDelta > 0 ? -1 : 1
-  }, [])
-
-  const wheelAdjustHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    const baseValue = control === 'h'
-      ? activeColorHsva.h
-      : activeColorHsva[control] * 255
-
-    updateHsvaControlValue(control, baseValue + stepDirection)
-  }, [activeColorHsva, getWheelStepDirection, updateHsvaControlValue])
-
-  const startHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-
-    event.preventDefault()
-
-    const baseValue = control === 'h'
-      ? activeColorHsva.h
-      : activeColorHsva[control] * 255
-
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setHsvaDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateHsvaControlValue(control, baseValue)
-  }, [activeColorHsva, updateHsvaControlValue])
-
-  const handleHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = hsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateHsvaControlValue(control, currentDrag.baseValue + delta)
-  }, [hsvaDragState, updateHsvaControlValue])
-
-  const stopHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = hsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setHsvaDragState(null)
-  }, [hsvaDragState])
-
-  // Mouse-cursor-overlay color widget (Options > Mouse options): a local
-  // closed loop, not tied to primedColorSource/colorArmTimerRef above -- see
-  // cursorColorHsva's declaration for why. Left-click on a row-2 swatch
-  // applies the staged H/S/V/A; holding right-click on one copies its color
-  // back into the staged H/S/V/A, mirroring startElementPreviewCopyHold.
-  const clearCursorColorArmTimer = useCallback(() => {
-    if (cursorColorArmTimerRef.current === null) return
-    cursorColorArmTimerRef.current()
-    cursorColorArmTimerRef.current = null
-  }, [])
-
-  const applyCursorColorToTarget = useCallback((target: CursorColorTargetKey) => {
-    const css = rgbaToCssColor(hsvaToRgba(cursorColorHsva))
-    if (target === 'dot') setCustomCursorDotColor(css)
-    else if (target === 'center') setCustomCursorCenterColor(css)
-    else if (target === 'halo') setCustomCursorHaloColor(css)
-    else setCustomCursorTrailColor(css)
-  }, [cursorColorHsva])
-
-  const copyCursorTargetColorToHsva = useCallback((target: CursorColorTargetKey) => {
-    const css = target === 'dot' ? customCursorDotColor
-      : target === 'center' ? customCursorCenterColor
-      : target === 'halo' ? customCursorHaloColor
-      : customCursorTrailColor
-    const rgba = parseCssColorToRgba(css)
-    if (!rgba) return
-    setCursorColorHsva(rgbaToHsva(rgba))
-  }, [customCursorDotColor, customCursorCenterColor, customCursorHaloColor, customCursorTrailColor])
-
-  const startCursorColorCopyHold = useCallback((target: CursorColorTargetKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearCursorColorArmTimer()
-
-    cursorColorArmTimerRef.current = armHold(() => {
-      copyCursorTargetColorToHsva(target)
-      cursorColorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearCursorColorArmTimer, copyCursorTargetColorToHsva])
-
-  const updateCursorHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
-    setCursorColorHsva((previous) => {
-      if (control === 'h') {
-        const nextHue = Math.max(0, Math.min(360, rawValue))
-        return { ...previous, h: nextHue }
-      }
-
-      const normalized = Math.max(0, Math.min(1, rawValue / 255))
-      return { ...previous, [control]: normalized }
-    })
-  }, [])
-
-  const wheelAdjustCursorHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    const baseValue = control === 'h'
-      ? cursorColorHsva.h
-      : cursorColorHsva[control] * 255
-
-    updateCursorHsvaControlValue(control, baseValue + stepDirection)
-  }, [cursorColorHsva, getWheelStepDirection, updateCursorHsvaControlValue])
-
-  const startCursorHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-
-    event.preventDefault()
-
-    const baseValue = control === 'h'
-      ? cursorColorHsva.h
-      : cursorColorHsva[control] * 255
-
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setCursorHsvaDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateCursorHsvaControlValue(control, baseValue)
-  }, [cursorColorHsva, updateCursorHsvaControlValue])
-
-  const handleCursorHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = cursorHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateCursorHsvaControlValue(control, currentDrag.baseValue + delta)
-  }, [cursorHsvaDragState, updateCursorHsvaControlValue])
-
-  const stopCursorHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = cursorHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setCursorHsvaDragState(null)
-  }, [cursorHsvaDragState])
-
-  // Caret color widget (Options > Caret): the same closed-loop pattern as the
-  // mouse-cursor one directly above -- left-click a target swatch to apply the
-  // staged H/S/V/A to it, hold right-click on one to copy its color back into
-  // the staged H/S/V/A. Kept separate from the cursor's staging so tuning a
-  // caret color can't disturb a cursor color mid-edit, and vice versa.
-  const clearCaretColorArmTimer = useCallback(() => {
-    if (caretColorArmTimerRef.current === null) return
-    caretColorArmTimerRef.current()
-    caretColorArmTimerRef.current = null
-  }, [])
-
-  const applyCaretColorToTarget = useCallback((target: CaretColorTargetKey) => {
-    const css = rgbaToCssColor(hsvaToRgba(caretColorHsva))
-    if (target === 'outline') setCaretOutlineColor(css)
-    else setCaretHaloColor(css)
-  }, [caretColorHsva])
-
-  const copyCaretTargetColorToHsva = useCallback((target: CaretColorTargetKey) => {
-    const css = target === 'outline' ? caretOutlineColor : caretHaloColor
-    const rgba = parseCssColorToRgba(css)
-    if (!rgba) return
-    setCaretColorHsva(rgbaToHsva(rgba))
-  }, [caretOutlineColor, caretHaloColor])
-
-  const startCaretColorCopyHold = useCallback((target: CaretColorTargetKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearCaretColorArmTimer()
-
-    caretColorArmTimerRef.current = armHold(() => {
-      copyCaretTargetColorToHsva(target)
-      caretColorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearCaretColorArmTimer, copyCaretTargetColorToHsva])
-
-  const updateCaretHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
-    setCaretColorHsva((previous) => {
-      if (control === 'h') {
-        const nextHue = Math.max(0, Math.min(360, rawValue))
-        return { ...previous, h: nextHue }
-      }
-
-      const normalized = Math.max(0, Math.min(1, rawValue / 255))
-      return { ...previous, [control]: normalized }
-    })
-  }, [])
-
-  const wheelAdjustCaretHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    const baseValue = control === 'h'
-      ? caretColorHsva.h
-      : caretColorHsva[control] * 255
-
-    updateCaretHsvaControlValue(control, baseValue + stepDirection)
-  }, [caretColorHsva, getWheelStepDirection, updateCaretHsvaControlValue])
-
-  const startCaretHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-
-    event.preventDefault()
-
-    const baseValue = control === 'h'
-      ? caretColorHsva.h
-      : caretColorHsva[control] * 255
-
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setCaretHsvaDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateCaretHsvaControlValue(control, baseValue)
-  }, [caretColorHsva, updateCaretHsvaControlValue])
-
-  const handleCaretHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = caretHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateCaretHsvaControlValue(control, currentDrag.baseValue + delta)
-  }, [caretHsvaDragState, updateCaretHsvaControlValue])
-
-  const stopCaretHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = caretHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setCaretHsvaDragState(null)
-  }, [caretHsvaDragState])
-
-  const getTextureControlBounds = useCallback((control: TextureControlKey) => {
-    if (control === 'granularity') {
-      return {
-        min: TEXTURE_GRANULARITY_MIN,
-        max: TEXTURE_GRANULARITY_MAX,
-      }
-    }
-
-    return {
-      min: TEXTURE_VSTEPS_MIN,
-      max: TEXTURE_VSTEPS_MAX,
-    }
-  }, [])
-
-  const getTextureControlValue = useCallback((control: TextureControlKey) => {
-    if (control === 'granularity') {
-      return texturePreviewMaterial.granularity
-    }
-
-    return texturePreviewMaterial.vSteps
-  }, [texturePreviewMaterial.granularity, texturePreviewMaterial.vSteps])
-
-  const updateTextureControlValue = useCallback((control: TextureControlKey, rawValue: number) => {
-    const bounds = getTextureControlBounds(control)
-    const nextValue = clamp(Math.round(rawValue), bounds.min, bounds.max)
-
-    setTexturePreviewMaterial((current) => {
-      if (control === 'granularity') {
-        if (current.granularity === nextValue) return current
-        return {
-          ...current,
-          granularity: nextValue,
-        }
-      }
-
-      if (current.vSteps === nextValue) return current
-      return {
-        ...current,
-        vSteps: nextValue,
-      }
-    })
-  }, [getTextureControlBounds])
-
-  const wheelAdjustTextureControl = useCallback((control: TextureControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    updateTextureControlValue(control, getTextureControlValue(control) + stepDirection)
-  }, [getTextureControlValue, getWheelStepDirection, updateTextureControlValue])
-
-  const startTextureControlDrag = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-    event.preventDefault()
-
-    const baseValue = getTextureControlValue(control)
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setTextureControlDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateTextureControlValue(control, baseValue)
-  }, [getTextureControlValue, updateTextureControlValue])
-
-  const handleTextureControlDragMove = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = textureControlDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateTextureControlValue(control, currentDrag.baseValue + delta)
-  }, [textureControlDragState, updateTextureControlValue])
-
-  const stopTextureControlDrag = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = textureControlDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setTextureControlDragState(null)
-  }, [textureControlDragState])
-
-  useEffect(() => {
-    // Hidden during a value drag only when the custom cursor stands in for
-    // it; the native cursor stays visible throughout.
-    if (!customCursorSettings.enabled || (!hsvaDragState && !textureControlDragState)) {
-      document.body.classList.remove('hsva-dragging')
-      return
-    }
-
-    document.body.classList.add('hsva-dragging')
-    return () => {
-      document.body.classList.remove('hsva-dragging')
-    }
-  }, [customCursorSettings.enabled, hsvaDragState, textureControlDragState])
-
-  useEffect(() => {
-    if (sidebarMode !== 'options') return
-
-    const optionsContentEl = optionsContentRef.current
-    if (!optionsContentEl) return
-
-    const handleOptionsWheelCapture = (event: WheelEvent) => {
-      const target = event.target
-      if (!(target instanceof Element)) return
-
-      if (!target.closest('.options-hsva-control, .options-texture-control-btn')) {
-        return
-      }
-
-      event.preventDefault()
-    }
-
-    optionsContentEl.addEventListener('wheel', handleOptionsWheelCapture, { capture: true, passive: false })
-    return () => {
-      optionsContentEl.removeEventListener('wheel', handleOptionsWheelCapture, true)
-    }
-  }, [sidebarMode])
-
-  useEffect(() => {
-    return () => {
-      clearColorArmTimer()
-    }
-  }, [clearColorArmTimer])
-
   // Runs once persistence has fully restored appState (including uiMode,
   // set deep inside the bootstrap effect further below). Firing this on
   // plain mount (`[]`) instead of `[persistenceReady]` was the bug: uiMode
@@ -3807,18 +3057,6 @@ function App() {
     // effect's job is only the one-time apply-on-launch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistenceReady])
-
-  useEffect(() => {
-    const handleGlobalSecondaryPress = (event: globalThis.PointerEvent) => {
-      if (event.button !== 2) return
-      clearColorArmTimer()
-    }
-
-    window.addEventListener('pointerdown', handleGlobalSecondaryPress, true)
-    return () => {
-      window.removeEventListener('pointerdown', handleGlobalSecondaryPress, true)
-    }
-  }, [clearColorArmTimer])
 
   // Debounced: whenever the live captured state drifts from the active entry
   // for the current mode, push it to the pending row (+/-7) on the backend.
@@ -8035,12 +7273,6 @@ ${markdownHtml}
   }, [effectiveCurrentPage, isPageJumpEditing])
 
   useEffect(() => {
-    if (!isTextureSeedEditing) {
-      setTextureSeedInput(String(texturePreviewMaterial.seed))
-    }
-  }, [isTextureSeedEditing, texturePreviewMaterial.seed])
-
-  useEffect(() => {
     if (!isGlazeLinearSeedEditing) {
       setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
     }
@@ -8081,20 +7313,6 @@ ${markdownHtml}
     })
   }, [isPageJumpEditing])
 
-  const commitTextureSeedEdit = useCallback(() => {
-    const parsed = Number.parseInt(textureSeedInput.trim(), 10)
-    const safeSeed = Number.isFinite(parsed)
-      ? clamp(parsed, 0, 1000000)
-      : clamp(texturePreviewMaterial.seed, 0, 1000000)
-
-    setTexturePreviewMaterial((current) => ({
-      ...current,
-      seed: safeSeed,
-    }))
-    setTextureSeedInput(String(safeSeed))
-    setIsTextureSeedEditing(false)
-  }, [texturePreviewMaterial.seed, textureSeedInput])
-
   const commitGlazeLinearSeedEdit = useCallback(() => {
     const parsed = Number.parseInt(glazeLinearSeedInput.trim(), 10)
     const safeSeed = Number.isFinite(parsed)
@@ -8124,11 +7342,6 @@ ${markdownHtml}
   }, [glazeRadialSeedInput, glazeSettings.radialSeed])
 
 
-  const cancelTextureSeedEdit = useCallback(() => {
-    setTextureSeedInput(String(texturePreviewMaterial.seed))
-    setIsTextureSeedEditing(false)
-  }, [texturePreviewMaterial.seed])
-
   const cancelGlazeLinearSeedEdit = useCallback(() => {
     setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
     setIsGlazeLinearSeedEditing(false)
@@ -8138,16 +7351,6 @@ ${markdownHtml}
     setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
     setIsGlazeRadialSeedEditing(false)
   }, [glazeSettings.radialSeed])
-
-  const randomizeTextureSeed = useCallback(() => {
-    if (isTextureSeedEditing) return
-
-    const nextSeed = Math.floor(Math.random() * 1000001)
-    setTexturePreviewMaterial((current) => ({
-      ...current,
-      seed: nextSeed,
-    }))
-  }, [isTextureSeedEditing])
 
   const randomizeGlazeLinearSeed = useCallback(() => {
     if (isGlazeLinearSeedEditing) return
@@ -8169,11 +7372,6 @@ ${markdownHtml}
     }))
   }, [isGlazeRadialSeedEditing])
 
-  const startTextureSeedEdit = useCallback(() => {
-    setTextureSeedInput(String(texturePreviewMaterial.seed))
-    setIsTextureSeedEditing(true)
-  }, [texturePreviewMaterial.seed])
-
   const startGlazeLinearSeedEdit = useCallback(() => {
     setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
     setIsGlazeLinearSeedEditing(true)
@@ -8183,14 +7381,6 @@ ${markdownHtml}
     setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
     setIsGlazeRadialSeedEditing(true)
   }, [glazeSettings.radialSeed])
-
-  useEffect(() => {
-    if (!isTextureSeedEditing) return
-    window.requestAnimationFrame(() => {
-      textureSeedInputRef.current?.focus()
-      textureSeedInputRef.current?.select()
-    })
-  }, [isTextureSeedEditing])
 
   useEffect(() => {
     if (!isGlazeLinearSeedEditing) return
@@ -8233,10 +7423,9 @@ ${markdownHtml}
       const isReplaceField = target === documentReplaceInputRef.current
       const isTagField = target === activeSection?.tagInputRef.current
       const isPageJumpField = target === pageJumpInputRef.current
-      const isTextureSeedField = target === textureSeedInputRef.current
       const isGlazeLinearSeedField = target === glazeLinearSeedInputRef.current
       const isGlazeRadialSeedField = target === glazeRadialSeedInputRef.current
-      const isEditorControlField = isSearchField || isReplaceField || isTagField || isPageJumpField || isTextureSeedField || isGlazeLinearSeedField || isGlazeRadialSeedField
+      const isEditorControlField = isSearchField || isReplaceField || isTagField || isPageJumpField || isGlazeLinearSeedField || isGlazeRadialSeedField
 
       // THE FIND/REPLACE PAIR IS THE ONE PLACE TAB STEPS SIDEWAYS, and it
       // now does so by NAME rather than by riding the browser's tab order.
@@ -9342,49 +8531,18 @@ ${markdownHtml}
                         saveCustomLoadout={saveCustomLoadout}
                         resetCustomLoadout={resetCustomLoadout}
                         resetCustomLayoutPrimed={resetCustomLayoutPrimed}
-                        primedColorSource={primedColorSource}
-                        setPrimedColorSource={setPrimedColorSource}
+                        setHighlightColorCss={setHighlightColorCss}
+                        setEditorTextColorCss={setEditorTextColorCss}
+                        setTextureMaterial={setTextureMaterial}
+                        setCustomCursorDotColor={setCustomCursorDotColor}
+                        setCustomCursorCenterColor={setCustomCursorCenterColor}
+                        setCustomCursorTrailColor={setCustomCursorTrailColor}
+                        setCustomCursorHaloColor={setCustomCursorHaloColor}
+                        setCaretOutlineColor={setCaretOutlineColor}
+                        setCaretHaloColor={setCaretHaloColor}
                         highlightColors={highlightColors}
                         editorTextColors={editorTextColors}
-                        applyActiveColorToElement={applyActiveColorToElement}
-                        updateHighlightColor={updateHighlightColor}
-                        applyHsvaValueToElement={applyHsvaValueToElement}
-                        applyActiveColorToEditorText={applyActiveColorToEditorText}
-                        updateEditorTextColor={updateEditorTextColor}
-                        applyHsvaValueToEditorText={applyHsvaValueToEditorText}
-                        startElementPreviewCopyHold={startElementPreviewCopyHold}
-                        clearColorArmTimer={clearColorArmTimer}
-                        hsvaDragState={hsvaDragState}
-                        hsvaDisplayColors={hsvaDisplayColors}
-                        activeColorHsva={activeColorHsva}
-                        activeColorHex={activeColorHex}
-                        activeColorCss={activeColorCss}
-                        startHsvaDrag={startHsvaDrag}
-                        handleHsvaDragMove={handleHsvaDragMove}
-                        stopHsvaDrag={stopHsvaDrag}
-                        startColorArmHold={startColorArmHold}
-                        wheelAdjustHsvaControl={wheelAdjustHsvaControl}
-                        applyActiveColorToTexture={applyActiveColorToTexture}
-                        applyTexturePreviewToSurface={applyTexturePreviewToSurface}
-                        applyHsvaValueToTexture={applyHsvaValueToTexture}
                         textureMaterials={textureMaterials}
-                        texturePreviewMaterial={texturePreviewMaterial}
-                        texturePreviewHex={texturePreviewHex}
-                        texturePreviewTintCss={texturePreviewTintCss}
-                        texturePreviewCss={texturePreviewCss}
-                        isTextureSeedEditing={isTextureSeedEditing}
-                        textureSeedInputRef={textureSeedInputRef}
-                        textureSeedInput={textureSeedInput}
-                        setTextureSeedInput={setTextureSeedInput}
-                        commitTextureSeedEdit={commitTextureSeedEdit}
-                        cancelTextureSeedEdit={cancelTextureSeedEdit}
-                        randomizeTextureSeed={randomizeTextureSeed}
-                        startTextureSeedEdit={startTextureSeedEdit}
-                        textureControlDragState={textureControlDragState}
-                        startTextureControlDrag={startTextureControlDrag}
-                        handleTextureControlDragMove={handleTextureControlDragMove}
-                        stopTextureControlDrag={stopTextureControlDrag}
-                        wheelAdjustTextureControl={wheelAdjustTextureControl}
                         glazeSettings={glazeSettings}
                         setGlazeSettings={setGlazeSettings}
                         isGlazeLinearSeedEditing={isGlazeLinearSeedEditing}
@@ -9529,16 +8687,6 @@ ${markdownHtml}
                         setCustomCursorClickMinHoldMs={setCustomCursorClickMinHoldMs}
                         customCursorClickBalance={customCursorClickBalance}
                         setCustomCursorClickBalance={setCustomCursorClickBalance}
-                        cursorColorHsva={cursorColorHsva}
-                        cursorHsvaDisplayColors={cursorHsvaDisplayColors}
-                        cursorHsvaDragState={cursorHsvaDragState}
-                        startCursorHsvaDrag={startCursorHsvaDrag}
-                        handleCursorHsvaDragMove={handleCursorHsvaDragMove}
-                        stopCursorHsvaDrag={stopCursorHsvaDrag}
-                        wheelAdjustCursorHsvaControl={wheelAdjustCursorHsvaControl}
-                        applyCursorColorToTarget={applyCursorColorToTarget}
-                        startCursorColorCopyHold={startCursorColorCopyHold}
-                        clearCursorColorArmTimer={clearCursorColorArmTimer}
                         caretSizeDeviationPx={caretSizeDeviationPx}
                         setCaretSizeDeviationPx={setCaretSizeDeviationPx}
                         caretOutlineWidthPx={caretOutlineWidthPx}
@@ -9557,16 +8705,6 @@ ${markdownHtml}
                         setCaretFrameDurationMs={setCaretFrameDurationMs}
                         caretEffectStrengthPercent={caretEffectStrengthPercent}
                         setCaretEffectStrengthPercent={setCaretEffectStrengthPercent}
-                        caretColorHsva={caretColorHsva}
-                        caretHsvaDisplayColors={caretHsvaDisplayColors}
-                        caretHsvaDragState={caretHsvaDragState}
-                        startCaretHsvaDrag={startCaretHsvaDrag}
-                        handleCaretHsvaDragMove={handleCaretHsvaDragMove}
-                        stopCaretHsvaDrag={stopCaretHsvaDrag}
-                        wheelAdjustCaretHsvaControl={wheelAdjustCaretHsvaControl}
-                        applyCaretColorToTarget={applyCaretColorToTarget}
-                        startCaretColorCopyHold={startCaretColorCopyHold}
-                        clearCaretColorArmTimer={clearCaretColorArmTimer}
                       />
                     ) : (
                       <div

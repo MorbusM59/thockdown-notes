@@ -1,6 +1,5 @@
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
-import type * as React from 'react'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
@@ -39,10 +38,11 @@ import {
   type VisualizerChannel,
   type VisualizerSettings,
 } from '@thockdown/look/visualizer'
-import { StagedColorRow } from './StagedColorRow'
+import { ColorPickerRow } from '../colorPicker/ColorPickerRow'
+import { ColorTargetButton } from '../colorPicker/ColorTargetButton'
+import { SurfaceTexturePicker } from '../colorPicker/SurfaceTexturePicker'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
-import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '@thockdown/look/colorMath'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
 import type { FeatureToggles } from '../shared/features'
@@ -95,10 +95,6 @@ import {
   type CaretAnimationPresetKey,
 } from '@thockdown/look/caretSettings'
 import {
-  TEXTURE_GRANULARITY_MIN,
-  TEXTURE_GRANULARITY_MAX,
-  TEXTURE_VSTEPS_MIN,
-  TEXTURE_VSTEPS_MAX,
   type TextureSurfaceKey,
   type TextureMaterialsBySurface,
   type TextureMaterialSettings,
@@ -283,35 +279,6 @@ type ViewStyleKey =
   | 'fredericka'
   | 'bubblerone'
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
-type HsvaControlKey = 'h' | 's' | 'v' | 'a'
-type TextureControlKey = 'granularity' | 'smoothness'
-type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
-type CaretColorTargetKey = 'outline' | 'halo'
-
-type HsvaDragState = {
-  control: HsvaControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type TextureControlDragState = {
-  control: TextureControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type ColorArmSource =
-  | { kind: 'hsva'; key: HsvaControlKey }
-  | { kind: 'active-color' }
-  | { kind: 'texture-preview' }
-
-type ElementPreviewCopySource =
-  | { kind: 'element'; key: HighlightColorKey }
-  | { kind: 'texture'; key: TextureSurfaceKey }
-  | { kind: 'text'; key: EditorTextColorTargetKey }
-
 // ── Panel-local option/lookup data ─────────────────────────────────────────
 // Only ever read by this panel, so these live here rather than in a shared
 // module (unlike the analogous EDITOR_STYLE_OPTIONS etc., which App.tsx
@@ -404,20 +371,6 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   markdownUnchecked: 'fa-regular fa-square',
 }
 
-const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
-  appGrid: 'App grid texture color',
-  sidebarContent: 'Sidebar texture color',
-  editorEditText: 'Edit text panel texture color',
-  editorRenderText: 'Render text panel texture color',
-}
-
-const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
-  appGrid: 'fa-solid fa-table-columns',
-  sidebarContent: 'fa-solid fa-list',
-  editorEditText: 'fa-solid fa-align-justify',
-  editorRenderText: 'fa-solid fa-align-justify',
-}
-
 export interface SidebarOptionsPanelProps {
   isPreviewMode: boolean
   uiMode: 'light' | 'dark'
@@ -462,50 +415,19 @@ export interface SidebarOptionsPanelProps {
   resetCustomLoadout: () => Promise<void>
   resetCustomLayoutPrimed: boolean
 
-  primedColorSource: ColorArmSource
-  setPrimedColorSource: (source: ColorArmSource) => void
   highlightColors: HighlightColors
+  setHighlightColorCss: (key: HighlightColorKey, css: string) => void
+  setEditorTextColorCss: (key: EditorTextColorTargetKey, css: string) => void
+  setTextureMaterial: (surface: TextureSurfaceKey, material: TextureMaterialSettings) => void
+  setCustomCursorDotColor: (css: string) => void
+  setCustomCursorCenterColor: (css: string) => void
+  setCustomCursorTrailColor: (css: string) => void
+  setCustomCursorHaloColor: (css: string) => void
+  setCaretOutlineColor: (css: string) => void
+  setCaretHaloColor: (css: string) => void
   editorTextColors: Record<EditorTextColorTargetKey, string>
-  applyActiveColorToElement: (key: HighlightColorKey) => void
-  updateHighlightColor: (key: HighlightColorKey, color: RgbaColor) => void
-  applyHsvaValueToElement: (sourceKey: HsvaControlKey, targetKey: HighlightColorKey) => void
-  applyActiveColorToEditorText: (key: EditorTextColorTargetKey) => void
-  updateEditorTextColor: (key: EditorTextColorTargetKey, color: RgbaColor) => void
-  applyHsvaValueToEditorText: (sourceKey: HsvaControlKey, targetKey: EditorTextColorTargetKey) => void
-  startElementPreviewCopyHold: (source: ElementPreviewCopySource, event: PointerEvent<HTMLButtonElement>) => void
-  clearColorArmTimer: () => void
-  hsvaDragState: HsvaDragState | null
-  hsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
-  activeColorHsva: HsvaColor
-  activeColorHex: string
-  activeColorCss: string
-  startHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  startColorArmHold: (source: ColorArmSource, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
 
-  applyActiveColorToTexture: (surface: TextureSurfaceKey) => void
-  applyTexturePreviewToSurface: (surface: TextureSurfaceKey) => void
-  applyHsvaValueToTexture: (sourceKey: HsvaControlKey, surface: TextureSurfaceKey) => void
   textureMaterials: TextureMaterialsBySurface
-  texturePreviewMaterial: TextureMaterialSettings
-  texturePreviewHex: string
-  texturePreviewTintCss: string
-  texturePreviewCss: string
-  isTextureSeedEditing: boolean
-  textureSeedInputRef: MutableRefObject<HTMLInputElement | null>
-  textureSeedInput: string
-  setTextureSeedInput: (value: string) => void
-  commitTextureSeedEdit: () => void
-  cancelTextureSeedEdit: () => void
-  randomizeTextureSeed: () => void
-  startTextureSeedEdit: () => void
-  textureControlDragState: TextureControlDragState | null
-  startTextureControlDrag: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleTextureControlDragMove: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopTextureControlDrag: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustTextureControl: (control: TextureControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
 
   glazeSettings: GlazeSettings
   setGlazeSettings: (updater: (previous: GlazeSettings) => GlazeSettings) => void
@@ -664,16 +586,6 @@ export interface SidebarOptionsPanelProps {
   setCustomCursorClickMinHoldMs: (value: number) => void
   customCursorClickBalance: number
   setCustomCursorClickBalance: (value: number) => void
-  cursorColorHsva: HsvaColor
-  cursorHsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
-  cursorHsvaDragState: HsvaDragState | null
-  startCursorHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleCursorHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopCursorHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustCursorHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
-  applyCursorColorToTarget: (target: CursorColorTargetKey) => void
-  startCursorColorCopyHold: (target: CursorColorTargetKey, event: PointerEvent<HTMLButtonElement>) => void
-  clearCursorColorArmTimer: () => void
   caretSizeDeviationPx: number
   setCaretSizeDeviationPx: (value: number) => void
   caretOutlineWidthPx: number
@@ -702,16 +614,6 @@ export interface SidebarOptionsPanelProps {
   setCaretFrameDurationMs: (value: number) => void
   caretEffectStrengthPercent: number
   setCaretEffectStrengthPercent: (value: number) => void
-  caretColorHsva: HsvaColor
-  caretHsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
-  caretHsvaDragState: HsvaDragState | null
-  startCaretHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleCaretHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopCaretHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustCaretHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
-  applyCaretColorToTarget: (target: CaretColorTargetKey) => void
-  startCaretColorCopyHold: (target: CaretColorTargetKey, event: PointerEvent<HTMLButtonElement>) => void
-  clearCaretColorArmTimer: () => void
 }
 
 /**
@@ -760,49 +662,18 @@ export function SidebarOptionsPanel({
   saveCustomLoadout,
   resetCustomLoadout,
   resetCustomLayoutPrimed,
-  primedColorSource,
-  setPrimedColorSource,
   highlightColors,
+  setHighlightColorCss,
+  setEditorTextColorCss,
+  setTextureMaterial,
+  setCustomCursorDotColor,
+  setCustomCursorCenterColor,
+  setCustomCursorTrailColor,
+  setCustomCursorHaloColor,
+  setCaretOutlineColor,
+  setCaretHaloColor,
   editorTextColors,
-  applyActiveColorToElement,
-  updateHighlightColor,
-  applyHsvaValueToElement,
-  applyActiveColorToEditorText,
-  updateEditorTextColor,
-  applyHsvaValueToEditorText,
-  startElementPreviewCopyHold,
-  clearColorArmTimer,
-  hsvaDragState,
-  hsvaDisplayColors,
-  activeColorHsva,
-  activeColorHex,
-  activeColorCss,
-  startHsvaDrag,
-  handleHsvaDragMove,
-  stopHsvaDrag,
-  startColorArmHold,
-  wheelAdjustHsvaControl,
-  applyActiveColorToTexture,
-  applyTexturePreviewToSurface,
-  applyHsvaValueToTexture,
   textureMaterials,
-  texturePreviewMaterial,
-  texturePreviewHex,
-  texturePreviewTintCss,
-  texturePreviewCss,
-  isTextureSeedEditing,
-  textureSeedInputRef,
-  textureSeedInput,
-  setTextureSeedInput,
-  commitTextureSeedEdit,
-  cancelTextureSeedEdit,
-  randomizeTextureSeed,
-  startTextureSeedEdit,
-  textureControlDragState,
-  startTextureControlDrag,
-  handleTextureControlDragMove,
-  stopTextureControlDrag,
-  wheelAdjustTextureControl,
   glazeSettings,
   setGlazeSettings,
   isGlazeLinearSeedEditing,
@@ -937,16 +808,6 @@ export function SidebarOptionsPanel({
   setCustomCursorClickMinHoldMs,
   customCursorClickBalance,
   setCustomCursorClickBalance,
-  cursorColorHsva,
-  cursorHsvaDisplayColors,
-  cursorHsvaDragState,
-  startCursorHsvaDrag,
-  handleCursorHsvaDragMove,
-  stopCursorHsvaDrag,
-  wheelAdjustCursorHsvaControl,
-  applyCursorColorToTarget,
-  startCursorColorCopyHold,
-  clearCursorColorArmTimer,
   caretSizeDeviationPx,
   setCaretSizeDeviationPx,
   caretOutlineWidthPx,
@@ -975,16 +836,6 @@ export function SidebarOptionsPanel({
   setCaretFrameDurationMs,
   caretEffectStrengthPercent,
   setCaretEffectStrengthPercent,
-  caretColorHsva,
-  caretHsvaDisplayColors,
-  caretHsvaDragState,
-  startCaretHsvaDrag,
-  handleCaretHsvaDragMove,
-  stopCaretHsvaDrag,
-  wheelAdjustCaretHsvaControl,
-  applyCaretColorToTarget,
-  startCaretColorCopyHold,
-  clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
     // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
     // With the Visualizer off it cannot be used at all, so it is disabled (and
@@ -1192,94 +1043,20 @@ export function SidebarOptionsPanel({
       'textBase',
       'textEmbossUi',
     ]
-    const textureTargets = ['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]
-
     const renderHighlightSwatchButton = (key: HighlightColorKey) => {
       const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
       const isSearchHighlightControl = key === 'caret' && isPreviewMode
-      const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
-      const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
-
       return (
-        <button
+        <ColorTargetButton
           key={key}
-          type="button"
-          className={`btn-icon options-color-swatch${isSearchHighlightControl ? ' search-highlight-color-button' : ''}${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
-          onClick={() => {
-            if (primedColorSource.kind === 'active-color') {
-              applyActiveColorToElement(resolvedKey)
-              return
-            }
-
-            if (primedColorSource.kind === 'texture-preview') {
-              updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
-              return
-            }
-
-            if (primedColorSource.kind === 'hsva') {
-              applyHsvaValueToElement(primedColorSource.key, resolvedKey)
-            }
-          }}
-          onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
-          onPointerUp={(event) => {
-            if (event.button !== 2) return
-            clearColorArmTimer()
-          }}
-          onMouseLeave={() => {
-            clearColorArmTimer()
-          }}
-          data-secondary-press="action"
-          onContextMenu={(event) => {
-            event.preventDefault()
-            clearColorArmTimer()
-          }}
-          style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
-          data-tooltip={buttonTitle}
-        >
-          <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
-        </button>
+          className={`${isSearchHighlightControl ? 'search-highlight-color-button' : ''}${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
+          color={highlightColors[resolvedKey]}
+          glyph={isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]}
+          tooltip={isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]}
+          onApply={(css) => setHighlightColorCss(resolvedKey, css)}
+        />
       )
     }
-
-    const renderTextureSwatchButton = (surface: TextureSurfaceKey) => (
-      <button
-        key={surface}
-        type="button"
-        className="btn-icon options-color-swatch"
-        onClick={() => {
-          if (primedColorSource.kind === 'active-color') {
-            applyActiveColorToTexture(surface)
-            return
-          }
-
-          if (primedColorSource.kind === 'texture-preview') {
-            applyTexturePreviewToSurface(surface)
-            return
-          }
-
-          if (primedColorSource.kind === 'hsva') {
-            applyHsvaValueToTexture(primedColorSource.key, surface)
-          }
-        }}
-        onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
-        onPointerUp={(event) => {
-          if (event.button !== 2) return
-          clearColorArmTimer()
-        }}
-        onMouseLeave={() => {
-          clearColorArmTimer()
-        }}
-        data-secondary-press="action"
-        onContextMenu={(event) => {
-          event.preventDefault()
-          clearColorArmTimer()
-        }}
-        style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
-        data-tooltip={TEXTURE_SURFACE_TITLES[surface]}
-      >
-        <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
-      </button>
-    )
 
     return (
     <div
@@ -1579,398 +1356,26 @@ export function SidebarOptionsPanel({
         iconClass="fa-rectangle-list"
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
-        <div className="options-color-layout" aria-label="Color and texture controls">
-          <div className="options-color-grid options-hsva-grid" role="group" aria-label="HSVA value controls">
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'h' ? ' is-active' : ''}`}
-              style={{ background: hsvaDisplayColors.hColor }}
-              data-live-tooltip={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('h', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'h' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('h', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('h', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('h', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('h', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('h', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 's' ? ' is-active' : ''}`}
-              style={{ background: hsvaDisplayColors.sColor }}
-              data-live-tooltip={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('s', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 's' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('s', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('s', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('s', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('s', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('s', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'v' ? ' is-active' : ''}`}
-              style={{ background: hsvaDisplayColors.vColor }}
-              data-live-tooltip={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('v', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'v' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('v', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('v', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('v', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('v', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('v', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={[
-                'btn-icon',
-                'options-color-swatch',
-                'options-hsva-control',
-                'options-hsva-alpha',
-                hsvaDragState?.control === 'a' ? 'is-dragging' : '',
-                primedColorSource.kind === 'hsva' && primedColorSource.key === 'a' ? 'is-active' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
-              data-live-tooltip={`Alpha: ${Math.round(activeColorHsva.a * 255)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('a', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'a' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('a', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('a', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('a', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('a', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('a', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-active-color${primedColorSource.kind === 'active-color' ? ' is-active' : ''}`}
-              data-tooltip={`Active color:\n${activeColorHex}`}
-              style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
-              onPointerDown={(event) => {
-                if (event.button !== 2) return
-                startColorArmHold({ kind: 'active-color' }, event)
-              }}
-              onPointerUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onClick={() => {}}
-            />
-          </div>
-          <div className="options-texture-settings" aria-label="Texture generation settings">
-            <div className="options-texture-preview-row">
-              <button
-                type="button"
-                className={`btn-icon options-color-swatch options-active-color options-texture-preview${primedColorSource.kind === 'texture-preview' ? ' is-active' : ''}`}
-                data-tooltip={`Texture preview: ${texturePreviewHex}`}
-                style={{
-                  '--texture-preview-color': texturePreviewTintCss,
-                  '--texture-preview-mask': texturePreviewCss,
-                } as React.CSSProperties}
-                onPointerDown={(event) => {
-                  if (event.button !== 2) return
-                  startColorArmHold({ kind: 'texture-preview' }, event)
-                }}
-                onPointerUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={clearColorArmTimer}
-                data-secondary-press="action"
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                onClick={() => {
-                  setPrimedColorSource({ kind: 'texture-preview' })
-                }}
-              />
-            </div>
-            <div className="options-texture-seed-slot">
-              <div className="options-seed-editor" aria-label="Texture seed">
-                {isTextureSeedEditing ? (
-                  <label className="options-seed-btn is-editing" aria-label="Edit texture seed">
-                    <input
-                      ref={textureSeedInputRef}
-                      type="number"
-                      min={0}
-                      max={1000000}
-                      step={1}
-                      inputMode="numeric"
-                      spellCheck={false}
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      className="sidebar-page-number-input sidebar-page-number-input--edit"
-                      value={textureSeedInput}
-                      onChange={(event) => {
-                        setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          commitTextureSeedEdit()
-                          scheduleFocusEditorInEditMode()
-                          return
-                        }
+        <ColorPickerRow />
 
-                        if (event.key === 'Escape' || event.key === 'Tab') {
-                          event.preventDefault()
-                          cancelTextureSeedEdit()
-                          scheduleFocusEditorInEditMode()
-                        }
-                      }}
-                      onBlur={() => {
-                        window.setTimeout(() => {
-                          if (!isTextEntryElement(document.activeElement)) {
-                            scheduleFocusEditorInEditMode()
-                          }
-                        }, 0)
-                      }}
-                    />
-                  </label>
-                ) : (
-                  <button
-                    type="button"
-                    className="options-seed-btn"
-                    aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
-                    data-tooltip="Left click: random seed. Right click: edit seed."
-                    onClick={randomizeTextureSeed}
-                    data-secondary-press="action"
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      startTextureSeedEdit()
-                    }}
-                  ><span className="fa-solid fa-seedling" />
-                  </button>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              role="slider"
-              aria-label="Texture granularity"
-              aria-orientation="vertical"
-              aria-valuemin={TEXTURE_GRANULARITY_MIN}
-              aria-valuemax={TEXTURE_GRANULARITY_MAX}
-              aria-valuenow={texturePreviewMaterial.granularity}
-              className={[
-                'btn-icon',
-                'options-color-swatch',
-                'options-hsva-control',
-                'options-hsva-alpha',
-                'options-texture-control-btn',
-                'options-texture-control-btn-granularity',
-                textureControlDragState?.control === 'granularity' ? 'is-dragging' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              data-live-tooltip={`Granularity (${texturePreviewMaterial.granularity})`}
-              onPointerDown={(event) => {
-                startTextureControlDrag('granularity', event)
-              }}
-              onPointerMove={(event) => {
-                handleTextureControlDragMove('granularity', event)
-              }}
-              onPointerUp={(event) => {
-                stopTextureControlDrag('granularity', event)
-              }}
-              onPointerCancel={(event) => {
-                stopTextureControlDrag('granularity', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopTextureControlDrag('granularity', event)
-              }}
-              data-secondary-press="none"
-              onContextMenu={(event) => {
-                event.preventDefault()
-              }}
-              onWheel={(event) => {
-                wheelAdjustTextureControl('granularity', event)
-              }}
-            >
-              <span className="options-hsva-glyph fa-solid fa-chess-board" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              role="slider"
-              aria-label="Texture smoothness"
-              aria-orientation="vertical"
-              aria-valuemin={TEXTURE_VSTEPS_MIN}
-              aria-valuemax={TEXTURE_VSTEPS_MAX}
-              aria-valuenow={texturePreviewMaterial.vSteps}
-              className={[
-                'btn-icon',
-                'options-color-swatch',
-                'options-hsva-control',
-                'options-hsva-alpha',
-                'options-texture-control-btn',
-                'options-texture-control-btn-smoothness',
-                textureControlDragState?.control === 'smoothness' ? 'is-dragging' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              data-live-tooltip={`Smoothness (${texturePreviewMaterial.vSteps})`}
-              onPointerDown={(event) => {
-                startTextureControlDrag('smoothness', event)
-              }}
-              onPointerMove={(event) => {
-                handleTextureControlDragMove('smoothness', event)
-              }}
-              onPointerUp={(event) => {
-                stopTextureControlDrag('smoothness', event)
-              }}
-              onPointerCancel={(event) => {
-                stopTextureControlDrag('smoothness', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopTextureControlDrag('smoothness', event)
-              }}
-              data-secondary-press="none"
-              onContextMenu={(event) => {
-                event.preventDefault()
-              }}
-              onWheel={(event) => {
-                wheelAdjustTextureControl('smoothness', event)
-              }}
-            >
-              <span className="options-hsva-glyph fa-solid fa-pen-nib" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-
-        <OptionsSubsectionLabel>Surfaces</OptionsSubsectionLabel>
-
-        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="App base and texture colors">
+        <OptionsSubsectionLabel>Interface</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="Interface colors">
           {topRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
-          {textureTargets.map((surface) => renderTextureSwatchButton(surface))}
         </div>
+
+        <OptionsSubsectionLabel>Surface textures</OptionsSubsectionLabel>
+        <SurfaceTexturePicker materials={textureMaterials} onWrite={setTextureMaterial} />
 
         <OptionsSubsectionLabel>Text</OptionsSubsectionLabel>
 
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch text-icon"
-            onClick={() => {
-              const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
-
-              if (primedColorSource.kind === 'active-color') {
-                applyActiveColorToEditorText(target)
-                return
-              }
-
-              if (primedColorSource.kind === 'texture-preview') {
-                updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
-                return
-              }
-
-              if (primedColorSource.kind === 'hsva') {
-                applyHsvaValueToEditorText(primedColorSource.key, target)
-              }
-            }}
-            onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
-            onPointerUp={(event) => {
-              if (event.button !== 2) return
-              clearColorArmTimer()
-            }}
-            onMouseLeave={() => {
-              clearColorArmTimer()
-            }}
-            data-secondary-press="action"
-            onContextMenu={(event) => {
-              event.preventDefault()
-              clearColorArmTimer()
-            }}
-            style={{
-              '--options-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
-            } as React.CSSProperties}
-            data-tooltip={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
-          >
-            <span className="options-color-swatch-glyph fa-solid fa-font" aria-hidden="true" />
-          </button>
+          <ColorTargetButton
+            className="text-icon"
+            color={editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText']}
+            glyph="fa-solid fa-font"
+            tooltip={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
+            onApply={(css) => setEditorTextColorCss(isPreviewMode ? 'editorRenderText' : 'editorEditText', css)}
+          />
 
           {middleRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
@@ -2435,33 +1840,16 @@ export function SidebarOptionsPanel({
         iconClass="fa-rectangle-list"
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
+        <ColorPickerRow />
         <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch "
-            style={{ background: customCursorCenterColor }}
-            data-tooltip="Center dot color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('center')}
-            onPointerDown={(event) => startCursorColorCopyHold('center', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-regular fa-circle-dot" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: customCursorHaloColor }}
-            data-tooltip="Halo color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('halo')}
-            onPointerDown={(event) => startCursorColorCopyHold('halo', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-circle" aria-hidden="true" /></button>
+          <div className="options-mouse-target-grid">
+            <ColorTargetButton color={customCursorCenterColor} glyph="fa-regular fa-circle-dot" tooltip="Center dot color" onApply={setCustomCursorCenterColor} />
+            <ColorTargetButton color={customCursorHaloColor} glyph="fa-solid fa-circle" tooltip="Halo color" onApply={setCustomCursorHaloColor} />
+            <ColorTargetButton color={customCursorDotColor} glyph="fa-solid fa-spinner" tooltip="Circling dots color" onApply={setCustomCursorDotColor} />
+            <ColorTargetButton color={customCursorTrailColor} glyph="fa-solid fa-cancer" tooltip="Trail color" onApply={setCustomCursorTrailColor} />
+          </div>
 
-          <div className="options-mouse-center-grid" aria-hidden="true">
+          <div className="options-mouse-center-grid options-mouse-center-grid-wide" aria-hidden="true">
             <div className="options-glaze-cell options-glaze-cell-span-2">
               <CompactScrollbarSlider
                 id="cursor-trail-thickness"
@@ -2501,84 +1889,7 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setCustomCursorCenterSizePx(clamp(value, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX))}
               />
             </div>
-
           </div>
-
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
-            style={{ background: cursorHsvaDisplayColors.hColor }}
-            data-live-tooltip={`Hue: ${Math.round(cursorColorHsva.h)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('h', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('h', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('h', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('h', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('h', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('h', event)}
-          ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 's' ? ' is-dragging' : ''}`}
-            style={{ background: cursorHsvaDisplayColors.sColor }}
-            data-live-tooltip={`Saturation: ${Math.round(cursorColorHsva.s * 255)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('s', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('s', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('s', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('s', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('s', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('s', event)}
-          ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
-
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: customCursorDotColor }}
-            data-tooltip="Circling dots color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('dot')}
-            onPointerDown={(event) => startCursorColorCopyHold('dot', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-spinner" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: customCursorTrailColor }}
-            data-tooltip="Trail color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('trail')}
-            onPointerDown={(event) => startCursorColorCopyHold('trail', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-cancer" aria-hidden="true" /></button>
-
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
-            style={{ background: cursorHsvaDisplayColors.vColor }}
-            data-live-tooltip={`Value: ${Math.round(cursorColorHsva.v * 255)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('v', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('v', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('v', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('v', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('v', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('v', event)}
-          ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control options-hsva-alpha${cursorHsvaDragState?.control === 'a' ? ' is-dragging' : ''}`}
-            style={{ background: 'var(--color-background-light)', color: cursorHsvaDisplayColors.aGhostColor }}
-            data-live-tooltip={`Alpha: ${Math.round(cursorColorHsva.a * 255)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('a', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('a', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('a', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('a', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('a', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('a', event)}
-          ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
-
 
           <OptionsSubsectionLabel>Trail</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-3">
@@ -2779,86 +2090,15 @@ export function SidebarOptionsPanel({
         iconClass="fa-rectangle-list"
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
+        <ColorPickerRow />
         <div className="options-caret-settings-grid" role="group" aria-label="Caret appearance controls">
-          {/* Row 1: the two colour targets this section owns. The caret's FILL
+          {/* The two colour targets this section owns. The caret's FILL
               colour is not here on purpose -- it is highlightColors.caret,
               edited in Colors with every other highlight colour;
               duplicating it here would be a second control for one value. */}
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: caretOutlineColor }}
-            data-tooltip="Caret outline color — click to apply, hold right-click to copy"
-            onClick={() => applyCaretColorToTarget('outline')}
-            onPointerDown={(event) => startCaretColorCopyHold('outline', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
-            onMouseLeave={clearCaretColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-regular fa-square" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: caretHaloColor }}
-            data-tooltip="Caret halo color — click to apply, hold right-click to copy"
-            onClick={() => applyCaretColorToTarget('halo')}
-            onPointerDown={(event) => startCaretColorCopyHold('halo', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
-            onMouseLeave={clearCaretColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-square" aria-hidden="true" /></button>
-
-          {/* The staged H/S/V/A the two swatches above apply -- same closed-loop
-              widget as the Cursor section's, scoped to this section. */}
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
-            style={{ background: caretHsvaDisplayColors.hColor }}
-            data-live-tooltip={`Hue: ${Math.round(caretColorHsva.h)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('h', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('h', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('h', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('h', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('h', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('h', event)}
-          ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 's' ? ' is-dragging' : ''}`}
-            style={{ background: caretHsvaDisplayColors.sColor }}
-            data-live-tooltip={`Saturation: ${Math.round(caretColorHsva.s * 255)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('s', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('s', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('s', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('s', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('s', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('s', event)}
-          ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
-            style={{ background: caretHsvaDisplayColors.vColor }}
-            data-live-tooltip={`Value: ${Math.round(caretColorHsva.v * 255)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('v', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('v', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('v', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('v', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('v', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('v', event)}
-          ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control options-hsva-alpha${caretHsvaDragState?.control === 'a' ? ' is-dragging' : ''}`}
-            style={{ background: 'var(--color-background-light)', color: caretHsvaDisplayColors.aGhostColor }}
-            data-live-tooltip={`Alpha: ${Math.round(caretColorHsva.a * 255)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('a', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('a', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('a', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('a', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('a', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('a', event)}
-          ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
+          <ColorTargetButton color={caretOutlineColor} glyph="fa-regular fa-square" tooltip="Caret outline color" onApply={setCaretOutlineColor} />
+          <ColorTargetButton color={caretHaloColor} glyph="fa-solid fa-square" tooltip="Caret halo color" onApply={setCaretHaloColor} />
+          <div className="options-caret-target-spacer" aria-hidden="true" />
 
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
@@ -3182,6 +2422,7 @@ export function SidebarOptionsPanel({
         iconClass="fa-rectangle-list"
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout. Its delay is kept for every layout."
       >
+          <ColorPickerRow />
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[1]}>
               <CompactScrollbarSlider
@@ -3199,13 +2440,10 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
-          <StagedColorRow
-            label="Visualizer colours"
-            targets={[
-              { id: 'edge', color: visualizer.edge.color, glyph: 'fa-solid fa-square', tooltip: 'Edge colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } })) },
-              { id: 'pane', color: visualizer.pane.color, glyph: 'fa-regular fa-square', tooltip: 'Pane colour: click to apply the staged colour, hold right-click to copy it', onApply: (css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } })) },
-            ]}
-          />
+          <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
+            <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
+            <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
+          </div>
           {visualizer.caret.followsMusic && renderBeatCaret()}
           {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
           {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
