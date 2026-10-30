@@ -56,8 +56,6 @@ type CompactScrollbarSliderProps = {
    * Escape or leaving the field cancels.
    */
   secondaryPress?: 'reset' | 'type'
-  /** A CSS background for the rail, for a slider whose track can show what it sets (a hue ramp). */
-  trackBackground?: string
   /**
    * Shows the slider as not in effect while leaving it fully usable -- for a
    * value that is still edited but that a press elsewhere will not apply.
@@ -81,7 +79,6 @@ export function CompactScrollbarSlider({
   disabled = false,
   formatValue,
   secondaryPress = 'reset',
-  trackBackground,
   dimmed = false,
   onCommit,
 }: CompactScrollbarSliderProps) {
@@ -258,7 +255,7 @@ export function CompactScrollbarSlider({
           onBlur={() => setEntry(null)}
         />
       ) : null}
-      <div className="utility-setting-scrollbar-rail" ref={railRef} aria-hidden="true" style={trackBackground ? { background: trackBackground } : undefined}>
+      <div className="utility-setting-scrollbar-rail" ref={railRef} aria-hidden="true">
         <span className="utility-setting-scrollbar-track-label">{trackLabel}</span>
         <div
           className="utility-setting-scrollbar-thumb"

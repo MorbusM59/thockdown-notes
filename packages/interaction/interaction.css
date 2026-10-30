@@ -643,8 +643,14 @@
   min-width:      0;
 }
 
-.options-color-picker-sliders .utility-setting-scrollbar-shell {
-  height: calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
+/* Two sliders stacked in one grid row: the slider's thickness is set at its
+   source, so the shell, the thumb and the pointer arithmetic all follow it. */
+.options-color-picker-sliders,
+.options-surface-texture-sliders {
+  --canonical-scroll-thickness: calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
+  --canonical-scroll-handle-thickness: calc(
+    var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
+  );
 }
 
 /* Surface textures (apps/notes/src/colorPicker/SurfaceTexturePicker.tsx):
@@ -678,10 +684,6 @@
   flex-direction: column;
   gap:            var(--color-grid-gap);
   min-width:      0;
-}
-
-.options-surface-texture-sliders .utility-setting-scrollbar-shell {
-  height: calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
 }
 
 /* Seed buttons (the texture's and the glaze's) and the texture preview */

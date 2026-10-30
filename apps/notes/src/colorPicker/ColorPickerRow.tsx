@@ -49,18 +49,6 @@ function withChannelValue(color: HsvaColor, channel: ColorChannel, value: number
     : { ...color, [channel]: Math.max(0, Math.min(255, value)) / 255 }
 }
 
-/** The rail of each slider shows what moving it does, at the rest of the staged colour. */
-function trackBackground(color: HsvaColor, channel: ColorChannel): string {
-  if (channel === 'h') {
-    const stops = [0, 60, 120, 180, 240, 300, 360].map((h) => css({ ...color, h, a: 1 }))
-    return `linear-gradient(to right, ${stops.join(', ')})`
-  }
-  if (channel === 'a') {
-    return `linear-gradient(to right, ${css({ ...color, a: 0 })}, ${css({ ...color, a: 1 })}), var(--color-background-light)`
-  }
-  return `linear-gradient(to right, ${css({ ...color, [channel]: 0, a: 1 })}, ${css({ ...color, [channel]: 1, a: 1 })})`
-}
-
 export function ColorPickerRow() {
   const { color, mask } = useColorStaging()
   const allActive = isAllChannels(mask)
@@ -109,7 +97,6 @@ export function ColorPickerRow() {
               tooltipLabel={CHANNEL_NAMES[channel]}
               ariaLabel={`Staged colour ${CHANNEL_NAMES[channel].toLowerCase()}`}
               secondaryPress="type"
-              trackBackground={trackBackground(color, channel)}
               dimmed={!mask[channel]}
               onCommit={(value) => setStagedColor((previous) => withChannelValue(previous, channel, value))}
             />
