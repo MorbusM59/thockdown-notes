@@ -1,3 +1,4 @@
+// verify: reads-repository (scripts/verify.mjs, "what a module reads from disk")
 import { installHangLog } from './hangLog'
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, protocol, shell, screen } from 'electron'

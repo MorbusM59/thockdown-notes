@@ -1,3 +1,4 @@
+// verify: reads-siblings (scripts/verify.mjs, "what a module reads from disk")
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createSoundscapeChannel, SOUNDSCAPE_CHANNEL_ROSTER, DEFAULT_SOUNDSCAPE_WEATHER, type SoundscapeChannelSettings, type SoundscapeWeatherSettings } from './soundscape';

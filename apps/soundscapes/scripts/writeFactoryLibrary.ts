@@ -1,3 +1,4 @@
+// verify: reads-repository (scripts/verify.mjs, "what a module reads from disk")
 /**
  * Writes the factory soundscapes, as the session entries the web page would
  * publish for a listener with no soundscapes of their own, into the Android

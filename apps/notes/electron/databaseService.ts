@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
 import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '@thockdown/soundscape/presetFile';
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
