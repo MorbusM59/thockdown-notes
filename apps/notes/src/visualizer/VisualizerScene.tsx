@@ -31,6 +31,7 @@ import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import { SpectrumBallistics, litRows } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
+import { GridWave } from './GridWave'
 import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
   computeVisualizerLayout,
@@ -320,6 +321,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
             style={{ backgroundPosition: `${originXPx - 1}px ${originYPx - 1}px`, ...cutoutHole }}
           />
           <div className="visualizer-grid thockdown-grid-lines" style={{ backgroundPosition: `${originXPx}px ${originYPx}px`, zIndex: 4 }} />
+          <GridWave boxPx={box} originXPx={originXPx} originYPx={originYPx} />
 
           {layout.titleRow !== null && <Letters runs={title} row={layout.titleRow} layout={layout} />}
           {layout.creditsRow !== null && <Letters runs={credits} row={layout.creditsRow} layout={layout} />}

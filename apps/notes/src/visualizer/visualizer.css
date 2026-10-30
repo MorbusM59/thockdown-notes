@@ -115,3 +115,44 @@
 .visualizer-glaze-layer {
   will-change: transform;
 }
+
+/* The smooth wave (GridWave.tsx): masked to the grid lines exactly as
+   `.thockdown-grid-lines` draws them (index.css), above them and below the
+   letters. */
+.visualizer-scene > .visualizer-grid-wave {
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  mask-image:
+    repeating-linear-gradient(to right, #000 0, #000 1px, transparent 1px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, #000 0, #000 1px, transparent 1px, transparent var(--editor-line-height));
+  mask-size: var(--editor-cell-width) var(--editor-line-height);
+}
+
+.visualizer-grid-wave-bands {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--grid-wave-period));
+  right: 0;
+  --grid-wave-color: color-mix(in srgb, var(--color-caret) 50%, transparent);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    var(--grid-wave-color) calc(var(--grid-wave-period) / 2),
+    transparent var(--grid-wave-period)
+  );
+  will-change: transform;
+  animation: visualizer-grid-wave var(--grid-wave-duration) linear infinite;
+}
+
+@keyframes visualizer-grid-wave {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--grid-wave-period)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visualizer-grid-wave-bands {
+    animation: none;
+  }
+}
