@@ -113,10 +113,9 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
       lastTime = timeSec
       if (!(periodSec > 0)) return
       const target = 1 / periodSec
-      if (!(dt > 0 && dt < MAX_FRAME_SEC)) {
-        if (Number.isNaN(beatsPerSec)) beatsPerSec = target
-        return
-      }
+      // The first tempo heard is taken as it is; only a CHANGE of tempo is eased.
+      if (Number.isNaN(beatsPerSec)) beatsPerSec = target
+      if (!(dt > 0 && dt < MAX_FRAME_SEC)) return
       beatsPerSec += (target - beatsPerSec) * (1 - Math.exp(-dt / TEMPO_EASE_SEC))
       if (reducedMotion.matches) return
       angles = advanceWaveAngles(angles, waveTurn, dt * beatsPerSec)
