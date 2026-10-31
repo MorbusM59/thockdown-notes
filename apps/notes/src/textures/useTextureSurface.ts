@@ -19,13 +19,41 @@ function createBlobUrl(data: Uint8Array, mimeType: string): string {
   return URL.createObjectURL(blob);
 }
 
-function swapUrl(nextUrl: string, currentUrlRef: React.MutableRefObject<string | null>, setUrl: (value: string | null) => void): void {
+/**
+ * Replaces the shown texture with `nextUrl` once it is ready to paint.
+ *
+ * A CSS image whose URL has just changed is fetched and decoded after the
+ * style commits, and until it is, the layer it belongs to paints nothing: a
+ * texture used as a mask showed its tint unmasked for a frame, a bright flash
+ * on every change. So the new image is decoded first (an `Image` sharing the
+ * URL warms the same decoded-image cache the style will read), and only then
+ * does the style switch to it; the old image stays on screen until that
+ * moment. `isCurrent` is asked after the decode, because the settings may
+ * have changed while it ran, and a texture nobody wants any more is revoked
+ * instead of shown. The previous URL is revoked a frame after the switch,
+ * once the new one has painted.
+ */
+async function swapUrl(
+  nextUrl: string,
+  isCurrent: () => boolean,
+  currentUrlRef: React.MutableRefObject<string | null>,
+  setUrl: (value: string | null) => void,
+): Promise<void> {
+  const image = new Image();
+  image.src = nextUrl;
+  try {
+    await image.decode();
+  } catch {
+    // An image that will not decode will not paint either; showing it is no
+    // worse than keeping the old one, and keeps the hook's state truthful.
+  }
+  if (!isCurrent()) {
+    revokeUrl(nextUrl);
+    return;
+  }
   const previousUrl = currentUrlRef.current;
   currentUrlRef.current = nextUrl;
   setUrl(nextUrl);
-
-  // Keep the previously rendered frame alive through this paint to avoid
-  // brief blanking while style updates commit to the new blob URL.
   if (previousUrl && previousUrl !== nextUrl) {
     window.requestAnimationFrame(() => {
       revokeUrl(previousUrl);
@@ -142,7 +170,7 @@ export function useTextureSurface(params: {
           const cached = await textureApi.getCachedTexture(cacheKey);
           if (cached && !cancelled) {
             const cachedUrl = createBlobUrl(cached.data, cached.mimeType);
-            swapUrl(cachedUrl, currentUrlRef, setUrl);
+            await swapUrl(cachedUrl, () => !cancelled, currentUrlRef, setUrl);
             return;
           }
         }
@@ -168,7 +196,7 @@ export function useTextureSurface(params: {
 
         const data = new Uint8Array(response.buffer);
         const generatedUrl = createBlobUrl(data, response.mimeType);
-        swapUrl(generatedUrl, currentUrlRef, setUrl);
+        await swapUrl(generatedUrl, () => !cancelled, currentUrlRef, setUrl);
 
         if (textureApi && usePersistentCache) {
           await textureApi.saveCachedTexture(cacheKey, {
