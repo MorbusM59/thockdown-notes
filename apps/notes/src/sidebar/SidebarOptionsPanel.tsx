@@ -2462,7 +2462,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Immersive</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive settings">
-            <OptionsSliderRows rows={[2, 2, 3, 2]}>
+            <OptionsSliderRows rows={[2, 2, 3, 3]}>
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2579,6 +2579,19 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseDecay}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseDecay: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-softness"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.pulseSoftness}
+                trackLabel="soft"
+                tooltipLabel="How softly the centre pulse's ring fades at its edges, in percent: 0 is a band with hard edges, 100 a smooth swell with no flat middle"
+                ariaLabel="Immersive: centre pulse edge softness, percent"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseSoftness}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSoftness: value } }))}
               />
             </OptionsSliderRows>
           </div>

@@ -141,6 +141,8 @@ export interface VisualizerImmersive {
   pulseSpeed: number
   /** 0 to 0.5: the share of its speed the centre pulse loses each second (exponentially); 0 keeps it constant. */
   pulseDecay: number
+  /** 0 to 1: how gradually the pulse's ring fades at its edges (`pulseRingGradient`); 0 is a hard-edged band, 1 a smooth bell. */
+  pulseSoftness: number
 }
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
@@ -165,7 +167,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseDecay: 0 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseDecay: 0, pulseSoftness: 1 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -380,6 +382,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     pulseColor: typeof source.pulseColor === 'string' && source.pulseColor.length > 0 ? source.pulseColor : d.pulseColor,
     pulseSpeed: bounded(source.pulseSpeed, PULSE_SPEED_MIN, PULSE_SPEED_MAX, d.pulseSpeed),
     pulseDecay: bounded(source.pulseDecay, 0, PULSE_DECAY_MAX, d.pulseDecay),
+    pulseSoftness: bounded(source.pulseSoftness, 0, 1, d.pulseSoftness),
   }
 }
 
@@ -470,4 +473,29 @@ export function pulseTimeToTravel(distance: number, speed: number, decay: number
   const k = -Math.log(1 - decay)
   const share = (distance * k) / speed
   return share >= 1 ? Infinity : -Math.log(1 - share) / k
+}
+
+/** Stops each side of the ring's centre in `pulseRingGradient`. */
+const PULSE_RING_STOPS = 8
+
+/**
+ * The centre pulse's ring as the colour stops of a `radial-gradient`, the
+ * ring lying between `inner` and 100% of the radius. Across the ring (u from
+ * -1 at an edge to 0 at its middle) the colour's strength is a plateau with
+ * ramps `softness` of the half-width wide, each eased by smoothstep: 0 is a
+ * band with hard edges, 1 a bell with no plateau. The strength is
+ * `color-mix` of the colour with transparent, so the colour's own alpha is
+ * the ring's peak.
+ */
+export function pulseRingGradient(color: string, softness: number, inner = 75): string {
+  const ramp = Math.max(softness, 1e-3)
+  const stops: string[] = []
+  for (let i = 0; i <= 2 * PULSE_RING_STOPS; i++) {
+    const u = i / PULSE_RING_STOPS - 1
+    const x = Math.min(1, (1 - Math.abs(u)) / ramp)
+    const strength = x * x * (3 - 2 * x)
+    const at = inner + ((100 - inner) * i) / (2 * PULSE_RING_STOPS)
+    stops.push(`color-mix(in srgb, ${color} ${(strength * 100).toFixed(1)}%, transparent) ${at.toFixed(2)}%`)
+  }
+  return `transparent ${inner}%, ${stops.join(', ')}`
 }
