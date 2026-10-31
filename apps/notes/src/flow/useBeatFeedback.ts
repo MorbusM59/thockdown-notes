@@ -34,6 +34,7 @@ import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { setBeatVisualDelaySec, subscribeMusicBand, subscribeMusicClock } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
+import { emitPulseHit } from '../visualizer/pulseHits'
 import { setFlowStyle } from './flowStyle'
 
 type BlockName = keyof VisualizerSettings
@@ -52,6 +53,12 @@ type Subscribe<T> = (settings: T, listener: (response: number) => void, present:
 const subscribeBand: Subscribe<VisualizerChannel> = (channel, listener, present) => {
   present(true)
   return subscribeMusicBand(channel, listener)
+}
+
+/** The edge's band also drives the visualizer's centre pulse, one pulse per hit (`pulseHits.ts`). */
+const subscribeEdgeBand: Subscribe<VisualizerChannel> = (channel, listener, present) => {
+  present(true)
+  return subscribeMusicBand(channel, listener, emitPulseHit)
 }
 
 const subscribeClock: Subscribe<VisualizerCaret> = (caret, listener, present) => subscribeMusicClock(caret, listener, present)
@@ -94,7 +101,7 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
 
 export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings): void {
   useBeatBlock('caret', visualizer.caret, enabled && visualizer.caret.followsMusic, subscribeClock)
-  useBeatBlock('edge', visualizer.edge, enabled, subscribeBand)
+  useBeatBlock('edge', visualizer.edge, enabled, subscribeEdgeBand)
   useBeatBlock('pane', visualizer.pane, enabled, subscribeBand)
   const edgeColor = visualizer.edge.color
   const edgeSpreadPx = visualizer.edge.spreadPx

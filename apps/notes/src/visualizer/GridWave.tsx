@@ -24,10 +24,10 @@
  * seamless. Nothing repaints.
  *
  * Beside the turning square, inside the same line mask, sits the centre
- * PULSE: a ring at the rim of a layer exactly the cutout's square, so at rest
- * it is hidden behind the cutout. On the first kick of each bar
- * (`subscribeMusicBarKicks`) it is scaled up, linearly over that bar, to the
- * factor at which the ring's inner edge reaches the scene's farthest corner.
+ * PULSE: a stack of rings, each at the rim of a layer exactly the cutout's
+ * square, so at rest hidden behind the cutout. Each hit of the edge's band
+ * (`pulseHits.ts`) scales the next ring at rest out until its inner edge
+ * reaches the scene's farthest corner, so pulses overlap.
  *
  * The colour, wave length and travel time are the layout's, published as
  * CSS variables by `useBeatFeedback`, and the rotation step and wave length
@@ -41,7 +41,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { pulseTimeToTravel, pulseTravelBoxes } from '@thockdown/look/visualizer'
-import { subscribeMusicBarKicks, subscribeMusicTempo } from '../sound/musicBeat'
+import { subscribeMusicTempo } from '../sound/musicBeat'
+import { subscribePulseHits } from './pulseHits'
 import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
@@ -50,6 +51,13 @@ const PULSE_RING_SHARE = 0.25
 const PULSE_KEYFRAMES = 24
 /** A pulse its decay stops short is ended after this many half-lives of its speed (under 1% of its speed left). */
 const PULSE_STALL_HALF_LIVES = 7
+/**
+ * Prerendered rings in the pulse STACK: a hit scales the first one not
+ * already travelling, so pulses overlap rather than cut each other off. With
+ * every one travelling, the oldest is taken. Six covers a kick every beat at
+ * 120 BPM with three seconds of travel; each is a cutout-sized layer.
+ */
+const PULSE_LAYERS = 6
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
@@ -126,15 +134,15 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
   }, [host])
 
   // The centre pulse: a ring at the rim of a layer exactly the cutout's
-  // square, so at rest it lies wholly behind the cutout. On the first kick of
-  // each bar it is scaled out, its inner edge setting off at the layout's
+  // square, so at rest it lies wholly behind the cutout. On each hit of the
+  // edge's band (`pulseHits.ts`) the next ring of the stack is scaled out, its inner edge setting off at the layout's
   // starting speed and losing its decay share of that speed each second
   // (`pulseTravelBoxes`), until that edge reaches the scene's farthest corner
   // from the cutout's centre. A decay that stops it short ends it once it has
-  // all but stopped; the next bar's kick starts a new one either way. A Web
+  // all but stopped. A Web
   // Animation of `transform` sampled from that curve: the compositor runs it,
   // nothing repaints.
-  const pulseRef = useRef<HTMLDivElement>(null)
+  const pulseRefs = useRef<Array<HTMLDivElement | null>>([])
   const pulseInnerPx = cutout && cutout.size > 0 ? (cutout.size / 2) * (1 - PULSE_RING_SHARE) : 0
   const pulseExitScale = sceneBox && cutout && pulseInnerPx > 0
     ? Math.hypot(
@@ -143,15 +151,16 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     ) / pulseInnerPx
     : 0
   // Read through a ref, so a resize or a slider changes the next pulse
-  // without cancelling the one under way or forgetting which bar was shown.
+  // without cancelling the pulses under way.
   const pulseInputs = useRef({ pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseDecay })
   pulseInputs.current = { pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseDecay }
   const hasPulse = pulseInnerPx > 0
   useEffect(() => {
-    const pulse = pulseRef.current
-    if (!pulse) return
-    let running: Animation | null = null
-    const unsubscribe = subscribeMusicBarKicks(() => {
+    const layers = pulseRefs.current.filter((layer): layer is HTMLDivElement => layer !== null)
+    if (layers.length === 0) return
+    const running: Array<Animation | null> = layers.map(() => null)
+    const startedAt: number[] = layers.map(() => -Infinity)
+    const unsubscribe = subscribePulseHits(() => {
       const { pulseExitScale: exitScale, pulseInnerPx: innerPx, boxPx: box, pulseSpeed: speed, pulseDecay: decay } = pulseInputs.current
       if (reducedMotion.matches || !(exitScale > 1) || !(box > 0)) return
       const exitBoxes = ((exitScale - 1) * innerPx) / box
@@ -162,12 +171,19 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
         const t = (i / PULSE_KEYFRAMES) * durationSec
         keyframes.push({ transform: `scale(${1 + (pulseTravelBoxes(t, speed, decay) * box) / innerPx})` })
       }
-      running?.cancel()
-      running = pulse.animate(keyframes, { duration: durationSec * 1000, easing: 'linear' })
+      // The first layer at rest, or else the one that set off longest ago.
+      let pick = 0
+      for (let i = 0; i < layers.length; i++) {
+        if (running[i]?.playState !== 'running') { pick = i; break }
+        if (startedAt[i] < startedAt[pick]) pick = i
+      }
+      running[pick]?.cancel()
+      running[pick] = layers[pick].animate(keyframes, { duration: durationSec * 1000, easing: 'linear' })
+      startedAt[pick] = performance.now()
     })
     return () => {
       unsubscribe()
-      running?.cancel()
+      for (const animation of running) animation?.cancel()
     }
   }, [host, hasPulse])
 
@@ -219,13 +235,14 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
             >
               <div className="visualizer-grid-wave-bands" />
             </div>
-            {cutout && cutout.size > 0 ? (
+            {cutout && cutout.size > 0 ? Array.from({ length: PULSE_LAYERS }, (_, i) => (
               <div
-                ref={pulseRef}
+                key={i}
+                ref={(layer) => { pulseRefs.current[i] = layer }}
                 className="visualizer-grid-wave-pulse"
                 style={{ left: cutout.left, top: cutout.top, width: cutout.size, height: cutout.size }}
               />
-            ) : null}
+            )) : null}
           </div>
         </div>,
         host,

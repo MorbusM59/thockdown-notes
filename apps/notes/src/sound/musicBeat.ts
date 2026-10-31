@@ -99,6 +99,10 @@ interface Band {
   count: number
   bins: Uint32Array
   published: number
+  /** Told of each HIT (`respond`): the response rising to a new peak after falling, with that peak. */
+  onHit: ((strength: number) => void) | null
+  /** Whether the response rose at the last frame, so a hit is the first rising frame after a fall. */
+  rising: boolean
 }
 
 const bands = new Set<Band>()
@@ -133,17 +137,9 @@ interface Counter {
 
 const counters = new Set<Counter>()
 
-/** A BAR KICK subscriber: told the bar's length, in seconds, on the first kick of each bar (`DrumTracker.barKickBetween`). */
-interface BarKick {
-  cursor: DrumCursor
-  listener: (barSec: number) => void
-}
-
-const barKicks = new Set<BarKick>()
-
 /** Everything the frame loop answers. */
 function subscriberCount(): number {
-  return bands.size + clocks.size + counters.size + barKicks.size
+  return bands.size + clocks.size + counters.size
 }
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
@@ -172,7 +168,7 @@ function drumOf(channel: BeatChannel): VisualizerDrum | null {
 
 /** Whether anything reads the drum analysis: a drum channel for its hits, a clock for its grid. */
 function needsDrums(): boolean {
-  return clocks.size > 0 || counters.size > 0 || barKicks.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
+  return clocks.size > 0 || counters.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
 }
 
 function clearWindow(band: Band): void {
@@ -278,11 +274,17 @@ function respond(band: Band, listenerTime: number): number {
   // the block's own curve and length. A rise is taken at once.
   const { fallSec, shape } = band.channel
   const held = band.peak * pulseCurve((listenerTime - band.peakTime) / fallSec, shape)
-  if (raw >= held) {
+  if (raw > 0 && raw >= held) {
+    // A hit is where a rise begins: a drum's every hit (between hits it
+    // reads 0), a level band's every climb out of its fall. One rule, so
+    // whatever the block follows, what pulses is what makes it rise.
+    if (!band.rising) band.onHit?.(raw)
+    band.rising = true
     band.peak = raw
     band.peakTime = listenerTime
     return raw
   }
+  band.rising = false
   return held
 }
 
@@ -432,10 +434,6 @@ function tick(frameTimeMs: number): void {
   for (const band of bands) publish(band, respond(band, heardTime))
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   for (const counter of counters) count(counter, heardTime)
-  for (const barKick of barKicks) {
-    const barSec = drums ? drums.tracker.barKickBetween(barKick.cursor, heardTime) : 0
-    if (barSec > 0) barKick.listener(barSec)
-  }
   frame = requestAnimationFrame(tick)
 }
 
@@ -502,8 +500,8 @@ function removed(): void {
   document.removeEventListener('visibilitychange', onVisibility)
 }
 
-/** Follows one band of the music; `listener` gets the response whenever it moves. */
-export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener): MusicBandSubscription {
+/** Follows one band of the music; `listener` gets the response whenever it moves, and `onHit` each hit (`respond`: where a rise begins). */
+export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener, onHit: ((strength: number) => void) | null = null): MusicBandSubscription {
   const band: Band = {
     channel,
     listener,
@@ -517,6 +515,8 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener)
     count: 0,
     bins: new Uint32Array(BINS),
     published: 0,
+    onHit,
+    rising: false,
   }
   bands.add(band)
   added()
@@ -574,18 +574,3 @@ export function subscribeMusicTempo(listener: (timeSec: number, periodSec: numbe
   }
 }
 
-/**
- * The first kick of each bar, as it is HEARD: `listener` is called with the
- * bar's length in seconds at the current tempo, once per bar that has a kick
- * (`DrumTracker.barKickBetween`). Nothing is called before the tempo grid is
- * locked, nor while the music is paused or the window hidden.
- */
-export function subscribeMusicBarKicks(listener: (barSec: number) => void): () => void {
-  const barKick: BarKick = { cursor: new DrumCursor(), listener }
-  barKicks.add(barKick)
-  added()
-  return () => {
-    barKicks.delete(barKick)
-    removed()
-  }
-}

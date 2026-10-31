@@ -323,8 +323,6 @@ const BEATS_PER_BAR = 4
  * fall on a bin of their own.
  */
 const PATTERN_BINS = BEATS_PER_BAR * 12
-/** The least share of the strong kicks' strength a bar's first kick must have (`barKickBetween`, `hitBetween`'s contrast). */
-const BAR_KICK_CONTRAST = 0.5
 /** A pattern position counts as a place kicks land when it holds this share of the strongest. */
 const SLOT_SHARE = 0.2
 /** An onset at a slot is a kick when its strength is this share of the slot's remembered strength. */
@@ -811,8 +809,6 @@ export class DrumCursor {
   /** The snare only (`DrumTracker.counterHit`): the last hop the counter profile was looked at up to, and the hop of the last snare shown from either source. */
   counterLastPeak = NaN
   snareShownAt = -Infinity
-  /** `DrumTracker.barKickBetween`: the hop on which the bar whose first kick this reader was last shown starts. */
-  barShown = -Infinity
   /**
    * With groove above 0: the drum has stopped (a break) -- an established
    * slot came round and nothing climbed in the drum's own bands there. The
@@ -2295,7 +2291,6 @@ export class DrumTracker {
       cursor.resumedAt = -Infinity
       cursor.counterLastPeak = NaN
       cursor.snareShownAt = -Infinity
-      cursor.barShown = -Infinity
     }
     const previous = cursor.lastAsked
     cursor.lastAsked = time
@@ -2362,80 +2357,6 @@ export class DrumTracker {
       return Math.max(0, Math.min(1, (db - floorDb) / -floorDb))
     }
     return Math.max(counter, response(strength), FRILL_WEIGHT * response(frillStrength))
-  }
-
-  /**
-   * The hop phase of the bar's FIRST BEAT, as music counts it (`barPhase`
-   * only keeps the learned pattern's positions still, and starts on whichever
-   * beat the grid first locked on). The snare's backbeat says where it is: a
-   * counter every two beats lands on 2 and 4, so 1 is the beat before one;
-   * every four beats (half time) it lands on 3, so 1 is two beats before.
-   * A backbeat every two beats cannot tell 1 from 3, so of the two the one
-   * nearer `barPhase` is kept, which holds it still from grid to grid.
-   * With no counter, or one on every beat (four on the floor, where every
-   * beat is alike), 1 is the beat whose kick slot the pattern remembers as
-   * strongest, `barPhase`'s own on a tie.
-   */
-  private downbeatPhase(): number {
-    const beat = this.period
-    const bar = BEATS_PER_BAR * beat
-    const cycleBeats = this.counterValid ? this.counterCycle / this.counterSteps : 0
-    if (cycleBeats === 2 || cycleBeats === 4) {
-      // The counter's position nearest the bar's phase, so the anchor's own
-      // beat length (which may differ a little from the grid's) is not
-      // extrapolated across a long section; from there the grid's beat.
-      const cycleHops = cycleBeats * this.counterPeriod
-      const anchored = this.counterAnchor + this.counterOffset * (this.counterPeriod / this.counterSteps)
-      const counterAt = anchored + Math.round((this.barPhase - anchored) / cycleHops) * cycleHops
-      const first = counterAt - (cycleBeats / 2) * beat
-      let best = first
-      let bestDistance = Infinity
-      for (const candidate of cycleBeats === 2 ? [first, first + 2 * beat] : [first]) {
-        const offset = (((candidate - this.barPhase) % bar) + bar) % bar
-        const distance = Math.min(offset, bar - offset)
-        if (distance < bestDistance) {
-          bestDistance = distance
-          best = candidate
-        }
-      }
-      return best
-    }
-    const memory = this.voices.kick.slotMemory
-    const binsPerBeat = PATTERN_BINS / BEATS_PER_BAR
-    let bestBeat = 0
-    for (let j = 1; j < BEATS_PER_BAR; j++) {
-      if (memory[j * binsPerBeat] > memory[bestBeat * binsPerBeat]) bestBeat = j
-    }
-    return this.barPhase + bestBeat * beat
-  }
-
-  /**
-   * The length of a bar in seconds when the FIRST kick of a bar was heard
-   * between `cursor`'s last call and media time `time`, 0 otherwise. A kick
-   * belongs to the bar counted from the learned bar's first beat
-   * (`barPhase`), less a slot's reach, so a kick played a touch ahead of the
-   * bar line is that bar's first and not the last bar's; any further kick in
-   * the same bar is not reported. A bar with no kick reports nothing. Read at
-   * `BAR_KICK_CONTRAST`, so a ghost kick ahead of the bar's real first one
-   * does not take its place. A reader that asks this must not also ask
-   * `hitBetween` with the same cursor.
-   */
-  barKickBetween(cursor: DrumCursor, time: number): number {
-    // The downbeat is read off the snare's learned backbeat (`downbeatPhase`), so the snare is learned too.
-    this.voices.snare.followed = true
-    const response = this.hitBetween('kick', cursor, time, BAR_KICK_CONTRAST)
-    if (response <= 0 || Number.isNaN(this.barPhase)) return 0
-    const bar = BEATS_PER_BAR * this.period
-    // The hop the kick's bar starts on. `barPhase` is only a phase (it is
-    // moved a whole bar at a time as the window slides), so the bar is
-    // identified by where it starts, and a kick starts a new one when that is
-    // more than half a bar past the last bar shown.
-    const shifted = cursor.lastPeak + this.slotReach() * (bar / PATTERN_BINS)
-    const downbeat = this.downbeatPhase()
-    const barStart = shifted - ((((shifted - downbeat) % bar) + bar) % bar)
-    if (barStart - cursor.barShown < bar / 2) return 0
-    cursor.barShown = barStart
-    return bar * this.hopSec
   }
 
   /**
