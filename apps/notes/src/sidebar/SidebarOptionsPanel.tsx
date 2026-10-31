@@ -2610,7 +2610,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
-            <OptionsSliderRows rows={[2, 2]}>
+            <OptionsSliderRows rows={[2, 3]}>
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
                 min={PULSE_SPEED_MIN}
@@ -2662,6 +2662,19 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseSoftness}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSoftness: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-cutout-round"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.cutoutRound}
+                trackLabel="round"
+                tooltipLabel="How round the centre panel's corners are, in percent: 0 square, 100 a circle. The grid around it stays whole boxes either way"
+                ariaLabel="Immersive: centre panel corner roundness, percent"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.cutoutRound}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, cutoutRound: value } }))}
               />
             </OptionsSliderRows>
           </div>

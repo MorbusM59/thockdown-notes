@@ -99,15 +99,40 @@
 .visualizer-scene > .visualizer-cutout {
   z-index: 7;
   pointer-events: auto;
-  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
-  box-shadow: var(--box-shadow-inverted-filtered);
-  outline: 1px solid var(--color-grid-bg);
+  /* The square hole in the grid, whole boxes and ruled round by the outline
+     whatever the face's corners: what the face leaves uncovered is plain
+     background, so no grid line ever runs into a rounded corner. */
+  background: var(--background-color-root);
   border: none;
 }
 
-/* Square, unlike the empty state's circle (editor.css rounds its stripes). */
-.visualizer-cutout::before {
-  border-radius: 0;
+/* The outline is its own layer above the face, so it paints over the face's
+   outer glow exactly as it did when both were on one element. */
+.visualizer-scene > .visualizer-cutout::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  outline: 1px solid var(--color-grid-bg);
+}
+
+/* The face: the cutout's panel and the solid's stripes. Its corners are
+   rounded by --visualizer-cutout-round (0 square, 1 a circle); at 0 it
+   covers the hole exactly, so the scene is the square cutout unchanged. */
+.visualizer-cutout-face {
+  position: absolute;
+  inset: 0;
+  /* Its own stacking context, so the stripes (z-index -1) paint over its background. */
+  z-index: 0;
+  pointer-events: none;
+  border-radius: calc(var(--visualizer-cutout-round, 0) * 50%);
+  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
+  box-shadow: var(--box-shadow-inverted-filtered);
+}
+
+.visualizer-cutout-face::before {
+  border-radius: inherit;
 }
 
 /* Each swayed layer is promoted once and only moved after that, so a frame

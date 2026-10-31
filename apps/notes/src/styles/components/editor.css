@@ -997,7 +997,7 @@ html[data-beat-pane] .editor-section-column.is-active .editor-beat-wash.is-shown
    as softer partial cutouts per their own random opacity), instead of the
    shape itself being the only textured part. */
 .editor-empty-state::before,
-.visualizer-cutout::before {
+.visualizer-cutout-face::before {
   content:        '';
   position:       absolute;
   inset:          0;

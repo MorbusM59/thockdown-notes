@@ -149,7 +149,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   // The solid's thump: on each hit the centre pulse sets off on (the edge's
   // band, `pulseHits.ts`), the solid grows by THUMP_SCALE and falls back on
   // the edge's own fall, so the solid's beat and the ring leaving it are one
-  // event. Only the SOLID grows: the cutout's ::before paints the stripe
+  // event. Only the SOLID grows: the cutout face's ::before paints the stripe
   // texture through a mask whose second layer is the solid, so the animation
   // sizes that mask layer alone (the first, the full square it is XORed
   // with, stays at 100%) and the stripes keep their scale. The solid's mask
@@ -377,7 +377,6 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
 
           {cutout.size > 0 && (
             <div
-              ref={cutoutRef}
               className="visualizer-cutout"
               style={{
                 left: cutoutRect.left,
@@ -387,7 +386,9 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
                 '--empty-state-scene-mask': sceneMaskUrl,
               } as CSSProperties}
               onClick={onCutoutClick}
-            />
+            >
+              <div ref={cutoutRef} className="visualizer-cutout-face" />
+            </div>
           )}
         </>
       )}
