@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { WAVE_ANGLES_AT_REST, advanceWaveAngles, nestedWavePoint, waveTurnTransform } from './gridWaveTurn'
+import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, nestedWavePoint, waveTurnTransform } from './gridWaveTurn'
 
 /** The band value (0..1 along one wave length) a stripe pattern shows at `point`, after `transform` (`translate(..) rotate(..)`). */
 function bandAt(point: { x: number; y: number }, transform: string, periodPx: number): number {
@@ -57,5 +57,39 @@ describe('advanceWaveAngles', () => {
 
   it('rests upright at step 0', () => {
     expect(advanceWaveAngles({ primary: 1, secondary: 2, tertiary: 3 }, 0, 1)).toEqual(WAVE_ANGLES_AT_REST)
+  })
+})
+
+describe('createTempoFollower', () => {
+  // Frames at 60Hz, as the beat loop hears them.
+  const frames = (follow: (t: number, p: number) => number, from: number, to: number, period: (t: number) => number) => {
+    let beats = 0
+    for (let t = from; t < to; t += 1 / 60) beats += follow(t, period(t))
+    return beats
+  }
+
+  it('turns from the first locked frame of ordinary playback, at the beat rate', () => {
+    const follow = createTempoFollower()
+    // Unlocked for a second, then a steady 120 BPM with no seek in between.
+    frames(follow, 0, 1, () => NaN)
+    const beats = frames(follow, 1, 11, () => 0.5)
+    expect(beats).toBeCloseTo(20, 0)
+  })
+
+  it('passes no beats across a seek or while there is no beat', () => {
+    const follow = createTempoFollower()
+    frames(follow, 0, 2, () => 0.5)
+    expect(follow(50, 0.5)).toBe(0)
+    expect(follow(50 + 1 / 60, NaN)).toBe(0)
+  })
+
+  it('eases a change of tempo rather than stepping it, and settles on it', () => {
+    const follow = createTempoFollower()
+    frames(follow, 0, 5, () => 0.5)
+    const first = follow(5 + 1 / 60, 0.25) * 60
+    expect(first).toBeGreaterThan(2)
+    expect(first).toBeLessThan(2.1)
+    frames(follow, 5 + 2 / 60, 25, () => 0.25)
+    expect(follow(25 + 1 / 60, 0.25) * 60).toBeCloseTo(4, 2)
   })
 })

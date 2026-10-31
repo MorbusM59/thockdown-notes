@@ -2381,8 +2381,13 @@ export class DrumTracker {
     const bar = BEATS_PER_BAR * beat
     const cycleBeats = this.counterValid ? this.counterCycle / this.counterSteps : 0
     if (cycleBeats === 2 || cycleBeats === 4) {
-      const counterAt = this.counterAnchor + this.counterOffset * (this.counterPeriod / this.counterSteps)
-      const first = counterAt - (cycleBeats / 2) * this.counterPeriod
+      // The counter's position nearest the bar's phase, so the anchor's own
+      // beat length (which may differ a little from the grid's) is not
+      // extrapolated across a long section; from there the grid's beat.
+      const cycleHops = cycleBeats * this.counterPeriod
+      const anchored = this.counterAnchor + this.counterOffset * (this.counterPeriod / this.counterSteps)
+      const counterAt = anchored + Math.round((this.barPhase - anchored) / cycleHops) * cycleHops
+      const first = counterAt - (cycleBeats / 2) * beat
       let best = first
       let bestDistance = Infinity
       for (const candidate of cycleBeats === 2 ? [first, first + 2 * beat] : [first]) {

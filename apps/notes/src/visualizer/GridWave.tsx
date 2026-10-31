@@ -41,12 +41,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { subscribeMusicBarKicks, subscribeMusicTempo } from '../sound/musicBeat'
-import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readWaveTurnSettings, subscribeWaveTurnSettings, waveTurnTransform } from './gridWaveTurn'
+import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readWaveTurnSettings, subscribeWaveTurnSettings, waveTurnTransform } from './gridWaveTurn'
 
-/** A frame further than this from the last is a seek or a stall, not playback. */
-const MAX_FRAME_SEC = 0.25
-/** How quickly the turning rate follows a change of tempo. */
-const TEMPO_EASE_SEC = 2
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
 const PULSE_RING_SHARE = 0.25
 
@@ -93,35 +89,36 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
   // transform written per frame on the beat loop's own frame: each frame
   // advances by the time heard over the beat period, so the angle never takes
   // the beat clock's phase jumps when it re-seats after a seek or a change of
-  // section. The rate itself follows the period exponentially (time constant
-  // `TEMPO_EASE_SEC`), so a new tempo, or a grid found at double or half the
-  // last one, is eased into rather than stepped. A frame further than
-  // `MAX_FRAME_SEC` from the last (a seek, a stall) moves nothing. Entering
+  // section. The rate itself follows the period exponentially (`createTempoFollower`), so a new tempo, or a grid found at double or half the
+  // last one, is eased into rather than stepped. A frame far (a seek, a stall) moves nothing. Entering
   // the visualizer starts upright; no beat holds the angle reached. Step 0
   // does not listen at all and rests upright.
+  // ONE subscription for the visualizer's whole stay: the settings and the
+  // scene's size are read through a ref, so moving a slider or resizing the
+  // window changes the rate or the shift and never the angle reached.
+  const turnInputs = useRef({ waveTurn, widthPx, periodPx: waveBoxes * boxPx })
+  turnInputs.current = { waveTurn, widthPx, periodPx: waveBoxes * boxPx }
   useEffect(() => {
     const turn = turnRef.current
     if (!turn) return
     turn.style.transform = ''
-    if (waveTurn === 0 || widthPx === 0) return
-    const periodPx = waveBoxes * boxPx
     let angles = WAVE_ANGLES_AT_REST
-    let lastTime = NaN
-    let beatsPerSec = NaN
+    const follow = createTempoFollower()
     return subscribeMusicTempo((timeSec, periodSec) => {
-      const dt = timeSec - lastTime
-      lastTime = timeSec
-      if (!(periodSec > 0)) return
-      const target = 1 / periodSec
-      // The first tempo heard is taken as it is; only a CHANGE of tempo is eased.
-      if (Number.isNaN(beatsPerSec)) beatsPerSec = target
-      if (!(dt > 0 && dt < MAX_FRAME_SEC)) return
-      beatsPerSec += (target - beatsPerSec) * (1 - Math.exp(-dt / TEMPO_EASE_SEC))
-      if (reducedMotion.matches) return
-      angles = advanceWaveAngles(angles, waveTurn, dt * beatsPerSec)
-      turn.style.transform = waveTurnTransform(angles, widthPx, periodPx)
+      const beats = follow(timeSec, periodSec)
+      const { waveTurn: step, widthPx: width, periodPx } = turnInputs.current
+      if (step === 0) {
+        if (angles !== WAVE_ANGLES_AT_REST) {
+          angles = WAVE_ANGLES_AT_REST
+          turn.style.transform = ''
+        }
+        return
+      }
+      if (beats <= 0 || width === 0 || reducedMotion.matches) return
+      angles = advanceWaveAngles(angles, step, beats)
+      turn.style.transform = waveTurnTransform(angles, width, periodPx)
     })
-  }, [waveTurn, waveBoxes, boxPx, widthPx, host])
+  }, [host])
 
   // The centre pulse: a ring at the rim of a layer exactly the cutout's
   // square, so at rest it lies wholly behind the cutout. On the first kick of
@@ -136,15 +133,21 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
       Math.max(cutout.top + cutout.size / 2, sceneBox.height - cutout.top - cutout.size / 2),
     ) / ((cutout.size / 2) * (1 - PULSE_RING_SHARE))
     : 0
+  // Read through a ref, so a resize changes the next pulse's reach without
+  // cancelling the one under way or forgetting which bar was shown.
+  const pulseExitScaleRef = useRef(pulseExitScale)
+  pulseExitScaleRef.current = pulseExitScale
+  const hasPulse = !!(cutout && cutout.size > 0)
   useEffect(() => {
     const pulse = pulseRef.current
-    if (!pulse || !(pulseExitScale > 1)) return
+    if (!pulse) return
     let running: Animation | null = null
     const unsubscribe = subscribeMusicBarKicks((barSec) => {
-      if (reducedMotion.matches) return
+      const exitScale = pulseExitScaleRef.current
+      if (reducedMotion.matches || !(exitScale > 1)) return
       running?.cancel()
       running = pulse.animate(
-        [{ transform: 'scale(1)' }, { transform: `scale(${pulseExitScale})` }],
+        [{ transform: 'scale(1)' }, { transform: `scale(${exitScale})` }],
         { duration: barSec * 1000, easing: 'linear' },
       )
     })
@@ -152,7 +155,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
       unsubscribe()
       running?.cancel()
     }
-  }, [pulseExitScale, host])
+  }, [host, hasPulse])
 
   // The rotating layer is a square as wide as the scene's diagonal, centred
   // on the scene, so the bands cover every corner at every angle.

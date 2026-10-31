@@ -119,3 +119,31 @@ export function subscribeWaveTurnSettings(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
+
+/** A frame further than this from the last is a seek or a stall, not playback. */
+const MAX_FRAME_SEC = 0.25
+/** How quickly the turning rate follows a change of tempo. */
+const TEMPO_EASE_SEC = 2
+
+/**
+ * Turns the music's TEMPO, frame by frame, into the beats that passed: the
+ * time heard since the last frame over the beat period, at a rate that takes
+ * the first tempo heard as it is and eases every later change over
+ * `TEMPO_EASE_SEC` (a new tempo, or a grid read at double or half the last).
+ * A frame with no beat (`periodSec` NaN), or further than `MAX_FRAME_SEC`
+ * from the last (a seek, a stall), passes no beats.
+ */
+export function createTempoFollower(): (timeSec: number, periodSec: number) => number {
+  let lastTime = NaN
+  let beatsPerSec = NaN
+  return (timeSec, periodSec) => {
+    const dt = timeSec - lastTime
+    lastTime = timeSec
+    if (!(periodSec > 0)) return 0
+    const target = 1 / periodSec
+    if (Number.isNaN(beatsPerSec)) beatsPerSec = target
+    if (!(dt > 0 && dt < MAX_FRAME_SEC)) return 0
+    beatsPerSec += (target - beatsPerSec) * (1 - Math.exp(-dt / TEMPO_EASE_SEC))
+    return dt * beatsPerSec
+  }
+}
