@@ -1458,3 +1458,35 @@ describe('DrumTracker.barKickBetween', () => {
     }
   })
 })
+
+describe('DrumTracker.barKickBetween downbeat', () => {
+  it('counts the bar from a beat before the backbeat, so its first kick is on 1 or 3', () => {
+    // Kicks on 1, 3, the "and" of 3 and the "and" of 4; snare on 2 and 4.
+    // Counted from beat 4, the first kick of a bar would be the "and" of 4.
+    // A backbeat on 2 and 4 cannot tell 1 from 3, so either is right.
+    const bpm = 110
+    const kit = counterKit(40, bpm, { kicks: [0, 8, 10, 14], counter: [4, 12], hats: EIGHTHS, sound: () => 'snare' })
+    const barSec = (4 * 60) / bpm
+    // Started on beat 4 (the kit's first three beats cut off), so the first beat the grid locks on is a 4.
+    const lead = Math.round(((3 * barSec) / 4) * RATE)
+    const samples = kit.samples.subarray(lead)
+    const tracker = new DrumTracker(RATE)
+    const cursor = new DrumCursor()
+    const reports: number[] = []
+    let fed = 0
+    for (let heard = 0; heard < 34; heard += 1 / 60) {
+      const end = Math.min(samples.length, Math.round((heard + 6) * RATE))
+      if (end > fed) tracker.feed(samples.subarray(fed, end), 0, (end - 1) / RATE)
+      fed = Math.max(fed, end)
+      if (tracker.barKickBetween(cursor, heard) > 0) reports.push(heard)
+    }
+    // Once the backbeat is learned, and before the window runs off the track's end.
+    const steady = reports.filter((at) => at > 6 && at < 30)
+    expect(steady.length).toBeGreaterThan(8)
+    const half = barSec / 2
+    for (const at of steady) {
+      const intoHalf = (at + (3 * barSec) / 4) % half
+      expect(Math.min(intoHalf, half - intoHalf)).toBeLessThan(0.06)
+    }
+  })
+})
