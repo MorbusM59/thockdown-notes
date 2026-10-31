@@ -10,9 +10,7 @@ import type { RefObject } from 'react'
  * scrolling the nearest real scrollable ancestor on the very first wheel
  * tick of a gesture -- an ancestor nudge a value slider must never produce.
  * A listener attached directly to the element itself, before the event ever
- * reaches that ancestor, closes that gap (same mechanism App.tsx's
- * options-panel HSVA/texture-control guard already relies on, just owned by
- * the control itself instead of a distant ancestor keeping a selector list).
+ * reaches that ancestor, closes that gap.
  *
  * The listener is bound when the effect runs, which is on mount and when
  * `handler` changes -- not when the element behind `ref` is replaced. So the

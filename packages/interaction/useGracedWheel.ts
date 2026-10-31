@@ -87,6 +87,9 @@ export function useGracedWheel<T extends HTMLElement>(
       }
     }
     handler(event)
+    // A control that let the wheel through (disabled, no delta) scrolled the
+    // panel, which restarts the grace for every control like any other scroll.
+    if (!event.defaultPrevented) lastScrollingWheelAt = event.timeStamp
   }, [handler])
 
   useNonPassiveWheel(ref, gated)
