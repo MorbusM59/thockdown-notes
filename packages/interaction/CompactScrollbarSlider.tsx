@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
-import { useNonPassiveWheel } from './useNonPassiveWheel'
+import { useGracedWheel } from './useGracedWheel'
 import { clamp } from './clamp'
 
 
@@ -148,7 +148,7 @@ export function CompactScrollbarSlider({
     if (Number.isFinite(parsed)) onCommit(snapValue(parsed))
   }
 
-  useNonPassiveWheel(shellRef, handleWheel)
+  useGracedWheel(shellRef, handleWheel)
 
   return (
     <div

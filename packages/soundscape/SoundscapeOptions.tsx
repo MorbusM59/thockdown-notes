@@ -53,7 +53,7 @@ import { CHIME_SCALES, chimeScaleOf } from './soundscapeChimeScales'
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { newSoundscapeId, neutralSoundscape } from './soundscapeFile'
 import { exportSoundscapes } from './soundscapeFileActions'
-import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
+import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
 import { toDisplayLevel } from './musicSoundOptions'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
@@ -712,7 +712,7 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
       channels: preferences.settings.channels.map((item) => (item.id === channel.id ? { ...item, volume } : item)),
     }))
   }, [onChange, preferences])
-  useNonPassiveWheel(channelSelectorRef, handleChannelWheel)
+  useGracedWheel(channelSelectorRef, handleChannelWheel)
 
   const savePreset = () => {
     if (!canSave) return
