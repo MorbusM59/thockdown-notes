@@ -27,7 +27,7 @@
  * `<html>` (`--beat-edge-color`, `--beat-edge-spread`, `--beat-edge-blur`, `--beat-pane-color`).
  */
 
-import { setWaveTurnSettings } from '../visualizer/gridWaveTurn'
+import { setGridWaveSettings } from '../visualizer/gridWaveTurn'
 import { useEffect, useRef } from 'react'
 import type { VisualizerCaret, VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
@@ -100,8 +100,8 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurn } = visualizer.immersive
-  useEffect(() => setWaveTurnSettings(waveTurn, waveBoxes), [waveTurn, waveBoxes])
+  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseDecay } = visualizer.immersive
+  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseDecay }), [waveTurn, waveBoxes, pulseSpeed, pulseDecay])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)
@@ -111,7 +111,8 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     root.setProperty('--visualizer-wave-color', waveColor)
     root.setProperty('--visualizer-wave-boxes', String(waveBoxes))
     root.setProperty('--visualizer-wave-sec', `${waveSec}s`)
-  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec])
+    root.setProperty('--visualizer-pulse-color', pulseColor)
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec, pulseColor])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

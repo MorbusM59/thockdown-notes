@@ -166,9 +166,11 @@
   background-image: radial-gradient(
     circle closest-side,
     transparent 75%,
-    var(--visualizer-wave-color) 87.5%,
+    var(--visualizer-pulse-color) 87.5%,
     transparent 100%
   );
+  /* Above the turning wave. */
+  z-index: 1;
   /* Scaled by GridWave.tsx on the first kick of each bar; at rest it lies behind the cutout. */
   will-change: transform;
 }

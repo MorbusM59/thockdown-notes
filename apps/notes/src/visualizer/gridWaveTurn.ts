@@ -95,27 +95,33 @@ export function waveTurnTransform(angles: WaveAngles, widthPx: number, periodPx:
   return `translate(${kept * acrossX}px, ${kept * acrossY}px) rotate(${angle}rad)`
 }
 
-/** What the rotation reads of the layout: the step and the wave length in boxes (the shift is kept modulo one wave length). */
-export interface WaveTurnSettings {
+/**
+ * What the grid wave reads of the layout that is not CSS: the rotation step
+ * and the wave length in boxes (the shift is kept modulo one wave length),
+ * and the centre pulse's starting speed and decay (`VisualizerImmersive`).
+ */
+export interface GridWaveSettings {
   waveTurn: number
   waveBoxes: number
+  pulseSpeed: number
+  pulseDecay: number
 }
 
-let settings: WaveTurnSettings = { waveTurn: 0, waveBoxes: 1 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseDecay: 0 }
 const listeners = new Set<() => void>()
 
-/** The layout's rotation step and wave length (`VisualizerImmersive.waveTurn`, `waveBoxes`). */
-export function setWaveTurnSettings(waveTurn: number, waveBoxes: number): void {
-  if (waveTurn === settings.waveTurn && waveBoxes === settings.waveBoxes) return
-  settings = { waveTurn, waveBoxes }
+export function setGridWaveSettings(next: GridWaveSettings): void {
+  if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes
+    && next.pulseSpeed === settings.pulseSpeed && next.pulseDecay === settings.pulseDecay) return
+  settings = next
   for (const listener of listeners) listener()
 }
 
-export function readWaveTurnSettings(): WaveTurnSettings {
+export function readGridWaveSettings(): GridWaveSettings {
   return settings
 }
 
-export function subscribeWaveTurnSettings(listener: () => void): () => void {
+export function subscribeGridWaveSettings(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }

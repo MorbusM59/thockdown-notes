@@ -40,11 +40,16 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import { pulseTimeToTravel, pulseTravelBoxes } from '@thockdown/look/visualizer'
 import { subscribeMusicBarKicks, subscribeMusicTempo } from '../sound/musicBeat'
-import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readWaveTurnSettings, subscribeWaveTurnSettings, waveTurnTransform } from './gridWaveTurn'
+import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
 const PULSE_RING_SHARE = 0.25
+/** Keyframes sampled along the pulse's travel curve; linear between them. */
+const PULSE_KEYFRAMES = 24
+/** A pulse its decay stops short is ended after this many half-lives of its speed (under 1% of its speed left). */
+const PULSE_STALL_HALF_LIVES = 7
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
@@ -83,7 +88,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes } = useSyncExternalStore(subscribeWaveTurnSettings, readWaveTurnSettings)
+  const { waveTurn, waveBoxes, pulseSpeed, pulseDecay } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -122,34 +127,43 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
 
   // The centre pulse: a ring at the rim of a layer exactly the cutout's
   // square, so at rest it lies wholly behind the cutout. On the first kick of
-  // each bar it is scaled, linearly over that bar, to the factor at which the
-  // ring's INNER edge reaches the scene's farthest corner from the cutout's
-  // centre, so it leaves the screen exactly as the next bar can start one.
-  // A Web Animation of `transform`: the compositor runs it, nothing repaints.
+  // each bar it is scaled out, its inner edge setting off at the layout's
+  // starting speed and losing its decay share of that speed each second
+  // (`pulseTravelBoxes`), until that edge reaches the scene's farthest corner
+  // from the cutout's centre. A decay that stops it short ends it once it has
+  // all but stopped; the next bar's kick starts a new one either way. A Web
+  // Animation of `transform` sampled from that curve: the compositor runs it,
+  // nothing repaints.
   const pulseRef = useRef<HTMLDivElement>(null)
-  const pulseExitScale = sceneBox && cutout && cutout.size > 0
+  const pulseInnerPx = cutout && cutout.size > 0 ? (cutout.size / 2) * (1 - PULSE_RING_SHARE) : 0
+  const pulseExitScale = sceneBox && cutout && pulseInnerPx > 0
     ? Math.hypot(
       Math.max(cutout.left + cutout.size / 2, sceneBox.width - cutout.left - cutout.size / 2),
       Math.max(cutout.top + cutout.size / 2, sceneBox.height - cutout.top - cutout.size / 2),
-    ) / ((cutout.size / 2) * (1 - PULSE_RING_SHARE))
+    ) / pulseInnerPx
     : 0
-  // Read through a ref, so a resize changes the next pulse's reach without
-  // cancelling the one under way or forgetting which bar was shown.
-  const pulseExitScaleRef = useRef(pulseExitScale)
-  pulseExitScaleRef.current = pulseExitScale
-  const hasPulse = !!(cutout && cutout.size > 0)
+  // Read through a ref, so a resize or a slider changes the next pulse
+  // without cancelling the one under way or forgetting which bar was shown.
+  const pulseInputs = useRef({ pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseDecay })
+  pulseInputs.current = { pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseDecay }
+  const hasPulse = pulseInnerPx > 0
   useEffect(() => {
     const pulse = pulseRef.current
     if (!pulse) return
     let running: Animation | null = null
-    const unsubscribe = subscribeMusicBarKicks((barSec) => {
-      const exitScale = pulseExitScaleRef.current
-      if (reducedMotion.matches || !(exitScale > 1)) return
+    const unsubscribe = subscribeMusicBarKicks(() => {
+      const { pulseExitScale: exitScale, pulseInnerPx: innerPx, boxPx: box, pulseSpeed: speed, pulseDecay: decay } = pulseInputs.current
+      if (reducedMotion.matches || !(exitScale > 1) || !(box > 0)) return
+      const exitBoxes = ((exitScale - 1) * innerPx) / box
+      const exitSec = pulseTimeToTravel(exitBoxes, speed, decay)
+      const durationSec = Number.isFinite(exitSec) ? exitSec : (PULSE_STALL_HALF_LIVES * Math.LN2) / -Math.log(1 - decay)
+      const keyframes: Keyframe[] = []
+      for (let i = 0; i <= PULSE_KEYFRAMES; i++) {
+        const t = (i / PULSE_KEYFRAMES) * durationSec
+        keyframes.push({ transform: `scale(${1 + (pulseTravelBoxes(t, speed, decay) * box) / innerPx})` })
+      }
       running?.cancel()
-      running = pulse.animate(
-        [{ transform: 'scale(1)' }, { transform: `scale(${exitScale})` }],
-        { duration: barSec * 1000, easing: 'linear' },
-      )
+      running = pulse.animate(keyframes, { duration: durationSec * 1000, easing: 'linear' })
     })
     return () => {
       unsubscribe()

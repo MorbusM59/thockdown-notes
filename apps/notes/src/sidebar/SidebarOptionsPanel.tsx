@@ -32,6 +32,9 @@ import {
   WAVE_BOXES_MAX,
   WAVE_BOXES_MIN,
   WAVE_SEC_MAX,
+  PULSE_DECAY_MAX,
+  PULSE_SPEED_MAX,
+  PULSE_SPEED_MIN,
   WAVE_SEC_MIN,
   WAVE_TURN_MAX,
   waveTertiaryBeats,
@@ -2433,6 +2436,7 @@ export function SidebarOptionsPanel({
             <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
             <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
             <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on the first kick of each bar in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
           </div>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[1]}>
@@ -2458,7 +2462,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Immersive</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive settings">
-            <OptionsSliderRows rows={[2, 2, 3]}>
+            <OptionsSliderRows rows={[2, 2, 3, 2]}>
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2549,6 +2553,32 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.waveTurn}
                 formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurn: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-speed"
+                min={PULSE_SPEED_MIN}
+                max={PULSE_SPEED_MAX}
+                step={1}
+                value={visualizer.immersive.pulseSpeed}
+                trackLabel="pulse"
+                tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on the first kick of each bar"
+                ariaLabel="Immersive: centre pulse starting speed, boxes per second"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseSpeed}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSpeed: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-decay"
+                min={0}
+                max={PULSE_DECAY_MAX}
+                step={0.01}
+                value={visualizer.immersive.pulseDecay}
+                trackLabel="decay"
+                tooltipLabel="How much of its speed the centre pulse loses each second, in percent: 0 keeps a steady speed, 50 halves it every second. A strong decay can stop the ring before it leaves the screen"
+                ariaLabel="Immersive: centre pulse speed lost per second, percent"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseDecay}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseDecay: value } }))}
               />
             </OptionsSliderRows>
           </div>

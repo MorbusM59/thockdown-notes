@@ -135,6 +135,12 @@ export interface VisualizerImmersive {
    * negative counter-clockwise, and the further from 0 the faster.
    */
   waveTurn: number
+  /** The centre pulse's colour (GridWave.tsx), picked like any layout colour. */
+  pulseColor: string
+  /** The centre pulse's starting speed, in grid boxes per second, at the ring's inner edge. */
+  pulseSpeed: number
+  /** 0 to 0.5: the share of its speed the centre pulse loses each second (exponentially); 0 keeps it constant. */
+  pulseDecay: number
 }
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
@@ -143,6 +149,9 @@ export const WAVE_BOXES_MIN = 2
 export const WAVE_BOXES_MAX = 256
 export const WAVE_SEC_MIN = 0.5
 export const WAVE_SEC_MAX = 30
+export const PULSE_SPEED_MIN = 2
+export const PULSE_SPEED_MAX = 100
+export const PULSE_DECAY_MAX = 0.5
 /**
  * Beats per turn of the grid wave's TERTIARY rotation at each step away from
  * still (`waveTurn` 1..5, or -1..-5): the secondary turns 4 times slower and
@@ -156,7 +165,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseDecay: 0 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -368,6 +377,9 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
     waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
+    pulseColor: typeof source.pulseColor === 'string' && source.pulseColor.length > 0 ? source.pulseColor : d.pulseColor,
+    pulseSpeed: bounded(source.pulseSpeed, PULSE_SPEED_MIN, PULSE_SPEED_MAX, d.pulseSpeed),
+    pulseDecay: bounded(source.pulseDecay, 0, PULSE_DECAY_MAX, d.pulseDecay),
   }
 }
 
@@ -438,4 +450,24 @@ export function sourceAtSlider(value: number, frequencyHz: number): Pick<Visuali
   if (value < MIDDLE + SLIDER_STOP_OCTAVES) return { source: 'snare', frequencyHz }
   if (value <= HIGH + SLIDER_STOP_OCTAVES) return band(value - SLIDER_STOP_OCTAVES)
   return { source: 'hat', frequencyHz }
+}
+
+/**
+ * How far, in boxes, the centre pulse has travelled `t` seconds after it set
+ * off at `speed` boxes a second, losing `decay` of its speed each second:
+ * `v(t) = speed (1 - decay)^t`, integrated. With decay it travels at most
+ * `speed / -ln(1 - decay)`.
+ */
+export function pulseTravelBoxes(t: number, speed: number, decay: number): number {
+  if (decay <= 0) return speed * t
+  const k = -Math.log(1 - decay)
+  return (speed * (1 - Math.exp(-k * t))) / k
+}
+
+/** Seconds the centre pulse takes to travel `distance` boxes, Infinity when its decay stops it short. */
+export function pulseTimeToTravel(distance: number, speed: number, decay: number): number {
+  if (decay <= 0) return distance / speed
+  const k = -Math.log(1 - decay)
+  const share = (distance * k) / speed
+  return share >= 1 ? Infinity : -Math.log(1 - share) / k
 }
