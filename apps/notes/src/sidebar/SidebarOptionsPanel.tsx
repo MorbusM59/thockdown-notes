@@ -33,7 +33,8 @@ import {
   WAVE_BOXES_MIN,
   WAVE_SEC_MAX,
   WAVE_SEC_MIN,
-  WAVE_TURNS_PER_SEC_MAX,
+  WAVE_TURN_MAX,
+  waveTertiaryBeats,
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
   SOURCE_SLIDER_MAX,
@@ -2538,16 +2539,16 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="visualizer-wave-turn"
-                min={-WAVE_TURNS_PER_SEC_MAX}
-                max={WAVE_TURNS_PER_SEC_MAX}
-                step={0.01}
-                value={visualizer.immersive.waveTurnsPerSec}
+                min={-WAVE_TURN_MAX}
+                max={WAVE_TURN_MAX}
+                step={1}
+                value={visualizer.immersive.waveTurn}
                 trackLabel="turn"
-                tooltipLabel="Seconds the grid wave takes for one turn: the centre holds it still, left turns it counter-clockwise (shown negative), right clockwise, up to one turn a second at either end"
-                ariaLabel="Immersive: grid wave rotation, negative counter-clockwise, in turns per second"
-                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.waveTurnsPerSec}
-                formatValue={(value) => (Math.abs(value) < 0.005 ? '0' : (Math.sign(value) / Math.abs(value)).toFixed(1))}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurnsPerSec: Math.abs(value) < 0.005 ? 0 : value } }))}
+                tooltipLabel="Beats per turn of the grid wave's fastest pivot, with the music's beat: the centre holds it still, right turns it clockwise and left counter-clockwise (shown negative), at 16, 8, 4, 2 and 1 beats towards either end. Three pivots turn together (the screen's centre, a quarter of the screen to its left and a quarter to its right), the outer two 16 and 4 times slower"
+                ariaLabel="Immersive: beats per turn of the grid wave's fastest pivot, negative counter-clockwise, 0 still"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.waveTurn}
+                formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurn: Math.round(value) } }))}
               />
             </OptionsSliderRows>
           </div>

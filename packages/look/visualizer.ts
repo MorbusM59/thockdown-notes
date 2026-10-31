@@ -130,10 +130,11 @@ export interface VisualizerImmersive {
   /** Seconds a wave band takes to travel one wave length. */
   waveSec: number
   /**
-   * The grid wave's rotation, in turns per second, -1..1: 0 holds it still,
-   * negative turns it counter-clockwise, positive clockwise.
+   * The grid wave's rotation, a step of the music's beat, -5..5
+   * (`waveTertiaryBeats`): 0 holds it still, positive turns it clockwise,
+   * negative counter-clockwise, and the further from 0 the faster.
    */
-  waveTurnsPerSec: number
+  waveTurn: number
 }
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
@@ -142,8 +143,20 @@ export const WAVE_BOXES_MIN = 2
 export const WAVE_BOXES_MAX = 256
 export const WAVE_SEC_MIN = 0.5
 export const WAVE_SEC_MAX = 30
-export const WAVE_TURNS_PER_SEC_MAX = 1
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurnsPerSec: 0 }
+/**
+ * Beats per turn of the grid wave's TERTIARY rotation at each step away from
+ * still (`waveTurn` 1..5, or -1..-5): the secondary turns 4 times slower and
+ * the primary 16 (the visualizer's GridWave.tsx).
+ */
+export const WAVE_TURN_BEATS = [16, 8, 4, 2, 1] as const
+export const WAVE_TURN_MAX = WAVE_TURN_BEATS.length
+
+/** Beats per tertiary turn at `waveTurn`, signed (negative counter-clockwise); null when it holds still. */
+export function waveTertiaryBeats(waveTurn: number): number | null {
+  if (waveTurn === 0) return null
+  return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
+}
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -354,7 +367,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
-    waveTurnsPerSec: bounded(source.waveTurnsPerSec, -WAVE_TURNS_PER_SEC_MAX, WAVE_TURNS_PER_SEC_MAX, d.waveTurnsPerSec),
+    waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
   }
 }
 

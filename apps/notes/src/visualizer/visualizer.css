@@ -140,8 +140,8 @@
 
 .visualizer-grid-wave-turn {
   position: absolute;
+  /* Turned by GridWave.tsx from the music's beat, one transform per frame. */
   will-change: transform;
-  animation: var(--visualizer-wave-turn-name, none) var(--visualizer-wave-turn-sec, 1s) linear infinite var(--visualizer-wave-turn-direction, normal);
 }
 
 .visualizer-grid-wave-bands {
@@ -165,14 +165,8 @@
   to { transform: translateX(var(--grid-wave-period)); }
 }
 
-@keyframes visualizer-grid-wave-turn {
-  from { transform: rotate(0turn); }
-  to { transform: rotate(1turn); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .visualizer-grid-wave-bands,
-  .visualizer-grid-wave-turn {
+  .visualizer-grid-wave-bands {
     animation: none;
   }
 }

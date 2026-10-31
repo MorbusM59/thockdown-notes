@@ -27,6 +27,7 @@
  * `<html>` (`--beat-edge-color`, `--beat-edge-spread`, `--beat-edge-blur`, `--beat-pane-color`).
  */
 
+import { setWaveTurnSettings } from '../visualizer/gridWaveTurn'
 import { useEffect, useRef } from 'react'
 import type { VisualizerCaret, VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
@@ -99,7 +100,8 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurnsPerSec } = visualizer.immersive
+  const { waveColor, waveBoxes, waveSec, waveTurn } = visualizer.immersive
+  useEffect(() => setWaveTurnSettings(waveTurn, waveBoxes), [waveTurn, waveBoxes])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)
@@ -109,12 +111,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     root.setProperty('--visualizer-wave-color', waveColor)
     root.setProperty('--visualizer-wave-boxes', String(waveBoxes))
     root.setProperty('--visualizer-wave-sec', `${waveSec}s`)
-    // A rate of zero names no animation, so the wave rests unrotated rather
-    // than frozen at whatever angle it had reached.
-    root.setProperty('--visualizer-wave-turn-name', waveTurnsPerSec === 0 ? 'none' : 'visualizer-grid-wave-turn')
-    root.setProperty('--visualizer-wave-turn-sec', waveTurnsPerSec === 0 ? '1s' : `${1 / Math.abs(waveTurnsPerSec)}s`)
-    root.setProperty('--visualizer-wave-turn-direction', waveTurnsPerSec < 0 ? 'reverse' : 'normal')
-  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec, waveTurnsPerSec])
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

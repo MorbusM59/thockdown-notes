@@ -16,23 +16,31 @@
  * the cutout; the one inside it is masked to the grid lines by the same
  * gradients that draw them, at the same tile size and position. Neither
  * moves. Inside the lines sits a square as wide as the scene's diagonal,
- * centred on it, which a CSS animation of `transform` turns at the layout's
- * rate (Options > Visualizer, `waveTurnsPerSec`); and inside that, one
+ * centred on it, turned with the music's beat by one transform written per
+ * frame (`gridWaveTurn.ts`: three nested pivots reduced to the single
+ * rotation and shift that draw the same stripes); and inside that, one
  * repeating band pattern, one wave length wider than the square, moved by a
- * second `transform` animation one wave length per cycle, so the loop is
- * seamless. Both animations run on the compositor without the main thread.
+ * CSS animation of `transform` one wave length per cycle, so the loop is
+ * seamless. Nothing repaints.
  *
- * The wave length, its travel time and the rotation are the layout's
- * (`immersive.waveBoxes`, `waveSec`, `waveTurnsPerSec`), published as CSS
- * variables by `useBeatFeedback`, so a slider changes no React state here.
+ * The colour, wave length and travel time are the layout's, published as
+ * CSS variables by `useBeatFeedback`, and the rotation step and wave length
+ * through `gridWaveTurn.ts`'s settings store.
  *
  * Self-contained: it reads only the box size, the grid's origin and the
  * cutout, which the scene already has, so it can be switched off or moved
  * into a package without touching anything else.
  */
 
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import { subscribeMusicBeats } from '../sound/musicBeat'
+import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readWaveTurnSettings, subscribeWaveTurnSettings, waveTurnTransform } from './gridWaveTurn'
+
+/** A step between two frames' beat positions longer than this is a seek or a new track, not time passing. */
+const MAX_BEAT_STEP = 1
+
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
 interface SceneBox { left: number; top: number; width: number; height: number }
 
@@ -67,6 +75,31 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
       window.removeEventListener('resize', measure)
     }
   }, [])
+
+  const turnRef = useRef<HTMLDivElement>(null)
+  const { waveTurn, waveBoxes } = useSyncExternalStore(subscribeWaveTurnSettings, readWaveTurnSettings)
+  const widthPx = sceneBox?.width ?? 0
+  // The rotation follows the music's steady beat (`subscribeMusicBeats`),
+  // one transform written per frame on the beat loop's own frame. Entering
+  // the visualizer starts upright; no beat (paused, no tempo found yet)
+  // holds the angle reached, and the next beat carries on from it. Step 0
+  // does not listen at all and rests upright.
+  useEffect(() => {
+    const turn = turnRef.current
+    if (!turn) return
+    turn.style.transform = ''
+    if (waveTurn === 0 || widthPx === 0) return
+    const periodPx = waveBoxes * boxPx
+    let angles = WAVE_ANGLES_AT_REST
+    let last = NaN
+    return subscribeMusicBeats((beats) => {
+      const step = beats - last
+      last = beats
+      if (!(step > 0 && step < MAX_BEAT_STEP) || reducedMotion.matches) return
+      angles = advanceWaveAngles(angles, waveTurn, step)
+      turn.style.transform = waveTurnTransform(angles, widthPx, periodPx)
+    })
+  }, [waveTurn, waveBoxes, boxPx, widthPx, host])
 
   // The rotating layer is a square as wide as the scene's diagonal, centred
   // on the scene, so the bands cover every corner at every angle.
@@ -105,6 +138,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
         >
           <div className="visualizer-grid-wave-lines" style={lineMask}>
             <div
+              ref={turnRef}
               className="visualizer-grid-wave-turn"
               style={{
                 width: turnSide,

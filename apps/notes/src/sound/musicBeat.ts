@@ -125,9 +125,17 @@ function setLocked(subscriber: Clock, locked: boolean): void {
 
 const clocks = new Set<Clock>()
 
+/** A COUNTER subscriber: the steady beat's position, in beats, every frame (NaN while there is no beat). */
+interface Counter {
+  clock: BeatClock
+  listener: (beats: number) => void
+}
+
+const counters = new Set<Counter>()
+
 /** Everything the frame loop answers. */
 function subscriberCount(): number {
-  return bands.size + clocks.size
+  return bands.size + clocks.size + counters.size
 }
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
@@ -156,7 +164,7 @@ function drumOf(channel: BeatChannel): VisualizerDrum | null {
 
 /** Whether anything reads the drum analysis: a drum channel for its hits, a clock for its grid. */
 function needsDrums(): boolean {
-  return clocks.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
+  return clocks.size > 0 || counters.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
 }
 
 function clearWindow(band: Band): void {
@@ -199,7 +207,7 @@ function restartAnalysis(listenerTime: number): void {
   const id = ++run
   // A new track's beat is not the last one's; a seek in the same track keeps the tempo and seats on the next grid.
   const newTrack = stream?.url !== url
-  for (const { clock } of clocks) {
+  for (const { clock } of [...clocks, ...counters]) {
     if (newTrack) clock.reset()
     else clock.restart()
   }
@@ -280,6 +288,13 @@ function pulse(subscriber: Clock, listenerTime: number): number {
   if (Number.isNaN(phase)) return 0
   const { fallSec, shape } = subscriber.caret
   return pulseCurve((phase * clock.period) / Math.min(fallSec, clock.period), shape)
+}
+
+/** A counter's beat position, on the same steady beat the caret follows. */
+function count(counter: Counter, listenerTime: number): void {
+  const tracker = drums?.tracker
+  counter.clock.advance(listenerTime, tracker ? tracker.gridPeriodSec : NaN, tracker ? tracker.gridBeatTime : NaN)
+  counter.listener(counter.clock.position)
 }
 
 /** A level band's response: its level at `listenerTime`, stretched over the window around it. */
@@ -408,6 +423,7 @@ function tick(frameTimeMs: number): void {
   const heardTime = listenerTime - heardLagSec()
   for (const band of bands) publish(band, respond(band, heardTime))
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
+  for (const counter of counters) count(counter, heardTime)
   frame = requestAnimationFrame(tick)
 }
 
@@ -426,6 +442,7 @@ function stop(): void {
     publish(subscriber, 0)
     setLocked(subscriber, false)
   }
+  for (const counter of counters) counter.listener(NaN)
 }
 
 function onVisibility(): void {
@@ -523,4 +540,21 @@ export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListen
     removed()
   }
   return { update, unsubscribe }
+}
+
+/**
+ * The steady beat's position, in beats, every frame while music plays (the
+ * header's CLOCK, as the caret follows it), and NaN whenever there is no beat:
+ * paused, hidden, or a track not yet read. The position only moves forward
+ * between jumps; a seek or a new track restarts it, so a reader takes the
+ * step between two frames and treats anything else as a jump.
+ */
+export function subscribeMusicBeats(listener: (beats: number) => void): () => void {
+  const counter: Counter = { clock: new BeatClock(), listener }
+  counters.add(counter)
+  added()
+  return () => {
+    counters.delete(counter)
+    removed()
+  }
 }
