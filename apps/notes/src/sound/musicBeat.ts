@@ -125,10 +125,10 @@ function setLocked(subscriber: Clock, locked: boolean): void {
 
 const clocks = new Set<Clock>()
 
-/** A COUNTER subscriber: the steady beat's position, in beats, every frame (NaN while there is no beat). */
+/** A TEMPO subscriber: the heard media time and the steady beat's period, every frame (NaN while there is no beat). */
 interface Counter {
   clock: BeatClock
-  listener: (beats: number) => void
+  listener: (timeSec: number, periodSec: number) => void
 }
 
 const counters = new Set<Counter>()
@@ -290,11 +290,11 @@ function pulse(subscriber: Clock, listenerTime: number): number {
   return pulseCurve((phase * clock.period) / Math.min(fallSec, clock.period), shape)
 }
 
-/** A counter's beat position, on the same steady beat the caret follows. */
+/** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
 function count(counter: Counter, listenerTime: number): void {
   const tracker = drums?.tracker
   counter.clock.advance(listenerTime, tracker ? tracker.gridPeriodSec : NaN, tracker ? tracker.gridBeatTime : NaN)
-  counter.listener(counter.clock.position)
+  counter.listener(listenerTime, Number.isNaN(counter.clock.phase) ? NaN : counter.clock.period)
 }
 
 /** A level band's response: its level at `listenerTime`, stretched over the window around it. */
@@ -442,7 +442,7 @@ function stop(): void {
     publish(subscriber, 0)
     setLocked(subscriber, false)
   }
-  for (const counter of counters) counter.listener(NaN)
+  for (const counter of counters) counter.listener(NaN, NaN)
 }
 
 function onVisibility(): void {
@@ -543,13 +543,16 @@ export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListen
 }
 
 /**
- * The steady beat's position, in beats, every frame while music plays (the
- * header's CLOCK, as the caret follows it), and NaN whenever there is no beat:
- * paused, hidden, or a track not yet read. The position only moves forward
- * between jumps; a seek or a new track restarts it, so a reader takes the
- * step between two frames and treats anything else as a jump.
+ * The steady beat's TEMPO every frame while music plays: the media time heard
+ * and the period, in seconds, of the beat the caret follows (the header's
+ * CLOCK), with NaN for both whenever there is no beat: paused, hidden, or a
+ * track not yet read. Tempo and not position, deliberately: a clock that
+ * re-seats after a seek or a change of section takes the new grid's PHASE as
+ * it is, so its position jumps by up to half a beat, while its period is
+ * continuous apart from a change of tempo. A reader that only needs to move
+ * at the music's rate integrates time over period and never sees the jump.
  */
-export function subscribeMusicBeats(listener: (beats: number) => void): () => void {
+export function subscribeMusicTempo(listener: (timeSec: number, periodSec: number) => void): () => void {
   const counter: Counter = { clock: new BeatClock(), listener }
   counters.add(counter)
   added()

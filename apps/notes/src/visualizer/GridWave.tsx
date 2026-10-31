@@ -34,11 +34,14 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { subscribeMusicBeats } from '../sound/musicBeat'
+import { subscribeMusicTempo } from '../sound/musicBeat'
 import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readWaveTurnSettings, subscribeWaveTurnSettings, waveTurnTransform } from './gridWaveTurn'
 
 /** A step between two frames' beat positions longer than this is a seek or a new track, not time passing. */
-const MAX_BEAT_STEP = 1
+/** A frame further than this from the last is a seek or a stall, not playback. */
+const MAX_FRAME_SEC = 0.25
+/** How quickly the turning rate follows a change of tempo. */
+const TEMPO_EASE_SEC = 2
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
@@ -79,10 +82,15 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
   const turnRef = useRef<HTMLDivElement>(null)
   const { waveTurn, waveBoxes } = useSyncExternalStore(subscribeWaveTurnSettings, readWaveTurnSettings)
   const widthPx = sceneBox?.width ?? 0
-  // The rotation follows the music's steady beat (`subscribeMusicBeats`),
-  // one transform written per frame on the beat loop's own frame. Entering
-  // the visualizer starts upright; no beat (paused, no tempo found yet)
-  // holds the angle reached, and the next beat carries on from it. Step 0
+  // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
+  // transform written per frame on the beat loop's own frame: each frame
+  // advances by the time heard over the beat period, so the angle never takes
+  // the beat clock's phase jumps when it re-seats after a seek or a change of
+  // section. The rate itself follows the period exponentially (time constant
+  // `TEMPO_EASE_SEC`), so a new tempo, or a grid found at double or half the
+  // last one, is eased into rather than stepped. A frame further than
+  // `MAX_FRAME_SEC` from the last (a seek, a stall) moves nothing. Entering
+  // the visualizer starts upright; no beat holds the angle reached. Step 0
   // does not listen at all and rests upright.
   useEffect(() => {
     const turn = turnRef.current
@@ -91,12 +99,20 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     if (waveTurn === 0 || widthPx === 0) return
     const periodPx = waveBoxes * boxPx
     let angles = WAVE_ANGLES_AT_REST
-    let last = NaN
-    return subscribeMusicBeats((beats) => {
-      const step = beats - last
-      last = beats
-      if (!(step > 0 && step < MAX_BEAT_STEP) || reducedMotion.matches) return
-      angles = advanceWaveAngles(angles, waveTurn, step)
+    let lastTime = NaN
+    let beatsPerSec = NaN
+    return subscribeMusicTempo((timeSec, periodSec) => {
+      const dt = timeSec - lastTime
+      lastTime = timeSec
+      if (!(periodSec > 0)) return
+      const target = 1 / periodSec
+      if (!(dt > 0 && dt < MAX_FRAME_SEC)) {
+        if (Number.isNaN(beatsPerSec)) beatsPerSec = target
+        return
+      }
+      beatsPerSec += (target - beatsPerSec) * (1 - Math.exp(-dt / TEMPO_EASE_SEC))
+      if (reducedMotion.matches) return
+      angles = advanceWaveAngles(angles, waveTurn, dt * beatsPerSec)
       turn.style.transform = waveTurnTransform(angles, widthPx, periodPx)
     })
   }, [waveTurn, waveBoxes, boxPx, widthPx, host])
