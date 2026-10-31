@@ -99,34 +99,48 @@
 .visualizer-scene > .visualizer-cutout {
   z-index: 7;
   pointer-events: auto;
-  /* The square hole in the grid, whole boxes and ruled round by the outline
-     whatever the face's corners: what the face leaves uncovered is plain
-     background, so no grid line ever runs into a rounded corner. */
-  background: var(--background-color-root);
+  /* Behind the face: with rounded corners the grid closes round the face
+     (cutoutRing.ts), and the square's corners outside it are left
+     uncovered so the boxes show through. */
   border: none;
 }
 
-/* The outline is its own layer above the face, so it paints over the face's
-   outer glow exactly as it did when both were on one element. */
+/* The outline ring the grid closes round a rounded face with (cutoutRing.ts),
+   at the outline grid's layer. The grid ring is the cutout's own outline
+   (::after below), which follows the face's radius. */
+.visualizer-scene > .visualizer-cutout-ring {
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+}
+.visualizer-scene > .visualizer-cutout-ring.is-outline {
+  z-index: 3;
+  background-color: var(--color-grid-outline);
+}
+
+/* The grid line round the face: its own layer above the face, so it paints
+   over the face's outer glow exactly as it did when both were on one
+   element, and rounded with the face, so with rounded corners it is the
+   grid ring (cutoutRing.ts). */
 .visualizer-scene > .visualizer-cutout::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
+  border-radius: var(--visualizer-face-radius, 0);
   outline: 1px solid var(--color-grid-bg);
 }
 
 /* The face: the cutout's panel and the solid's stripes. Its corners are
-   rounded by --visualizer-cutout-round (0 square, 1 a circle); at 0 it
-   covers the hole exactly, so the scene is the square cutout unchanged. */
+   rounded inline (cutoutRing.ts); at roundness 0 it covers the hole exactly,
+   so the scene is the square cutout unchanged. */
 .visualizer-cutout-face {
   position: absolute;
   inset: 0;
   /* Its own stacking context, so the stripes (z-index -1) paint over its background. */
   z-index: 0;
   pointer-events: none;
-  border-radius: calc(var(--visualizer-cutout-round, 0) * 50%);
+  border-radius: var(--visualizer-face-radius, 0);
   background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
   box-shadow: var(--box-shadow-inverted-filtered);
 }

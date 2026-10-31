@@ -113,16 +113,19 @@ export interface GridWaveSettings {
   /** The edge's fall after each of its hits, which the centre solid's thump follows. */
   edgeShape: number
   edgeFallSec: number
+  /** The centre cutout's corner roundness, 0 square to 1 a circle (`cutoutRing.ts`). */
+  cutoutRound: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, edgeShape: 0, edgeFallSec: 0.25 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
   if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes
     && next.pulseSpeed === settings.pulseSpeed && next.pulseHalfLifeSec === settings.pulseHalfLifeSec && next.pulseFadeSec === settings.pulseFadeSec
     && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec
-    && next.edgeShape === settings.edgeShape && next.edgeFallSec === settings.edgeFallSec) return
+    && next.edgeShape === settings.edgeShape && next.edgeFallSec === settings.edgeFallSec
+    && next.cutoutRound === settings.cutoutRound) return
   settings = next
   for (const listener of listeners) listener()
 }

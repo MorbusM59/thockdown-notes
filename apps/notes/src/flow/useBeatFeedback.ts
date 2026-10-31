@@ -110,7 +110,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const paneColor = visualizer.pane.color
   const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, cutoutRound, waveShape, waveFallSec } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
-  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec])
+  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)
@@ -122,8 +122,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     root.setProperty('--visualizer-wave-sec', `${waveSec}s`)
     root.setProperty('--visualizer-pulse-color', pulseColor)
     root.setProperty('--visualizer-pulse-ring', pulseRingGradient(pulseColor, pulseSoftness))
-    root.setProperty('--visualizer-cutout-round', String(cutoutRound))
-  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec, pulseColor, pulseSoftness, cutoutRound])
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec, pulseColor, pulseSoftness])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

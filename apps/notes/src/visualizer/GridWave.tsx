@@ -38,6 +38,7 @@
  * into a package without touching anything else.
  */
 
+import { cutoutClosure } from './cutoutRing'
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { DEFAULT_VISUALIZER_CHANNEL, pulseTimeToTravel, pulseTravelBoxes, type VisualizerChannel } from '@thockdown/look/visualizer'
@@ -62,12 +63,14 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
 interface SceneBox { left: number; top: number; width: number; height: number }
 
-export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
+export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   boxPx: number
   originXPx: number
   originYPx: number
   /** The centre cutout in scene pixels, left out of the wave; null for none. */
   cutout: { left: number; top: number; size: number } | null
+  /** The cutout face's corner roundness (`cutoutRing.ts`): the wave follows the grid ring round it. */
+  cutoutRound: number
 }) {
   const anchorRef = useRef<HTMLDivElement>(null)
   const [sceneBox, setSceneBox] = useState<SceneBox | null>(null)
@@ -227,22 +230,33 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
   const turnSide = sceneBox ? Math.ceil(Math.hypot(sceneBox.width, sceneBox.height)) : 0
   const lines = `repeating-linear-gradient(to right, #000 0, #000 1px, transparent 1px, transparent ${boxPx}px), `
     + `repeating-linear-gradient(to bottom, #000 0, #000 1px, transparent 1px, transparent ${boxPx}px)`
-  const lineMask: CSSProperties = {
+  // A mask composites each layer onto the ones BELOW it, so "two line sets
+  // minus a rectangle" cannot be one element's mask (the union of the lines
+  // would have to be formed before the rectangle is taken out). The cutout's
+  // hole is therefore the outer element's mask and the lines the inner one's.
+  // With a rounded face the grid closes round it with a ring (cutoutRing.ts),
+  // which is a line too: added on top of both, so it survives the hole and
+  // the line mask alike.
+  const closure = cutout && cutout.size > 0 ? cutoutClosure(cutout, cutoutRound) : null
+  const ring = closure?.gridRing ?? null
+  const lineMask: CSSProperties = ring ? {
+    maskImage: `${ring.mask}, ${lines}`,
+    maskSize: `${ring.size}px ${ring.size}px, ${boxPx}px ${boxPx}px, ${boxPx}px ${boxPx}px`,
+    maskPosition: `${ring.left}px ${ring.top}px, ${originXPx}px ${originYPx}px, ${originXPx}px ${originYPx}px`,
+    maskRepeat: 'no-repeat, repeat, repeat',
+  } : {
     maskImage: lines,
     maskSize: `${boxPx}px ${boxPx}px`,
     maskPosition: `${originXPx}px ${originYPx}px`,
   }
-  // A mask composites each layer onto the ones BELOW it, so "two line sets
-  // minus a rectangle" cannot be one element's mask (the union of the lines
-  // would have to be formed before the rectangle is taken out). The cutout is
-  // therefore the outer element's mask and the lines the inner one's.
-  const holeMask: CSSProperties = cutout && cutout.size > 0 ? {
-    maskImage: 'linear-gradient(#000, #000), linear-gradient(#000, #000)',
-    maskSize: `${cutout.size}px ${cutout.size}px, 100% 100%`,
-    maskPosition: `${cutout.left}px ${cutout.top}px, 0 0`,
+  const hole = closure?.hole
+  const holeMask: CSSProperties = !hole ? {} : ring ? {
+    maskImage: `${ring.mask}, ${hole.maskImage}`,
+    maskSize: `${ring.size}px ${ring.size}px, ${hole.maskSize}`,
+    maskPosition: `${ring.left}px ${ring.top}px, ${hole.maskPosition}`,
     maskRepeat: 'no-repeat',
-    maskComposite: 'exclude',
-  } : {}
+    maskComposite: 'add, exclude',
+  } : hole
 
   return (
     <>

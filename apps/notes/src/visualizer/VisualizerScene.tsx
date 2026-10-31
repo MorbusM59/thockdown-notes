@@ -33,7 +33,8 @@ import { SpectrumBallistics, litRows } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { subscribePulseHits } from './pulseHits'
-import { readGridWaveSettings } from './gridWaveTurn'
+import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
+import { cutoutClosure, type CutoutRing } from './cutoutRing'
 import { pulseCurve } from '@thockdown/look/visualizer'
 import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
@@ -134,6 +135,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   const { width, height } = useBoxSize(scene)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
   const { columns, originXPx, originYPx, stripRows, spectrumTopRow, cutout } = layout
+  const cutoutRound = useSyncExternalStore(subscribeGridWaveSettings, readCutoutRound)
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const titleText = nowPlaying.song ? fitToRow(songTitleText(nowPlaying.song), columns) : ''
@@ -305,16 +307,25 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     top: originYPx + cutout.row * box + 1,
     size: Math.max(0, cutout.size * box - 1),
   }
-  // The outline grid has a hole where the cutout is, so the beat pane's
-  // copy of it (useBeatGridMirror.ts, drawn above the scene) leaves the
-  // cutout alone.
-  const cutoutHole: CSSProperties = cutout.size > 0 ? {
-    maskImage: 'linear-gradient(#000, #000), linear-gradient(#000, #000)',
-    maskSize: `100% 100%, ${cutoutRect.size}px ${cutoutRect.size}px`,
-    maskPosition: `0 0, ${cutoutRect.left}px ${cutoutRect.top}px`,
-    maskRepeat: 'no-repeat',
-    maskComposite: 'exclude',
-  } : {}
+  // The grid closes around the cutout (cutoutRing.ts): every grid layer
+  // has a hole there, and with a rounded face the two line kinds bend round
+  // it as rings. The outline grid's hole and ring are also on its inline
+  // style, so the beat pane's copy of it (useBeatGridMirror.ts, drawn above
+  // the scene) leaves the cutout alone and draws the same ring.
+  const closure = cutout.size > 0 ? cutoutClosure(cutoutRect, cutoutRound) : null
+  const outlineRing = closure?.outlineRing ?? null
+  const outlineGridStyle: CSSProperties = closure ? {
+    ...closure.hole,
+    ...(outlineRing ? {
+      '--grid-ring-mask': outlineRing.mask,
+      '--grid-ring-left': `${outlineRing.left}px`,
+      '--grid-ring-top': `${outlineRing.top}px`,
+      '--grid-ring-size': `${outlineRing.size}px`,
+    } : {}),
+  } as CSSProperties : {}
+  // The grid-line layer needs the hole only when the rings replace the
+  // straight lines; at roundness 0 the cutout covers it, as it always did.
+  const gridLinesHole: CSSProperties = closure?.gridRing ? closure.hole : {}
   const track = trackSpan(columns)
   const rowTop = (row: number) => originYPx + row * box
   const style = {
@@ -359,10 +370,11 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
           <div
             ref={gridOutlineRef}
             className="visualizer-grid thockdown-grid-outline-lines"
-            style={{ backgroundPosition: `${originXPx - 1}px ${originYPx - 1}px`, ...cutoutHole }}
+            style={{ backgroundPosition: `${originXPx - 1}px ${originYPx - 1}px`, ...outlineGridStyle }}
           />
-          <div className="visualizer-grid thockdown-grid-lines" style={{ backgroundPosition: `${originXPx}px ${originYPx}px`, zIndex: 4 }} />
-          <GridWave boxPx={box} originXPx={originXPx} originYPx={originYPx} cutout={cutout.size > 0 ? cutoutRect : null} />
+          <div className="visualizer-grid thockdown-grid-lines" style={{ backgroundPosition: `${originXPx}px ${originYPx}px`, zIndex: 4, ...gridLinesHole }} />
+          {outlineRing && <CutoutRingLayer ring={outlineRing} className="is-outline" />}
+          <GridWave boxPx={box} originXPx={originXPx} originYPx={originYPx} cutout={cutout.size > 0 ? cutoutRect : null} cutoutRound={cutoutRound} />
 
           {layout.titleRow !== null && <Letters runs={title} row={layout.titleRow} layout={layout} />}
           {layout.creditsRow !== null && <Letters runs={credits} row={layout.creditsRow} layout={layout} />}
@@ -384,6 +396,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
                 width: cutoutRect.size,
                 height: cutoutRect.size,
                 '--empty-state-scene-mask': sceneMaskUrl,
+                '--visualizer-face-radius': `${closure?.faceRadiusPx ?? 0}px`,
               } as CSSProperties}
               onClick={onCutoutClick}
             >
@@ -393,5 +406,19 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
         </>
       )}
     </div>
+  )
+}
+
+function readCutoutRound(): number {
+  return readGridWaveSettings().cutoutRound
+}
+
+/** The outline ring the grid closes round a rounded cutout with: the line's own colour, masked to the ring. */
+function CutoutRingLayer({ ring, className }: { ring: CutoutRing; className: string }) {
+  return (
+    <div
+      className={`visualizer-cutout-ring ${className}`}
+      style={{ left: ring.left, top: ring.top, width: ring.size, height: ring.size, maskImage: ring.mask, WebkitMaskImage: ring.mask }}
+    />
   )
 }

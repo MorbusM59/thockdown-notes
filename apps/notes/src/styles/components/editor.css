@@ -560,6 +560,52 @@
   background-image:
     repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
     repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
+  mask-image:     var(--grid-mask-image, none);
+  mask-size:      var(--grid-mask-size, auto);
+  mask-position:  var(--grid-mask-position, 0 0);
+  mask-repeat:    var(--grid-mask-repeat, repeat);
+  mask-composite: var(--grid-mask-composite, add);
+}
+
+/* A grid that closes round its hole with a ring (visualizer/cutoutRing.ts):
+   the ring lies inside the hole, so the hole is taken out of the pattern
+   alone (::before) rather than out of the pane, and the ring is ::after.
+   Only then: a pattern on a pseudo-element under the pane's opacity
+   composites a shade apart from the pane's own, so a grid without a ring
+   keeps the pattern on the pane. */
+.editor-beat-pane[data-grid-ring] {
+  background-image: none;
+  mask-image:       none;
+}
+.editor-beat-pane[data-grid-ring]::before {
+  content:  '';
+  position: absolute;
+  inset:    0;
+  background-image:
+    repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
+  background-size:     inherit;
+  background-position: inherit;
+  mask-image:     var(--grid-mask-image, none);
+  mask-size:      var(--grid-mask-size, auto);
+  mask-position:  var(--grid-mask-position, 0 0);
+  mask-repeat:    var(--grid-mask-repeat, repeat);
+  mask-composite: var(--grid-mask-composite, add);
+}
+
+/* The ring the grid closes round its hole with (visualizer/cutoutRing.ts),
+   in the pane's colour; absent when the grid has none. */
+.editor-beat-pane[data-grid-ring]::after {
+  content:  '';
+  position: absolute;
+  left:     var(--grid-ring-left, 0);
+  top:      var(--grid-ring-top, 0);
+  width:    var(--grid-ring-size, 0);
+  height:   var(--grid-ring-size, 0);
+  background-color: var(--beat-pane-color);
+  mask-image:  var(--grid-ring-mask, none);
+  mask-size:   100% 100%;
+  mask-repeat: no-repeat;
 }
 
 /* The pane in any view without a grid (render view, an empty slot, a mode
