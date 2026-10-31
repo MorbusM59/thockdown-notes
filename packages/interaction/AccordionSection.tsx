@@ -17,6 +17,7 @@
 // reader opened or closed since as it is.
 
 import { type MouseEvent, type ReactNode, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { AccordionSectionOpenContext } from './accordionSectionOpen'
 import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from './ScrollCurvePlan'
 import { type OptionsSearchSection, applyOptionsSelection, indexOptionsSection, selectOptions } from './optionsSearch'
 
@@ -56,18 +57,6 @@ interface AccordionGroupCtx {
 }
 
 const AccordionGroupContext = createContext<AccordionGroupCtx | null>(null)
-
-/**
- * Whether the section a control sits in is open. A section's content stays
- * mounted while it is folded, so a control holding state that should not
- * outlive the reader leaving the section (a linked colour target) reads this
- * rather than its own mount. Outside any section it is always open.
- */
-const AccordionSectionOpenContext = createContext(true)
-
-export function useAccordionSectionOpen(): boolean {
-  return useContext(AccordionSectionOpenContext)
-}
 
 interface SearchState {
   /** The term the DOM currently reflects; '' when no search is in force. */

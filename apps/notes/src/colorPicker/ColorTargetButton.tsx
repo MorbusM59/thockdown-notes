@@ -13,7 +13,7 @@
  * carried from one section to another.
  */
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from 'react'
-import { useAccordionSectionOpen } from '@thockdown/interaction/AccordionSection'
+import { useAccordionSectionOpen } from '@thockdown/interaction/accordionSectionOpen'
 import { hsvaToRgba, parseCssColorToRgba, rgbaToCssColor, rgbaToHsva } from '@thockdown/look/colorMath'
 import { applyStagedColor, getColorStaging, linkTarget, unlinkTarget, useLinkedColor } from './colorStaging'
 
