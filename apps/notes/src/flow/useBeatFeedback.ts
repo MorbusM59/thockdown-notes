@@ -99,13 +99,15 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
+  const waveColor = visualizer.immersive.waveColor
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)
     root.setProperty('--beat-edge-spread', `${edgeSpreadPx}px`)
     root.setProperty('--beat-edge-blur', `${edgeBlurPx}px`)
     root.setProperty('--beat-pane-color', paneColor)
-  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor])
+    root.setProperty('--visualizer-wave-color', waveColor)
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

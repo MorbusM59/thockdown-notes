@@ -123,11 +123,13 @@ export interface VisualizerImmersive {
   swayRangePx: number
   /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
   swaySpread: number
+  /** The grid wave's colour (apps/notes's GridWave.tsx), picked like any layout colour, before the theme's invert. */
+  waveColor: string
 }
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
 export const IMMERSIVE_SWAY_RANGE_MAX_PX = 200
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)' }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -335,6 +337,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
     swayRangePx: Math.round(bounded(source.swayRangePx, 0, IMMERSIVE_SWAY_RANGE_MAX_PX, d.swayRangePx)),
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
+    waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
   }
 }
 

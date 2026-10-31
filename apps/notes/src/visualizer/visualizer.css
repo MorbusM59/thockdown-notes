@@ -143,11 +143,10 @@
   bottom: 0;
   left: calc(-1 * var(--grid-wave-period));
   right: 0;
-  --grid-wave-color: #00000016;
   background-image: repeating-linear-gradient(
     to right,
     transparent 0,
-    var(--grid-wave-color) calc(var(--grid-wave-period) / 2),
+    var(--visualizer-wave-color) calc(var(--grid-wave-period) / 2),
     transparent var(--grid-wave-period)
   );
   will-change: transform;

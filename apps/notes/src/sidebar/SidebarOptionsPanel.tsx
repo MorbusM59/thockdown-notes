@@ -2423,6 +2423,11 @@ export function SidebarOptionsPanel({
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout. Its delay is kept for every layout."
       >
           <ColorPickerRow />
+          <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
+            <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
+            <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
+          </div>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[1]}>
               <CompactScrollbarSlider
@@ -2439,10 +2444,6 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
               />
             </OptionsSliderRows>
-          </div>
-          <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
-            <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
-            <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
           </div>
           {visualizer.caret.followsMusic && renderBeatCaret()}
           {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}

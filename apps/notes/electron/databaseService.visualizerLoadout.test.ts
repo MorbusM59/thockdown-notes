@@ -23,7 +23,7 @@ describe('DatabaseService visualizer loadout', () => {
     caret: { followsMusic: true, effect: -0.3, shape: 0.4, fallSec: 0.6 },
     edge: { effect: -0.7, source: 'snare', frequencyHz: 90, octaves: 2, groove: 0.7, contrast: 0.2, shape: -0.8, fallSec: 0.15, color: 'rgba(12, 34, 56, 0.5)', spreadPx: 14, blurPx: 70 },
     pane: { effect: 0.5, source: 'hat', frequencyHz: 8000, octaves: 0.5, groove: 0.35, contrast: 0.6, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },
-    immersive: { glazeStrength: 0.15, glazeSpread: -0.4, swayRangePx: 120, swaySpread: 0.8 },
+    immersive: { glazeStrength: 0.15, glazeSpread: -0.4, swayRangePx: 120, swaySpread: 0.8, waveColor: 'rgba(10, 200, 90, 0.3)' },
   }
 
   const activeLight = (service: DatabaseService): UiLayoutLoadout => {

@@ -1,6 +1,7 @@
 /**
- * The visualizer's smooth wave: soft bands of the caret's colour, at half its
- * alpha, travelling left to right across the box grid's LINES (the 1px lines
+ * The visualizer's smooth wave: soft bands of the layout's wave colour
+ * (Options > Visualizer, `--visualizer-wave-color`), travelling left to
+ * right across the box grid's LINES (the 1px lines
  * between the boxes, `.thockdown-grid-lines`), brightening them as they pass.
  *
  * It is painted ABOVE the glaze, so the bands keep their colour instead of
