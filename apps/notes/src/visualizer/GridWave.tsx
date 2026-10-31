@@ -193,9 +193,10 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   // The ring itself: the face's rounded square, PULSE_RING_SHARE of its
   // half-side wide at the rim, drawn once per change of colour, softness,
   // roundness or size and then only scaled.
+  const pulseRingSize = cutout?.size ?? 0
   const pulseRingImage = useMemo(
-    () => (cutout && cutout.size > 0 ? drawPulseRing(cutout.size, cutoutRound, pulseColor, pulseSoftness) : 'none'),
-    [cutout?.size, cutoutRound, pulseColor, pulseSoftness],
+    () => (pulseRingSize > 0 ? drawPulseRing(pulseRingSize, cutoutRound, pulseColor, pulseSoftness) : 'none'),
+    [pulseRingSize, cutoutRound, pulseColor, pulseSoftness],
   )
   // Read through a ref, so a resize or a slider changes the next pulse
   // without cancelling the pulses under way.
