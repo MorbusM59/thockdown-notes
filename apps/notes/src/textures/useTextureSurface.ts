@@ -4,7 +4,7 @@ import type { TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, 
 import { clampMaterialSettings } from './generateTexture';
 import { beginBackgroundWork } from '../shared/backgroundWork';
 
-export const TEXTURE_ALGORITHM_VERSION = 2;
+export const TEXTURE_ALGORITHM_VERSION = 3;
 export const TEXTURE_REPEAT_TILE_SIZE = 512;
 
 function revokeUrl(url: string | null): void {
