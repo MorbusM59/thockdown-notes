@@ -169,9 +169,18 @@ export function linkTarget(id: string, color: HsvaColor, write: (css: string) =>
   publish({ ...state, color: copyIntoStaging(state.color, color, ALL_CHANNELS), linkedId: id })
 }
 
-/** Ends the link, writing what is still pending. The staged colour stays. */
-export function unlinkTarget(id?: string) {
+/**
+ * Ends the link, writing what is still pending -- unless `discard`, for a
+ * target whose value was changed from outside (a layout switch), where the
+ * pending write would land the old colour on the new value. The staged
+ * colour stays.
+ */
+export function unlinkTarget(id?: string, discard = false) {
   if (state.linkedId === null || (id !== undefined && id !== state.linkedId)) return
+  if (discard && pendingWrite !== null) {
+    clearTimeout(pendingWrite)
+    pendingWrite = null
+  }
   flushLinkWrite()
   linkWrite = null
   publish({ ...state, linkedId: null })

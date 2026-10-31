@@ -17,6 +17,19 @@ import { useAccordionSectionOpen } from '@thockdown/interaction/accordionSection
 import { hsvaToRgba, parseCssColorToRgba, rgbaToCssColor, rgbaToHsva } from '@thockdown/look/colorMath'
 import { applyStagedColor, getColorStaging, linkTarget, unlinkTarget, useLinkedColor } from './colorStaging'
 
+/**
+ * Whether two CSS colours are one colour. A target may store a written colour
+ * in another form than it was written in (a texture keeps HSVA), so both are
+ * compared after the same RGBA -> HSVA -> RGBA trip.
+ */
+function sameColor(a: string, b: string): boolean {
+  const normal = (css: string) => {
+    const rgba = parseCssColorToRgba(css)
+    return rgba ? rgbaToCssColor(hsvaToRgba(rgbaToHsva(rgba))) : css
+  }
+  return normal(a) === normal(b)
+}
+
 export interface ColorTargetButtonProps {
   /** The target's current colour, as CSS. */
   color: string
@@ -39,6 +52,14 @@ export function ColorTargetButton({ color, glyph, tooltip, onApply, linkId, clas
   const sectionOpen = useAccordionSectionOpen()
   const onApplyRef = useRef(onApply)
   onApplyRef.current = onApply
+  // The colour this target should hold while linked: what it had when linked,
+  // then whatever the link last wrote. Anything else arriving in `color` was
+  // written from outside (a layout switch), and the link would paint the old
+  // staging over it, so it ends the link.
+  const expectedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (isLinked && expectedRef.current !== null && sameColor(color, expectedRef.current) === false) unlinkTarget(id, true)
+  }, [color, isLinked, id])
 
   useEffect(() => {
     if (!sectionOpen) unlinkTarget(id)
@@ -58,7 +79,12 @@ export function ColorTargetButton({ color, glyph, tooltip, onApply, linkId, clas
           return
         }
         const rgba = parseCssColorToRgba(color)
-        if (rgba) linkTarget(id, rgbaToHsva(rgba), (css) => onApplyRef.current(css))
+        if (!rgba) return
+        expectedRef.current = color
+        linkTarget(id, rgbaToHsva(rgba), (css) => {
+          expectedRef.current = css
+          onApplyRef.current(css)
+        })
       }}
       onPointerDown={(event) => {
         if (event.button !== 2) return

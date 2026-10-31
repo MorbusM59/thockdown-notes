@@ -88,9 +88,22 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
     setDraft({ surface, material: next })
   }
 
+  /**
+   * A colour write goes straight through: a colour only tints the texture and
+   * never regenerates it, so it needs no debounce of its own (the link's is
+   * enough). A pending shape change for the same surface carries it along.
+   */
   const setColor = (surface: TextureSurfaceKey, css: string) => {
     const rgba = parseCssColorToRgba(css)
-    if (rgba) edit(surface, (current) => ({ ...current, color: rgbaToHsva(rgba) }))
+    if (!rgba) return
+    const color = rgbaToHsva(rgba)
+    const pending = pendingRef.current
+    if (pending?.surface === surface) {
+      pending.material = { ...pending.material, color }
+      setDraft({ surface, material: pending.material })
+      return
+    }
+    onWriteRef.current(surface, { ...materialsRef.current[surface], color, enabled: true })
   }
 
   const previewCss = useTextureSurface({
