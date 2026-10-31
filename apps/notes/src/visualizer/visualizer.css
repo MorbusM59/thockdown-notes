@@ -125,6 +125,7 @@
 }
 
 .visualizer-grid-wave {
+  --grid-wave-period: calc(var(--visualizer-wave-boxes, 128) * var(--grid-wave-box));
   position: fixed;
   z-index: 6001;
   overflow: hidden;
@@ -135,6 +136,12 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+}
+
+.visualizer-grid-wave-turn {
+  position: absolute;
+  will-change: transform;
+  animation: var(--visualizer-wave-turn-name, none) var(--visualizer-wave-turn-sec, 1s) linear infinite var(--visualizer-wave-turn-direction, normal);
 }
 
 .visualizer-grid-wave-bands {
@@ -150,7 +157,7 @@
     transparent var(--grid-wave-period)
   );
   will-change: transform;
-  animation: visualizer-grid-wave var(--grid-wave-duration) linear infinite;
+  animation: visualizer-grid-wave var(--visualizer-wave-sec, 6s) linear infinite;
 }
 
 @keyframes visualizer-grid-wave {
@@ -158,8 +165,14 @@
   to { transform: translateX(var(--grid-wave-period)); }
 }
 
+@keyframes visualizer-grid-wave-turn {
+  from { transform: rotate(0turn); }
+  to { transform: rotate(1turn); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .visualizer-grid-wave-bands {
+  .visualizer-grid-wave-bands,
+  .visualizer-grid-wave-turn {
     animation: none;
   }
 }

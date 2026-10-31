@@ -187,7 +187,7 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, waveColor: 7 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor })
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurnsPerSec: -5 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurnsPerSec: -1 })
     expect(sanitizeVisualizer({}, false).immersive).toEqual(DEFAULT_VISUALIZER_IMMERSIVE)
   })
 })

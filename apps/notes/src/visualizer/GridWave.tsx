@@ -15,10 +15,16 @@
  * A frame repaints nothing. The outer element is masked to everything but
  * the cutout; the one inside it is masked to the grid lines by the same
  * gradients that draw them, at the same tile size and position. Neither
- * moves. The inner one carries one repeating band
- * pattern, one period wider than the scene, and is moved by a CSS animation
- * of `transform` alone, one period per cycle, so the loop is seamless and
- * the compositor runs it without the main thread.
+ * moves. Inside the lines sits a square as wide as the scene's diagonal,
+ * centred on it, which a CSS animation of `transform` turns at the layout's
+ * rate (Options > Visualizer, `waveTurnsPerSec`); and inside that, one
+ * repeating band pattern, one wave length wider than the square, moved by a
+ * second `transform` animation one wave length per cycle, so the loop is
+ * seamless. Both animations run on the compositor without the main thread.
+ *
+ * The wave length, its travel time and the rotation are the layout's
+ * (`immersive.waveBoxes`, `waveSec`, `waveTurnsPerSec`), published as CSS
+ * variables by `useBeatFeedback`, so a slider changes no React state here.
  *
  * Self-contained: it reads only the box size, the grid's origin and the
  * cutout, which the scene already has, so it can be switched off or moved
@@ -27,11 +33,6 @@
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-
-/** A wave's length, in boxes, from one band's peak to the next. */
-const PERIOD_BOXES = 128
-/** Seconds a band takes to travel one period. */
-const PERIOD_SEC = 6
 
 interface SceneBox { left: number; top: number; width: number; height: number }
 
@@ -67,7 +68,9 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     }
   }, [])
 
-  const periodPx = PERIOD_BOXES * boxPx
+  // The rotating layer is a square as wide as the scene's diagonal, centred
+  // on the scene, so the bands cover every corner at every angle.
+  const turnSide = sceneBox ? Math.ceil(Math.hypot(sceneBox.width, sceneBox.height)) : 0
   const lines = `repeating-linear-gradient(to right, #000 0, #000 1px, transparent 1px, transparent ${boxPx}px), `
     + `repeating-linear-gradient(to bottom, #000 0, #000 1px, transparent 1px, transparent ${boxPx}px)`
   const lineMask: CSSProperties = {
@@ -97,12 +100,21 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
           style={{
             ...sceneBox,
             ...holeMask,
-            '--grid-wave-period': `${periodPx}px`,
-            '--grid-wave-duration': `${PERIOD_SEC}s`,
+            '--grid-wave-box': `${boxPx}px`,
           } as CSSProperties}
         >
           <div className="visualizer-grid-wave-lines" style={lineMask}>
-            <div className="visualizer-grid-wave-bands" />
+            <div
+              className="visualizer-grid-wave-turn"
+              style={{
+                width: turnSide,
+                height: turnSide,
+                left: (sceneBox.width - turnSide) / 2,
+                top: (sceneBox.height - turnSide) / 2,
+              }}
+            >
+              <div className="visualizer-grid-wave-bands" />
+            </div>
           </div>
         </div>,
         host,

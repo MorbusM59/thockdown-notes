@@ -125,11 +125,25 @@ export interface VisualizerImmersive {
   swaySpread: number
   /** The grid wave's colour (apps/notes's GridWave.tsx), picked like any layout colour, before the theme's invert. */
   waveColor: string
+  /** The grid wave's length, in boxes, from one band's peak to the next. */
+  waveBoxes: number
+  /** Seconds a wave band takes to travel one wave length. */
+  waveSec: number
+  /**
+   * The grid wave's rotation, in turns per second, -1..1: 0 holds it still,
+   * negative turns it counter-clockwise, positive clockwise.
+   */
+  waveTurnsPerSec: number
 }
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
 export const IMMERSIVE_SWAY_RANGE_MAX_PX = 200
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)' }
+export const WAVE_BOXES_MIN = 2
+export const WAVE_BOXES_MAX = 256
+export const WAVE_SEC_MIN = 0.5
+export const WAVE_SEC_MAX = 30
+export const WAVE_TURNS_PER_SEC_MAX = 1
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurnsPerSec: 0 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -338,6 +352,9 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     swayRangePx: Math.round(bounded(source.swayRangePx, 0, IMMERSIVE_SWAY_RANGE_MAX_PX, d.swayRangePx)),
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
     waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
+    waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
+    waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
+    waveTurnsPerSec: bounded(source.waveTurnsPerSec, -WAVE_TURNS_PER_SEC_MAX, WAVE_TURNS_PER_SEC_MAX, d.waveTurnsPerSec),
   }
 }
 

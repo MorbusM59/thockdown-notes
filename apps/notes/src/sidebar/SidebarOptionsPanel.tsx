@@ -29,6 +29,11 @@ import {
   DEFAULT_VISUALIZER_IMMERSIVE,
   IMMERSIVE_GLAZE_STRENGTH_MAX,
   IMMERSIVE_SWAY_RANGE_MAX_PX,
+  WAVE_BOXES_MAX,
+  WAVE_BOXES_MIN,
+  WAVE_SEC_MAX,
+  WAVE_SEC_MIN,
+  WAVE_TURNS_PER_SEC_MAX,
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
   SOURCE_SLIDER_MAX,
@@ -2452,7 +2457,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Immersive</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive settings">
-            <OptionsSliderRows rows={[2, 2]}>
+            <OptionsSliderRows rows={[2, 2, 3]}>
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2504,6 +2509,45 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swaySpread}
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-wave-boxes"
+                min={WAVE_BOXES_MIN}
+                max={WAVE_BOXES_MAX}
+                step={1}
+                value={visualizer.immersive.waveBoxes}
+                trackLabel="wave"
+                tooltipLabel="Boxes from one band of the grid wave to the next, in the visualizer mode (F3)"
+                ariaLabel="Immersive: grid wave length in boxes"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.waveBoxes}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveBoxes: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-wave-sec"
+                min={WAVE_SEC_MIN}
+                max={WAVE_SEC_MAX}
+                step={0.1}
+                value={visualizer.immersive.waveSec}
+                trackLabel="travel"
+                tooltipLabel="Seconds a band of the grid wave takes to travel one wave length"
+                ariaLabel="Immersive: seconds the grid wave takes to travel one wave length"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.waveSec}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveSec: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-wave-turn"
+                min={-WAVE_TURNS_PER_SEC_MAX}
+                max={WAVE_TURNS_PER_SEC_MAX}
+                step={0.01}
+                value={visualizer.immersive.waveTurnsPerSec}
+                trackLabel="turn"
+                tooltipLabel="Seconds the grid wave takes for one turn: the centre holds it still, left turns it counter-clockwise (shown negative), right clockwise, up to one turn a second at either end"
+                ariaLabel="Immersive: grid wave rotation, negative counter-clockwise, in turns per second"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.waveTurnsPerSec}
+                formatValue={(value) => (Math.abs(value) < 0.005 ? '0' : (Math.sign(value) / Math.abs(value)).toFixed(1))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurnsPerSec: Math.abs(value) < 0.005 ? 0 : value } }))}
               />
             </OptionsSliderRows>
           </div>
