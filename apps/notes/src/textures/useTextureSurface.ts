@@ -28,7 +28,9 @@ function createBlobUrl(data: Uint8Array, mimeType: string): string {
  * on every change. So the new image is decoded first (an `Image` sharing the
  * URL warms the same decoded-image cache the style will read), and only then
  * does the style switch to it; the old image stays on screen until that
- * moment. `isCurrent` is asked after the decode, because the settings may
+ * moment. The `Image` asks for CORS because CSS fetches a mask image that
+ * way, and the decoded-image cache keeps the two modes apart: without it the
+ * decode warmed an entry the mask never read, and the flash stayed. `isCurrent` is asked after the decode, because the settings may
  * have changed while it ran, and a texture nobody wants any more is revoked
  * instead of shown. The previous URL is revoked a frame after the switch,
  * once the new one has painted.
@@ -40,6 +42,7 @@ async function swapUrl(
   setUrl: (value: string | null) => void,
 ): Promise<void> {
   const image = new Image();
+  image.crossOrigin = 'anonymous';
   image.src = nextUrl;
   try {
     await image.decode();

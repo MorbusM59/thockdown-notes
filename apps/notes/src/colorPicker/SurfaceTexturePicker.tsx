@@ -16,7 +16,7 @@
  * written texture is regenerated on the surface itself; a pending change is
  * written at once when the link moves or the panel closes, so none is lost.
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { hsvaToRgba, parseCssColorToRgba, rgbaToCssColor, rgbaToHsva } from '@thockdown/look/colorMath'
 import {
@@ -91,7 +91,8 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
   // it at once, as the linked swatch does, rather than after the write.
   const liveColor = useLinkedColor(active ? linkIdOf(active) : '')
   const [base, setBase] = useState<string | null>(null)
-  useEffect(() => {
+  // Before paint, so a switch of surface never shows the new colour over the old background for a frame.
+  useLayoutEffect(() => {
     setBase(active ? surfaceBackground(active) : null)
   }, [active, materials])
 
