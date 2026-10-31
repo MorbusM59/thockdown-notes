@@ -147,10 +147,14 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   // The frame loop. Rebuilt when the layout changes, since the number of
   // bands is the number of columns and the canvas is sized to the strip.
   // The solid's thump: on each hit the centre pulse sets off on (the edge's
-  // band, `pulseHits.ts`), the solid's layer (the cutout's ::before, clipped
-  // by the cutout) is scaled up by THUMP_SCALE and falls back on the edge's
-  // own fall, so the solid's beat and the ring leaving it are one event.
-  // A Web Animation on transform: composited, nothing repaints.
+  // band, `pulseHits.ts`), the solid grows by THUMP_SCALE and falls back on
+  // the edge's own fall, so the solid's beat and the ring leaving it are one
+  // event. Only the SOLID grows: the cutout's ::before paints the stripe
+  // texture through a mask whose second layer is the solid, so the animation
+  // sizes that mask layer alone (the first, the full square it is XORed
+  // with, stays at 100%) and the stripes keep their scale. The solid's mask
+  // is an animated image that repaints the layer every frame anyway, so a
+  // mask size costs nothing a transform would have saved.
   const hasCutout = cutout.size > 0
   useEffect(() => {
     const element = cutoutRef.current
@@ -162,7 +166,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       const { edgeShape, edgeFallSec } = readGridWaveSettings()
       const keyframes: Keyframe[] = []
       for (let i = 0; i <= THUMP_KEYFRAMES; i++) {
-        keyframes.push({ transform: `scale(${1 + THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape)})` })
+        const size = `100% 100%, ${(100 * (1 + THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape))).toFixed(2)}% auto`
+        keyframes.push({ maskSize: size, webkitMaskSize: size } as Keyframe)
       }
       running?.cancel()
       running = element.animate(keyframes, { duration: edgeFallSec * 1000, easing: 'linear', pseudoElement: '::before' })
