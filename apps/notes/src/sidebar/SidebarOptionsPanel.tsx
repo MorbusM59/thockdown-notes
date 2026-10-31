@@ -32,7 +32,8 @@ import {
   WAVE_BOXES_MAX,
   WAVE_BOXES_MIN,
   WAVE_SEC_MAX,
-  PULSE_DECAY_MAX,
+  PULSE_SEC_MAX,
+  PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
   WAVE_SEC_MIN,
@@ -2568,7 +2569,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
-            <OptionsSliderRows rows={[3]}>
+            <OptionsSliderRows rows={[2, 2]}>
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
                 min={PULSE_SPEED_MIN}
@@ -2583,17 +2584,30 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSpeed: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
-                id="visualizer-pulse-decay"
-                min={0}
-                max={PULSE_DECAY_MAX}
-                step={0.01}
-                value={visualizer.immersive.pulseDecay}
-                trackLabel="decay"
-                tooltipLabel="How much of its speed the centre pulse loses each second, in percent: 0 keeps a steady speed, 50 halves it every second. A strong decay can stop the ring before it leaves the screen"
-                ariaLabel="Immersive: centre pulse speed lost per second, percent"
-                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseDecay}
-                formatValue={(value) => String(Math.round(value * 100))}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseDecay: value } }))}
+                id="visualizer-pulse-half-life"
+                min={PULSE_SEC_MIN}
+                max={PULSE_SEC_MAX}
+                step={0.1}
+                value={visualizer.immersive.pulseHalfLifeSec}
+                trackLabel="slow"
+                tooltipLabel="How quickly the centre pulse slows, in milliseconds: its speed halves every this long. A short half-life can stop the ring before it leaves the screen"
+                ariaLabel="Immersive: centre pulse speed half-life, milliseconds"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseHalfLifeSec}
+                formatValue={(value) => String(Math.round(value * 1000))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseHalfLifeSec: Math.round(value * 10) / 10 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-fade"
+                min={PULSE_SEC_MIN}
+                max={PULSE_SEC_MAX}
+                step={0.1}
+                value={visualizer.immersive.pulseFadeSec}
+                trackLabel="fade"
+                tooltipLabel="How long each centre pulse takes to fade from full to nothing, in milliseconds"
+                ariaLabel="Immersive: centre pulse fade duration, milliseconds"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseFadeSec}
+                formatValue={(value) => String(Math.round(value * 1000))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseFadeSec: Math.round(value * 10) / 10 } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-pulse-softness"

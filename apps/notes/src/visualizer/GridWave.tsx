@@ -49,8 +49,6 @@ import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWa
 const PULSE_RING_SHARE = 0.25
 /** Keyframes sampled along the pulse's travel curve; linear between them. */
 const PULSE_KEYFRAMES = 24
-/** A pulse its decay stops short is ended after this many half-lives of its speed (under 1% of its speed left). */
-const PULSE_STALL_HALF_LIVES = 7
 /**
  * Prerendered rings in the pulse STACK: a hit scales the first one not
  * already travelling, so pulses overlap rather than cut each other off. With
@@ -96,7 +94,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, pulseSpeed, pulseDecay, waveShape, waveFallSec } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -185,8 +183,8 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     : 0
   // Read through a ref, so a resize or a slider changes the next pulse
   // without cancelling the pulses under way.
-  const pulseInputs = useRef({ pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseDecay })
-  pulseInputs.current = { pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseDecay }
+  const pulseInputs = useRef({ pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseHalfLifeSec, pulseFadeSec })
+  pulseInputs.current = { pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseHalfLifeSec, pulseFadeSec }
   const hasPulse = pulseInnerPx > 0
   useEffect(() => {
     const layers = pulseRefs.current.filter((layer): layer is HTMLDivElement => layer !== null)
@@ -194,15 +192,16 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     const running: Array<Animation | null> = layers.map(() => null)
     const startedAt: number[] = layers.map(() => -Infinity)
     const unsubscribe = subscribePulseHits(() => {
-      const { pulseExitScale: exitScale, pulseInnerPx: innerPx, boxPx: box, pulseSpeed: speed, pulseDecay: decay } = pulseInputs.current
+      const { pulseExitScale: exitScale, pulseInnerPx: innerPx, boxPx: box, pulseSpeed: speed, pulseHalfLifeSec: halfLife, pulseFadeSec: fadeSec } = pulseInputs.current
       if (reducedMotion.matches || !(exitScale > 1) || !(box > 0)) return
       const exitBoxes = ((exitScale - 1) * innerPx) / box
-      const exitSec = pulseTimeToTravel(exitBoxes, speed, decay)
-      const durationSec = Number.isFinite(exitSec) ? exitSec : (PULSE_STALL_HALF_LIVES * Math.LN2) / -Math.log(1 - decay)
+      // Done when it has left the screen or faded out, whichever is first;
+      // a ring the half-life stops short has faded by then all the same.
+      const durationSec = Math.min(pulseTimeToTravel(exitBoxes, speed, halfLife), fadeSec)
       const keyframes: Keyframe[] = []
       for (let i = 0; i <= PULSE_KEYFRAMES; i++) {
         const t = (i / PULSE_KEYFRAMES) * durationSec
-        keyframes.push({ transform: `scale(${1 + (pulseTravelBoxes(t, speed, decay) * box) / innerPx})` })
+        keyframes.push({ transform: `scale(${1 + (pulseTravelBoxes(t, speed, halfLife) * box) / innerPx})`, opacity: 1 - t / fadeSec })
       }
       // The first layer at rest, or else the one that set off longest ago.
       let pick = 0

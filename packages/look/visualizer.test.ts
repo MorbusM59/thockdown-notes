@@ -187,18 +187,19 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseDecay: 2, pulseSoftness: 7 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: DEFAULT_VISUALIZER_IMMERSIVE.pulseColor, pulseSpeed: 100, pulseDecay: 0.5, pulseSoftness: 1 })
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: DEFAULT_VISUALIZER_IMMERSIVE.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1 })
     expect(sanitizeVisualizer({}, false).immersive).toEqual(DEFAULT_VISUALIZER_IMMERSIVE)
   })
 })
 
 describe('pulseTravelBoxes', () => {
-  it('travels at its speed undecayed, and loses the decay share of its speed each second', () => {
-    expect(pulseTravelBoxes(2, 10, 0)).toBe(20)
+  it('halves its speed every half-life', () => {
     // Speed at t: the travel's derivative, read numerically.
-    const speedAt = (t: number) => (pulseTravelBoxes(t + 1e-4, 10, 0.5) - pulseTravelBoxes(t, 10, 0.5)) / 1e-4
-    expect(speedAt(1) / speedAt(0)).toBeCloseTo(0.5, 3)
-    expect(pulseTimeToTravel(pulseTravelBoxes(1.7, 10, 0.3), 10, 0.3)).toBeCloseTo(1.7, 6)
-    expect(pulseTimeToTravel(100, 10, 0.5)).toBe(Infinity)
+    const speedAt = (t: number) => (pulseTravelBoxes(t + 1e-5, 10, 0.3) - pulseTravelBoxes(t, 10, 0.3)) / 1e-5
+    expect(speedAt(0)).toBeCloseTo(10, 2)
+    expect(speedAt(0.3) / speedAt(0)).toBeCloseTo(0.5, 3)
+    expect(pulseTimeToTravel(pulseTravelBoxes(1.7, 10, 2), 10, 2)).toBeCloseTo(1.7, 6)
+    // Total reach is speed x half-life / ln 2: farther never arrives.
+    expect(pulseTimeToTravel(100, 10, 1)).toBe(Infinity)
   })
 })

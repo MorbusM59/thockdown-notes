@@ -146,8 +146,10 @@ export interface VisualizerImmersive {
   pulseColor: string
   /** The centre pulse's starting speed, in grid boxes per second, at the ring's inner edge. */
   pulseSpeed: number
-  /** 0 to 0.5: the share of its speed the centre pulse loses each second (exponentially); 0 keeps it constant. */
-  pulseDecay: number
+  /** 0.1 to 5 seconds: the centre pulse's speed halves every this long (exponentially). */
+  pulseHalfLifeSec: number
+  /** 0.1 to 5 seconds: each pulse layer fades linearly from full to nothing over this long. */
+  pulseFadeSec: number
   /** 0 to 1: how gradually the pulse's ring fades at its edges (`pulseRingGradient`); 0 is a hard-edged band, 1 a smooth bell. */
   pulseSoftness: number
 }
@@ -160,7 +162,8 @@ export const WAVE_SEC_MIN = 0.5
 export const WAVE_SEC_MAX = 30
 export const PULSE_SPEED_MIN = 2
 export const PULSE_SPEED_MAX = 100
-export const PULSE_DECAY_MAX = 0.5
+export const PULSE_SEC_MIN = 0.1
+export const PULSE_SEC_MAX = 5
 /**
  * Beats per turn of the grid wave's TERTIARY rotation at each step away from
  * still (`waveTurn` 1..5, or -1..-5): the secondary turns 4 times slower and
@@ -174,7 +177,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseDecay: 0, pulseSoftness: 1 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -390,7 +393,8 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     waveFallSec: bounded(source.waveFallSec, FALL_MIN_SEC, FALL_MAX_SEC, d.waveFallSec),
     pulseColor: typeof source.pulseColor === 'string' && source.pulseColor.length > 0 ? source.pulseColor : d.pulseColor,
     pulseSpeed: bounded(source.pulseSpeed, PULSE_SPEED_MIN, PULSE_SPEED_MAX, d.pulseSpeed),
-    pulseDecay: bounded(source.pulseDecay, 0, PULSE_DECAY_MAX, d.pulseDecay),
+    pulseHalfLifeSec: bounded(source.pulseHalfLifeSec, PULSE_SEC_MIN, PULSE_SEC_MAX, d.pulseHalfLifeSec),
+    pulseFadeSec: bounded(source.pulseFadeSec, PULSE_SEC_MIN, PULSE_SEC_MAX, d.pulseFadeSec),
     pulseSoftness: bounded(source.pulseSoftness, 0, 1, d.pulseSoftness),
   }
 }
@@ -470,16 +474,14 @@ export function sourceAtSlider(value: number, frequencyHz: number): Pick<Visuali
  * `v(t) = speed (1 - decay)^t`, integrated. With decay it travels at most
  * `speed / -ln(1 - decay)`.
  */
-export function pulseTravelBoxes(t: number, speed: number, decay: number): number {
-  if (decay <= 0) return speed * t
-  const k = -Math.log(1 - decay)
+export function pulseTravelBoxes(t: number, speed: number, halfLifeSec: number): number {
+  const k = Math.LN2 / halfLifeSec
   return (speed * (1 - Math.exp(-k * t))) / k
 }
 
 /** Seconds the centre pulse takes to travel `distance` boxes, Infinity when its decay stops it short. */
-export function pulseTimeToTravel(distance: number, speed: number, decay: number): number {
-  if (decay <= 0) return distance / speed
-  const k = -Math.log(1 - decay)
+export function pulseTimeToTravel(distance: number, speed: number, halfLifeSec: number): number {
+  const k = Math.LN2 / halfLifeSec
   const share = (distance * k) / speed
   return share >= 1 ? Infinity : -Math.log(1 - share) / k
 }

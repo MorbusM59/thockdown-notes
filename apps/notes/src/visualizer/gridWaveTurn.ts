@@ -105,18 +105,19 @@ export interface GridWaveSettings {
   waveTurn: number
   waveBoxes: number
   pulseSpeed: number
-  pulseDecay: number
+  pulseHalfLifeSec: number
+  pulseFadeSec: number
   /** The wave's fall after each snare hit. */
   waveShape: number
   waveFallSec: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseDecay: 0, waveShape: 0, waveFallSec: 0.25 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
   if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes
-    && next.pulseSpeed === settings.pulseSpeed && next.pulseDecay === settings.pulseDecay
+    && next.pulseSpeed === settings.pulseSpeed && next.pulseHalfLifeSec === settings.pulseHalfLifeSec && next.pulseFadeSec === settings.pulseFadeSec
     && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec) return
   settings = next
   for (const listener of listeners) listener()
