@@ -8731,7 +8731,20 @@ ${markdownHtml}
                 </div>
 
                 {isSidebarScrollbarMode ? (
-                  <aside className="sidebar-scrollbar-slot" aria-hidden="true">
+                  <aside
+                    className="sidebar-scrollbar-slot"
+                    aria-hidden="true"
+                    // The rail sits beside the scroller, not inside it, so a
+                    // wheel over any part of it would otherwise scroll
+                    // nothing. Hand the wheel's travel to the list it
+                    // belongs to, in the browser's own units.
+                    onWheel={(event) => {
+                      const scroller = getSidebarScrollerForMode(sidebarMode)
+                      if (!scroller || event.ctrlKey) return
+                      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? scroller.clientHeight : 1
+                      scroller.scrollBy({ top: event.deltaY * unit })
+                    }}
+                  >
                     <div className="sidebar-scrollbar-slot-inner">
                       <div className="thockdown-scroll-rail sidebar-thockdown-scroll-rail">
                         <div
