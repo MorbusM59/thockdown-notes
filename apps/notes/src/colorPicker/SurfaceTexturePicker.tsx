@@ -81,7 +81,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
   const edit = (surface: TextureSurfaceKey, update: (current: TextureMaterialSettings) => TextureMaterialSettings) => {
     const pending = pendingRef.current
     const current = pending?.surface === surface ? pending.material : materialsRef.current[surface]
-    const next = { ...update(current), enabled: true }
+    const next = update(current)
     if (pending) window.clearTimeout(pending.timer)
     if (pending && pending.surface !== surface) onWriteRef.current(pending.surface, pending.material)
     pendingRef.current = { surface, material: next, timer: window.setTimeout(flush, TEXTURE_WRITE_DEBOUNCE_MS) }
@@ -103,7 +103,27 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
       setDraft({ surface, material: pending.material })
       return
     }
-    onWriteRef.current(surface, { ...materialsRef.current[surface], color, enabled: true })
+    onWriteRef.current(surface, { ...materialsRef.current[surface], color })
+  }
+
+  /**
+   * A right click on a surface paints it: the staged colour through the
+   * channel mask (`css`, already resolved by ColorTargetButton), and -- while
+   * a surface is linked and its texture is on -- that texture's seed,
+   * granularity and smoothness too. With the linked texture off, or nothing
+   * linked, it paints the colour alone.
+   */
+  const paint = (surface: TextureSurfaceKey, css: string) => {
+    if (!shown || !shown.enabled || surface === active) {
+      setColor(surface, css)
+      return
+    }
+    const rgba = parseCssColorToRgba(css)
+    if (!rgba) return
+    const { seed, granularity, vSteps } = shown
+    const pending = pendingRef.current
+    if (pending?.surface === surface) flush()
+    onWriteRef.current(surface, { ...materialsRef.current[surface], seed, granularity, vSteps, enabled: true, color: rgbaToHsva(rgba) })
   }
 
   const previewCss = useTextureSurface({
@@ -123,12 +143,22 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
           tooltip={`${name} texture`}
           color={rgbaToCssColor(hsvaToRgba((draft?.surface === surface ? draft.material : materials[surface]).color))}
           onApply={(css) => setColor(surface, css)}
+          onPaint={(css) => paint(surface, css)}
         />
       ))}
-      <div
-        className="options-color-swatch options-texture-preview options-surface-texture-preview"
-        aria-hidden="true"
-        style={shown ? { '--texture-preview-color': rgbaToCssColor(hsvaToRgba(shown.color)), '--texture-preview-mask': previewCss } as CSSProperties : undefined}
+      <button
+        type="button"
+        className={`btn-icon options-color-swatch options-texture-preview options-surface-texture-preview${shown?.enabled ? ' is-active' : ''}`}
+        disabled={!shown}
+        aria-pressed={shown?.enabled ?? false}
+        data-tooltip={shown ? (shown.enabled ? 'Texture on: click for colour only' : 'Colour only: click to turn the texture on') : 'Select a surface'}
+        style={shown ? {
+          '--texture-preview-color': rgbaToCssColor(hsvaToRgba(shown.color)),
+          '--texture-preview-mask': shown.enabled ? previewCss : 'none',
+        } as CSSProperties : undefined}
+        onClick={() => {
+          if (active) edit(active, (current) => ({ ...current, enabled: !current.enabled }))
+        }}
       />
       <div className="options-surface-texture-seed">
         <button

@@ -37,6 +37,8 @@ export interface ColorTargetButtonProps {
   glyph: string
   tooltip: string
   onApply: (css: string) => void
+  /** What a right click does with the painted colour, when that is more than `onApply` (a texture surface also takes the linked texture). */
+  onPaint?: (css: string) => void
   /** A stable id for the link, for a caller that needs to know which target is linked. */
   linkId?: string
   className?: string
@@ -44,7 +46,7 @@ export interface ColorTargetButtonProps {
   children?: ReactNode
 }
 
-export function ColorTargetButton({ color, glyph, tooltip, onApply, linkId, className, style, children }: ColorTargetButtonProps) {
+export function ColorTargetButton({ color, glyph, tooltip, onApply, onPaint, linkId, className, style, children }: ColorTargetButtonProps) {
   const ownId = useId()
   const id = linkId ?? ownId
   const linkedColor = useLinkedColor(id)
@@ -92,7 +94,8 @@ export function ColorTargetButton({ color, glyph, tooltip, onApply, linkId, clas
         const current = parseCssColorToRgba(color)
         if (!current) return
         const { color: staged, mask } = getColorStaging()
-        onApply(rgbaToCssColor(hsvaToRgba(applyStagedColor(rgbaToHsva(current), staged, mask))))
+        const paint = onPaint ?? onApply
+        paint(rgbaToCssColor(hsvaToRgba(applyStagedColor(rgbaToHsva(current), staged, mask))))
       }}
       data-secondary-press="action"
       onContextMenu={(event) => event.preventDefault()}

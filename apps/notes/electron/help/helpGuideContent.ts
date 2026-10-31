@@ -827,7 +827,7 @@ ${shortcutTable()}
 - Right-click a colour to paint it with the picker's colour.
 - The H, S, V and A letters choose which channels a right-click paints; Shift adds or removes one. The colour button selects all four.
 - Right-click a slider to type a value.
-- Surface textures: link a surface to edit its texture with the seed and the sliders.
+- Surface textures: link a surface to edit its texture with the seed and the sliders; click the preview to switch its texture on or off. Right-clicking another surface gives it the linked texture as well as the colour, unless that texture is off.
 
 ### [Borders](#borders-and-spacing)
 

@@ -242,14 +242,10 @@
   border-radius: var(--border-radius-regular);
   background:    var(--color-background-light);
   color:         var(--color-text-80);
-  font-size:     calc(100cqh - 4px);
+  font-size:     calc(10px * var(--ui-font-scale)); /* the track label's size */
   line-height:   1;
   text-align:    center;
   outline:       none;
-}
-
-.utility-setting-scrollbar-shell {
-  container-type: size;
 }
 
 /* =============================================================================
@@ -673,7 +669,6 @@
 
 .options-surface-texture-seed {
   position:       relative;
-  container-type: size;
   grid-column:    5 / span 2;
   grid-row:       1;
 }
@@ -718,6 +713,11 @@
   overflow:   hidden;
   border:     1px solid var(--btn-border-default);
   background: none;
+}
+
+.options-texture-preview.is-active {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 .options-texture-preview::before,
