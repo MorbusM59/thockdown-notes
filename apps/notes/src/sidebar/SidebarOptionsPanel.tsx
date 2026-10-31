@@ -2435,8 +2435,8 @@ export function SidebarOptionsPanel({
           <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
             <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
             <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on the first kick of each bar in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3), shown on each snare hit" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit the edge follows, in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
           </div>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[1]}>
@@ -2458,11 +2458,11 @@ export function SidebarOptionsPanel({
           {visualizer.caret.followsMusic && renderBeatCaret()}
           {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
           {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
-          <div className="utility-setting-button-row" role="group" aria-label="Immersive controls">
-            <OptionsSubsectionLabel>Immersive</OptionsSubsectionLabel>
+          <div className="utility-setting-button-row" role="group" aria-label="Immersive glaze controls">
+            <OptionsSubsectionLabel>Glaze (immersive)</OptionsSubsectionLabel>
           </div>
-          <div className="utility-setting-slider-stack" aria-label="Immersive settings">
-            <OptionsSliderRows rows={[2, 2, 3, 3]}>
+          <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
+            <OptionsSliderRows rows={[2, 2]}>
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2515,6 +2515,13 @@ export function SidebarOptionsPanel({
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
               />
+            </OptionsSliderRows>
+          </div>
+          <div className="utility-setting-button-row" role="group" aria-label="Immersive wave controls">
+            <OptionsSubsectionLabel>Wave (immersive)</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
+            <OptionsSliderRows rows={[3, 2]}>
               <CompactScrollbarSlider
                 id="visualizer-wave-boxes"
                 min={WAVE_BOXES_MIN}
@@ -2554,6 +2561,14 @@ export function SidebarOptionsPanel({
                 formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurn: Math.round(value) } }))}
               />
+              {renderFallSliders('visualizer-wave', 'Immersive wave', { shape: visualizer.immersive.waveShape, fallSec: visualizer.immersive.waveFallSec }, { shape: DEFAULT_VISUALIZER_IMMERSIVE.waveShape, fallSec: DEFAULT_VISUALIZER_IMMERSIVE.waveFallSec }, 'the wave after each snare hit', (patch) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, ...(patch.shape !== undefined ? { waveShape: patch.shape } : {}), ...(patch.fallSec !== undefined ? { waveFallSec: patch.fallSec } : {}) } })))}
+            </OptionsSliderRows>
+          </div>
+          <div className="utility-setting-button-row" role="group" aria-label="Immersive pulse controls">
+            <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
+            <OptionsSliderRows rows={[3]}>
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
                 min={PULSE_SPEED_MIN}
@@ -2561,7 +2576,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.pulseSpeed}
                 trackLabel="pulse"
-                tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on the first kick of each bar"
+                tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on each hit the edge follows"
                 ariaLabel="Immersive: centre pulse starting speed, boxes per second"
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseSpeed}
                 formatValue={(value) => String(Math.round(value))}

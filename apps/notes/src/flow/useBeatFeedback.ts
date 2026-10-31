@@ -108,8 +108,8 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseDecay, pulseSoftness } = visualizer.immersive
-  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseDecay }), [waveTurn, waveBoxes, pulseSpeed, pulseDecay])
+  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseDecay, pulseSoftness, waveShape, waveFallSec } = visualizer.immersive
+  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseDecay, waveShape, waveFallSec }), [waveTurn, waveBoxes, pulseSpeed, pulseDecay, waveShape, waveFallSec])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)

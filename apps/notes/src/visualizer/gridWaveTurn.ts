@@ -98,21 +98,26 @@ export function waveTurnTransform(angles: WaveAngles, widthPx: number, periodPx:
 /**
  * What the grid wave reads of the layout that is not CSS: the rotation step
  * and the wave length in boxes (the shift is kept modulo one wave length),
- * and the centre pulse's starting speed and decay (`VisualizerImmersive`).
+ * the wave's fall after each snare hit, and the centre pulse's starting
+ * speed and decay (`VisualizerImmersive`).
  */
 export interface GridWaveSettings {
   waveTurn: number
   waveBoxes: number
   pulseSpeed: number
   pulseDecay: number
+  /** The wave's fall after each snare hit. */
+  waveShape: number
+  waveFallSec: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseDecay: 0 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseDecay: 0, waveShape: 0, waveFallSec: 0.25 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
   if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes
-    && next.pulseSpeed === settings.pulseSpeed && next.pulseDecay === settings.pulseDecay) return
+    && next.pulseSpeed === settings.pulseSpeed && next.pulseDecay === settings.pulseDecay
+    && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec) return
   settings = next
   for (const listener of listeners) listener()
 }

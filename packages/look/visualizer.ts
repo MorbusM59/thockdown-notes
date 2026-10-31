@@ -135,6 +135,13 @@ export interface VisualizerImmersive {
    * negative counter-clockwise, and the further from 0 the faster.
    */
   waveTurn: number
+  /**
+   * The grid wave's fall after each SNARE hit (`pulseCurve`), as an edge or
+   * pane block's: the wave shows at full strength on a hit and falls to
+   * nothing, so between hits it is not there.
+   */
+  waveShape: number
+  waveFallSec: number
   /** The centre pulse's colour (GridWave.tsx), picked like any layout colour. */
   pulseColor: string
   /** The centre pulse's starting speed, in grid boxes per second, at the ring's inner edge. */
@@ -167,7 +174,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseDecay: 0, pulseSoftness: 1 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseDecay: 0, pulseSoftness: 1 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -379,6 +386,8 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
     waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
+    waveShape: bounded(source.waveShape, -1, 1, d.waveShape),
+    waveFallSec: bounded(source.waveFallSec, FALL_MIN_SEC, FALL_MAX_SEC, d.waveFallSec),
     pulseColor: typeof source.pulseColor === 'string' && source.pulseColor.length > 0 ? source.pulseColor : d.pulseColor,
     pulseSpeed: bounded(source.pulseSpeed, PULSE_SPEED_MIN, PULSE_SPEED_MAX, d.pulseSpeed),
     pulseDecay: bounded(source.pulseDecay, 0, PULSE_DECAY_MAX, d.pulseDecay),

@@ -40,8 +40,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { pulseTimeToTravel, pulseTravelBoxes } from '@thockdown/look/visualizer'
-import { subscribeMusicTempo } from '../sound/musicBeat'
+import { DEFAULT_VISUALIZER_CHANNEL, pulseTimeToTravel, pulseTravelBoxes, type VisualizerChannel } from '@thockdown/look/visualizer'
+import { subscribeMusicBand, subscribeMusicTempo } from '../sound/musicBeat'
 import { subscribePulseHits } from './pulseHits'
 import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
@@ -96,7 +96,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, pulseSpeed, pulseDecay } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, pulseSpeed, pulseDecay, waveShape, waveFallSec } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -132,6 +132,39 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
       turn.style.transform = waveTurnTransform(angles, width, periodPx)
     })
   }, [host])
+
+  // The wave SHOWS ON THE SNARE, as an edge or pane block does: a band of
+  // the music following the snare, its response (full on a hit, falling to
+  // nothing on the layout's fall) written as the bands' opacity. Subscribed
+  // here rather than with the other blocks, so the snare is followed only
+  // while the visualizer is up; retuned in place when the fall changes.
+  const bandsRef = useRef<HTMLDivElement>(null)
+  const waveChannel: VisualizerChannel = { ...DEFAULT_VISUALIZER_CHANNEL, effect: 1, source: 'snare', shape: waveShape, fallSec: waveFallSec }
+  const waveChannelRef = useRef(waveChannel)
+  waveChannelRef.current = waveChannel
+  const waveBandRef = useRef<{ update: (next: VisualizerChannel) => void } | null>(null)
+  useEffect(() => {
+    const bands = bandsRef.current
+    if (!bands) return
+    let shown = -1
+    const show = (response: number) => {
+      // Quantized to what an 8-bit alpha resolves, and written only when it changes.
+      const steps = Math.round(response * 255)
+      if (steps === shown) return
+      shown = steps
+      bands.style.opacity = String(steps / 255)
+    }
+    show(0)
+    const band = subscribeMusicBand(waveChannelRef.current, show)
+    waveBandRef.current = band
+    return () => {
+      waveBandRef.current = null
+      band.unsubscribe()
+    }
+  }, [host])
+  useEffect(() => {
+    waveBandRef.current?.update(waveChannelRef.current)
+  }, [waveShape, waveFallSec])
 
   // The centre pulse: a ring at the rim of a layer exactly the cutout's
   // square, so at rest it lies wholly behind the cutout. On each hit of the
@@ -233,7 +266,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
                 top: (sceneBox.height - turnSide) / 2,
               }}
             >
-              <div className="visualizer-grid-wave-bands" />
+              <div ref={bandsRef} className="visualizer-grid-wave-bands" />
             </div>
             {cutout && cutout.size > 0 ? Array.from({ length: PULSE_LAYERS }, (_, i) => (
               <div
