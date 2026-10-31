@@ -319,7 +319,7 @@ export function MobileSoundscapeApp() {
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
-              <div ref={pageScrollerRef} className={`options-content sidebar-options-content mode-edit thockdown-custom-scrollbar mobile-page-scroller${helpMode ? ' is-help' : ''}`}>
+              <div ref={pageScrollerRef} className={`options-content sidebar-options-content thockdown-custom-scrollbar mobile-page-scroller${helpMode ? ' is-help' : ''}`}>
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Master')!} /> : (<>
