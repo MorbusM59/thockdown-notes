@@ -34,6 +34,7 @@ import {
   WAVE_SEC_MAX,
   PULSE_SEC_MAX,
   SWAY_DRIFT_MAX_PX,
+  SWAY_PUSH_MAX_PX,
   PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
@@ -2519,16 +2520,16 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-push"
-                min={-1}
-                max={1}
-                step={0.01}
+                min={0}
+                max={SWAY_PUSH_MAX_PX}
+                step={0.1}
                 value={visualizer.immersive.swayPush}
                 trackLabel="push"
-                tooltipLabel="How far each snare hit pushes the glaze's light stripes across them, in percent of the whole distance they sway: the centre does not push, right pushes them one way and left the other, up to 20 at either end"
-                ariaLabel="Immersive: how far each snare hit pushes the glaze along its drift, negative pushes it back"
+                tooltipLabel="px each snare hit pushes the glaze's light stripes across them, for the nearest, in the drift's direction (forward when nothing drifts)"
+                ariaLabel="Immersive: how far each snare hit pushes the glaze stripes, pixels"
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayPush}
-                formatValue={(value) => String(Math.round(value * 20))}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: value } }))}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: Math.round(value * 10) / 10 } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-return"

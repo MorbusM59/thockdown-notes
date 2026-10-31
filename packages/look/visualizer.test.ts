@@ -187,7 +187,7 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -9, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: -1, swayReturn: 1, swayDrift: 200, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: DEFAULT_VISUALIZER_IMMERSIVE.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1 })
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -9, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: 0, swayReturn: 1, swayDrift: 200, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: DEFAULT_VISUALIZER_IMMERSIVE.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1 })
     expect(sanitizeVisualizer({}, false).immersive).toEqual(DEFAULT_VISUALIZER_IMMERSIVE)
   })
 })

@@ -138,12 +138,6 @@ export function registerSwayLayer(element: HTMLElement, index: number, depth: nu
   }
 }
 
-/**
- * The longest push a snare hit gives a linear stack at the push slider's
- * end, as a share of the whole distance the nearest stack sways (twice its
- * range, edge to edge).
- */
-export const SWAY_PUSH_MAX_SHARE = 0.2
 /** The push per hit in px for the nearest stack (signed), the share of it slid back, and the drift in px per second of sway. */
 let pushPx = 0
 let returnShare = 1
@@ -174,7 +168,8 @@ function pushOffsetPx(response: number): number {
 export function setSwaySnare(response: number): void {
   if (response > lastResponse) {
     keptPx += pushOffsetPx(lastResponse)
-    pushInFlight = pushPx * SWAY_PUSH_MAX_SHARE * 2 * rangePx
+    // In the drift's direction, so a push hurries the drift along.
+    pushInFlight = driftPxPerSec < 0 ? -pushPx : pushPx
   }
   lastResponse = response
 }
