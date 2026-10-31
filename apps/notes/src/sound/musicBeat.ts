@@ -133,9 +133,17 @@ interface Counter {
 
 const counters = new Set<Counter>()
 
+/** A BAR KICK subscriber: told the bar's length, in seconds, on the first kick of each bar (`DrumTracker.barKickBetween`). */
+interface BarKick {
+  cursor: DrumCursor
+  listener: (barSec: number) => void
+}
+
+const barKicks = new Set<BarKick>()
+
 /** Everything the frame loop answers. */
 function subscriberCount(): number {
-  return bands.size + clocks.size + counters.size
+  return bands.size + clocks.size + counters.size + barKicks.size
 }
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
@@ -164,7 +172,7 @@ function drumOf(channel: BeatChannel): VisualizerDrum | null {
 
 /** Whether anything reads the drum analysis: a drum channel for its hits, a clock for its grid. */
 function needsDrums(): boolean {
-  return clocks.size > 0 || counters.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
+  return clocks.size > 0 || counters.size > 0 || barKicks.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
 }
 
 function clearWindow(band: Band): void {
@@ -424,6 +432,10 @@ function tick(frameTimeMs: number): void {
   for (const band of bands) publish(band, respond(band, heardTime))
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   for (const counter of counters) count(counter, heardTime)
+  for (const barKick of barKicks) {
+    const barSec = drums ? drums.tracker.barKickBetween(barKick.cursor, heardTime) : 0
+    if (barSec > 0) barKick.listener(barSec)
+  }
   frame = requestAnimationFrame(tick)
 }
 
@@ -558,6 +570,22 @@ export function subscribeMusicTempo(listener: (timeSec: number, periodSec: numbe
   added()
   return () => {
     counters.delete(counter)
+    removed()
+  }
+}
+
+/**
+ * The first kick of each bar, as it is HEARD: `listener` is called with the
+ * bar's length in seconds at the current tempo, once per bar that has a kick
+ * (`DrumTracker.barKickBetween`). Nothing is called before the tempo grid is
+ * locked, nor while the music is paused or the window hidden.
+ */
+export function subscribeMusicBarKicks(listener: (barSec: number) => void): () => void {
+  const barKick: BarKick = { cursor: new DrumCursor(), listener }
+  barKicks.add(barKick)
+  added()
+  return () => {
+    barKicks.delete(barKick)
     removed()
   }
 }

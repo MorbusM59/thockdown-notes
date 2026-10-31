@@ -23,6 +23,12 @@
  * CSS animation of `transform` one wave length per cycle, so the loop is
  * seamless. Nothing repaints.
  *
+ * Beside the turning square, inside the same line mask, sits the centre
+ * PULSE: a ring at the rim of a layer exactly the cutout's square, so at rest
+ * it is hidden behind the cutout. On the first kick of each bar
+ * (`subscribeMusicBarKicks`) it is scaled up, linearly over that bar, to the
+ * factor at which the ring's inner edge reaches the scene's farthest corner.
+ *
  * The colour, wave length and travel time are the layout's, published as
  * CSS variables by `useBeatFeedback`, and the rotation step and wave length
  * through `gridWaveTurn.ts`'s settings store.
@@ -34,14 +40,15 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { subscribeMusicTempo } from '../sound/musicBeat'
+import { subscribeMusicBarKicks, subscribeMusicTempo } from '../sound/musicBeat'
 import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readWaveTurnSettings, subscribeWaveTurnSettings, waveTurnTransform } from './gridWaveTurn'
 
-/** A step between two frames' beat positions longer than this is a seek or a new track, not time passing. */
 /** A frame further than this from the last is a seek or a stall, not playback. */
 const MAX_FRAME_SEC = 0.25
 /** How quickly the turning rate follows a change of tempo. */
 const TEMPO_EASE_SEC = 2
+/** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
+const PULSE_RING_SHARE = 0.25
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
@@ -117,6 +124,37 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     })
   }, [waveTurn, waveBoxes, boxPx, widthPx, host])
 
+  // The centre pulse: a ring at the rim of a layer exactly the cutout's
+  // square, so at rest it lies wholly behind the cutout. On the first kick of
+  // each bar it is scaled, linearly over that bar, to the factor at which the
+  // ring's INNER edge reaches the scene's farthest corner from the cutout's
+  // centre, so it leaves the screen exactly as the next bar can start one.
+  // A Web Animation of `transform`: the compositor runs it, nothing repaints.
+  const pulseRef = useRef<HTMLDivElement>(null)
+  const pulseExitScale = sceneBox && cutout && cutout.size > 0
+    ? Math.hypot(
+      Math.max(cutout.left + cutout.size / 2, sceneBox.width - cutout.left - cutout.size / 2),
+      Math.max(cutout.top + cutout.size / 2, sceneBox.height - cutout.top - cutout.size / 2),
+    ) / ((cutout.size / 2) * (1 - PULSE_RING_SHARE))
+    : 0
+  useEffect(() => {
+    const pulse = pulseRef.current
+    if (!pulse || !(pulseExitScale > 1)) return
+    let running: Animation | null = null
+    const unsubscribe = subscribeMusicBarKicks((barSec) => {
+      if (reducedMotion.matches) return
+      running?.cancel()
+      running = pulse.animate(
+        [{ transform: 'scale(1)' }, { transform: `scale(${pulseExitScale})` }],
+        { duration: barSec * 1000, easing: 'linear' },
+      )
+    })
+    return () => {
+      unsubscribe()
+      running?.cancel()
+    }
+  }, [pulseExitScale, host])
+
   // The rotating layer is a square as wide as the scene's diagonal, centred
   // on the scene, so the bands cover every corner at every angle.
   const turnSide = sceneBox ? Math.ceil(Math.hypot(sceneBox.width, sceneBox.height)) : 0
@@ -165,6 +203,13 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
             >
               <div className="visualizer-grid-wave-bands" />
             </div>
+            {cutout && cutout.size > 0 ? (
+              <div
+                ref={pulseRef}
+                className="visualizer-grid-wave-pulse"
+                style={{ left: cutout.left, top: cutout.top, width: cutout.size, height: cutout.size }}
+              />
+            ) : null}
           </div>
         </div>,
         host,

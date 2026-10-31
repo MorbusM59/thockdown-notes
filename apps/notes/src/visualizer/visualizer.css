@@ -160,6 +160,19 @@
   animation: visualizer-grid-wave var(--visualizer-wave-sec, 6s) linear infinite;
 }
 
+.visualizer-grid-wave-pulse {
+  position: absolute;
+  /* The ring at the rim, PULSE_RING_SHARE (GridWave.tsx) of the radius wide. */
+  background-image: radial-gradient(
+    circle closest-side,
+    transparent 75%,
+    var(--visualizer-wave-color) 87.5%,
+    transparent 100%
+  );
+  /* Scaled by GridWave.tsx on the first kick of each bar; at rest it lies behind the cutout. */
+  will-change: transform;
+}
+
 @keyframes visualizer-grid-wave {
   from { transform: translateX(0); }
   to { transform: translateX(var(--grid-wave-period)); }

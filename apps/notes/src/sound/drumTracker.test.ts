@@ -1432,3 +1432,29 @@ describe('peakOffset', () => {
     expect(peakOffset(-1.5625, -0.0625, -0.5625)).toBeCloseTo(0.25, 12)
   })
 })
+
+describe('DrumTracker.barKickBetween', () => {
+  it('reports one kick per bar, on a kick, with the bar length, once the grid is locked', () => {
+    const track = house(40, 120)
+    const tracker = new DrumTracker(RATE)
+    const cursor = new DrumCursor()
+    const reports: Array<{ at: number; barSec: number }> = []
+    let fed = 0
+    for (let heard = 0; heard < 34; heard += 1 / 60) {
+      const end = Math.min(track.samples.length, Math.round((heard + 6) * RATE))
+      if (end > fed) tracker.feed(track.samples.subarray(fed, end), 0, (end - 1) / RATE)
+      fed = Math.max(fed, end)
+      const barSec = tracker.barKickBetween(cursor, heard)
+      if (barSec > 0) reports.push({ at: heard, barSec })
+    }
+    const steady = reports.filter((report) => report.at > 12)
+    expect(steady.length).toBeGreaterThan(8)
+    for (const report of steady) expect(report.barSec).toBeCloseTo(2, 1)
+    // One per bar: consecutive reports a bar apart, never two in one bar.
+    for (let i = 1; i < steady.length; i++) expect(steady[i].at - steady[i - 1].at).toBeCloseTo(2, 0)
+    // Each on a kick, as heard (within a frame or two of one).
+    for (const report of steady) {
+      expect(Math.min(...track.kicks.map((kick) => Math.abs(kick - report.at)))).toBeLessThan(0.06)
+    }
+  })
+})
