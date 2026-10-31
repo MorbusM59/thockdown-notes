@@ -32,6 +32,9 @@ import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPla
 import { SpectrumBallistics, litRows } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
+import { subscribePulseHits } from './pulseHits'
+import { readGridWaveSettings } from './gridWaveTurn'
+import { pulseCurve } from '@thockdown/look/visualizer'
 import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
   computeVisualizerLayout,
@@ -121,6 +124,11 @@ function Letters({ runs, row, layout }: { runs: RowText[]; row: number; layout: 
   )
 }
 
+/** How much the centre solid grows on a hit: from 100% to 110%. */
+const THUMP_SCALE = 0.1
+/** Keyframes sampled along the thump's fall; linear between them. */
+const THUMP_KEYFRAMES = 16
+
 export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, onCutoutClick, gridOutlineRef }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
@@ -133,10 +141,38 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   const credits = nowPlaying.song ? creditsLine(songArtistText(nowPlaying.song), songAlbumText(nowPlaying.song), columns) : []
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const cutoutRef = useRef<HTMLDivElement | null>(null)
   const [gapColumn, setGapColumn] = useState<number | null>(null)
 
   // The frame loop. Rebuilt when the layout changes, since the number of
   // bands is the number of columns and the canvas is sized to the strip.
+  // The solid's thump: on each hit the centre pulse sets off on (the edge's
+  // band, `pulseHits.ts`), the solid's layer (the cutout's ::before, clipped
+  // by the cutout) is scaled up by THUMP_SCALE and falls back on the edge's
+  // own fall, so the solid's beat and the ring leaving it are one event.
+  // A Web Animation on transform: composited, nothing repaints.
+  const hasCutout = cutout.size > 0
+  useEffect(() => {
+    const element = cutoutRef.current
+    if (!element) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    let running: Animation | null = null
+    const unsubscribe = subscribePulseHits(() => {
+      if (reducedMotion.matches) return
+      const { edgeShape, edgeFallSec } = readGridWaveSettings()
+      const keyframes: Keyframe[] = []
+      for (let i = 0; i <= THUMP_KEYFRAMES; i++) {
+        keyframes.push({ transform: `scale(${1 + THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape)})` })
+      }
+      running?.cancel()
+      running = element.animate(keyframes, { duration: edgeFallSec * 1000, easing: 'linear', pseudoElement: '::before' })
+    })
+    return () => {
+      unsubscribe()
+      running?.cancel()
+    }
+  }, [hasCutout])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!scene || columns <= 0) return
@@ -336,6 +372,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
 
           {cutout.size > 0 && (
             <div
+              ref={cutoutRef}
               className="visualizer-cutout"
               style={{
                 left: cutoutRect.left,

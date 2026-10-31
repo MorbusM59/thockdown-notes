@@ -43,6 +43,7 @@ import { createPortal } from 'react-dom'
 import { DEFAULT_VISUALIZER_CHANNEL, pulseTimeToTravel, pulseTravelBoxes, type VisualizerChannel } from '@thockdown/look/visualizer'
 import { subscribeMusicBand, subscribeMusicTempo } from '../sound/musicBeat'
 import { subscribePulseHits } from './pulseHits'
+import { setSwaySnare } from './parallaxSway'
 import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
@@ -146,6 +147,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     if (!bands) return
     let shown = -1
     const show = (response: number) => {
+      setSwaySnare(response)
       // Quantized to what an 8-bit alpha resolves, and written only when it changes.
       const steps = Math.round(response * 255)
       if (steps === shown) return
@@ -158,6 +160,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout }: {
     return () => {
       waveBandRef.current = null
       band.unsubscribe()
+      setSwaySnare(0)
     }
   }, [host])
   useEffect(() => {
