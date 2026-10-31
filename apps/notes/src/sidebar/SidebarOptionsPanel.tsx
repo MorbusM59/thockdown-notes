@@ -33,6 +33,7 @@ import {
   WAVE_BOXES_MIN,
   WAVE_SEC_MAX,
   PULSE_SEC_MAX,
+  SWAY_DRIFT_MAX_PX,
   PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
@@ -2463,7 +2464,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Glaze (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[3, 3]}>
+            <OptionsSliderRows rows={[4, 3]}>
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2523,7 +2524,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={visualizer.immersive.swayPush}
                 trackLabel="push"
-                tooltipLabel="How far each snare hit pushes the glaze along its drift, in percent of a whole sway: the centre does not push, right pushes it forward and left back, up to 20 at either end"
+                tooltipLabel="How far each snare hit pushes the glaze's light stripes across them, in percent of the whole distance they sway: the centre does not push, right pushes them one way and left the other, up to 20 at either end"
                 ariaLabel="Immersive: how far each snare hit pushes the glaze along its drift, negative pushes it back"
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayPush}
                 formatValue={(value) => String(Math.round(value * 20))}
@@ -2541,6 +2542,19 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayReturn}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayReturn: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-drift"
+                min={-SWAY_DRIFT_MAX_PX}
+                max={SWAY_DRIFT_MAX_PX}
+                step={1}
+                value={visualizer.immersive.swayDrift}
+                trackLabel="drift"
+                tooltipLabel="A steady, endless drift of the glaze's light stripes across them, in px a second for the nearest: the centre holds them still, right drifts them one way and left the other"
+                ariaLabel="Immersive: steady drift of the glaze stripes, pixels per second, negative drifts the other way"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayDrift}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
               />
             </OptionsSliderRows>
           </div>

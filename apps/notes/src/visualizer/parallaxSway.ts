@@ -107,8 +107,20 @@ export function breathScales(breath: number): { amplitude: number; speed: number
  * The layers on screen, registered by the component that draws them
  * (`VisualizerGlaze.tsx`) and moved by the loop that reads the music
  * (`VisualizerScene.tsx`), which live in different parts of the tree.
+ *
+ * A RADIAL layer sways on the closed path above and nothing else: it stays
+ * in place and does not answer the snare. A LINEAR stack is ENDLESS: its
+ * gradient repeats every `periodPx` along the gradient and is invariant
+ * along its stripes, so its whole position is one number, `s`, the distance
+ * along the gradient, and any `s` is drawn by the same picture shifted by
+ * `s` modulo the period. Its element is laid out with the gradient running
+ * along its own x axis and turned to the stack's angle (`VisualizerGlaze.tsx`),
+ * so the move is one `translateX` of the wrapped `s`; the element reaches
+ * half a period past the screen at either end, which is all the wrap needs.
+ * `s` is the sway projected onto the gradient, plus the drift, plus the
+ * snare's pushes, none of them bounded.
  */
-type SwayLayer = { element: HTMLElement; index: number; depth: number }
+type SwayLayer = { element: HTMLElement; index: number; depth: number; linear: { periodPx: number; angleDeg: number } | null }
 const layers = new Set<SwayLayer>()
 /** The nearest layer's range in px at the music's usual level: the reader's setting, published by the component that draws the layers. */
 let rangePx = 0
@@ -117,8 +129,8 @@ export function setSwayRange(px: number): void {
   rangePx = px
 }
 
-export function registerSwayLayer(element: HTMLElement, index: number, depth: number): () => void {
-  const layer = { element, index, depth }
+export function registerSwayLayer(element: HTMLElement, index: number, depth: number, linear: { periodPx: number; angleDeg: number } | null = null): () => void {
+  const layer = { element, index, depth, linear }
   layers.add(layer)
   return () => {
     layers.delete(layer)
@@ -127,52 +139,66 @@ export function registerSwayLayer(element: HTMLElement, index: number, depth: nu
 }
 
 /**
- * The longest push a snare hit gives the glaze at the push slider's end, as
- * a share of one whole sway cycle (the camera's longest period).
+ * The longest push a snare hit gives a linear stack at the push slider's
+ * end, as a share of the whole distance the nearest stack sways (twice its
+ * range, edge to edge).
  */
 export const SWAY_PUSH_MAX_SHARE = 0.2
-const SWAY_CYCLE_SEC = PERIODS_X[0]
-/** The push per hit in seconds of sway (signed) and the share of it slid back. */
-let pushSec = 0
+/** The push per hit in px for the nearest stack (signed), the share of it slid back, and the drift in px per second of sway. */
+let pushPx = 0
 let returnShare = 1
+let driftPxPerSec = 0
 
-export function setSwayPush(push: number, slideBack: number): void {
-  pushSec = push * SWAY_PUSH_MAX_SHARE * SWAY_CYCLE_SEC
+export function setSwayMotion(push: number, slideBack: number, drift: number): void {
+  pushPx = push
   returnShare = slideBack
+  driftPxPerSec = drift
 }
 
 /**
- * The snare's push on the sway, in seconds along its own path. Each hit
- * (the wave's snare response rising, `GridWave.tsx`) adds `pushSec` at once;
- * as the response falls on the wave's fall, `returnShare` of that push slides
- * back. What is not slid back is KEPT: it is folded into `keptSec` at the
- * next hit, so the drift is permanently advanced (or set back) by it. Kept in
- * PHASE rather than in pixels because the path is periodic: an offset in
- * phase never carries a layer past its overscan, however much accumulates.
+ * The snare's push along the gradient, in px for the nearest stack. Each hit
+ * (the wave's snare response rising, `GridWave.tsx`) adds the push at once;
+ * as the response falls on the wave's fall, `returnShare` of it slides back.
+ * What is not slid back is KEPT, folded into `keptPx` at the next hit, so a
+ * return below 1 moves the stacks on for good: the same distance on every
+ * hit, wherever the sway is, since the stacks have no edge to reach.
  */
-let keptSec = 0
+let keptPx = 0
 let lastResponse = 0
 let pushInFlight = 0
 
-function pushOffsetSec(response: number): number {
+function pushOffsetPx(response: number): number {
   return pushInFlight * (1 - returnShare * (1 - response))
 }
 
 export function setSwaySnare(response: number): void {
   if (response > lastResponse) {
-    // A hit: keep what the previous push left standing, then push again.
-    keptSec = (keptSec + pushOffsetSec(lastResponse)) % SWAY_CYCLE_SEC
-    pushInFlight = pushSec
+    keptPx += pushOffsetPx(lastResponse)
+    pushInFlight = pushPx * SWAY_PUSH_MAX_SHARE * 2 * rangePx
   }
   lastResponse = response
+}
+
+/** `value` wrapped into [-period/2, period/2). */
+export function wrapToPeriod(value: number, period: number): number {
+  if (!(period > 0)) return 0
+  return value - period * Math.floor(value / period + 0.5)
 }
 
 /** Moves every registered layer to where the sway is at `phaseSec`, with the music's breath widening it by `breathAmplitude`. */
 export function applySway(phaseSec: number, breathAmplitude: number): void {
   const amplitudePx = rangePx * breathAmplitude
-  const at = phaseSec + keptSec + pushOffsetSec(lastResponse)
+  const pushedPx = keptPx + pushOffsetPx(lastResponse)
   for (const layer of layers) {
-    const { x, y } = swayOffset(layer.index, layer.depth, at, amplitudePx)
-    layer.element.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`
+    const { x, y } = swayOffset(layer.index, layer.depth, phaseSec, amplitudePx)
+    if (layer.linear === null) {
+      layer.element.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`
+      continue
+    }
+    // The gradient's direction on screen (CSS angles run clockwise from up; y points down).
+    const radians = (layer.linear.angleDeg * Math.PI) / 180
+    const along = x * Math.sin(radians) - y * Math.cos(radians)
+    const s = along + layer.depth * (driftPxPerSec * phaseSec + pushedPx)
+    layer.element.style.transform = `translate3d(${wrapToPeriod(s, layer.linear.periodPx).toFixed(2)}px, 0, 0)`
   }
 }

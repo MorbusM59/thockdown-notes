@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { BREATH_AMPLITUDE_MAX, MusicBreath, breathScales, swayDepth, swayOffset, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, MusicBreath, breathScales, swayDepth, swayOffset, swayOverscanPx, wrapToPeriod } from './parallaxSway'
+import { buildLinearGlazeStacks } from '@thockdown/look/loadoutTheme'
+import { DEFAULT_GLAZE_SETTINGS } from '@thockdown/look/glaze'
 
 describe('swayOffset', () => {
   it('never travels past the overscan, at any depth or time', () => {
@@ -56,5 +58,26 @@ describe('MusicBreath', () => {
     expect(breathScales(0)).toEqual({ amplitude: 0.6, speed: 0.8 })
     expect(breathScales(1).amplitude).toBeCloseTo(1, 9)
     expect(breathScales(3)).toEqual({ amplitude: 1.5, speed: 1.3 })
+  })
+})
+
+describe('endless linear stacks', () => {
+  it('wraps any position into half a period either side, the same picture modulo the period', () => {
+    for (const s of [-12345.6, -350, -1, 0, 1, 99.9, 350, 98765.4]) {
+      const wrapped = wrapToPeriod(s, 700)
+      expect(wrapped).toBeGreaterThanOrEqual(-350)
+      expect(wrapped).toBeLessThan(350)
+      expect(Math.abs(((s - wrapped) / 700) - Math.round((s - wrapped) / 700))).toBeLessThan(1e-9)
+    }
+  })
+
+  it('reports the period each stack repeats over: its last colour stop', () => {
+    const stacks = buildLinearGlazeStacks({ ...DEFAULT_GLAZE_SETTINGS, linearStackCount: 3, linearOpacity: 0.1 }, 90)
+    expect(stacks).toHaveLength(3)
+    for (const { image, periodPx } of stacks) {
+      const stops = [...image.matchAll(/([\d.]+)px/g)].map((m) => Number(m[1]))
+      expect(periodPx).toBeGreaterThan(0)
+      expect(periodPx).toBe(Math.max(...stops))
+    }
   })
 })

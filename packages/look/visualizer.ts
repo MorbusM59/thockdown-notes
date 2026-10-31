@@ -124,13 +124,16 @@ export interface VisualizerImmersive {
   /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
   swaySpread: number
   /**
-   * -1 to 1: how far each snare hit pushes the glaze along its own drift,
-   * as a share of `SWAY_PUSH_MAX_SHARE` of one whole sway cycle; positive
-   * forward, negative back, 0 none (`parallaxSway.ts`).
+   * -1 to 1: how far each snare hit pushes the linear glaze stacks along
+   * their gradient, as a share of `SWAY_PUSH_MAX_SHARE` of the whole distance
+   * the nearest sways; positive forward, negative back, 0 none
+   * (`parallaxSway.ts`). The radial sources do not take it.
    */
   swayPush: number
   /** 0 to 1: the share of each push the glaze slides back on the wave's fall; 0 keeps it all, 1 returns it fully. */
   swayReturn: number
+  /** -`SWAY_DRIFT_MAX_PX` to it: a steady drift of the linear stacks along their gradient, px a second for the nearest; 0 none. */
+  swayDrift: number
   /** The grid wave's colour (apps/notes's GridWave.tsx), picked like any layout colour, before the theme's invert. */
   waveColor: string
   /** The grid wave's length, in boxes, from one band's peak to the next. */
@@ -164,6 +167,7 @@ export interface VisualizerImmersive {
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
 export const IMMERSIVE_SWAY_RANGE_MAX_PX = 200
+export const SWAY_DRIFT_MAX_PX = 200
 export const WAVE_BOXES_MIN = 2
 export const WAVE_BOXES_MAX = 256
 export const WAVE_SEC_MIN = 0.5
@@ -185,7 +189,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0.3, swayReturn: 1, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0.3, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -395,6 +399,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
     swayPush: bounded(source.swayPush, -1, 1, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),
+    swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX_PX, SWAY_DRIFT_MAX_PX, d.swayDrift),
     waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
