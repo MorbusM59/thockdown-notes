@@ -256,7 +256,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Every character you type adds flow, and flow drains steadily all the time, faster once you stop. An unhurried, even pace is enough to fill the meter and hold it.
 - Corrections and arrow keys never cost flow; only stopping does.
 - While you type, the word count shows your current speed instead, in letters per second: a number for your own reference, not for comparing with others. It switches back when you pause.
-- In flow, each character you type lights the grid lines above and below it, paler at low flow and in its full colour at full flow, and the caret's cell is framed in the same lines as its source; it fades over the time and shape set in the flow options, and its colour and its alpha are under Colors, in Boxes.
+- In flow, each character you type lights the grid lines above and below it, paler at low flow and in its full colour at full flow, and the caret's cell is framed in the same lines as its source; it fades over the time and shape set in the flow options, and its colour and its alpha are under Colors, in Editor Boxes.
 - **look**, **reverb** and **trail** set how strongly each answers, and **amp** how strongly playing music's EQ does.
 - While you type, the caret stops blinking and holds steady; when you stop, it eases back into its blink.
 
@@ -775,17 +775,16 @@ ${shortcutTable()}
 
 *The home for every appearance, sound, sync, and performance control in the app, organized into collapsible sections.*
 
-- Most controls apply live, and separately to edit mode and preview mode where the two differ (e.g. typography, text color).
+- Most controls apply live. Every section is always shown, whichever view you are in: where edit mode and render view differ, the editor's controls are headed "Editor" and the render view's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
 - Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
 
 ### [Editor Font](#editor-font)
 
 > **Where?**
-> Settings panel, directly below the feature switches.
+> Settings panel, directly below the feature switches, followed by Reader Font.
 
-*Font family, size, spacing, and padding for the editor and the rendered preview.*
+*Font family, size, spacing, and padding: Editor Font for edit mode (font family, size, glyph padding, line height), Reader Font for the render view (font family, size, letter spacing, line height).*
 
-- Separate controls for the editor (font family, size, line height, glyph padding) and the preview (font family, size, letter spacing, line height).
 - You can also change these from the text itself: hold \`Ctrl\` and roll the wheel over the text of a note to change its size by one step per notch, \`Ctrl+Alt\` for the horizontal spacing (letter spacing in render view, glyph padding in edit mode), \`Ctrl+Shift\` for the line height. It changes the settings of whichever view the pointer is over, not the slot you are typing in, so with an edit slot and a render slot side by side you adjust each by pointing at it.
 
 ### [Presets](#presets)
@@ -842,7 +841,7 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → UI Font.
 
-*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the editor/preview content fonts under [Editor Font]($#editor-font).*
+*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the note fonts under [Editor Font]($#editor-font).*
 
 - Twelve bundled UI fonts, from the general-purpose IBM Plex Sans to full-personality display fonts, alongside the app's default system font.
 - The size slider scales UI text only; icons and button sizing stay fixed.

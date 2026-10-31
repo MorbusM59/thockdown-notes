@@ -300,8 +300,6 @@
   }
 }
 
-.options-content.mode-view .options-section.display-in-edit:not(.display-in-view) { display: none; }
-.options-content.mode-edit .options-section.display-in-view:not(.display-in-edit) { display: none; }
 
 .preset-section, .typography-section {
   margin:         auto;
@@ -355,16 +353,11 @@
   min-width: 0;
 }
 
-.options-content.mode-view .options-section-info {
-  flex-basis: 300px;
-  min-width:  300px;
-}
-
 .options-element-grid .options-color-swatch.text-icon {
   background: var(--color-background-light);
 }
 
-.mode-edit .options-element-grid .options-color-swatch.text-icon::before {
+.options-element-grid .options-color-swatch.text-icon-edit::before {
   background-color:      var(--texture-editor-edit-tint);
   -webkit-mask-image:    var(--texture-editor-edit);
   -webkit-mask-repeat:   repeat;
@@ -376,7 +369,7 @@
   mask-position: 0 0;
 }
 
-.mode-view .options-element-grid .options-color-swatch.text-icon::before {
+.options-element-grid .options-color-swatch.text-icon-render::before {
   background-color:      var(--texture-editor-render-tint);
   -webkit-mask-image:    var(--texture-editor-render);
   -webkit-mask-repeat:   repeat;
@@ -388,11 +381,11 @@
   mask-position: 0 0;
 }
 
-.mode-edit .options-element-grid .options-color-swatch.text-icon::after {
+.options-element-grid .options-color-swatch.text-icon-edit::after {
   background: var(--color-bg-regular);
 }
 
-.mode-view .options-element-grid .options-color-swatch.text-icon::after {
+.options-element-grid .options-color-swatch.text-icon-render::after {
   background: transparent;
 }
 

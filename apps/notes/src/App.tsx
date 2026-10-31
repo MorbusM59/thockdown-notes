@@ -8493,7 +8493,6 @@ ${markdownHtml}
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
-                        isPreviewMode={activeSection?.isPreviewMode ?? false}
                         uiMode={uiMode}
                         optionsContentRef={optionsContentRef}
                         viewStyle={viewStyle}

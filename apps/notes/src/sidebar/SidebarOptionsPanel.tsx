@@ -372,7 +372,6 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
 }
 
 export interface SidebarOptionsPanelProps {
-  isPreviewMode: boolean
   uiMode: 'light' | 'dark'
   optionsContentRef: MutableRefObject<HTMLDivElement | null>
   /** The options search term; while it is non-empty only what it appears in is shown (AccordionGroup's `filter`). */
@@ -623,7 +622,6 @@ export interface SidebarOptionsPanelProps {
  * App.tsx with zero behavior change.
  */
 export function SidebarOptionsPanel({
-  isPreviewMode,
   uiMode,
   optionsContentRef,
   searchQuery,
@@ -1035,25 +1033,22 @@ export function SidebarOptionsPanel({
      */
     const remoteImagesHoldRef = useRef<(() => void) | null>(null)
     const remoteImagesHoldPressRef = useRef(false)
-    const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
-    const middleRowHighlightKeys: HighlightColorKey[] = [
-      isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
-      'caret',
-      isPreviewMode ? 'selectionRender' : 'selectionEdit',
-      'textBase',
-      'textEmbossUi',
-    ]
+    // Every colour is always on offer, whichever view the active slot shows:
+    // a colour that belongs to one view only sits under an "Editor" or
+    // "Reader" heading instead of being swapped in and out with the mode.
+    const interfaceHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons', 'textBase', 'textEmbossUi']
+    const editorTextHighlightKeys: HighlightColorKey[] = ['textEmbossEdit', 'caret', 'selectionEdit']
+    const readerTextHighlightKeys: HighlightColorKey[] = ['textEmbossRender', 'search', 'selectionRender']
     const renderHighlightSwatchButton = (key: HighlightColorKey) => {
-      const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
-      const isSearchHighlightControl = key === 'caret' && isPreviewMode
+      const isSearchHighlightControl = key === 'search'
       return (
         <ColorTargetButton
           key={key}
-          className={`${isSearchHighlightControl ? 'search-highlight-color-button' : ''}${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
-          color={highlightColors[resolvedKey]}
+          className={`${isSearchHighlightControl ? 'search-highlight-color-button' : ''}${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon text-icon-edit' : ''}`}
+          color={highlightColors[key]}
           glyph={isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]}
           tooltip={isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]}
-          onApply={(css) => setHighlightColorCss(resolvedKey, css)}
+          onApply={(css) => setHighlightColorCss(key, css)}
         />
       )
     }
@@ -1061,7 +1056,7 @@ export function SidebarOptionsPanel({
     return (
     <div
       ref={optionsContentRef}
-      className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
+      className="options-content sidebar-options-content"
       aria-label="Settings panel"
     >
       <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
@@ -1104,73 +1099,6 @@ export function SidebarOptionsPanel({
         ariaLabel="Editor Font"
         heading="Editor Font"
       >
-        {isPreviewMode ? (
-          <div className="typography-grid" role="group" aria-label="Render typography">
-            {VIEW_STYLE_OPTIONS.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' is-active' : ''}`}
-                data-tooltip={option.label}
-                aria-label={option.label}
-                aria-pressed={viewStyle === option.key}
-                onClick={() => setViewStyle(option.key)}
-              >
-                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {isPreviewMode ? (
-          <div className="typography-sliders">
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="typography-font-size"
-                min={EDITOR_FONT_SIZE_MIN_PX}
-                max={EDITOR_FONT_SIZE_MAX_PX}
-                step={EDITOR_FONT_SIZE_STEP_PX}
-                value={viewFontSize}
-                trackLabel="size"
-                ariaLabel="Render font size"
-                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
-                onCommit={(value) => setViewFontSize(
-                  clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
-                )}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="view-letter-spacing"
-                min={VIEW_LETTER_SPACING_MIN_EM}
-                max={VIEW_LETTER_SPACING_MAX_EM}
-                step={VIEW_LETTER_SPACING_STEP_EM}
-                value={viewLetterSpacingEm}
-                trackLabel="spacing"
-                ariaLabel="Render letter spacing in em"
-                defaultValue={DEFAULT_VIEW_LETTER_SPACING_EM}
-                onCommit={(value) => setViewLetterSpacingEm(
-                  clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM),
-                )}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="typography-spacing"
-                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
-                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
-                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
-                value={viewSpacing}
-                trackLabel="height"
-                ariaLabel="Render line height"
-                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
-                onCommit={(value) => setViewSpacing(
-                  clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
-                )}
-              />
-            </div>
-          </div>
-        ) : null}
-        {!isPreviewMode ? (
           <div className="typography-grid" role="group" aria-label="Editor typography">
             {EDITOR_STYLE_OPTIONS.map((option) => (
               <button
@@ -1189,8 +1117,6 @@ export function SidebarOptionsPanel({
               </button>
             ))}
           </div>
-        ) : null}
-        {!isPreviewMode ? (
           <div className="typography-sliders">
             <div className="typography-slider">
               <CompactScrollbarSlider
@@ -1251,7 +1177,75 @@ export function SidebarOptionsPanel({
               />
             </div>
           </div>
-        ) : null}
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-reader-font"
+        ariaLabel="Reader Font"
+        heading="Reader Font"
+      >
+          <div className="typography-grid" role="group" aria-label="Render typography">
+            {VIEW_STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' is-active' : ''}`}
+                data-tooltip={option.label}
+                aria-label={option.label}
+                aria-pressed={viewStyle === option.key}
+                onClick={() => setViewStyle(option.key)}
+              >
+                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+              </button>
+            ))}
+          </div>
+          <div className="typography-sliders">
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="reader-font-size"
+                min={EDITOR_FONT_SIZE_MIN_PX}
+                max={EDITOR_FONT_SIZE_MAX_PX}
+                step={EDITOR_FONT_SIZE_STEP_PX}
+                value={viewFontSize}
+                trackLabel="size"
+                ariaLabel="Render font size"
+                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
+                onCommit={(value) => setViewFontSize(
+                  clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+                )}
+              />
+            </div>
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="view-letter-spacing"
+                min={VIEW_LETTER_SPACING_MIN_EM}
+                max={VIEW_LETTER_SPACING_MAX_EM}
+                step={VIEW_LETTER_SPACING_STEP_EM}
+                value={viewLetterSpacingEm}
+                trackLabel="spacing"
+                ariaLabel="Render letter spacing in em"
+                defaultValue={DEFAULT_VIEW_LETTER_SPACING_EM}
+                onCommit={(value) => setViewLetterSpacingEm(
+                  clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM),
+                )}
+              />
+            </div>
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="reader-line-height"
+                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
+                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
+                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
+                value={viewSpacing}
+                trackLabel="height"
+                ariaLabel="Render line height"
+                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
+                onCommit={(value) => setViewSpacing(
+                  clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+                )}
+              />
+            </div>
+          </div>
       </AccordionSection>
 
       <AccordionSection
@@ -1360,38 +1354,44 @@ export function SidebarOptionsPanel({
 
         <OptionsSubsectionLabel>Interface</OptionsSubsectionLabel>
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="Interface colors">
-          {topRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
+          {interfaceHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
 
         <OptionsSubsectionLabel>Surface textures</OptionsSubsectionLabel>
         <SurfaceTexturePicker materials={textureMaterials} onWrite={setTextureMaterial} />
 
-        <OptionsSubsectionLabel>Text</OptionsSubsectionLabel>
-
-        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
+        <OptionsSubsectionLabel>Editor Text</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Editor text and selection colors">
           <ColorTargetButton
-            className="text-icon"
-            color={editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText']}
+            className="text-icon text-icon-edit"
+            color={editorTextColors.editorEditText}
             glyph="fa-solid fa-font"
-            tooltip={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
-            onApply={(css) => setEditorTextColorCss(isPreviewMode ? 'editorRenderText' : 'editorEditText', css)}
+            tooltip="Edit mode text color"
+            onApply={(css) => setEditorTextColorCss('editorEditText', css)}
           />
-
-          {middleRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
+          {editorTextHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
 
-        {!isPreviewMode ? (
-          <>
-            <OptionsSubsectionLabel>Boxes</OptionsSubsectionLabel>
-            <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
-              {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
-            </div>
-            <OptionsSubsectionLabel>Markdown</OptionsSubsectionLabel>
-            <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
-              {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
-            </div>
-          </>
-        ) : null}
+        <OptionsSubsectionLabel>Reader Text</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Reader text and selection colors">
+          <ColorTargetButton
+            className="text-icon text-icon-render"
+            color={editorTextColors.editorRenderText}
+            glyph="fa-solid fa-font"
+            tooltip="Render mode text color"
+            onApply={(css) => setEditorTextColorCss('editorRenderText', css)}
+          />
+          {readerTextHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
+        </div>
+
+        <OptionsSubsectionLabel>Editor Boxes</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
+          {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
+        </div>
+        <OptionsSubsectionLabel>Editor Markdown</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
+          {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
+        </div>
       </AccordionSection>
 
       {features.glaze ? (
