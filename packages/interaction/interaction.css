@@ -471,6 +471,7 @@
    color layers above (::before/::after) paint on top of it and hide it.
    Re-apply the shadow on ::after, the topmost of the two layers, so it
    remains visible over the swatch color. */
+.options-color-target.is-active::after,
 .options-color-target[data-pressed]::after,
 .options-color-picker-current.is-active::after,
 .options-color-picker-current[data-pressed]::after,

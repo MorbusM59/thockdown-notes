@@ -824,10 +824,11 @@ ${shortcutTable()}
 
 *One staged colour, shown at the top of every section that has colours.*
 
-- Click a colour to apply the staged colour to it; hold right-click on a colour to copy it into the staging.
-- The H, S, V and A letters choose which channels a click applies and a copy takes; Shift adds or removes one. The colour button selects all four.
+- Click a colour to link it: the picker takes its colour and paints it as you move the sliders. Click it again, choose a channel or fold the section to let go. The picker keeps the colour, so you can carry it to another section.
+- Right-click a colour to paint it with the picker's colour.
+- The H, S, V and A letters choose which channels a right-click paints; Shift adds or removes one. The colour button selects all four.
 - Right-click a slider to type a value.
-- Surface textures: click a surface to edit its texture; hold right-click on another surface to copy its texture to it; click the preview to apply the staged colour.
+- Surface textures: link a surface to edit its texture with the seed and the sliders.
 
 ### [Borders](#borders-and-spacing)
 

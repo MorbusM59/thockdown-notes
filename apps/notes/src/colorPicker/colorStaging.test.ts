@@ -48,3 +48,27 @@ describe('applyStagedColor', () => {
       .toEqual({ h: 200, s: 0.8, v: 0.6, a: 1 })
   })
 })
+
+describe('linking', () => {
+  it('loads the target, writes changes after the debounce, and flushes what is pending on unlink', async () => {
+    const { vi } = await import('vitest')
+    vi.useFakeTimers()
+    const { linkTarget, unlinkTarget, setStagedColor, getColorStaging, setChannelMask, LINK_WRITE_DEBOUNCE_MS } = await import('./colorStaging')
+    const writes: string[] = []
+    linkTarget('a', { h: 120, s: 1, v: 1, a: 1 }, (css) => writes.push(css))
+    expect(getColorStaging().linkedId).toBe('a')
+    expect(getColorStaging().color.h).toBe(120)
+    setStagedColor((c) => ({ ...c, v: 0.5 }))
+    expect(writes).toHaveLength(0)
+    vi.advanceTimersByTime(LINK_WRITE_DEBOUNCE_MS)
+    expect(writes).toHaveLength(1)
+    setStagedColor((c) => ({ ...c, v: 0.25 }))
+    unlinkTarget()
+    expect(writes).toHaveLength(2)
+    expect(getColorStaging().linkedId).toBeNull()
+    linkTarget('b', { h: 0, s: 1, v: 1, a: 1 }, () => {})
+    setChannelMask({ h: true, s: false, v: false, a: false })
+    expect(getColorStaging().linkedId).toBeNull()
+    vi.useRealTimers()
+  })
+})

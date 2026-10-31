@@ -1,14 +1,21 @@
 /**
- * A colour target: a swatch showing one colour the reader can set. A left
- * click applies the staged colour through the channel mask; a held right
- * click copies the target's masked channels into the staging
- * (colorStaging.ts). Every colour target in the options panel is one of
- * these, so the two gestures mean the same thing everywhere.
+ * A colour target: a swatch showing one colour the reader can set.
+ *
+ * A left click LINKS it (colorStaging.ts): the picker takes its colour, and
+ * from then on the picker writes into it as it moves; the button shows as
+ * active, and a second click unlinks it. A right click writes the staged
+ * colour into it at once, through the channel mask, without linking it.
+ * Every colour target in the options panel is one of these, so the two
+ * gestures mean the same thing everywhere.
+ *
+ * A link does not outlive its section: folding the section, or the panel
+ * unmounting, ends it. The staged colour stays, which is how a colour is
+ * carried from one section to another.
  */
-import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useAccordionSectionOpen } from '@thockdown/interaction/AccordionSection'
 import { hsvaToRgba, parseCssColorToRgba, rgbaToCssColor, rgbaToHsva } from '@thockdown/look/colorMath'
-import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
-import { applyStagedColor, copyIntoStaging, getColorStaging, setStagedColor } from './colorStaging'
+import { applyStagedColor, getColorStaging, linkTarget, unlinkTarget, useLinkedColor } from './colorStaging'
 
 export interface ColorTargetButtonProps {
   /** The target's current colour, as CSS. */
@@ -17,54 +24,52 @@ export interface ColorTargetButtonProps {
   glyph: string
   tooltip: string
   onApply: (css: string) => void
+  /** A stable id for the link, for a caller that needs to know which target is linked. */
+  linkId?: string
   className?: string
   style?: CSSProperties
   children?: ReactNode
 }
 
-export function ColorTargetButton({ color, glyph, tooltip, onApply, className, style, children }: ColorTargetButtonProps) {
-  const cancelHoldRef = useRef<(() => void) | null>(null)
-  const cancelHold = useCallback(() => {
-    cancelHoldRef.current?.()
-    cancelHoldRef.current = null
-  }, [])
-  useEffect(() => cancelHold, [cancelHold])
+export function ColorTargetButton({ color, glyph, tooltip, onApply, linkId, className, style, children }: ColorTargetButtonProps) {
+  const ownId = useId()
+  const id = linkId ?? ownId
+  const linkedColor = useLinkedColor(id)
+  const isLinked = linkedColor !== null
+  const sectionOpen = useAccordionSectionOpen()
+  const onApplyRef = useRef(onApply)
+  onApplyRef.current = onApply
 
-  const apply = () => {
-    const current = parseCssColorToRgba(color)
-    if (!current) return
-    const { color: staged, mask } = getColorStaging()
-    onApply(rgbaToCssColor(hsvaToRgba(applyStagedColor(rgbaToHsva(current), staged, mask))))
-  }
+  useEffect(() => {
+    if (!sectionOpen) unlinkTarget(id)
+  }, [sectionOpen, id])
+  useEffect(() => () => unlinkTarget(id), [id])
 
   return (
     <button
       type="button"
-      className={`btn-icon options-color-swatch options-color-target${className ? ` ${className}` : ''}`}
-      style={{ '--options-swatch-color': color, ...style } as CSSProperties}
+      className={`btn-icon options-color-swatch options-color-target${isLinked ? ' is-active' : ''}${className ? ` ${className}` : ''}`}
+      style={{ '--options-swatch-color': linkedColor ?? color, ...style } as CSSProperties}
       data-tooltip={tooltip}
-      onClick={apply}
+      aria-pressed={isLinked}
+      onClick={() => {
+        if (isLinked) {
+          unlinkTarget(id)
+          return
+        }
+        const rgba = parseCssColorToRgba(color)
+        if (rgba) linkTarget(id, rgbaToHsva(rgba), (css) => onApplyRef.current(css))
+      }}
       onPointerDown={(event) => {
         if (event.button !== 2) return
         event.stopPropagation()
-        cancelHold()
-        cancelHoldRef.current = armHold(() => {
-          cancelHoldRef.current = null
-          const source = parseCssColorToRgba(color)
-          if (!source) return
-          const { mask } = getColorStaging()
-          setStagedColor((staged) => copyIntoStaging(staged, rgbaToHsva(source), mask))
-        }, HOLD_CONFIRM_MS)
+        const current = parseCssColorToRgba(color)
+        if (!current) return
+        const { color: staged, mask } = getColorStaging()
+        onApply(rgbaToCssColor(hsvaToRgba(applyStagedColor(rgbaToHsva(current), staged, mask))))
       }}
-      onPointerUp={(event) => {
-        if (event.button === 2) cancelHold()
-      }}
-      onMouseLeave={cancelHold}
       data-secondary-press="action"
-      onContextMenu={(event) => {
-        event.preventDefault()
-        cancelHold()
-      }}
+      onContextMenu={(event) => event.preventDefault()}
     >
       <span className={`options-color-swatch-glyph ${glyph}`} aria-hidden="true" />
       {children}

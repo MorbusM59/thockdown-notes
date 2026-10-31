@@ -93,8 +93,7 @@ export function ColorPickerRow() {
               max={channel === 'h' ? 360 : 255}
               step={1}
               value={channelValue(color, channel)}
-              trackLabel=""
-              tooltipLabel={CHANNEL_NAMES[channel]}
+              trackLabel={CHANNEL_NAMES[channel]}
               ariaLabel={`Staged colour ${CHANNEL_NAMES[channel].toLowerCase()}`}
               secondaryPress="type"
               dimmed={!mask[channel]}
