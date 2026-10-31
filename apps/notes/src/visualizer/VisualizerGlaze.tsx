@@ -22,7 +22,7 @@ import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeLayers, buildRadialGlazeLayers } from '@thockdown/look/loadoutTheme'
-import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setSwayPush, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /**
  * `index` counts from the nearest layer; `linearPosition` places a linear
@@ -54,6 +54,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   // The widest the music ever carries the nearest layer, which no layer exceeds.
   const overscan = swayOverscanPx(immersive.swayRangePx * BREATH_AMPLITUDE_MAX)
   useEffect(() => setSwayRange(immersive.swayRangePx), [immersive.swayRangePx])
+  useEffect(() => setSwayPush(immersive.swayPush, immersive.swayReturn), [immersive.swayPush, immersive.swayReturn])
   const layers = useMemo<Layer[]>(() => {
     const settings = visualizerGlazeSettings(glaze, immersive.glazeStrength)
     // Nearest first: the top linear stack (each list is in stacking order,

@@ -127,23 +127,50 @@ export function registerSwayLayer(element: HTMLElement, index: number, depth: nu
 }
 
 /**
- * How far ahead along its own path the sway jumps on a snare hit, in seconds
- * of sway: the path is advanced by this times the snare response, which is
- * full on a hit and falls on the wave's fall (`GridWave.tsx`), so each hit is
- * a sudden step forward along the motion and a retreat back onto it.
+ * The longest push a snare hit gives the glaze at the push slider's end, as
+ * a share of one whole sway cycle (the camera's longest period).
  */
-const SNARE_SURGE_SEC = 1.5
-/** The grid wave's snare response, 0 to 1, published by `GridWave.tsx`. */
-let snareResponse = 0
+export const SWAY_PUSH_MAX_SHARE = 0.2
+const SWAY_CYCLE_SEC = PERIODS_X[0]
+/** The push per hit in seconds of sway (signed) and the share of it slid back. */
+let pushSec = 0
+let returnShare = 1
+
+export function setSwayPush(push: number, slideBack: number): void {
+  pushSec = push * SWAY_PUSH_MAX_SHARE * SWAY_CYCLE_SEC
+  returnShare = slideBack
+}
+
+/**
+ * The snare's push on the sway, in seconds along its own path. Each hit
+ * (the wave's snare response rising, `GridWave.tsx`) adds `pushSec` at once;
+ * as the response falls on the wave's fall, `returnShare` of that push slides
+ * back. What is not slid back is KEPT: it is folded into `keptSec` at the
+ * next hit, so the drift is permanently advanced (or set back) by it. Kept in
+ * PHASE rather than in pixels because the path is periodic: an offset in
+ * phase never carries a layer past its overscan, however much accumulates.
+ */
+let keptSec = 0
+let lastResponse = 0
+let pushInFlight = 0
+
+function pushOffsetSec(response: number): number {
+  return pushInFlight * (1 - returnShare * (1 - response))
+}
 
 export function setSwaySnare(response: number): void {
-  snareResponse = response
+  if (response > lastResponse) {
+    // A hit: keep what the previous push left standing, then push again.
+    keptSec = (keptSec + pushOffsetSec(lastResponse)) % SWAY_CYCLE_SEC
+    pushInFlight = pushSec
+  }
+  lastResponse = response
 }
 
 /** Moves every registered layer to where the sway is at `phaseSec`, with the music's breath widening it by `breathAmplitude`. */
 export function applySway(phaseSec: number, breathAmplitude: number): void {
   const amplitudePx = rangePx * breathAmplitude
-  const at = phaseSec + SNARE_SURGE_SEC * snareResponse
+  const at = phaseSec + keptSec + pushOffsetSec(lastResponse)
   for (const layer of layers) {
     const { x, y } = swayOffset(layer.index, layer.depth, at, amplitudePx)
     layer.element.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`

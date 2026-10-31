@@ -2463,7 +2463,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Glaze (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[2, 2]}>
+            <OptionsSliderRows rows={[3, 3]}>
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2515,6 +2515,32 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swaySpread}
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-push"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.swayPush}
+                trackLabel="push"
+                tooltipLabel="How far each snare hit pushes the glaze along its drift, in percent of a whole sway: the centre does not push, right pushes it forward and left back, up to 20 at either end"
+                ariaLabel="Immersive: how far each snare hit pushes the glaze along its drift, negative pushes it back"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayPush}
+                formatValue={(value) => String(Math.round(value * 20))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-return"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.swayReturn}
+                trackLabel="return"
+                tooltipLabel="How far the glaze slides back after a snare push, in percent, on the wave's fall: 0 keeps the whole push, 100 returns it to where it was"
+                ariaLabel="Immersive: share of each snare push the glaze slides back, percent"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayReturn}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayReturn: value } }))}
               />
             </OptionsSliderRows>
           </div>
