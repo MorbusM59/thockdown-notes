@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_VISUALIZER_IMMERSIVE, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
@@ -201,5 +201,26 @@ describe('pulseTravelBoxes', () => {
     expect(pulseTimeToTravel(pulseTravelBoxes(1.7, 10, 2), 10, 2)).toBeCloseTo(1.7, 6)
     // Total reach is speed x half-life / ln 2: farther never arrives.
     expect(pulseTimeToTravel(100, 10, 1)).toBe(Infinity)
+  })
+})
+
+describe('roundedSquareGauge', () => {
+  it('is the square at 0, the circle at 1, and 1 on the rounded edge between', () => {
+    expect(roundedSquareGauge(0.6, -0.9, 0)).toBeCloseTo(0.9)
+    expect(roundedSquareGauge(0.6, 0.8, 1)).toBeCloseTo(1)
+    // Corner of a half-rounded square: the arc's centre is (0.5, 0.5), radius 0.5.
+    const at = 0.5 + 0.5 * Math.SQRT1_2
+    expect(roundedSquareGauge(at, -at, 0.5)).toBeCloseTo(1)
+    expect(roundedSquareGauge(2 * at, 2 * at, 0.5)).toBeCloseTo(2)
+    expect(roundedSquareGauge(1, 0.3, 0.5)).toBeCloseTo(1)
+  })
+})
+
+describe('pulseRingStrength', () => {
+  it('is zero off the ring and full at its middle', () => {
+    expect(pulseRingStrength(0.7, 1)).toBe(0)
+    expect(pulseRingStrength(1, 1)).toBe(0)
+    expect(pulseRingStrength(0.875, 1)).toBeCloseTo(1)
+    expect(pulseRingStrength(0.76, 0)).toBe(1)
   })
 })

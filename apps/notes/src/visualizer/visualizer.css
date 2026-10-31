@@ -201,9 +201,8 @@
 
 .visualizer-grid-wave-pulse {
   position: absolute;
-  /* The ring at the rim, PULSE_RING_SHARE (GridWave.tsx) of the radius wide: pulseRingGradient's `inner`. */
-  /* The ring's stops come from useBeatFeedback (`pulseRingGradient`: colour and softness). */
-  background-image: radial-gradient(circle closest-side, var(--visualizer-pulse-ring, transparent 100%));
+  /* The ring, in the cutout face's shape, is an image GridWave.tsx draws (pulseRingImage). */
+  background-size: 100% 100%;
   /* Above the turning wave. */
   z-index: 1;
   /* Scaled by GridWave.tsx on the first kick of each bar; at rest it lies behind the cutout. */

@@ -115,9 +115,12 @@ export interface GridWaveSettings {
   edgeFallSec: number
   /** The centre cutout's corner roundness, 0 square to 1 a circle (`cutoutRing.ts`). */
   cutoutRound: number
+  /** The centre pulse's ring: its colour and edge softness (`pulseRingStrength`). */
+  pulseColor: string
+  pulseSoftness: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
@@ -125,7 +128,8 @@ export function setGridWaveSettings(next: GridWaveSettings): void {
     && next.pulseSpeed === settings.pulseSpeed && next.pulseHalfLifeSec === settings.pulseHalfLifeSec && next.pulseFadeSec === settings.pulseFadeSec
     && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec
     && next.edgeShape === settings.edgeShape && next.edgeFallSec === settings.edgeFallSec
-    && next.cutoutRound === settings.cutoutRound) return
+    && next.cutoutRound === settings.cutoutRound
+    && next.pulseColor === settings.pulseColor && next.pulseSoftness === settings.pulseSoftness) return
   settings = next
   for (const listener of listeners) listener()
 }

@@ -39,9 +39,9 @@
  */
 
 import { cutoutClosure } from './cutoutRing'
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { DEFAULT_VISUALIZER_CHANNEL, pulseTimeToTravel, pulseTravelBoxes, type VisualizerChannel } from '@thockdown/look/visualizer'
+import { DEFAULT_VISUALIZER_CHANNEL, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, pulseTravelBoxes, type VisualizerChannel } from '@thockdown/look/visualizer'
 import { subscribeMusicBand, subscribeMusicTempo } from '../sound/musicBeat'
 import { subscribePulseHits } from './pulseHits'
 import { setSwaySnare } from './parallaxSway'
@@ -98,7 +98,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -181,12 +181,22 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   // nothing repaints.
   const pulseRefs = useRef<Array<HTMLDivElement | null>>([])
   const pulseInnerPx = cutout && cutout.size > 0 ? (cutout.size / 2) * (1 - PULSE_RING_SHARE) : 0
+  // The ring is the cutout face's shape, so its inner edge clears the scene
+  // when the farthest corner lies on it: that corner's gauge, in half-sides.
   const pulseExitScale = sceneBox && cutout && pulseInnerPx > 0
-    ? Math.hypot(
-      Math.max(cutout.left + cutout.size / 2, sceneBox.width - cutout.left - cutout.size / 2),
-      Math.max(cutout.top + cutout.size / 2, sceneBox.height - cutout.top - cutout.size / 2),
-    ) / pulseInnerPx
+    ? roundedSquareGauge(
+      Math.max(cutout.left + cutout.size / 2, sceneBox.width - cutout.left - cutout.size / 2) / (cutout.size / 2),
+      Math.max(cutout.top + cutout.size / 2, sceneBox.height - cutout.top - cutout.size / 2) / (cutout.size / 2),
+      cutoutRound,
+    ) * (cutout.size / 2) / pulseInnerPx
     : 0
+  // The ring itself: the face's rounded square, PULSE_RING_SHARE of its
+  // half-side wide at the rim, drawn once per change of colour, softness,
+  // roundness or size and then only scaled.
+  const pulseRingImage = useMemo(
+    () => (cutout && cutout.size > 0 ? drawPulseRing(cutout.size, cutoutRound, pulseColor, pulseSoftness) : 'none'),
+    [cutout?.size, cutoutRound, pulseColor, pulseSoftness],
+  )
   // Read through a ref, so a resize or a slider changes the next pulse
   // without cancelling the pulses under way.
   const pulseInputs = useRef({ pulseExitScale, pulseInnerPx, boxPx, pulseSpeed, pulseHalfLifeSec, pulseFadeSec })
@@ -289,7 +299,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
                 key={i}
                 ref={(layer) => { pulseRefs.current[i] = layer }}
                 className="visualizer-grid-wave-pulse"
-                style={{ left: cutout.left, top: cutout.top, width: cutout.size, height: cutout.size }}
+                style={{ left: cutout.left, top: cutout.top, width: cutout.size, height: cutout.size, backgroundImage: pulseRingImage }}
               />
             )) : null}
           </div>
@@ -298,4 +308,33 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       ) : null}
     </>
   )
+}
+
+/**
+ * The pulse ring as an image `size` CSS px square at the device's pixel
+ * ratio: the colour, its alpha scaled per pixel by `pulseRingStrength` on the
+ * rounded square's gauge, so the colour's own alpha is the ring's peak.
+ */
+function drawPulseRing(size: number, round: number, color: string, softness: number): string {
+  const side = Math.max(1, Math.min(1024, Math.round(size * (window.devicePixelRatio || 1))))
+  const canvas = document.createElement('canvas')
+  canvas.width = side
+  canvas.height = side
+  const context = canvas.getContext('2d')
+  if (!context) return 'none'
+  context.fillStyle = color
+  context.fillRect(0, 0, side, side)
+  const image = context.getImageData(0, 0, side, side)
+  const data = image.data
+  const half = side / 2
+  for (let py = 0; py < side; py++) {
+    const y = (py + 0.5 - half) / half
+    for (let px = 0; px < side; px++) {
+      const strength = pulseRingStrength(roundedSquareGauge((px + 0.5 - half) / half, y, round), softness, 1 - PULSE_RING_SHARE)
+      const i = (py * side + px) * 4 + 3
+      data[i] = Math.round(data[i] * strength)
+    }
+  }
+  context.putImageData(image, 0, 0)
+  return `url(${canvas.toDataURL()})`
 }

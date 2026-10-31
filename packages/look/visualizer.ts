@@ -161,7 +161,7 @@ export interface VisualizerImmersive {
   pulseHalfLifeSec: number
   /** 0.1 to 5 seconds: each pulse layer fades linearly from full to nothing over this long. */
   pulseFadeSec: number
-  /** 0 to 1: how gradually the pulse's ring fades at its edges (`pulseRingGradient`); 0 is a hard-edged band, 1 a smooth bell. */
+  /** 0 to 1: how gradually the pulse's ring fades at its edges (`pulseRingStrength`); 0 is a hard-edged band, 1 a smooth bell. */
   pulseSoftness: number
   /** 0 to 1: how round the centre cutout's corners are, as a share of half its side; 0 square (the cutout as it always was), 1 a circle. The grid's square hole stays the same whole boxes either way. */
   cutoutRound: number
@@ -505,27 +505,38 @@ export function pulseTimeToTravel(distance: number, speed: number, halfLifeSec: 
   return share >= 1 ? Infinity : -Math.log(1 - share) / k
 }
 
-/** Stops each side of the ring's centre in `pulseRingGradient`. */
-const PULSE_RING_STOPS = 8
+/**
+ * How far out a point lies on the scale of a rounded square centred on the
+ * origin, half-side 1, corner radius `round` of the half-side (0 a square,
+ * 1 a circle): the factor the shape must be scaled by for its edge to pass
+ * through (x, y). Its level sets are the shape's own scaled copies, so a
+ * ring drawn on it has the shape of the cutout at every size.
+ */
+export function roundedSquareGauge(x: number, y: number, round: number): number {
+  const a = Math.max(Math.abs(x), Math.abs(y))
+  const b = Math.min(Math.abs(x), Math.abs(y))
+  const rho = Math.max(0, Math.min(1, round))
+  const c = 1 - rho
+  // On a straight side: the larger coordinate.
+  if (b <= a * c) return a
+  // In a corner: (a - g c)^2 + (b - g c)^2 = (g rho)^2, its smaller positive root.
+  const A = 2 * c * c - rho * rho
+  const B = -2 * c * (a + b)
+  const C = a * a + b * b
+  if (Math.abs(A) < 1e-9) return C / (2 * c * (a + b))
+  return (-B - Math.sqrt(Math.max(0, B * B - 4 * A * C))) / (2 * A)
+}
 
 /**
- * The centre pulse's ring as the colour stops of a `radial-gradient`, the
- * ring lying between `inner` and 100% of the radius. Across the ring (u from
- * -1 at an edge to 0 at its middle) the colour's strength is a plateau with
- * ramps `softness` of the half-width wide, each eased by smoothstep: 0 is a
- * band with hard edges, 1 a bell with no plateau. The strength is
- * `color-mix` of the colour with transparent, so the colour's own alpha is
- * the ring's peak.
+ * The centre pulse's ring strength, 0 to 1, at `gauge` (`roundedSquareGauge`,
+ * 1 at the layer's rim), the ring lying between `inner` and 1. Across the
+ * ring (u from -1 at an edge to 0 at its middle) the strength is a plateau
+ * with ramps `softness` of the half-width wide, each eased by smoothstep: 0
+ * is a band with hard edges, 1 a bell with no plateau.
  */
-export function pulseRingGradient(color: string, softness: number, inner = 75): string {
-  const ramp = Math.max(softness, 1e-3)
-  const stops: string[] = []
-  for (let i = 0; i <= 2 * PULSE_RING_STOPS; i++) {
-    const u = i / PULSE_RING_STOPS - 1
-    const x = Math.min(1, (1 - Math.abs(u)) / ramp)
-    const strength = x * x * (3 - 2 * x)
-    const at = inner + ((100 - inner) * i) / (2 * PULSE_RING_STOPS)
-    stops.push(`color-mix(in srgb, ${color} ${(strength * 100).toFixed(1)}%, transparent) ${at.toFixed(2)}%`)
-  }
-  return `transparent ${inner}%, ${stops.join(', ')}`
+export function pulseRingStrength(gauge: number, softness: number, inner = 0.75): number {
+  if (gauge <= inner || gauge >= 1) return 0
+  const u = (2 * (gauge - inner)) / (1 - inner) - 1
+  const x = Math.min(1, (1 - Math.abs(u)) / Math.max(softness, 1e-3))
+  return x * x * (3 - 2 * x)
 }
