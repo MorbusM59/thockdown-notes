@@ -447,8 +447,9 @@ export class MusicAnalysis {
       // Weighed by how far its signal is this drum: a sound on the edge of being one shows faintly.
       const confidence = band.drum === 'kicks' ? x.kick : x.hit
       if (confidence > 0) {
-        raw = Math.max(raw, confidence * instanceResponse(x.intensity, this.rangeOf(band.drum ?? 'kicks'), contrast))
-        if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} confidence=${confidence.toFixed(2)} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)}`)
+        const response = confidence * instanceResponse(x.intensity, this.rangeOf(band.drum ?? 'kicks'), contrast)
+        raw = Math.max(raw, response)
+        if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} confidence=${confidence.toFixed(2)} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)} contrast=${contrast.toFixed(2)} response=${response.toFixed(2)}`)
       }
     }
     return raw
