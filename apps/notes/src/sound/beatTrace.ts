@@ -50,10 +50,13 @@ export class BeatTraceWindow {
   private lost = 0
   private since = NaN
 
+  /** `emit` takes each line: the page's trace buffer, or, in the analysis worker, a list posted back to the page. */
+  constructor(private readonly emit: (line: string) => void = appendBeatTrace) {}
+
   /** Records the feed the tracker just took; writes a RESTART at once and a summary once a second. */
   record(tracker: DrumTracker, lost: number, mediaTime: number): void {
     const at = mediaTime.toFixed(3)
-    if (tracker.lastRestart) appendBeatTrace(`beat RESTART ${tracker.lastRestart} at=${at} drift=${(tracker.lastDriftSec * 1000).toFixed(1)}ms lost=${lost}`)
+    if (tracker.lastRestart) this.emit(`beat RESTART ${tracker.lastRestart} at=${at} drift=${(tracker.lastDriftSec * 1000).toFixed(1)}ms lost=${lost}`)
     else if (tracker.lastDriftSec !== 0) this.drifts.push(tracker.lastDriftSec * 1000)
     this.lost += lost
     if (Number.isNaN(this.since)) this.since = mediaTime
@@ -62,7 +65,7 @@ export class BeatTraceWindow {
     const mean = n > 0 ? this.drifts.reduce((a, b) => a + b, 0) / n : 0
     const spread = n > 0 ? Math.sqrt(this.drifts.reduce((a, b) => a + (b - mean) ** 2, 0) / n) : 0
     const bpm = tracker.tempoBpm
-    appendBeatTrace(
+    this.emit(
       `beat sec at=${at} feeds=${n} jitter mean=${mean.toFixed(2)}ms sd=${spread.toFixed(2)}ms lost=${this.lost}`
         + ` bpm=${Number.isNaN(bpm) ? '--' : bpm.toFixed(1)} conf=${tracker.gridConfidence.toFixed(2)}`,
     )

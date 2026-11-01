@@ -10,6 +10,12 @@
  * on any track at any volume, unless around here is near silence
  * (`SILENCE_DB`, `stretchLevel`), which gives none.
  *
+ * Everything that reads the decoded samples runs in a WORKER
+ * (`musicAnalysis.ts`), which this module asks once a frame, one frame
+ * ahead, for every reader's raw response, the tempo grid and the window's
+ * peak; what stays here is the frame: the listener's clock, the falls, the
+ * hits, the loudness gain and the caret's steady beat.
+ *
  * The window looks AHEAD as well as back, and is filled from the track
  * DECODED (`musicDecodeStream.ts`), never from what is playing: decoding is
  * far faster than playback, so whenever the analysis starts over (a new
@@ -54,59 +60,29 @@
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import type { VisualizerChannel as BeatChannel, VisualizerCaret, VisualizerDrum } from '@thockdown/look/visualizer'
+import type { VisualizerChannel as BeatChannel, VisualizerCaret } from '@thockdown/look/visualizer'
 import { pulseCurve } from '@thockdown/look/visualizer'
-import { BandLevelMeter, LEVEL_FLOOR_DB } from './bandLevel'
 import { BeatClock } from './beatClock'
-import { DrumCursor, DrumTracker } from './drumTracker'
-import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'
+import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
-import { MusicDecodeStream } from './musicDecodeStream'
-import { loudnessGain, PeakWindow } from './peakWindow'
+import type { AnalysisAnswer, AnalysisRequest, ReaderSource } from './musicAnalysis'
+import { loudnessGain } from './peakWindow'
 
-/** How far either side of the listener the window reaches, in seconds. */
-const LEAD_SEC = 5
-/** How far past the window's leading edge the decoding is let run, so it never trails the listener. */
-const DECODE_MARGIN_SEC = 1
 /** A listener this far from where its clock put it has jumped (a seek, a stall), and the analysis starts over. */
 const RESYNC_SEC = 0.75
-/** The share of the window's moments that give a full response. */
-const TOP_SHARE = 0.02
-/** The narrowest span the stretch may use, so a near-constant band is not blown up into noise. */
-const MIN_SPAN_DB = 3
-/**
- * A band's RMS level (dBFS, of the decoded track, before the player's volume)
- * that is silence to the stretch (`stretchLevel`): no response at or below
- * it. Well under any audible part of a band in a mastered track, and over a
- * hiss or dither floor, which a narrow band reads further down still.
- */
-const SILENCE_DB = -70
-/** Histogram resolution, in dB. */
-const BIN_DB = 0.5
-const BINS = Math.ceil(-LEVEL_FLOOR_DB / BIN_DB) + 1
-/** Readings kept per band: twice `LEAD_SEC` and the margin at a hundred a second, with room to spare. */
-const CAPACITY = 4096
 /** The smallest change a subscriber is told of. */
 const MIN_STEP = 0.001
 
 type BeatListener = (response: number) => void
 
 interface Band {
+  /** The reader's id in the analysis (`musicAnalysis.ts`). */
+  id: number
   channel: BeatChannel
   listener: BeatListener
-  /** A level band's meter, for the current analysis run; null for a drum or before a run. */
-  meter: BandLevelMeter | null
-  /** A drum channel's place in the shared tracker's hits; null for a band. */
-  cursor: DrumCursor | null
   /** The last peak of the response and the listener time it was reached at, for the fall (`pulseCurve`). */
   peak: number
   peakTime: number
-  /** Ring of readings: media time and level in dB, oldest at `head`. */
-  times: Float64Array
-  levels: Float32Array
-  head: number
-  count: number
-  bins: Uint32Array
   published: number
   /** Told of each HIT (`respond`): the response rising to a new peak after falling, with that peak. */
   onHit: ((strength: number) => void) | null
@@ -115,6 +91,8 @@ interface Band {
 }
 
 const bands = new Set<Band>()
+const bandsById = new Map<number, Band>()
+let nextBandId = 1
 
 /** A CLOCK subscriber (the caret's): a steady beat and the fall each beat makes. */
 interface Clock {
@@ -153,23 +131,16 @@ function subscriberCount(): number {
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
 
-/** The one drum analysis every drum channel reads, for the current run. */
-interface DrumAnalysis {
-  tracker: DrumTracker
-  /** The beat trace's running window, while the trace is on (`beatTrace.ts`). */
-  trace: BeatTraceWindow | null
-}
-let drums: DrumAnalysis | null = null
-/** The decoded track's peak sample magnitude around the listener, for the loudness gain (`respond`). */
-const peaks = new PeakWindow()
 /** The loudness gain the last frame read (`tick`). */
 let gain = 1
 /** How far below full scale a window's peak may be and still give a full response (`loudnessGain`); the reader's Response setting. */
 let headroomDb = 5
 
-/** The playing track, decoded; replaced when the track changes. */
-let stream: MusicDecodeStream | null = null
-/** Bumped by every restart, so a restart still waiting for its file to open is dropped by a later one. */
+/** The analysis worker, created with the first subscriber and ended with the last. */
+let worker: Worker | null = null
+/** The track the analysis was last restarted on. */
+let analysedUrl: string | null | undefined
+/** Bumped by every restart, so answers to an older run's asks are dropped. */
 let run = 0
 /** Something the analysis depends on changed (a band added, a source or band moved): the next frame starts it over. */
 let stale = true
@@ -177,126 +148,84 @@ let stale = true
 let lastListener = NaN
 let lastNow = NaN
 
-function drumOf(channel: BeatChannel): VisualizerDrum | null {
-  return channel.source === 'band' ? null : channel.source
+/**
+ * What the answers received since the last frame say. A drum's raw response
+ * is a hit since its last ask, so two answers landing between two frames
+ * are both kept (the larger); a level band's is a level, and the latest
+ * stands. NaN grid and peak until an answer says otherwise.
+ */
+const pendingRaw = new Map<number, number>()
+let gridPeriodSec = NaN
+let gridBeatTime = NaN
+
+function send(request: AnalysisRequest): void {
+  worker?.postMessage(request)
+}
+
+function receive(answer: AnalysisAnswer): void {
+  if (answer.run !== run) return
+  for (let i = 0; i < answer.ids.length; i++) {
+    const id = answer.ids[i]
+    const raw = answer.raws[i]
+    const band = bandsById.get(id)
+    if (!band) continue
+    const isDrum = band.channel.source !== 'band'
+    pendingRaw.set(id, isDrum ? Math.max(pendingRaw.get(id) ?? 0, raw) : raw)
+  }
+  gridPeriodSec = answer.gridPeriodSec
+  gridBeatTime = answer.gridBeatTime
+  // Until the decoding has reached the listener there is no peak to read:
+  // the last gain holds rather than reading as silence.
+  if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
+  for (const line of answer.traceLines) appendBeatTrace(line)
+}
+
+function ensureWorker(): void {
+  if (worker) return
+  worker = new Worker(new URL('./musicAnalysis.worker.ts', import.meta.url), { type: 'module' })
+  worker.onmessage = (event: MessageEvent<AnalysisAnswer>) => receive(event.data)
 }
 
 /** Whether anything reads the drum analysis: a drum channel for its hits, a clock for its grid. */
 function needsDrums(): boolean {
-  return clocks.size > 0 || counters.size > 0 || [...bands].some((band) => drumOf(band.channel) !== null)
-}
-
-function clearWindow(band: Band): void {
-  band.head = 0
-  band.count = 0
-  band.bins.fill(0)
-  band.peak = 0
-}
-
-function binOf(db: number): number {
-  return Math.min(BINS - 1, Math.max(0, Math.round((db - LEVEL_FLOOR_DB) / BIN_DB)))
-}
-
-function dropOldest(band: Band): void {
-  band.bins[binOf(band.levels[band.head])]--
-  band.head = (band.head + 1) % CAPACITY
-  band.count--
-}
-
-function record(band: Band, time: number, db: number): void {
-  if (band.count === CAPACITY) dropOldest(band)
-  const at = (band.head + band.count) % CAPACITY
-  band.times[at] = time
-  band.levels[at] = db
-  band.count++
-  band.bins[binOf(db)]++
+  return clocks.size > 0 || counters.size > 0 || [...bands].some((band) => band.channel.source !== 'band')
 }
 
 /**
  * Starts the analysis over at the listener: every window emptied, the
  * decoding put back to `LEAD_SEC` behind `listenerTime` and run to the
- * window's leading edge at once.
+ * window's leading edge at once (`musicAnalysis.ts`).
  */
 function restartAnalysis(listenerTime: number): void {
   stale = false
   const url = musicPlayerService.trackUrl
-  for (const band of bands) clearWindow(band)
-  peaks.reset()
-  drums = null
-  // Every restart supersedes one still waiting for its file to open, whether or not it gets as far as starting one of its own.
+  for (const band of bands) band.peak = 0
+  pendingRaw.clear()
+  gridPeriodSec = NaN
+  gridBeatTime = NaN
   const id = ++run
   // A new track's beat is not the last one's; a seek in the same track keeps the tempo and seats on the next grid.
-  const newTrack = stream?.url !== url
+  const newTrack = analysedUrl !== url
+  analysedUrl = url
   for (const { clock } of [...clocks, ...counters]) {
     if (newTrack) clock.reset()
     else clock.restart()
   }
-  if (newTrack) {
-    stream?.dispose()
-    stream = url ? new MusicDecodeStream(url) : null
-  }
-  if (!stream) return
-  stream.halt()
-  const target = stream
-  if (isBeatTraceOn()) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
-  void target.sampleRate().then((sampleRate) => {
-    if (id !== run || sampleRate === null) return
-    for (const band of bands) {
-      if (drumOf(band.channel)) {
-        band.cursor ??= new DrumCursor()
-        band.meter = null
-      } else {
-        band.cursor = null
-        band.meter = new BandLevelMeter(sampleRate, band.channel.frequencyHz, band.channel.octaves)
-      }
-    }
-    drums = needsDrums() ? { tracker: new DrumTracker(sampleRate), trace: null } : null
-    // The file may have taken a moment to open: start from where the listener is now.
-    const at = Number.isNaN(lastListener) ? listenerTime : lastListener
-    target.run(Math.max(0, at - LEAD_SEC), at + LEAD_SEC + DECODE_MARGIN_SEC, (samples, startTime) => {
-      // A chunk decoded for a run a later restart replaced is not this window's.
-      if (id === run) analyse(samples, startTime, sampleRate)
-    })
-  })
-}
-
-/** Measures one decoded chunk into the drum analysis and every level band. */
-function analyse(samples: Float32Array, startTime: number, sampleRate: number): void {
-  peaks.add(samples, startTime, sampleRate)
-  if (drums) {
-    const endTime = startTime + (samples.length - 1) / sampleRate
-    drums.tracker.feed(samples, 0, endTime)
-    if (isBeatTraceOn()) (drums.trace ??= new BeatTraceWindow()).record(drums.tracker, 0, endTime)
-    else drums.trace = null
-  }
-  for (const band of bands) {
-    band.meter?.process(samples, startTime, (time, db) => record(band, time, db))
-  }
-}
-
-function percentile(band: Band, share: number): number {
-  const target = share * (band.count - 1)
-  let seen = 0
-  for (let b = 0; b < BINS; b++) {
-    seen += band.bins[b]
-    if (seen > target) return LEVEL_FLOOR_DB + b * BIN_DB
-  }
-  return 0
+  if (isBeatTraceOn() && url) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
+  const readers: ReaderSource[] = [...bands].map(({ id: readerId, channel }) => ({ id: readerId, source: channel.source, frequencyHz: channel.frequencyHz, octaves: channel.octaves }))
+  send({ type: 'restart', run: id, url, listenerTime, readers, drums: needsDrums() })
 }
 
 /**
- * The response for what the listener hears at `listenerTime`, from the
- * window around it, at `gain` (`loudnessGain`: how near full scale the
- * track's peak around the listener comes), so a track mixed quiet, or a
- * quiet passage between loud ones, pulses less than one at full scale. Every
- * band and drum source is scaled alike, and a hit's strength (`onHit`) with
- * it; a clock (the caret's beat) is not, being a beat rather than a level.
+ * The response for what the listener hears at `listenerTime`, from the raw
+ * response the analysis gave (`raw`: a drum's hit, a level band's stretched
+ * level), at `gain` (`loudnessGain`: how near full scale the track's peak
+ * around the listener comes), so a track mixed quiet, or a quiet passage
+ * between loud ones, pulses less than one at full scale. Every band and drum
+ * source is scaled alike, and a hit's strength (`onHit`) with it; a clock
+ * (the caret's beat) is not, being a beat rather than a level.
  */
-function respond(band: Band, listenerTime: number, gain: number): number {
-  const drum = drumOf(band.channel)
-  const raw = drum
-    ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast, band.channel.groove) : 0)
-    : stretched(band, listenerTime)
+function respond(band: Band, raw: number, listenerTime: number, gain: number): number {
   // The fall: a response never drops faster than its last peak fades, on
   // the block's own curve and length. A rise is taken at once.
   const { fallSec, shape } = band.channel
@@ -321,8 +250,7 @@ function respond(band: Band, listenerTime: number, gain: number): number {
 /** A clock's response: its fall, restarted on each of its beats and cut at the next. */
 function pulse(subscriber: Clock, listenerTime: number): number {
   const { clock } = subscriber
-  const tracker = drums?.tracker
-  clock.advance(listenerTime, tracker ? tracker.gridPeriodSec : NaN, tracker ? tracker.gridBeatTime : NaN)
+  clock.advance(listenerTime, gridPeriodSec, gridBeatTime)
   const phase = clock.phase
   setLocked(subscriber, !Number.isNaN(phase))
   if (Number.isNaN(phase)) return 0
@@ -332,48 +260,8 @@ function pulse(subscriber: Clock, listenerTime: number): number {
 
 /** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
 function count(counter: Counter, listenerTime: number): void {
-  const tracker = drums?.tracker
-  counter.clock.advance(listenerTime, tracker ? tracker.gridPeriodSec : NaN, tracker ? tracker.gridBeatTime : NaN)
+  counter.clock.advance(listenerTime, gridPeriodSec, gridBeatTime)
   counter.listener(listenerTime, Number.isNaN(counter.clock.phase) ? NaN : counter.clock.period)
-}
-
-/** A level band's response: its level at `listenerTime`, stretched over the window around it. */
-function stretched(band: Band, listenerTime: number): number {
-  while (band.count > 0 && band.times[band.head] < listenerTime - LEAD_SEC) dropOldest(band)
-  // Before a restart's decoding has reached the listener, every reading
-  // lies ahead of it (or there are none): nothing heard yet to describe.
-  if (band.count === 0 || band.times[band.head] > listenerTime) return 0
-  // The level at the listener's moment, interpolated between the readings
-  // either side of it, so a frame between two readings does not hold the
-  // older one and then step.
-  let level = band.levels[band.head]
-  let before = band.head
-  for (let k = 1; k < band.count; k++) {
-    const at = (band.head + k) % CAPACITY
-    if (band.times[at] > listenerTime) {
-      const span = band.times[at] - band.times[before]
-      const share = span > 0 ? (listenerTime - band.times[before]) / span : 0
-      level = band.levels[before] + (band.levels[at] - band.levels[before]) * share
-      break
-    }
-    before = at
-    level = band.levels[at]
-  }
-  return stretchLevel(level, percentile(band, band.channel.contrast), percentile(band, 1 - TOP_SHARE))
-}
-
-/**
- * The levels stretch (header) of `level` between the window's `floor` and
- * `top` percentiles, in dB. Neither end is taken below SILENCE_DB: a window
- * of near silence (a track's lead-in, the gap between two songs, a hiss or
- * dither floor) is not stretched into a full response, which would make its
- * noise pulse like the music. Above it the stretch is the window's own, so
- * a quiet but audible passage still reaches a full response.
- */
-export function stretchLevel(level: number, floor: number, top: number): number {
-  const from = Math.max(SILENCE_DB, floor)
-  const to = Math.max(from + MIN_SPAN_DB, top)
-  return Math.max(0, Math.min(1, (level - from) / (to - from)))
 }
 
 function publish(subscriber: Band | Clock, response: number): void {
@@ -471,19 +359,32 @@ function tick(frameTimeMs: number): void {
   const listenerTime = listenerClock.read(musicPlayerService.currentTime, now)
   // Where the listener would be had nothing jumped: carried on by the
   // clock from the last frame, or where it was when the music stopped.
-  const expected = Number.isNaN(lastNow) ? lastListener : lastListener + (now - lastNow)
+  const frameSec = Number.isNaN(lastNow) ? 0 : now - lastNow
+  const expected = Number.isNaN(lastNow) ? lastListener : lastListener + frameSec
   const jumped = !(Math.abs(listenerTime - expected) <= RESYNC_SEC)
   lastListener = listenerTime
   lastNow = now
-  if (stale || jumped || (stream?.url ?? null) !== musicPlayerService.trackUrl) restartAnalysis(listenerTime)
-  else stream?.want(listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
+  if (stale || jumped || analysedUrl !== musicPlayerService.trackUrl) restartAnalysis(listenerTime)
   const heardTime = listenerTime - heardLagSec()
-  // Until the decoding has reached the listener there is no peak to read:
-  // the last gain holds rather than reading as silence.
-  if (!peaks.isEmpty) gain = loudnessGain(peaks.peakSince(heardTime - LEAD_SEC), headroomDb)
-  for (const band of bands) publish(band, respond(band, heardTime, gain))
+  // What the answers since the last frame said, asked for this frame's
+  // heard moment one frame ago (below).
+  for (const band of bands) {
+    const raw = pendingRaw.get(band.id) ?? 0
+    if (band.channel.source !== 'band') pendingRaw.delete(band.id)
+    publish(band, respond(band, raw, heardTime, gain))
+  }
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   for (const counter of counters) count(counter, heardTime)
+  // Asked one frame AHEAD: the answer is back before the next frame, which
+  // shows the moment it is for, so the worker costs no lag.
+  send({
+    type: 'ask',
+    run,
+    listenerTime,
+    heardTime: heardTime + frameSec,
+    readers: [...bands].map(({ id, channel }) => ({ id, contrast: channel.contrast, groove: channel.groove })),
+    trace: isBeatTraceOn(),
+  })
   frame = requestAnimationFrame(tick)
 }
 
@@ -525,6 +426,7 @@ export interface MusicClockSubscription {
 /** The first subscriber starts listening for play state and visibility; every new one marks the analysis stale. */
 function added(): void {
   stale = true
+  ensureWorker()
   if (subscriberCount() === 1) {
     unsubscribePlaying = musicPlayerService.subscribePlaying((playing) => (playing ? start() : stop()))
     document.addEventListener('visibilitychange', onVisibility)
@@ -535,14 +437,15 @@ function added(): void {
 /** After a subscriber left: drops the drum analysis if nothing reads it, and everything once nothing is left. */
 function removed(): void {
   if (subscriberCount() > 0) {
-    if (!needsDrums()) drums = null
+    if (!needsDrums()) send({ type: 'dropDrums' })
     return
   }
   stop()
   run++
-  stream?.dispose()
-  stream = null
-  drums = null
+  send({ type: 'dispose' })
+  worker?.terminate()
+  worker = null
+  analysedUrl = undefined
   stale = true
   lastListener = NaN
   unsubscribePlaying?.()
@@ -553,22 +456,17 @@ function removed(): void {
 /** Follows one band of the music; `listener` gets the response whenever it moves, and `onHit` each hit (`respond`: where a rise begins). */
 export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener, onHit: ((strength: number) => void) | null = null): MusicBandSubscription {
   const band: Band = {
+    id: nextBandId++,
     channel,
     listener,
-    meter: null,
-    cursor: null,
     peak: 0,
     peakTime: 0,
-    times: new Float64Array(CAPACITY),
-    levels: new Float32Array(CAPACITY),
-    head: 0,
-    count: 0,
-    bins: new Uint32Array(BINS),
     published: 0,
     onHit,
     rising: false,
   }
   bands.add(band)
+  bandsById.set(band.id, band)
   added()
   const update = (next: BeatChannel) => {
     // A new source, frequency or width is a different quantity: the window
@@ -578,6 +476,8 @@ export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener,
   }
   const unsubscribe = () => {
     bands.delete(band)
+    bandsById.delete(band.id)
+    pendingRaw.delete(band.id)
     removed()
   }
   return { update, unsubscribe }

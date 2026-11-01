@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { stretchLevel } from './musicBeat'
+import { stretchLevel } from './musicAnalysis'
 
 describe('the levels stretch', () => {
   it('gives a window of near silence no response, however its noise moves', () => {
