@@ -85,7 +85,7 @@
   text-align: center;
   font-family: var(--visualizer-font);
   font-size: var(--visualizer-font-size);
-  color: var(--color-editor-edit-text);
+  color: var(--visualizer-accent-color, var(--color-caret));
   white-space: pre;
 }
 
