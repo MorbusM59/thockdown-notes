@@ -60,7 +60,7 @@ export interface VisualizerChannel {
 
 /**
  * The caret's block: it ticks on a steady beat that follows the music's
- * tempo (the notes app's `sound/beatMap.ts`) rather than a band or a drum,
+ * tempo (the notes app's `sound/beatClock.ts`) rather than a band or a drum,
  * so it has only the depth of each beat (`effect`, as a channel's) and the
  * fall each beat makes (`shape` and `fallSec`, cut at the next beat).
  *
