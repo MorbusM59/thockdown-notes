@@ -245,15 +245,23 @@ class DelayRing {
 /**
  * A drum reader's response to one instance: the same levels stretch a band
  * gets (`musicBeat.ts`'s header), over the intensities of that drum's
- * instances in the score around the listener (`intensities`, ascending), so
+ * instances in the score around the listener (`intensities`: intensity and confidence, ascending), so
  * `contrast` means one thing for every source and every track: the
  * `contrast` share of the drum's instances shows nothing and its top
  * `TOP_SHARE` shows in full, whether the track is mastered loud or quiet.
  * `intensity` is the score's, 0..1 over `INTENSITY_FLOOR_DB`..0 dBFS.
  */
-export function instanceResponse(intensity: number, intensities: readonly number[], contrast: number): number {
+export function instanceResponse(intensity: number, intensities: readonly (readonly [number, number])[], contrast: number): number {
   if (intensities.length === 0) return 0
-  const at = (share: number) => intensities[Math.min(intensities.length - 1, Math.floor(share * intensities.length))]
+  let total = 0
+  for (const [, weight] of intensities) total += weight
+  // A weighted percentile: each instance counts by its confidence, so a kick that is faintly a hit cannot set the
+  // hits' top.
+  const at = (share: number) => {
+    let seen = 0
+    for (const [value, weight] of intensities) if ((seen += weight) > share * total) return value
+    return intensities[intensities.length - 1][0]
+  }
   const top = at(1 - TOP_SHARE)
   // At least MIN_SPAN_DB below the top, measured DOWN from it: drums of one loudness (a programmed kick) are all
   // full, where a span measured up from the floor would leave every one of them at nothing.
@@ -425,7 +433,7 @@ export class MusicAnalysis {
     const scored = this.scored
     if (!scored || Number.isNaN(from) || heardTime <= from) return 0
     let raw = 0
-    let intensities: number[] | null = null
+    let intensities: (readonly [number, number])[] | null = null
     for (const x of this.held) {
       if (x.time <= from || x.time > heardTime) continue
       // Weighed by how far its signal is this drum: a sound on the edge of being one shows faintly.
@@ -433,7 +441,7 @@ export class MusicAnalysis {
       if (confidence > 0) {
         // The drum's instances in the score (everything held: a second behind the listener to the frontier), built only
         // when one is heard.
-        intensities ??= this.held.filter((y) => (band.drum === 'kicks' ? y.kick : y.hit) > 0).map((y) => y.intensity).sort((a, b) => a - b)
+        intensities ??= this.held.map((y) => [y.intensity, band.drum === 'kicks' ? y.kick : y.hit] as const).filter(([, w]) => w > 0).sort((a, b) => a[0] - b[0])
         raw = Math.max(raw, confidence * instanceResponse(x.intensity, intensities, contrast))
         if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} confidence=${confidence.toFixed(2)} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)}`)
       }
