@@ -308,7 +308,9 @@ export class BeatMap {
     const window = Math.round(TEMPO_WINDOW_SEC / this.hopSec)
     const minLag = Math.floor(60 / MAX_BPM / this.hopSec)
     const maxLag = Math.ceil(60 / MIN_BPM / this.hopSec)
-    const scores = new Float64Array(maxLag + 1)
+    // Lags up to twice the slowest beat, for the half bar each candidate is judged with.
+    const maxLag2 = Math.min(2 * maxLag + 1, window - 1)
+    const scores = new Float64Array(maxLag2 + 2)
     for (;;) {
       const last = this.tempos.length > 0 ? this.tempos[this.tempos.length - 1].time : this.timeOf(this.first) + TEMPO_WINDOW_SEC / 2 - TEMPO_STEP_SEC
       const centre = last + TEMPO_STEP_SEC
@@ -348,7 +350,7 @@ export class BeatMap {
       let best = -Infinity
       let bestLag = NaN
       let bestRaw = 0
-      for (let lag = minLag; lag <= maxLag; lag++) {
+      for (let lag = minLag; lag <= maxLag2; lag++) {
         let sum = 0
         for (let i = lag; i < window; i++) sum += smooth[i] * smooth[i - lag]
         scores[lag] = sum / (window - lag)
@@ -358,8 +360,16 @@ export class BeatMap {
         if (scores[lag] < scores[lag - 1] || scores[lag] < scores[lag + 1] || scores[lag] <= 0) continue
         const period = lag * this.hopSec
         const weight = logGaussian(period, 60 / PRIOR_BPM, PRIOR_OCTAVES) * (Number.isNaN(previous) ? 1 : 0.25 + 0.75 * logGaussian(period, previous, CONTINUITY_OCTAVES))
-        if (scores[lag] * weight > best) {
-          best = scores[lag] * weight
+        // A beat is judged with everything it builds: its lag AND every whole
+        // multiple of it the window holds (the k-th weighed 1/k). A
+        // syncopated loop can correlate as strongly at one and a half beats
+        // as at one, and the lag alone cannot tell them apart (a seek into
+        // such a loop locked onto 1.5 beats); the real pulse's multiples
+        // land on the half bar and the bar, one and a half's do not.
+        let comb = scores[lag]
+        for (let k = 2; k * lag <= maxLag2; k++) comb += Math.max(0, this.peakNear(scores, k * lag, maxLag2)) / k
+        if (comb * weight > best) {
+          best = comb * weight
           // The peak's position refined between hops by a parabola through it and its neighbours.
           const l = scores[lag - 1]
           const c = scores[lag]
@@ -372,6 +382,13 @@ export class BeatMap {
       const strength = zero > 0 ? bestRaw / (zero / window) : 0
       this.tempos.push({ time: centre, period: Number.isNaN(bestLag) ? NaN : bestLag * this.hopSec, strength, confident: false, folded: NaN })
     }
+  }
+
+  /** The autocorrelation's largest value within one hop of `lag` (a doubled lag lands between hops). */
+  private peakNear(scores: Float64Array, lag: number, top: number): number {
+    let best = -Infinity
+    for (let l = Math.max(0, lag - 1); l <= Math.min(top, lag + 1); l++) best = Math.max(best, scores[l])
+    return best
   }
 
   private lastPeriod(): number {
