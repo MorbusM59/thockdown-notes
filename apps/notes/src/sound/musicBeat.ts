@@ -184,6 +184,8 @@ function ensureWorker(): void {
   if (worker) return
   worker = new Worker(new URL('./musicAnalysis.worker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent<AnalysisAnswer>) => receive(event.data)
+  // A worker that fails to load answers nothing, and the pulse would go flat with no word why.
+  worker.onerror = (event) => console.error('beat analysis worker failed', event.message)
 }
 
 /** Whether anything reads the drum analysis: a drum channel for its hits, a clock for its grid. */
@@ -398,6 +400,8 @@ function stop(): void {
   frame = null
   lastNow = NaN
   listenerClock.reset()
+  // An answer to the last ask before the stop describes a moment that has passed.
+  pendingRaw.clear()
   for (const band of bands) publish(band, 0)
   for (const subscriber of clocks) {
     publish(subscriber, 0)
