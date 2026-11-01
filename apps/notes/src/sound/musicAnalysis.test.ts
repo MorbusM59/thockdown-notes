@@ -100,13 +100,10 @@ describe('the beat analysis behind the worker', () => {
     for (const t of shown) expect(Math.min(...expected.map((k) => Math.abs(k - t)))).toBeLessThan(0.08)
   })
 
-  it('reports the beats around the moment and the window peak with every answer', async () => {
+  it('reports the tempo grid and the window peak with every answer', async () => {
     const { answers } = await play(kicks(40, 120).samples, 15, 10)
     const last = answers[answers.length - 1]
-    expect(last.caretPeriod).toBeCloseTo(0.5, 2)
-    // On a kick, within the map's resolution: the beat began a phase's worth of period before the moment.
-    const beatAt = last.heardTime - last.caretPhase * last.caretPeriod
-    expect(Math.abs(beatAt - Math.round(beatAt * 2) / 2)).toBeLessThan(0.03)
+    expect(last.gridPeriodSec).toBeCloseTo(0.5, 2)
     expect(last.peak).toBeGreaterThan(0.5)
   })
 

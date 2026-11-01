@@ -1,0 +1,158 @@
+import { describe, expect, it } from 'vitest'
+import { BeatClock, inTempoRange, MAX_PHASE_RATE } from './beatClock'
+
+const FRAME = 1 / 60
+
+interface Grid { periodSec: number; beatTime: number }
+
+/**
+ * Plays a clock at 60 frames a second along a listener's timeline (pieces of
+ * media time, each a seek from the last) and returns the media times it
+ * crossed a beat at, with whether a frame ever crossed more than one.
+ */
+function play(pieces: Array<[from: number, to: number]>, gridAt: (time: number) => Grid | null): { ticks: number[]; doubled: boolean } {
+  const clock = new BeatClock()
+  const ticks: number[] = []
+  let doubled = false
+  for (const [from, to] of pieces) {
+    let last = NaN
+    for (let frame = 0; from + frame * FRAME <= to; frame++) {
+      const time = from + frame * FRAME
+      const grid = gridAt(time)
+      clock.advance(time, grid?.periodSec ?? NaN, grid?.beatTime ?? NaN)
+      const count = Math.floor(clock.position)
+      if (!Number.isNaN(last) && count > last) {
+        ticks.push(time)
+        if (count - last > 1) doubled = true
+      }
+      last = count
+    }
+  }
+  return { ticks, doubled }
+}
+
+/** The distance from `time` to the nearest beat of `grid`, in seconds. */
+function offGrid(time: number, grid: Grid): number {
+  const beats = (time - grid.beatTime) / grid.periodSec
+  return Math.abs(beats - Math.round(beats)) * grid.periodSec
+}
+
+/** Every interval between consecutive ticks within `bound` of the one before (as a share of it, plus a frame's quantization either side). */
+function expectSteady(ticks: number[], bound: number): void {
+  for (let i = 2; i < ticks.length; i++) {
+    const before = ticks[i - 1] - ticks[i - 2]
+    const now = ticks[i] - ticks[i - 1]
+    expect(Math.abs(now - before)).toBeLessThanOrEqual(before * bound + 2 * FRAME)
+  }
+}
+
+describe('BeatClock', () => {
+  it('has no beat before it has seen a grid', () => {
+    const clock = new BeatClock()
+    clock.advance(1, NaN, NaN)
+    expect(Number.isNaN(clock.phase)).toBe(true)
+  })
+
+  it('ticks on the grid it starts from', () => {
+    const grid = { periodSec: 0.5, beatTime: 0.13 }
+    const { ticks, doubled } = play([[0, 20]], () => grid)
+    expect(ticks.length).toBeGreaterThan(35)
+    expect(doubled).toBe(false)
+    for (const time of ticks) expect(offGrid(time, grid)).toBeLessThanOrEqual(FRAME)
+  })
+
+  it('follows a change of tempo and phase with steady beats, and locks onto the new grid', () => {
+    const first = { periodSec: 0.5, beatTime: 0 }
+    const second = { periodSec: 60 / 97, beatTime: 30.21 }
+    const { ticks, doubled } = play([[0, 60]], (time) => (time < 30 ? first : second))
+    expect(doubled).toBe(false)
+    // The phase limit with a little for the tempo's glide: well short of the quarter an unlimited correction makes here.
+    expectSteady(ticks, MAX_PHASE_RATE + 0.03)
+    for (const time of ticks.filter((t) => t > 45)) expect(offGrid(time, second)).toBeLessThanOrEqual(FRAME + 0.002)
+  })
+
+  it('keeps its pace when the grid halves or doubles, beating on the grid all along', () => {
+    // The tracker reading one song at 79 and then at 158 beats a minute, back and forth.
+    const slow = { periodSec: 60 / 79, beatTime: 0.05 }
+    const fast = { periodSec: 60 / 158, beatTime: 0.05 }
+    const { ticks, doubled } = play([[0, 80]], (time) => (Math.floor(time / 9) % 2 === 0 ? slow : fast))
+    expect(doubled).toBe(false)
+    expectSteady(ticks, 0.001)
+    for (const time of ticks) expect(offGrid(time, slow)).toBeLessThanOrEqual(FRAME)
+  })
+
+  it('folds every tempo into 70 up to but not including 140 beats a minute, by whole octaves', () => {
+    for (let bpm = 20; bpm < 400; bpm += 0.37) {
+      const folded = 60 / inTempoRange(60 / bpm)
+      expect(folded).toBeGreaterThanOrEqual(70 - 1e-9)
+      expect(folded).toBeLessThan(140)
+      expect(Math.abs(Math.log2(folded / bpm) - Math.round(Math.log2(folded / bpm)))).toBeLessThan(1e-9)
+    }
+    expect(60 / inTempoRange(60 / 140)).toBeCloseTo(70, 9)
+    expect(60 / inTempoRange(60 / 70)).toBeCloseTo(70, 9)
+  })
+
+  it('beats at the folded tempo on every other beat of a grid read at 150', () => {
+    const fast = { periodSec: 0.4, beatTime: 0 }
+    const { ticks, doubled } = play([[0, 40]], () => fast)
+    expect(doubled).toBe(false)
+    expectSteady(ticks, 0.001)
+    for (let i = 1; i < ticks.length; i++) expect(ticks[i] - ticks[i - 1]).toBeCloseTo(0.8, 1)
+    for (const time of ticks) expect(offGrid(time, fast)).toBeLessThanOrEqual(FRAME + 1e-9)
+  })
+
+  it('keeps the folded tempo across a seek that lands on a reading in the other octave', () => {
+    const fast = { periodSec: 60 / 158, beatTime: 0.05 }
+    const slow = { periodSec: 60 / 79, beatTime: 0.05 }
+    const { ticks, doubled } = play([[0, 20], [60, 80]], (time) => (time < 30 ? fast : slow))
+    expect(doubled).toBe(false)
+    for (let i = 1; i < ticks.length; i++) if (ticks[i] > ticks[i - 1] && ticks[i] - ticks[i - 1] < 5) expect(ticks[i] - ticks[i - 1]).toBeCloseTo(slow.periodSec, 1)
+    for (const time of ticks.filter((t) => t > 61)) expect(offGrid(time, slow)).toBeLessThanOrEqual(FRAME + 1e-9)
+  })
+
+  it('locks onto a grid near an octave away from any offset', () => {
+    let seed = 7
+    const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    for (let trial = 0; trial < 40; trial++) {
+      const first = { periodSec: 0.3 + 0.7 * random(), beatTime: random() }
+      const ratio = [0.5, 1, 2][trial % 3] * (0.95 + 0.1 * random())
+      const second = { periodSec: first.periodSec * ratio, beatTime: 5 + random() }
+      const { ticks, doubled } = play([[0, 60]], (time) => (time < 5 ? first : second))
+      expect(doubled).toBe(false)
+      const fine = { periodSec: Math.min(second.periodSec, inTempoRange(second.periodSec)), beatTime: second.beatTime }
+      for (const time of ticks.filter((t) => t > 45)) expect(offGrid(time, fine)).toBeLessThanOrEqual(FRAME + 0.003)
+    }
+  })
+
+  it('holds the beat through a stretch with no grid', () => {
+    const grid = { periodSec: 0.48, beatTime: 0 }
+    const { ticks } = play([[0, 40]], (time) => (time > 15 && time < 30 ? null : grid))
+    const gap = ticks.filter((t) => t > 16 && t < 30)
+    for (let i = 1; i < gap.length; i++) expect(Math.abs(gap[i] - gap[i - 1] - 0.48)).toBeLessThanOrEqual(FRAME)
+    for (const time of gap) expect(offGrid(time, grid)).toBeLessThanOrEqual(FRAME + 0.002)
+  })
+
+  it('keeps beating after a seek backwards', () => {
+    const grid = { periodSec: 0.5, beatTime: 0 }
+    const { ticks, doubled } = play([[0, 60], [10, 40]], () => grid)
+    expect(doubled).toBe(false)
+    const after = ticks.filter((t, i) => i > 0 && ticks[i - 1] > t || false)
+    expect(after.length).toBe(1)
+    const replay = ticks.slice(ticks.indexOf(after[0]))
+    expect(replay.length).toBeGreaterThan(55)
+    for (const time of replay) expect(offGrid(time, grid)).toBeLessThanOrEqual(FRAME)
+  })
+
+  it('runs on its tempo after a seek forward and seats on the grid the moment it returns', () => {
+    const grid = { periodSec: 0.5, beatTime: 0.1 }
+    // The new position's analysis has no grid for its first four seconds, as after a real seek.
+    const { ticks, doubled } = play([[0, 20], [100.27, 120]], (time) => (time > 20 && time < 104.27 ? null : grid))
+    expect(doubled).toBe(false)
+    const unseated = ticks.filter((t) => t > 100.27 && t < 104.27)
+    expect(unseated.length).toBeGreaterThanOrEqual(7)
+    for (let i = 1; i < unseated.length; i++) expect(Math.abs(unseated[i] - unseated[i - 1] - 0.5)).toBeLessThanOrEqual(FRAME)
+    const seated = ticks.filter((t) => t > 104.27)
+    expectSteady(seated, 0)
+    for (const time of seated) expect(offGrid(time, grid)).toBeLessThanOrEqual(FRAME)
+  })
+})

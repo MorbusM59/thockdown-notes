@@ -324,7 +324,7 @@ const COMB_BEATS = 4
  * How far (in octaves) an estimate's period may sit from the held grid's, or
  * from its double or half, and still be the SAME beat: the parabolic
  * refinement wanders by a few tenths of a BPM between updates, and a tempo
- * read an octave off is the caret's to fold (`BeatMap.caretAt`), not a new beat.
+ * read an octave off is the clock's to fold (`beatClock.ts`), not a new beat.
  */
 const AGREE_OCTAVES = 0.03
 /**
@@ -2520,7 +2520,7 @@ export class DrumTracker {
 
   /**
    * The grid's beat period in seconds while it is trusted, NaN otherwise
-   * (the beat trace's tempo line, `beatTrace.ts`). Two numbers rather than
+   * (the visualizer caret's clock, `beatClock.ts`). Two numbers rather than
    * an object, as it is read every frame.
    */
   get gridPeriodSec(): number {

@@ -33,12 +33,9 @@
  * pulse absent for the whole of the look-ahead.
  *
  * A CLOCK channel (the caret's, `subscribeMusicClock`) follows no band and
- * no hit: it pulses on the beats of the ROLLING BEAT MAP (`beatMap.ts`),
- * planned up to half a minute ahead, so it lands on every beat through a
- * ritardando and glides across a silence to the tempo after it, in the
- * caret's octave of tempo, on the bar's one and three (`BeatMap.caretAt`). It replaced a clock STEERED
- * toward the drum tracker's tempo grid after the fact, which could only
- * catch up with a change of tempo, never land on it. Its pulse is the same fall a
+ * no hit: it pulses on a steady `BeatClock` (`beatClock.ts`) steered by the
+ * drum analysis's tempo grid, so it keeps time through fills and breaks and
+ * glides to each new tempo of a compilation. Its pulse is the same fall a
  * hit makes (`pulseCurve`), restarted on every beat and never longer than
  * one.
  *
@@ -73,6 +70,7 @@
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerCaret, VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, TRACKER_DRUM, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
+import { BeatClock } from './beatClock'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
@@ -122,6 +120,7 @@ const bands = new Set<Band>()
 
 /** A CLOCK subscriber (the caret's): a steady beat and the fall each beat makes. */
 interface Clock {
+  clock: BeatClock
   caret: VisualizerCaret
   listener: BeatListener
   published: number
@@ -143,6 +142,7 @@ const clocks = new Set<Clock>()
 
 /** A TEMPO subscriber: the heard media time and the steady beat's period, every frame (NaN while there is no beat). */
 interface Counter {
+  clock: BeatClock
   listener: (timeSec: number, periodSec: number) => void
 }
 
@@ -183,21 +183,8 @@ const pendingRaw = new Float64Array(VISUALIZER_TRACKERS.length)
 const trackerRaw = new Float64Array(VISUALIZER_TRACKERS.length)
 /** The trackers the analysis was last restarted with (`readsOf`), as a bit mask by `TRACKER_INDEX`. */
 let analysedTrackers = 0
-/**
- * The caret's beat as last answered (`BeatMap.caretAt`): its phase at media
- * time `caretTime` and its period; a frame between answers runs the phase on
- * at that period.
- */
-let caretTime = NaN
-let caretPhase = NaN
-let caretPeriod = NaN
-
-/** The caret's beat at media time `time`, carried on from the last answer: its phase and period, NaN for both where there is none. */
-function caretAt(time: number): { phase: number; period: number } {
-  if (Number.isNaN(caretPhase) || !(caretPeriod > 0)) return { phase: NaN, period: NaN }
-  const at = caretPhase + (time - caretTime) / caretPeriod
-  return { phase: at - Math.floor(at), period: caretPeriod }
-}
+let gridPeriodSec = NaN
+let gridBeatTime = NaN
 
 function send(request: AnalysisRequest): void {
   worker?.postMessage(request)
@@ -210,9 +197,8 @@ function receive(answer: AnalysisAnswer): void {
     const raw = answer.raws[i]
     pendingRaw[index] = index === TRACKER_INDEX.band ? raw : Math.max(pendingRaw[index], raw)
   }
-  caretTime = answer.heardTime
-  caretPhase = answer.caretPhase
-  caretPeriod = answer.caretPeriod
+  gridPeriodSec = answer.gridPeriodSec
+  gridBeatTime = answer.gridBeatTime
   // Until the decoding has reached the listener there is no peak to read:
   // the last gain holds rather than reading as silence.
   if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
@@ -270,11 +256,16 @@ function restartAnalysis(listenerTime: number): void {
   for (const band of bands) band.peak = 0
   pendingRaw.fill(0)
   trackerRaw.fill(0)
-  caretTime = NaN
-  caretPhase = NaN
-  caretPeriod = NaN
+  gridPeriodSec = NaN
+  gridBeatTime = NaN
   const id = ++run
+  // A new track's beat is not the last one's; a seek in the same track keeps the tempo and seats on the next grid.
+  const newTrack = analysedUrl !== url
   analysedUrl = url
+  for (const { clock } of [...clocks, ...counters]) {
+    if (newTrack) clock.reset()
+    else clock.restart()
+  }
   if (isBeatTraceOn() && url) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
   analysedTrackers = readsOf()
   rebuildAskReaders()
@@ -320,16 +311,19 @@ function respond(band: Band, raw: number, listenerTime: number, gain: number): n
 
 /** A clock's response: its fall, restarted on each of its beats and cut at the next. */
 function pulse(subscriber: Clock, listenerTime: number): number {
-  const { phase, period } = caretAt(listenerTime)
+  const { clock } = subscriber
+  clock.advance(listenerTime, gridPeriodSec, gridBeatTime)
+  const phase = clock.phase
   setLocked(subscriber, !Number.isNaN(phase))
   if (Number.isNaN(phase)) return 0
   const { fallSec, shape } = subscriber.caret
-  return pulseCurve((phase * period) / Math.min(fallSec, period), shape)
+  return pulseCurve((phase * clock.period) / Math.min(fallSec, clock.period), shape)
 }
 
 /** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
 function count(counter: Counter, listenerTime: number): void {
-  counter.listener(listenerTime, caretAt(listenerTime).period)
+  counter.clock.advance(listenerTime, gridPeriodSec, gridBeatTime)
+  counter.listener(listenerTime, Number.isNaN(counter.clock.phase) ? NaN : counter.clock.period)
 }
 
 function publish(subscriber: Band | Clock, response: number): void {
@@ -588,7 +582,7 @@ export function subscribeMusicMix(channel: MusicMixChannel, listener: BeatListen
  * read), so the caret can blink whenever there is no beat to follow.
  */
 export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener, lockListener: LockListener): MusicClockSubscription {
-  const subscriber: Clock = { caret, listener, published: 0, lockListener, locked: false }
+  const subscriber: Clock = { clock: new BeatClock(), caret, listener, published: 0, lockListener, locked: false }
   const update = (next: VisualizerCaret) => {
     subscriber.caret = next
   }
@@ -605,13 +599,14 @@ export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListen
  * The steady beat's TEMPO every frame while music plays: the media time heard
  * and the period, in seconds, of the beat the caret follows (the header's
  * CLOCK), with NaN for both whenever there is no beat: paused, hidden, or a
- * track not yet read. Tempo and not position, deliberately: after a seek the
- * beat lands at whatever phase the music has there, a jump of up to half a
- * beat, while the period carries on. A reader that only needs to move at the
- * music's rate integrates time over period and never sees the jump.
+ * track not yet read. Tempo and not position, deliberately: a clock that
+ * re-seats after a seek or a change of section takes the new grid's PHASE as
+ * it is, so its position jumps by up to half a beat, while its period is
+ * continuous apart from a change of tempo. A reader that only needs to move
+ * at the music's rate integrates time over period and never sees the jump.
  */
 export function subscribeMusicTempo(listener: (timeSec: number, periodSec: number) => void): () => void {
-  const counter: Counter = { listener }
+  const counter: Counter = { clock: new BeatClock(), listener }
   counters.add(counter)
   added()
   return () => {
