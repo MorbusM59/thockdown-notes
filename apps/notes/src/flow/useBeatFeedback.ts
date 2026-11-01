@@ -104,9 +104,9 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, pulseMix, accentColor, letterboxColor } = visualizer.immersive
+  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, glazeMix, pulseMix, accentColor, letterboxColor } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
-  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
+  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)

@@ -11,11 +11,11 @@ describe('sanitizeVisualizer', () => {
   it('keeps each block its own mix, colour and effect, bounded', () => {
     const v = sanitizeVisualizer({
       trackers: {},
-      edge: { mix: { kicks: 2, hits: -1, band: 0.4, normalize: 0.5 }, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
+      edge: { mix: { kicks: 2, hits: -1, band: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
       pane: { mix: 'x', color: '' },
       immersive: { pulseMix: { kicks: 0.5, band: 1 } },
     }, false)
-    expect(v.edge).toMatchObject({ mix: { kicks: 1, hits: 0, band: 0.4, normalize: 0.5 }, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
+    expect(v.edge).toMatchObject({ mix: { kicks: 1, hits: 0, band: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
     expect(v.pane.mix).toEqual(defaultVisualizer(false).pane.mix)
     expect(v.pane.color).toBe(defaultVisualizer(false).pane.color)
     // The pulse takes no band, whatever was saved.
@@ -84,28 +84,30 @@ describe('a layout saved before the trackers', () => {
 })
 
 describe('mixResponse', () => {
-  const mix = (kicks: number, hits: number, band: number, normalize: number) => ({ kicks, hits, band, normalize })
-  it('adds the contributions and caps at a full response with no scaling', () => {
-    expect(mixResponse(mix(1, 0, 0, 0), 1, 0, 0)).toBe(1)
-    expect(mixResponse(mix(1, 1, 0, 0), 1, 1, 0)).toBe(1)
-    expect(mixResponse(mix(0.5, 0, 0, 0), 1, 0, 0)).toBe(0.5)
-    expect(mixResponse(mix(0.5, 0.3, 0.2, 0), 1, 1, 1)).toBeCloseTo(1)
-  })
-  it('divides by the contributions\' sum at full scaling, linearly between', () => {
-    expect(mixResponse(mix(1, 0.5, 0, 1), 1, 0, 0)).toBeCloseTo(1 / 1.5)
-    expect(mixResponse(mix(0.5, 0, 0, 1), 1, 0, 0)).toBe(1)
-    expect(mixResponse(mix(1, 0.5, 0, 0.5), 1, 0, 0)).toBeCloseTo(1 / 1.25)
-    expect(mixResponse(mix(1, 1, 1, 1), 1, 1, 1)).toBe(1)
+  const mix = (kicks: number, hits: number, band: number) => ({ kicks, hits, band })
+  it('adds the contributions and caps at a full response', () => {
+    expect(mixResponse(mix(1, 0, 0), 1, 0, 0)).toBe(1)
+    expect(mixResponse(mix(1, 1, 0), 1, 1, 0)).toBe(1)
+    expect(mixResponse(mix(0.5, 0, 0), 1, 0, 0)).toBe(0.5)
+    expect(mixResponse(mix(1 / 3, 1 / 3, 1 / 3), 1, 1, 1)).toBeCloseTo(1)
+    expect(mixResponse(mix(1 / 3, 1 / 3, 1 / 3), 1, 0, 0)).toBeCloseTo(1 / 3)
   })
   it('stays inside 0..1 for every mix and every response', () => {
     for (let i = 0; i < 2000; i++) {
-      const m = mix(Math.random(), Math.random(), Math.random(), Math.random())
-      const r = mixResponse(m, Math.random(), Math.random(), Math.random())
+      const r = mixResponse(mix(Math.random(), Math.random(), Math.random()), Math.random(), Math.random(), Math.random())
       expect(r).toBeGreaterThanOrEqual(0)
       expect(r).toBeLessThanOrEqual(1)
     }
-    expect(mixResponse(mix(0, 0, 0, 1), 1, 1, 1)).toBe(0)
+    expect(mixResponse(mix(0, 0, 0), 1, 1, 1)).toBe(0)
   })
+})
+
+it('reads an old saved scale as gone, and gives the glaze the wave\'s mix when it had none', () => {
+  const v = sanitizeVisualizer({ immersive: { waveMix: { kicks: 0.4, hits: 0, band: 0.6, normalize: 1 } } }, false)
+  expect(v.immersive.waveMix).toEqual({ kicks: 0.4, hits: 0, band: 0.6 })
+  expect(v.immersive.glazeMix).toEqual({ kicks: 0.4, hits: 0, band: 0.6 })
+  const w = sanitizeVisualizer({ immersive: { waveMix: { kicks: 1, hits: 0, band: 0 }, glazeMix: { kicks: 0, hits: 0.5, band: 0 } } }, false)
+  expect(w.immersive.glazeMix).toEqual({ kicks: 0, hits: 0.5, band: 0 })
 })
 
 it('turns a saved amount and invert into a signed effect', () => {
@@ -210,7 +212,7 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -99, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: soleMix('hits'), pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: -10, swayReturn: 1, swayDrift: 200, waveColor: defaultVisualizer(false).immersive.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: defaultVisualizer(false).immersive.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: defaultVisualizer(false).immersive.accentColor, letterboxColor: defaultVisualizer(false).immersive.letterboxColor })
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -99, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: soleMix('hits'), glazeMix: soleMix('hits'), pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: -10, swayReturn: 1, swayDrift: 200, waveColor: defaultVisualizer(false).immersive.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: defaultVisualizer(false).immersive.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: defaultVisualizer(false).immersive.accentColor, letterboxColor: defaultVisualizer(false).immersive.letterboxColor })
     expect(sanitizeVisualizer({ trackers: {} }, false).immersive).toEqual(defaultVisualizer(false).immersive)
   })
 })

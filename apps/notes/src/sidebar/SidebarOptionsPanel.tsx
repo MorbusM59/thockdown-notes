@@ -925,8 +925,8 @@ export function SidebarOptionsPanel({
     }
 
     // An element's MIX of the three trackers (visualizer.ts, `mixResponse`):
-    // one contribution per tracker side by side, then the relative scaling
-    // below them. The centre pulse takes no band. Arrays, not fragments:
+    // one contribution per tracker side by side, added and capped at a full
+    // response. The centre pulse takes no band. Arrays, not fragments:
     // OptionsSliderRows counts its children.
     const MIX_TRACKERS = [
       { field: 'kicks', what: 'the kicks (the kick drum: the thump felt in the chest)' },
@@ -952,20 +952,6 @@ export function SidebarOptionsPanel({
             onCommit={(value) => onCommit({ ...mix, [field]: value })}
           />
         )),
-        <CompactScrollbarSlider
-          key="normalize"
-          id={`${id}-mix-normalize`}
-          min={0}
-          max={1}
-          step={0.01}
-          value={mix.normalize}
-          trackLabel="scale"
-          tooltipLabel="Relative scaling of the contributions above, 0 to 100. At the left each adds its response times its contribution; at the right the sum is divided by the contributions added together, so it peaks only when everything it follows does (100 kicks and 50 hits read a full kick alone as 67). Linear between"
-          ariaLabel={`${label}: relative scaling of the contributions, 0 to 100`}
-          defaultValue={defaults.normalize}
-          formatValue={percent}
-          onCommit={(value) => onCommit({ ...mix, normalize: value })}
-        />,
       ]
     }
 
@@ -1070,7 +1056,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={key === 'edge' ? [3, 1, 3, 2] : [3, 1, 3]}>
+            <OptionsSliderRows rows={key === 'edge' ? [3, 3, 2] : [3, 3]}>
               {renderMixSliders(`beat-${key}`, label, channel.mix, defaults.mix, false, (mix) => set({ mix }))}
               <CompactScrollbarSlider
                 id={`beat-${key}-effect`}
@@ -2590,7 +2576,8 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Glaze (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[4, 3]}>
+            <OptionsSliderRows rows={[3, 4, 3]}>
+              {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, layoutVisualizer.immersive.glazeMix, false, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2650,8 +2637,8 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={visualizer.immersive.swayPush}
                 trackLabel="push"
-                tooltipLabel="px each hit of the wave pushes the glaze's light stripes across them, for the nearest: right of centre forward, left of centre in reverse, 0 at the centre not at all"
-                ariaLabel="Immersive: how far each hit of the wave pushes the glaze stripes, pixels"
+                tooltipLabel="px each hit of the glaze's mix above pushes the glaze's light stripes across them, for the nearest: right of centre forward, left of centre in reverse, 0 at the centre not at all"
+                ariaLabel="Immersive: how far each hit of the glaze mix pushes the glaze stripes, pixels"
                 defaultValue={layoutVisualizer.immersive.swayPush}
                 formatValue={(value) => value.toFixed(1)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: Math.round(value * 10) / 10 } }))}
@@ -2688,7 +2675,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Wave (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
-            <OptionsSliderRows rows={[3, 1, 3, 2]}>
+            <OptionsSliderRows rows={[3, 3, 2]}>
               {renderMixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, layoutVisualizer.immersive.waveMix, false, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-wave-boxes"
@@ -2736,7 +2723,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
-            <OptionsSliderRows rows={[2, 1, 3, 3]}>
+            <OptionsSliderRows rows={[2, 3, 3]}>
               {renderMixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, layoutVisualizer.immersive.pulseMix, true, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
