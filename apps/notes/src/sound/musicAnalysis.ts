@@ -27,6 +27,7 @@
  * at once and nothing restarts, exactly as when this ran on the page.
  */
 
+import { INTENSITY_FLOOR_DB } from './signalMap'
 import { BandLevelMeter, LEVEL_FLOOR_DB } from './bandLevel'
 import { BeatMap, MAP_AHEAD_SEC } from './beatMap'
 import { WorkerScore, type ScoreUpdate, type ScoreWriter } from './musicScore'
@@ -241,9 +242,23 @@ class DelayRing {
   }
 }
 
-/** A drum reader's response to one instance: its intensity past the reader's contrast, scaled so the loudest is 1. */
-export function instanceResponse(intensity: number, contrast: number): number {
-  return Math.max(0, Math.min(1, (intensity - contrast) / (1 - contrast)))
+/**
+ * A drum reader's response to one instance: the same levels stretch a band
+ * gets (`musicBeat.ts`'s header), over the intensities of that drum's
+ * instances in the score around the listener (`intensities`, ascending), so
+ * `contrast` means one thing for every source and every track: the
+ * `contrast` share of the drum's instances shows nothing and its top
+ * `TOP_SHARE` shows in full, whether the track is mastered loud or quiet.
+ * `intensity` is the score's, 0..1 over `INTENSITY_FLOOR_DB`..0 dBFS.
+ */
+export function instanceResponse(intensity: number, intensities: readonly number[], contrast: number): number {
+  if (intensities.length === 0) return 0
+  const at = (share: number) => intensities[Math.min(intensities.length - 1, Math.floor(share * intensities.length))]
+  const top = at(1 - TOP_SHARE)
+  // At least MIN_SPAN_DB below the top, measured DOWN from it: drums of one loudness (a programmed kick) are all
+  // full, where a span measured up from the floor would leave every one of them at nothing.
+  const floor = Math.min(at(contrast), top - MIN_SPAN_DB / -INTENSITY_FLOOR_DB)
+  return Math.max(0, Math.min(1, (intensity - floor) / (top - floor)))
 }
 
 /** The worker's whole state; `handle` takes each request in arrival order. */
@@ -410,12 +425,16 @@ export class MusicAnalysis {
     const scored = this.scored
     if (!scored || Number.isNaN(from) || heardTime <= from) return 0
     let raw = 0
+    let intensities: number[] | null = null
     for (const x of this.held) {
       if (x.time <= from || x.time > heardTime) continue
       // Weighed by how far its signal is this drum: a sound on the edge of being one shows faintly.
       const confidence = band.drum === 'kicks' ? x.kick : x.hit
       if (confidence > 0) {
-        raw = Math.max(raw, confidence * instanceResponse(x.intensity, contrast))
+        // The drum's instances in the score (everything held: a second behind the listener to the frontier), built only
+        // when one is heard.
+        intensities ??= this.held.filter((y) => (band.drum === 'kicks' ? y.kick : y.hit) > 0).map((y) => y.intensity).sort((a, b) => a - b)
+        raw = Math.max(raw, confidence * instanceResponse(x.intensity, intensities, contrast))
         if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} confidence=${confidence.toFixed(2)} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)}`)
       }
     }
