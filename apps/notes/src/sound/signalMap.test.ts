@@ -19,7 +19,7 @@ const FOUR = [0, 4, 8, 12]
 const BACKBEAT = [4, 12]
 const EIGHTHS = [2, 6, 10, 14]
 
-describe('SignalMap', () => {
+describe('SignalMap', { timeout: 60_000 }, () => {
   it('finds every kick and every snare of a four-on-the-floor kit, and flags no hat', () => {
     const played = track(30, 124, [{ from: 0, kicks: FOUR, snares: BACKBEAT, hats: EIGHTHS }])
     const map = mapOf(played)

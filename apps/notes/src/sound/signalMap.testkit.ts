@@ -38,7 +38,8 @@ function darkNoise(hz: number, rand: () => number): () => number {
 /** A kick: a pitch falling from `top` to `bottom` Hz, its click below 3kHz. */
 function addKick(out: Float32Array, t0: number, gain: number, click: () => number, bottom = 50, top = 150, decay = 0.12): void {
   let phase = 0
-  for (let i = 0; i < 0.3 * RATE; i++) {
+  // Long enough to die away (60 dB down): cut short, an 808's tail ends in a broadband click of its own.
+  for (let i = 0; i < Math.max(0.3, 7 * decay) * RATE; i++) {
     const at = Math.round(t0 * RATE) + i
     if (at >= out.length) break
     const t = i / RATE
@@ -80,7 +81,8 @@ function addBass(out: Float32Array, t0: number, length: number): void {
     const k = Math.round(t0 * RATE) + i
     if (k >= out.length) break
     const t = i / RATE
-    out[k] += 0.35 * Math.min(1, t / 0.04) * Math.sin(2 * Math.PI * 49 * t)
+    // Faded in and out: a sine cut off mid-cycle ends in a broadband click, a sound of its own.
+    out[k] += 0.35 * Math.min(1, t / 0.04, (length - t) / 0.04) * Math.sin(2 * Math.PI * 49 * t)
   }
 }
 
