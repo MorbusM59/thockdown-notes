@@ -379,7 +379,7 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
  * inverted layout.
  */
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
-  // Each side is the author's own tuning (dark: a dark layout the author saved;
+  // Each side is the author's own tuning (dark: the author's dark layout exported 2026-11-01;
   // light: the author's light layout exported 2026-11-01), not one side inverted into the other.
   if (!inverted) return {
     trackers: { ...DEFAULT_VISUALIZER_TRACKERS, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
@@ -388,11 +388,14 @@ export function defaultVisualizer(inverted: boolean): VisualizerSettings {
     pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(255, 255, 255, 1)', effect: 1 },
     immersive: LIGHT_VISUALIZER_IMMERSIVE,
   }
+  // The dark export is a diff against the LIGHT defaults (the .tdl writer
+  // diffs against NEUTRAL_BASE, whose visualizer is defaultVisualizer(false)),
+  // so every field it leaves out takes the light value.
   return {
-    trackers: DEFAULT_VISUALIZER_TRACKERS,
-    caret: DEFAULT_VISUALIZER_CARET,
-    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', spreadPx: 10, blurPx: 200 },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(0, 0, 0, 0.275)' },
+    trackers: { ...DEFAULT_VISUALIZER_TRACKERS, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
+    caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.515 },
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', fallSec: 0.5, spreadPx: 10, blurPx: 200 },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(0, 0, 0, 0.275)', effect: 0.5 },
     immersive: DARK_VISUALIZER_IMMERSIVE,
   }
 }
@@ -408,11 +411,11 @@ const LIGHT_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
 }
 
 const DARK_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
-  ...DEFAULT_VISUALIZER_IMMERSIVE,
-  swayRangePx: 0, swayDrift: 10,
-  waveColor: 'rgba(255, 255, 255, 1)', waveBoxes: 104, waveTurn: 4, waveShape: 0.5, waveFallSec: 1.9949745588310244,
-  pulseColor: 'rgba(0, 0, 0, 0.137)', pulseSpeed: 35, pulseHalfLifeSec: 0.7, pulseFadeSec: 1.4, pulseSoftness: 0,
-  cutoutRound: 1,
+  ...LIGHT_VISUALIZER_IMMERSIVE,
+  glazeStrength: 0.1, glazeSpread: 0, swayDrift: 10,
+  waveColor: 'rgba(255, 255, 255, 1)', waveSec: 2, waveFallSec: 1.9949745588310244,
+  pulseColor: 'rgba(0, 0, 0, 0.137)', pulseSpeed: 35, pulseHalfLifeSec: 0.7, pulseFadeSec: 1.4, pulseSoftness: 0, pulseBoost: 1,
+  accentColor: '', letterboxColor: '',
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
