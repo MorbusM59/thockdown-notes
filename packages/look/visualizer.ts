@@ -618,7 +618,10 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCare
   // pulse rode the edge's hits; it keeps the edge's drum (a band, which no
   // pulse takes, reads as the kick, the pulse's default).
   const isLegacy = source.trackers === undefined
-  const legacyPulseMix = isLegacy ? { ...soleMix(edge.mix.hits > 0 ? 'hits' : 'kicks') } : null
+  // An edge with no effect subscribed nothing, so it set off no pulse.
+  const legacyPulseMix = !isLegacy ? null
+    : edge.effect === 0 ? { kicks: 0, hits: 0, band: 0, normalize: 0 }
+    : soleMix(edge.mix.hits > 0 ? 'hits' : 'kicks')
   return {
     trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], d.trackers) : sanitizeTrackers(source.trackers, d.trackers),
     caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),

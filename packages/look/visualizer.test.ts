@@ -63,6 +63,7 @@ describe('a layout saved before the trackers', () => {
     const v = sanitizeVisualizer({ edge: { source: 'band', frequencyHz: 440, octaves: 2, contrast: 0.2 }, pane: { source: 'band', frequencyHz: 99 } }, false)
     expect(v.trackers.band).toEqual({ frequencyHz: 440, octaves: 2, contrast: 0.2 })
     expect(v.pane.mix).toEqual(soleMix('band'))
+    expect(sanitizeVisualizer({ edge: { source: 'kick', effect: 0 } }, false).immersive.pulseMix.kicks).toBe(0)
     // A band edge set no pulse drum: the kick.
     expect(v.immersive.pulseMix).toEqual(soleMix('kicks'))
   })
