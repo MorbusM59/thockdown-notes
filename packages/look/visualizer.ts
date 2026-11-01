@@ -395,17 +395,31 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
  * inverted layout.
  */
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
+  // Each side is the author's own tuning (dark: a dark layout the author saved;
+  // light: the author's light layout exported 2026-11-01), not one side inverted into the other.
+  if (!inverted) return {
+    trackers: { ...DEFAULT_VISUALIZER_TRACKERS, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
+    caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.988171738655529 },
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.451)', fallSec: 0.48243336686426647, spreadPx: 10, blurPx: 200 },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(255, 255, 255, 1)', effect: 1 },
+    immersive: LIGHT_VISUALIZER_IMMERSIVE,
+  }
   return {
     trackers: DEFAULT_VISUALIZER_TRACKERS,
     caret: DEFAULT_VISUALIZER_CARET,
-    // An inverted (dark) layout's visualizer is the author's own tuning, not the
-    // light one inverted: every dark factory preset takes it.
-    edge: inverted
-      ? { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', spreadPx: 10, blurPx: 200 }
-      : { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 1)' },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.275)' : 'rgba(255, 255, 255, 0.499)' },
-    immersive: inverted ? DARK_VISUALIZER_IMMERSIVE : DEFAULT_VISUALIZER_IMMERSIVE,
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', spreadPx: 10, blurPx: 200 },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(0, 0, 0, 0.275)' },
+    immersive: DARK_VISUALIZER_IMMERSIVE,
   }
+}
+
+const LIGHT_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
+  ...DEFAULT_VISUALIZER_IMMERSIVE,
+  glazeStrength: 0.075, glazeSpread: 0.5, swayReturn: 0.8, swayDrift: 5,
+  waveColor: 'rgba(0, 0, 0, 0.235)', waveBoxes: 72, waveTurn: 4, waveShape: -0.5, waveFallSec: 0.49958086198073737,
+  waveMix: { kicks: 0, hits: 0, band: 1, normalize: 0 },
+  pulseColor: 'rgba(255, 255, 255, 0.706)', pulseSpeed: 32, pulseHalfLifeSec: 0.5, pulseFadeSec: 1.5, pulseSoftness: 0.49, pulseBoost: 0,
+  cutoutRound: 1, accentColor: 'rgba(0, 0, 0, 0.235)', letterboxColor: 'rgba(255, 255, 255, 1)',
 }
 
 const DARK_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
@@ -566,7 +580,7 @@ function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): Visualiz
   }
 }
 
-function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null): VisualizerImmersive {
+function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null, legacyWaveMix: VisualizerMix | null): VisualizerImmersive {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive, unknown>>
   return {
     glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
@@ -579,7 +593,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
-    waveMix: sanitizeMix(source.waveMix, d.waveMix),
+    waveMix: sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix),
     pulseMix: sanitizeMix(source.pulseMix, legacyPulseMix ?? d.pulseMix, true),
     waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
     waveShape: bounded(source.waveShape, -1, 1, d.waveShape),
@@ -623,11 +637,14 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCare
     : edge.effect === 0 ? { kicks: 0, hits: 0, band: 0, normalize: 0 }
     : soleMix(edge.mix.hits > 0 ? 'hits' : 'kicks')
   return {
-    trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], d.trackers) : sanitizeTrackers(source.trackers, d.trackers),
+    // A legacy layout reads against what the trackers were when it was saved
+    // (the band at 70Hz), not against today's light default.
+    trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
     caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
     edge,
     pane: sanitizeColorChannel(paneInput, d.pane),
-    immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix),
+    // ...and its wave followed the snare, whatever the default wave mix is now.
+    immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('hits') : null),
   }
 }
 

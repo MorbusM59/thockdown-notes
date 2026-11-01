@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_VISUALIZER_IMMERSIVE, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, DEFAULT_VISUALIZER_TRACKERS, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
@@ -79,7 +79,7 @@ describe('a layout saved before the trackers', () => {
     const v = sanitizeVisualizer({ edge: { source: 'kick' }, pane: { source: 'snare' } }, false)
     expect(v.edge.mix).toEqual(defaultVisualizer(false).edge.mix)
     expect(v.pane.mix).toEqual(defaultVisualizer(false).pane.mix)
-    expect(v.trackers).toEqual(defaultVisualizer(false).trackers)
+    expect(v.trackers).toEqual(DEFAULT_VISUALIZER_TRACKERS)
   })
 })
 
@@ -172,9 +172,9 @@ describe('pulseCurve', () => {
 })
 
 it('gives a save without the edge geometry its defaults, and bounds and rounds what it has', () => {
-  expect(sanitizeVisualizer({ edge: {} }, false).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_EDGE_BLUR_PX })
+  expect(sanitizeVisualizer({ edge: {} }, false).edge).toMatchObject({ spreadPx: defaultVisualizer(false).edge.spreadPx, blurPx: defaultVisualizer(false).edge.blurPx })
   expect(sanitizeVisualizer({ edge: { spreadPx: 14.7, blurPx: 900 } }, false).edge).toMatchObject({ spreadPx: 15, blurPx: 200 })
-  expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }, false).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_EDGE_BLUR_PX })
+  expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }, false).edge).toMatchObject({ spreadPx: 0, blurPx: defaultVisualizer(false).edge.blurPx })
 })
 
 it('reads a layout saved under the old block names, shade and outline, as the edge and the pane', () => {
@@ -210,8 +210,8 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -9, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: 0, swayReturn: 1, swayDrift: 200, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: DEFAULT_VISUALIZER_IMMERSIVE.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: '', letterboxColor: '' })
-    expect(sanitizeVisualizer({}, false).immersive).toEqual(DEFAULT_VISUALIZER_IMMERSIVE)
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -9, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: soleMix('hits'), pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: 0, swayReturn: 1, swayDrift: 200, waveColor: defaultVisualizer(false).immersive.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: defaultVisualizer(false).immersive.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: defaultVisualizer(false).immersive.accentColor, letterboxColor: defaultVisualizer(false).immersive.letterboxColor })
+    expect(sanitizeVisualizer({ trackers: {} }, false).immersive).toEqual(defaultVisualizer(false).immersive)
   })
 })
 
