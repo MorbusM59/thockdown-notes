@@ -253,7 +253,7 @@ interface VoiceSpec {
   /**
    * The hops a falling pitch may take to cross from the onset's second band
    * to its first, when that SWEEP stands in for the last band's climb
-   * (`DrumTracker.pushHop`). Left out: the drum has no such sound.
+   * (`DrumTracker.readSweep`). Left out: the drum has no such sound.
    */
   sweepHops?: number
 }
@@ -854,7 +854,7 @@ class Voice {
   /** With a sweep (`VoiceSpec.sweepHops`): the second onset band's last few normalised rises and raw rises, newest at `sweepAt`. */
   readonly sweepRise: Float32Array
   readonly sweepRaw: Float32Array
-  /** With a sweep: the ordinary onset over twice as many hops, newest at `sweepOnsetAt`, as the body began to climb a rise's length before its peak. */
+  /** With a sweep: the ordinary onset over twice the sweep's hops, newest at `sweepOnsetAt`, so a read can reach back to where the body began to climb. */
   readonly sweepOnset: Float32Array
   sweepAt = 0
   sweepOnsetAt = 0
@@ -1353,15 +1353,19 @@ export class DrumTracker {
    * whose click a busy mix had masked moved the grid's phase by two hops.
    * Its strength is the sub's now with the body's at its peak.
    *
-   * One sound is one hit: for the sweep's length after one is read, the
-   * sound's own later climb (its sub, which the click band's faintest leak
-   * lifts off zero in the product) is not read again as another.
+   * One sound is one hit: for the sweep's length (n hops, counted from when
+   * it is read, not from its date) the sound's own later climb (its sub,
+   * which the click band's faintest leak lifts off zero in the product) is
+   * not read again, as a sweep or an ordinary onset. A second kick inside
+   * that ~64ms is lost, which no played pattern asks for.
    *
    * `onset` is hop `at`'s ordinary onset; returns the onset to store there.
    */
   private readSweep(voice: Voice, at: number, onset: number): number {
     const { spec, onsetBands } = voice
-    const [sub, body, click] = spec.onset
+    const sub = spec.onset[0]
+    const body = spec.onset[1]
+    const click = spec.onset[2]
     const n = voice.sweepRise.length
     const index = this.start + this.count
     const subRise = this.rises[onsetBands[0]]
@@ -1389,30 +1393,33 @@ export class DrumTracker {
     voice.sweepRaw[voice.sweepAt] = this.rawRises[onsetBands[1]]
     voice.sweepOnsetAt = (voice.sweepOnsetAt + 1) % m
     voice.sweepOnset[voice.sweepOnsetAt] = onset
-    const stored = index - voice.sweptAt <= n ? 0 : onset
+    // One sound is one hit, in both directions: a sweep read in the last n
+    // hops is this sound, so neither its ordinary onset nor a further sweep
+    // (which the next hops would date one later each) is read again.
+    if (index - voice.sweptAt <= n) return 0
     // After a gap the climb from its silence is blind (`settle`): a sweep
     // whose start fell in it is a sound whose attack was lost, and read by
     // its sweep it would land a sweep's length late.
-    if (index >= this.gapFrom && index - this.resumedAt < 2 * ENVELOPE_HOPS + n) return stored
+    if (index >= this.gapFrom && index - this.resumedAt < 2 * ENVELOPE_HOPS + n) return onset
     // Only where the ordinary onset found no kick: one with a click is read
     // by it, at the moment it lands, as it always was.
-    if (!(read < spec.shapeShare * voice.shape)) return stored
+    if (!(read < spec.shapeShare * voice.shape)) return onset
     // The body having stopped climbing altogether (fallen to a tenth of its
     // peak) while the sub climbs (to over half its yardstick): the sine has
     // LEFT the body band. A bass note's start climbs in both at once, and the
     // body's climb only eases.
     const fall = Math.max(0, peakRise - bodyRise)
-    if (fall < SWEEP_FALL * peakRise || subRise < SWEEP_CLIMB) return stored
+    if (fall < SWEEP_FALL * peakRise || subRise < SWEEP_CLIMB) return onset
     // From a body as loud as a kick's: the sine starts there and carries real
     // energy down, where a bass note's start only splashes a little of its
     // attack into the body band before its sub swells.
     const subRaw = this.rawRises[onsetBands[0]]
-    if (peakRaw < SWEEP_BODY_SHARE * subRaw) return stored
+    if (peakRaw < SWEEP_BODY_SHARE * subRaw) return onset
     const dateAge = Math.round(bodyAge / 2)
-    if (dateAge < 1 || dateAge > this.count) return stored
+    if (dateAge < 1 || dateAge > this.count) return onset
     const swept = subRise ** sub[2] * peakRise ** body[2] * fall ** click[2]
     const then = (at - dateAge + CAPACITY) % CAPACITY
-    if (swept <= voice.onset[then]) return stored
+    if (swept <= voice.onset[then]) return onset
     voice.onset[then] = swept
     voice.strength[then] = Math.max(voice.strength[then], (subRaw ** sub[2] * peakRaw ** body[2]) ** (1 / (sub[2] + body[2])))
     voice.sweptAt = index
