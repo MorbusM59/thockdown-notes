@@ -8149,10 +8149,16 @@ ${markdownHtml}
             ref={appShellRef}
             style={appShellStyle}
           >
-            {isSidebarShown ? (
+            {/* Mounted whenever the reader's setting shows it, immersion or
+                not: immersion only takes it off screen (layout.css keeps it
+                laid out at its own width but unrendered and inert), so its
+                scroll positions and component state are exactly as they were
+                when immersion ends. Unmounting it lost them. */}
+            {isSidebarVisible ? (
             <aside
               className="notes-sidebar"
-              style={{ gridArea: 'sidebar' }}
+              style={isImmersiveMode ? { gridArea: 'sidebar', width: sidebarWidthPx } : { gridArea: 'sidebar' }}
+              {...(isImmersiveMode ? ({ inert: '' } as object) : {})}
               // An image shown from the sidebar is a glance: any click back
               // in the sidebar gives the slot its note again. The click still
               // reaches its target.
