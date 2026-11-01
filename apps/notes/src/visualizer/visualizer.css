@@ -51,7 +51,7 @@
 }
 .visualizer-strip.is-top {
   top: 0;
-  background-color: var(--color-bg-leading);
+  background-color: var(--visualizer-letterbox-color, var(--color-bg-leading));
 }
 /* The three zones sit side by side on the stage's own background, exactly as
    the editor's zone divs do (CM6Editor.tsx), never stacked on a regular-colour
@@ -62,7 +62,7 @@
 }
 .visualizer-strip.is-bottom {
   bottom: 0;
-  background-color: var(--color-bg-trailing);
+  background-color: var(--visualizer-letterbox-color, var(--color-bg-trailing));
 }
 
 .visualizer-letter-box {
@@ -70,7 +70,7 @@
 }
 
 .visualizer-lit {
-  background-color: var(--color-caret);
+  background-color: var(--visualizer-accent-color, var(--color-caret));
 }
 
 .visualizer-scene > .visualizer-grid {

@@ -155,6 +155,18 @@ export interface VisualizerImmersive {
   waveFallSec: number
   /** The centre pulse's colour (GridWave.tsx), picked like any layout colour. */
   pulseColor: string
+  /**
+   * The visualizer's ACCENT: the spectrum's bars and the progress track's lit
+   * boxes. Empty follows the theme's caret colour, which is what both drew in
+   * before they had a colour of their own.
+   */
+  accentColor: string
+  /**
+   * The LETTERBOX: the top and bottom strips around the scene. Empty follows
+   * the theme's leading and trailing zone colours, the editor's top and bottom
+   * sections, which is what the strips drew in before they had one of their own.
+   */
+  letterboxColor: string
   /** The centre pulse's starting speed, in grid boxes per second, at the ring's inner edge. */
   pulseSpeed: number
   /** 0.1 to 5 seconds: the centre pulse's speed halves every this long (exponentially). */
@@ -198,7 +210,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 3, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 3, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '' }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -432,6 +444,8 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     pulseSoftness: bounded(source.pulseSoftness, 0, 1, d.pulseSoftness),
     pulseBoost: bounded(source.pulseBoost, 0, 1, d.pulseBoost),
     cutoutRound: bounded(source.cutoutRound, 0, 1, d.cutoutRound),
+    accentColor: typeof source.accentColor === 'string' ? source.accentColor : d.accentColor,
+    letterboxColor: typeof source.letterboxColor === 'string' ? source.letterboxColor : d.letterboxColor,
   }
 }
 
