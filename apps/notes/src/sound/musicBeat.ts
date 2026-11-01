@@ -186,6 +186,62 @@ let analysedTrackers = 0
 let gridPeriodSec = NaN
 let gridBeatTime = NaN
 
+/**
+ * Whether the caret follows the beat map (`beatMap.ts`, planned in the
+ * worker) rather than the `BeatClock` steered by the drum tracker's grid.
+ * Off unless the `thockdown:beat-map` localStorage flag is set, read when the
+ * analysis restarts: the map drifted against the music on one machine and
+ * not in any reproduction, so it stays opt-in until a trace from that
+ * machine (`thockdown:debug-beat`, which logs both beats side by side once
+ * a second) shows why.
+ */
+let beatMapOn = false
+
+function readBeatMapFlag(): boolean {
+  try {
+    return localStorage.getItem('thockdown:beat-map') !== null
+  } catch {
+    return false
+  }
+}
+
+/** The map's caret as last answered: its phase at media time `mapTime` and its period (`BeatMap.caretAt`). */
+let mapTime = NaN
+let mapPhase = NaN
+let mapPeriod = NaN
+
+/** The map's caret at `time`, run on from the last answer at its period; NaN where there is no beat. */
+function mapCaretAt(time: number): { phase: number; period: number } {
+  if (Number.isNaN(mapPhase) || !(mapPeriod > 0)) return { phase: NaN, period: NaN }
+  const at = mapPhase + (time - mapTime) / mapPeriod
+  return { phase: at - Math.floor(at), period: mapPeriod }
+}
+
+/** The caret's beat at `time`: the map's when it is on, else `clock` steered to the tracker's grid. */
+function caretBeat(clock: BeatClock, time: number): { phase: number; period: number } {
+  if (beatMapOn) return mapCaretAt(time)
+  clock.advance(time, gridPeriodSec, gridBeatTime)
+  return { phase: clock.phase, period: clock.period }
+}
+
+/** When the last side-by-side caret line was traced (`traceCaret`). */
+let lastCaretTrace = -Infinity
+
+/**
+ * One trace line a second while the beat trace is on: where the playback
+ * element is, the time heard, and the beat each caret source puts before it
+ * with its period. A drift between the map and the music shows as `map`
+ * walking against `clock` (or against the kicks heard) while `el` and
+ * `heard` keep their constant offset.
+ */
+function traceCaret(listenerTime: number, heardTime: number): void {
+  if (!isBeatTraceOn() || Math.abs(heardTime - lastCaretTrace) < 1) return
+  lastCaretTrace = heardTime
+  const map = mapCaretAt(heardTime)
+  const grid = gridPeriodSec > 0 ? heardTime - ((((heardTime - gridBeatTime) / gridPeriodSec) % 1) + 1) % 1 * gridPeriodSec : NaN
+  appendBeatTrace(`caret el=${musicPlayerService.currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} map=${beatMapOn ? 'on' : 'off'} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} gridBeat=${grid.toFixed(3)} gridPer=${gridPeriodSec.toFixed(4)}`)
+}
+
 function send(request: AnalysisRequest): void {
   worker?.postMessage(request)
 }
@@ -199,6 +255,9 @@ function receive(answer: AnalysisAnswer): void {
   }
   gridPeriodSec = answer.gridPeriodSec
   gridBeatTime = answer.gridBeatTime
+  mapTime = answer.heardTime
+  mapPhase = answer.caretPhase
+  mapPeriod = answer.caretPeriod
   // Until the decoding has reached the listener there is no peak to read:
   // the last gain holds rather than reading as silence.
   if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
@@ -258,6 +317,8 @@ function restartAnalysis(listenerTime: number): void {
   trackerRaw.fill(0)
   gridPeriodSec = NaN
   gridBeatTime = NaN
+  mapTime = mapPhase = mapPeriod = NaN
+  beatMapOn = readBeatMapFlag()
   const id = ++run
   // A new track's beat is not the last one's; a seek in the same track keeps the tempo and seats on the next grid.
   const newTrack = analysedUrl !== url
@@ -276,7 +337,7 @@ function restartAnalysis(listenerTime: number): void {
     const { frequencyHz, octaves } = trackers.band
     readers.push({ id: index, source: name === 'band' ? 'band' : TRACKER_DRUM[name], frequencyHz, octaves })
   }
-  send({ type: 'restart', run: id, url, listenerTime, readers, drums: needsDrums() })
+  send({ type: 'restart', run: id, url, listenerTime, readers, drums: needsDrums(), beatMap: beatMapOn })
 }
 
 /**
@@ -311,19 +372,17 @@ function respond(band: Band, raw: number, listenerTime: number, gain: number): n
 
 /** A clock's response: its fall, restarted on each of its beats and cut at the next. */
 function pulse(subscriber: Clock, listenerTime: number): number {
-  const { clock } = subscriber
-  clock.advance(listenerTime, gridPeriodSec, gridBeatTime)
-  const phase = clock.phase
+  const { phase, period } = caretBeat(subscriber.clock, listenerTime)
   setLocked(subscriber, !Number.isNaN(phase))
   if (Number.isNaN(phase)) return 0
   const { fallSec, shape } = subscriber.caret
-  return pulseCurve((phase * clock.period) / Math.min(fallSec, clock.period), shape)
+  return pulseCurve((phase * period) / Math.min(fallSec, period), shape)
 }
 
 /** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
 function count(counter: Counter, listenerTime: number): void {
-  counter.clock.advance(listenerTime, gridPeriodSec, gridBeatTime)
-  counter.listener(listenerTime, Number.isNaN(counter.clock.phase) ? NaN : counter.clock.period)
+  const { phase, period } = caretBeat(counter.clock, listenerTime)
+  counter.listener(listenerTime, Number.isNaN(phase) ? NaN : period)
 }
 
 function publish(subscriber: Band | Clock, response: number): void {
@@ -437,6 +496,7 @@ function tick(frameTimeMs: number): void {
   for (const band of bands) publish(band, respond(band, mixResponse(band.channel.mix, kicks, hits, level), heardTime, gain))
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   for (const counter of counters) count(counter, heardTime)
+  traceCaret(listenerTime, heardTime)
   // Asked one frame AHEAD: the answer is back before the next frame, which
   // shows the moment it is for, so the worker costs no lag.
   send({

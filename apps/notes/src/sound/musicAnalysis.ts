@@ -11,12 +11,14 @@
  * window of readings, and the window's peak (`PeakWindow`). The page
  * (`musicBeat.ts`) keeps what a FRAME needs: the listener's clock, each
  * subscriber's fall, the hits it reports, the loudness gain and the caret's
- * steady beat.
+ * phase. The beat map (`beatMap.ts`) is planned here too, from the samples
+ * as they are decoded, `MAP_AHEAD_SEC` ahead; everything measuring the ±5s
+ * window is handed them from a delay ring when the listener comes in reach.
  *
  * The two talk in ASKS. Once a frame the page asks for the moment it will
  * draw next (`AnalysisAsk`): every reader's RAW response there (a drum's hit
- * since its last ask, a level band's stretched level), the tempo grid in
- * force, and the window's peak. The answer arrives before that frame, so the
+ * since its last ask, a level band's stretched level), the beat map's beats around it
+ * (`beatMap.ts`), and the window's peak. The answer arrives before that frame, so the
  * worker adds no lag beyond the one frame the page asks ahead by. Every
  * reader's settings (contrast, groove) come with the ask, so a slider acts
  * at once and nothing restarts, exactly as when this ran on the page.
@@ -26,6 +28,7 @@ import type { VisualizerDrum } from '@thockdown/look/visualizer'
 import { BandLevelMeter, LEVEL_FLOOR_DB } from './bandLevel'
 import { DrumCursor, DrumTracker } from './drumTracker'
 import { BeatTraceWindow } from './beatTrace'
+import { BeatMap, MAP_AHEAD_SEC } from './beatMap'
 import { MusicDecodeStream } from './musicDecodeStream'
 import { PeakWindow } from './peakWindow'
 
@@ -74,6 +77,8 @@ export interface AnalysisRestart {
   readers: ReaderSource[]
   /** Whether anything reads the drum analysis (a drum reader, or the caret's clock for its grid). */
   drums: boolean
+  /** Whether to plan the beat map and answer the caret from it (the `thockdown:beat-map` flag, `musicBeat.ts`). */
+  beatMap?: boolean
 }
 
 export interface AnalysisAsk {
@@ -105,10 +110,14 @@ export interface AnalysisAnswer {
   /** Each asked reader's raw response, in the ask's order (`ids`). */
   ids: number[]
   raws: number[]
-  gridPeriodSec: number
-  gridBeatTime: number
   /** The window's peak sample magnitude before `heardTime` (`PeakWindow.peakSince`), NaN while nothing is decoded. */
   peak: number
+  /** The drum tracker's tempo grid (`DrumTracker.gridPeriodSec`/`gridBeatTime`), which the caret's `BeatClock` follows unless the beat map is on. */
+  gridPeriodSec: number
+  gridBeatTime: number
+  /** The caret's beat at `heardTime` (`BeatMap.caretAt`): how far into it, 0..1, and its period (s); NaN where there is none. */
+  caretPhase: number
+  caretPeriod: number
   traceLines: string[]
 }
 
@@ -194,6 +203,48 @@ export function stretchLevel(level: number, floor: number, top: number): number 
   return Math.max(0, Math.min(1, (level - from) / (to - from)))
 }
 
+/**
+ * The decoded samples between the window's leading edge and the beat map's
+ * (`MAP_AHEAD_SEC`): decoded once, for the map, and handed on to everything
+ * that measures the ±`LEAD_SEC` window when the listener comes within reach
+ * of them. A ring of samples counted from the run's first, so nothing is
+ * allocated per chunk.
+ */
+class DelayRing {
+  private readonly ring: Float32Array
+  /** Samples written and released since the run began. */
+  private written = 0
+  private released = 0
+  private origin = NaN
+
+  constructor(readonly sampleRate: number) {
+    this.ring = new Float32Array(Math.ceil((MAP_AHEAD_SEC + 4) * sampleRate))
+  }
+
+  write(samples: Float32Array, startTime: number): void {
+    if (Number.isNaN(this.origin)) this.origin = startTime
+    const size = this.ring.length
+    for (let i = 0; i < samples.length; i++) this.ring[(this.written + i) % size] = samples[i]
+    this.written += samples.length
+    // The stream is never asked further ahead than MAP_AHEAD_SEC and a
+    // margin, and the ring holds more than that, so nothing unreleased is
+    // ever overwritten.
+  }
+
+  /** Hands every sample before media time `until` to `take`, in at most two contiguous parts. */
+  release(until: number, take: (samples: Float32Array, startTime: number) => void): void {
+    if (Number.isNaN(this.origin)) return
+    const end = Math.min(this.written, Math.max(this.released, Math.floor((until - this.origin) * this.sampleRate)))
+    const size = this.ring.length
+    while (this.released < end) {
+      const from = this.released % size
+      const count = Math.min(end - this.released, size - from)
+      take(this.ring.subarray(from, from + count), this.origin + this.released / this.sampleRate)
+      this.released += count
+    }
+  }
+}
+
 /** The worker's whole state; `handle` takes each request in arrival order. */
 export class MusicAnalysis {
   private stream: MusicDecodeStream | null = null
@@ -207,6 +258,8 @@ export class MusicAnalysis {
   private traceOn = false
   private traceLines: string[] = []
   private readonly peaks = new PeakWindow()
+  private map: BeatMap | null = null
+  private delay: DelayRing | null = null
 
   constructor(private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url)) {}
 
@@ -220,6 +273,7 @@ export class MusicAnalysis {
         return this.ask(request)
       case 'dropDrums':
         this.tracker = null
+        this.map = null
         this.trace = null
         return null
       case 'dispose':
@@ -227,6 +281,8 @@ export class MusicAnalysis {
         this.stream?.dispose()
         this.stream = null
         this.tracker = null
+        this.map = null
+        this.delay = null
         this.bands.clear()
         return null
     }
@@ -235,6 +291,8 @@ export class MusicAnalysis {
   private restart(request: AnalysisRestart): void {
     const id = (this.run = request.run)
     this.peaks.reset()
+    this.map = null
+    this.delay = null
     this.tracker = null
     this.trace = null
     // A new track is a new stream; a seek in the same one keeps it.
@@ -271,12 +329,18 @@ export class MusicAnalysis {
         else band.meter = new BandLevelMeter(sampleRate, band.frequencyHz, band.octaves)
       }
       this.tracker = request.drums ? new DrumTracker(sampleRate) : null
+      this.map = request.drums && request.beatMap ? new BeatMap(sampleRate) : null
+      this.delay = this.map ? new DelayRing(sampleRate) : null
       this.started = id
       // The file may have taken a moment to open: start from where the listener is now.
       const at = Number.isNaN(this.listenerTime) ? request.listenerTime : this.listenerTime
-      stream.run(Math.max(0, at - LEAD_SEC), at + LEAD_SEC + DECODE_MARGIN_SEC, (samples, startTime) => {
+      stream.run(Math.max(0, at - LEAD_SEC), at + this.aheadSec() + DECODE_MARGIN_SEC, (samples, startTime) => {
         // A chunk decoded for a run a later restart replaced is not this window's.
-        if (id === this.run) this.analyse(samples, startTime, sampleRate)
+        if (id !== this.run) return
+        if (!this.delay) return this.analyse(samples, startTime, sampleRate)
+        this.map?.feed(samples, startTime)
+        this.delay?.write(samples, startTime)
+        this.releaseUpTo(at + LEAD_SEC + DECODE_MARGIN_SEC)
       })
     })
     this.listenerTime = NaN
@@ -284,6 +348,18 @@ export class MusicAnalysis {
 
   /** The listener's position at the last ask of this run (NaN before one). */
   private listenerTime = NaN
+
+  /** How far ahead of the listener to decode: the beat map's reach while it is on, else the window's. */
+  private aheadSec(): number {
+    return this.map ? MAP_AHEAD_SEC : LEAD_SEC
+  }
+
+  /** Measures the decoded samples up to media time `until` into the ±LEAD_SEC window. */
+  private releaseUpTo(until: number): void {
+    const sampleRate = this.delay?.sampleRate
+    if (sampleRate === undefined) return
+    this.delay?.release(until, (samples, startTime) => this.analyse(samples, startTime, sampleRate))
+  }
 
   /** Measures one decoded chunk into the drum analysis and every level band. */
   private analyse(samples: Float32Array, startTime: number, sampleRate: number): void {
@@ -304,8 +380,13 @@ export class MusicAnalysis {
     if (request.run !== this.run) return null
     this.listenerTime = request.listenerTime
     this.traceOn = request.trace
-    if (this.started === this.run) this.stream?.want(request.listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
     const { heardTime } = request
+    if (this.started === this.run) {
+      this.stream?.want(request.listenerTime + this.aheadSec() + DECODE_MARGIN_SEC)
+      this.releaseUpTo(request.listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
+      this.map?.update(heardTime)
+    }
+    const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
     const tracker = this.tracker
     const ids: number[] = []
     const raws: number[] = []
@@ -330,6 +411,8 @@ export class MusicAnalysis {
       gridPeriodSec: tracker ? tracker.gridPeriodSec : NaN,
       gridBeatTime: tracker ? tracker.gridBeatTime : NaN,
       peak: this.peaks.isEmpty ? NaN : this.peaks.peakSince(heardTime - LEAD_SEC),
+      caretPhase: caret.phase,
+      caretPeriod: caret.period,
       traceLines,
     }
   }
