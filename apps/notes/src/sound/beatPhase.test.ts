@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { caretBeat } from './beatPhase'
+import { CaretFold, caretBeat } from './beatPhase'
 
 describe('the caret beat from the map', () => {
   it('is the share of the way from one beat to the next in the caret range', () => {
@@ -24,5 +24,12 @@ describe('the caret beat from the map', () => {
   it('has no beat without two beats around the moment', () => {
     expect(Number.isNaN(caretBeat(NaN, 1, 0, 0.5).phase)).toBe(true)
     expect(Number.isNaN(caretBeat(0, NaN, 0, 0.5).period)).toBe(true)
+  })
+
+  it('holds its octave while the tempo hovers at the edge of the range', () => {
+    const fold = new CaretFold()
+    // 141, 139, 141, 139 BPM: one octave throughout.
+    const periods = [141, 139, 141, 139].map((bpm) => fold.beat(0, 60 / bpm, 2, 0.1).period)
+    expect(new Set(periods.map((p) => p > 0.6)).size).toBe(1)
   })
 })

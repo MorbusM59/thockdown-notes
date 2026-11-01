@@ -65,7 +65,7 @@
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerChannel as BeatChannel, VisualizerCaret } from '@thockdown/look/visualizer'
 import { pulseCurve } from '@thockdown/look/visualizer'
-import { caretBeat } from './beatPhase'
+import { CaretFold } from './beatPhase'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSource } from './musicAnalysis'
@@ -160,6 +160,8 @@ const pendingRaw = new Map<number, number>()
 let beatBefore = NaN
 let beatAfter = NaN
 let beatIndex = NaN
+/** The caret's octave, held between beats (`CaretFold`). */
+const fold = new CaretFold()
 
 function send(request: AnalysisRequest): void {
   worker?.postMessage(request)
@@ -250,7 +252,7 @@ function respond(band: Band, raw: number, listenerTime: number, gain: number): n
 
 /** A clock's response: its fall, restarted on each of its beats and cut at the next. */
 function pulse(subscriber: Clock, listenerTime: number): number {
-  const { phase, period } = caretBeat(beatBefore, beatAfter, beatIndex, listenerTime)
+  const { phase, period } = fold.beat(beatBefore, beatAfter, beatIndex, listenerTime)
   setLocked(subscriber, !Number.isNaN(phase))
   if (Number.isNaN(phase)) return 0
   const { fallSec, shape } = subscriber.caret
@@ -259,7 +261,7 @@ function pulse(subscriber: Clock, listenerTime: number): number {
 
 /** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
 function count(counter: Counter, listenerTime: number): void {
-  counter.listener(listenerTime, caretBeat(beatBefore, beatAfter, beatIndex, listenerTime).period)
+  counter.listener(listenerTime, fold.beat(beatBefore, beatAfter, beatIndex, listenerTime).period)
 }
 
 function publish(subscriber: Band | Clock, response: number): void {

@@ -130,4 +130,13 @@ describe('the rolling beat map', () => {
     const times = [...seen.keys()].sort((a, b) => a - b)
     for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThan(300)
   })
+
+  it('finds the beat again after a gap too long to carry, from the first beat after it', () => {
+    // 120 BPM, then ninety seconds of silence, then 124 BPM.
+    const first = beatsOf(0, 20, () => 0.5)
+    const second = beatsOf(110, 140, () => 60 / 124)
+    const { shown } = play(render([...first, ...second], 140), 5)
+    expect(shown.filter((t) => t > 40 && t < 100).length).toBe(0)
+    expect(match(second, shown, 110, 135)).toMatchObject({ missed: 0, extra: 0 })
+  })
 })
