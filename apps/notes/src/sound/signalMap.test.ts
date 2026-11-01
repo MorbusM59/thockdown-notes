@@ -101,6 +101,39 @@ describe('SignalMap', { timeout: 60_000 }, () => {
     expect(strays(map, played.snares, (i) => i.hit)).toEqual([])
   })
 
+  it('read by a moving listener while it forgets what lies behind, gives every hit once and holds a bounded span', () => {
+    const played = track(90, 124, [{ from: 0, kicks: FOUR, snares: BACKBEAT, hats: EIGHTHS }])
+    const map = new SignalMap(gridOf(played.beats))
+    const chunk = RATE / 4
+    let fed = 0
+    const kicks: number[] = []
+    const hits: number[] = []
+    let read = -Infinity
+    let held = 0
+    for (let heard = 0; heard < 89.5; heard += 0.5) {
+      while (fed < Math.min(played.samples.length, (heard + 20) * RATE)) { map.feed(played.samples.subarray(fed, fed + chunk), fed / RATE); fed += chunk }
+      map.forgetBefore(heard - 30)
+      map.analyse(heard)
+      held = Math.max(held, map.heldSec)
+      // As a reader takes them: each instance once, when the listener reaches it.
+      for (const x of map.instancesBetween(read, heard + 1e-9)) {
+        if (x.time <= read) continue
+        if (x.kick) kicks.push(x.time)
+        if (x.hit) hits.push(x.time)
+      }
+      read = heard
+    }
+    const near = (times: number[], t: number) => times.some((x) => Math.abs(x - t) < 0.03)
+    // The first ten seconds are learned before anything is flagged; from then on every hit is read, once.
+    for (const t of played.kicks.filter((t) => t >= 12 && t < 89)) expect(near(kicks, t), `kick at ${t.toFixed(2)}`).toBe(true)
+    for (const t of played.snares.filter((t) => t >= 12 && t < 89)) expect(near(hits, t), `snare at ${t.toFixed(2)}`).toBe(true)
+    for (const t of kicks) expect(near(played.kicks, t), `stray kick at ${t.toFixed(2)}`).toBe(true)
+    for (const t of hits) expect(near(played.snares, t), `stray hit at ${t.toFixed(2)}`).toBe(true)
+    for (const list of [kicks, hits]) for (let i = 1; i < list.length; i++) expect(list[i] - list[i - 1], 'read twice').toBeGreaterThan(0.05)
+    // Thirty seconds behind, twenty ahead, and up to a forget block more.
+    expect(held).toBeLessThan(62)
+  })
+
   it('finds a kick the pattern predicts under a crash that hides its onset', () => {
     const played = track(30, 124, [{ from: 0, kicks: FOUR, snares: BACKBEAT, hats: [] }])
     const crash = brightNoiseBurst(played.samples, 3)

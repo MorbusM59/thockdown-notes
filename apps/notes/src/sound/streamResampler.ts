@@ -6,9 +6,9 @@
  * timing is exact; the price is a lag of two input samples, which the times
  * `process` reports account for.
  *
- * Built for the drum tracker, whose every constant was tuned on 48kHz audio
- * (`DrumTracker`): a cubic's slight treble roll-off below 10kHz is far
- * inside what its band filters already shape.
+ * Used by the score (`musicScore.ts`), whose signal map's every constant was
+ * tuned on 48kHz audio (`signalMap.ts`'s `SIGNAL_RATE`): a cubic's slight
+ * treble roll-off below 10kHz is far inside its log bands' resolution.
  */
 
 export class StreamResampler {

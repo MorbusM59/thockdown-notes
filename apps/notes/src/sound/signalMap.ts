@@ -47,6 +47,9 @@ export const SIGNAL_RATE = 48000
 export const HOP = 256
 export const HOP_SEC = HOP / SIGNAL_RATE
 
+/** The fewest frames `forgetBefore` drops at once (~10s). */
+const FORGET_BLOCK = Math.round(10 / HOP_SEC)
+
 /** Octave band centres, in Hz: the fingerprints and the flags are read in these. */
 export const BANDS = [50, 100, 200, 400, 800, 1600, 3200, 6400, 12800] as const
 const BAND_COUNT = BANDS.length
@@ -97,10 +100,17 @@ const ONSET_SHARE = 0.25
  * A peak more than PEAK_FLOOR_DB under its template's typical strong peak (its
  * PEAK_REFERENCE quantile) is the template explaining a little of something
  * else, not an instance. On a real track the strays sit 10 to 20 dB under the
- * real hits of the same template.
+ * real hits of the same template, and a soft hit of the same drum as far as 11
+ * dB (bladeloop1's pickup kicks, once the template has been re-learned over
+ * forty seconds of the main kick): the floor keeps those.
  */
-const PEAK_FLOOR_DB = 9
+const PEAK_FLOOR_DB = 11
 const PEAK_REFERENCE = 0.95
+/**
+ * A STRONG instance is within STRONG_DB of its template's PEAK_REFERENCE quantile: a signal's typical match is
+ * judged by these (see `peaks`), so admitting soft instances does not move it.
+ */
+const STRONG_DB = 9
 /** The least match an instance needs at all. */
 const MIN_MATCH = 0.1
 /** A peak matching under MATCH_SHARE of its template's typical match (its MATCH_REFERENCE quantile) is not an instance. */
@@ -152,8 +162,11 @@ const BODY_TOP_DB = -24
 const BODY_DB = -12
 /** A low sound's noise must be within this many dB of its loudest band for it to be a hit as well (see `flag`). */
 const LAYERED_NOISE_DB = 12
-/** At most this many instances a beat for a hit; a hat plays on every eighth or sixteenth. */
-const HIT_PER_BEAT = 1.1
+/**
+ * At most this many instances a beat for a hit: a hat plays on every eighth or sixteenth (two or four a beat), a
+ * snare with its ghost notes and its soft instances (bladeloop1's) up to about one and a half.
+ */
+const HIT_PER_BEAT = 1.5
 
 /** Where the beats fall: the beat times between two moments. A port, so the map does not own the beat grid. */
 export interface BeatPort {
@@ -278,6 +291,7 @@ export class SignalMap {
   private templates: Templates | null = null
   /** Frames whose activations are fitted, and the frame the templates were last learned up to. */
   private fittedTo = 0
+  private learnedTo = 0
   private instances: Instance[] = []
   /** `instances` as readers see them (`withoutDuplicates`). */
   private published: Instance[] = []
@@ -296,6 +310,11 @@ export class SignalMap {
     return Number.isNaN(this.origin) ? NaN : this.timeOf(this.hops)
   }
 
+  /** How much music the map holds, in seconds: from the oldest frame kept (`forgetBefore`) to the frontier. */
+  get heldSec(): number {
+    return this.hops * HOP_SEC
+  }
+
   /** Forgets what was fed: a new track, or a seek outside what is held. The templates are kept (what was learned stays true). */
   reset(): void {
     this.ring.fill(0)
@@ -304,9 +323,30 @@ export class SignalMap {
     this.filled = 0
     this.origin = NaN
     this.fittedTo = 0
+    this.learnedTo = 0
     this.instances = []
     this.published = []
     this.heardTime = -Infinity
+  }
+
+  /**
+   * Forgets the frames and instances before media time `time`, so a long track (an eight-hour mix) holds a bounded
+   * span: the listener's past is final and nothing reads it again. Frames are dropped in blocks of at least
+   * FORGET_BLOCK, so the copy is paid rarely, and never past what the fit still reads as context.
+   */
+  forgetBefore(time: number): void {
+    if (Number.isNaN(this.origin)) return
+    const drop = Math.min(Math.floor((time - this.origin) / HOP_SEC), this.fittedTo - FIT_CONTEXT - TEMPLATE_FRAMES)
+    if (drop < FORGET_BLOCK) return
+    this.spec.copyWithin(0, drop * F, this.hops * F)
+    for (const a of this.act) a.copyWithin(0, drop, this.hops)
+    this.hops -= drop
+    this.fittedTo -= drop
+    this.learnedTo = Math.max(0, this.learnedTo - drop)
+    this.origin += drop * HOP_SEC
+    const shift = (list: Instance[]) => list.filter((x) => x.frame >= drop).map((x) => ({ ...x, frame: x.frame - drop }))
+    this.instances = shift(this.instances)
+    this.published = shift(this.published)
   }
 
   /** Clears the learned templates, for a new track. */
@@ -429,6 +469,7 @@ export class SignalMap {
     this.seedActivations(0, end)
     this.windowed(0, end, (v, m, h) => factorize(this.templates!, v, m, h, LEARN_ITERATIONS))
     this.fittedTo = n
+    this.learnedTo = n
   }
 
   private normalizeTemplates(): void {
@@ -531,15 +572,15 @@ export class SignalMap {
     }
     if (out.length === 0) return out
     const levels = out.map((x) => x.intensity).sort((a, b) => a - b)
-    const floor = levels[Math.floor(PEAK_REFERENCE * (levels.length - 1))] + PEAK_FLOOR_DB / INTENSITY_FLOOR_DB
-    const loud = out.filter((x) => x.intensity >= floor)
-    if (loud.length === 0) return loud
-    // And a peak matching far worse than its template's typical instance is the template borrowed by another sound
+    const reference = levels[Math.floor(PEAK_REFERENCE * (levels.length - 1))]
+    // A peak matching far worse than its template's typical instance is the template borrowed by another sound
     // (a kick's template lending its low end to a bass note). Relative, because overlap lowers every match of a
-    // sound that always plays under others (a clap under sixteenth hats).
-    const matches = loud.map((x) => x.match).sort((a, b) => a - b)
+    // sound that always plays under others (a clap under sixteenth hats). Typical among its STRONG peaks, so how
+    // many soft ones the floor lets in does not move it.
+    const matches = out.filter((x) => x.intensity >= reference + STRONG_DB / INTENSITY_FLOOR_DB).map((x) => x.match).sort((a, b) => a - b)
     const typical = matches[Math.floor(MATCH_REFERENCE * (matches.length - 1))]
-    return loud.filter((x) => x.frame >= from && x.match >= MATCH_SHARE * typical)
+    const floor = reference + PEAK_FLOOR_DB / INTENSITY_FLOOR_DB
+    return out.filter((x) => x.frame >= from && x.intensity >= floor && x.match >= MATCH_SHARE * typical)
   }
 
   /** Describes each template: its octave balance from the template, its shape from its instances' fingerprints. */
@@ -688,8 +729,12 @@ export class SignalMap {
     while (this.fittedTo < ready) {
       const to = Math.min(ready, this.fittedTo + relearnFrames)
       this.fit(this.fittedTo, to)
-      if (to - this.fittedTo === relearnFrames) this.relearn(to)
       this.fittedTo = to
+      // Re-learned every RELEARN_SEC of music, however it arrived: in one piece, or a second at a time as it streams.
+      if (to - this.learnedTo >= relearnFrames) {
+        this.relearn(to)
+        this.learnedTo = to
+      }
     }
     const final = this.instances.filter((x) => x.time <= this.heardTime)
     const fresh: Instance[] = []

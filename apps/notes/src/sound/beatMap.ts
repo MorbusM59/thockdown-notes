@@ -46,8 +46,8 @@
 
 /** The envelope's resolution, in seconds. */
 export const HOP_SEC = 256 / 48000
-/** How far ahead of the listener the map is planned. */
-export const MAP_AHEAD_SEC = 30
+/** How far ahead of the listener the map is planned: the look-ahead of the whole score (`musicScore.ts`), which the drum hits are written over too. */
+export const MAP_AHEAD_SEC = 60
 /** How far behind the listener the map keeps what it planned. */
 export const MAP_BEHIND_SEC = 30
 /** Beats this close to the listener (or behind it) are final. */

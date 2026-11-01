@@ -51,8 +51,8 @@ describe('a layout saved before the trackers', () => {
     }, false)
     expect(v.edge.mix).toEqual(soleMix('kicks'))
     expect(v.pane.mix).toEqual(soleMix('hits'))
-    expect(v.trackers.kicks).toEqual({ groove: 0.8, contrast: 0.3 })
-    expect(v.trackers.hits).toEqual({ groove: 1, contrast: 0.1 })
+    expect(v.trackers.kicks).toEqual({ contrast: 0.3 })
+    expect(v.trackers.hits).toEqual({ contrast: 0.1 })
     // The pulse rode the edge.
     expect(v.immersive.pulseMix).toEqual(soleMix('kicks'))
     // The wave followed the snare.

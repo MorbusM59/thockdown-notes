@@ -14,9 +14,6 @@
  * sanitizer, shared by the renderer and the main process.
  */
 
-/** A drum the drum tracker (the notes app's `sound/drumTracker.ts`) finds the hits of. */
-export type VisualizerDrum = 'kick' | 'snare' | 'hat'
-
 /**
  * The three TRACKERS: what is detected in the music, once per layout, apart
  * from what shows it. Every block that follows the music reads all three
@@ -35,20 +32,14 @@ export type VisualizerTrackerName = 'kicks' | 'hits' | 'band'
 
 export const VISUALIZER_TRACKERS: readonly VisualizerTrackerName[] = ['kicks', 'hits', 'band']
 
-/** The drum each hit tracker follows. */
-export const TRACKER_DRUM: Record<'kicks' | 'hits', VisualizerDrum> = { kicks: 'kick', hits: 'snare' }
-
-/** A drum tracker's settings. */
+/**
+ * A drum tracker's settings. It detects nothing: it reads the score of the
+ * music written ahead of the listener (the notes app's `sound/signalMap.ts`),
+ * every instance of a signal flagged as its drum, and turns each into a
+ * response.
+ */
 export interface VisualizerDrumTracker {
-  /**
-   * 0..1: how steadily it holds the pattern the drum has been playing
-   * against what it hears (the notes app's `sound/drumTracker.ts`, GROOVE).
-   * 0 shows only the hits it hears, the pattern a filter; 1 lands every hit
-   * of the pattern at full strength, masked or not, ignores a one-off off it,
-   * and stops through a break.
-   */
-  groove: number
-  /** Where a response starts, as a share of the surrounding ten seconds: higher keeps only the biggest hits. */
+  /** The cut on an instance's intensity (0..1 over -60..0 dBFS) where a response starts: higher keeps only the loudest hits. */
   contrast: number
 }
 
@@ -343,12 +334,12 @@ export function soleMix(tracker: VisualizerTrackerName): VisualizerMix {
 
 /**
  * The trackers' defaults: each drum as it was followed before the trackers
- * were separated from the blocks (groove 0, contrast 0.5), and the band the
+ * were separated from the blocks (contrast 0.5), and the band the
  * edge's default band was.
  */
 export const DEFAULT_VISUALIZER_TRACKERS: VisualizerTrackers = {
-  kicks: { groove: 0, contrast: 0.5 },
-  hits: { groove: 0, contrast: 0.5 },
+  kicks: { contrast: 0.5 },
+  hits: { contrast: 0.5 },
   band: { frequencyHz: 70, octaves: 1, contrast: 0.5 },
 }
 
@@ -449,7 +440,7 @@ function sanitizeMix(input: unknown, d: VisualizerMix, bandless = false): Visual
  * LEGACY: before the trackers were separated from the blocks (2026-11-01),
  * every block followed ONE source of its own (`source`: a band, the kick,
  * the snare or the hat; a layout older still said the kick with a frequency
- * of 0 and a band with its frequency) with its own band, groove and
+ * of 0 and a band with its frequency) with its own band and
  * contrast. Such a block reads as the mix following that source's tracker
  * in full; the hat, which no tracker follows on its own, as the hits (the
  * other bright drum).
@@ -477,7 +468,7 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
 
 function sanitizeDrumTracker(input: unknown, d: VisualizerDrumTracker): VisualizerDrumTracker {
   const source = fieldsOf(input)
-  return { groove: bounded(source.groove, 0, 1, d.groove), contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast) }
+  return { contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast) }
 }
 
 function sanitizeBandTracker(input: unknown, d: VisualizerBandTracker): VisualizerBandTracker {

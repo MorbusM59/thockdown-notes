@@ -986,25 +986,10 @@ export function SidebarOptionsPanel({
           step={0.01}
           value={trackers[key].contrast}
           trackLabel="contrast"
-          tooltipLabel="How loud it must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits"
+          tooltipLabel={key === 'band' ? 'How loud it must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits' : 'How loud a hit must be before it responds: higher keeps only the loudest hits'}
           ariaLabel={`${label}: contrast`}
           defaultValue={DEFAULT_VISUALIZER_TRACKERS[key].contrast}
           onCommit={(value) => setTracker(key, { contrast: value })}
-        />
-      )
-      const groove = (key: 'kicks' | 'hits', label: string) => (
-        <CompactScrollbarSlider
-          key="groove"
-          id={`beat-tracker-${key}-groove`}
-          min={0}
-          max={1}
-          step={0.01}
-          value={trackers[key].groove}
-          trackLabel="groove"
-          tooltipLabel="How steadily it holds the learned pattern against what it hears. At the left it shows only the hits it hears; towards the middle it also shows an accent off the pattern; at the right every hit of the pattern lands at full strength, even one drowned by another instrument, and a one-off is ignored. A break stops it at any setting"
-          ariaLabel={`${label}: groove`}
-          defaultValue={DEFAULT_VISUALIZER_TRACKERS[key].groove}
-          onCommit={(value) => setTracker(key, { groove: value })}
         />
       )
       const drum = (key: 'kicks' | 'hits', label: string, what: string) => (
@@ -1013,8 +998,8 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel tooltip={what}>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2]}>
-              {[groove(key, label), contrast(key, label)]}
+            <OptionsSliderRows rows={[1]}>
+              {[contrast(key, label)]}
             </OptionsSliderRows>
           </div>
         </>

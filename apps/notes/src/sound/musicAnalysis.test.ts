@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { MusicAnalysis, type AnalysisAnswer } from './musicAnalysis'
 import type { DecodedChunk, MusicDecodeStream } from './musicDecodeStream'
+import { SignalScore } from './musicScore'
 
 const RATE = 48000
 const CHUNK = 1152
@@ -71,29 +72,31 @@ class FakeStream {
 /** Plays `samples` through the analysis the way `musicBeat.ts` asks it: once a 60Hz frame, from `from`, one frame ahead. */
 async function play(samples: Float32Array, from: number, seconds: number, contrast = 0.5) {
   const streams: FakeStream[] = []
+  // The score is written in-thread here: synchronously, so what it sends is in hand before the next ask.
   const analysis = new MusicAnalysis((url) => {
     const stream = new FakeStream(url, samples)
     streams.push(stream)
     return stream as unknown as MusicDecodeStream
-  })
-  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, source: 'kick', frequencyHz: 0, octaves: 0 }], drums: true })
+  }, (publish) => new SignalScore(publish))
+  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, source: 'kicks', frequencyHz: 0, octaves: 0 }], drums: true })
   await Promise.resolve()
   await Promise.resolve()
   const answers: AnalysisAnswer[] = []
   for (let frame = 0; frame * (1 / 60) < seconds; frame++) {
     const at = from + frame / 60
-    const answer = analysis.handle({ type: 'ask', run: 1, listenerTime: at, heardTime: at, readers: [{ id: 7, contrast, groove: 0 }], trace: false })
+    const answer = analysis.handle({ type: 'ask', run: 1, listenerTime: at, heardTime: at, readers: [{ id: 7, contrast }], trace: false })
     if (answer) answers.push(answer)
   }
   return { answers, streams, analysis }
 }
 
-describe('the beat analysis behind the worker', () => {
+describe('the beat analysis behind the worker', { timeout: 60_000 }, () => {
   it('answers each kick once, from a cold start in the middle of a track', async () => {
     const track = kicks(40, 120)
     const { answers } = await play(track.samples, 15, 20)
     const hits = answers.filter((a) => a.raws[0] > 0).map((a) => a.heardTime)
-    // Once the grid is found (a few seconds), every kick is answered, once, and only kicks are.
+    // Once the score has learned the kick (its first ten seconds are written ahead of the listener at once), every
+    // kick is answered, once, and only kicks are.
     const expected = track.times.filter((t) => t >= 22 && t < 34)
     const shown = hits.filter((t) => t >= 21.98 && t < 34)
     expect(shown.length).toBe(expected.length)
