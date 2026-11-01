@@ -673,10 +673,15 @@ export class SignalMap {
     for (const s of this.signals) {
       s.kick = 0
       s.hit = 0
-      const list = times.get(s.id) ?? []
-      if (list.length < MIN_FLAG_INSTANCES) continue
-      const beats = this.beats.beatsBetween(list[0] - 2, list[list.length - 1] + 2)
+      const all = times.get(s.id) ?? []
+      if (all.length < MIN_FLAG_INSTANCES) continue
+      const beats = this.beats.beatsBetween(all[0] - 2, all[all.length - 1] + 2)
       if (beats.length < 2) continue
+      // Judged only where there are beats to judge by: the music is fed ahead of the beat map's plan, and the
+      // instances past its last beat are on no grid, so counting them unflagged every signal until the next plan.
+      const last = beats[beats.length - 1] + (beats[beats.length - 1] - beats[beats.length - 2])
+      const list = all.filter((t) => t >= beats[0] - 2 && t <= last)
+      if (list.length < MIN_FLAG_INSTANCES) continue
       const grid: number[] = []
       for (let i = 0; i + 1 < beats.length; i++) {
         for (let k = 0; k < GRID_DIVISIONS; k++) grid.push(beats[i] + ((beats[i + 1] - beats[i]) * k) / GRID_DIVISIONS)
