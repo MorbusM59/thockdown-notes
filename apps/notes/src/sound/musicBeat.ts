@@ -205,6 +205,9 @@ function readBeatMapFlag(): boolean {
   }
 }
 
+/** How long the map may answer no beat before the caret is let go to its own blink. */
+const MAP_BEAT_LOSS_SEC = 4
+
 /** The map's caret as last answered: its phase at media time `mapTime` and its period (`BeatMap.caretAt`). */
 let mapTime = NaN
 let mapPhase = NaN
@@ -255,9 +258,17 @@ function receive(answer: AnalysisAnswer): void {
   }
   gridPeriodSec = answer.gridPeriodSec
   gridBeatTime = answer.gridBeatTime
-  mapTime = answer.heardTime
-  mapPhase = answer.caretPhase
-  mapPeriod = answer.caretPeriod
+  // A beat the map answers is taken at once. A missing one (an unconfident
+  // stretch, a frame between replans) does not drop the caret back to its
+  // own blink: the last beat runs on at its period until the map has had no
+  // beat for MAP_BEAT_LOSS_SEC, so only a sustained absence lets it go.
+  if (!Number.isNaN(answer.caretPhase) && answer.caretPeriod > 0) {
+    mapTime = answer.heardTime
+    mapPhase = answer.caretPhase
+    mapPeriod = answer.caretPeriod
+  } else if (!(answer.heardTime - mapTime < MAP_BEAT_LOSS_SEC)) {
+    mapTime = mapPhase = mapPeriod = NaN
+  }
   // Until the decoding has reached the listener there is no peak to read:
   // the last gain holds rather than reading as silence.
   if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
