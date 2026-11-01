@@ -24,7 +24,7 @@
  * so the scene's components do not have to carry it.
  */
 
-import { waveTertiaryBeats } from '@thockdown/look/visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, waveTertiaryBeats, type VisualizerMix } from '@thockdown/look/visualizer'
 
 /** Each pivot's turns per TERTIARY turn, primary first. */
 const PIVOT_SHARES = [1 / 16, 1 / 4, 1] as const
@@ -107,9 +107,12 @@ export interface GridWaveSettings {
   pulseSpeed: number
   pulseHalfLifeSec: number
   pulseFadeSec: number
-  /** The wave's fall after each snare hit. */
+  /** The wave's fall after each hit of its mix. */
   waveShape: number
   waveFallSec: number
+  /** How much each tracker shows the wave, and sets off the centre pulse (`VisualizerImmersive`). */
+  waveMix: VisualizerMix
+  pulseMix: VisualizerMix
   /** The edge's fall after each of its hits, which the centre solid's thump follows. */
   edgeShape: number
   edgeFallSec: number
@@ -122,13 +125,14 @@ export interface GridWaveSettings {
   pulseBoost: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
   if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes
     && next.pulseSpeed === settings.pulseSpeed && next.pulseHalfLifeSec === settings.pulseHalfLifeSec && next.pulseFadeSec === settings.pulseFadeSec
     && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec
+    && next.waveMix === settings.waveMix && next.pulseMix === settings.pulseMix
     && next.edgeShape === settings.edgeShape && next.edgeFallSec === settings.edgeFallSec
     && next.cutoutRound === settings.cutoutRound
     && next.pulseColor === settings.pulseColor && next.pulseSoftness === settings.pulseSoftness && next.pulseBoost === settings.pulseBoost) return

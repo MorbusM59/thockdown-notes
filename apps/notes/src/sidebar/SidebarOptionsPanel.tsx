@@ -46,11 +46,12 @@ import {
   waveTertiaryBeats,
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
-  SOURCE_SLIDER_MAX,
-  SOURCE_SLIDER_MIN,
-  sourceAtSlider,
-  sourceSliderValue,
+  BEAT_FREQUENCY_MAX_HZ,
+  BEAT_FREQUENCY_MIN_HZ,
+  DEFAULT_VISUALIZER_TRACKERS,
   type VisualizerChannel,
+  type VisualizerMix,
+  type VisualizerTrackers,
   type VisualizerSettings,
 } from '@thockdown/look/visualizer'
 import { ColorPickerRow } from '../colorPicker/ColorPickerRow'
@@ -925,59 +926,166 @@ export function SidebarOptionsPanel({
       )
     }
 
-    // One band block's toggle and six sliders: the same for the edge and the pane, plus the edge's spread and blur.
+    // An element's MIX of the three trackers (visualizer.ts, `mixResponse`):
+    // one contribution per tracker side by side, then the relative scaling
+    // below them. The centre pulse takes no band. Arrays, not fragments:
+    // OptionsSliderRows counts its children.
+    const MIX_TRACKERS = [
+      { field: 'kicks', what: 'the kicks (the kick drum: the thump felt in the chest)' },
+      { field: 'hits', what: 'the hits (the snare, claps and rim shots: bright counter hits)' },
+      { field: 'band', what: 'the band (the live level of the band set under Band)' },
+    ] as const
+    const renderMixSliders = (id: string, label: string, mix: VisualizerMix, defaults: VisualizerMix, bandless: boolean, onCommit: (mix: VisualizerMix) => void) => {
+      const percent = (value: number) => Math.round(value * 100).toString()
+      return [
+        ...MIX_TRACKERS.filter(({ field }) => !bandless || field !== 'band').map(({ field, what }) => (
+          <CompactScrollbarSlider
+            key={field}
+            id={`${id}-mix-${field}`}
+            min={0}
+            max={1}
+            step={0.01}
+            value={mix[field]}
+            trackLabel={field}
+            tooltipLabel={`How much ${what} drives it, 0 to 100. Contributions add up, and the response is capped at a full one`}
+            ariaLabel={`${label}: contribution of ${field}, 0 to 100`}
+            defaultValue={defaults[field]}
+            formatValue={percent}
+            onCommit={(value) => onCommit({ ...mix, [field]: value })}
+          />
+        )),
+        <CompactScrollbarSlider
+          key="normalize"
+          id={`${id}-mix-normalize`}
+          min={0}
+          max={1}
+          step={0.01}
+          value={mix.normalize}
+          trackLabel="scale"
+          tooltipLabel="Relative scaling of the contributions above, 0 to 100. At the left each adds its response times its contribution; at the right the sum is divided by the contributions added together, so it peaks only when everything it follows does (100 kicks and 50 hits read a full kick alone as 67). Linear between"
+          ariaLabel={`${label}: relative scaling of the contributions, 0 to 100`}
+          defaultValue={defaults.normalize}
+          formatValue={percent}
+          onCommit={(value) => onCommit({ ...mix, normalize: value })}
+        />,
+      ]
+    }
+
+    // The three trackers (visualizer.ts, `VisualizerTrackers`): what is
+    // detected in the music, once, for every element below.
+    const renderTrackers = () => {
+      const { trackers } = visualizer
+      const setTracker = <K extends keyof VisualizerTrackers>(key: K, patch: Partial<VisualizerTrackers[K]>) =>
+        setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], ...patch } } }))
+      const contrast = (key: keyof VisualizerTrackers, label: string) => (
+        <CompactScrollbarSlider
+          key="contrast"
+          id={`beat-tracker-${key}-contrast`}
+          min={0}
+          max={BEAT_CONTRAST_MAX}
+          step={0.01}
+          value={trackers[key].contrast}
+          trackLabel="contrast"
+          tooltipLabel="How loud it must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits"
+          ariaLabel={`${label}: contrast`}
+          defaultValue={DEFAULT_VISUALIZER_TRACKERS[key].contrast}
+          onCommit={(value) => setTracker(key, { contrast: value })}
+        />
+      )
+      const groove = (key: 'kicks' | 'hits', label: string) => (
+        <CompactScrollbarSlider
+          key="groove"
+          id={`beat-tracker-${key}-groove`}
+          min={0}
+          max={1}
+          step={0.01}
+          value={trackers[key].groove}
+          trackLabel="groove"
+          tooltipLabel="How steadily it holds the learned pattern against what it hears. At the left it shows only the hits it hears; towards the middle it also shows an accent off the pattern; at the right every hit of the pattern lands at full strength, even one drowned by another instrument, and a one-off is ignored. A break stops it at any setting"
+          ariaLabel={`${label}: groove`}
+          defaultValue={DEFAULT_VISUALIZER_TRACKERS[key].groove}
+          onCommit={(value) => setTracker(key, { groove: value })}
+        />
+      )
+      const drum = (key: 'kicks' | 'hits', label: string, what: string) => (
+        <>
+          <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
+            <OptionsSubsectionLabel tooltip={what}>{label}</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
+            <OptionsSliderRows rows={[2]}>
+              {[groove(key, label), contrast(key, label)]}
+            </OptionsSliderRows>
+          </div>
+        </>
+      )
+      return (
+        <>
+          {drum('kicks', 'Kicks', 'The kick drum\'s hits: the boomy thump you feel in the chest')}
+          {drum('hits', 'Hits', 'The snare\'s hits, with claps and rim shots: the bright counter hits piercing through at mid and high frequencies')}
+          <div className="utility-setting-button-row" role="group" aria-label="Band controls">
+            <OptionsSubsectionLabel tooltip="The live level of one band of the music, a bell around a frequency, driving intensity">Band</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Band settings">
+            <OptionsSliderRows rows={[3]}>
+              <CompactScrollbarSlider
+                id="beat-tracker-band-frequency"
+                min={Math.log2(BEAT_FREQUENCY_MIN_HZ)}
+                max={Math.log2(BEAT_FREQUENCY_MAX_HZ)}
+                step={0.01}
+                value={Math.log2(trackers.band.frequencyHz)}
+                trackLabel="freq"
+                tooltipLabel="Hz: the centre of the band, on a scale of octaves"
+                ariaLabel="Band: frequency in Hz"
+                defaultValue={Math.log2(DEFAULT_VISUALIZER_TRACKERS.band.frequencyHz)}
+                formatValue={(value) => Math.round(2 ** value).toString()}
+                onCommit={(value) => setTracker('band', { frequencyHz: Math.max(BEAT_FREQUENCY_MIN_HZ, Math.min(BEAT_FREQUENCY_MAX_HZ, Math.round(2 ** value))) })}
+              />
+              <CompactScrollbarSlider
+                id="beat-tracker-band-octaves"
+                min={BEAT_OCTAVES_MIN}
+                max={BEAT_OCTAVES_MAX}
+                step={0.1}
+                value={trackers.band.octaves}
+                trackLabel="width"
+                tooltipLabel="Octaves: how wide the bell around the frequency is, between its half-power points"
+                ariaLabel="Band: width in octaves"
+                defaultValue={DEFAULT_VISUALIZER_TRACKERS.band.octaves}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setTracker('band', { octaves: value })}
+              />
+              {contrast('band', 'Band')}
+            </OptionsSliderRows>
+          </div>
+        </>
+      )
+    }
+
+    // One coloured block: its mix, its effect and fall, plus the edge's spread and blur.
     const renderBeatChannel = (key: 'edge' | 'pane', label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
       const defaults: VisualizerChannel = key === 'edge' ? DEFAULT_VISUALIZER_EDGE : DEFAULT_VISUALIZER_PANE
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-      const slider = (field: Exclude<keyof VisualizerChannel, 'source' | 'shape' | 'fallSec'>, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
-        <CompactScrollbarSlider
-          id={`beat-${key}-${field}`}
-          min={min}
-          max={max}
-          step={step}
-          value={channel[field]}
-          trackLabel={trackLabel}
-          tooltipLabel={tooltipLabel}
-          ariaLabel={`${label}: ${ariaName}`}
-          defaultValue={defaults[field]}
-          formatValue={digits === undefined ? undefined : (value) => value.toFixed(digits)}
-          onCommit={(value) => set({ [field]: value })}
-        />
-      )
       return (
         <>
           <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={key === 'edge' ? [2, 2, 2, 2] : [2, 2, 2]}>
-              {slider('effect', 'effect', -1, 1, 0.01, `How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`, 'effect, negative inverts')}
-              {/* One track for every source (visualizer.ts, `sourceSliderValue`): the
-                  kick at the left end, the snare at the centre, the hat at the right,
-                  and the spectrum in octaves between them, shown in Hz. */}
+            <OptionsSliderRows rows={key === 'edge' ? [3, 1, 3, 2] : [3, 1, 3]}>
+              {renderMixSliders(`beat-${key}`, label, channel.mix, defaults.mix, false, (mix) => set({ mix }))}
               <CompactScrollbarSlider
-                id={`beat-${key}-source`}
-                min={SOURCE_SLIDER_MIN}
-                max={SOURCE_SLIDER_MAX}
+                id={`beat-${key}-effect`}
+                min={-1}
+                max={1}
                 step={0.01}
-                value={sourceSliderValue(channel)}
-                trackLabel="freq"
-                tooltipLabel="What it follows: the kick drum at the left end, the snare (and claps and rim shots) at the centre, hi-hats (and other short bright hits) at the right end, or, in between, the level of one band of the music, in Hz"
-                ariaLabel={`${label}: kick, snare, hi-hat, or a frequency in Hz`}
-                defaultValue={sourceSliderValue(defaults)}
-                formatValue={(value) => {
-                  const at = sourceAtSlider(value, channel.frequencyHz)
-                  return at.source === 'band' ? at.frequencyHz.toString() : at.source
-                }}
-                onCommit={(value) => set(sourceAtSlider(value, channel.frequencyHz))}
+                value={channel.effect}
+                trackLabel="effect"
+                tooltipLabel={`How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`}
+                ariaLabel={`${label}: effect, negative inverts`}
+                defaultValue={defaults.effect}
+                onCommit={(value) => set({ effect: value })}
               />
-              {/* One slot, two settings, each kept while the other shows: a band's
-                  width, or a drum's groove (visualizer.ts, `groove`). */}
-              {channel.source === 'band'
-                ? slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)
-                : slider('groove', 'groove', 0, 1, 0.01, 'How steadily it holds the learned pattern against what it hears. At the left it shows only the hits it hears; towards the middle it also shows an accent off the pattern; at the right every hit of the pattern lands at full strength, even one drowned by another instrument, and a one-off is ignored. A break stops it at any setting', 'groove')}
-              {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
               {renderFallSliders(`beat-${key}`, label, channel, defaults, 'each hit', set)}
               {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}
               {key === 'edge' && [
@@ -2441,8 +2549,8 @@ export function SidebarOptionsPanel({
           <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
             <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
             <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3), shown on each snare hit" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit the edge follows, in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3), shown on each hit of its mix" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit of its mix, in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
             <ColorTargetButton color={visualizer.immersive.accentColor || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum and the progress track in the visualizer mode (F3). Until picked it follows the caret colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, accentColor: css } }))} />
             <ColorTargetButton color={visualizer.immersive.letterboxColor || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F3). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, letterboxColor: css } }))} />
           </div>
@@ -2476,6 +2584,7 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
+          {renderTrackers()}
           {visualizer.caret.followsMusic && renderBeatCaret()}
           {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
           {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
@@ -2543,8 +2652,8 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={visualizer.immersive.swayPush}
                 trackLabel="push"
-                tooltipLabel="px each snare hit pushes the glaze's light stripes across them, for the nearest, in the drift's direction (forward when nothing drifts)"
-                ariaLabel="Immersive: how far each snare hit pushes the glaze stripes, pixels"
+                tooltipLabel="px each hit of the wave pushes the glaze's light stripes across them, for the nearest, in the drift's direction (forward when nothing drifts)"
+                ariaLabel="Immersive: how far each hit of the wave pushes the glaze stripes, pixels"
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayPush}
                 formatValue={(value) => value.toFixed(1)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: Math.round(value * 10) / 10 } }))}
@@ -2556,8 +2665,8 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={visualizer.immersive.swayReturn}
                 trackLabel="return"
-                tooltipLabel="How far the glaze slides back after a snare push, in percent, on the wave's fall: 0 keeps the whole push, 100 returns it to where it was"
-                ariaLabel="Immersive: share of each snare push the glaze slides back, percent"
+                tooltipLabel="How far the glaze slides back after a push, in percent, on the wave's fall: 0 keeps the whole push, 100 returns it to where it was"
+                ariaLabel="Immersive: share of each push the glaze slides back, percent"
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.swayReturn}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayReturn: value } }))}
@@ -2581,7 +2690,8 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Wave (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
-            <OptionsSliderRows rows={[3, 2]}>
+            <OptionsSliderRows rows={[3, 1, 3, 2]}>
+              {renderMixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, DEFAULT_VISUALIZER_IMMERSIVE.waveMix, false, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-wave-boxes"
                 min={WAVE_BOXES_MIN}
@@ -2621,14 +2731,15 @@ export function SidebarOptionsPanel({
                 formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurn: Math.round(value) } }))}
               />
-              {renderFallSliders('visualizer-wave', 'Immersive wave', { shape: visualizer.immersive.waveShape, fallSec: visualizer.immersive.waveFallSec }, { shape: DEFAULT_VISUALIZER_IMMERSIVE.waveShape, fallSec: DEFAULT_VISUALIZER_IMMERSIVE.waveFallSec }, 'the wave after each snare hit', (patch) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, ...(patch.shape !== undefined ? { waveShape: patch.shape } : {}), ...(patch.fallSec !== undefined ? { waveFallSec: patch.fallSec } : {}) } })))}
+              {renderFallSliders('visualizer-wave', 'Immersive wave', { shape: visualizer.immersive.waveShape, fallSec: visualizer.immersive.waveFallSec }, { shape: DEFAULT_VISUALIZER_IMMERSIVE.waveShape, fallSec: DEFAULT_VISUALIZER_IMMERSIVE.waveFallSec }, 'the wave after each hit', (patch) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, ...(patch.shape !== undefined ? { waveShape: patch.shape } : {}), ...(patch.fallSec !== undefined ? { waveFallSec: patch.fallSec } : {}) } })))}
             </OptionsSliderRows>
           </div>
           <div className="utility-setting-button-row" role="group" aria-label="Immersive pulse controls">
             <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
-            <OptionsSliderRows rows={[3, 3]}>
+            <OptionsSliderRows rows={[2, 1, 3, 3]}>
+              {renderMixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, true, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
                 min={PULSE_SPEED_MIN}
@@ -2636,7 +2747,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.pulseSpeed}
                 trackLabel="pulse"
-                tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on each hit the edge follows"
+                tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on each hit of its mix"
                 ariaLabel="Immersive: centre pulse starting speed, boxes per second"
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseSpeed}
                 formatValue={(value) => String(Math.round(value))}

@@ -1,5 +1,5 @@
 /**
- * Hands the music's bands (`sound/musicBeat.ts`) to the visualizer's blocks
+ * Hands the music's trackers (`sound/musicBeat.ts`), each block through its own mix, to the visualizer's blocks
  * (`@thockdown/look/visualizer`), each a CSS variable on the one element that
  * reads it (`flowStyle.ts`, never `<html>`), already scaled by the block's
  * effect and turned over when that effect is negative, so CSS only reads it:
@@ -32,14 +32,13 @@ import { useEffect, useRef } from 'react'
 import type { VisualizerCaret, VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
-import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, subscribeMusicBand, subscribeMusicClock } from '../sound/musicBeat'
+import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
-import { emitPulseHit } from '../visualizer/pulseHits'
 import { setFlowStyle } from './flowStyle'
 
-type BlockName = keyof VisualizerSettings
+type BlockName = 'caret' | 'edge' | 'pane'
 
-/** What a block subscribes with: a band channel for the edge and pane, the caret's two fields for the caret's clock. */
+/** What a block subscribes with: a mix for the edge and pane, the caret's two fields for the caret's clock. */
 type BlockSettings = VisualizerChannel | VisualizerCaret
 
 interface BlockSubscription<T> {
@@ -50,15 +49,9 @@ interface BlockSubscription<T> {
 /** `present` says whether the block is showing (its `<html>` attribute); a band's is from the start, the caret's only while its clock has a beat. */
 type Subscribe<T> = (settings: T, listener: (response: number) => void, present: (present: boolean) => void) => BlockSubscription<T>
 
-const subscribeBand: Subscribe<VisualizerChannel> = (channel, listener, present) => {
+const subscribeMix: Subscribe<VisualizerChannel> = (channel, listener, present) => {
   present(true)
-  return subscribeMusicBand(channel, listener)
-}
-
-/** The edge's band also drives the visualizer's centre pulse, one pulse per hit (`pulseHits.ts`). */
-const subscribeEdgeBand: Subscribe<VisualizerChannel> = (channel, listener, present) => {
-  present(true)
-  return subscribeMusicBand(channel, listener, emitPulseHit)
+  return subscribeMusicMix(channel, listener)
 }
 
 const subscribeClock: Subscribe<VisualizerCaret> = (caret, listener, present) => subscribeMusicClock(caret, listener, present)
@@ -100,16 +93,20 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
 }
 
 export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings): void {
+  // Set before the blocks subscribe (effects run in order), so the first
+  // analysis already listens to this layout's trackers.
+  const { trackers } = visualizer
+  useEffect(() => setVisualizerTrackers(trackers), [trackers])
   useBeatBlock('caret', visualizer.caret, enabled && visualizer.caret.followsMusic, subscribeClock)
-  useBeatBlock('edge', visualizer.edge, enabled, subscribeEdgeBand)
-  useBeatBlock('pane', visualizer.pane, enabled, subscribeBand)
+  useBeatBlock('edge', visualizer.edge, enabled, subscribeMix)
+  useBeatBlock('pane', visualizer.pane, enabled, subscribeMix)
   const edgeColor = visualizer.edge.color
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, accentColor, letterboxColor } = visualizer.immersive
+  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, pulseMix, accentColor, letterboxColor } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
-  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
+  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)

@@ -41,9 +41,9 @@
 import { cutoutClosure } from './cutoutRing'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { DEFAULT_VISUALIZER_CHANNEL, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, pulseTravelBoxes, type VisualizerChannel } from '@thockdown/look/visualizer'
-import { subscribeMusicBand, subscribeMusicTempo } from '../sound/musicBeat'
-import { pulseAmount, subscribePulseHits } from './pulseHits'
+import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
+import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
+import { emitPulseHit, pulseAmount, subscribePulseHits } from './pulseHits'
 import { setSwaySnare } from './parallaxSway'
 import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
@@ -71,6 +71,9 @@ const PULSE_LAYERS = 6
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
 interface SceneBox { left: number; top: number; width: number; height: number }
+
+/** The pulse's mix is followed for its hits alone. */
+function ignoreResponse(): void {}
 
 export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   boxPx: number
@@ -107,7 +110,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -144,16 +147,17 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     })
   }, [host])
 
-  // The wave SHOWS ON THE SNARE, as an edge or pane block does: a band of
-  // the music following the snare, its response (full on a hit, falling to
-  // nothing on the layout's fall) written as the bands' opacity. Subscribed
-  // here rather than with the other blocks, so the snare is followed only
-  // while the visualizer is up; retuned in place when the fall changes.
+  // The wave SHOWS ON ITS MIX's hits (the layout's `waveMix` of the
+  // trackers, the snare's hits by default), as an edge or pane block does:
+  // its response (full on a hit, falling to nothing on the layout's fall)
+  // written as the bands' opacity. Subscribed here rather than with the other
+  // blocks, so the trackers are followed only while the visualizer is up;
+  // retuned in place when the mix or the fall changes.
   const bandsRef = useRef<HTMLDivElement>(null)
-  const waveChannel: VisualizerChannel = { ...DEFAULT_VISUALIZER_CHANNEL, effect: 1, source: 'snare', shape: waveShape, fallSec: waveFallSec }
+  const waveChannel = useMemo<MusicMixChannel>(() => ({ mix: waveMix, shape: waveShape, fallSec: waveFallSec }), [waveMix, waveShape, waveFallSec])
   const waveChannelRef = useRef(waveChannel)
   waveChannelRef.current = waveChannel
-  const waveBandRef = useRef<{ update: (next: VisualizerChannel) => void } | null>(null)
+  const waveBandRef = useRef<{ update: (next: MusicMixChannel) => void } | null>(null)
   useEffect(() => {
     const bands = bandsRef.current
     if (!bands) return
@@ -167,7 +171,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       bands.style.opacity = String(steps / 255)
     }
     show(0)
-    const band = subscribeMusicBand(waveChannelRef.current, show)
+    const band = subscribeMusicMix(waveChannelRef.current, show)
     waveBandRef.current = band
     return () => {
       waveBandRef.current = null
@@ -176,11 +180,32 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     }
   }, [host])
   useEffect(() => {
-    waveBandRef.current?.update(waveChannelRef.current)
-  }, [waveShape, waveFallSec])
+    waveBandRef.current?.update(waveChannel)
+  }, [waveChannel])
+
+  // What sets the centre pulse off: the hits of the layout's `pulseMix` (the
+  // kick and snare trackers only), one pulse per hit (`pulseHits.ts`). Its
+  // response is drawn nowhere, so its fall is only the shortest a block has,
+  // which keeps two hits a frame or two apart (a kick and a snare together)
+  // from setting off two rings.
+  const pulseChannel = useMemo<MusicMixChannel>(() => ({ mix: pulseMix, shape: 0, fallSec: FALL_MIN_SEC }), [pulseMix])
+  const pulseChannelRef = useRef(pulseChannel)
+  pulseChannelRef.current = pulseChannel
+  const pulseBandRef = useRef<{ update: (next: MusicMixChannel) => void } | null>(null)
+  useEffect(() => {
+    const band = subscribeMusicMix(pulseChannelRef.current, ignoreResponse, emitPulseHit)
+    pulseBandRef.current = band
+    return () => {
+      pulseBandRef.current = null
+      band.unsubscribe()
+    }
+  }, [host])
+  useEffect(() => {
+    pulseBandRef.current?.update(pulseChannel)
+  }, [pulseChannel])
 
   // The centre pulse: a ring at the rim of a layer exactly the cutout's
-  // square, invisible at rest. On each hit of the edge's band
+  // square, invisible at rest. On each hit of the pulse's mix
   // (`pulseHits.ts`) the next ring of the stack sets off with its middle on
   // the face's rim (PULSE_START_SCALE) and is scaled out, its inner edge travelling at the layout's
   // starting speed and losing its decay share of that speed each second

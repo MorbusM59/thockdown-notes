@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_VISUALIZER_IMMERSIVE, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, SOURCE_SLIDER_MAX, SOURCE_SLIDER_MIN, sourceAtSlider, sourceSliderValue } from './visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_EDGE_BLUR_PX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
@@ -8,15 +8,19 @@ describe('sanitizeVisualizer', () => {
     expect(defaultVisualizer(true).edge.color).not.toBe(defaultVisualizer(false).edge.color)
   })
 
-  it('keeps each block its own band, colour and effect, bounded', () => {
+  it('keeps each block its own mix, colour and effect, bounded', () => {
     const v = sanitizeVisualizer({
-      edge: { source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
-      pane: { source: 'cowbell', frequencyHz: 99999, color: '' },
+      trackers: {},
+      edge: { mix: { kicks: 2, hits: -1, band: 0.4, normalize: 0.5 }, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
+      pane: { mix: 'x', color: '' },
+      immersive: { pulseMix: { kicks: 0.5, band: 1 } },
     }, false)
-    expect(v.edge).toMatchObject({ source: 'snare', frequencyHz: 300, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
-    expect(v.pane.frequencyHz).toBe(20000)
-    expect(v.pane.source).toBe('band')
+    expect(v.edge).toMatchObject({ mix: { kicks: 1, hits: 0, band: 0.4, normalize: 0.5 }, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
+    expect(v.pane.mix).toEqual(defaultVisualizer(false).pane.mix)
     expect(v.pane.color).toBe(defaultVisualizer(false).pane.color)
+    // The pulse takes no band, whatever was saved.
+    expect(v.immersive.pulseMix.band).toBe(0)
+    expect(v.immersive.pulseMix.kicks).toBe(0.5)
     expect(v.caret.effect).toBe(DEFAULT_VISUALIZER_CARET.effect)
   })
 
@@ -39,17 +43,68 @@ describe('sanitizeVisualizer', () => {
   })
 })
 
-it('keeps a drum\'s groove beside the band\'s width, bounded, and reads a layout saved before groove at 0', () => {
-  const v = sanitizeVisualizer({ edge: { source: 'hat', octaves: 2, groove: 0.8 }, pane: { source: 'kick', octaves: 3, groove: 7 } }, false)
-  expect(v.edge).toMatchObject({ octaves: 2, groove: 0.8 })
-  expect(v.pane).toMatchObject({ octaves: 3, groove: 1 })
-  expect(sanitizeVisualizer({ edge: { source: 'snare', octaves: 2 } }, false).edge.groove).toBe(0)
+describe('a layout saved before the trackers', () => {
+  it('reads each block as following its old source in full, and the trackers as that block\'s tuning', () => {
+    const v = sanitizeVisualizer({
+      edge: { source: 'kick', groove: 0.8, contrast: 0.3, frequencyHz: 90 },
+      pane: { source: 'hat', groove: 7, contrast: 0.1 },
+    }, false)
+    expect(v.edge.mix).toEqual(soleMix('kicks'))
+    expect(v.pane.mix).toEqual(soleMix('hits'))
+    expect(v.trackers.kicks).toEqual({ groove: 0.8, contrast: 0.3 })
+    expect(v.trackers.hits).toEqual({ groove: 1, contrast: 0.1 })
+    // The pulse rode the edge.
+    expect(v.immersive.pulseMix).toEqual(soleMix('kicks'))
+    // The wave followed the snare.
+    expect(v.immersive.waveMix).toEqual(soleMix('hits'))
+  })
+
+  it('takes a band block\'s band as the band tracker, the first block winning', () => {
+    const v = sanitizeVisualizer({ edge: { source: 'band', frequencyHz: 440, octaves: 2, contrast: 0.2 }, pane: { source: 'band', frequencyHz: 99 } }, false)
+    expect(v.trackers.band).toEqual({ frequencyHz: 440, octaves: 2, contrast: 0.2 })
+    expect(v.pane.mix).toEqual(soleMix('band'))
+    // A band edge set no pulse drum: the kick.
+    expect(v.immersive.pulseMix).toEqual(soleMix('kicks'))
+  })
+
+  it('reads a layout saved before the source existed', () => {
+    const v = sanitizeVisualizer({ pane: { frequencyHz: 0 }, edge: { frequencyHz: 440 } }, false)
+    expect(v.pane.mix).toEqual(soleMix('kicks'))
+    expect(v.edge.mix).toEqual(soleMix('band'))
+    expect(v.trackers.band.frequencyHz).toBe(440)
+  })
+
+  it('looks as the defaults did for a layout that saved the defaults', () => {
+    const v = sanitizeVisualizer({ edge: { source: 'kick' }, pane: { source: 'snare' } }, false)
+    expect(v.edge.mix).toEqual(defaultVisualizer(false).edge.mix)
+    expect(v.pane.mix).toEqual(defaultVisualizer(false).pane.mix)
+    expect(v.trackers).toEqual(defaultVisualizer(false).trackers)
+  })
 })
 
-it('reads a layout saved before the source existed', () => {
-  const v = sanitizeVisualizer({ pane: { frequencyHz: 0 }, edge: { frequencyHz: 440 } }, false)
-  expect(v.pane.source).toBe('kick')
-  expect(v.edge).toMatchObject({ source: 'band', frequencyHz: 440 })
+describe('mixResponse', () => {
+  const mix = (kicks: number, hits: number, band: number, normalize: number) => ({ kicks, hits, band, normalize })
+  it('adds the contributions and caps at a full response with no scaling', () => {
+    expect(mixResponse(mix(1, 0, 0, 0), 1, 0, 0)).toBe(1)
+    expect(mixResponse(mix(1, 1, 0, 0), 1, 1, 0)).toBe(1)
+    expect(mixResponse(mix(0.5, 0, 0, 0), 1, 0, 0)).toBe(0.5)
+    expect(mixResponse(mix(0.5, 0.3, 0.2, 0), 1, 1, 1)).toBeCloseTo(1)
+  })
+  it('divides by the contributions\' sum at full scaling, linearly between', () => {
+    expect(mixResponse(mix(1, 0.5, 0, 1), 1, 0, 0)).toBeCloseTo(1 / 1.5)
+    expect(mixResponse(mix(0.5, 0, 0, 1), 1, 0, 0)).toBe(1)
+    expect(mixResponse(mix(1, 0.5, 0, 0.5), 1, 0, 0)).toBeCloseTo(1 / 1.25)
+    expect(mixResponse(mix(1, 1, 1, 1), 1, 1, 1)).toBe(1)
+  })
+  it('stays inside 0..1 for every mix and every response', () => {
+    for (let i = 0; i < 2000; i++) {
+      const m = mix(Math.random(), Math.random(), Math.random(), Math.random())
+      const r = mixResponse(m, Math.random(), Math.random(), Math.random())
+      expect(r).toBeGreaterThanOrEqual(0)
+      expect(r).toBeLessThanOrEqual(1)
+    }
+    expect(mixResponse(mix(0, 0, 0, 1), 1, 1, 1)).toBe(0)
+  })
 })
 
 it('turns a saved amount and invert into a signed effect', () => {
@@ -121,39 +176,6 @@ it('gives a save without the edge geometry its defaults, and bounds and rounds w
   expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }, false).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_EDGE_BLUR_PX })
 })
 
-describe('the source slider', () => {
-  it('puts the kick at the left end, the snare at the centre and the hat at the right end', () => {
-    const at = (source: 'kick' | 'snare' | 'hat') => sourceSliderValue({ source, frequencyHz: 100 })
-    expect(at('kick')).toBeGreaterThan(SOURCE_SLIDER_MIN)
-    expect(at('hat')).toBeLessThan(SOURCE_SLIDER_MAX)
-    expect(at('kick') - SOURCE_SLIDER_MIN).toBeCloseTo(SOURCE_SLIDER_MAX - at('hat'))
-    expect(at('snare')).toBeCloseTo((SOURCE_SLIDER_MIN + SOURCE_SLIDER_MAX) / 2)
-    expect(sourceAtSlider(SOURCE_SLIDER_MIN, 100).source).toBe('kick')
-    expect(sourceAtSlider((SOURCE_SLIDER_MIN + SOURCE_SLIDER_MAX) / 2, 100).source).toBe('snare')
-    expect(sourceAtSlider(SOURCE_SLIDER_MAX, 100).source).toBe('hat')
-  })
-
-  it('returns every source and band frequency to the position it came from', () => {
-    for (const source of ['kick', 'snare', 'hat'] as const) {
-      expect(sourceAtSlider(sourceSliderValue({ source, frequencyHz: 440 }), 440)).toEqual({ source, frequencyHz: 440 })
-    }
-    for (const frequencyHz of [20, 70, 440, 630, 640, 2000, 20000]) {
-      expect(sourceAtSlider(sourceSliderValue({ source: 'band', frequencyHz }), 1)).toEqual({ source: 'band', frequencyHz })
-    }
-  })
-
-  it('runs the spectrum upwards from left to right, through the snare', () => {
-    let last = 0
-    for (let v = SOURCE_SLIDER_MIN; v <= SOURCE_SLIDER_MAX; v += 0.01) {
-      const at = sourceAtSlider(v, 1)
-      if (at.source !== 'band') continue
-      expect(at.frequencyHz).toBeGreaterThanOrEqual(last)
-      last = at.frequencyHz
-    }
-    expect(last).toBeGreaterThan(19000)
-  })
-})
-
 it('reads a layout saved under the old block names, shade and outline, as the edge and the pane', () => {
   const v = sanitizeVisualizer({ shade: { effect: 0.4, spreadPx: 12 }, outline: { effect: -0.3, color: 'rgba(1, 2, 3, 1)' } }, false)
   expect(v.edge).toMatchObject({ effect: 0.4, spreadPx: 12 })
@@ -187,7 +209,7 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -9, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: 0, swayReturn: 1, swayDrift: 200, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: DEFAULT_VISUALIZER_IMMERSIVE.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: '', letterboxColor: '' })
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -9, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: 0, swayReturn: 1, swayDrift: 200, waveColor: DEFAULT_VISUALIZER_IMMERSIVE.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: DEFAULT_VISUALIZER_IMMERSIVE.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: '', letterboxColor: '' })
     expect(sanitizeVisualizer({}, false).immersive).toEqual(DEFAULT_VISUALIZER_IMMERSIVE)
   })
 })

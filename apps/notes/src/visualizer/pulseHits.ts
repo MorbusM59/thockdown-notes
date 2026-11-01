@@ -1,8 +1,8 @@
 /**
- * The hits the visualizer's centre pulse answers: those of the EDGE block's
- * band (`useBeatFeedback`, `subscribeMusicBand`'s `onHit`), so the pulse and
- * the edge follow one detection and the reader tunes it in one place.
- * A plain event bus between the two, since neither owns the other.
+ * The hits the visualizer's centre pulse answers: those of the layout's
+ * pulse mix (`GridWave.tsx`, `subscribeMusicMix`'s `onHit`), heard by the
+ * ring (`GridWave.tsx`) and the centre solid's thump (`VisualizerScene.tsx`).
+ * A plain event bus between them, since neither owns the other.
  */
 
 type HitListener = (strength: number) => void
@@ -20,8 +20,8 @@ export function subscribePulseHits(listener: HitListener): () => void {
 
 /**
  * How much of its full size a centre pulse is drawn at (the ring's opacity,
- * the solid's thump) for a hit of `strength` (0..1, the edge's response at
- * the hit) at the layout's signal `boost` (`VisualizerImmersive.pulseBoost`):
+ * the solid's thump) for a hit of `strength` (0..1, the pulse mix's response
+ * at the hit) at the layout's signal `boost` (`VisualizerImmersive.pulseBoost`):
  * in full at a boost of 1, the hit's own strength at 0, and between them in
  * proportion.
  */

@@ -20,10 +20,11 @@ describe('DatabaseService visualizer loadout', () => {
 
   // Every field different from NEUTRAL_BASE's, so a dropped one shows.
   const visualizer: VisualizerSettings = {
+    trackers: { kicks: { groove: 0.3, contrast: 0.4 }, hits: { groove: 0.7, contrast: 0.2 }, band: { frequencyHz: 90, octaves: 2, contrast: 0.6 } },
     caret: { followsMusic: true, effect: -0.3, shape: 0.4, fallSec: 0.6 },
-    edge: { effect: -0.7, source: 'snare', frequencyHz: 90, octaves: 2, groove: 0.7, contrast: 0.2, shape: -0.8, fallSec: 0.15, color: 'rgba(12, 34, 56, 0.5)', spreadPx: 14, blurPx: 70 },
-    pane: { effect: 0.5, source: 'hat', frequencyHz: 8000, octaves: 0.5, groove: 0.35, contrast: 0.6, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },
-    immersive: { glazeStrength: 0.15, glazeSpread: -0.4, swayRangePx: 120, swaySpread: 0.8, swayPush: 4.5, swayReturn: 0.6, swayDrift: -30, waveColor: 'rgba(10, 200, 90, 0.3)', waveBoxes: 40, waveSec: 3.5, waveTurn: -2, waveShape: -0.4, waveFallSec: 0.5, pulseColor: 'rgba(1, 2, 3, 0.4)', pulseSpeed: 30, pulseHalfLifeSec: 1.2, pulseFadeSec: 0.7, pulseSoftness: 0.3, pulseBoost: 0.4, cutoutRound: 0, accentColor: 'rgba(250, 20, 120, 1)', letterboxColor: 'rgba(5, 6, 7, 1)' },
+    edge: { effect: -0.7, mix: { kicks: 0.4, hits: 0.6, band: 0.2, normalize: 0.5 }, shape: -0.8, fallSec: 0.15, color: 'rgba(12, 34, 56, 0.5)', spreadPx: 14, blurPx: 70 },
+    pane: { effect: 0.5, mix: { kicks: 0, hits: 0.3, band: 1, normalize: 1 }, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },
+    immersive: { glazeStrength: 0.15, glazeSpread: -0.4, swayRangePx: 120, swaySpread: 0.8, swayPush: 4.5, swayReturn: 0.6, swayDrift: -30, waveColor: 'rgba(10, 200, 90, 0.3)', waveBoxes: 40, waveSec: 3.5, waveMix: { kicks: 0.2, hits: 0.9, band: 0.1, normalize: 0.3 }, pulseMix: { kicks: 0.8, hits: 0.5, band: 0, normalize: 0.7 }, waveTurn: -2, waveShape: -0.4, waveFallSec: 0.5, pulseColor: 'rgba(1, 2, 3, 0.4)', pulseSpeed: 30, pulseHalfLifeSec: 1.2, pulseFadeSec: 0.7, pulseSoftness: 0.3, pulseBoost: 0.4, cutoutRound: 0, accentColor: 'rgba(250, 20, 120, 1)', letterboxColor: 'rgba(5, 6, 7, 1)' },
   }
 
   const activeLight = (service: DatabaseService): UiLayoutLoadout => {
