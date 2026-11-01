@@ -675,8 +675,8 @@ export class SignalMap {
     const times = new Map<number, number[]>()
     for (const x of this.instances) { const l = times.get(x.signal) ?? []; l.push(x.time); times.set(x.signal, l) }
     for (const s of this.signals) {
-      s.kick = 0
-      s.hit = 0
+      // Where there is too little to judge by (a seek emptied the instances, or the beat map has no beats there yet),
+      // the last judgement stands: no evidence is not evidence that a kick stopped being one.
       const all = times.get(s.id) ?? []
       s.why = `few${all.length}`
       if (all.length < MIN_FLAG_INSTANCES) continue
