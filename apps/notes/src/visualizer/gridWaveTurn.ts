@@ -113,6 +113,8 @@ export interface GridWaveSettings {
   /** How much each tracker shows the wave, and sets off the centre pulse (`VisualizerImmersive`). */
   waveMix: VisualizerMix
   glazeMix: VisualizerMix
+  /** Whether the glaze is pushed at all (`swayPush` not 0): its mix is followed only then, so it costs no analysis otherwise. */
+  glazePushes: boolean
   pulseMix: VisualizerMix
   /** The edge's fall after each of its hits, which the centre solid's thump follows. */
   edgeShape: number
@@ -126,14 +128,14 @@ export interface GridWaveSettings {
   pulseBoost: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, glazeMix: DEFAULT_VISUALIZER_IMMERSIVE.glazeMix, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, glazeMix: DEFAULT_VISUALIZER_IMMERSIVE.glazeMix, glazePushes: false, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
   if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes
     && next.pulseSpeed === settings.pulseSpeed && next.pulseHalfLifeSec === settings.pulseHalfLifeSec && next.pulseFadeSec === settings.pulseFadeSec
     && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec
-    && next.waveMix === settings.waveMix && next.glazeMix === settings.glazeMix && next.pulseMix === settings.pulseMix
+    && next.waveMix === settings.waveMix && next.glazeMix === settings.glazeMix && next.glazePushes === settings.glazePushes && next.pulseMix === settings.pulseMix
     && next.edgeShape === settings.edgeShape && next.edgeFallSec === settings.edgeFallSec
     && next.cutoutRound === settings.cutoutRound
     && next.pulseColor === settings.pulseColor && next.pulseSoftness === settings.pulseSoftness && next.pulseBoost === settings.pulseBoost) return

@@ -110,7 +110,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, glazePushes, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -191,13 +191,14 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   glazeChannelRef.current = glazeChannel
   const glazeBandRef = useRef<{ update: (next: MusicMixChannel) => void } | null>(null)
   useEffect(() => {
+    if (!glazePushes) return
     const band = subscribeMusicMix(glazeChannelRef.current, () => {}, () => swaySnareHit())
     glazeBandRef.current = band
     return () => {
       glazeBandRef.current = null
       band.unsubscribe()
     }
-  }, [host])
+  }, [host, glazePushes])
   useEffect(() => {
     glazeBandRef.current?.update(glazeChannel)
   }, [glazeChannel])
