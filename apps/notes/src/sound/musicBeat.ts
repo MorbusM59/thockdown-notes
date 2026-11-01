@@ -31,7 +31,7 @@
  * no hit: it pulses on the beats of the ROLLING BEAT MAP (`beatMap.ts`),
  * planned up to half a minute ahead, so it lands on every beat through a
  * ritardando and glides across a silence to the tempo after it, in the
- * caret's octave of tempo (`beatPhase.ts`). It replaced a clock STEERED
+ * caret's octave of tempo, on the bar's one and three (`BeatMap.caretAt`). It replaced a clock STEERED
  * toward the drum tracker's tempo grid after the fact, which could only
  * catch up with a change of tempo, never land on it. Its pulse is the same fall a
  * hit makes (`pulseCurve`), restarted on every beat and never longer than
@@ -65,7 +65,6 @@
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerChannel as BeatChannel, VisualizerCaret } from '@thockdown/look/visualizer'
 import { pulseCurve } from '@thockdown/look/visualizer'
-import { CaretFold } from './beatPhase'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSource } from './musicAnalysis'
@@ -156,12 +155,21 @@ let lastNow = NaN
  * stands. NaN grid and peak until an answer says otherwise.
  */
 const pendingRaw = new Map<number, number>()
-/** The beat map's beats around the moment last asked for, and the number of the first (`BeatMap.beatsAround`). */
-let beatBefore = NaN
-let beatAfter = NaN
-let beatIndex = NaN
-/** The caret's octave, held between beats (`CaretFold`). */
-const fold = new CaretFold()
+/**
+ * The caret's beat as last answered (`BeatMap.caretAt`): its phase at media
+ * time `caretTime` and its period; a frame between answers runs the phase on
+ * at that period.
+ */
+let caretTime = NaN
+let caretPhase = NaN
+let caretPeriod = NaN
+
+/** The caret's beat at media time `time`, carried on from the last answer: its phase and period, NaN for both where there is none. */
+function caretAt(time: number): { phase: number; period: number } {
+  if (Number.isNaN(caretPhase) || !(caretPeriod > 0)) return { phase: NaN, period: NaN }
+  const at = caretPhase + (time - caretTime) / caretPeriod
+  return { phase: at - Math.floor(at), period: caretPeriod }
+}
 
 function send(request: AnalysisRequest): void {
   worker?.postMessage(request)
@@ -177,9 +185,9 @@ function receive(answer: AnalysisAnswer): void {
     const isDrum = band.channel.source !== 'band'
     pendingRaw.set(id, isDrum ? Math.max(pendingRaw.get(id) ?? 0, raw) : raw)
   }
-  beatBefore = answer.beatBefore
-  beatAfter = answer.beatAfter
-  beatIndex = answer.beatIndex
+  caretTime = answer.heardTime
+  caretPhase = answer.caretPhase
+  caretPeriod = answer.caretPeriod
   // Until the decoding has reached the listener there is no peak to read:
   // the last gain holds rather than reading as silence.
   if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
@@ -209,9 +217,9 @@ function restartAnalysis(listenerTime: number): void {
   const url = musicPlayerService.trackUrl
   for (const band of bands) band.peak = 0
   pendingRaw.clear()
-  beatBefore = NaN
-  beatAfter = NaN
-  beatIndex = NaN
+  caretTime = NaN
+  caretPhase = NaN
+  caretPeriod = NaN
   const id = ++run
   analysedUrl = url
   if (isBeatTraceOn() && url) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
@@ -252,7 +260,7 @@ function respond(band: Band, raw: number, listenerTime: number, gain: number): n
 
 /** A clock's response: its fall, restarted on each of its beats and cut at the next. */
 function pulse(subscriber: Clock, listenerTime: number): number {
-  const { phase, period } = fold.beat(beatBefore, beatAfter, beatIndex, listenerTime)
+  const { phase, period } = caretAt(listenerTime)
   setLocked(subscriber, !Number.isNaN(phase))
   if (Number.isNaN(phase)) return 0
   const { fallSec, shape } = subscriber.caret
@@ -261,7 +269,7 @@ function pulse(subscriber: Clock, listenerTime: number): number {
 
 /** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
 function count(counter: Counter, listenerTime: number): void {
-  counter.listener(listenerTime, fold.beat(beatBefore, beatAfter, beatIndex, listenerTime).period)
+  counter.listener(listenerTime, caretAt(listenerTime).period)
 }
 
 function publish(subscriber: Band | Clock, response: number): void {

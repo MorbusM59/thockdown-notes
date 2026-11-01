@@ -58,7 +58,8 @@ function play(samples: Float32Array, start: number, ahead = 30) {
 /** For each expected beat in [from, to): the nearest shown beat's error; and shown beats in that span with no expected beat near. */
 function match(expected: number[], shown: number[], from: number, to: number, tolerance = 0.03) {
   const want = expected.filter((t) => t >= from && t < to)
-  const got = shown.filter((t) => t >= from && t < to)
+  // Shown beats a tolerance either side of the span's edges, so a beat smoothed a millisecond over an edge is neither missed nor extra.
+  const got = shown.filter((t) => t >= from - tolerance && t < to - tolerance)
   const missed = want.filter((t) => !got.some((s) => Math.abs(s - t) <= tolerance))
   const extra = got.filter((s) => !want.some((t) => Math.abs(s - t) <= tolerance))
   return { want: want.length, missed: missed.length, extra: extra.length }
@@ -139,4 +140,69 @@ describe('the rolling beat map', () => {
     expect(shown.filter((t) => t > 40 && t < 100).length).toBe(0)
     expect(match(second, shown, 110, 135)).toMatchObject({ missed: 0, extra: 0 })
   })
+
+  it('puts the caret on the kick (one and three) of a breakbeat whose snare is louder, and holds it through a break', () => {
+    const beat = 60 / 174
+    const samples = dnb(120, beat, 50, 72)
+    const map = new BeatMap(RATE)
+    const chunk = 1152
+    let fed = 0
+    const onsets: number[] = []
+    let lastPhase = NaN
+    for (let listener = 2; listener < 115; listener += 1 / 60) {
+      while (fed < samples.length && fed / RATE < listener + 30) {
+        map.feed(samples.subarray(fed, fed + chunk), fed / RATE)
+        fed += chunk
+      }
+      map.update(listener)
+      const { phase } = map.caretAt(listener)
+      // A caret beat begins where the phase wraps.
+      if (phase < lastPhase) onsets.push(listener - phase * map.caretAt(listener).period)
+      lastPhase = phase
+    }
+    const late = onsets.filter((t) => t > 8)
+    expect(late.length).toBeGreaterThan(100)
+    // Every caret beat on the bar's one or three (positions 0 and 2 of four), never on a snare.
+    for (const t of late) {
+      const position = ((Math.round(t / beat) % 4) + 4) % 4
+      expect(position % 2).toBe(0)
+      expect(Math.abs(t - Math.round(t / beat) * beat)).toBeLessThan(0.02)
+    }
+  })
 })
+
+/** Drum and bass at `beat` seconds a beat: kick on one and the and of three, a loud snare on two and four, eighth hats, a sub under it all, and no kick between `breakFrom` and `breakTo`. */
+function dnb(seconds: number, beat: number, breakFrom: number, breakTo: number): Float32Array {
+  const out = new Float32Array(seconds * RATE)
+  let seed = 3
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647
+    return seed / 2147483647 - 0.5
+  }
+  const add = (t0: number, len: number, f: (t: number) => number) => {
+    for (let i = 0; i < len * RATE; i++) {
+      const at = Math.round(t0 * RATE) + i
+      if (at >= out.length) break
+      out[at] += f(i / RATE)
+    }
+  }
+  const kick = (t0: number, gain: number) => {
+    let phase = 0
+    add(t0, 0.25, (t) => {
+      phase += (2 * Math.PI * (50 + 90 * Math.exp(-t / 0.02))) / RATE
+      return gain * Math.sin(phase) * Math.exp(-t / 0.1) + 0.2 * rnd() * Math.exp(-t / 0.003)
+    })
+  }
+  for (let b = 0; b * beat < seconds; b++) {
+    const t0 = b * beat
+    const position = b % 4
+    const inBreak = t0 >= breakFrom && t0 < breakTo
+    if (!inBreak && position === 0) kick(t0, 0.8)
+    if (!inBreak && position === 2) kick(t0 + beat / 2, 0.7)
+    if (position === 1 || position === 3) add(t0, 0.2, (t) => (0.9 * rnd() + 0.4 * Math.sin(2 * Math.PI * 190 * t)) * Math.exp(-t / 0.06))
+    add(t0, 0.05, (t) => 0.15 * rnd() * Math.exp(-t / 0.01))
+    add(t0 + beat / 2, 0.05, (t) => 0.1 * rnd() * Math.exp(-t / 0.01))
+  }
+  for (let i = 0; i < out.length; i++) out[i] += 0.2 * Math.sin((2 * Math.PI * 45 * i) / RATE)
+  return out
+}

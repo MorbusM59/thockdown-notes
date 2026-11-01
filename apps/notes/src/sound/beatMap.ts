@@ -79,6 +79,22 @@ const AGREE_STEP = Math.round(TEMPO_WINDOW_SEC / TEMPO_STEP_SEC)
 export const GLIDE_MAX_SEC = 16
 /** How strongly a gap is held to the local period (Ellis's alpha, for an envelope of unit spread). */
 const TIGHTNESS = 1600
+/**
+ * The KICK band: below this the envelope's second, low-only measure
+ * (`kickEnvelope`), which decides where the caret's beat falls in the bar.
+ */
+const KICK_HZ = 90
+/**
+ * How many beats either side a beat's time is SMOOTHED over (`regularize`):
+ * a local quadratic fit through the chain, so a steady tempo is a rigid grid
+ * however busy the break played over it, while a ritardando, which is
+ * smooth over that span, is followed.
+ */
+const SMOOTH_BEATS = 8
+/** How many beats of look-ahead decide where the caret's beat falls (`decideCaret`). */
+const CARET_DECIDE_BEATS = 32
+/** How much stronger another placement of the caret's beat must read to replace the held one. */
+const CARET_SWITCH_RATIO = 1.5
 /** How much more of the track must be decoded before the chain is planned again. */
 const REPLAN_SEC = 1
 /** The energy smoothing per hop for each band (one-pole, the hop's share). */
@@ -102,6 +118,46 @@ interface TempoFrame {
   strength: number
   confident: boolean
   folded: number
+}
+
+/** The caret's tempo range, in beats a minute: from CARET_MIN_BPM up to but not including twice it. */
+export const CARET_MIN_BPM = 70
+
+/**
+ * Where the caret's beat falls from map beat number `from` on: a caret beat
+ * at every map beat position `from + phase + m / scale` (whole m), `scale`
+ * being the caret's beats per map beat (a power of two) and `phase` in map
+ * beats, in halves. `period` is the map's beat period (s) it was decided at.
+ */
+interface CaretPlacement {
+  from: number
+  scale: number
+  phase: number
+  period: number
+}
+
+/** The caret's beat at a moment: how far into it, 0..1, and its period (s); NaN for both where there is none. */
+export interface CaretBeat {
+  phase: number
+  period: number
+}
+
+/** The value at `at` of the least-squares quadratic through (j, values[j]) for j in lo..hi. */
+function quadraticAt(values: number[], lo: number, hi: number, at: number): number {
+  // Centred on `at` for conditioning: fit y = a + b x + c x^2 with x = j - at, and a is the answer.
+  let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, t0 = 0, t1 = 0, t2 = 0
+  for (let j = lo; j <= hi; j++) {
+    const x = j - at
+    const y = values[j] - values[at]
+    const x2 = x * x
+    s0 += 1; s1 += x; s2 += x2; s3 += x2 * x; s4 += x2 * x2
+    t0 += y; t1 += x * y; t2 += x2 * y
+  }
+  // Cramer's rule on the normal equations, for a.
+  const det = s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2)
+  if (Math.abs(det) < 1e-9) return values[at]
+  const a = t0 * (s2 * s4 - s3 * s3) - s1 * (t1 * s4 - s3 * t2) + s2 * (t1 * s3 - s2 * t2)
+  return values[at] + a / det
 }
 
 function logGaussian(x: number, centre: number, octaves: number): number {
@@ -136,6 +192,15 @@ export class BeatMap {
   /** The last plan read back: provisional beats after the last committed one. */
   private planned: number[] = []
   private dirty = false
+  /** The kick band's rise per hop, a ring alongside `envelope`, and its filter state. */
+  private readonly kickEnvelope: Float32Array
+  private readonly kickCoeff: number
+  private kick1 = 0
+  private kick2 = 0
+  private kickEnergy = 0
+  private prevKickDb = NaN
+  /** Where the CARET's beat falls (`decideCaret`), each decision from its beat on, oldest first. */
+  private carets: CaretPlacement[] = []
   /** Scratch for one tempo window's smoothed envelope. */
   private readonly smoothed: Float64Array
   /** The frontier the last plan was made at. */
@@ -146,6 +211,8 @@ export class BeatMap {
     this.lowCoeff = 1 - Math.exp((-2 * Math.PI * LOW_HZ) / sampleRate)
     this.capacity = Math.ceil((MAP_AHEAD_SEC + MAP_BEHIND_SEC + TEMPO_WINDOW_SEC + 4) / this.hopSec)
     this.envelope = new Float32Array(this.capacity)
+    this.kickEnvelope = new Float32Array(this.capacity)
+    this.kickCoeff = 1 - Math.exp((-2 * Math.PI * KICK_HZ) / sampleRate)
     this.smoothed = new Float64Array(Math.round(TEMPO_WINDOW_SEC / this.hopSec) + 1)
   }
 
@@ -176,6 +243,9 @@ export class BeatMap {
       this.lastX = x
       this.lowEnergy += this.low * this.low
       this.highEnergy += high * high
+      this.kick1 += (x - this.kick1) * this.kickCoeff
+      this.kick2 += (this.kick1 - this.kick2) * this.kickCoeff
+      this.kickEnergy += this.kick2 * this.kick2
       if (++this.filled === this.hopFrames) this.closeHop()
     }
     this.dirty = true
@@ -190,6 +260,10 @@ export class BeatMap {
     this.prevLowDb = lowDb
     this.prevHighDb = highDb
     this.envelope[this.next % this.capacity] = audible ? rise : 0
+    const kickDb = 10 * Math.log10(ENERGY_FLOOR + this.kickEnergy / this.hopFrames)
+    this.kickEnvelope[this.next % this.capacity] = audible && !Number.isNaN(this.prevKickDb) ? Math.max(0, kickDb - this.prevKickDb) : 0
+    this.prevKickDb = kickDb
+    this.kickEnergy = 0
     this.next++
     if (this.next - this.first > this.capacity) this.first = this.next - this.capacity
     this.filled = 0
@@ -225,6 +299,9 @@ export class BeatMap {
     while (this.tempos.length > 0 && this.tempos[0].time < keepFrom - TEMPO_WINDOW_SEC) this.tempos.shift()
     // The newest committed beat anchors the chain, so it is kept whatever its age.
     while (this.committed.length > 1 && this.timeOf(this.committed[0]) < keepFrom) this.committed.shift()
+    // Every decision but the one in force at the oldest beat kept.
+    const oldest = this.committedCount - this.committed.length
+    while (this.carets.length > 1 && this.carets[1].from <= oldest) this.carets.shift()
   }
 
   private estimateTempos(): void {
@@ -456,14 +533,113 @@ export class BeatMap {
       while (chain.length > 0 && chain[0] <= after) chain.shift()
     }
     // Only the parts of the chain in a passage with a beat are beats.
-    this.planned = chain.filter((h) => !Number.isNaN(this.periodAt(this.timeOf(h))))
+    this.planned = this.regularize(chain.filter((h) => !Number.isNaN(this.periodAt(this.timeOf(h)))))
+  }
+
+  /**
+   * The planned beats SMOOTHED (header of SMOOTH_BEATS): each moved onto a
+   * quadratic fitted by least squares through the beats within SMOOTH_BEATS
+   * of it, committed ones included, in the same run (no gap of more than
+   * twice the local period between neighbours). The chain says where the
+   * beats are; the fit says where a steady hand would put them, which is
+   * what a break's ghost notes and flams must not move.
+   */
+  private regularize(chain: number[]): number[] {
+    const context = Math.min(this.committed.length, SMOOTH_BEATS)
+    const all = [...this.committed.slice(this.committed.length - context), ...chain]
+    const out = new Array<number>(chain.length)
+    for (let i = 0; i < chain.length; i++) {
+      const at = context + i
+      // The run around beat `at`: stop at a gap no beat bridges.
+      let lo = at
+      while (lo > 0 && at - lo < SMOOTH_BEATS && all[lo] - all[lo - 1] < 2 * this.periodHopsAt(all[lo])) lo--
+      let hi = at
+      while (hi < all.length - 1 && hi - at < SMOOTH_BEATS && all[hi + 1] - all[hi] < 2 * this.periodHopsAt(all[hi])) hi++
+      out[i] = hi - lo >= 4 ? quadraticAt(all, lo, hi, at) : chain[i]
+    }
+    return out
+  }
+
+  private periodHopsAt(hop: number): number {
+    const period = this.periodAt(this.timeOf(hop))
+    return Number.isNaN(period) ? Infinity : period / this.hopSec
+  }
+
+  private kickAt(hop: number): number {
+    // The strongest rise within two hops: a beat's time and its kick's onset differ by the envelope's smear.
+    const h = Math.round(hop)
+    let most = 0
+    for (let j = h - 2; j <= h + 2; j++) if (j >= this.first && j < this.next) most = Math.max(most, this.kickEnvelope[j % this.capacity])
+    return most
+  }
+
+  /**
+   * Decides where the caret's beat falls, from map beat number `from` on
+   * (whose time is `beats[0]`, the beats after it following): the caret's
+   * octave (a power of two of the map's tempo inside MIN_BPM..MAX_BPM), and
+   * of the placements that octave allows (every map beat or half beat in one
+   * caret beat), the one whose positions carry the most KICK over the next
+   * CARET_DECIDE_BEATS map beats: the bar's one and three, wherever the
+   * loudest onsets fall. A held placement is kept unless another reads
+   * CARET_SWITCH_RATIO stronger, so a break that drops the kick for a bar
+   * does not move it.
+   */
+  private decideCaret(from: number, beats: number[], keep: boolean): void {
+    const count = Math.min(beats.length - 1, CARET_DECIDE_BEATS)
+    if (count < 1) return
+    const period = ((beats[count] - beats[0]) / count) * this.hopSec
+    const scale = 2 ** -Math.floor(Math.log2(60 / period / CARET_MIN_BPM))
+    // The placements one caret beat allows, in halves of a map beat.
+    const placements = Math.max(1, Math.round(2 / scale))
+    const strength = new Float64Array(placements)
+    for (let i = 0; i < count; i++) {
+      strength[(2 * i) % placements] += this.kickAt(beats[i])
+      strength[(2 * i + 1) % placements] += this.kickAt((beats[i] + beats[i + 1]) / 2)
+    }
+    let best = 0
+    for (let p = 1; p < placements; p++) if (strength[p] > strength[best]) best = p
+    const last = this.carets[this.carets.length - 1]
+    if (keep && last && last.scale === scale) {
+      // The held placement, in this decision's terms.
+      const held = (((Math.round(2 * (last.from + last.phase - from)) % placements) + placements) % placements)
+      if (!(strength[best] > CARET_SWITCH_RATIO * strength[held])) {
+        last.period = period
+        return
+      }
+    }
+    this.carets.push({ from, scale, phase: best / 2, period })
+  }
+
+  /**
+   * The caret's beat at media time `time` (`CaretBeat`): the map's beats
+   * either side of it, read through the caret placement in force there.
+   */
+  caretAt(time: number): CaretBeat {
+    const { previous, next, index } = this.beatsAround(time)
+    if (Number.isNaN(previous) || Number.isNaN(next) || Number.isNaN(index)) return { phase: NaN, period: NaN }
+    let placement: CaretPlacement | undefined
+    for (const c of this.carets) if (c.from <= index) placement = c
+    if (!placement) return { phase: NaN, period: NaN }
+    const position = index - placement.from + (time - previous) / (next - previous)
+    const caret = (position - placement.phase) * placement.scale
+    return { phase: caret - Math.floor(caret), period: (next - previous) / placement.scale }
   }
 
   private commit(listenerTime: number): void {
     const limit = listenerTime + COMMIT_SEC
     let taken = 0
     while (taken < this.planned.length && this.timeOf(this.planned[taken]) <= limit) {
-      this.committed.push(this.planned[taken])
+      const beat = this.planned[taken]
+      const before = this.committed.length > 0 ? this.committed[this.committed.length - 1] : NaN
+      const period = this.periodHopsAt(beat)
+      // A new passage (the first beat, or one after a gap no beat bridges)
+      // decides the caret afresh; within one, only a real change of tempo
+      // reopens the decision, and then the held placement is preferred.
+      const ahead = this.planned.slice(taken)
+      const held = this.carets[this.carets.length - 1]
+      if (!held || !(beat - before < 2 * period)) this.decideCaret(this.committedCount, ahead, false)
+      else if (Math.abs(Math.log2((period * this.hopSec) / held.period)) > Math.log2(1 + AGREE_RATIO)) this.decideCaret(this.committedCount, ahead, true)
+      this.committed.push(beat)
       this.committedCount++
       taken++
     }
