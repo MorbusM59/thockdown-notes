@@ -374,14 +374,8 @@ export class BeatMap {
    * so TIGHTNESS means the same on a quiet track as on a loud one.
    */
   private plan(): void {
-    // The last committed beat anchors the chain, unless a gap no chain can
-    // carry across lies between it and the frontier (a long silence, a
-    // stretch with no pulse): then the chain starts afresh, and the plan
-    // never spans more than the look-ahead and that gap.
-    const lastCommitted = this.committed.length > 0 ? Math.round(this.committed[this.committed.length - 1]) : -1
-    const fresh = lastCommitted < 0 || lastCommitted < this.first || this.next - lastCommitted > (MAP_AHEAD_SEC + COMMIT_SEC + GLIDE_MAX_SEC) / this.hopSec
-    const anchor = fresh ? -1 : lastCommitted
-    const start = anchor >= 0 ? anchor : Math.max(this.first, this.next - Math.ceil((MAP_AHEAD_SEC + COMMIT_SEC + GLIDE_MAX_SEC) / this.hopSec))
+    const anchor = this.committed.length > 0 ? Math.round(this.committed[this.committed.length - 1]) : -1
+    const start = anchor >= 0 ? anchor : this.first
     const end = this.next - 1
     if (end - start < 2) {
       this.planned = []
@@ -446,15 +440,9 @@ export class BeatMap {
       chain.push(start + k)
       k = from[k]
     }
-    // The chain's first beat: the anchor itself (already committed) or the
-    // start of a fresh chain, whether at the plan's start or after a gap.
-    if (k >= 0 && start + k !== anchor) chain.push(start + k)
+    // The chain's first beat: the anchor itself (already committed) or the start of a fresh chain.
+    if (anchor < 0 && k >= 0) chain.push(start + k)
     chain.reverse()
-    // A fresh chain never reaches back over beats already committed.
-    if (lastCommitted >= 0) {
-      const after = lastCommitted
-      while (chain.length > 0 && chain[0] <= after) chain.shift()
-    }
     // Only the parts of the chain in a passage with a beat are beats.
     this.planned = chain.filter((h) => !Number.isNaN(this.periodAt(this.timeOf(h))))
   }
