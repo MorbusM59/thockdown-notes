@@ -88,6 +88,8 @@ export class SignalScore implements ScoreWriter {
 
   beats(run: number, times: number[]): void {
     if (run !== this.run) return
+    // Handed on once a second whether the map re-planned or not: the same beats judge nothing new.
+    if (times.length === this.beatTimes.length && times.every((t, i) => t === this.beatTimes[i])) return
     this.beatTimes = times
     // The flags read the beats, so new beats re-judge them, even where no more music is fed (the track's end lies
     // inside the look-ahead).
