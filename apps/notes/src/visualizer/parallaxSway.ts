@@ -1,3 +1,4 @@
+import { pulseCurve } from '@thockdown/look/visualizer'
 /**
  * The visualizer mode's swaying glaze: a slow camera drifting over glaze
  * layers that sit at different DEPTHS, so the near ones travel further than
@@ -150,28 +151,44 @@ export function setSwayMotion(push: number, slideBack: number, drift: number): v
 }
 
 /**
- * The snare's push along the gradient, in px for the nearest stack. Each hit
- * (the wave's snare response rising, `GridWave.tsx`) adds the push at once;
- * as the response falls on the wave's fall, `returnShare` of it slides back.
- * What is not slid back is KEPT, folded into `keptPx` at the next hit, so a
- * return below 1 moves the stacks on for good: the same distance on every
- * hit, wherever the sway is, since the stacks have no edge to reach.
+ * The snare's push along the gradient, in px for the nearest stack. Each HIT
+ * of the wave's mix (`subscribeMusicMix`'s `onHit`, `GridWave.tsx`) moves the
+ * stacks by the push at once: `1 - returnShare` of it is KEPT for good, and
+ * `returnShare` of it SLIDES BACK on the wave's own fall (`pulseCurve` over
+ * `fallSec`, from the moment of the hit). A hit landing while earlier pushes
+ * are still sliding adds its share to what is still sliding, and the sum
+ * falls from there, so a return of 1 always ends exactly where the stacks
+ * started, however close together the hits come.
+ *
+ * The return is timed by its own clock, not by the wave's response. Reading
+ * the response tied the slide back to the music: a hit arriving before the
+ * response had fallen banked whatever had not yet slid back, and with hits
+ * closer together than the fall (any busy snare, any band mix) that was
+ * nearly all of it, so the stacks pushed on endlessly at any return.
  */
 let keptPx = 0
-let lastResponse = 0
-let pushInFlight = 0
+let slidingPx = 0
+let slideStartMs = 0
+let fallSec = 0
+let fallShape = 0
 
-function pushOffsetPx(response: number): number {
-  return pushInFlight * (1 - returnShare * (1 - response))
+/** The wave's fall, which the slide back follows. */
+export function setSwayReturnFall(sec: number, shape: number): void {
+  fallSec = sec
+  fallShape = shape
 }
 
-export function setSwaySnare(response: number): void {
-  if (response > lastResponse) {
-    keptPx += pushOffsetPx(lastResponse)
-    // In the drift's direction, so a push hurries the drift along.
-    pushInFlight = driftPxPerSec < 0 ? -pushPx : pushPx
-  }
-  lastResponse = response
+function slidingNowPx(nowMs: number): number {
+  if (slidingPx === 0) return 0
+  return slidingPx * (fallSec > 0 ? pulseCurve((nowMs - slideStartMs) / 1000 / fallSec, fallShape) : 0)
+}
+
+/** A hit of the wave's mix: pushes the stacks by the signed push (positive forward, negative in reverse). */
+export function swaySnareHit(nowMs: number = performance.now()): void {
+  const push = pushPx
+  keptPx += push * (1 - returnShare)
+  slidingPx = slidingNowPx(nowMs) + push * returnShare
+  slideStartMs = nowMs
 }
 
 /** `value` wrapped into [-period/2, period/2). */
@@ -181,9 +198,9 @@ export function wrapToPeriod(value: number, period: number): number {
 }
 
 /** Moves every registered layer to where the sway is at `phaseSec`, with the music's breath widening it by `breathAmplitude`. */
-export function applySway(phaseSec: number, breathAmplitude: number): void {
+export function applySway(phaseSec: number, breathAmplitude: number, nowMs: number = performance.now()): void {
   const amplitudePx = rangePx * breathAmplitude
-  const pushedPx = keptPx + pushOffsetPx(lastResponse)
+  const pushedPx = keptPx + slidingNowPx(nowMs)
   for (const layer of layers) {
     const { x, y } = swayOffset(layer.index, layer.depth, phaseSec, amplitudePx)
     if (layer.linear === null) {

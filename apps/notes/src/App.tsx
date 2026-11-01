@@ -3019,6 +3019,25 @@ function App() {
     })
   }, [uiLoadoutEntries, applyEntryToLiveState])
 
+  /**
+   * Steps the current mode's layout to the next (+1) or previous (-1) preset,
+   * wrapping, in the order the options panel lists them: the factory presets,
+   * then the saved custom slots. From an entry outside that list (unsaved
+   * changes, or the default custom layout) the step starts from before the
+   * first preset, so +1 lands on the first and -1 on the last. Selecting goes
+   * through `selectLoadoutPreset`, the same path as pressing the preset's
+   * button, so the choice is persisted the same way.
+   */
+  const stepLayoutPreset = useCallback((direction: 1 | -1) => {
+    const cycle = [...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode]
+    if (cycle.length === 0) return
+    const current = cycle.findIndex((entry) => entry.id === activeEntryForCurrentMode?.id)
+    const next = current < 0
+      ? (direction > 0 ? 0 : cycle.length - 1)
+      : (current + direction + cycle.length) % cycle.length
+    void selectLoadoutPreset(cycle[next].id)
+  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
+
   // Runs once persistence has fully restored appState (including uiMode,
   // set deep inside the bootstrap effect further below). Firing this on
   // plain mount (`[]`) instead of `[persistenceReady]` was the bug: uiMode
@@ -7417,6 +7436,25 @@ ${markdownHtml}
         return
       }
 
+      // In the visualizer the scene holds the keyboard and the note under it
+      // is hidden, so Space and Enter are free: Space steps through the
+      // current mode's layout presets (Shift+Space backwards) and Enter
+      // switches between light and dark. Repeats are ignored, so holding a
+      // key does not race through the presets.
+      if (isVisualizerMode) {
+        const layoutChord = matchShortcut(event, 'visualizerNextLayout')
+          ? 1
+          : matchShortcut(event, 'visualizerPreviousLayout') ? -1 : 0
+        if (layoutChord !== 0 || matchShortcut(event, 'visualizerLightDark')) {
+          event.preventDefault()
+          if (!event.repeat) {
+            if (layoutChord !== 0) stepLayoutPreset(layoutChord)
+            else toggleUiMode()
+          }
+          return
+        }
+      }
+
       const target = event.target instanceof HTMLElement ? event.target : null
       const isEditorTarget = Boolean(target?.closest('.editor-stage'))
       const isSearchField = target === sidebarSearchInputRef.current
@@ -7744,7 +7782,9 @@ ${markdownHtml}
     markSectionActive,
     setImmersiveMode,
     showSidebarInMode,
+    stepLayoutPreset,
     toggleSidebarVisible,
+    toggleUiMode,
     toggleVisualizerMode,
   ])
 
@@ -8149,10 +8189,16 @@ ${markdownHtml}
             ref={appShellRef}
             style={appShellStyle}
           >
-            {isSidebarShown ? (
+            {/* Mounted whenever the reader's setting shows it, immersion or
+                not: immersion only takes it off screen (layout.css keeps it
+                laid out at its own width but unrendered and inert), so its
+                scroll positions and component state are exactly as they were
+                when immersion ends. Unmounting it lost them. */}
+            {isSidebarVisible ? (
             <aside
               className="notes-sidebar"
-              style={{ gridArea: 'sidebar' }}
+              style={isImmersiveMode ? { gridArea: 'sidebar', width: sidebarWidthPx } : { gridArea: 'sidebar' }}
+              {...(isImmersiveMode ? ({ inert: '' } as object) : {})}
               // An image shown from the sidebar is a glance: any click back
               // in the sidebar gives the slot its note again. The click still
               // reaches its target.

@@ -44,7 +44,7 @@ import { createPortal } from 'react-dom'
 import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
 import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
 import { emitPulseHit, pulseAmount, subscribePulseHits } from './pulseHits'
-import { setSwaySnare } from './parallaxSway'
+import { setSwayReturnFall, swaySnareHit } from './parallaxSway'
 import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
@@ -110,7 +110,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, glazePushes, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -163,7 +163,6 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     if (!bands) return
     let shown = -1
     const show = (response: number) => {
-      setSwaySnare(response)
       // Quantized to what an 8-bit alpha resolves, and written only when it changes.
       const steps = Math.round(response * 255)
       if (steps === shown) return
@@ -176,12 +175,33 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     return () => {
       waveBandRef.current = null
       band.unsubscribe()
-      setSwaySnare(0)
     }
   }, [host])
   useEffect(() => {
     waveBandRef.current?.update(waveChannel)
-  }, [waveChannel])
+    setSwayReturnFall(waveFallSec, waveShape)
+  }, [waveChannel, waveFallSec, waveShape])
+
+  // What pushes the glaze's linear stacks: the hits of the layout's own
+  // `glazeMix` (`parallaxSway.ts`'s `swaySnareHit`). Only the hits are read;
+  // the push slides back on the wave's fall, set just above. The channel's
+  // fall is the shortest, so each hit is told apart from the next.
+  const glazeChannel = useMemo<MusicMixChannel>(() => ({ mix: glazeMix, shape: 0, fallSec: FALL_MIN_SEC }), [glazeMix])
+  const glazeChannelRef = useRef(glazeChannel)
+  glazeChannelRef.current = glazeChannel
+  const glazeBandRef = useRef<{ update: (next: MusicMixChannel) => void } | null>(null)
+  useEffect(() => {
+    if (!glazePushes) return
+    const band = subscribeMusicMix(glazeChannelRef.current, () => {}, () => swaySnareHit())
+    glazeBandRef.current = band
+    return () => {
+      glazeBandRef.current = null
+      band.unsubscribe()
+    }
+  }, [host, glazePushes])
+  useEffect(() => {
+    glazeBandRef.current?.update(glazeChannel)
+  }, [glazeChannel])
 
   // What sets the centre pulse off: the hits of the layout's `pulseMix` (the
   // kick and snare trackers only), one pulse per hit (`pulseHits.ts`). Its

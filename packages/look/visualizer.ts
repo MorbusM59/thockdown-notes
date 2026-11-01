@@ -60,36 +60,25 @@ export interface VisualizerTrackers {
 }
 
 /**
- * How much each tracker drives one element, each 0..1, and how the sum is
- * scaled (`mixResponse`). The centre pulse takes no band (a level has no
+ * How much each tracker drives one element, each 0..1, added and capped
+ * (`mixResponse`). The centre pulse takes no band (a level has no
  * hits to set a pulse off), so its `band` is always 0.
  */
 export interface VisualizerMix {
   kicks: number
   hits: number
   band: number
-  /**
-   * 0..1, the RELATIVE SCALING: at 0 each tracker adds its response times its
-   * contribution, at 1 that sum is divided by the sum of the contributions,
-   * linearly between.
-   */
-  normalize: number
 }
 
 /**
  * An element's response from the trackers' (each 0..1): every tracker's
- * response times its contribution, summed, divided by a divisor running
- * linearly from 1 (`normalize` 0) to the contributions' own sum (1), and
- * capped at 1. So at 0 a single contribution of 1 peaks the element and two
- * at once cannot exceed it; at 1 the element peaks only when every tracker it
- * follows does, and a lone contribution of any size peaks it (100 kick and 50
- * hits read a full kick alone as 100/150). No contribution at all is no response.
+ * response times its contribution, summed and capped at 1, so a single
+ * contribution of 1 peaks the element and two at once cannot exceed it. To
+ * peak only when several trackers do, lower each contribution (three at a
+ * third peak together). No contribution at all is no response.
  */
 export function mixResponse(mix: VisualizerMix, kicks: number, hits: number, band: number): number {
-  const sum = mix.kicks + mix.hits + mix.band
-  if (!(sum > 0)) return 0
-  const divisor = 1 + mix.normalize * (sum - 1)
-  return Math.min(1, (kicks * mix.kicks + hits * mix.hits + band * mix.band) / divisor)
+  return Math.min(1, kicks * mix.kicks + hits * mix.hits + band * mix.band)
 }
 
 /** Whether a mix reads `tracker` at all. */
@@ -185,9 +174,10 @@ export interface VisualizerImmersive {
   /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
   swaySpread: number
   /**
-   * 0 to `SWAY_PUSH_MAX_PX`: how far each snare hit pushes the linear glaze
-   * stacks along their gradient, in px for the nearest, in the drift's
-   * direction (forward when there is no drift) (`parallaxSway.ts`). The
+   * -`SWAY_PUSH_MAX_PX` to `SWAY_PUSH_MAX_PX`: how far each snare hit pushes
+   * the linear glaze stacks along their gradient, in px for the nearest,
+   * signed: positive forward, negative in reverse, 0 not at all
+   * (`parallaxSway.ts`). The
    * radial sources do not take it.
    */
   swayPush: number
@@ -203,6 +193,8 @@ export interface VisualizerImmersive {
   waveSec: number
   /** How much each tracker shows the grid wave. */
   waveMix: VisualizerMix
+  /** How much each tracker's hits push the glaze's linear stacks (`swayPush`); the push slides back on the wave's fall. */
+  glazeMix: VisualizerMix
   /** How much each hit tracker sets off the centre pulse; its `band` is always 0. */
   pulseMix: VisualizerMix
   /**
@@ -275,7 +267,8 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 3, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { kicks: 0, hits: 1, band: 0, normalize: 0 }, pulseMix: { kicks: 1, hits: 0, band: 0, normalize: 0 } }
+/** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { kicks: 0, hits: 1, band: 0 }, glazeMix: { kicks: 0, hits: 1, band: 0 }, pulseMix: { kicks: 1, hits: 0, band: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -329,7 +322,7 @@ function fallOfMass(mass: number): { shape: number; fallSec: number } {
 
 /** A mix following one tracker in full. */
 export function soleMix(tracker: VisualizerTrackerName): VisualizerMix {
-  return { kicks: 0, hits: 0, band: 0, normalize: 0, [tracker]: 1 }
+  return { kicks: 0, hits: 0, band: 0, [tracker]: 1 }
 }
 
 /**
@@ -386,17 +379,32 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
  * inverted layout.
  */
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
+  // Each side is the author's own tuning (dark: a dark layout the author saved;
+  // light: the author's light layout exported 2026-11-01), not one side inverted into the other.
+  if (!inverted) return {
+    trackers: { ...DEFAULT_VISUALIZER_TRACKERS, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
+    caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.988171738655529 },
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.451)', fallSec: 0.48243336686426647, spreadPx: 10, blurPx: 200 },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(255, 255, 255, 1)', effect: 1 },
+    immersive: LIGHT_VISUALIZER_IMMERSIVE,
+  }
   return {
     trackers: DEFAULT_VISUALIZER_TRACKERS,
     caret: DEFAULT_VISUALIZER_CARET,
-    // An inverted (dark) layout's visualizer is the author's own tuning, not the
-    // light one inverted: every dark factory preset takes it.
-    edge: inverted
-      ? { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', spreadPx: 10, blurPx: 200 }
-      : { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 1)' },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.275)' : 'rgba(255, 255, 255, 0.499)' },
-    immersive: inverted ? DARK_VISUALIZER_IMMERSIVE : DEFAULT_VISUALIZER_IMMERSIVE,
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', spreadPx: 10, blurPx: 200 },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(0, 0, 0, 0.275)' },
+    immersive: DARK_VISUALIZER_IMMERSIVE,
   }
+}
+
+const LIGHT_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
+  ...DEFAULT_VISUALIZER_IMMERSIVE,
+  glazeStrength: 0.075, glazeSpread: 0.5, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 12,
+  waveColor: 'rgba(255, 255, 255, 0.314)', waveBoxes: 72, waveTurn: 4, waveShape: -0.5, waveFallSec: 0.49958086198073737,
+  waveMix: { kicks: 0, hits: 0, band: 1 },
+  glazeMix: { kicks: 0, hits: 1, band: 0 },
+  pulseColor: 'rgba(255, 255, 255, 0.392)', pulseSpeed: 32, pulseHalfLifeSec: 0.5, pulseFadeSec: 1.5, pulseSoftness: 0.49, pulseBoost: 0,
+  cutoutRound: 1, accentColor: 'rgba(0, 0, 0, 0.235)', letterboxColor: 'rgba(255, 255, 255, 1)',
 }
 
 const DARK_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
@@ -432,7 +440,6 @@ function sanitizeMix(input: unknown, d: VisualizerMix, bandless = false): Visual
     kicks: bounded(source.kicks, 0, 1, d.kicks),
     hits: bounded(source.hits, 0, 1, d.hits),
     band: bandless ? 0 : bounded(source.band, 0, 1, d.band),
-    normalize: bounded(source.normalize, 0, 1, d.normalize),
   }
 }
 
@@ -557,20 +564,24 @@ function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): Visualiz
   }
 }
 
-function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null): VisualizerImmersive {
+function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null, legacyWaveMix: VisualizerMix | null): VisualizerImmersive {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive, unknown>>
   return {
     glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
     swayRangePx: Math.round(bounded(source.swayRangePx, 0, IMMERSIVE_SWAY_RANGE_MAX_PX, d.swayRangePx)),
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
-    swayPush: bounded(source.swayPush, 0, SWAY_PUSH_MAX_PX, d.swayPush),
+    swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX_PX, SWAY_PUSH_MAX_PX, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),
     swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX_PX, SWAY_DRIFT_MAX_PX, d.swayDrift),
     waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
-    waveMix: sanitizeMix(source.waveMix, d.waveMix),
+    waveMix: sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix),
+    // A layout saved before the glaze had its own mix (2026-11-01) was pushed by the wave's;
+    // only a layout that SAVED a wave mix is one of those, so one that saved neither takes the default.
+    glazeMix: sanitizeMix(source.glazeMix, source.glazeMix === undefined && (source.waveMix !== undefined || legacyWaveMix)
+      ? sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix) : d.glazeMix),
     pulseMix: sanitizeMix(source.pulseMix, legacyPulseMix ?? d.pulseMix, true),
     waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
     waveShape: bounded(source.waveShape, -1, 1, d.waveShape),
@@ -611,14 +622,17 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCare
   const isLegacy = source.trackers === undefined
   // An edge with no effect subscribed nothing, so it set off no pulse.
   const legacyPulseMix = !isLegacy ? null
-    : edge.effect === 0 ? { kicks: 0, hits: 0, band: 0, normalize: 0 }
+    : edge.effect === 0 ? { kicks: 0, hits: 0, band: 0 }
     : soleMix(edge.mix.hits > 0 ? 'hits' : 'kicks')
   return {
-    trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], d.trackers) : sanitizeTrackers(source.trackers, d.trackers),
+    // A legacy layout reads against what the trackers were when it was saved
+    // (the band at 70Hz), not against today's light default.
+    trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
     caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
     edge,
     pane: sanitizeColorChannel(paneInput, d.pane),
-    immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix),
+    // ...and its wave followed the snare, whatever the default wave mix is now.
+    immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('hits') : null),
   }
 }
 

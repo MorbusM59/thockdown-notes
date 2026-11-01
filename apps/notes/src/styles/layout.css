@@ -107,6 +107,17 @@
   display: none !important;
 }
 
+/* The sidebar is the exception: display:none would discard its scroll
+   positions, so it stays laid out at its own width, out of the grid's flow,
+   and skips rendering (content-visibility keeps its rendering state). App.tsx
+   marks it inert, so nothing in it can take focus or a press. */
+.app-grid.is-immersive > .notes-sidebar {
+  display: flex !important;
+  position: absolute;
+  visibility: hidden;
+  content-visibility: hidden;
+}
+
 .app-grid.is-immersive .editor-section-divider,
 .app-grid.is-immersive .editor-section-slot.is-immersive-hidden {
   display: none;
