@@ -585,10 +585,7 @@ export class BeatMap {
    * does not move it.
    */
   private decideCaret(from: number, beats: number[], keep: boolean): void {
-    // The look-ahead stops at a gap no beat bridges: past it is another passage.
-    let reach = 1
-    while (reach < beats.length && reach <= CARET_DECIDE_BEATS && beats[reach] - beats[reach - 1] < 2 * this.periodHopsAt(beats[reach - 1])) reach++
-    const count = reach - 1
+    const count = Math.min(beats.length - 1, CARET_DECIDE_BEATS)
     if (count < 1) return
     const period = ((beats[count] - beats[0]) / count) * this.hopSec
     const scale = 2 ** -Math.floor(Math.log2(60 / period / CARET_MIN_BPM))
