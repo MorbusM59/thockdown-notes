@@ -162,6 +162,8 @@ interface DrumAnalysis {
 let drums: DrumAnalysis | null = null
 /** The decoded track's peak sample magnitude around the listener, for the loudness gain (`respond`). */
 const peaks = new PeakWindow()
+/** The loudness gain the last frame read (`tick`). */
+let gain = 1
 /** How far below full scale a window's peak may be and still give a full response (`loudnessGain`); the reader's Response setting. */
 let headroomDb = 5
 
@@ -251,7 +253,10 @@ function restartAnalysis(listenerTime: number): void {
     drums = needsDrums() ? { tracker: new DrumTracker(sampleRate), trace: null } : null
     // The file may have taken a moment to open: start from where the listener is now.
     const at = Number.isNaN(lastListener) ? listenerTime : lastListener
-    target.run(Math.max(0, at - LEAD_SEC), at + LEAD_SEC + DECODE_MARGIN_SEC, (samples, startTime) => analyse(samples, startTime, sampleRate))
+    target.run(Math.max(0, at - LEAD_SEC), at + LEAD_SEC + DECODE_MARGIN_SEC, (samples, startTime) => {
+      // A chunk decoded for a run a later restart replaced is not this window's.
+      if (id === run) analyse(samples, startTime, sampleRate)
+    })
   })
 }
 
@@ -284,13 +289,14 @@ function percentile(band: Band, share: number): number {
  * window around it, at `gain` (`loudnessGain`: how near full scale the
  * track's peak around the listener comes), so a track mixed quiet, or a
  * quiet passage between loud ones, pulses less than one at full scale. Every
- * source is scaled alike, and a hit's strength (`onHit`) with it.
+ * band and drum source is scaled alike, and a hit's strength (`onHit`) with
+ * it; a clock (the caret's beat) is not, being a beat rather than a level.
  */
 function respond(band: Band, listenerTime: number, gain: number): number {
   const drum = drumOf(band.channel)
-  const raw = gain * (drum
+  const raw = drum
     ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast, band.channel.groove) : 0)
-    : stretched(band, listenerTime))
+    : stretched(band, listenerTime)
   // The fall: a response never drops faster than its last peak fades, on
   // the block's own curve and length. A rise is taken at once.
   const { fallSec, shape } = band.channel
@@ -299,14 +305,17 @@ function respond(band: Band, listenerTime: number, gain: number): number {
     // A hit is where a rise begins: a drum's every hit (between hits it
     // reads 0), a level band's every climb out of its fall. One rule, so
     // whatever the block follows, what pulses is what makes it rise.
-    if (!band.rising) band.onHit?.(raw)
+    // Judged before the gain, which only scales what is shown: a gain that
+    // moves (the decoding reaching the listener, a loud passage coming into
+    // the window) must not read as the music rising.
+    if (!band.rising) band.onHit?.(gain * raw)
     band.rising = true
     band.peak = raw
     band.peakTime = listenerTime
-    return raw
+    return gain * raw
   }
   band.rising = false
-  return held
+  return gain * held
 }
 
 /** A clock's response: its fall, restarted on each of its beats and cut at the next. */
@@ -469,7 +478,9 @@ function tick(frameTimeMs: number): void {
   if (stale || jumped || (stream?.url ?? null) !== musicPlayerService.trackUrl) restartAnalysis(listenerTime)
   else stream?.want(listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
   const heardTime = listenerTime - heardLagSec()
-  const gain = loudnessGain(peaks.peakSince(heardTime - LEAD_SEC), headroomDb)
+  // Until the decoding has reached the listener there is no peak to read:
+  // the last gain holds rather than reading as silence.
+  if (!peaks.isEmpty) gain = loudnessGain(peaks.peakSince(heardTime - LEAD_SEC), headroomDb)
   for (const band of bands) publish(band, respond(band, heardTime, gain))
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   for (const counter of counters) count(counter, heardTime)

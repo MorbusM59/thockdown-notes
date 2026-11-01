@@ -24,6 +24,8 @@ export class PeakWindow {
   private count = 0
   private blockPeak = 0
   private blockStart = NaN
+  /** Samples still to come in the open block. */
+  private remaining = 0
 
   /** Forgets everything: a new run of decoding. */
   reset(): void {
@@ -31,16 +33,33 @@ export class PeakWindow {
     this.count = 0
     this.blockPeak = 0
     this.blockStart = NaN
+    this.remaining = 0
+  }
+
+  /** Whether any block is in the window: none before the decoding has reached it. */
+  get isEmpty(): boolean {
+    return this.count === 0
   }
 
   /** Adds a decoded chunk whose first sample is at media time `startTime`. */
   add(samples: Float32Array, startTime: number, sampleRate: number): void {
-    const perBlock = Math.max(1, Math.round(BLOCK_SEC * sampleRate))
-    for (let i = 0; i < samples.length; i++) {
-      if (Number.isNaN(this.blockStart)) this.blockStart = startTime + i / sampleRate
-      const magnitude = Math.abs(samples[i])
-      if (magnitude > this.blockPeak) this.blockPeak = magnitude
-      if (startTime + (i + 1) / sampleRate - this.blockStart >= perBlock / sampleRate - 1e-9) this.closeBlock()
+    // Counted in samples, not compared in time, so a block is the same length
+    // whatever the chunks, and the per-sample work is an abs and a compare.
+    let i = 0
+    while (i < samples.length) {
+      if (this.remaining === 0) {
+        this.remaining = Math.max(1, Math.round(BLOCK_SEC * sampleRate))
+        this.blockStart = startTime + i / sampleRate
+      }
+      const end = Math.min(samples.length, i + this.remaining)
+      this.remaining -= end - i
+      let peak = this.blockPeak
+      for (; i < end; i++) {
+        const magnitude = Math.abs(samples[i])
+        if (magnitude > peak) peak = magnitude
+      }
+      this.blockPeak = peak
+      if (this.remaining === 0) this.closeBlock()
     }
   }
 
@@ -67,7 +86,6 @@ export class PeakWindow {
     this.peaks[at] = peak
     this.count++
     this.blockPeak = 0
-    this.blockStart = NaN
   }
 }
 
