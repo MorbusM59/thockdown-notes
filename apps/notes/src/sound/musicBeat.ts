@@ -181,6 +181,8 @@ const pendingRaw = new Float64Array(VISUALIZER_TRACKERS.length)
 const trackerRaw = new Float64Array(VISUALIZER_TRACKERS.length)
 /** The trackers the analysis was last restarted with (`readsOf`), as a bit mask by `TRACKER_INDEX`. */
 let analysedTrackers = 0
+/** Whether the analysis was last restarted with the beat map and the score (`needsDrums`). */
+let analysedDrums = false
 
 /** How long the map may answer no beat before the caret is let go to its own blink. */
 const MAP_BEAT_LOSS_SEC = 4
@@ -307,6 +309,7 @@ function restartAnalysis(listenerTime: number): void {
   analysedUrl = url
   if (isBeatTraceOn() && url) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
   analysedTrackers = readsOf()
+  analysedDrums = needsDrums()
   rebuildAskReaders()
   const readers: ReaderSource[] = []
   for (const name of VISUALIZER_TRACKERS) {
@@ -552,7 +555,10 @@ export interface MusicClockSubscription {
 
 /** The first subscriber starts listening for play state and visibility; every new one marks the analysis stale. */
 function added(): void {
-  stale = true
+  // A subscriber that reads only what is already analysed changes nothing: restarting would throw away the score
+  // written ahead, and its kick and hit flags with it, every time an element mounts (entering the visualizer mounts
+  // three). One reading a tracker, or the beat map, the analysis was not started with starts it over.
+  if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
   ensureWorker()
   if (subscriberCount() === 1) {
     unsubscribePlaying = musicPlayerService.subscribePlaying((playing) => (playing ? start() : stop()))
@@ -564,7 +570,10 @@ function added(): void {
 /** After a subscriber left: drops the drum analysis if nothing reads it, and everything once nothing is left. */
 function removed(): void {
   if (subscriberCount() > 0) {
-    if (!needsDrums()) send({ type: 'dropDrums' })
+    if (!needsDrums() && analysedDrums) {
+      analysedDrums = false
+      send({ type: 'dropDrums' })
+    }
     return
   }
   stop()
@@ -609,7 +618,7 @@ export function subscribeMusicMix(channel: MusicMixChannel, listener: BeatListen
     // A tracker no element read before is not being analysed: the window is
     // measured again from the decoded track, which is immediate. One no
     // longer read is simply ignored until the next restart.
-    if (readsOf() & ~analysedTrackers) stale = true
+    if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
   }
   const unsubscribe = () => {
     bands.delete(band)
