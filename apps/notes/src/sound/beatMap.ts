@@ -536,7 +536,7 @@ export class BeatMap {
     // tempo window either): the map went dark until the frontier moved on.
     const chain: number[] = []
     let reached = n - 1
-    let k = -1
+    let k: number
     while (reached >= 0) {
       while (reached >= 0 && score[reached] === -Infinity) reached--
       if (reached < 0) break
