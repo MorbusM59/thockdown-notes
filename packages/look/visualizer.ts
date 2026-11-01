@@ -194,9 +194,10 @@ export interface VisualizerImmersive {
   /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
   swaySpread: number
   /**
-   * 0 to `SWAY_PUSH_MAX_PX`: how far each snare hit pushes the linear glaze
-   * stacks along their gradient, in px for the nearest, in the drift's
-   * direction (forward when there is no drift) (`parallaxSway.ts`). The
+   * -`SWAY_PUSH_MAX_PX` to `SWAY_PUSH_MAX_PX`: how far each snare hit pushes
+   * the linear glaze stacks along their gradient, in px for the nearest,
+   * signed: positive forward, negative in reverse, 0 not at all
+   * (`parallaxSway.ts`). The
    * radial sources do not take it.
    */
   swayPush: number
@@ -285,7 +286,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 3, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { kicks: 0, hits: 1, band: 0, normalize: 0 }, pulseMix: { kicks: 1, hits: 0, band: 0, normalize: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { kicks: 0, hits: 1, band: 0, normalize: 0 }, pulseMix: { kicks: 1, hits: 0, band: 0, normalize: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -588,7 +589,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
     swayRangePx: Math.round(bounded(source.swayRangePx, 0, IMMERSIVE_SWAY_RANGE_MAX_PX, d.swayRangePx)),
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
-    swayPush: bounded(source.swayPush, 0, SWAY_PUSH_MAX_PX, d.swayPush),
+    swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX_PX, SWAY_PUSH_MAX_PX, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),
     swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX_PX, SWAY_DRIFT_MAX_PX, d.swayDrift),
     waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,

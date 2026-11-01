@@ -33,3 +33,15 @@ describe('the glaze push and its return', () => {
     expect(offsetAt(t + 600) - start).toBeCloseTo(4 * 2, 6)
   })
 })
+
+describe('a reverse push', () => {
+  it('moves the other way and returns to rest the same', () => {
+    setSwayMotion(-10, 1, 0)
+    setSwayReturnFall(0.5, 0)
+    const t = 50_000
+    const start = offsetAt(t)
+    swaySnareHit(t)
+    expect(offsetAt(t) - start).toBeCloseTo(-10, 6)
+    expect(offsetAt(t + 600)).toBeCloseTo(start, 6)
+  })
+})

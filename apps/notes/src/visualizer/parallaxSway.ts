@@ -183,9 +183,9 @@ function slidingNowPx(nowMs: number): number {
   return slidingPx * (fallSec > 0 ? pulseCurve((nowMs - slideStartMs) / 1000 / fallSec, fallShape) : 0)
 }
 
-/** A hit of the wave's mix: pushes the stacks, in the drift's direction so a push hurries the drift along. */
+/** A hit of the wave's mix: pushes the stacks by the signed push (positive forward, negative in reverse). */
 export function swaySnareHit(nowMs: number = performance.now()): void {
-  const push = driftPxPerSec < 0 ? -pushPx : pushPx
+  const push = pushPx
   keptPx += push * (1 - returnShare)
   slidingPx = slidingNowPx(nowMs) + push * returnShare
   slideStartMs = nowMs

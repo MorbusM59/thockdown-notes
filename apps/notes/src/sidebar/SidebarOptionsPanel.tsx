@@ -2645,12 +2645,12 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-push"
-                min={0}
+                min={-SWAY_PUSH_MAX_PX}
                 max={SWAY_PUSH_MAX_PX}
                 step={0.1}
                 value={visualizer.immersive.swayPush}
                 trackLabel="push"
-                tooltipLabel="px each hit of the wave pushes the glaze's light stripes across them, for the nearest, in the drift's direction (forward when nothing drifts)"
+                tooltipLabel="px each hit of the wave pushes the glaze's light stripes across them, for the nearest: right of centre forward, left of centre in reverse, 0 at the centre not at all"
                 ariaLabel="Immersive: how far each hit of the wave pushes the glaze stripes, pixels"
                 defaultValue={layoutVisualizer.immersive.swayPush}
                 formatValue={(value) => value.toFixed(1)}
