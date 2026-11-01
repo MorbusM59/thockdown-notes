@@ -36,6 +36,10 @@ import { PeakWindow } from './peakWindow'
 
 /** How far either side of the listener the window reaches, in seconds. */
 export const LEAD_SEC = 5
+/** The look-ahead a start or a seek decodes first, in seconds (`aheadSec`). */
+const AHEAD_START_SEC = 10
+/** How many seconds the look-ahead grows per second played. */
+const AHEAD_GROWTH = 2
 /** How far past the window's leading edge the decoding is let run, so it never trails the listener. */
 const DECODE_MARGIN_SEC = 1
 /** The share of the window's moments that give a full response. */
@@ -302,6 +306,8 @@ export class MusicAnalysis {
   private scoreUrl: string | null = null
   /** The heard moment the beat map's beats were last handed to the score at. */
   private beatsSentAt = NaN
+  /** The listener's media time when this run started decoding: the look-ahead grows from it (`aheadSec`). */
+  private startedAt = NaN
 
   constructor(
     private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url),
@@ -392,6 +398,7 @@ export class MusicAnalysis {
       this.started = id
       // The file may have taken a moment to open: start from where the listener is now.
       const at = Number.isNaN(this.listenerTime) ? request.listenerTime : this.listenerTime
+      this.startedAt = at
       stream.run(Math.max(0, at - LEAD_SEC), at + this.aheadSec() + DECODE_MARGIN_SEC, (samples, startTime) => {
         // A chunk decoded for a run a later restart replaced is not this window's.
         if (id !== this.run) return
@@ -416,8 +423,17 @@ export class MusicAnalysis {
   private listenerTime = NaN
 
   /** How far ahead of the listener to decode: the beat map's and the score's reach while they are on, else the window's. */
+  /**
+   * How far ahead of the listener to decode. With the beat map and the score it starts at AHEAD_START_SEC and grows
+   * AHEAD_GROWTH times as fast as the music plays, to MAP_AHEAD_SEC: decoding the whole look-ahead at once handed the
+   * score a minute of music to factorize before it could judge anything, so a start or a seek showed no kick or hit
+   * for that long. A short start is judged within a couple of seconds, and the growth stays well inside the score's
+   * own pace (several times real time).
+   */
   private aheadSec(): number {
-    return this.map ? MAP_AHEAD_SEC : LEAD_SEC
+    if (!this.map) return LEAD_SEC
+    const played = Number.isNaN(this.startedAt) || Number.isNaN(this.listenerTime) ? 0 : Math.max(0, this.listenerTime - this.startedAt)
+    return Math.min(MAP_AHEAD_SEC, AHEAD_START_SEC + AHEAD_GROWTH * played)
   }
 
   /** Measures the decoded samples up to media time `until` into the ±LEAD_SEC window. */
