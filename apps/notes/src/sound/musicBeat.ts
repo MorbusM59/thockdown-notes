@@ -7,7 +7,8 @@
  * twice `LEAD_SEC` centred on the moment being heard, the `contrast` percentile
  * of the band's levels is no response and its top `TOP_SHARE` is a full one.
  * So a full response always means "as loud as this band gets around here",
- * on any track at any volume.
+ * on any track at any volume, unless around here is near silence
+ * (`SILENCE_DB`, `stretchLevel`), which gives none.
  *
  * The window looks AHEAD as well as back, and is filled from the track
  * DECODED (`musicDecodeStream.ts`), never from what is playing: decoding is
@@ -72,6 +73,13 @@ const RESYNC_SEC = 0.75
 const TOP_SHARE = 0.02
 /** The narrowest span the stretch may use, so a near-constant band is not blown up into noise. */
 const MIN_SPAN_DB = 3
+/**
+ * A band's RMS level (dBFS, of the decoded track, before the player's volume)
+ * that is silence to the stretch (`stretchLevel`): no response at or below
+ * it. Well under any audible part of a band in a mastered track, and over a
+ * hiss or dither floor, which a narrow band reads further down still.
+ */
+const SILENCE_DB = -70
 /** Histogram resolution, in dB. */
 const BIN_DB = 0.5
 const BINS = Math.ceil(-LEVEL_FLOOR_DB / BIN_DB) + 1
@@ -329,9 +337,21 @@ function stretched(band: Band, listenerTime: number): number {
     before = at
     level = band.levels[at]
   }
-  const floor = percentile(band, band.channel.contrast)
-  const top = Math.max(floor + MIN_SPAN_DB, percentile(band, 1 - TOP_SHARE))
-  return Math.max(0, Math.min(1, (level - floor) / (top - floor)))
+  return stretchLevel(level, percentile(band, band.channel.contrast), percentile(band, 1 - TOP_SHARE))
+}
+
+/**
+ * The levels stretch (header) of `level` between the window's `floor` and
+ * `top` percentiles, in dB. Neither end is taken below SILENCE_DB: a window
+ * of near silence (a track's lead-in, the gap between two songs, a hiss or
+ * dither floor) is not stretched into a full response, which would make its
+ * noise pulse like the music. Above it the stretch is the window's own, so
+ * a quiet but audible passage still reaches a full response.
+ */
+export function stretchLevel(level: number, floor: number, top: number): number {
+  const from = Math.max(SILENCE_DB, floor)
+  const to = Math.max(from + MIN_SPAN_DB, top)
+  return Math.max(0, Math.min(1, (level - from) / (to - from)))
 }
 
 function publish(subscriber: Band | Clock, response: number): void {
