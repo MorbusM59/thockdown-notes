@@ -587,8 +587,10 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
     waveMix: sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix),
-    // A layout saved before the glaze had its own mix (2026-11-01) was pushed by the wave's.
-    glazeMix: sanitizeMix(source.glazeMix, source.glazeMix === undefined ? sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix) : d.glazeMix),
+    // A layout saved before the glaze had its own mix (2026-11-01) was pushed by the wave's;
+    // only a layout that SAVED a wave mix is one of those, so one that saved neither takes the default.
+    glazeMix: sanitizeMix(source.glazeMix, source.glazeMix === undefined && (source.waveMix !== undefined || legacyWaveMix)
+      ? sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix) : d.glazeMix),
     pulseMix: sanitizeMix(source.pulseMix, legacyPulseMix ?? d.pulseMix, true),
     waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
     waveShape: bounded(source.waveShape, -1, 1, d.waveShape),
