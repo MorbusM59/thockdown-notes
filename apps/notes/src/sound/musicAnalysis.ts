@@ -263,6 +263,14 @@ export class MusicAnalysis {
   /** Where the score is written, while anything reads it, and the last it sent for this run. */
   private score: ScoreWriter | null = null
   private scored: ScoreUpdate | null = null
+  /**
+   * Every instance the score has sent for this run and no reader has passed: each update replaces only what it
+   * covers (from its `from` on), so an update that lands late (the score worker busy factorizing) loses nothing
+   * written before it.
+   */
+  private held: ScoreUpdate['instances'] = []
+  /** The track the score was last reset for: a seek in it keeps the signals learned, another track does not. */
+  private scoreUrl: string | null = null
   /** The heard moment the beat map's beats were last handed to the score at. */
   private beatsSentAt = NaN
 
@@ -300,6 +308,8 @@ export class MusicAnalysis {
     this.score?.dispose()
     this.score = null
     this.scored = null
+    this.held = []
+    this.scoreUrl = null
   }
 
   private restart(request: AnalysisRestart): void {
@@ -308,10 +318,10 @@ export class MusicAnalysis {
     this.map = null
     this.delay = null
     this.scored = null
+    this.held = []
     this.beatsSentAt = NaN
-    // A new track is a new stream; a seek in the same one keeps it, and the score keeps the signals it learned.
-    const newTrack = this.stream?.url !== request.url
-    if (newTrack) {
+    // A new track is a new stream; a seek in the same one keeps it.
+    if (this.stream?.url !== request.url) {
       this.stream?.dispose()
       this.stream = request.url ? this.createStream(request.url) : null
     }
@@ -342,10 +352,11 @@ export class MusicAnalysis {
       this.map = request.drums ? new BeatMap(sampleRate) : null
       this.delay = this.map ? new DelayRing(sampleRate) : null
       if (request.drums) {
-        // A score that was dropped (nothing read it) starts afresh: what it had learned is gone with it.
-        const fresh = !this.score
+        // The score keeps the signals it learned through a seek in the same track, judged here rather than when the
+        // restart arrived, since a restart for another track may have been overtaken before reaching this point.
         this.score ??= this.createScore((update) => this.takeScore(update))
-        this.score.reset(id, sampleRate, newTrack || fresh)
+        this.score.reset(id, sampleRate, this.scoreUrl !== request.url)
+        this.scoreUrl = request.url
       }
       this.started = id
       // The file may have taken a moment to open: start from where the listener is now.
@@ -364,7 +375,9 @@ export class MusicAnalysis {
   }
 
   private takeScore(update: ScoreUpdate): void {
-    if (update.run === this.run) this.scored = update
+    if (update.run !== this.run) return
+    this.scored = update
+    this.held = [...this.held.filter((x) => x.time < update.from), ...update.instances]
   }
 
   /** The listener's position at the last ask of this run (NaN before one). */
@@ -397,7 +410,7 @@ export class MusicAnalysis {
     const scored = this.scored
     if (!scored || Number.isNaN(from) || heardTime <= from) return 0
     let raw = 0
-    for (const x of scored.instances) {
+    for (const x of this.held) {
       if (x.time <= from || x.time > heardTime) continue
       // Weighed by how far its signal is this drum: a sound on the edge of being one shows faintly.
       const confidence = band.drum === 'kicks' ? x.kick : x.hit
@@ -436,6 +449,10 @@ export class MusicAnalysis {
       ids.push(reader.id)
       raws.push(band.drum ? this.drumResponse(band, heardTime, reader.contrast) : stretched(band, heardTime, reader.contrast))
     }
+    // What every reader has passed is never read again.
+    let passed = Infinity
+    for (const band of this.bands.values()) if (band.drum) passed = Math.min(passed, Number.isNaN(band.heardTo) ? -Infinity : band.heardTo)
+    if (this.held.length > 0 && this.held[0].time <= passed) this.held = this.held.filter((x) => x.time > passed)
     if (this.traceOn && this.scored && !(Math.abs(heardTime - this.tracedAt) < 1)) {
       this.tracedAt = heardTime
       this.traceLines.push(`score sec heard=${heardTime.toFixed(3)} ahead=${(this.scored.frontier - heardTime).toFixed(1)}s ` + this.scored.signals.map(signalLabel).join(' '))
