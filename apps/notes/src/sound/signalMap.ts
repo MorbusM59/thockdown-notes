@@ -64,7 +64,7 @@ export const INTENSITY_FLOOR_DB = -60
 const FFT_SIZE = 2048
 const SPEC_LOW_HZ = 35
 const SPEC_HIGH_HZ = 18000
-const SPEC_BANDS_PER_OCTAVE = 4
+const SPEC_BANDS_PER_OCTAVE = 3
 /** A Hann-windowed full-scale sine's FFT magnitude: 0 dBFS. */
 const FULL_SCALE = FFT_SIZE / 4
 /** Frames from a sound's first sample to the peak of its activation (measured: its window has taken in two hops of it). */
@@ -76,22 +76,30 @@ const TEMPLATE_FRAMES = 16
 /** Music the templates are first learned on, and how often they are refined after, in seconds. */
 const LEARN_SEC = 10
 const RELEARN_SEC = 10
-const LEARN_ITERATIONS = 60
+const LEARN_ITERATIONS = 40
 const RELEARN_ITERATIONS = 15
-const FIT_ITERATIONS = 30
+const FIT_ITERATIONS = 10
 /** Frames before new ones that are held while fitting them, so a sound already sounding is explained by its own activation. */
 const FIT_CONTEXT = 16
 /** A peak of an activation: the highest within PEAK_HOPS either side, and PEAK_RISE times the lowest over the PEAK_BACK frames before it. */
 const PEAK_HOPS = 4
 const PEAK_BACK = 8
 const PEAK_RISE = 2
-/** A peak below this share of its template's strongest is the template explaining a little of something else, not an instance. */
-const PEAK_FLOOR = 0
+/**
+ * A peak more than PEAK_FLOOR_DB under its template's typical strong peak (its
+ * PEAK_REFERENCE quantile) is the template explaining a little of something
+ * else, not an instance. On a real track the strays sit 10 to 20 dB under the
+ * real hits of the same template.
+ */
+const PEAK_FLOOR_DB = 9
+const PEAK_REFERENCE = 0.95
 /** The least match an instance needs. */
 const MIN_MATCH = 0.25
 /** A template's own bands: within this many dB of its loudest. */
 const MASK_RANGE_DB = 30
 
+/** The octave bands a signal is described by: within this many dB of its loudest (a real snare's noise sits 25 to 35 dB under its shell tone). */
+const DESCRIBE_RANGE_DB = 40
 /** Instances a signal needs before it can be flagged. */
 export const MIN_FLAG_INSTANCES = 3
 /** How far from the drum grid an instance may land and still count as on it, in seconds. */
@@ -127,14 +135,15 @@ const KICK_PER_BEAT = 2
 /** A hit's noise: at least this many bands from 800Hz up. */
 const NOISE_BANDS = 3
 /**
- * A hit's BODY: its loudest band between 800Hz and 3.2kHz within this many
- * dB of its loudest band from 800Hz up (a hat's power lies above the body),
- * and still within BODY_SUSTAIN_DB of its peak BODY_SUSTAIN_HOPS later (~64ms:
- * a kick's beater click and a closed hat have died away by then, a snare's or
- * a clap's noise has not).
+ * A hit's BODY: its loudest band between BODY_LOW_HZ and 3.2kHz (a real
+ * snare's shell tone at 200Hz, a clap's or a synthetic snare's noise around
+ * 1 to 2kHz), within BODY_TOP_DB of the whole sound's loudest band (a hat's
+ * power lies above it, so its body is faint), and still within
+ * BODY_SUSTAIN_DB of its peak BODY_SUSTAIN_HOPS later (~64ms: a kick's beater
+ * click and a closed hat have died away by then, a snare's or a clap's noise
+ * has not).
  */
-const BODY_DB = -12
-/** And within this many dB of the whole sound's loudest band: a faint upper edge of a low sound is not a body. */
+const BODY_LOW_HZ = 200
 const BODY_TOP_DB = -24
 const BODY_SUSTAIN_HOPS = 12
 const BODY_SUSTAIN_DB = -10
@@ -502,11 +511,16 @@ export class SignalMap {
   /** Refines the templates on the LEARN_SEC before frame `to`, from where they are. */
   private relearn(to: number): void {
     const from = Math.max(0, to - Math.round(LEARN_SEC / HOP_SEC))
-    this.windowed(from, to, (v, n, h) => factorize(this.templates!, v, n, h, RELEARN_ITERATIONS))
+    // Only the templates are taken from it: a window's last frames see a sound's start without its end, so the
+    // activations it leaves there are an edge artefact. The activations stay those the fit gave.
+    const n = to - from
+    const h = new Float32Array(this.act.length * n)
+    for (let k = 0; k < this.act.length; k++) h.set(this.act[k].subarray(from, to), k * n)
+    factorize(this.templates!, this.spec.subarray(from * F, to * F), n, h, RELEARN_ITERATIONS)
   }
 
   /** The instances of template `k` peaking in frames [from, to). */
-  private peaks(k: number, from: number, to: number, strongest: number): Instance[] {
+  private peaks(k: number, from: number, to: number): Instance[] {
     const tpl = this.templates!
     const h = this.act[k]
     const out: Instance[] = []
@@ -522,18 +536,18 @@ export class SignalMap {
     for (let j = 0; j < F; j++) top = Math.max(top, power[j])
     const own: number[] = []
     for (let j = 0; j < F; j++) if (power[j] >= top * dbToPower(-MASK_RANGE_DB)) own.push(j)
-    for (let i = Math.max(0, from); i < to; i++) {
+    for (let i = 0; i < to; i++) {
       const a = h[i]
-      if (a < strongest * PEAK_FLOOR) continue
       let peak = true
       for (let d = 1; d <= PEAK_HOPS && peak; d++) {
         if (i - d >= 0 && h[i - d] >= a) peak = false
         if (i + d < this.fittedTo && h[i + d] > a) peak = false
       }
       if (!peak) continue
-      let low = Infinity
+      // Before the first frame is silence, so a sound at the very start still rises.
+      let low = i < PEAK_BACK ? 0 : Infinity
       for (let d = 1; d <= PEAK_BACK && i - d >= 0; d++) low = Math.min(low, h[i - d])
-      if (low !== Infinity && a < PEAK_RISE * low) continue
+      if (a < PEAK_RISE * low) continue
       // Intensity: the template's loudest frame at this activation, as dBFS.
       const db = 10 * Math.log10(1e-12 + (a * a * loudPower) / (FULL_SCALE * FULL_SCALE))
       const intensity = Math.min(1, Math.max(0, (db - INTENSITY_FLOOR_DB) / -INTENSITY_FLOOR_DB))
@@ -556,7 +570,10 @@ export class SignalMap {
       const hop = i - FRAME_LAG
       out.push({ frame: i, time: this.timeOf(hop), signal: k, match, intensity })
     }
-    return out
+    if (out.length === 0) return out
+    const levels = out.map((x) => x.intensity).sort((a, b) => a - b)
+    const floor = levels[Math.floor(PEAK_REFERENCE * (levels.length - 1))] + PEAK_FLOOR_DB / INTENSITY_FLOOR_DB
+    return out.filter((x) => x.frame >= from && x.intensity >= floor)
   }
 
   /** Describes each template: its octave balance from the template, its shape from its instances' fingerprints. */
@@ -572,7 +589,7 @@ export class SignalMap {
       for (let b = 0; b < BAND_COUNT; b++) top = Math.max(top, octave[b])
       const balance = Float64Array.from(octave, (p) => 10 * Math.log10((p + 1e-30) / (top + 1e-30)))
       let mask = 0
-      for (let b = 0; b < BAND_COUNT; b++) if (balance[b] >= -MASK_RANGE_DB) mask |= 1 << b
+      for (let b = 0; b < BAND_COUNT; b++) if (balance[b] >= -DESCRIBE_RANGE_DB) mask |= 1 << b
       const shape = BANDS.map(() => new Float32Array(SHAPE_HOPS))
       const list = byK.get(k) ?? []
       let weight = 0
@@ -645,11 +662,9 @@ export class SignalMap {
       const percussive = lowTop >= 0 && s.shape[lowTop][SHAPE_HOPS - 1] <= -DECAY_DB
       const low = this.shareIn(s, 0, LOW_TOP_HZ) >= LOW_SHARE || (this.shareIn(s, 0, 250) >= LOW_SHARE && sweep)
       s.kick = bands.length >= 2 && low && (click || sweep || percussive) && perBeat <= KICK_PER_BEAT
-      let bright = -Infinity
-      for (const b of bands) if (BANDS[b] >= 800) bright = Math.max(bright, s.balance[b])
       let bodyBand = -1
-      for (const b of bands) if (BANDS[b] >= 800 && BANDS[b] <= 3200 && (bodyBand < 0 || s.balance[b] > s.balance[bodyBand])) bodyBand = b
-      const body = bodyBand >= 0 && s.balance[bodyBand] - bright >= BODY_DB && s.balance[bodyBand] >= BODY_TOP_DB && s.shape[bodyBand][BODY_SUSTAIN_HOPS] >= BODY_SUSTAIN_DB && s.shape[bodyBand][SHAPE_HOPS - 1] <= -BODY_DECAY_DB
+      for (const b of bands) if (BANDS[b] >= BODY_LOW_HZ && BANDS[b] <= 3200 && (bodyBand < 0 || s.balance[b] > s.balance[bodyBand])) bodyBand = b
+      const body = bodyBand >= 0 && s.balance[bodyBand] >= BODY_TOP_DB && s.shape[bodyBand][BODY_SUSTAIN_HOPS] >= BODY_SUSTAIN_DB && s.shape[bodyBand][SHAPE_HOPS - 1] <= -BODY_DECAY_DB
       const noise = bands.filter((b) => BANDS[b] >= 800).length >= NOISE_BANDS && bands.some((b) => BANDS[b] >= 3200)
       s.hit = body && noise && perBeat <= HIT_PER_BEAT
     }
@@ -683,9 +698,7 @@ export class SignalMap {
     const lastFinal = final.reduce((m, x) => Math.max(m, x.frame), -1)
     const fresh: Instance[] = []
     for (let k = 0; k < COMPONENTS; k++) {
-      let strongest = 0
-      for (let i = 0; i < this.fittedTo; i++) strongest = Math.max(strongest, this.act[k][i])
-      for (const x of this.peaks(k, lastFinal + 1, this.fittedTo, strongest)) if (x.time > this.heardTime) fresh.push(x)
+      for (const x of this.peaks(k, lastFinal + 1, this.fittedTo)) fresh.push(x)
     }
     this.instances = [...final, ...fresh].sort((a, b) => a.time - b.time)
     this.describe()
