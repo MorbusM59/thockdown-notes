@@ -199,17 +199,21 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       canvas.height = Math.round(stripRows * boxPx * dpr)
     }
 
-    // The caret's colour, read off the shell and again whenever the shell's
-    // variables are rewritten (a layout change), never per frame.
+    // The accent colour (the layout's own, or the caret's when it has none, as
+    // `.visualizer-lit` does in CSS), read off the scene and again whenever
+    // the shell's or the root's variables are rewritten (a layout or a
+    // settings change), never per frame.
     const shell = scene.closest<HTMLElement>('.app-shell') ?? scene
-    let caretColor = ''
+    let accentColor = ''
     const readColor = () => {
-      caretColor = getComputedStyle(scene).getPropertyValue('--color-caret').trim()
+      const style = getComputedStyle(scene)
+      accentColor = style.getPropertyValue('--visualizer-accent-color').trim() || style.getPropertyValue('--color-caret').trim()
       drawnLit.fill(-1)
     }
     readColor()
     const restyle = new MutationObserver(readColor)
     restyle.observe(shell, { attributes: true, attributeFilter: ['style'] })
+    restyle.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
 
     // The gap is React's to draw (`gapColumn`); the loop only says when the
     // playhead has crossed into another box, which is seconds apart.
@@ -233,7 +237,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       if (!changed) return
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
       context.clearRect(0, 0, columns * boxPx, stripRows * boxPx)
-      context.fillStyle = caretColor
+      context.fillStyle = accentColor
       for (let band = 0; band < columns; band += 1) {
         const lit = drawnLit[band]
         const x = band * boxPx

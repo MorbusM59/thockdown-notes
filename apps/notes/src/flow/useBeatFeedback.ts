@@ -107,7 +107,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec } = visualizer.immersive
+  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, accentColor, letterboxColor } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
   useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
   useEffect(() => {
@@ -120,7 +120,13 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     root.setProperty('--visualizer-wave-boxes', String(waveBoxes))
     root.setProperty('--visualizer-wave-sec', `${waveSec}s`)
     root.setProperty('--visualizer-pulse-color', pulseColor)
-  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec, pulseColor, pulseSoftness])
+    // Empty means "follow the theme": the property is removed so the CSS
+    // fallback (the caret, the zone colours) applies.
+    if (accentColor) root.setProperty('--visualizer-accent-color', accentColor)
+    else root.removeProperty('--visualizer-accent-color')
+    if (letterboxColor) root.setProperty('--visualizer-letterbox-color', letterboxColor)
+    else root.removeProperty('--visualizer-letterbox-color')
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec, pulseColor, pulseSoftness, accentColor, letterboxColor])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
