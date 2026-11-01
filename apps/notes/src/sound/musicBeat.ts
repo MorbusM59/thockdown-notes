@@ -62,6 +62,7 @@ import { DrumCursor, DrumTracker } from './drumTracker'
 import { appendBeatTrace, BeatTraceWindow, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 import { MusicDecodeStream } from './musicDecodeStream'
+import { loudnessGain, PeakWindow } from './peakWindow'
 
 /** How far either side of the listener the window reaches, in seconds. */
 const LEAD_SEC = 5
@@ -159,6 +160,10 @@ interface DrumAnalysis {
   trace: BeatTraceWindow | null
 }
 let drums: DrumAnalysis | null = null
+/** The decoded track's peak sample magnitude around the listener, for the loudness gain (`respond`). */
+const peaks = new PeakWindow()
+/** How far below full scale a window's peak may be and still give a full response (`loudnessGain`); the reader's Response setting. */
+let headroomDb = 5
 
 /** The playing track, decoded; replaced when the track changes. */
 let stream: MusicDecodeStream | null = null
@@ -214,6 +219,7 @@ function restartAnalysis(listenerTime: number): void {
   stale = false
   const url = musicPlayerService.trackUrl
   for (const band of bands) clearWindow(band)
+  peaks.reset()
   drums = null
   // Every restart supersedes one still waiting for its file to open, whether or not it gets as far as starting one of its own.
   const id = ++run
@@ -251,6 +257,7 @@ function restartAnalysis(listenerTime: number): void {
 
 /** Measures one decoded chunk into the drum analysis and every level band. */
 function analyse(samples: Float32Array, startTime: number, sampleRate: number): void {
+  peaks.add(samples, startTime, sampleRate)
   if (drums) {
     const endTime = startTime + (samples.length - 1) / sampleRate
     drums.tracker.feed(samples, 0, endTime)
@@ -272,12 +279,18 @@ function percentile(band: Band, share: number): number {
   return 0
 }
 
-/** The response for what the listener hears at `listenerTime`, from the window around it. */
-function respond(band: Band, listenerTime: number): number {
+/**
+ * The response for what the listener hears at `listenerTime`, from the
+ * window around it, at `gain` (`loudnessGain`: how near full scale the
+ * track's peak around the listener comes), so a track mixed quiet, or a
+ * quiet passage between loud ones, pulses less than one at full scale. Every
+ * source is scaled alike, and a hit's strength (`onHit`) with it.
+ */
+function respond(band: Band, listenerTime: number, gain: number): number {
   const drum = drumOf(band.channel)
-  const raw = drum
+  const raw = gain * (drum
     ? (drums && band.cursor ? drums.tracker.hitBetween(drum, band.cursor, listenerTime, band.channel.contrast, band.channel.groove) : 0)
-    : stretched(band, listenerTime)
+    : stretched(band, listenerTime))
   // The fall: a response never drops faster than its last peak fades, on
   // the block's own curve and length. A rise is taken at once.
   const { fallSec, shape } = band.channel
@@ -361,6 +374,11 @@ function publish(subscriber: Band | Clock, response: number): void {
 }
 
 let visualDelaySec = 0
+
+/** Sets how far below full scale a track's peak may be and still give a full response (`BeatSettings.responseDb`). */
+export function setBeatResponseHeadroomDb(db: number): void {
+  headroomDb = db
+}
 
 /**
  * Draws the pulse this much later than the latency the audio stack reports
@@ -451,7 +469,8 @@ function tick(frameTimeMs: number): void {
   if (stale || jumped || (stream?.url ?? null) !== musicPlayerService.trackUrl) restartAnalysis(listenerTime)
   else stream?.want(listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
   const heardTime = listenerTime - heardLagSec()
-  for (const band of bands) publish(band, respond(band, heardTime))
+  const gain = loudnessGain(peaks.peakSince(heardTime - LEAD_SEC), headroomDb)
+  for (const band of bands) publish(band, respond(band, heardTime, gain))
   for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
   for (const counter of counters) count(counter, heardTime)
   frame = requestAnimationFrame(tick)

@@ -15,6 +15,9 @@ import {
 import {
   BEAT_DELAY_MAX_MS,
   BEAT_DELAY_MIN_MS,
+  BEAT_RESPONSE_MAX_DB,
+  BEAT_RESPONSE_MIN_DB,
+  DEFAULT_BEAT_SETTINGS,
   type BeatSettings,
 } from '../shared/beatSettings'
 import {
@@ -2442,7 +2445,7 @@ export function SidebarOptionsPanel({
             <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit the edge follows, in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
           </div>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
-            <OptionsSliderRows rows={[1]}>
+            <OptionsSliderRows rows={[1, 1]}>
               <CompactScrollbarSlider
                 id="beat-delay"
                 min={BEAT_DELAY_MIN_MS}
@@ -2455,6 +2458,19 @@ export function SidebarOptionsPanel({
                 defaultValue={0}
                 formatValue={(value) => Math.round(value).toString()}
                 onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="beat-response"
+                min={BEAT_RESPONSE_MIN_DB}
+                max={BEAT_RESPONSE_MAX_DB}
+                step={1}
+                value={beatSettings.responseDb}
+                trackLabel="response"
+                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half. Kept for every layout"
+                ariaLabel="Beat pulse: dB below full scale that still gives a full response"
+                defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
               />
             </OptionsSliderRows>
           </div>
@@ -2610,7 +2626,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
-            <OptionsSliderRows rows={[2, 3]}>
+            <OptionsSliderRows rows={[3, 3]}>
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
                 min={PULSE_SPEED_MIN}
@@ -2636,6 +2652,19 @@ export function SidebarOptionsPanel({
                 defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseHalfLifeSec}
                 formatValue={(value) => String(Math.round(value * 1000))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseHalfLifeSec: Math.round(value * 10) / 10 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-boost"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.pulseBoost}
+                trackLabel="boost"
+                tooltipLabel="Signal boost of the centre pulse, in percent: at 100 every hit sends a full ring and thump, at 0 each is as strong as the hit that set it off"
+                ariaLabel="Immersive: centre pulse signal boost, percent"
+                defaultValue={DEFAULT_VISUALIZER_IMMERSIVE.pulseBoost}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseBoost: value } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-pulse-fade"

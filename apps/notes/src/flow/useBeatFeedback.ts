@@ -32,7 +32,7 @@ import { useEffect, useRef } from 'react'
 import type { VisualizerCaret, VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
-import { setBeatVisualDelaySec, subscribeMusicBand, subscribeMusicClock } from '../sound/musicBeat'
+import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, subscribeMusicBand, subscribeMusicClock } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
 import { emitPulseHit } from '../visualizer/pulseHits'
 import { setFlowStyle } from './flowStyle'
@@ -107,9 +107,9 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, cutoutRound, waveShape, waveFallSec } = visualizer.immersive
+  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
-  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness])
+  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)
@@ -124,4 +124,5 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
+  useEffect(() => setBeatResponseHeadroomDb(settings.responseDb), [settings.responseDb])
 }

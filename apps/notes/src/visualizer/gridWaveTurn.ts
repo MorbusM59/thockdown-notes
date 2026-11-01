@@ -118,9 +118,11 @@ export interface GridWaveSettings {
   /** The centre pulse's ring: its colour and edge softness (`pulseRingStrength`). */
   pulseColor: string
   pulseSoftness: number
+  /** The layout's signal boost for the centre pulse (`VisualizerImmersive.pulseBoost`). */
+  pulseBoost: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
@@ -129,7 +131,7 @@ export function setGridWaveSettings(next: GridWaveSettings): void {
     && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec
     && next.edgeShape === settings.edgeShape && next.edgeFallSec === settings.edgeFallSec
     && next.cutoutRound === settings.cutoutRound
-    && next.pulseColor === settings.pulseColor && next.pulseSoftness === settings.pulseSoftness) return
+    && next.pulseColor === settings.pulseColor && next.pulseSoftness === settings.pulseSoftness && next.pulseBoost === settings.pulseBoost) return
   settings = next
   for (const listener of listeners) listener()
 }

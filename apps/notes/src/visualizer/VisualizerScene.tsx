@@ -32,7 +32,7 @@ import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPla
 import { SpectrumBallistics, litRows } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
-import { subscribePulseHits } from './pulseHits'
+import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
 import { cutoutClosure, type CutoutRing } from './cutoutRing'
 import { pulseCurve } from '@thockdown/look/visualizer'
@@ -163,12 +163,13 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     if (!element) return
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
     let running: Animation | null = null
-    const unsubscribe = subscribePulseHits(() => {
+    const unsubscribe = subscribePulseHits((strength) => {
       if (reducedMotion.matches) return
-      const { edgeShape, edgeFallSec } = readGridWaveSettings()
+      const { edgeShape, edgeFallSec, pulseBoost } = readGridWaveSettings()
+      const amount = pulseAmount(strength, pulseBoost)
       const keyframes: Keyframe[] = []
       for (let i = 0; i <= THUMP_KEYFRAMES; i++) {
-        const size = `100% 100%, ${(100 * (1 + THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape))).toFixed(2)}% auto`
+        const size = `100% 100%, ${(100 * (1 + amount * THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape))).toFixed(2)}% auto`
         keyframes.push({ maskSize: size, webkitMaskSize: size } as Keyframe)
       }
       running?.cancel()

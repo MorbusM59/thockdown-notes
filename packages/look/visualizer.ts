@@ -163,6 +163,12 @@ export interface VisualizerImmersive {
   pulseFadeSec: number
   /** 0 to 1: how gradually the pulse's ring fades at its edges (`pulseRingStrength`); 0 is a hard-edged band, 1 a smooth bell. */
   pulseSoftness: number
+  /**
+   * 0 to 1: SIGNAL BOOST, how far the centre pulse (its ring and the solid's
+   * thump) is lifted above the strength of the hit that set it off. At 1
+   * every hit pulses in full; at 0 a hit pulses in proportion to its strength.
+   */
+  pulseBoost: number
   /** 0 to 1: how round the centre cutout's corners are, as a share of half its side; 0 square (the cutout as it always was), 1 a circle. The grid's square hole stays the same whole boxes either way. */
   cutoutRound: number
 }
@@ -192,7 +198,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   if (waveTurn === 0) return null
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 3, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, cutoutRound: 0 }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 3, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0 }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -424,6 +430,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive): VisualizerIm
     pulseHalfLifeSec: bounded(source.pulseHalfLifeSec, PULSE_SEC_MIN, PULSE_SEC_MAX, d.pulseHalfLifeSec),
     pulseFadeSec: bounded(source.pulseFadeSec, PULSE_SEC_MIN, PULSE_SEC_MAX, d.pulseFadeSec),
     pulseSoftness: bounded(source.pulseSoftness, 0, 1, d.pulseSoftness),
+    pulseBoost: bounded(source.pulseBoost, 0, 1, d.pulseBoost),
     cutoutRound: bounded(source.cutoutRound, 0, 1, d.cutoutRound),
   }
 }

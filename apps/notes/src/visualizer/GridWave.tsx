@@ -43,7 +43,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal } from 'react-dom'
 import { DEFAULT_VISUALIZER_CHANNEL, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, pulseTravelBoxes, type VisualizerChannel } from '@thockdown/look/visualizer'
 import { subscribeMusicBand, subscribeMusicTempo } from '../sound/musicBeat'
-import { subscribePulseHits } from './pulseHits'
+import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { setSwaySnare } from './parallaxSway'
 import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
@@ -218,7 +218,8 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     if (layers.length === 0) return
     const running: Array<Animation | null> = layers.map(() => null)
     const startedAt: number[] = layers.map(() => -Infinity)
-    const unsubscribe = subscribePulseHits(() => {
+    const unsubscribe = subscribePulseHits((strength) => {
+      const amount = pulseAmount(strength, readGridWaveSettings().pulseBoost)
       const { pulseExitScale: exitScale, pulseInnerPx: innerPx, boxPx: box, pulseSpeed: speed, pulseHalfLifeSec: halfLife, pulseFadeSec: fadeSec } = pulseInputs.current
       if (reducedMotion.matches || !(exitScale > PULSE_START_SCALE) || !(box > 0)) return
       const exitBoxes = ((exitScale - PULSE_START_SCALE) * innerPx) / box
@@ -228,7 +229,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       const keyframes: Keyframe[] = []
       for (let i = 0; i <= PULSE_KEYFRAMES; i++) {
         const t = (i / PULSE_KEYFRAMES) * durationSec
-        keyframes.push({ transform: `scale(${PULSE_START_SCALE + (pulseTravelBoxes(t, speed, halfLife) * box) / innerPx})`, opacity: 1 - t / fadeSec })
+        keyframes.push({ transform: `scale(${PULSE_START_SCALE + (pulseTravelBoxes(t, speed, halfLife) * box) / innerPx})`, opacity: amount * (1 - t / fadeSec) })
       }
       // The first layer at rest, or else the one that set off longest ago.
       let pick = 0
