@@ -49,6 +49,15 @@ import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWa
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
 const PULSE_RING_SHARE = 0.25
+/**
+ * The scale a pulse sets off at: the ring's middle, its strongest line, on
+ * the face's rim, so on the hit it is already showing at the rim at full
+ * strength with its inner half still behind the face. Set off from the
+ * resting layer (the ring wholly behind the face), the middle would only
+ * reach the rim after travelling an eighth of the face's half-side, and the
+ * pulse read as starting outside the face.
+ */
+const PULSE_START_SCALE = 1 / (1 - PULSE_RING_SHARE / 2)
 /** Keyframes sampled along the pulse's travel curve; linear between them. */
 const PULSE_KEYFRAMES = 24
 /**
@@ -171,8 +180,9 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   }, [waveShape, waveFallSec])
 
   // The centre pulse: a ring at the rim of a layer exactly the cutout's
-  // square, so at rest it lies wholly behind the cutout. On each hit of the
-  // edge's band (`pulseHits.ts`) the next ring of the stack is scaled out, its inner edge setting off at the layout's
+  // square, invisible at rest. On each hit of the edge's band
+  // (`pulseHits.ts`) the next ring of the stack sets off with its middle on
+  // the face's rim (PULSE_START_SCALE) and is scaled out, its inner edge travelling at the layout's
   // starting speed and losing its decay share of that speed each second
   // (`pulseTravelBoxes`), until that edge reaches the scene's farthest corner
   // from the cutout's centre. A decay that stops it short ends it once it has
@@ -210,15 +220,15 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     const startedAt: number[] = layers.map(() => -Infinity)
     const unsubscribe = subscribePulseHits(() => {
       const { pulseExitScale: exitScale, pulseInnerPx: innerPx, boxPx: box, pulseSpeed: speed, pulseHalfLifeSec: halfLife, pulseFadeSec: fadeSec } = pulseInputs.current
-      if (reducedMotion.matches || !(exitScale > 1) || !(box > 0)) return
-      const exitBoxes = ((exitScale - 1) * innerPx) / box
+      if (reducedMotion.matches || !(exitScale > PULSE_START_SCALE) || !(box > 0)) return
+      const exitBoxes = ((exitScale - PULSE_START_SCALE) * innerPx) / box
       // Done when it has left the screen or faded out, whichever is first;
       // a ring the half-life stops short has faded by then all the same.
       const durationSec = Math.min(pulseTimeToTravel(exitBoxes, speed, halfLife), fadeSec)
       const keyframes: Keyframe[] = []
       for (let i = 0; i <= PULSE_KEYFRAMES; i++) {
         const t = (i / PULSE_KEYFRAMES) * durationSec
-        keyframes.push({ transform: `scale(${1 + (pulseTravelBoxes(t, speed, halfLife) * box) / innerPx})`, opacity: 1 - t / fadeSec })
+        keyframes.push({ transform: `scale(${PULSE_START_SCALE + (pulseTravelBoxes(t, speed, halfLife) * box) / innerPx})`, opacity: 1 - t / fadeSec })
       }
       // The first layer at rest, or else the one that set off longest ago.
       let pick = 0

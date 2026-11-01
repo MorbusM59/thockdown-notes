@@ -205,7 +205,9 @@
   background-size: 100% 100%;
   /* Above the turning wave. */
   z-index: 1;
-  /* Scaled by GridWave.tsx on the first kick of each bar; at rest it lies behind the cutout. */
+  /* Shown only while GridWave.tsx animates it (its keyframes carry the
+     opacity), so its resting place does not matter. */
+  opacity: 0;
   will-change: transform;
 }
 
