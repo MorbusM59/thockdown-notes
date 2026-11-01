@@ -529,25 +529,39 @@ export class BeatMap {
       score[k] = onset + best
       from[k] = bestFrom
     }
-    // Read back from the best beat within the last period before the frontier.
-    const lastPeriod = periods[n - 1]
-    const reach = Number.isNaN(lastPeriod) ? 1 : Math.ceil(lastPeriod)
-    let best = -Infinity
-    let k = -1
-    for (let j = Math.max(0, n - reach); j < n; j++) {
-      if (score[j] > best) {
-        best = score[j]
-        k = j
-      }
-    }
+    // Read back passage by passage, from the frontier towards the plan's start: from the best beat within the last
+    // period a chain reaches, back to where that chain began, then on from before it. Reading back one chain only, from
+    // the frontier, lost every passage before a break (a stretch with no beat) once the frontier was past it, and found
+    // nothing at all while the frontier lay in one (an anchored chain cannot reach it; the track's last seconds have no
+    // tempo window either): the map went dark until the frontier moved on.
     const chain: number[] = []
-    while (k > 0 && from[k] >= 0) {
-      chain.push(start + k)
-      k = from[k]
+    let reached = n - 1
+    let k = -1
+    while (reached >= 0) {
+      while (reached >= 0 && score[reached] === -Infinity) reached--
+      if (reached < 0) break
+      const lastPeriod = periods[reached]
+      const reach = Number.isNaN(lastPeriod) ? 1 : Math.ceil(lastPeriod)
+      let best = -Infinity
+      k = -1
+      for (let j = Math.max(0, reached + 1 - reach); j <= reached; j++) {
+        if (score[j] > best) {
+          best = score[j]
+          k = j
+        }
+      }
+      while (k > 0 && from[k] >= 0) {
+        chain.push(start + k)
+        k = from[k]
+      }
+      // The chain's first beat: the anchor itself (already committed) or the
+      // start of a fresh chain, whether at the plan's start or after a gap.
+      if (k >= 0 && start + k !== anchor) chain.push(start + k)
+      // An earlier passage only across a stretch with no beat: a chain that began afresh where there was a beat began
+      // on what the chain before it could not explain, and what lies before it is not a passage of its own.
+      if (k <= 0 || !Number.isNaN(periods[k - 1])) break
+      reached = k - 1
     }
-    // The chain's first beat: the anchor itself (already committed) or the
-    // start of a fresh chain, whether at the plan's start or after a gap.
-    if (k >= 0 && start + k !== anchor) chain.push(start + k)
     chain.reverse()
     // A fresh chain never reaches back over beats already committed.
     if (lastCommitted >= 0) {

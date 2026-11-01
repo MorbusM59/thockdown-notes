@@ -66,6 +66,15 @@ function match(expected: number[], shown: number[], from: number, to: number, to
 }
 
 describe('the rolling beat map', () => {
+  it('keeps its beats while the look-ahead ends in a break, and resumes right after the break', () => {
+    // Kicks, then fifteen seconds with no pulse, then kicks again: while the frontier lies in the break, the beats
+    // before it are still beats; once the kicks return, so do the beats.
+    const expected = [...beatsOf(0, 40, () => 0.5), ...beatsOf(55, 100, () => 0.5)]
+    const { shown } = play(render(expected, 100), 0)
+    expect(match(expected, shown, 5, 38)).toMatchObject({ missed: 0, extra: 0 })
+    expect(match(expected, shown, 60, 95)).toMatchObject({ missed: 0, extra: 0 })
+  })
+
   it('lands on every beat of a steady track, from a cold start mid-track', () => {
     const expected = beatsOf(0, 60, () => 0.5)
     const { shown } = play(render(expected, 60), 20)
