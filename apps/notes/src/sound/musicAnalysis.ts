@@ -110,9 +110,10 @@ export interface AnalysisAnswer {
   raws: number[]
   /** The window's peak sample magnitude before `heardTime` (`PeakWindow.peakSince`), NaN while nothing is decoded. */
   peak: number
-  /** The caret's beat at `heardTime` (`BeatMap.caretAt`): how far into it, 0..1, and its period (s); NaN where there is none. */
-  caretPhase: number
-  caretPeriod: number
+  /** The beat map's beats either side of `heardTime` (`BeatMap.beatsAround`), NaN where there is none, and the count of the one before. */
+  beatBefore: number
+  beatAfter: number
+  beatIndex: number
   traceLines: string[]
 }
 
@@ -375,7 +376,7 @@ export class MusicAnalysis {
       this.releaseUpTo(request.listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
       this.map?.update(heardTime)
     }
-    const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
+    const beats = this.map ? this.map.beatsAround(heardTime) : { previous: NaN, next: NaN, index: NaN }
     const tracker = this.tracker
     const ids: number[] = []
     const raws: number[] = []
@@ -398,8 +399,9 @@ export class MusicAnalysis {
       ids,
       raws,
       peak: this.peaks.isEmpty ? NaN : this.peaks.peakSince(heardTime - LEAD_SEC),
-      caretPhase: caret.phase,
-      caretPeriod: caret.period,
+      beatBefore: beats.previous,
+      beatAfter: beats.next,
+      beatIndex: beats.index,
       traceLines,
     }
   }
