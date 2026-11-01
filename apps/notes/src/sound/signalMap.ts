@@ -123,6 +123,14 @@ const ON_GRID_SHARE = 0.6
 /** The share of a signal's power in the 50Hz and 100Hz bands (a kick's fundamental) that makes it a low sound; a snare's tonal body sits at 200Hz. */
 const LOW_SHARE = 0.5
 const LOW_TOP_HZ = 150
+/**
+ * A drum keeps to a PATTERN: folded onto a bar of four beats cut into
+ * GRID_DIVISIONS, at least PATTERN_SHARE of a signal's instances fall on its
+ * PATTERN_SLOTS busiest positions. A synth's notes landing on the grid are
+ * spread over the bar; a kick's or a snare's return to the same few places.
+ */
+const PATTERN_SLOTS = 4
+const PATTERN_SHARE = 0.6
 /** Positions a beat is cut into for the drum grid: sixteenths and triplets (and so swung sixteenths) alike. */
 const GRID_DIVISIONS = 12
 /** A kick's CLICK: a band from 800Hz up within CLICK_DB of the top that has fallen CLICK_FALL_DB by CLICK_HOPS (~16ms). */
@@ -153,6 +161,8 @@ const BODY_DB = -12
 const BODY_TOP_DB = -24
 const BODY_SUSTAIN_HOPS = 12
 const BODY_SUSTAIN_DB = -10
+/** And then dying away: at least BODY_DECAY_DB down by the end of the shape (~128ms), where a pad or a held chord is not. */
+const BODY_DECAY_DB = 6
 /** At most this many instances a beat for a hit; a hat plays on every eighth or sixteenth. */
 const HIT_PER_BEAT = 1.1
 /** How far either side of a predicted instance the pattern's second look searches, in hops (~32ms). */
@@ -179,6 +189,12 @@ interface MapEvent {
   bands: BandPrint[]
   /** Bands whose rise made it an onset (or, for an event the pattern's second look found, the mask it was searched for). */
   onsetMask: number
+  /**
+   * Bands still inside an earlier event's join when this one began: whatever
+   * they do here is that sound arriving (an 808's sub still climbing), so they
+   * count as absent from this event.
+   */
+  heldMask: number
   /** Signal ids this event is an instance of, with the match and intensity each. */
   assigned: Array<{ signal: number; match: number; intensity: number }>
   /** Heard: its assignment is final. */
@@ -425,7 +441,9 @@ export class SignalMap {
       }
       if (mask === 0) { i++; continue }
       const hop = this.firstHop + i
-      this.events.push({ hop, time: this.timeOf(hop), bands: this.printAt(i), onsetMask: mask, assigned: [], final: false, predicted: false })
+      let held = 0
+      for (let b = 0; b < BAND_COUNT; b++) if (!free(b, i)) held |= 1 << b
+      this.events.push({ hop, time: this.timeOf(hop), bands: this.printAt(i), onsetMask: mask, heldMask: held, assigned: [], final: false, predicted: false })
       // The next event may begin once the earliest join has closed; a band already gathered cannot start it again within its own join.
       for (let b = 0; b < BAND_COUNT; b++) if (mask & (1 << b)) this.busyUntil[b] = i + joinHopsOf(b)
       i += JOIN_HOPS + 1
@@ -441,7 +459,7 @@ export class SignalMap {
    * and how far its level stands from where the archetype puts it against the
    * loudest band.
    */
-  private matchOf(print: BandPrint[], signal: Signal, onsetMask: number): number {
+  private matchOf(print: BandPrint[], signal: Signal, onsetMask: number, heldMask = 0): number {
     const bands = bandsOf(signal.mask)
     let top = -Infinity
     for (const b of bands) top = Math.max(top, print[b].peakDb)
@@ -449,7 +467,7 @@ export class SignalMap {
     let weightSum = 0
     for (const b of bands) {
       const p = print[b]
-      const present = onsetMask & (1 << b) ? 1 : Math.max(ABSENT_FLOOR, Math.min(1, p.rise / RISE_DB))
+      const present = onsetMask & (1 << b) ? 1 : heldMask & (1 << b) ? ABSENT_FLOOR : Math.max(ABSENT_FLOOR, Math.min(1, p.rise / RISE_DB))
       let d = 0
       const a = signal.shape[b]
       for (let k = 0; k < SHAPE_HOPS; k++) d += Math.abs(p.shape[k] - a[k])
@@ -505,7 +523,7 @@ export class SignalMap {
         if ((s.mask & event.onsetMask) === 0) continue
         // A signal this event alone defines matches it trivially: it must earn its place against the others again.
         if (soleOf.get(s.id) === event) continue
-        const m = this.matchOf(event.bands, s, event.onsetMask)
+        const m = this.matchOf(event.bands, s, event.onsetMask, event.heldMask)
         if (m < NEW_SIGNAL_MATCH) continue
         let covered = 0
         for (const b of bandsOf(s.mask)) covered += dbToPower(event.bands[b].peakDb)
@@ -662,7 +680,7 @@ export class SignalMap {
       }
       grid.push(beats[beats.length - 1])
       const onGrid = list.filter((t) => nearest(grid, t) <= ON_GRID_SEC).length / list.length >= ON_GRID_SHARE
-      if (!onGrid) continue
+      if (!onGrid || patternShare(list, beats) < PATTERN_SHARE) continue
       const spanBeats = Math.max(1, beats.filter((t) => t >= list[0] && t <= list[list.length - 1]).length)
       const perBeat = list.length / spanBeats
       const bands = bandsOf(s.mask)
@@ -683,7 +701,7 @@ export class SignalMap {
       for (const b of bands) if (BANDS[b] >= 800) bright = Math.max(bright, s.balance[b])
       let bodyBand = -1
       for (const b of bands) if (BANDS[b] >= 800 && BANDS[b] <= 3200 && (bodyBand < 0 || s.balance[b] > s.balance[bodyBand])) bodyBand = b
-      const body = bodyBand >= 0 && s.balance[bodyBand] - bright >= BODY_DB && s.balance[bodyBand] >= BODY_TOP_DB && s.shape[bodyBand][BODY_SUSTAIN_HOPS] >= BODY_SUSTAIN_DB
+      const body = bodyBand >= 0 && s.balance[bodyBand] - bright >= BODY_DB && s.balance[bodyBand] >= BODY_TOP_DB && s.shape[bodyBand][BODY_SUSTAIN_HOPS] >= BODY_SUSTAIN_DB && s.shape[bodyBand][SHAPE_HOPS - 1] <= -BODY_DECAY_DB
       const noise = bands.filter((b) => BANDS[b] >= 800).length >= NOISE_BANDS && bands.some((b) => BANDS[b] >= 3200)
       s.hit = body && noise && perBeat <= HIT_PER_BEAT
     }
@@ -726,7 +744,7 @@ export class SignalMap {
         const hop = this.firstHop + bestAt
         const time = this.timeOf(hop)
         if (this.events.some((e) => Math.abs(e.time - time) <= ON_GRID_SEC && e.assigned.some((a) => a.signal === s.id))) continue
-        const event: MapEvent = { hop, time, bands: bestPrint, onsetMask: s.mask, assigned: [], final: false, predicted: true }
+        const event: MapEvent = { hop, time, bands: bestPrint, onsetMask: s.mask, heldMask: 0, assigned: [], final: false, predicted: true }
         event.assigned.push({ signal: s.id, match: bestMatch, intensity: this.intensityOf(bestPrint, s.mask) })
         this.events.push(event)
         own.push(time)
@@ -784,6 +802,24 @@ export class SignalMap {
     }
     return out
   }
+}
+
+/** The share of `times` on their PATTERN_SLOTS busiest positions of a four-beat bar of `beats` (sorted), cut into GRID_DIVISIONS a beat. */
+function patternShare(times: number[], beats: number[]): number {
+  const counts = new Map<number, number>()
+  let placed = 0
+  let k = 0
+  for (const t of times) {
+    while (k + 1 < beats.length && beats[k + 1] <= t) k++
+    if (k + 1 >= beats.length || beats[k] > t) continue
+    const slot = (k % 4) * GRID_DIVISIONS + Math.round(((t - beats[k]) / (beats[k + 1] - beats[k])) * GRID_DIVISIONS)
+    const key = slot % (4 * GRID_DIVISIONS)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+    placed++
+  }
+  if (placed === 0) return 0
+  const top = [...counts.values()].sort((a, b) => b - a).slice(0, PATTERN_SLOTS)
+  return top.reduce((a, b) => a + b, 0) / placed
 }
 
 /** The distance from `t` to the nearest of the sorted `times`. */
