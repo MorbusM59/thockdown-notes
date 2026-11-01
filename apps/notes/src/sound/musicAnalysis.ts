@@ -292,6 +292,12 @@ export class MusicAnalysis {
    * written before it.
    */
   private held: ScoreUpdate['instances'] = []
+  /**
+   * Each drum's instances held, as (intensity, confidence) ascending: the range a reader's contrast stretches over.
+   * Built when first read and kept until the held instances change (a score update, or instances passing the
+   * listener): once per heard instance at most, rather than on every frame that reads it.
+   */
+  private readonly ranges = new Map<'kicks' | 'hits', (readonly [number, number])[]>()
   /** The track the score was last reset for: a seek in it keeps the signals learned, another track does not. */
   private scoreUrl: string | null = null
   /** The heard moment the beat map's beats were last handed to the score at. */
@@ -332,6 +338,7 @@ export class MusicAnalysis {
     this.score = null
     this.scored = null
     this.held = []
+    this.ranges.clear()
     this.scoreUrl = null
   }
 
@@ -342,6 +349,7 @@ export class MusicAnalysis {
     this.delay = null
     this.scored = null
     this.held = []
+    this.ranges.clear()
     this.beatsSentAt = NaN
     // A new track is a new stream; a seek in the same one keeps it.
     if (this.stream?.url !== request.url) {
@@ -401,6 +409,7 @@ export class MusicAnalysis {
     if (update.run !== this.run) return
     this.scored = update
     this.held = [...this.held.filter((x) => x.time < update.from), ...update.instances]
+    this.ranges.clear()
   }
 
   /** The listener's position at the last ask of this run (NaN before one). */
@@ -433,20 +442,25 @@ export class MusicAnalysis {
     const scored = this.scored
     if (!scored || Number.isNaN(from) || heardTime <= from) return 0
     let raw = 0
-    let intensities: (readonly [number, number])[] | null = null
     for (const x of this.held) {
       if (x.time <= from || x.time > heardTime) continue
       // Weighed by how far its signal is this drum: a sound on the edge of being one shows faintly.
       const confidence = band.drum === 'kicks' ? x.kick : x.hit
       if (confidence > 0) {
-        // The drum's instances in the score (everything held: a second behind the listener to the frontier), built only
-        // when one is heard.
-        intensities ??= this.held.map((y) => [y.intensity, band.drum === 'kicks' ? y.kick : y.hit] as const).filter(([, w]) => w > 0).sort((a, b) => a[0] - b[0])
-        raw = Math.max(raw, confidence * instanceResponse(x.intensity, intensities, contrast))
+        raw = Math.max(raw, confidence * instanceResponse(x.intensity, this.rangeOf(band.drum ?? 'kicks'), contrast))
         if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} confidence=${confidence.toFixed(2)} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)}`)
       }
     }
     return raw
+  }
+
+  private rangeOf(drum: 'kicks' | 'hits'): (readonly [number, number])[] {
+    let range = this.ranges.get(drum)
+    if (!range) {
+      range = this.held.map((y) => [y.intensity, drum === 'kicks' ? y.kick : y.hit] as const).filter(([, w]) => w > 0).sort((a, b) => a[0] - b[0])
+      this.ranges.set(drum, range)
+    }
+    return range
   }
 
   private ask(request: AnalysisAsk): AnalysisAnswer | null {
@@ -479,7 +493,10 @@ export class MusicAnalysis {
     // What every reader has passed is never read again.
     let passed = Infinity
     for (const band of this.bands.values()) if (band.drum) passed = Math.min(passed, Number.isNaN(band.heardTo) ? -Infinity : band.heardTo)
-    if (this.held.length > 0 && this.held[0].time <= passed) this.held = this.held.filter((x) => x.time > passed)
+    if (this.held.length > 0 && this.held[0].time <= passed) {
+      this.held = this.held.filter((x) => x.time > passed)
+      this.ranges.clear()
+    }
     if (this.traceOn && this.scored && !(Math.abs(heardTime - this.tracedAt) < 1)) {
       this.tracedAt = heardTime
       this.traceLines.push(`score sec heard=${heardTime.toFixed(3)} ahead=${(this.scored.frontier - heardTime).toFixed(1)}s ` + this.scored.signals.map(signalLabel).join(' '))
