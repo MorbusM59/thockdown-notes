@@ -300,12 +300,22 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
   return {
     caret: DEFAULT_VISUALIZER_CARET,
-    // An inverted (dark) layout's colours are the author's own picks, value 0 at
-    // alphas 200 and 25 of the picker's 255, not the light ones inverted.
-    edge: { ...DEFAULT_VISUALIZER_EDGE, color: inverted ? 'rgba(0, 0, 0, 0.784)' : 'rgba(0, 0, 0, 1)' },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.098)' : 'rgba(255, 255, 255, 0.499)' },
-    immersive: DEFAULT_VISUALIZER_IMMERSIVE,
+    // An inverted (dark) layout's visualizer is the author's own tuning, not the
+    // light one inverted: every dark factory preset takes it.
+    edge: inverted
+      ? { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', spreadPx: 10, blurPx: 200 }
+      : { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 1)' },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: inverted ? 'rgba(0, 0, 0, 0.275)' : 'rgba(255, 255, 255, 0.499)' },
+    immersive: inverted ? DARK_VISUALIZER_IMMERSIVE : DEFAULT_VISUALIZER_IMMERSIVE,
   }
+}
+
+const DARK_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
+  ...DEFAULT_VISUALIZER_IMMERSIVE,
+  swayRangePx: 0, swayDrift: 10,
+  waveColor: 'rgba(255, 255, 255, 1)', waveBoxes: 104, waveTurn: 4, waveShape: 0.5, waveFallSec: 1.9949745588310244,
+  pulseColor: 'rgba(0, 0, 0, 0.137)', pulseSpeed: 35, pulseHalfLifeSec: 0.7, pulseFadeSec: 1.4, pulseSoftness: 0,
+  cutoutRound: 1,
 }
 
 const SOURCES: readonly VisualizerSource[] = ['band', 'kick', 'snare', 'hat']
