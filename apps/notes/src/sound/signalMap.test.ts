@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SignalMap, SIGNAL_RATE as RATE, type SignalInstance } from './signalMap'
-import { gridOf, mapOf, track, type Section } from './signalMap.testkit'
+import { gridOf, mapOf, track, type Played, type Section } from './signalMap.testkit'
 
 const TOLERANCE_SEC = 0.03
 

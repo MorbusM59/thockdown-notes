@@ -9,111 +9,89 @@
  * decides. Any scaling, threshold or lift relative to the surrounding music
  * is applied by whoever reads it.
  *
- * - A SIGNAL is one recurring sound. Its ARCHETYPE is the average of its
- *   instances' fingerprints, over the bands it occupies (its MASK). Its two
- *   flags, KICK and HIT, belong to the signal and not to an instance; a
- *   signal may carry one, both or neither (a kick and a snare that always
- *   land together are one signal carrying both).
- * - An INSTANCE is one occurrence: its time, its MATCH to the archetype
- *   (0..1, how closely its shape agrees) and its INTENSITY (0..1, linear in
- *   dB: 1 is 0 dBFS in the signal's bands, 0 is -60 dB or below).
+ * - A SIGNAL is one recurring sound: one TEMPLATE of a non-negative matrix
+ *   factor deconvolution (`nmfd.ts`) of the music's spectrogram, a short
+ *   spectrogram of its own (its ARCHETYPE). Its two flags, KICK and HIT,
+ *   belong to the signal and not to an instance; a signal may carry one, both
+ *   or neither.
+ * - An INSTANCE is one peak of the template's activation: its time, its MATCH
+ *   (0..1, the share of the music in the template's own bands that the
+ *   template explains there) and its INTENSITY (0..1, linear in dB: 1 is
+ *   0 dBFS, 0 is -60 dB or below).
+ *
+ * Overlapping sounds ADD in the model, so a kick under a snare or a crash is
+ * the kick's activation plus the other's, and nothing has to decide which
+ * sound owns which band.
  *
  * How the inventory is built:
  *
- * 1. PARSE. Nine octave bands (`BANDS`), each a two-stage band-pass, give a
- *    level in dB per hop (`HOP` samples, ~5.3ms). A band's RISE is how far
- *    its level climbs above its lowest over the last `RISE_HOPS`; an ONSET
- *    in a band is a rise of at least `RISE_DB` peaking there. Onsets in
- *    several bands within `JOIN_HOPS` of each other are one EVENT, whose
- *    FINGERPRINT is, per band, its peak level, its rise and its SHAPE: the
- *    level over the next `SHAPE_HOPS` relative to that peak.
- * 2. MATCH, PER BAND. An event is compared with each signal over that
- *    signal's mask only (`matchOf`), so energy in other bands, belonging to
- *    other sounds, does not count against it. The best signal at or above
- *    `NEW_SIGNAL_MATCH` takes the event and CLAIMS its mask's bands; the
- *    bands left unclaimed may be taken by another signal, so a kick layered
- *    with a snare counts for both. Onset bands nothing could take FOUND a new
- *    signal whose mask they are.
- * 3. ARCHETYPE. A signal's archetype is the mean of its instances'
- *    fingerprints, each weighted by its match, over every instance in the
- *    map, before and after: the first kick of a section is judged against
- *    the archetype its successors build.
- * 4. FLAG. Each signal is judged on its archetype's sound and on how its
- *    instances lie against the beat grid (`BeatPort`): a low body landing on
- *    beats is a kick, a bright body landing on beats or between them at no
- *    more than one a beat is a hit.
+ * 1. SPECTROGRAM. A Hann-windowed FFT_SIZE FFT every HOP samples, summed into
+ *    log bands (SPEC_BANDS_PER_OCTAVE an octave) as magnitudes.
+ * 2. LEARN. The first LEARN_SEC are factorized into COMPONENTS templates of
+ *    TEMPLATE_FRAMES frames, seeded from the strongest, most different
+ *    onsets. Every RELEARN_SEC after, the templates are refined on the last
+ *    LEARN_SEC, starting from where they are, so a new sound is taken up.
+ * 3. FIT. New frames get their activations with the templates held.
+ * 4. FLAG. Each template is judged on its sound (its octave balance, and the
+ *    averaged octave-band fingerprints of its instances, `printAt`) and on how
+ *    its instances lie against the beat grid (`BeatPort`).
  *
- * The PATTERN is a second opinion inside the analysis, never a setting:
- * where a flagged signal has an instance a bar before and a bar after and
- * none between, the bar between is searched again without the onset floor
- * (`searchPredicted`), and an instance is added only where the sound itself
- * matches there. Whether a hit exists is the analysis's decision.
- *
- * Everything not yet heard is re-decided on every pass (`analyse`): events
- * are re-assigned against the archetypes as they now stand. Instances the
- * listener has passed are FINAL.
+ * Instances the listener has passed are FINAL; everything ahead is re-read
+ * from the activations on every pass (`analyse`).
  */
+
+import { fitActivations, factorize, normalize, type Templates } from './nmfd'
 
 /** The rate every figure here is tuned at; audio at another rate is resampled to it on the way in. */
 export const SIGNAL_RATE = 48000
 export const HOP = 256
 export const HOP_SEC = HOP / SIGNAL_RATE
 
-/** Octave band centres, in Hz. */
+/** Octave band centres, in Hz: the fingerprints and the flags are read in these. */
 export const BANDS = [50, 100, 200, 400, 800, 1600, 3200, 6400, 12800] as const
 const BAND_COUNT = BANDS.length
 const BAND_Q = Math.SQRT2
 /** Hops a band's energy is averaged over: about two cycles of its centre, at least two hops. */
 const ENVELOPE_HOPS = BANDS.map((hz) => Math.max(2, Math.ceil((2 * SIGNAL_RATE) / hz / HOP)))
-/** Hops a rise is measured over (behind the envelope). */
-const RISE_HOPS = 6
-/** The least rise, in dB, that is an onset in a band. */
-export const RISE_DB = 6
-/** Bands below this level, in dB, are silence: no onset is read there. */
-const SILENCE_DB = -70
-/**
- * Bands beginning within this many hops of the event's first are the same
- * event (~32ms): a kick's falling pitch reaches its lower bands that much
- * after its click, and a sixteenth at 180 BPM is still 83ms.
- */
-const JOIN_HOPS = 6
-/**
- * The bands at and below 200Hz join for longer (~64ms): a kick's pitch falls
- * from a couple of hundred Hz into the sub, reaching the 50Hz band up to
- * some 60ms after its click. A bass note on the next eighth is further away
- * than this at any tempo up to 230 BPM.
- */
-const LOW_JOIN_HOPS = 12
-const LOW_JOIN_HZ = 200
-const joinHopsOf = (b: number) => (BANDS[b] <= LOW_JOIN_HZ ? LOW_JOIN_HOPS : JOIN_HOPS)
-/** Hops a fingerprint's shape spans, from the event's start: ~128ms. */
+/** Hops a fingerprint's shape spans, from the sound's start: ~128ms. */
 export const SHAPE_HOPS = 24
 /** How far below its peak a shape is followed, in dB. */
 const SHAPE_FLOOR_DB = -40
 /** Intensity 0 is this level, in dB; 1 is 0 dBFS. */
 export const INTENSITY_FLOOR_DB = -60
 
-/**
- * The least match at which an event is an instance of an existing signal;
- * below it, it founds a new one. THE internal tuning factor of the inventory:
- * too strict and one sound splits into many signals that never gather enough
- * instances to be flagged, too loose and unlike sounds merge.
- */
-export const NEW_SIGNAL_MATCH = 0.5
-/** Assign-rebuild-merge rounds per analysis pass. */
-const ROUNDS = 3
-/** Two signals are one sound when their masks share this share of their bands and each archetype matches the other this well. */
-const MERGE_OVERLAP = 0.5
-const MERGE_MATCH = 0.7
-/** The dB a band's shape may differ by, on average, for its shape score to fall to 1/e. */
-const SHAPE_SCALE_DB = 6
-/** The same for the balance between a signal's bands; a band's balance counts at most BALANCE_CAP_DB against it. */
-const BALANCE_SCALE_DB = 6
-const BALANCE_CAP_DB = 24
-/** What a mask band that did not climb at all still counts for, before its weight. */
-const ABSENT_FLOOR = 0.05
-/** A band more than this many dB under an event's loudest onset band is not part of a new signal's mask: it is leakage or another sound's tail. */
+/** The spectrogram: FFT size (~43ms) and its log bands. */
+const FFT_SIZE = 2048
+const SPEC_LOW_HZ = 35
+const SPEC_HIGH_HZ = 18000
+const SPEC_BANDS_PER_OCTAVE = 4
+/** A Hann-windowed full-scale sine's FFT magnitude: 0 dBFS. */
+const FULL_SCALE = FFT_SIZE / 4
+/** Frames from a sound's first sample to the peak of its activation (measured: its window has taken in two hops of it). */
+const FRAME_LAG = 2
+
+/** Templates, and how many frames (~43ms) each spans. */
+export const COMPONENTS = 12
+const TEMPLATE_FRAMES = 16
+/** Music the templates are first learned on, and how often they are refined after, in seconds. */
+const LEARN_SEC = 10
+const RELEARN_SEC = 10
+const LEARN_ITERATIONS = 60
+const RELEARN_ITERATIONS = 15
+const FIT_ITERATIONS = 30
+/** Frames before new ones that are held while fitting them, so a sound already sounding is explained by its own activation. */
+const FIT_CONTEXT = 16
+/** A peak of an activation: the highest within PEAK_HOPS either side, and PEAK_RISE times the lowest over the PEAK_BACK frames before it. */
+const PEAK_HOPS = 4
+const PEAK_BACK = 8
+const PEAK_RISE = 2
+/** A peak below this share of its template's strongest is the template explaining a little of something else, not an instance. */
+const PEAK_FLOOR = 0
+/** The least match an instance needs. */
+const MIN_MATCH = 0.25
+/** A template's own bands: within this many dB of its loudest. */
 const MASK_RANGE_DB = 30
+
 /** Instances a signal needs before it can be flagged. */
 export const MIN_FLAG_INSTANCES = 3
 /** How far from the drum grid an instance may land and still count as on it, in seconds. */
@@ -150,8 +128,7 @@ const KICK_PER_BEAT = 2
 const NOISE_BANDS = 3
 /**
  * A hit's BODY: its loudest band between 800Hz and 3.2kHz within this many
- * dB of its loudest band from 800Hz up (a hat's power lies above the body;
- * the 400Hz band is left out because a kick's body leaks into it),
+ * dB of its loudest band from 800Hz up (a hat's power lies above the body),
  * and still within BODY_SUSTAIN_DB of its peak BODY_SUSTAIN_HOPS later (~64ms:
  * a kick's beater click and a closed hat have died away by then, a snare's or
  * a clap's noise has not).
@@ -165,54 +142,85 @@ const BODY_SUSTAIN_DB = -10
 const BODY_DECAY_DB = 6
 /** At most this many instances a beat for a hit; a hat plays on every eighth or sixteenth. */
 const HIT_PER_BEAT = 1.1
-/** How far either side of a predicted instance the pattern's second look searches, in hops (~32ms). */
-const PREDICT_SEARCH_HOPS = 6
-/** The least rise, in dB, the second look accepts: the sound must still arrive, but under a masking sound. */
-const PREDICT_RISE_DB = 2
 
 /** Where the beats fall: the beat times between two moments. A port, so the map does not own the beat grid. */
 export interface BeatPort {
   beatsBetween(from: number, to: number): number[]
 }
 
-/** One band's part of a fingerprint. */
+/** The FFT bins summed into each log band (at least one each), and the octave band each falls in. */
+const SPEC_BINS: Array<[number, number]> = []
+const SPEC_OCTAVE: number[] = []
+{
+  const binHz = SIGNAL_RATE / FFT_SIZE
+  // Log-spaced edges, but never narrower than one bin: below ~400Hz a quarter octave holds less than a bin, and a bin counted in several bands would weigh its sound several times over.
+  let a = Math.round(SPEC_LOW_HZ / binHz)
+  while (a * binHz < SPEC_HIGH_HZ) {
+    const b = Math.max(a + 1, Math.round(a * 2 ** (1 / SPEC_BANDS_PER_OCTAVE)))
+    SPEC_BINS.push([a, b])
+    const centre = Math.sqrt(a * b) * binHz
+    SPEC_OCTAVE.push(Math.min(BAND_COUNT - 1, Math.max(0, Math.round(Math.log2(centre / BANDS[0])))))
+    a = b
+  }
+}
+const F = SPEC_BINS.length
+const HANN = Float32Array.from({ length: FFT_SIZE }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / FFT_SIZE))
+
+/** In-place radix-2 FFT of `re`/`im` (length a power of two). */
+function fft(re: Float64Array, im: Float64Array): void {
+  const n = re.length
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1
+    for (; j & bit; bit >>= 1) j ^= bit
+    j ^= bit
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len
+    const wr = Math.cos(ang)
+    const wi = Math.sin(ang)
+    for (let i = 0; i < n; i += len) {
+      let cr = 1
+      let ci = 0
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k
+        const b = a + len / 2
+        const xr = re[b] * cr - im[b] * ci
+        const xi = re[b] * ci + im[b] * cr
+        re[b] = re[a] - xr; im[b] = im[a] - xi
+        re[a] += xr; im[a] += xi
+        const t = cr * wr - ci * wi
+        ci = cr * wi + ci * wr
+        cr = t
+      }
+    }
+  }
+}
+
+/** One band's part of a fingerprint: its peak level and its level over SHAPE_HOPS relative to it. */
 interface BandPrint {
   peakDb: number
-  rise: number
   shape: Float32Array
 }
 
-/** One parsed onset event. */
-interface MapEvent {
-  hop: number
-  time: number
-  bands: BandPrint[]
-  /** Bands whose rise made it an onset (or, for an event the pattern's second look found, the mask it was searched for). */
-  onsetMask: number
-  /**
-   * Bands still inside an earlier event's join when this one began: whatever
-   * they do here is that sound arriving (an 808's sub still climbing), so they
-   * count as absent from this event.
-   */
-  heldMask: number
-  /** Signal ids this event is an instance of, with the match and intensity each. */
-  assigned: Array<{ signal: number; match: number; intensity: number }>
-  /** Heard: its assignment is final. */
-  final: boolean
-  /** Found by the pattern's second look, not by the onset floor. */
-  predicted: boolean
-}
-
-/** A recurring sound. */
+/** A recurring sound: a template, described. */
 interface Signal {
   id: number
   mask: number
-  /** Archetype per band (only mask bands meaningful): mean shape, mean balance (peak dB under the loudest mask band). */
-  shape: Float32Array[]
+  /** Per octave band: the template's level under its loudest band, and its instances' mean shape. */
   balance: Float64Array
-  weight: number
+  shape: Float32Array[]
   kick: boolean
   hit: boolean
+}
+
+/** One instance, as held. */
+interface Instance {
+  frame: number
+  time: number
+  signal: number
+  match: number
+  intensity: number
 }
 
 /** A signal as a reader sees it. */
@@ -239,17 +247,6 @@ function bandsOf(mask: number): number[] {
   for (let b = 0; b < BAND_COUNT; b++) if (mask & (1 << b)) out.push(b)
   return out
 }
-
-/**
- * How much a band counts in a match, by its level under the archetype's
- * loudest: linear in dB, 1 at the top and nothing at WEIGHT_RANGE_DB below.
- * Not by power: white noise has most of its power in the top octaves, and a
- * snare would then be judged on its hiss alone, which a hat shares.
- */
-function bandWeight(balanceDb: number): number {
-  return Math.max(0, 1 + balanceDb / WEIGHT_RANGE_DB)
-}
-const WEIGHT_RANGE_DB = 40
 
 function dbToPower(db: number): number {
   return 10 ** (db / 10)
@@ -296,22 +293,26 @@ class BandFilter {
 
 export class SignalMap {
   private readonly filters = BANDS.map((hz) => new BandFilter(hz))
-  /** Per band, per hop since `firstHop`: the raw hop energy and the enveloped level in dB. */
+  /** Per octave band, per hop: the raw hop energy and the enveloped level in dB. */
   private raw: Float32Array[] = BANDS.map(() => new Float32Array(1 << 14))
   private level: Float32Array[] = BANDS.map(() => new Float32Array(1 << 14))
-  /** Hop number of index 0 in the arrays, and the number of hops held. */
-  private firstHop = 0
+  /** The spectrogram, frame-major ([hop * F + band]); frame i ends at hop i's last sample. */
+  private spec = new Float32Array((1 << 14) * F)
+  /** Activations, per template, per frame. */
+  private act: Float32Array[] = []
+  private readonly ring = new Float32Array(FFT_SIZE)
+  private ringAt = 0
+  private readonly re = new Float64Array(FFT_SIZE)
+  private readonly im = new Float64Array(FFT_SIZE)
   private hops = 0
   private filled = 0
   /** Media time of hop 0. */
   private origin = NaN
-  /** Hops up to which events have been parsed. */
-  private parsedTo = 0
-  /** Per band, the last local hop an event's join holds it for. */
-  private busyUntil = new Array<number>(BAND_COUNT).fill(-Infinity)
-  private events: MapEvent[] = []
+  private templates: Templates | null = null
+  /** Frames whose activations are fitted, and the frame the templates were last learned up to. */
+  private fittedTo = 0
+  private instances: Instance[] = []
   private signals: Signal[] = []
-  private nextSignal = 0
   private heardTime = -Infinity
 
   constructor(private readonly beats: BeatPort) {}
@@ -323,27 +324,26 @@ export class SignalMap {
 
   /** The media time analysed up to: the look-ahead's front. */
   get frontier(): number {
-    return Number.isNaN(this.origin) ? NaN : this.timeOf(this.firstHop + this.hops)
+    return Number.isNaN(this.origin) ? NaN : this.timeOf(this.hops)
   }
 
-  /** Forgets everything: a new track, or a seek outside what is held. */
+  /** Forgets what was fed: a new track, or a seek outside what is held. The templates are kept (what was learned stays true). */
   reset(): void {
     for (const f of this.filters) f.reset()
-    this.firstHop = 0
+    this.ring.fill(0)
+    this.ringAt = 0
     this.hops = 0
     this.filled = 0
     this.origin = NaN
-    this.parsedTo = 0
-    this.busyUntil.fill(-Infinity)
-    this.events = []
+    this.fittedTo = 0
+    this.instances = []
     this.heardTime = -Infinity
-    // Signals are kept across a seek in the same track (what was learned stays true); `forgetSignals` clears them for a new one.
   }
 
-  /** Clears the learned signals, for a new track. */
+  /** Clears the learned templates, for a new track. */
   forgetSignals(): void {
+    this.templates = null
     this.signals = []
-    this.nextSignal = 0
   }
 
   /** Takes mono samples at SIGNAL_RATE, the first at media time `startTime`, contiguous with what came before (or the first after `reset`). */
@@ -353,6 +353,8 @@ export class SignalMap {
     for (let i = 0; i < samples.length; i++) {
       const x = samples[i]
       for (let b = 0; b < BAND_COUNT; b++) filters[b].add(x)
+      this.ring[this.ringAt] = x
+      this.ringAt = (this.ringAt + 1) % FFT_SIZE
       if (++this.filled === HOP) this.closeHop()
     }
   }
@@ -366,35 +368,36 @@ export class SignalMap {
       const raw = this.raw[b]
       raw[index] = f.energy / HOP
       f.energy = 0
-      // Before the first hop is silence, so the first hops average as every other does.
       const span = ENVELOPE_HOPS[b]
       let sum = 0
       for (let k = 0; k < Math.min(span, index + 1); k++) sum += raw[index - k]
       // A full-scale sine in the band reads 0 dB (mean square 1/2).
       this.level[b][index] = 10 * Math.log10(1e-12 + (2 * sum) / span)
     }
+    const re = this.re
+    const im = this.im
+    for (let i = 0; i < FFT_SIZE; i++) { re[i] = this.ring[(this.ringAt + i) % FFT_SIZE] * HANN[i]; im[i] = 0 }
+    fft(re, im)
+    const o = index * F
+    for (let j = 0; j < F; j++) {
+      const [a, b] = SPEC_BINS[j]
+      let p = 0
+      for (let k = a; k < b; k++) p += re[k] * re[k] + im[k] * im[k]
+      this.spec[o + j] = Math.sqrt(p)
+    }
     this.hops++
   }
 
   private grow(): void {
     const size = this.raw[0].length * 2
-    this.raw = this.raw.map((a) => { const n = new Float32Array(size); n.set(a); return n })
-    this.level = this.level.map((a) => { const n = new Float32Array(size); n.set(a); return n })
+    const widen = (a: Float32Array, n: number) => { const x = new Float32Array(n); x.set(a); return x }
+    this.raw = this.raw.map((a) => widen(a, size))
+    this.level = this.level.map((a) => widen(a, size))
+    this.spec = widen(this.spec, size * F)
+    this.act = this.act.map((a) => widen(a, size))
   }
 
-  /** The band's rise at local hop `i`: its level over its lowest in the RISE_HOPS before its envelope. */
-  private riseAt(b: number, i: number): number {
-    if (i < 0) return 0
-    const lv = this.level[b]
-    const back = ENVELOPE_HOPS[b]
-    if (lv[i] < SILENCE_DB) return 0
-    // Before the first hop is silence, so a sound at the very start still climbs.
-    let trough = Infinity
-    for (let k = i - back - RISE_HOPS; k < i - back + 1; k++) trough = Math.min(trough, k < 0 ? SILENCE_DB : lv[k])
-    return Math.max(0, lv[i] - trough)
-  }
-
-  /** The fingerprint of an event starting at local hop `start`, for every band. */
+  /** The octave-band fingerprint of a sound starting at hop `start`. */
   private printAt(start: number): BandPrint[] {
     const out: BandPrint[] = []
     for (let b = 0; b < BAND_COUNT; b++) {
@@ -402,230 +405,184 @@ export class SignalMap {
       // The band's own clock: its level lags the sound by its envelope.
       const from = start + ENVELOPE_HOPS[b] - 1
       let peakDb = -Infinity
-      for (let k = from; k <= from + joinHopsOf(b); k++) peakDb = Math.max(peakDb, lv[k])
-      let rise = 0
-      for (let k = from - 1; k <= from + joinHopsOf(b); k++) rise = Math.max(rise, this.riseAt(b, k))
+      for (let k = from; k <= from + 6 && k < this.hops; k++) peakDb = Math.max(peakDb, lv[k])
       const shape = new Float32Array(SHAPE_HOPS)
-      for (let k = 0; k < SHAPE_HOPS; k++) shape[k] = Math.max(SHAPE_FLOOR_DB, lv[from + k] - peakDb)
-      out.push({ peakDb, rise, shape })
+      for (let k = 0; k < SHAPE_HOPS; k++) shape[k] = from + k < this.hops ? Math.max(SHAPE_FLOOR_DB, lv[from + k] - peakDb) : SHAPE_FLOOR_DB
+      out.push({ peakDb, shape })
     }
     return out
   }
 
-  /**
-   * Whether band `b` has an onset whose rise peaks at local hop `i`. A band's
-   * level is averaged over ENVELOPE_HOPS[b], so its rise peaks that many hops
-   * after the sound began: a 50Hz band's some 40ms after a click's.
-   */
-  private onsetAt(b: number, i: number): boolean {
-    const r = this.riseAt(b, i)
-    return r >= RISE_DB && r >= this.riseAt(b, i - 1) && r > this.riseAt(b, i + 1)
+  /** Runs `run` on frames [from, to) as a window of their own: the spectrogram and the activations copied out and back. */
+  private windowed(from: number, to: number, run: (v: Float32Array, n: number, h: Float32Array) => void): void {
+    const n = to - from
+    const K = this.act.length
+    const h = new Float32Array(K * n)
+    for (let k = 0; k < K; k++) h.set(this.act[k].subarray(from, to), k * n)
+    run(this.spec.subarray(from * F, to * F), n, h)
+    for (let k = 0; k < K; k++) this.act[k].set(h.subarray(k * n, (k + 1) * n), from)
   }
 
-  /** Parses every event whose fingerprint lies wholly inside what has been fed. */
-  private parse(): void {
-    const lag = Math.max(...ENVELOPE_HOPS)
-    const last = this.hops - SHAPE_HOPS - LOW_JOIN_HOPS - 2 * lag
-    let i = this.parsedTo
-    // `i` is the hop a sound BEGINS at: band b shows its onset ENVELOPE_HOPS[b] - 1 hops later.
-    while (i < last) {
-      // A band an earlier event gathered is that event's until its join closes.
-      const free = (b: number, j: number) => j > this.busyUntil[b]
+  /** A starting activation for frames [from, to): the frame's total shared evenly, so the fit starts near the right level. */
+  private seedActivations(from: number, to: number): void {
+    const K = this.act.length
+    for (let i = from; i < to; i++) {
+      let s = 0
+      for (let j = 0; j < F; j++) s += this.spec[i * F + j]
+      for (let k = 0; k < K; k++) this.act[k][i] = s / K + 1e-6
+    }
+  }
+
+  /** Templates seeded from the strongest onsets of frames [0, n), each as unlike those already taken as possible. */
+  private learn(n: number): void {
+    const flux = new Float32Array(n)
+    for (let i = 1; i < n; i++) {
+      let s = 0
+      for (let j = 0; j < F; j++) s += Math.max(0, Math.log(1e-3 + this.spec[i * F + j]) - Math.log(1e-3 + this.spec[(i - 1) * F + j]))
+      flux[i] = s
+    }
+    const onsets: number[] = []
+    for (let i = 1; i + TEMPLATE_FRAMES < n; i++) {
+      let peak = true
+      for (let k = Math.max(0, i - PEAK_HOPS); k <= Math.min(n - 1, i + PEAK_HOPS); k++) if (flux[k] > flux[i] || (flux[k] === flux[i] && k < i)) { peak = false; break }
+      if (peak && flux[i] > 0) onsets.push(i)
+    }
+    onsets.sort((a, b) => flux[b] - flux[a])
+    const candidates = onsets.slice(0, COMPONENTS * 8)
+    const spectrumOf = (i: number) => {
+      const x = new Float32Array(F)
+      for (let t = 0; t < TEMPLATE_FRAMES; t++) for (let j = 0; j < F; j++) x[j] += this.spec[(i + t) * F + j]
+      for (let j = 0; j < F; j++) x[j] = Math.log(1e-3 + x[j])
+      return x
+    }
+    const prints = candidates.map(spectrumOf)
+    const chosen: number[] = []
+    const distance = new Float32Array(candidates.length).fill(Infinity)
+    while (chosen.length < Math.min(COMPONENTS, candidates.length)) {
+      // The first is the strongest; each next one the farthest from everything taken, weighed by its strength.
+      let best = -1
+      let bestScore = -Infinity
+      for (let c = 0; c < candidates.length; c++) {
+        if (chosen.includes(c)) continue
+        const score = chosen.length === 0 ? flux[candidates[c]] : distance[c] * Math.sqrt(flux[candidates[c]])
+        if (score > bestScore) { bestScore = score; best = c }
+      }
+      chosen.push(best)
+      for (let c = 0; c < candidates.length; c++) {
+        let d = 0
+        for (let j = 0; j < F; j++) d += (prints[c][j] - prints[best][j]) ** 2
+        distance[c] = Math.min(distance[c], d)
+      }
+    }
+    const w = new Float32Array(COMPONENTS * TEMPLATE_FRAMES * F)
+    for (let k = 0; k < COMPONENTS; k++) {
+      // A template with no onset to start from starts from a frame spread evenly over the window.
+      const at = k < chosen.length ? candidates[chosen[k]] : Math.floor(((k + 0.5) / COMPONENTS) * (n - TEMPLATE_FRAMES))
+      for (let t = 0; t < TEMPLATE_FRAMES; t++) for (let j = 0; j < F; j++) w[(k * TEMPLATE_FRAMES + t) * F + j] = this.spec[(at + t) * F + j] + 1e-3
+    }
+    this.templates = { K: COMPONENTS, T: TEMPLATE_FRAMES, F, w }
+    this.act = Array.from({ length: COMPONENTS }, () => new Float32Array(this.raw[0].length))
+    this.normalizeTemplates()
+    this.seedActivations(0, n)
+    this.windowed(0, n, (v, m, h) => factorize(this.templates!, v, m, h, LEARN_ITERATIONS))
+    this.fittedTo = n
+  }
+
+  private normalizeTemplates(): void {
+    normalize(this.templates!, new Float32Array(COMPONENTS), 1)
+  }
+
+  /** Fits frames [from, to) with the templates held, the FIT_CONTEXT frames before them held as they are. */
+  private fit(from: number, to: number): void {
+    this.seedActivations(from, to)
+    const start = Math.max(0, from - FIT_CONTEXT)
+    this.windowed(start, to, (v, n, h) => fitActivations(this.templates!, v, n, h, FIT_ITERATIONS, from - start))
+  }
+
+  /** Refines the templates on the LEARN_SEC before frame `to`, from where they are. */
+  private relearn(to: number): void {
+    const from = Math.max(0, to - Math.round(LEARN_SEC / HOP_SEC))
+    this.windowed(from, to, (v, n, h) => factorize(this.templates!, v, n, h, RELEARN_ITERATIONS))
+  }
+
+  /** The instances of template `k` peaking in frames [from, to). */
+  private peaks(k: number, from: number, to: number, strongest: number): Instance[] {
+    const tpl = this.templates!
+    const h = this.act[k]
+    const out: Instance[] = []
+    // The template's own bands, and its loudest frame (its level is read there).
+    const power = new Float32Array(F)
+    let loudPower = -1
+    for (let t = 0; t < TEMPLATE_FRAMES; t++) {
+      let p = 0
+      for (let j = 0; j < F; j++) { const x = tpl.w[(k * TEMPLATE_FRAMES + t) * F + j]; power[j] += x * x; p += x * x }
+      if (p > loudPower) loudPower = p
+    }
+    let top = 0
+    for (let j = 0; j < F; j++) top = Math.max(top, power[j])
+    const own: number[] = []
+    for (let j = 0; j < F; j++) if (power[j] >= top * dbToPower(-MASK_RANGE_DB)) own.push(j)
+    for (let i = Math.max(0, from); i < to; i++) {
+      const a = h[i]
+      if (a < strongest * PEAK_FLOOR) continue
+      let peak = true
+      for (let d = 1; d <= PEAK_HOPS && peak; d++) {
+        if (i - d >= 0 && h[i - d] >= a) peak = false
+        if (i + d < this.fittedTo && h[i + d] > a) peak = false
+      }
+      if (!peak) continue
+      let low = Infinity
+      for (let d = 1; d <= PEAK_BACK && i - d >= 0; d++) low = Math.min(low, h[i - d])
+      if (low !== Infinity && a < PEAK_RISE * low) continue
+      // Intensity: the template's loudest frame at this activation, as dBFS.
+      const db = 10 * Math.log10(1e-12 + (a * a * loudPower) / (FULL_SCALE * FULL_SCALE))
+      const intensity = Math.min(1, Math.max(0, (db - INTENSITY_FLOOR_DB) / -INTENSITY_FLOOR_DB))
+      if (intensity <= 0) continue
+      // Match: the share of the music in the template's bands, over its span, that the template explains,
+      // with everything its activation contributes there (an activation is spread over a few frames).
+      let mine = 0
+      let all = 0
+      for (let t = 0; t < TEMPLATE_FRAMES && i + t < this.hops; t++) {
+        for (const j of own) {
+          let l = 0
+          for (let u = 0; u < TEMPLATE_FRAMES && u <= i + t; u++) l += h[i + t - u] * tpl.w[(k * TEMPLATE_FRAMES + u) * F + j]
+          const v = this.spec[(i + t) * F + j]
+          mine += Math.min(v, l)
+          all += v
+        }
+      }
+      const match = all > 0 ? mine / all : 0
+      if (match < MIN_MATCH) continue
+      const hop = i - FRAME_LAG
+      out.push({ frame: i, time: this.timeOf(hop), signal: k, match, intensity })
+    }
+    return out
+  }
+
+  /** Describes each template: its octave balance from the template, its shape from its instances' fingerprints. */
+  private describe(): void {
+    const tpl = this.templates!
+    const byK = new Map<number, Instance[]>()
+    for (const x of this.instances) { const l = byK.get(x.signal) ?? []; l.push(x); byK.set(x.signal, l) }
+    this.signals = []
+    for (let k = 0; k < tpl.K; k++) {
+      const octave = new Float64Array(BAND_COUNT)
+      for (let t = 0; t < TEMPLATE_FRAMES; t++) for (let j = 0; j < F; j++) octave[SPEC_OCTAVE[j]] += tpl.w[(k * TEMPLATE_FRAMES + t) * F + j] ** 2
+      let top = 0
+      for (let b = 0; b < BAND_COUNT; b++) top = Math.max(top, octave[b])
+      const balance = Float64Array.from(octave, (p) => 10 * Math.log10((p + 1e-30) / (top + 1e-30)))
       let mask = 0
-      for (let b = 0; b < BAND_COUNT; b++) if (free(b, i) && this.onsetAt(b, i + ENVELOPE_HOPS[b] - 1)) mask |= 1 << b
-      // The event starts at the first hop any band begins at, and gathers what begins in each band within its join of it.
-      if (mask !== 0) {
-        for (let b = 0; b < BAND_COUNT; b++) {
-          for (let j = i + 1; j <= i + joinHopsOf(b) && !(mask & (1 << b)); j++) if (free(b, j) && this.onsetAt(b, j + ENVELOPE_HOPS[b] - 1)) mask |= 1 << b
-        }
+      for (let b = 0; b < BAND_COUNT; b++) if (balance[b] >= -MASK_RANGE_DB) mask |= 1 << b
+      const shape = BANDS.map(() => new Float32Array(SHAPE_HOPS))
+      const list = byK.get(k) ?? []
+      let weight = 0
+      for (const x of list) {
+        const print = this.printAt(x.frame - FRAME_LAG)
+        for (let b = 0; b < BAND_COUNT; b++) for (let s = 0; s < SHAPE_HOPS; s++) shape[b][s] += x.match * print[b].shape[s]
+        weight += x.match
       }
-      if (mask === 0) { i++; continue }
-      const hop = this.firstHop + i
-      let held = 0
-      for (let b = 0; b < BAND_COUNT; b++) if (!free(b, i)) held |= 1 << b
-      this.events.push({ hop, time: this.timeOf(hop), bands: this.printAt(i), onsetMask: mask, heldMask: held, assigned: [], final: false, predicted: false })
-      // The next event may begin once the earliest join has closed; a band already gathered cannot start it again within its own join.
-      for (let b = 0; b < BAND_COUNT; b++) if (mask & (1 << b)) this.busyUntil[b] = i + joinHopsOf(b)
-      i += JOIN_HOPS + 1
-    }
-    this.parsedTo = Math.max(this.parsedTo, i)
-  }
-
-  /**
-   * How closely `print` matches `signal`'s archetype over its mask, 0..1.
-   * Each band counts by its level in the archetype (`bandWeight`), so a band
-   * that carries little of the sound (a kick's faint top) cannot sink a match
-   * on its own: per band, how far its shape differs, whether it climbed at all,
-   * and how far its level stands from where the archetype puts it against the
-   * loudest band.
-   */
-  private matchOf(print: BandPrint[], signal: Signal, onsetMask: number, heldMask = 0): number {
-    const bands = bandsOf(signal.mask)
-    let top = -Infinity
-    for (const b of bands) top = Math.max(top, print[b].peakDb)
-    let logSum = 0
-    let weightSum = 0
-    for (const b of bands) {
-      const p = print[b]
-      const present = onsetMask & (1 << b) ? 1 : heldMask & (1 << b) ? ABSENT_FLOOR : Math.max(ABSENT_FLOOR, Math.min(1, p.rise / RISE_DB))
-      let d = 0
-      const a = signal.shape[b]
-      for (let k = 0; k < SHAPE_HOPS; k++) d += Math.abs(p.shape[k] - a[k])
-      d /= SHAPE_HOPS
-      const balance = Math.min(BALANCE_CAP_DB, Math.abs(p.peakDb - top - signal.balance[b]))
-      const w = bandWeight(signal.balance[b])
-      logSum += w * (Math.log(present) - d / SHAPE_SCALE_DB - balance / BALANCE_SCALE_DB)
-      weightSum += w
-    }
-    return weightSum > 0 ? Math.exp(logSum / weightSum) : 0
-  }
-
-  /** The intensity of `print` in `mask`'s bands: their summed peak power, 0 dBFS = 1, INTENSITY_FLOOR_DB = 0. */
-  private intensityOf(print: BandPrint[], mask: number): number {
-    let power = 0
-    for (const b of bandsOf(mask)) power += dbToPower(print[b].peakDb)
-    const db = 10 * Math.log10(power + 1e-12)
-    return Math.min(1, Math.max(0, (db - INTENSITY_FLOOR_DB) / -INTENSITY_FLOOR_DB))
-  }
-
-  private found(print: BandPrint[], mask: number): Signal {
-    const bands = bandsOf(mask)
-    let top = -Infinity
-    for (const b of bands) top = Math.max(top, print[b].peakDb)
-    const signal: Signal = {
-      id: this.nextSignal++,
-      mask,
-      shape: BANDS.map((_, b) => Float32Array.from(print[b].shape)),
-      balance: Float64Array.from(BANDS.map((_, b) => print[b].peakDb - top)),
-      weight: 0,
-      kick: false,
-      hit: false,
-    }
-    this.signals.push(signal)
-    return signal
-  }
-
-  /** Assigns one event: the best signals over disjoint masks, then a new signal for the onset bands left. */
-  private assign(event: MapEvent, soleOf: Map<number, MapEvent>): void {
-    event.assigned = []
-    let claimed = 0
-    // Of the signals matching at or above NEW_SIGNAL_MATCH, the one explaining the most of the event's
-    // power over its mask is taken first: by match alone, a one-band signal (a bass note's sub, a
-    // fragment of a kick) matches as readily as a whole kick and would claim a band of it first.
-    // Over the whole mask, not only the bands that climbed: an 808's sub may already be sounding.
-    for (;;) {
-      let best: Signal | null = null
-      let bestMatch = 0
-      let bestScore = 0
-      for (const s of this.signals) {
-        if (s.mask & claimed) continue
-        // A signal needs at least one of its bands to have an onset in this event.
-        if ((s.mask & event.onsetMask) === 0) continue
-        // A signal this event alone defines matches it trivially: it must earn its place against the others again.
-        if (soleOf.get(s.id) === event) continue
-        const m = this.matchOf(event.bands, s, event.onsetMask, event.heldMask)
-        if (m < NEW_SIGNAL_MATCH) continue
-        let covered = 0
-        for (const b of bandsOf(s.mask)) covered += dbToPower(event.bands[b].peakDb)
-        const score = m * covered
-        if (score > bestScore) { best = s; bestMatch = m; bestScore = score }
-      }
-      if (!best) break
-      claimed |= best.mask
-      event.assigned.push({ signal: best.id, match: bestMatch, intensity: this.intensityOf(event.bands, best.mask) })
-    }
-    let left = event.onsetMask & ~claimed
-    let loudest = -Infinity
-    for (const b of bandsOf(left)) loudest = Math.max(loudest, event.bands[b].peakDb)
-    for (const b of bandsOf(left)) if (event.bands[b].peakDb < loudest - MASK_RANGE_DB) left &= ~(1 << b)
-    if (left !== 0 && !event.predicted) {
-      const s = this.found(event.bands, left)
-      event.assigned.push({ signal: s.id, match: 1, intensity: this.intensityOf(event.bands, left) })
-    }
-  }
-
-  /**
-   * Folds each signal into an older one it is the same sound as: masks
-   * sharing at least MERGE_OVERLAP of their bands, and each archetype
-   * matching the other at MERGE_MATCH or better. True when anything merged.
-   */
-  private mergeAlike(): boolean {
-    const into = new Map<number, number>()
-    for (let i = 0; i < this.signals.length; i++) {
-      const a = this.signals[i]
-      if (into.has(a.id)) continue
-      for (let j = i + 1; j < this.signals.length; j++) {
-        const b = this.signals[j]
-        if (into.has(b.id)) continue
-        const shared = bandsOf(a.mask & b.mask).length
-        const union = bandsOf(a.mask | b.mask).length
-        if (shared / union < MERGE_OVERLAP) continue
-        if (this.matchOf(this.printOf(b), a, b.mask) < MERGE_MATCH || this.matchOf(this.printOf(a), b, a.mask) < MERGE_MATCH) continue
-        into.set(b.id, a.id)
-        a.mask |= b.mask
-      }
-    }
-    if (into.size === 0) return false
-    for (const e of this.events) {
-      const seen = new Set<number>()
-      e.assigned = e.assigned
-        .map((x) => ({ ...x, signal: into.get(x.signal) ?? x.signal }))
-        .filter((x) => !seen.has(x.signal) && (seen.add(x.signal), true))
-    }
-    this.signals = this.signals.filter((s) => !into.has(s.id))
-    return true
-  }
-
-  /** A signal's archetype as a fingerprint, to match it against another signal. */
-  private printOf(signal: Signal): BandPrint[] {
-    return BANDS.map((_, b) => ({ peakDb: signal.balance[b], rise: RISE_DB, shape: signal.shape[b] }))
-  }
-
-  /** The signals with exactly one instance, each with that instance. */
-  private soleInstances(): Map<number, MapEvent> {
-    const count = new Map<number, number>()
-    const only = new Map<number, MapEvent>()
-    for (const e of this.events) for (const a of e.assigned) {
-      count.set(a.signal, (count.get(a.signal) ?? 0) + 1)
-      only.set(a.signal, e)
-    }
-    for (const [id, n] of count) if (n !== 1) only.delete(id)
-    return only
-  }
-
-  /** Rebuilds every archetype from its instances, weighted by match. */
-  private rebuildArchetypes(): void {
-    const byId = new Map(this.signals.map((s) => [s.id, s]))
-    const acc = new Map<number, { shape: Float64Array[]; balance: Float64Array; weight: number }>()
-    for (const e of this.events) {
-      for (const a of e.assigned) {
-        const s = byId.get(a.signal)
-        if (!s) continue
-        let entry = acc.get(s.id)
-        if (!entry) {
-          entry = { shape: BANDS.map(() => new Float64Array(SHAPE_HOPS)), balance: new Float64Array(BAND_COUNT), weight: 0 }
-          acc.set(s.id, entry)
-        }
-        const bands = bandsOf(s.mask)
-        let top = -Infinity
-        for (const b of bands) top = Math.max(top, e.bands[b].peakDb)
-        const w = a.match
-        for (const b of bands) {
-          const shape = e.bands[b].shape
-          for (let k = 0; k < SHAPE_HOPS; k++) entry.shape[b][k] += w * shape[k]
-          entry.balance[b] += w * (e.bands[b].peakDb - top)
-        }
-        entry.weight += w
-      }
-    }
-    for (const s of this.signals) {
-      const entry = acc.get(s.id)
-      s.weight = entry?.weight ?? 0
-      if (!entry || entry.weight <= 0) continue
-      for (const b of bandsOf(s.mask)) {
-        for (let k = 0; k < SHAPE_HOPS; k++) s.shape[b][k] = entry.shape[b][k] / entry.weight
-        s.balance[b] = entry.balance[b] / entry.weight
-      }
+      if (weight > 0) for (const s of shape) for (let i = 0; i < SHAPE_HOPS; i++) s[i] /= weight
+      this.signals.push({ id: k, mask, balance, shape, kick: false, hit: false })
     }
   }
 
@@ -652,25 +609,17 @@ export class SignalMap {
    *   50Hz and 100Hz bands), with something a kick has and a bass note does
    *   not: a beater CLICK (a band from 800Hz to 3.2kHz within CLICK_DB of the
    *   top, gone within CLICK_HOPS), a falling pitch (SWEEP: its upper low
-   *   bands dying SWEEP_DB faster than its lowest) or a percussive DECAY. Any
-   *   one will do, because a snare landing on the kick every time hides the
-   *   click under its noise and the sweep under its body. And no more than
-   *   KICK_PER_BEAT.
+   *   bands dying SWEEP_DB faster than its lowest) or a percussive DECAY. And
+   *   no more than KICK_PER_BEAT.
    * - HIT: a BODY (see BODY_DB) carried on noise (at least NOISE_BANDS bands
    *   from 800Hz up, one of them at or above 3.2kHz), and no more than
    *   HIT_PER_BEAT.
    */
   private flag(): void {
     const times = new Map<number, number[]>()
-    for (const e of this.events) for (const a of e.assigned) {
-      const list = times.get(a.signal) ?? []
-      list.push(e.time)
-      times.set(a.signal, list)
-    }
+    for (const x of this.instances) { const l = times.get(x.signal) ?? []; l.push(x.time); times.set(x.signal, l) }
     for (const s of this.signals) {
       const list = times.get(s.id) ?? []
-      s.kick = false
-      s.hit = false
       if (list.length < MIN_FLAG_INSTANCES) continue
       const beats = this.beats.beatsBetween(list[0] - 2, list[list.length - 1] + 2)
       if (beats.length < 2) continue
@@ -684,7 +633,6 @@ export class SignalMap {
       const spanBeats = Math.max(1, beats.filter((t) => t >= list[0] && t <= list[list.length - 1]).length)
       const perBeat = list.length / spanBeats
       const bands = bandsOf(s.mask)
-      // Mostly low: in a kick's fundamental, or as high as 200Hz where that is a pitch passing through on its way down.
       // A click is the top of the sound falling away above it; a hat landing with a bass note climbs toward 12.8kHz instead.
       let above = -Infinity
       for (const b of bands) if (BANDS[b] > 3200) above = Math.max(above, s.balance[b])
@@ -708,83 +656,46 @@ export class SignalMap {
   }
 
   /**
-   * The pattern's second look: for each flagged signal, a bar with an
-   * instance a bar before and a bar after and none of its own is searched
-   * without the onset floor, and an instance is added where the sound
-   * matches. Only the event added is new; the onset events are untouched.
-   */
-  private searchPredicted(): void {
-    for (const s of this.signals) {
-      if (!s.kick && !s.hit) continue
-      const own = this.events.filter((e) => e.assigned.some((a) => a.signal === s.id)).map((e) => e.time)
-      if (own.length < MIN_FLAG_INSTANCES) continue
-      for (const t of own) {
-        const beats = this.beats.beatsBetween(t - 0.01, t + 8)
-        if (beats.length < 9) continue
-        const bar = beats[4] - beats[0]
-        const predicted = t + bar
-        if (nearest(own, predicted) <= ON_GRID_SEC) continue
-        if (nearest(own, predicted + bar) > ON_GRID_SEC) continue
-        if (predicted - this.timeOf(this.firstHop) < 1 || predicted > this.frontier - 1) continue
-        if (predicted <= this.heardTime) continue
-        const centre = Math.round((predicted - this.origin) / HOP_SEC) - this.firstHop - 2
-        let bestMatch = NEW_SIGNAL_MATCH
-        let bestAt = -1
-        let bestPrint: BandPrint[] | null = null
-        for (let i = centre - PREDICT_SEARCH_HOPS; i <= centre + PREDICT_SEARCH_HOPS; i++) {
-          if (i < 1 || i + SHAPE_HOPS + 16 >= this.hops) continue
-          const print = this.printAt(i)
-          let rose = true
-          for (const b of bandsOf(s.mask)) if (print[b].rise < PREDICT_RISE_DB) { rose = false; break }
-          if (!rose) continue
-          const m = this.matchOf(print, s, s.mask)
-          if (m > bestMatch) { bestMatch = m; bestAt = i; bestPrint = print }
-        }
-        if (!bestPrint) continue
-        const hop = this.firstHop + bestAt
-        const time = this.timeOf(hop)
-        if (this.events.some((e) => Math.abs(e.time - time) <= ON_GRID_SEC && e.assigned.some((a) => a.signal === s.id))) continue
-        const event: MapEvent = { hop, time, bands: bestPrint, onsetMask: s.mask, heldMask: 0, assigned: [], final: false, predicted: true }
-        event.assigned.push({ signal: s.id, match: bestMatch, intensity: this.intensityOf(bestPrint, s.mask) })
-        this.events.push(event)
-        own.push(time)
-        own.sort((a, b) => a - b)
-      }
-    }
-    this.events.sort((a, b) => a.time - b.time)
-  }
-
-  /**
-   * Brings the map up to date for a listener at `heardTime`: parses what
-   * was fed, makes everything heard final, and re-decides the rest against
-   * the archetypes as they now stand.
+   * Brings the map up to date for a listener at `heardTime`: learns or
+   * refines the templates, fits what was fed since, makes everything heard
+   * final and re-reads the rest from the activations.
    */
   analyse(heardTime: number): void {
     if (Number.isNaN(this.origin)) return
     this.heardTime = Math.max(this.heardTime, heardTime)
-    for (const e of this.events) if (e.time <= this.heardTime) e.final = true
-    this.parse()
-    // Predicted events are re-derived from the pattern each pass, unless heard.
-    this.events = this.events.filter((e) => e.final || !e.predicted)
-    // Two rounds: assign against the archetypes, rebuild them from the assignment, assign again.
-    // Assign against the archetypes, rebuild them, fold together signals that turned out to be one
-    // sound, and assign again: one sound first met layered with another, or founded twice before
-    // either had an archetype worth matching, converges onto one signal.
-    for (let round = 0; round < ROUNDS; round++) {
-      const soleOf = this.soleInstances()
-      for (const e of this.events) if (!e.final) this.assign(e, soleOf)
-      this.rebuildArchetypes()
-      this.signals = this.signals.filter((s) => s.weight > 0)
-      if (this.mergeAlike()) this.rebuildArchetypes()
+    // A frame is fitted once the whole template after it has been fed.
+    const ready = this.hops - TEMPLATE_FRAMES
+    const learnFrames = Math.round(LEARN_SEC / HOP_SEC)
+    const relearnFrames = Math.round(RELEARN_SEC / HOP_SEC)
+    if (!this.templates) {
+      if (ready < learnFrames) return
+      this.learn(learnFrames)
+    } else if (this.act.length === 0) {
+      this.act = Array.from({ length: COMPONENTS }, () => new Float32Array(this.raw[0].length))
     }
+    while (this.fittedTo < ready) {
+      const to = Math.min(ready, this.fittedTo + relearnFrames)
+      this.fit(this.fittedTo, to)
+      if (to - this.fittedTo === relearnFrames) this.relearn(to)
+      this.fittedTo = to
+    }
+    const final = this.instances.filter((x) => x.time <= this.heardTime)
+    const lastFinal = final.reduce((m, x) => Math.max(m, x.frame), -1)
+    const fresh: Instance[] = []
+    for (let k = 0; k < COMPONENTS; k++) {
+      let strongest = 0
+      for (let i = 0; i < this.fittedTo; i++) strongest = Math.max(strongest, this.act[k][i])
+      for (const x of this.peaks(k, lastFinal + 1, this.fittedTo, strongest)) if (x.time > this.heardTime) fresh.push(x)
+    }
+    this.instances = [...final, ...fresh].sort((a, b) => a.time - b.time)
+    this.describe()
     this.flag()
-    this.searchPredicted()
   }
 
   /** The inventory's signals. */
   signalList(): SignalSummary[] {
     const counts = new Map<number, number>()
-    for (const e of this.events) for (const a of e.assigned) counts.set(a.signal, (counts.get(a.signal) ?? 0) + 1)
+    for (const x of this.instances) counts.set(x.signal, (counts.get(x.signal) ?? 0) + 1)
     return this.signals.map((s) => ({ id: s.id, bands: bandsOf(s.mask).map((b) => BANDS[b]), kick: s.kick, hit: s.hit, instances: counts.get(s.id) ?? 0 }))
   }
 
@@ -792,13 +703,11 @@ export class SignalMap {
   instancesBetween(from: number, to: number): SignalInstance[] {
     const byId = new Map(this.signals.map((s) => [s.id, s]))
     const out: SignalInstance[] = []
-    for (const e of this.events) {
-      if (e.time < from || e.time >= to) continue
-      for (const a of e.assigned) {
-        const s = byId.get(a.signal)
-        if (!s) continue
-        out.push({ time: e.time, signal: s.id, kick: s.kick, hit: s.hit, match: a.match, intensity: a.intensity })
-      }
+    for (const x of this.instances) {
+      if (x.time < from || x.time >= to) continue
+      const s = byId.get(x.signal)
+      if (!s) continue
+      out.push({ time: x.time, signal: s.id, kick: s.kick, hit: s.hit, match: x.match, intensity: x.intensity })
     }
     return out
   }
