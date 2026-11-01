@@ -18,7 +18,7 @@ describe('the glaze push and its return', () => {
     const start = offsetAfter(() => {})
     const end = offsetAfter(() => {
       for (let hit = 0; hit < 20; hit++) {
-        swaySnareHit()
+        swaySnareHit(0.4)
         // A hit peaking below 1 (the loudness gain), wobbling upwards as it falls.
         for (const r of [0.4, 0.6, 0.5, 0.55, 0.3, 0.35, 0.1, 0]) setSwaySnare(r)
       }
@@ -31,13 +31,13 @@ describe('the glaze push and its return', () => {
     setSwayMotion(10, 0.8, 0)
     const start = offsetAfter(() => {})
     const peak = offsetAfter(() => {
-      swaySnareHit()
-      setSwaySnare(0.6)
+      // The listener not told of the hit's response at all.
+      swaySnareHit(0.6)
     })
     expect(peak - start).toBeCloseTo(10, 6)
     const rest = offsetAfter(() => {
       for (let hit = 0; hit < 4; hit++) {
-        swaySnareHit()
+        swaySnareHit(0.6)
         for (const r of [0.6, 0.65, 0.2, 0]) setSwaySnare(r)
       }
     })

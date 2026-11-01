@@ -178,11 +178,14 @@ function pushOffsetPx(): number {
 }
 
 /** A hit of the wave's mix: banks what the last push left behind and starts a new one. */
-export function swaySnareHit(): void {
+export function swaySnareHit(strength: number): void {
   keptPx += pushOffsetPx()
   // In the drift's direction, so a push hurries the drift along.
   pushInFlight = driftPxPerSec < 0 ? -pushPx : pushPx
-  peakResponse = 0
+  // Seeded from the hit itself: the listener is told only of a response
+  // that moved by a minimum step, so a hit need not reach setSwaySnare.
+  peakResponse = strength
+  lastResponse = strength
 }
 
 /** The wave mix's response, which carries the push's slide back. */
