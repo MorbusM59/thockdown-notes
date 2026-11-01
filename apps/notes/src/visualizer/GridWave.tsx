@@ -44,7 +44,7 @@ import { createPortal } from 'react-dom'
 import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
 import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
 import { emitPulseHit, pulseAmount, subscribePulseHits } from './pulseHits'
-import { setSwaySnare } from './parallaxSway'
+import { setSwaySnare, swaySnareHit } from './parallaxSway'
 import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
@@ -171,7 +171,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       bands.style.opacity = String(steps / 255)
     }
     show(0)
-    const band = subscribeMusicMix(waveChannelRef.current, show)
+    const band = subscribeMusicMix(waveChannelRef.current, show, swaySnareHit)
     waveBandRef.current = band
     return () => {
       waveBandRef.current = null

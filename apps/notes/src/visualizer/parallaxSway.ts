@@ -150,27 +150,44 @@ export function setSwayMotion(push: number, slideBack: number, drift: number): v
 }
 
 /**
- * The snare's push along the gradient, in px for the nearest stack. Each hit
- * (the wave's snare response rising, `GridWave.tsx`) adds the push at once;
- * as the response falls on the wave's fall, `returnShare` of it slides back.
- * What is not slid back is KEPT, folded into `keptPx` at the next hit, so a
- * return below 1 moves the stacks on for good: the same distance on every
- * hit, wherever the sway is, since the stacks have no edge to reach.
+ * The snare's push along the gradient, in px for the nearest stack. Each HIT
+ * of the wave's mix (`subscribeMusicMix`'s `onHit`, where a rise begins,
+ * `GridWave.tsx`) adds the push at once; as the response then falls from the
+ * highest it reached since that hit, `returnShare` of the push slides back in
+ * proportion. What is not slid back is KEPT, folded into `keptPx` at the next
+ * hit, so a return below 1 moves the stacks on for good: the same distance on
+ * every hit, wherever the sway is, since the stacks have no edge to reach.
+ *
+ * A hit is the mix's own definition, never "the response went up this
+ * frame": the response also climbs when the loudness gain moves or a band
+ * wobbles, and counting each such frame as a hit re-pushed the stacks and
+ * banked the push before it could slide back, so the return never happened.
+ * The fall is measured against the peak rather than against 1 because the
+ * response carries the track's loudness gain and a band's floor: against 1,
+ * a hit peaking at 0.6 began with only part of its push and a band never
+ * falling to 0 never returned.
  */
 let keptPx = 0
-let lastResponse = 0
 let pushInFlight = 0
+let peakResponse = 0
+let lastResponse = 0
 
-function pushOffsetPx(response: number): number {
-  return pushInFlight * (1 - returnShare * (1 - response))
+function pushOffsetPx(): number {
+  const fallen = peakResponse > 0 ? 1 - lastResponse / peakResponse : 1
+  return pushInFlight * (1 - returnShare * fallen)
 }
 
+/** A hit of the wave's mix: banks what the last push left behind and starts a new one. */
+export function swaySnareHit(): void {
+  keptPx += pushOffsetPx()
+  // In the drift's direction, so a push hurries the drift along.
+  pushInFlight = driftPxPerSec < 0 ? -pushPx : pushPx
+  peakResponse = 0
+}
+
+/** The wave mix's response, which carries the push's slide back. */
 export function setSwaySnare(response: number): void {
-  if (response > lastResponse) {
-    keptPx += pushOffsetPx(lastResponse)
-    // In the drift's direction, so a push hurries the drift along.
-    pushInFlight = driftPxPerSec < 0 ? -pushPx : pushPx
-  }
+  if (response > peakResponse) peakResponse = response
   lastResponse = response
 }
 
@@ -183,7 +200,7 @@ export function wrapToPeriod(value: number, period: number): number {
 /** Moves every registered layer to where the sway is at `phaseSec`, with the music's breath widening it by `breathAmplitude`. */
 export function applySway(phaseSec: number, breathAmplitude: number): void {
   const amplitudePx = rangePx * breathAmplitude
-  const pushedPx = keptPx + pushOffsetPx(lastResponse)
+  const pushedPx = keptPx + pushOffsetPx()
   for (const layer of layers) {
     const { x, y } = swayOffset(layer.index, layer.depth, phaseSec, amplitudePx)
     if (layer.linear === null) {
