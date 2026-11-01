@@ -500,6 +500,9 @@ export class MusicAnalysis {
     if (this.traceOn && this.scored && !(Math.abs(heardTime - this.tracedAt) < 1)) {
       this.tracedAt = heardTime
       this.traceLines.push(`score sec heard=${heardTime.toFixed(3)} ahead=${(this.scored.frontier - heardTime).toFixed(1)}s ` + this.scored.signals.map(signalLabel).join(' '))
+      // Every fifth second, why each signal is or is not a kick and a hit: each term of the two flags (`signalMap.ts`'s
+      // `flag`) in ninths, every one of which must be high for the flag to be.
+      if (Math.floor(heardTime) % 5 === 0) for (const s of this.scored.signals) this.traceLines.push(`score why ${s.id} bands=${s.bands.join('/')} ${s.why}`)
     }
     const traceLines = this.traceLines
     this.traceLines = []

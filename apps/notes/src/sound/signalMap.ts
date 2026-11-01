@@ -240,6 +240,8 @@ interface Signal {
   /** How far it is a kick, and a hit, 0..1 (see `flag`). */
   kick: number
   hit: number
+  /** For the beat trace: each term of the two flags, in tenths (`flag`). */
+  why: string
 }
 
 /** One instance, as held. */
@@ -258,6 +260,8 @@ export interface SignalSummary {
   kick: number
   hit: number
   instances: number
+  /** For the beat trace: each term of the two flags, in tenths (`flag`). */
+  why: string
 }
 
 /** One instance as a reader sees it. */
@@ -624,7 +628,7 @@ export class SignalMap {
         for (let t = 0; t < band.length; t++) peak = Math.max(peak, band[t])
         for (let t = 0; t < band.length; t++) band[t] = Math.max(SHAPE_FLOOR_DB, 10 * Math.log10((band[t] + 1e-30) / (peak + 1e-30)))
       }
-      this.signals.push({ id: k, mask, balance, shape, kick: 0, hit: 0 })
+      this.signals.push({ id: k, mask, balance, shape, kick: 0, hit: 0, why: '' })
     }
   }
 
@@ -674,13 +678,16 @@ export class SignalMap {
       s.kick = 0
       s.hit = 0
       const all = times.get(s.id) ?? []
+      s.why = `few${all.length}`
       if (all.length < MIN_FLAG_INSTANCES) continue
       const beats = this.beats.beatsBetween(all[0] - 2, all[all.length - 1] + 2)
+      s.why = `beats${beats.length}`
       if (beats.length < 2) continue
       // Judged only where there are beats to judge by: the music is fed ahead of the beat map's plan, and the
       // instances past its last beat are on no grid, so counting them unflagged every signal until the next plan.
       const last = beats[beats.length - 1] + (beats[beats.length - 1] - beats[beats.length - 2])
       const list = all.filter((t) => t >= beats[0] - 2 && t <= last)
+      s.why = `ongrid${list.length}`
       if (list.length < MIN_FLAG_INSTANCES) continue
       const grid: number[] = []
       for (let i = 0; i + 1 < beats.length; i++) {
@@ -734,6 +741,8 @@ export class SignalMap {
       // template that absorbed some of a snare landing with it now and then carries that noise too, but faintly.
       const loudNoise = sizzle < 0 ? 0 : level(sizzle, -LAYERED_NOISE_DB)
       s.hit = Math.min(patterned, Math.max(1 - low, loudNoise), body, noise, atMost(perBeat, HIT_PER_BEAT, PER_BEAT_WIDTH))
+      const d = (x: number) => Math.round(x * 9)
+      s.why = `grid${d(onGrid)}pat${d(patterned)}perBeat${perBeat.toFixed(1)} K:reach${d(reach)}low${d(low)}click${d(click)}sweep${d(sweep)} H:quiet${d(Math.max(1 - low, loudNoise))}body${d(body)}noise${d(noise)}`
     }
   }
 
@@ -807,7 +816,7 @@ export class SignalMap {
   signalList(): SignalSummary[] {
     const counts = new Map<number, number>()
     for (const x of this.instances) counts.set(x.signal, (counts.get(x.signal) ?? 0) + 1)
-    return this.signals.map((s) => ({ id: s.id, bands: bandsOf(s.mask).map((b) => BANDS[b]), kick: s.kick, hit: s.hit, instances: counts.get(s.id) ?? 0 }))
+    return this.signals.map((s) => ({ id: s.id, bands: bandsOf(s.mask).map((b) => BANDS[b]), kick: s.kick, hit: s.hit, instances: counts.get(s.id) ?? 0, why: s.why }))
   }
 
   /** Every instance with a time in [from, to), oldest first. */
