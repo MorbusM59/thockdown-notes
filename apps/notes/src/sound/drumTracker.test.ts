@@ -205,6 +205,39 @@ function hitFor(kick: number, hits: Array<{ at: number; response: number }>) {
   return hits.find((h) => h.at >= kick - EARLY_SEC && h.at <= kick + LATE_SEC)
 }
 
+/**
+ * A groove whose bar opens on a BOOM rather than a kick: a sub note with no
+ * click and no falling pitch, landing hard on the one (an 808, a drop's
+ * bass hit), with clicked kicks on the other three beats, a clap on two and
+ * four, hats on the eighths, and a softer bass line on the off-beats that
+ * swells in. Returns the booms' times.
+ */
+function boomOnTheOne(seconds: number, bpm: number) {
+  const bar = 240 / bpm
+  const track = kit(seconds, bpm, { kicks: [4, 8, 12], snares: [4, 12], hats: [2, 4, 6, 8, 10, 12, 14] })
+  const booms: number[] = []
+  for (let b = 0; b * bar < seconds; b++) {
+    const t0 = b * bar
+    for (let i = 0; i < 0.5 * RATE; i++) {
+      const at = Math.round(t0 * RATE) + i
+      if (at >= track.samples.length) break
+      const t = i / RATE
+      track.samples[at] += 0.9 * Math.min(1, t / 0.003) * Math.exp(-t / 0.3) * Math.sin(2 * Math.PI * 50 * t)
+    }
+    booms.push(t0)
+    for (let beat = 0; beat < 4; beat++) {
+      const from = t0 + (beat + 0.5) * (bar / 4)
+      for (let i = 0; i < (bar / 8) * RATE; i++) {
+        const at = Math.round(from * RATE) + i
+        if (at >= track.samples.length) break
+        const t = i / RATE
+        track.samples[at] += 0.25 * Math.min(1, t / 0.05) * Math.sin(2 * Math.PI * 62 * t)
+      }
+    }
+  }
+  return { track, booms }
+}
+
 describe('DrumTracker on kicks', () => {
   it('locks to the tempo of four-on-the-floor house', () => {
     const { tracker } = play(house(20, 126), 0.5)
@@ -676,6 +709,28 @@ describe('DrumTracker on snares and hats', () => {
     const due = clickless.filter((t) => t > 10 && t < 34)
     expect(due.filter((t) => (hitFor(t, hits)?.response ?? 0) <= 0.3).map((t) => t.toFixed(2))).toEqual([])
     expect(hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.kicks.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))).toEqual([])
+  })
+
+  it('shows a boom on the one as a full hit, as far as the contrast lets it through', () => {
+    const { track, booms } = boomOnTheOne(40, 124)
+    const due = booms.filter((t) => t > 10 && t < 34)
+    const kicks = track.kicks.filter((t) => t > 10 && t < 34)
+    for (const contrast of [0, 0.5]) {
+      const { hits } = play({ samples: track.samples, kicks: [...track.kicks, ...booms] }, contrast)
+      expect(due.filter((t) => (hitFor(t, hits)?.response ?? 0) < 1).map((t) => t.toFixed(2)), `contrast ${contrast}`).toEqual([])
+      // The bass line between the kicks is not a hit at any contrast.
+      const strays = hits.filter((h) => h.at > 10 && h.at < 34 && ![...kicks, ...booms].some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))
+      expect(strays, `contrast ${contrast}`).toEqual([])
+    }
+    // At the top of the contrast only a kick with its whole signature shows.
+    const { hits } = play({ samples: track.samples, kicks: track.kicks }, 0.95)
+    expect(due.filter((t) => hitFor(t, hits) !== undefined).map((t) => t.toFixed(2))).toEqual([])
+  })
+
+  it('keeps a bass line whose notes thump alike dark at contrast 0', () => {
+    const track = house(40, 124, 14, 22)
+    const { hits } = play(track, 0)
+    expect(hits.filter((h) => h.at > 14.1 && h.at < 21.9)).toEqual([])
   })
 
   it('keeps the kick as it was when the kit has every drum', () => {

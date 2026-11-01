@@ -113,6 +113,21 @@
  * hits down to `CONTRAST_RANGE_DB` below the strong ones, contrast 1 only
  * the strong ones.
  *
+ * BOOMS (kick only, `boomResponse`). Contrast is also how far a reader lets
+ * the kick stand for what is not a kick in full: a BOOM, a low climb the
+ * evidence does not accept (an 808 without a click, a drop's bass hit, a
+ * bass note landing hard). Everything above learns only from kicks; a boom
+ * is read per reader, after the fact, and never taught to the bar. Only a
+ * boom ON A BEAT counts (between the beats the low end is the bass line's),
+ * and it must be LOW (`isLowAt`: not a snare's or a clap's noise). Its
+ * DISTINCTNESS, 0..1 (`boomDistinctness`), is how suddenly it arrives, how
+ * far it stands above the low climbs around it, and how loud it is against
+ * the kick; it shows where that exceeds the contrast, so contrast 0 takes
+ * every distinct thump and the top of the slider a kick's whole signature
+ * only. On the bar's ONE (`downbeat`: the beat the low end lands hardest
+ * on) it is a full hit; elsewhere it shows at BOOM_WEIGHT of its
+ * distinctness, under a kick with its click.
+ *
  * GROOVE (`hitBetween`'s `groove`, 0..1, per reader) is how steadily the
  * answer holds the learned bar against what is heard. It weighs the
  * evidence hit by hit and never touches the learning: every stage above
@@ -256,6 +271,12 @@ interface VoiceSpec {
    * (`DrumTracker.readSweep`). Left out: the drum has no such sound.
    */
   sweepHops?: number
+  /**
+   * Whether a BOOM (`DrumTracker.boomResponse`) may stand in for this drum: a
+   * low climb without the drum's whole signature, which a reader's contrast
+   * lets through as its distinctness allows. The kick's alone.
+   */
+  boom?: boolean
 }
 
 /** The half-life of a band's remembered peak rises, for normalising the next. */
@@ -349,6 +370,8 @@ const BEATS_PER_BAR = 4
  * fall on a bin of their own.
  */
 const PATTERN_BINS = BEATS_PER_BAR * 12
+/** Pattern positions to a beat. */
+const BINS_PER_BEAT = PATTERN_BINS / BEATS_PER_BAR
 /** A pattern position counts as a place kicks land when it holds this share of the strongest. */
 const SLOT_SHARE = 0.2
 /** An onset at a slot is a kick when its strength is this share of the slot's remembered strength. */
@@ -441,6 +464,31 @@ const PATTERN_MEMORY_SEC = 30
  */
 const PEAK_SEC = 60 / MAX_BPM / 4 / 2
 const TOP_SHARE = 0.25
+/** A boom's response off the bar's one, as a share of its distinctness (`DrumTracker.boomResponse`): below a full kick's, so the kick's whole signature still reads as more. */
+const BOOM_WEIGHT = 0.75
+/** A boom's rise time in full attack and in none (`DrumTracker.boomAttackAt`), in seconds. */
+const ATTACK_FAST_SEC = 0.03
+const ATTACK_SLOW_SEC = 0.12
+/** The hops before a boom's peak its rise is looked for in: about 130ms, past ATTACK_SLOW_SEC. */
+const ATTACK_HOPS = 24
+/** The hops the sub band's energy is averaged over for a boom's rise time: about a cycle of 50Hz. */
+const ATTACK_SMOOTH_HOPS = 4
+/** The hops after a boom's onset peak its climb's top is looked for in: about 50ms, as a sub keeps climbing past its steepest point. */
+const ATTACK_AFTER_HOPS = 10
+/**
+ * How much more a boom must climb per Hz in the sub band than in the kick's
+ * click band (`DrumTracker.isLowAt`): 20dB. Pink noise (a snare's, a
+ * clap's) gives about 18dB between the two bands, white noise none.
+ */
+const LOW_RATIO = 100
+/**
+ * How far a boom must climb above the booms around it to stand out at all,
+ * and to stand out fully, in dB (`DrumTracker.boomDistinctness`). The first is
+ * about the least change in loudness a listener notices: a bass line's notes
+ * differing by less are the line.
+ */
+const PROMINENCE_MIN_DB = 1
+const PROMINENCE_DB = 4
 /** The span of strengths, in dB below the strong hits, that contrast 0 lets through; contrast 1 lets through only the strong hits. */
 const CONTRAST_RANGE_DB = 20
 /** How slowly the strong hits' remembered level fades once the window holds nothing as strong. */
@@ -489,6 +537,7 @@ const VOICES: Record<Drum, VoiceSpec> = {
     strengthBands: 2,
     exclude: [],
     sweepHops: KICK_SWEEP_HOPS,
+    boom: true,
   },
   snare: {
     onset: [[210, 1.2, 0.3], [1800, 0.8, 0.4], [5000, 0.8, 0.3]],
@@ -836,6 +885,8 @@ export class DrumCursor {
   /** The snare only (`DrumTracker.counterHit`): the last hop the counter profile was looked at up to, and the hop of the last snare shown from either source. */
   counterLastPeak = NaN
   snareShownAt = -Infinity
+  /** The kick only (`DrumTracker.boomResponse`): the last hop judged for a boom, once all it is judged on had settled. */
+  boomLastPeak = NaN
   /**
    * With groove above 0: the drum has stopped (a break) -- an established
    * slot came round and nothing climbed in the drum's own bands there. The
@@ -860,6 +911,14 @@ class Voice {
   sweepOnsetAt = 0
   /** The hop at which a sweep was last read (`DrumTracker.readSweep`). */
   sweptAt = -Infinity
+  /**
+   * With a boom (`VoiceSpec.boom`), per hop: the onset of the strength bands
+   * alone (the sub's and the body's normalised rises, without the click), and
+   * the sub band's energy in that hop alone, which a boom's ATTACK is read
+   * from (`DrumTracker.boomAttackAt`). Empty otherwise.
+   */
+  readonly boomOnset: Float32Array
+  readonly boomEnergy: Float32Array
   /**
    * The same hops' STRENGTH: the voice's strength bands alone. For the kick
    * the click decides WHERE the kicks are, not how strong one is, or a clap
@@ -953,6 +1012,8 @@ class Voice {
     this.sweepRise = new Float32Array(spec.sweepHops ?? 0)
     this.sweepRaw = new Float32Array(spec.sweepHops ?? 0)
     this.sweepOnset = new Float32Array(2 * (spec.sweepHops ?? 0))
+    this.boomOnset = new Float32Array(spec.boom === true ? CAPACITY : 0)
+    this.boomEnergy = new Float32Array(spec.boom === true ? CAPACITY : 0)
   }
 
   /** Hops after its own that a hop waits for before its onset is final: its exclusion looks that far on. */
@@ -1054,6 +1115,20 @@ export class DrumTracker {
   private memoryWeight = 0
   /** The grid hop the bar is folded from, kept on the same beat of the bar across updates (NaN: none yet). */
   private barPhase = NaN
+  /**
+   * Which of the bar's beats (0..3, from `barPhase`) is its ONE, and each
+   * beat's remembered low climb that decides it (`learnDownbeat`). The bar's
+   * first beat as the grid names it is only the beat the kick's comb found
+   * first; the one is where the low end lands hardest.
+   */
+  private downbeat = 0
+  /** The height of the climb `boomAttackAt` last read: the sub band's energy at its top less at its foot, averaged as it reads them. */
+  private boomClimb = 0
+  /** Scratch for `boomAttackAt`'s smoothed energies. */
+  private readonly attackScratch = new Float64Array(ATTACK_HOPS + ATTACK_AFTER_HOPS + 1)
+  private readonly downbeatScore = new Float64Array(BEATS_PER_BAR)
+  /** The grid period `downbeatScore` was learned at. */
+  private downbeatPeriod = NaN
   /**
    * The absolute hop the bands started over at after samples were lost
    * (-Infinity: never). An exclusion judges a climb against the level before
@@ -1183,6 +1258,9 @@ export class DrumTracker {
     this.gridDriveAt = -Infinity
     this.memoryWeight = 0
     this.barPhase = NaN
+    this.downbeat = 0
+    this.downbeatScore.fill(0)
+    this.downbeatPeriod = NaN
     this.counterValid = false
     this.counterWeight.fill(0)
     this.counterLearnedAt = -Infinity
@@ -1300,6 +1378,16 @@ export class DrumTracker {
       const strength = low ** (1 / lowWeight)
       voice.onset[at] = voice.sweepRise.length > 0 ? this.readSweep(voice, at, onset) : onset
       voice.strength[at] = strength
+      if (voice.boomOnset.length > 0) {
+        // The click band left out: the onset a boom is peaked on.
+        let boom = 1
+        for (let k = 0; k < spec.strengthBands; k++) boom *= this.rises[onsetBands[k]] ** (spec.onset[k][2] / lowWeight)
+        const index = this.start + this.count
+        const blind = index >= this.gapFrom && index - this.resumedAt < 2 * ENVELOPE_HOPS
+        const sub = this.bands[onsetBands[0]]
+        voice.boomOnset[at] = blind ? 0 : boom
+        voice.boomEnergy[at] = blind ? 0 : sub.hopLevel
+      }
       // The exclusion compares against the TOP band alone: a strum or a
       // chord landing with a hat reaches the lower one, never the top.
       const top = onsetBands.length - 1
@@ -1728,11 +1816,51 @@ export class DrumTracker {
     }
   }
 
+  /**
+   * Finds the bar's ONE (`downbeat`): of its four beats, the one whose low
+   * climbs (the sub band's energy, `Voice.boomEnergy`, wherever it climbs
+   * within a slot's reach of the beat) collect the most: each window's sums,
+   * averaged with the earlier windows' over the bar's memory (the windows
+   * overlap, so this smooths a window score rather than counting each hop
+   * once).
+   * A loop's big kick, a bass line's new note, a drop: the low end lands
+   * hardest on the one. Moves only to a beat that collects clearly more
+   * (CLEARLY_BETTER), since in four on the floor every beat is alike and the
+   * one must not wander between them.
+   */
+  private learnDownbeat(keep: number): void {
+    const kick = this.voices.kick
+    const reach = this.slotReach()
+    const usable = this.count - kick.settleHops
+    // A grid that moved an octave numbers different beats: what was learned
+    // of the old ones says nothing of these.
+    if (!(Math.abs(Math.log2(this.period / this.downbeatPeriod)) < 0.5)) {
+      this.downbeatScore.fill(0)
+      this.downbeat = 0
+    }
+    this.downbeatPeriod = this.period
+    for (let j = 0; j < BEATS_PER_BAR; j++) this.downbeatScore[j] *= keep
+    for (let k = 2; k < usable; k++) {
+      // The sub's climb over two hops: what lands in the low end, whatever
+      // shape it has, a kick's or a bass note's.
+      const strength = kick.boomEnergy[(this.head + k) % CAPACITY] - kick.boomEnergy[(this.head + k - 2) % CAPACITY]
+      if (strength <= 0) continue
+      const position = this.positionOf(this.start + k)
+      const nearest = Math.round(position / BINS_PER_BEAT)
+      if (Math.abs(position - nearest * BINS_PER_BEAT) > reach) continue
+      this.downbeatScore[nearest % BEATS_PER_BAR] += strength / Math.max(1, usable)
+    }
+    let best = this.downbeat
+    for (let j = 0; j < BEATS_PER_BAR; j++) if (this.downbeatScore[j] > this.downbeatScore[best]) best = j
+    if (this.downbeatScore[best] > CLEARLY_BETTER * this.downbeatScore[this.downbeat]) this.downbeat = best
+  }
+
   /** Learns every voice's pattern, after one step of the shared memory weight. */
   private learnPatterns(): void {
     const keep = 0.5 ** ((GRID_EVERY_HOPS * this.hopSec) / PATTERN_MEMORY_SEC)
     this.memoryWeight = keep * this.memoryWeight + 1
     for (const voice of Object.values(this.voices)) if (voice.followed) this.learnPattern(voice, keep)
+    this.learnDownbeat(keep)
     for (const voice of Object.values(this.voices)) if (voice.followed && voice.excludeBands.length > 0) this.learnColour(voice)
     if (this.voices.snare.followed) this.learnCounter()
   }
@@ -2432,6 +2560,7 @@ export class DrumTracker {
       cursor.resumedAt = -Infinity
       cursor.counterLastPeak = NaN
       cursor.snareShownAt = -Infinity
+      cursor.boomLastPeak = NaN
     }
     const previous = cursor.lastAsked
     cursor.lastAsked = time
@@ -2479,7 +2608,7 @@ export class DrumTracker {
       else strength = Math.max(strength, value)
       peakAt = k
     }
-    const counter = voice === this.voices.snare ? this.counterResponse(cursor, from, to, contrast, g) : 0
+    const counter = voice === this.voices.snare ? this.counterResponse(cursor, from, to, contrast, g) : voice.boomOnset.length > 0 ? this.boomResponse(voice, cursor, from, to, contrast, g) : 0
     if (strength > 0 || frillStrength > 0) cursor.snareShownAt = Math.max(cursor.snareShownAt, peakAt)
     if (strength <= 0 && frillStrength <= 0) return counter
     const response = (value: number): number => {
@@ -2498,6 +2627,201 @@ export class DrumTracker {
       return Math.max(0, Math.min(1, (db - floorDb) / -floorDb))
     }
     return Math.max(counter, response(strength), FRILL_WEIGHT * response(frillStrength))
+  }
+
+  /**
+   * The kick's response from BOOMS between hops `from` and `to` (header,
+   * BOOMS): low climbs the kick's evidence does not accept, shown as far as
+   * the reader's `contrast` allows. Each boom's DISTINCTNESS (`boomDistinctness`,
+   * 0..1) must exceed the contrast, so contrast 0 lets every distinct thump
+   * through and contrast 1 none. A boom on the bar's ONE (`downbeat`) is a
+   * full hit; anywhere else it shows at BOOM_WEIGHT of its distinctness, so a
+   * kick with its whole signature still outshines it. Never within an
+   * occurrence of a kick the evidence accepts, or of one the groove showed.
+   */
+  private boomResponse(voice: Voice, cursor: DrumCursor, from: number, to: number, contrast: number, g: number): number {
+    let response = 0
+    const span = this.occurrenceSpan()
+    // A boom is judged once, so only where all it is judged on has settled:
+    // its peak test and its climb's top look that far past it.
+    const last = Math.min(Math.floor(to), this.start + this.count - voice.settleHops - 1 - Math.max(this.peakHops, ATTACK_AFTER_HOPS))
+    for (let k = Math.max(Math.floor(from) + 1, Number.isNaN(cursor.boomLastPeak) ? -Infinity : cursor.boomLastPeak + 1); k <= last; k++) {
+      cursor.boomLastPeak = k
+      if (!this.isBoomPeak(voice, k)) continue
+      if (k - cursor.shownAt < span || k - cursor.suppliedAt < span || !this.isLowAt(voice, k) || this.isKickNear(k)) continue
+      const { distinctness, onOne } = this.boomDistinctness(voice, k)
+      if (distinctness <= contrast) continue
+      if (g > 0) cursor.shownAt = k
+      response = Math.max(response, onOne ? 1 : BOOM_WEIGHT * distinctness)
+    }
+    return response
+  }
+
+  /**
+   * How distinct a boom peaking at hop `index` is, 0..1, and whether it lands
+   * on the bar's ONE. Only a boom on a BEAT is one at all: between the beats
+   * the low end is the bass line's (house's off-beat bass is the plainest
+   * case), and an off-beat kick has its click, which the evidence reads. The
+   * geometric mean of three shares, each 0..1:
+   *
+   * - ATTACK (`boomAttackAt`): how suddenly the sub arrived. A bass note
+   *   swelling in or a pad is a line; a thump arrives within a cycle or two.
+   * - PROMINENCE: how far the height of its climb (`boomClimb`: what it ADDS
+   *   to the low end, so a bass note over a boom's tail is not credited with
+   *   the tail) stands above the loudest other low climb within a beat
+   *   either side (`boomNeighbour`, kicks included), from
+   *   PROMINENCE_MIN_DB to PROMINENCE_DB, and in full with none. A bass line
+   *   whose notes all thump alike is the line, and the note that lands harder
+   *   than the ones around it is the event.
+   * - LOUDNESS: its strength against the kick's full hit, over
+   *   CONTRAST_RANGE_DB.
+   */
+  private boomDistinctness(voice: Voice, index: number): { distinctness: number; onOne: boolean } {
+    const level = voice.level
+    const none = { distinctness: 0, onOne: false }
+    if (level <= 0) return none
+    const position = this.positionOf(index)
+    const beat = Math.round(position / BINS_PER_BEAT)
+    if (Math.abs(position - beat * BINS_PER_BEAT) > this.slotReach()) return none
+    const attack = this.boomAttackAt(voice, index)
+    const top = this.boomClimb
+    if (attack <= 0) return none
+    const strength = this.boomStrengthAt(voice, index)
+    if (strength <= 0) return none
+    const loudness = Math.min(1, 1 + (10 * Math.log10(strength / level)) / CONTRAST_RANGE_DB)
+    if (loudness <= 0) return none
+    const neighbour = this.boomNeighbour(voice, index)
+    const prominence = neighbour > 0 ? Math.min(1, (10 * Math.log10(top / neighbour) - PROMINENCE_MIN_DB) / (PROMINENCE_DB - PROMINENCE_MIN_DB)) : 1
+    if (prominence <= 0) return none
+    const onOne = beat % BEATS_PER_BAR === this.downbeat
+    const distinctness = Math.cbrt(attack * prominence * loudness)
+    return { distinctness, onOne }
+  }
+
+  /**
+   * Whether the climb at hop `index` is LOW: within two hops, the sub band
+   * climbs at least LOW_RATIO times as much per Hz as the kick's top band
+   * (`Voice.lowDensity`, `density`). A sub note or an 808 climbs in the top
+   * band hardly at all; a snare's or a clap's noise climbs alike in both, its
+   * share of the sub being only its spectrum's spread.
+   */
+  private isLowAt(voice: Voice, index: number): boolean {
+    let low = 0
+    let top = 0
+    for (let j = index - 2; j <= index + 2; j++) {
+      const k = j - this.start
+      if (k < 0 || k >= this.count) continue
+      const at = (this.head + k) % CAPACITY
+      low = Math.max(low, voice.lowDensity[at])
+      top = Math.max(top, voice.density[at])
+    }
+    return low > 0 && low >= LOW_RATIO * top
+  }
+
+  /**
+   * The loudest boom (the height of its climb, `boomAttackAt`) peaking within
+   * a beat of hop `index` (and an occurrence's reach past it, so a note a
+   * beat away whose peak lands a hop late still counts) but not within an
+   * occurrence of it (where it is the same sound's second climb); 0 when
+   * there is none. A kick counts: a bass note no harder than the kicks
+   * around it is the groove going on, not an event of its own.
+   */
+  private boomNeighbour(voice: Voice, index: number): number {
+    const own = this.occurrenceSpan()
+    const reach = Math.ceil(this.period) + own
+    let most = 0
+    for (let j = index - reach; j <= index + reach; j++) {
+      if (Math.abs(j - index) <= own || !this.isBoomPeak(voice, j)) continue
+      this.boomAttackAt(voice, j)
+      most = Math.max(most, this.boomClimb)
+    }
+    return most
+  }
+
+  /**
+   * A boom's ATTACK, 0..1, from its RISE TIME: the hops the sub band's energy
+   * (`Voice.boomEnergy`, averaged over ATTACK_SMOOTH_HOPS, about one cycle of
+   * the sub, since a single hop is a quarter of one and swings with its
+   * phase) takes from a tenth to nine tenths of its climb to the boom's peak
+   * at `index`. In full at ATTACK_FAST_SEC or quicker, nothing at
+   * ATTACK_SLOW_SEC: a kick or an 808 lands within a cycle or two, a note
+   * swelling in or a pad does not.
+   */
+  private boomAttackAt(voice: Voice, index: number): number {
+    this.boomClimb = 0
+    const from = index - ATTACK_HOPS
+    const to = index + ATTACK_AFTER_HOPS
+    const smoothed = this.attackScratch
+    for (let j = from; j <= to; j++) {
+      let sum = 0
+      for (let d = 0; d < ATTACK_SMOOTH_HOPS; d++) {
+        const e = this.boomEnergyAt(voice, j - d)
+        if (Number.isNaN(e)) return 0
+        sum += e
+      }
+      smoothed[j - from] = sum / ATTACK_SMOOTH_HOPS
+    }
+    // The climb's top: from the boom's onset peak, on while the energy still
+    // climbs (a sub keeps climbing past its steepest point), and no further:
+    // what follows is the boom ringing on, or the next sound.
+    let highAt = index
+    while (highAt < to && smoothed[highAt + 1 - from] >= smoothed[highAt - from]) highAt++
+    const high = smoothed[highAt - from]
+    // The climb's foot: walking back from the top, the lowest hop before the
+    // energy climbs back to half way up again (into what rang before the
+    // boom), so the averaged sub's ripple does not end the walk mid-climb.
+    let footAt = highAt
+    for (let j = highAt - 1; j >= from; j--) {
+      const e = smoothed[j - from]
+      if (e < smoothed[footAt - from]) footAt = j
+      else if (e > (smoothed[footAt - from] + high) / 2) break
+    }
+    const low = smoothed[footAt - from]
+    if (!(high > low)) return 0
+    this.boomClimb = high - low
+    let tenth = footAt
+    let nineTenths = highAt
+    for (let j = footAt; j <= highAt; j++) {
+      const share = (smoothed[j - from] - low) / (high - low)
+      if (share < 0.1) tenth = j
+      if (share >= 0.9) {
+        nineTenths = j
+        break
+      }
+    }
+    const rise = (nineTenths - tenth) * this.hopSec
+    return Math.max(0, Math.min(1, (ATTACK_SLOW_SEC - rise) / (ATTACK_SLOW_SEC - ATTACK_FAST_SEC)))
+  }
+
+  /** The sub band's energy in hop `index` alone (`Voice.boomEnergy`), NaN outside the settled window. */
+  private boomEnergyAt(voice: Voice, index: number): number {
+    const k = index - this.start
+    return k >= 0 && k < this.count - voice.settleHops ? voice.boomEnergy[(this.head + k) % CAPACITY] : NaN
+  }
+
+  /** Whether a voice's boom onset (`Voice.boomOnset`) at `index` is the largest within a sixteenth's half either side (ties to the earlier). */
+  private isBoomPeak(voice: Voice, index: number): boolean {
+    const value = this.boomAt(voice, index)
+    if (value <= 0) return false
+    const reach = this.peakHops
+    for (let j = index - reach; j <= index + reach; j++) {
+      if (j === index) continue
+      const other = this.boomAt(voice, j)
+      if (other > value || (other === value && j < index)) return false
+    }
+    return true
+  }
+
+  /** A boom's strength: the most the kick's strength bands read within two hops of its peak at `index`. */
+  private boomStrengthAt(voice: Voice, index: number): number {
+    let strength = 0
+    for (let j = index - 2; j <= index + 2; j++) strength = Math.max(strength, this.strengthAt(voice, j))
+    return strength
+  }
+
+  private boomAt(voice: Voice, index: number): number {
+    const k = index - this.start
+    return k >= 0 && k < this.count - voice.settleHops ? voice.boomOnset[(this.head + k) % CAPACITY] : 0
   }
 
   /**
