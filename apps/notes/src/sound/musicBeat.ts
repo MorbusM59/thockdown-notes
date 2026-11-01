@@ -227,6 +227,11 @@ function caretBeat(clock: BeatClock, time: number): { phase: number; period: num
   return { phase: clock.phase, period: clock.period }
 }
 
+/** Dips the caret's clock subscribers drew since the last caret trace line (a jump up in the published response). */
+let drawnDips = 0
+/** Frames ticked since the last caret trace line. */
+let framesSinceTrace = 0
+
 /** When the last side-by-side caret line was traced (`traceCaret`). */
 let lastCaretTrace = -Infinity
 
@@ -242,7 +247,9 @@ function traceCaret(listenerTime: number, heardTime: number): void {
   lastCaretTrace = heardTime
   const map = mapCaretAt(heardTime)
   const grid = gridPeriodSec > 0 ? heardTime - ((((heardTime - gridBeatTime) / gridPeriodSec) % 1) + 1) % 1 * gridPeriodSec : NaN
-  appendBeatTrace(`caret el=${musicPlayerService.currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} map=${beatMapOn ? 'on' : 'off'} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} gridBeat=${grid.toFixed(3)} gridPer=${gridPeriodSec.toFixed(4)}`)
+  appendBeatTrace(`caret el=${musicPlayerService.currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} map=${beatMapOn ? 'on' : 'off'} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} gridBeat=${grid.toFixed(3)} gridPer=${gridPeriodSec.toFixed(4)} drawn=${drawnDips} clocks=${clocks.size} frames=${framesSinceTrace}`)
+  drawnDips = 0
+  framesSinceTrace = 0
 }
 
 function send(request: AnalysisRequest): void {
@@ -505,8 +512,14 @@ function tick(frameTimeMs: number): void {
   const hits = trackerRaw[TRACKER_INDEX.hits]
   const level = trackerRaw[TRACKER_INDEX.band]
   for (const band of bands) publish(band, respond(band, mixResponse(band.channel.mix, kicks, hits, level), heardTime, gain))
-  for (const subscriber of clocks) publish(subscriber, pulse(subscriber, heardTime))
+  for (const subscriber of clocks) {
+    const response = pulse(subscriber, heardTime)
+    // A dip as DRAWN: the response jumping up, which is a beat starting on screen.
+    if (response - subscriber.published > 0.3) drawnDips++
+    publish(subscriber, response)
+  }
   for (const counter of counters) count(counter, heardTime)
+  framesSinceTrace++
   traceCaret(listenerTime, heardTime)
   // Asked one frame AHEAD: the answer is back before the next frame, which
   // shows the moment it is for, so the worker costs no lag.
