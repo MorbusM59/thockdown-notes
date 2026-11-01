@@ -63,8 +63,13 @@ const MAX_BPM = 220
 /** The tempo prior: a log-Gaussian centred here, `PRIOR_OCTAVES` wide. */
 const PRIOR_BPM = 120
 const PRIOR_OCTAVES = 1
-/** How much a tempo estimate is drawn to the last one: a log-Gaussian this many octaves wide. */
+/**
+ * How much a tempo estimate is drawn to the last one: a log-Gaussian this many octaves wide, worth at most
+ * CONTINUITY_PULL of a candidate's score. It breaks near-ties only: as a quarter-to-one factor it outvoted the music
+ * itself, so a near-tie the first window decided wrongly (a 3:2 or 4:3 of the beat) held for the whole track.
+ */
 const CONTINUITY_OCTAVES = 0.15
+const CONTINUITY_PULL = 0.1
 /** Least strength (autocorrelation peak against zero lag) an estimate needs to count at all. */
 const MIN_STRENGTH = 0.2
 /**
@@ -359,7 +364,7 @@ export class BeatMap {
         // A peak of the autocorrelation, not a shoulder of one.
         if (scores[lag] < scores[lag - 1] || scores[lag] < scores[lag + 1] || scores[lag] <= 0) continue
         const period = lag * this.hopSec
-        const weight = logGaussian(period, 60 / PRIOR_BPM, PRIOR_OCTAVES) * (Number.isNaN(previous) ? 1 : 0.25 + 0.75 * logGaussian(period, previous, CONTINUITY_OCTAVES))
+        const weight = logGaussian(period, 60 / PRIOR_BPM, PRIOR_OCTAVES) * (Number.isNaN(previous) ? 1 : 1 - CONTINUITY_PULL + CONTINUITY_PULL * logGaussian(period, previous, CONTINUITY_OCTAVES))
         // A beat is judged with everything it builds: its lag AND every whole
         // multiple of it the window holds (the k-th weighed 1/k). A
         // syncopated loop can correlate as strongly at one and a half beats
