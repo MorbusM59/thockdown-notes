@@ -168,6 +168,14 @@ const LAYERED_NOISE_DB = 12
  */
 const HIT_PER_BEAT = 1.5
 
+/**
+ * How soft each kind of test is (`atLeast`): the span over which a test goes from not met (0) to met (1), centred on
+ * its threshold. A level in dB, a share of instances or of power, and instances a beat.
+ */
+const DB_WIDTH = 6
+const SHARE_WIDTH = 0.2
+const PER_BEAT_WIDTH = 0.4
+
 /** Where the beats fall: the beat times between two moments. A port, so the map does not own the beat grid. */
 export interface BeatPort {
   beatsBetween(from: number, to: number): number[]
@@ -229,8 +237,9 @@ interface Signal {
   /** Per octave band: the template's level under its loudest band, and its instances' mean shape. */
   balance: Float64Array
   shape: Float32Array[]
-  kick: boolean
-  hit: boolean
+  /** How far it is a kick, and a hit, 0..1 (see `flag`). */
+  kick: number
+  hit: number
 }
 
 /** One instance, as held. */
@@ -246,8 +255,8 @@ interface Instance {
 export interface SignalSummary {
   id: number
   bands: number[]
-  kick: boolean
-  hit: boolean
+  kick: number
+  hit: number
   instances: number
 }
 
@@ -255,8 +264,8 @@ export interface SignalSummary {
 export interface SignalInstance {
   time: number
   signal: number
-  kick: boolean
-  hit: boolean
+  kick: number
+  hit: number
   match: number
   intensity: number
 }
@@ -615,7 +624,7 @@ export class SignalMap {
         for (let t = 0; t < band.length; t++) peak = Math.max(peak, band[t])
         for (let t = 0; t < band.length; t++) band[t] = Math.max(SHAPE_FLOOR_DB, 10 * Math.log10((band[t] + 1e-30) / (peak + 1e-30)))
       }
-      this.signals.push({ id: k, mask, balance, shape, kick: false, hit: false })
+      this.signals.push({ id: k, mask, balance, shape, kick: 0, hit: 0 })
     }
   }
 
@@ -650,11 +659,20 @@ export class SignalMap {
    *   HIT_PER_BEAT.
    *
    * The shapes are the template's own, a frame (HOP samples) per step.
+   *
+   * Each flag is a CONFIDENCE, 0..1, not a yes or no: every test above is met
+   * by degrees (`atLeast`, `atMost`: 0.5 at its threshold), "and" is the
+   * least of its parts and "or" the most. A sound on the edge of a test (a
+   * wide-band layer over a kick, half a hit by its spectrum) would otherwise
+   * flip between nothing and a full hit each time the map is re-judged; as a
+   * confidence it reads faintly, and a reader weighs each instance by it.
    */
   private flag(): void {
     const times = new Map<number, number[]>()
     for (const x of this.instances) { const l = times.get(x.signal) ?? []; l.push(x.time); times.set(x.signal, l) }
     for (const s of this.signals) {
+      s.kick = 0
+      s.hit = 0
       const list = times.get(s.id) ?? []
       if (list.length < MIN_FLAG_INSTANCES) continue
       const beats = this.beats.beatsBetween(list[0] - 2, list[list.length - 1] + 2)
@@ -664,23 +682,28 @@ export class SignalMap {
         for (let k = 0; k < GRID_DIVISIONS; k++) grid.push(beats[i] + ((beats[i + 1] - beats[i]) * k) / GRID_DIVISIONS)
       }
       grid.push(beats[beats.length - 1])
-      const onGrid = list.filter((t) => nearest(grid, t) <= ON_GRID_SEC).length / list.length >= ON_GRID_SHARE
-      if (!onGrid || patternShare(list, beats) < PATTERN_SHARE) continue
+      const onGrid = atLeast(list.filter((t) => nearest(grid, t) <= ON_GRID_SEC).length / list.length, ON_GRID_SHARE, SHARE_WIDTH)
+      const patterned = Math.min(onGrid, atLeast(patternShare(list, beats), PATTERN_SHARE, SHARE_WIDTH))
       const spanBeats = Math.max(1, beats.filter((t) => t >= list[0] && t <= list[list.length - 1]).length)
       const perBeat = list.length / spanBeats
       const bands = bandsOf(s.mask)
+      const level = (b: number, floor: number) => atLeast(s.balance[b], floor, DB_WIDTH)
       // A click is the top of the sound falling away above it; a hat landing with a bass note climbs toward 12.8kHz instead.
       let above = -Infinity
       for (const b of bands) if (BANDS[b] > 3200) above = Math.max(above, s.balance[b])
-      const click = bands.some((b) => BANDS[b] >= 800 && BANDS[b] <= 3200 && s.balance[b] >= CLICK_DB && s.balance[b] >= above && at(s.shape[b], CLICK_HOPS) <= -CLICK_FALL_DB)
+      let click = 0
+      for (const b of bands) {
+        if (BANDS[b] < 800 || BANDS[b] > 3200) continue
+        click = Math.max(click, Math.min(level(b, CLICK_DB), atLeast(s.balance[b], above, DB_WIDTH), atLeast(-at(s.shape[b], CLICK_HOPS), CLICK_FALL_DB, DB_WIDTH)))
+      }
       const lows = bands.filter((b) => BANDS[b] <= 200)
       const swept = lows.filter((b) => s.balance[b] >= SWEEP_LEVEL_DB)
-      const sweep = swept.length >= 2 && at(s.shape[swept[swept.length - 1]], SWEEP_HOPS) <= at(s.shape[swept[0]], SWEEP_HOPS) - SWEEP_DB
-      const low = this.shareIn(s, 0, LOW_TOP_HZ) >= LOW_SHARE || (this.shareIn(s, 0, 250) >= LOW_SHARE && sweep)
+      const sweep = swept.length >= 2 ? atLeast(at(s.shape[swept[0]], SWEEP_HOPS) - at(s.shape[swept[swept.length - 1]], SWEEP_HOPS), SWEEP_DB, DB_WIDTH) : 0
+      const low = Math.max(atLeast(this.shareIn(s, 0, LOW_TOP_HZ), LOW_SHARE, SHARE_WIDTH), Math.min(atLeast(this.shareIn(s, 0, 250), LOW_SHARE, SHARE_WIDTH), sweep))
       // A kick's body reaches the 200Hz band; a bass note's stays in its two lowest octaves (and a bass note under a
       // hat leaves a gap between them).
-      const reach = s.balance[BANDS.indexOf(200)] >= -KICK_REACH_DB
-      s.kick = reach && low && (click || sweep) && perBeat <= KICK_PER_BEAT
+      const reach = level(BANDS.indexOf(200), -KICK_REACH_DB)
+      s.kick = Math.min(patterned, reach, low, Math.max(click, sweep), atMost(perBeat, KICK_PER_BEAT, PER_BEAT_WIDTH))
       // A hit is judged by its spectrum alone (a template's decay is not the sound's: the fit explains a long tail with
       // fresh activations, so a template ends early). Levels are read against the loudest band from BODY_LOW_HZ up,
       // not the whole sound's: where a hit always lands with a kick the two are one template, and the kick's
@@ -696,17 +719,19 @@ export class SignalMap {
       // BODY_DB under the sizzle above it (a hat's power lies far above its body).
       const bodyBand = loudestIn(BODY_LOW_HZ, 3200)
       const sizzle = loudestIn(800, Infinity)
-      const body = bodyBand >= 0 && s.balance[bodyBand] - hitTop >= BODY_TOP_DB && (sizzle < 0 || s.balance[bodyBand] >= s.balance[sizzle] + BODY_DB)
+      const body = bodyBand < 0 ? 0 : Math.min(atLeast(s.balance[bodyBand] - hitTop, BODY_TOP_DB, DB_WIDTH), sizzle < 0 ? 1 : atLeast(s.balance[bodyBand] - s.balance[sizzle], BODY_DB, DB_WIDTH))
       // NOISE: at least NOISE_BANDS bands from 800Hz up within NOISE_DB of the whole sound's top, one of them at 3.2kHz
       // or above (a kick's click lies further down than that, and so does a snare a kick's template sometimes absorbs).
-      const noisy = bands.filter((b) => BANDS[b] >= 800 && s.balance[b] >= -NOISE_DB)
-      const noise = noisy.length >= NOISE_BANDS && noisy.some((b) => BANDS[b] >= 3200)
+      const noisy = bands.filter((b) => BANDS[b] >= 800).map((b) => level(b, -NOISE_DB)).sort((p, q) => q - p)
+      const high = Math.max(0, ...bands.filter((b) => BANDS[b] >= 3200).map((b) => level(b, -NOISE_DB)))
+      const noise = Math.min(noisy[NOISE_BANDS - 1] ?? 0, high)
       // A low sound carries a hit only where its noise is loud (a kick and a clap that always land together): a kick's
       // template that absorbed some of a snare landing with it now and then carries that noise too, but faintly.
-      const loudNoise = sizzle >= 0 && s.balance[sizzle] >= -LAYERED_NOISE_DB
-      s.hit = (!low || loudNoise) && body && noise && perBeat <= HIT_PER_BEAT
+      const loudNoise = sizzle < 0 ? 0 : level(sizzle, -LAYERED_NOISE_DB)
+      s.hit = Math.min(patterned, Math.max(1 - low, loudNoise), body, noise, atMost(perBeat, HIT_PER_BEAT, PER_BEAT_WIDTH))
     }
   }
+
 
   /**
    * Brings the map up to date for a listener at `heardTime`: learns or
@@ -756,7 +781,7 @@ export class SignalMap {
    * and a snare landing together carry different flags and both stay.
    */
   private withoutDuplicates(): Instance[] {
-    const flagsOf = (x: Instance) => { const s = this.signals[x.signal]; return (s.kick ? 1 : 0) | (s.hit ? 2 : 0) }
+    const flagsOf = (x: Instance) => { const s = this.signals[x.signal]; return (s.kick >= 0.5 ? 1 : 0) | (s.hit >= 0.5 ? 2 : 0) }
     const out: Instance[] = []
     for (const x of this.instances) {
       const f = flagsOf(x)
@@ -815,6 +840,19 @@ function patternShare(times: number[], beats: number[]): number {
 /** A shape's level `t` frames on, or its last where it is shorter. */
 function at(shape: Float32Array, t: number): number {
   return shape[Math.min(t, shape.length - 1)]
+}
+
+/**
+ * How far `x` meets "at least `floor`", 0..1: 0.5 at the floor itself, rising linearly to 1 half a `width` above it
+ * and falling to 0 half a `width` below. The flags are measurements, not decisions (see `flag`).
+ */
+function atLeast(x: number, floor: number, width: number): number {
+  return Math.max(0, Math.min(1, 0.5 + (x - floor) / width))
+}
+
+/** How far `x` meets "at most `ceiling`", 0..1 (see `atLeast`). */
+function atMost(x: number, ceiling: number, width: number): number {
+  return atLeast(-x, -ceiling, width)
 }
 
 /** The distance from `t` to the nearest of the sorted `times`. */

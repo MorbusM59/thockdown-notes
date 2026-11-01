@@ -18,7 +18,8 @@
  *
  * The two talk in ASKS. Once a frame the page asks for the moment it will
  * draw next (`AnalysisAsk`): every reader's RAW response there (the loudest
- * instance of its drum in the score since its last ask, past its contrast;
+ * instance of its drum in the score since its last ask, past its contrast and
+ * weighed by how far its signal is that drum;
  * a level band's stretched level), the beat map's beats around it
  * (`beatMap.ts`), and the window's peak. The answer arrives before that frame, so the
  * worker adds no lag beyond the one frame the page asks ahead by. Every
@@ -398,9 +399,11 @@ export class MusicAnalysis {
     let raw = 0
     for (const x of scored.instances) {
       if (x.time <= from || x.time > heardTime) continue
-      if (band.drum === 'kicks' ? x.kick : x.hit) {
-        raw = Math.max(raw, instanceResponse(x.intensity, contrast))
-        if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)}`)
+      // Weighed by how far its signal is this drum: a sound on the edge of being one shows faintly.
+      const confidence = band.drum === 'kicks' ? x.kick : x.hit
+      if (confidence > 0) {
+        raw = Math.max(raw, confidence * instanceResponse(x.intensity, contrast))
+        if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} confidence=${confidence.toFixed(2)} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)}`)
       }
     }
     return raw
@@ -453,8 +456,9 @@ export class MusicAnalysis {
   }
 }
 
-/** One signal in the trace: its id, its flags and its instances held, e.g. `3k:12` (`k` kick, `h` hit). */
-function signalLabel(signal: { id: number; kick: boolean; hit: boolean; instances: number }): string {
-  return `${signal.id}${signal.kick ? 'k' : ''}${signal.hit ? 'h' : ''}:${signal.instances}`
+/** One signal in the trace: its id, its kick and hit confidences in tenths where above zero, and its instances held, e.g. `3k9h1:12`. */
+function signalLabel(signal: { id: number; kick: number; hit: number; instances: number }): string {
+  const tenths = (x: number) => Math.min(9, Math.round(x * 10))
+  return `${signal.id}${signal.kick > 0 ? `k${tenths(signal.kick)}` : ''}${signal.hit > 0 ? `h${tenths(signal.hit)}` : ''}:${signal.instances}`
 }
 

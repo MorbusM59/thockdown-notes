@@ -23,21 +23,21 @@ describe('SignalMap', { timeout: 60_000 }, () => {
   it('finds every kick and every snare of a four-on-the-floor kit, and flags no hat', () => {
     const played = track(30, 124, [{ from: 0, kicks: FOUR, snares: BACKBEAT, hats: EIGHTHS }])
     const map = mapOf(played)
-    const kicks = found(map, played.kicks, (i) => i.kick)
-    const snares = found(map, played.snares, (i) => i.hit)
+    const kicks = found(map, played.kicks, (i) => i.kick >= 0.5)
+    const snares = found(map, played.snares, (i) => i.hit >= 0.5)
     expect(kicks.missed).toEqual([])
     expect(snares.missed).toEqual([])
-    expect(strays(map, played.kicks, (i) => i.kick)).toEqual([])
-    expect(strays(map, played.snares, (i) => i.hit)).toEqual([])
+    expect(strays(map, played.kicks, (i) => i.kick >= 0.5)).toEqual([])
+    expect(strays(map, played.snares, (i) => i.hit >= 0.5)).toEqual([])
   })
 
   it('a kick layered with a snare fires both, and a lone kick only the kick', () => {
     const played = track(30, 124, [{ from: 0, kicks: FOUR, snares: BACKBEAT, hats: [] }])
     const map = mapOf(played)
-    expect(found(map, played.snares, (i) => i.hit).missed).toEqual([])
-    expect(found(map, played.kicks, (i) => i.kick).missed).toEqual([])
+    expect(found(map, played.snares, (i) => i.hit >= 0.5).missed).toEqual([])
+    expect(found(map, played.kicks, (i) => i.kick >= 0.5).missed).toEqual([])
     const lone = played.kicks.filter((t) => !played.snares.some((s) => Math.abs(s - t) < 0.01))
-    expect(strays(map, played.snares, (i) => i.hit).filter((t) => lone.some((k) => Math.abs(k - t) < TOLERANCE_SEC))).toEqual([])
+    expect(strays(map, played.snares, (i) => i.hit >= 0.5).filter((t) => lone.some((k) => Math.abs(k - t) < TOLERANCE_SEC))).toEqual([])
   })
 
   it('the first kick of a section with a new kick sound is a kick, judged with what follows it', () => {
@@ -47,15 +47,15 @@ describe('SignalMap', { timeout: 60_000 }, () => {
     ])
     const map = mapOf(played)
     const first = played.kicks.find((t) => t >= 20)!
-    expect(found(map, [first], (i) => i.kick).missed).toEqual([])
-    expect(found(map, played.kicks, (i) => i.kick).missed).toEqual([])
+    expect(found(map, [first], (i) => i.kick >= 0.5).missed).toEqual([])
+    expect(found(map, played.kicks, (i) => i.kick >= 0.5).missed).toEqual([])
   })
 
   it('records intensity in absolute dB: a kick 12 dB down reads 0.2 lower', () => {
     const loud = track(12, 124, [{ from: 0, kicks: FOUR, snares: [], hats: [] }])
     const quiet = { ...loud, samples: loud.samples.map((x) => x / 4) }
     const level = (p: Played) => {
-      const i = mapOf(p).instancesBetween(4, 8).filter((x) => x.kick)
+      const i = mapOf(p).instancesBetween(4, 8).filter((x) => x.kick >= 0.5)
       return i.reduce((s, x) => s + x.intensity, 0) / i.length
     }
     expect(level(loud) - level(quiet)).toBeCloseTo(12 / 60, 1)
@@ -73,10 +73,10 @@ describe('SignalMap', { timeout: 60_000 }, () => {
       const played = track(40, bpm, [{ from: 0, ...style }])
       const map = mapOf(played)
       expect({
-        kicksMissed: found(map, played.kicks, (i) => i.kick).missed,
-        snaresMissed: found(map, played.snares, (i) => i.hit).missed,
-        kickStrays: strays(map, played.kicks, (i) => i.kick),
-        hitStrays: strays(map, played.snares, (i) => i.hit),
+        kicksMissed: found(map, played.kicks, (i) => i.kick >= 0.5).missed,
+        snaresMissed: found(map, played.snares, (i) => i.hit >= 0.5).missed,
+        kickStrays: strays(map, played.kicks, (i) => i.kick >= 0.5),
+        hitStrays: strays(map, played.snares, (i) => i.hit >= 0.5),
       }).toEqual({ kicksMissed: [], snaresMissed: [], kickStrays: [], hitStrays: [] })
     })
   }
@@ -95,10 +95,10 @@ describe('SignalMap', { timeout: 60_000 }, () => {
       while (fed < Math.min(played.samples.length, (heard + 20) * RATE)) { map.feed(played.samples.subarray(fed, fed + chunk), fed / RATE); fed += chunk }
       map.analyse(heard)
     }
-    expect(found(map, played.kicks, (i) => i.kick).missed).toEqual([])
-    expect(found(map, played.snares, (i) => i.hit).missed).toEqual([])
-    expect(strays(map, played.kicks, (i) => i.kick)).toEqual([])
-    expect(strays(map, played.snares, (i) => i.hit)).toEqual([])
+    expect(found(map, played.kicks, (i) => i.kick >= 0.5).missed).toEqual([])
+    expect(found(map, played.snares, (i) => i.hit >= 0.5).missed).toEqual([])
+    expect(strays(map, played.kicks, (i) => i.kick >= 0.5)).toEqual([])
+    expect(strays(map, played.snares, (i) => i.hit >= 0.5)).toEqual([])
   })
 
   it('read by a moving listener while it forgets what lies behind, gives every hit once and holds a bounded span', () => {
@@ -118,8 +118,8 @@ describe('SignalMap', { timeout: 60_000 }, () => {
       // As a reader takes them: each instance once, when the listener reaches it.
       for (const x of map.instancesBetween(read, heard + 1e-9)) {
         if (x.time <= read) continue
-        if (x.kick) kicks.push(x.time)
-        if (x.hit) hits.push(x.time)
+        if (x.kick >= 0.5) kicks.push(x.time)
+        if (x.hit >= 0.5) hits.push(x.time)
       }
       read = heard
     }
@@ -141,7 +141,7 @@ describe('SignalMap', { timeout: 60_000 }, () => {
     const bar = (4 * 60) / 124
     for (let t = 4 * bar; t < 28; t += 4 * bar) crash(t - 0.06, 0.06)
     const map = mapOf(played)
-    expect(found(map, played.kicks, (i) => i.kick).missed).toEqual([])
+    expect(found(map, played.kicks, (i) => i.kick >= 0.5).missed).toEqual([])
   })
 })
 
