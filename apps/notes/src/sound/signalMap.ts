@@ -742,7 +742,7 @@ export class SignalMap {
       const loudNoise = sizzle < 0 ? 0 : level(sizzle, -LAYERED_NOISE_DB)
       s.hit = Math.min(patterned, Math.max(1 - low, loudNoise), body, noise, atMost(perBeat, HIT_PER_BEAT, PER_BEAT_WIDTH))
       const d = (x: number) => Math.round(x * 9)
-      s.why = `grid${d(onGrid)}pat${d(patterned)}perBeat${perBeat.toFixed(1)} K:reach${d(reach)}low${d(low)}click${d(click)}sweep${d(sweep)} H:quiet${d(Math.max(1 - low, loudNoise))}body${d(body)}noise${d(noise)}`
+      s.why = `grid${d(onGrid)}pat${d(patterned)}perBeat${perBeat.toFixed(1)} slots=${slotHistogram(list, beats)} K:reach${d(reach)}low${d(low)}click${d(click)}sweep${d(sweep)} H:quiet${d(Math.max(1 - low, loudNoise))}body${d(body)}noise${d(noise)}`
     }
   }
 
@@ -849,6 +849,27 @@ function patternShare(times: number[], beats: number[]): number {
   if (placed === 0) return 0
   const top = [...counts.values()].sort((a, b) => b - a).slice(0, PATTERN_SLOTS)
   return top.reduce((a, b) => a + b, 0) / placed
+}
+
+/**
+ * Trace only (`thockdown:debug-beat`'s `score why`): where a signal's instances fall in the four-beat bar
+ * `patternShare` folds them onto, as `beat.position:count` for the ten busiest positions (beat 0..3, position
+ * 0..GRID_DIVISIONS within it), then `/placed`. Says whether a pattern fails for having more than PATTERN_SLOTS
+ * positions or for being smeared across the bar.
+ */
+function slotHistogram(times: number[], beats: number[]): string {
+  const counts = new Map<number, number>()
+  let placed = 0
+  let k = 0
+  for (const t of times) {
+    while (k + 1 < beats.length && beats[k + 1] <= t) k++
+    if (k + 1 >= beats.length || beats[k] > t) continue
+    const slot = ((k % 4) * GRID_DIVISIONS + Math.round(((t - beats[k]) / (beats[k + 1] - beats[k])) * GRID_DIVISIONS)) % (4 * GRID_DIVISIONS)
+    counts.set(slot, (counts.get(slot) ?? 0) + 1)
+    placed++
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+  return top.map(([slot, n]) => `${Math.floor(slot / GRID_DIVISIONS)}.${slot % GRID_DIVISIONS}:${n}`).join(',') + `/${placed}`
 }
 
 /** A shape's level `t` frames on, or its last where it is shorter. */
