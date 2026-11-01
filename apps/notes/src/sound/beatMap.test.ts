@@ -72,6 +72,24 @@ describe('the rolling beat map', () => {
     expect(match(expected, shown, 21, 55)).toMatchObject({ missed: 0, extra: 0 })
   })
 
+  it('keeps the caret on the kicks of a hat-heavy track at 90 to 110 BPM', () => {
+    for (const bpm of [90, 100, 110]) {
+      const beat = 60 / bpm
+      const kicks = render(beatsOf(0, 60, () => beat), 60)
+      const hats = render(beatsOf(beat / 2, 60, () => beat), 60)
+      const samples = new Float32Array(kicks.length)
+      for (let i = 0; i < samples.length; i++) samples[i] = kicks[i] + 0.6 * hats[i]
+      const { map } = play(samples.subarray(0, 50 * RATE), 20)
+      for (const t of [36.1, 41.3, 47.9]) {
+        const { phase, period } = map.caretAt(t)
+        expect(period, `${bpm} BPM`).toBeCloseTo(beat, 1)
+        const start = t - phase * period
+        const off = Math.abs(start / beat - Math.round(start / beat)) * beat
+        expect(off, `${bpm} BPM at ${t}`).toBeLessThan(0.04)
+      }
+    }
+  })
+
   it('follows a ritardando beat by beat', () => {
     // 128 BPM easing to 100 BPM over twenty seconds.
     const period = (t: number) => 60 / (128 - 28 * Math.min(1, Math.max(0, (t - 15) / 20)))
