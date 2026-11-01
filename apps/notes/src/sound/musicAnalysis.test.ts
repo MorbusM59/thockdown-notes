@@ -76,7 +76,7 @@ async function play(samples: Float32Array, from: number, seconds: number, contra
     streams.push(stream)
     return stream as unknown as MusicDecodeStream
   })
-  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, source: 'kick', frequencyHz: 0, octaves: 0 }], drums: true, beatMap: true })
+  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, source: 'kick', frequencyHz: 0, octaves: 0 }], drums: true })
   await Promise.resolve()
   await Promise.resolve()
   const answers: AnalysisAnswer[] = []

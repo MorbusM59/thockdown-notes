@@ -33,9 +33,10 @@
  * pulse absent for the whole of the look-ahead.
  *
  * A CLOCK channel (the caret's, `subscribeMusicClock`) follows no band and
- * no hit: it pulses on a steady `BeatClock` (`beatClock.ts`) steered by the
- * drum analysis's tempo grid, so it keeps time through fills and breaks and
- * glides to each new tempo of a compilation. Its pulse is the same fall a
+ * no hit: it pulses on the beat map's caret (`beatMap.ts`, planned in the
+ * worker 30s ahead), which lands on every beat through tempo changes and
+ * carries across a gap, and is held here through a missing beat for up to
+ * `MAP_BEAT_LOSS_SEC`. Its pulse is the same fall a
  * hit makes (`pulseCurve`), restarted on every beat and never longer than
  * one.
  *
@@ -70,7 +71,6 @@
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerCaret, VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, TRACKER_DRUM, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
-import { BeatClock } from './beatClock'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
@@ -120,7 +120,6 @@ const bands = new Set<Band>()
 
 /** A CLOCK subscriber (the caret's): a steady beat and the fall each beat makes. */
 interface Clock {
-  clock: BeatClock
   caret: VisualizerCaret
   listener: BeatListener
   published: number
@@ -142,7 +141,6 @@ const clocks = new Set<Clock>()
 
 /** A TEMPO subscriber: the heard media time and the steady beat's period, every frame (NaN while there is no beat). */
 interface Counter {
-  clock: BeatClock
   listener: (timeSec: number, periodSec: number) => void
 }
 
@@ -186,25 +184,6 @@ let analysedTrackers = 0
 let gridPeriodSec = NaN
 let gridBeatTime = NaN
 
-/**
- * Whether the caret follows the beat map (`beatMap.ts`, planned in the
- * worker) rather than the `BeatClock` steered by the drum tracker's grid.
- * Off unless the `thockdown:beat-map` localStorage flag is set, read when the
- * analysis restarts: the map drifted against the music on one machine and
- * not in any reproduction, so it stays opt-in until a trace from that
- * machine (`thockdown:debug-beat`, which logs both beats side by side once
- * a second) shows why.
- */
-let beatMapOn = false
-
-function readBeatMapFlag(): boolean {
-  try {
-    return localStorage.getItem('thockdown:beat-map') !== null
-  } catch {
-    return false
-  }
-}
-
 /** How long the map may answer no beat before the caret is let go to its own blink. */
 const MAP_BEAT_LOSS_SEC = 4
 
@@ -220,12 +199,6 @@ function mapCaretAt(time: number): { phase: number; period: number } {
   return { phase: at - Math.floor(at), period: mapPeriod }
 }
 
-/** The caret's beat at `time`: the map's when it is on, else `clock` steered to the tracker's grid. */
-function caretBeat(clock: BeatClock, time: number): { phase: number; period: number } {
-  if (beatMapOn) return mapCaretAt(time)
-  clock.advance(time, gridPeriodSec, gridBeatTime)
-  return { phase: clock.phase, period: clock.period }
-}
 
 /** Dips the caret's clock subscribers drew since the last caret trace line (a jump up in the published response). */
 let drawnDips = 0
@@ -238,16 +211,18 @@ let lastCaretTrace = -Infinity
 /**
  * One trace line a second while the beat trace is on: where the playback
  * element is, the time heard, and the beat each caret source puts before it
- * with its period. A drift between the map and the music shows as `map`
- * walking against `clock` (or against the kicks heard) while `el` and
- * `heard` keep their constant offset.
+ * with its period (the map's, which drives the caret, and the drum
+ * tracker's grid beside it as a cross-check), and how many dips the caret
+ * drew. A drift between the map and the music shows as `mapBeat` walking
+ * against `gridBeat` (or the kicks heard) while `el` and `heard` keep their
+ * constant offset.
  */
 function traceCaret(listenerTime: number, heardTime: number): void {
   if (!isBeatTraceOn() || Math.abs(heardTime - lastCaretTrace) < 1) return
   lastCaretTrace = heardTime
   const map = mapCaretAt(heardTime)
   const grid = gridPeriodSec > 0 ? heardTime - ((((heardTime - gridBeatTime) / gridPeriodSec) % 1) + 1) % 1 * gridPeriodSec : NaN
-  appendBeatTrace(`caret el=${musicPlayerService.currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} map=${beatMapOn ? 'on' : 'off'} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} gridBeat=${grid.toFixed(3)} gridPer=${gridPeriodSec.toFixed(4)} drawn=${drawnDips} clocks=${clocks.size} frames=${framesSinceTrace}`)
+  appendBeatTrace(`caret el=${musicPlayerService.currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} gridBeat=${grid.toFixed(3)} gridPer=${gridPeriodSec.toFixed(4)} drawn=${drawnDips} clocks=${clocks.size} frames=${framesSinceTrace}`)
   drawnDips = 0
   framesSinceTrace = 0
 }
@@ -336,15 +311,8 @@ function restartAnalysis(listenerTime: number): void {
   gridPeriodSec = NaN
   gridBeatTime = NaN
   mapTime = mapPhase = mapPeriod = NaN
-  beatMapOn = readBeatMapFlag()
   const id = ++run
-  // A new track's beat is not the last one's; a seek in the same track keeps the tempo and seats on the next grid.
-  const newTrack = analysedUrl !== url
   analysedUrl = url
-  for (const { clock } of [...clocks, ...counters]) {
-    if (newTrack) clock.reset()
-    else clock.restart()
-  }
   if (isBeatTraceOn() && url) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
   analysedTrackers = readsOf()
   rebuildAskReaders()
@@ -355,7 +323,7 @@ function restartAnalysis(listenerTime: number): void {
     const { frequencyHz, octaves } = trackers.band
     readers.push({ id: index, source: name === 'band' ? 'band' : TRACKER_DRUM[name], frequencyHz, octaves })
   }
-  send({ type: 'restart', run: id, url, listenerTime, readers, drums: needsDrums(), beatMap: beatMapOn })
+  send({ type: 'restart', run: id, url, listenerTime, readers, drums: needsDrums() })
 }
 
 /**
@@ -390,7 +358,7 @@ function respond(band: Band, raw: number, listenerTime: number, gain: number): n
 
 /** A clock's response: its fall, restarted on each of its beats and cut at the next. */
 function pulse(subscriber: Clock, listenerTime: number): number {
-  const { phase, period } = caretBeat(subscriber.clock, listenerTime)
+  const { phase, period } = mapCaretAt(listenerTime)
   setLocked(subscriber, !Number.isNaN(phase))
   if (Number.isNaN(phase)) return 0
   const { fallSec, shape } = subscriber.caret
@@ -399,7 +367,7 @@ function pulse(subscriber: Clock, listenerTime: number): number {
 
 /** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
 function count(counter: Counter, listenerTime: number): void {
-  const { phase, period } = caretBeat(counter.clock, listenerTime)
+  const { phase, period } = mapCaretAt(listenerTime)
   counter.listener(listenerTime, Number.isNaN(phase) ? NaN : period)
 }
 
@@ -666,7 +634,7 @@ export function subscribeMusicMix(channel: MusicMixChannel, listener: BeatListen
  * read), so the caret can blink whenever there is no beat to follow.
  */
 export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener, lockListener: LockListener): MusicClockSubscription {
-  const subscriber: Clock = { clock: new BeatClock(), caret, listener, published: 0, lockListener, locked: false }
+  const subscriber: Clock = { caret, listener, published: 0, lockListener, locked: false }
   const update = (next: VisualizerCaret) => {
     subscriber.caret = next
   }
@@ -690,7 +658,7 @@ export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListen
  * at the music's rate integrates time over period and never sees the jump.
  */
 export function subscribeMusicTempo(listener: (timeSec: number, periodSec: number) => void): () => void {
-  const counter: Counter = { clock: new BeatClock(), listener }
+  const counter: Counter = { listener }
   counters.add(counter)
   added()
   return () => {

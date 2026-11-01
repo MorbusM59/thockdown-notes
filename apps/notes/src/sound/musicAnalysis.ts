@@ -77,8 +77,6 @@ export interface AnalysisRestart {
   readers: ReaderSource[]
   /** Whether anything reads the drum analysis (a drum reader, or the caret's clock for its grid). */
   drums: boolean
-  /** Whether to plan the beat map and answer the caret from it (the `thockdown:beat-map` flag, `musicBeat.ts`). */
-  beatMap?: boolean
 }
 
 export interface AnalysisAsk {
@@ -112,7 +110,7 @@ export interface AnalysisAnswer {
   raws: number[]
   /** The window's peak sample magnitude before `heardTime` (`PeakWindow.peakSince`), NaN while nothing is decoded. */
   peak: number
-  /** The drum tracker's tempo grid (`DrumTracker.gridPeriodSec`/`gridBeatTime`), which the caret's `BeatClock` follows unless the beat map is on. */
+  /** The drum tracker's tempo grid (`DrumTracker.gridPeriodSec`/`gridBeatTime`), traced beside the map's caret as a cross-check (`beatTrace.ts`). */
   gridPeriodSec: number
   gridBeatTime: number
   /** The caret's beat at `heardTime` (`BeatMap.caretAt`): how far into it, 0..1, and its period (s); NaN where there is none. */
@@ -329,7 +327,7 @@ export class MusicAnalysis {
         else band.meter = new BandLevelMeter(sampleRate, band.frequencyHz, band.octaves)
       }
       this.tracker = request.drums ? new DrumTracker(sampleRate) : null
-      this.map = request.drums && request.beatMap ? new BeatMap(sampleRate) : null
+      this.map = request.drums ? new BeatMap(sampleRate) : null
       this.delay = this.map ? new DelayRing(sampleRate) : null
       this.started = id
       // The file may have taken a moment to open: start from where the listener is now.
