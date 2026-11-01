@@ -36,7 +36,10 @@
  *    faint for seconds. The fade is what keeps a breakdown faint: the bass
  *    line is measured against kicks that are fading, not forgotten. The
  *    onset is the weighted GEOMETRIC MEAN of the three: large only when all
- *    three climb together.
+ *    three climb together. A kick with no beater click has nothing in the
+ *    top band and reads zero there, so its falling pitch stands in for the
+ *    click: the body band climbing and then leaving as the sub climbs
+ *    (`DrumTracker.readSweep`), which a bass note's start does not do.
  *
  * 2. TEMPO AND PHASE, from the whole window (`musicBeat.ts` decodes the track
  *    seconds ahead, so the window reaches past the listener as well as
@@ -247,10 +250,33 @@ interface VoiceSpec {
    * strum), not the excluded sound.
    */
   confirmedBy?: Drum
+  /**
+   * The hops a falling pitch may take to cross from the onset's second band
+   * to its first, when that SWEEP stands in for the last band's climb
+   * (`DrumTracker.pushHop`). Left out: the drum has no such sound.
+   */
+  sweepHops?: number
 }
 
 /** The half-life of a band's remembered peak rises, for normalising the next. */
 const BAND_MEMORY_SEC = 4
+/**
+ * Hops (~64ms) a kick's falling pitch may take from its body (140Hz) to its
+ * sub (55Hz). A kick's sine falls from one to the other over a few tens of
+ * milliseconds: measured on a clickless kick, the body band's climb peaked
+ * 45ms before the sub band's (`VoiceSpec.sweepHops`).
+ */
+const KICK_SWEEP_HOPS = 12
+/**
+ * The least share of the sub band's climb the body band's must have reached
+ * for a sweep to be a kick's (`KICK_SWEEP_HOPS`): the clickless kick
+ * measured climbed about as far in both (body 0.28 against sub 0.29..0.42).
+ */
+const SWEEP_BODY_SHARE = 0.5
+/** The least share of its peak a sweep's body climb has fallen by (`KICK_SWEEP_HOPS`): measured 0.98 on the clickless kick as its sub peaked. */
+const SWEEP_FALL = 0.9
+/** The least a sweep's sub climbs, against the band's yardstick (`KICK_SWEEP_HOPS`). */
+const SWEEP_CLIMB = 0.5
 /**
  * Which of a band's remembered peak rises (largest first, as faded) a rise
  * is measured against: the third, so up to two outliers do not set it.
@@ -462,6 +488,7 @@ const VOICES: Record<Drum, VoiceSpec> = {
     envelopeHops: ENVELOPE_HOPS,
     strengthBands: 2,
     exclude: [],
+    sweepHops: KICK_SWEEP_HOPS,
   },
   snare: {
     onset: [[210, 1.2, 0.3], [1800, 0.8, 0.4], [5000, 0.8, 0.3]],
@@ -824,6 +851,15 @@ export class DrumCursor {
 class Voice {
   /** Onset per hop, in the tracker's ring. */
   readonly onset = new Float32Array(CAPACITY)
+  /** With a sweep (`VoiceSpec.sweepHops`): the second onset band's last few normalised rises and raw rises, newest at `sweepAt`. */
+  readonly sweepRise: Float32Array
+  readonly sweepRaw: Float32Array
+  /** With a sweep: the ordinary onset over twice as many hops, newest at `sweepOnsetAt`, as the body began to climb a rise's length before its peak. */
+  readonly sweepOnset: Float32Array
+  sweepAt = 0
+  sweepOnsetAt = 0
+  /** The hop at which a sweep was last read (`DrumTracker.readSweep`). */
+  sweptAt = -Infinity
   /**
    * The same hops' STRENGTH: the voice's strength bands alone. For the kick
    * the click decides WHERE the kicks are, not how strong one is, or a clap
@@ -914,6 +950,9 @@ class Voice {
   constructor(readonly spec: VoiceSpec, readonly onsetBands: number[], readonly excludeBands: number[]) {
     this.excludeLevel = excludeBands.map(() => new Float32Array(CAPACITY))
     this.ringing = new Float64Array(excludeBands.length)
+    this.sweepRise = new Float32Array(spec.sweepHops ?? 0)
+    this.sweepRaw = new Float32Array(spec.sweepHops ?? 0)
+    this.sweepOnset = new Float32Array(2 * (spec.sweepHops ?? 0))
   }
 
   /** Hops after its own that a hop waits for before its onset is final: its exclusion looks that far on. */
@@ -921,7 +960,18 @@ class Voice {
     return this.excludeBands.length > 0 ? EXCLUDE_AFTER_HOPS : 0
   }
 
+  /** Forgets the sweep's recent hops: across a gap they are not this sound's. */
+  resetSweep(): void {
+    this.sweepRise.fill(0)
+    this.sweepRaw.fill(0)
+    this.sweepOnset.fill(0)
+    this.sweepOnsetAt = 0
+    this.sweptAt = -Infinity
+    this.sweepAt = 0
+  }
+
   reset(): void {
+    this.resetSweep()
     this.slotOnset.fill(0)
     this.slotStrength.fill(0)
     this.slotMemory.fill(0)
@@ -1190,6 +1240,7 @@ export class DrumTracker {
           // The silence is the clock's, not the music's: the bands start
           // over from the next real sample rather than read it as a climb.
           for (const band of this.bands) band.settle()
+          for (const voice of Object.values(this.voices)) voice.resetSweep()
           this.hopIndex = 0
           this.resumedAt = this.start + this.count
         }
@@ -1246,8 +1297,9 @@ export class DrumTracker {
           lowWeight += weight
         }
       }
-      voice.onset[at] = onset
-      voice.strength[at] = low ** (1 / lowWeight)
+      const strength = low ** (1 / lowWeight)
+      voice.onset[at] = voice.sweepRise.length > 0 ? this.readSweep(voice, at, onset) : onset
+      voice.strength[at] = strength
       // The exclusion compares against the TOP band alone: a strum or a
       // chord landing with a hat reaches the lower one, never the top.
       const top = onsetBands.length - 1
@@ -1283,6 +1335,88 @@ export class DrumTracker {
       this.hopsSinceGrid = 0
       this.updateGrid()
     }
+  }
+
+  /**
+   * A kick's pitch FALLS, from its body band to its sub, which is the other
+   * proof it is a kick and not a bass note swelling in the same bands. A kick
+   * without a beater click (an 808, a loop's big downbeat) has nothing in the
+   * click band at all, and the onset's product reads it as zero however loud
+   * it is. So where the ordinary onset found nothing kick-shaped over this
+   * sound, and the sub climbs once the body has climbed and LEFT
+   * its band, that fall stands in for the click (`VoiceSpec.sweepHops`).
+   *
+   * Its onset is each band at its own best, as the sine reaches them one
+   * after the other: the sub's climb now, the body's at its peak, the fall.
+   * It is DATED halfway between the body's peak and now, where a kick's
+   * click would have landed with them: dated at the body's peak, a kick
+   * whose click a busy mix had masked moved the grid's phase by two hops.
+   * Its strength is the sub's now with the body's at its peak.
+   *
+   * One sound is one hit: for the sweep's length after one is read, the
+   * sound's own later climb (its sub, which the click band's faintest leak
+   * lifts off zero in the product) is not read again as another.
+   *
+   * `onset` is hop `at`'s ordinary onset; returns the onset to store there.
+   */
+  private readSweep(voice: Voice, at: number, onset: number): number {
+    const { spec, onsetBands } = voice
+    const [sub, body, click] = spec.onset
+    const n = voice.sweepRise.length
+    const index = this.start + this.count
+    const subRise = this.rises[onsetBands[0]]
+    const bodyRise = this.rises[onsetBands[1]]
+    let peakRise = 0
+    let peakRaw = 0
+    let bodyAge = 0
+    for (let j = 0; j < n; j++) {
+      if (voice.sweepRise[j] > peakRise) {
+        peakRise = voice.sweepRise[j]
+        // Hops before this one: the newest entry is the hop before.
+        bodyAge = ((voice.sweepAt - j + n) % n) + 1
+      }
+      peakRaw = Math.max(peakRaw, voice.sweepRaw[j])
+    }
+    // What the ordinary onset made of this sound: from where its body began
+    // to climb (a rise's length before the body peaked) to now. Further back
+    // is whatever played before it.
+    let read = onset
+    const m = voice.sweepOnset.length
+    const reach = Math.min(m, bodyAge + riseHopsOf(spec.envelopeHops))
+    for (let a = 0; a < reach; a++) read = Math.max(read, voice.sweepOnset[(voice.sweepOnsetAt - a + m) % m])
+    voice.sweepAt = (voice.sweepAt + 1) % n
+    voice.sweepRise[voice.sweepAt] = bodyRise
+    voice.sweepRaw[voice.sweepAt] = this.rawRises[onsetBands[1]]
+    voice.sweepOnsetAt = (voice.sweepOnsetAt + 1) % m
+    voice.sweepOnset[voice.sweepOnsetAt] = onset
+    const stored = index - voice.sweptAt <= n ? 0 : onset
+    // After a gap the climb from its silence is blind (`settle`): a sweep
+    // whose start fell in it is a sound whose attack was lost, and read by
+    // its sweep it would land a sweep's length late.
+    if (index >= this.gapFrom && index - this.resumedAt < 2 * ENVELOPE_HOPS + n) return stored
+    // Only where the ordinary onset found no kick: one with a click is read
+    // by it, at the moment it lands, as it always was.
+    if (!(read < spec.shapeShare * voice.shape)) return stored
+    // The body having stopped climbing altogether (fallen to a tenth of its
+    // peak) while the sub climbs (to over half its yardstick): the sine has
+    // LEFT the body band. A bass note's start climbs in both at once, and the
+    // body's climb only eases.
+    const fall = Math.max(0, peakRise - bodyRise)
+    if (fall < SWEEP_FALL * peakRise || subRise < SWEEP_CLIMB) return stored
+    // From a body as loud as a kick's: the sine starts there and carries real
+    // energy down, where a bass note's start only splashes a little of its
+    // attack into the body band before its sub swells.
+    const subRaw = this.rawRises[onsetBands[0]]
+    if (peakRaw < SWEEP_BODY_SHARE * subRaw) return stored
+    const dateAge = Math.round(bodyAge / 2)
+    if (dateAge < 1 || dateAge > this.count) return stored
+    const swept = subRise ** sub[2] * peakRise ** body[2] * fall ** click[2]
+    const then = (at - dateAge + CAPACITY) % CAPACITY
+    if (swept <= voice.onset[then]) return stored
+    voice.onset[then] = swept
+    voice.strength[then] = Math.max(voice.strength[then], (subRaw ** sub[2] * peakRaw ** body[2]) ** (1 / (sub[2] + body[2])))
+    voice.sweptAt = index
+    return 0
   }
 
   /**

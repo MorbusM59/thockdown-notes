@@ -625,6 +625,59 @@ describe('DrumTracker on snares and hats', () => {
     }
   })
 
+  it('finds a kick with no beater click by its falling pitch, and only that kick', () => {
+    // A loop whose first downbeat is a kick with no click at all (an 808, a
+    // loop's big opening kick): all sub and body, nothing in the click band,
+    // its sine falling from the body's band to the sub's more slowly than the
+    // kit's own kick. Every other kick has a click. Read by the click alone,
+    // the onset's product was zero on every one of them however loud.
+    const bpm = 121
+    const bar = 240 / bpm
+    // No hat on the downbeat: one landing with the kick would be its click.
+    const track = kit(40, bpm, { kicks: [8, 10], snares: [4, 12], hats: [2, 4, 6, 8, 10, 12, 14] })
+    const click = darkNoise(3000, noise(17))
+    const clickless: number[] = []
+    for (let b = 0; b * bar < 40; b++) {
+      const t0 = b * bar
+      if (b % 4 === 0) {
+        // Layered, as such kicks often are: a short punch whose pitch falls
+        // through the body band, and the sub taking over as it dies away.
+        let phase = 0
+        for (let i = 0; i < 0.4 * RATE; i++) {
+          const at = Math.round(t0 * RATE) + i
+          if (at >= track.samples.length) break
+          const t = i / RATE
+          phase += (2 * Math.PI * (55 + 110 * Math.exp(-t / 0.02))) / RATE
+          const punch = Math.min(1, t / 0.004) * Math.exp(-t / 0.025)
+          const sub = t < 0.04 ? 0 : Math.min(1, (t - 0.04) / 0.01) * Math.exp(-(t - 0.04) / 0.2)
+          track.samples[at] += 1.1 * Math.sin(phase) * (punch + sub)
+        }
+        clickless.push(t0)
+      } else {
+        addMixedKick(track.samples, t0, click)
+      }
+      track.kicks.push(t0)
+    }
+    // A shaker on every off sixteenth, loud in the click band: what a click
+    // there is measured against. In a full mix the band is busy, and the
+    // little a kick's sine leaks into it reads as nothing; alone, that leak
+    // read as a click.
+    const shaker = brightNoise(3500, 2, noise(29))
+    for (let s16 = 1; s16 * (bar / 16) < 40; s16 += 2) {
+      const t0 = s16 * (bar / 16)
+      for (let i = 0; i < 0.06 * RATE; i++) {
+        const at = Math.round(t0 * RATE) + i
+        if (at >= track.samples.length) break
+        track.samples[at] += 0.5 * shaker() * Math.exp(-i / RATE / 0.015)
+      }
+    }
+    track.kicks.sort((x, y) => x - y)
+    const { hits } = play({ samples: track.samples, kicks: track.kicks }, 0.5)
+    const due = clickless.filter((t) => t > 10 && t < 34)
+    expect(due.filter((t) => (hitFor(t, hits)?.response ?? 0) <= 0.3).map((t) => t.toFixed(2))).toEqual([])
+    expect(hits.filter((h) => h.at > 10 && h.at < 34 && h.response > 0.3 && !track.kicks.some((t) => h.at >= t - EARLY_SEC && h.at <= t + LATE_SEC))).toEqual([])
+  })
+
   it('keeps the kick as it was when the kit has every drum', () => {
     const track = kit(40, 110, rock)
     const { found, strays } = scoreDrum(track, 'kick', track.kicks)
@@ -716,7 +769,10 @@ describe('DrumTracker with groove', () => {
   it('is the tracker as it was before groove existed at groove 0, response for response', () => {
     // Captured from main's tracker (43031195) on the same tracks, frames and contrast;
     // the hip-hop entries re-captured when tempo refinement stopped extrapolating
-    // past its three samples (same hits, strengths moved by about 1%).
+    // past its three samples (same hits, strengths moved by about 1%), and the
+    // busy kit's kick and hat when a kick whose click the mix masked became
+    // readable by its falling pitch (same hits and frames; the last few of each
+    // at a higher strength).
     const fixture = JSON.parse(readFileSync(new URL('./drumTracker.groove0.fixture.json', import.meta.url), 'utf8')) as Record<string, Array<[number, number]>>
     for (const [name, samples] of groove0Tracks()) {
       for (const drum of ['kick', 'snare', 'hat'] as const) {
