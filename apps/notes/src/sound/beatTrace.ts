@@ -6,12 +6,13 @@
 // `copy(window.__beatTrace.join('\n'))`. Attaches nothing when unset.
 //
 // The lines, all stamped with media time:
-// - `score sec`: once a second, how far ahead the score is written and its
-//   signals (`musicAnalysis.ts`'s `signalLabel`).
-// - `score kicks` / `score hits`: every instance a tracker took.
+// - `score sec`: once a second, how far ahead the drum score is written and
+//   how many instances of each channel it holds.
+// - `score thump` / `score pierce` / `score tick`: every instance a tracker
+//   took, with its strength and the response it gave.
 // - `caret`: once a second, the caret's beat (`musicBeat.ts`'s `traceCaret`).
 // - `beat RESYNC`: the analysis started over at the listener (a seek, a new
-//   track, a changed source or band), decoding the window around it afresh.
+//   track, a tracker newly read), decoding the window around it afresh.
 
 const BEAT_TRACE_FLAG = 'thockdown:debug-beat'
 const BEAT_TRACE_LIMIT = 400

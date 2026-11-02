@@ -11,16 +11,14 @@ describe('sanitizeVisualizer', () => {
   it('keeps each block its own mix, colour and effect, bounded', () => {
     const v = sanitizeVisualizer({
       trackers: {},
-      edge: { mix: { kicks: 2, hits: -1, band: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
+      edge: { mix: { thump: 2, pierce: -1, tick: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
       pane: { mix: 'x', color: '' },
-      immersive: { pulseMix: { kicks: 0.5, band: 1 } },
+      immersive: { pulseMix: { thump: 0.5, tick: 1 } },
     }, false)
-    expect(v.edge).toMatchObject({ mix: { kicks: 1, hits: 0, band: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
+    expect(v.edge).toMatchObject({ mix: { thump: 1, pierce: 0, tick: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
     expect(v.pane.mix).toEqual(defaultVisualizer(false).pane.mix)
     expect(v.pane.color).toBe(defaultVisualizer(false).pane.color)
-    // The pulse takes no band, whatever was saved.
-    expect(v.immersive.pulseMix.band).toBe(0)
-    expect(v.immersive.pulseMix.kicks).toBe(0.5)
+    expect(v.immersive.pulseMix).toEqual({ thump: 0.5, pierce: defaultVisualizer(false).immersive.pulseMix.pierce, tick: 1 })
     expect(v.caret.effect).toBe(DEFAULT_VISUALIZER_CARET.effect)
   })
 
@@ -43,36 +41,49 @@ describe('sanitizeVisualizer', () => {
   })
 })
 
+describe('a layout saved with the kicks, hits and band trackers', () => {
+  it('reads them as the thump, the pierce and the tick, the band\'s level contrast not carried over', () => {
+    const v = sanitizeVisualizer({
+      trackers: { kicks: { contrast: 0.3 }, hits: { contrast: 0.2 }, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
+      edge: { mix: { kicks: 1, hits: 0.5, band: 0.25 } },
+      immersive: { waveMix: { kicks: 0, hits: 0, band: 1 } },
+    }, false)
+    expect(v.trackers).toEqual({ thump: { contrast: 0.3 }, pierce: { contrast: 0.2 }, tick: DEFAULT_VISUALIZER_TRACKERS.tick })
+    expect(v.edge.mix).toEqual({ thump: 1, pierce: 0.5, tick: 0.25 })
+    expect(v.immersive.waveMix).toEqual(soleMix('tick'))
+  })
+})
+
 describe('a layout saved before the trackers', () => {
   it('reads each block as following its old source in full, and the trackers as that block\'s tuning', () => {
     const v = sanitizeVisualizer({
       edge: { source: 'kick', groove: 0.8, contrast: 0.3, frequencyHz: 90 },
       pane: { source: 'hat', groove: 7, contrast: 0.1 },
     }, false)
-    expect(v.edge.mix).toEqual(soleMix('kicks'))
-    expect(v.pane.mix).toEqual(soleMix('hits'))
-    expect(v.trackers.kicks).toEqual({ contrast: 0.3 })
-    expect(v.trackers.hits).toEqual({ contrast: 0.1 })
+    expect(v.edge.mix).toEqual(soleMix('thump'))
+    expect(v.pane.mix).toEqual(soleMix('tick'))
+    expect(v.trackers.thump).toEqual({ contrast: 0.3 })
+    // A hat's contrast was the drum score's, not the tick's.
+    expect(v.trackers.tick).toEqual(DEFAULT_VISUALIZER_TRACKERS.tick)
     // The pulse rode the edge.
-    expect(v.immersive.pulseMix).toEqual(soleMix('kicks'))
+    expect(v.immersive.pulseMix).toEqual(soleMix('thump'))
     // The wave followed the snare.
-    expect(v.immersive.waveMix).toEqual(soleMix('hits'))
+    expect(v.immersive.waveMix).toEqual(soleMix('pierce'))
   })
 
-  it('takes a band block\'s band as the band tracker, the first block winning', () => {
+  it('reads a band block as following the tick', () => {
     const v = sanitizeVisualizer({ edge: { source: 'band', frequencyHz: 440, octaves: 2, contrast: 0.2 }, pane: { source: 'band', frequencyHz: 99 } }, false)
-    expect(v.trackers.band).toEqual({ frequencyHz: 440, octaves: 2, contrast: 0.2 })
-    expect(v.pane.mix).toEqual(soleMix('band'))
-    expect(sanitizeVisualizer({ edge: { source: 'kick', effect: 0 } }, false).immersive.pulseMix.kicks).toBe(0)
-    // A band edge set no pulse drum: the kick.
-    expect(v.immersive.pulseMix).toEqual(soleMix('kicks'))
+    expect(v.trackers.tick).toEqual(DEFAULT_VISUALIZER_TRACKERS.tick)
+    expect(v.pane.mix).toEqual(soleMix('tick'))
+    expect(sanitizeVisualizer({ edge: { source: 'kick', effect: 0 } }, false).immersive.pulseMix.thump).toBe(0)
+    // A band edge set no pulse drum: the thump.
+    expect(v.immersive.pulseMix).toEqual(soleMix('thump'))
   })
 
   it('reads a layout saved before the source existed', () => {
     const v = sanitizeVisualizer({ pane: { frequencyHz: 0 }, edge: { frequencyHz: 440 } }, false)
-    expect(v.pane.mix).toEqual(soleMix('kicks'))
-    expect(v.edge.mix).toEqual(soleMix('band'))
-    expect(v.trackers.band.frequencyHz).toBe(440)
+    expect(v.pane.mix).toEqual(soleMix('thump'))
+    expect(v.edge.mix).toEqual(soleMix('tick'))
   })
 
   it('looks as the defaults did for a layout that saved the defaults', () => {
@@ -84,7 +95,7 @@ describe('a layout saved before the trackers', () => {
 })
 
 describe('mixResponse', () => {
-  const mix = (kicks: number, hits: number, band: number) => ({ kicks, hits, band })
+  const mix = (thump: number, pierce: number, tick: number) => ({ thump, pierce, tick })
   it('adds the contributions and caps at a full response', () => {
     expect(mixResponse(mix(1, 0, 0), 1, 0, 0)).toBe(1)
     expect(mixResponse(mix(1, 1, 0), 1, 1, 0)).toBe(1)
@@ -104,10 +115,10 @@ describe('mixResponse', () => {
 
 it('reads an old saved scale as gone, and gives the glaze the wave\'s mix when it had none', () => {
   const v = sanitizeVisualizer({ immersive: { waveMix: { kicks: 0.4, hits: 0, band: 0.6, normalize: 1 } } }, false)
-  expect(v.immersive.waveMix).toEqual({ kicks: 0.4, hits: 0, band: 0.6 })
-  expect(v.immersive.glazeMix).toEqual({ kicks: 0.4, hits: 0, band: 0.6 })
+  expect(v.immersive.waveMix).toEqual({ thump: 0.4, pierce: 0, tick: 0.6 })
+  expect(v.immersive.glazeMix).toEqual({ thump: 0.4, pierce: 0, tick: 0.6 })
   const w = sanitizeVisualizer({ immersive: { waveMix: { kicks: 1, hits: 0, band: 0 }, glazeMix: { kicks: 0, hits: 0.5, band: 0 } } }, false)
-  expect(w.immersive.glazeMix).toEqual({ kicks: 0, hits: 0.5, band: 0 })
+  expect(w.immersive.glazeMix).toEqual({ thump: 0, pierce: 0.5, tick: 0 })
 })
 
 it('turns a saved amount and invert into a signed effect', () => {
@@ -212,7 +223,7 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -99, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: soleMix('hits'), glazeMix: soleMix('hits'), pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: -10, swayReturn: 1, swayDrift: 200, waveColor: defaultVisualizer(false).immersive.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: defaultVisualizer(false).immersive.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: defaultVisualizer(false).immersive.accentColor, letterboxColor: defaultVisualizer(false).immersive.letterboxColor })
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -99, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveSec: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: soleMix('pierce'), glazeMix: soleMix('pierce'), pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: -10, swayReturn: 1, swayDrift: 200, waveColor: defaultVisualizer(false).immersive.waveColor, waveBoxes: 256, waveSec: 0.5, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: defaultVisualizer(false).immersive.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: defaultVisualizer(false).immersive.accentColor, letterboxColor: defaultVisualizer(false).immersive.letterboxColor })
     expect(sanitizeVisualizer({ trackers: {} }, false).immersive).toEqual(defaultVisualizer(false).immersive)
   })
 })

@@ -21,8 +21,6 @@ import {
   type BeatSettings,
 } from '../shared/beatSettings'
 import {
-  BEAT_OCTAVES_MAX,
-  BEAT_OCTAVES_MIN,
   BEAT_CONTRAST_MAX,
   FALL_MAX_SEC,
   FALL_MIN_SEC,
@@ -42,11 +40,9 @@ import {
   waveTertiaryBeats,
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
-  BEAT_FREQUENCY_MAX_HZ,
-  BEAT_FREQUENCY_MIN_HZ,
   type VisualizerChannel,
   type VisualizerMix,
-  type VisualizerTrackers,
+  type VisualizerTrackerName,
   type VisualizerSettings,
   defaultVisualizer,
 } from '@thockdown/look/visualizer'
@@ -926,106 +922,67 @@ export function SidebarOptionsPanel({
 
     // An element's MIX of the three trackers (visualizer.ts, `mixResponse`):
     // one contribution per tracker side by side, added and capped at a full
-    // response. The centre pulse takes no band. Arrays, not fragments:
-    // OptionsSliderRows counts its children.
+    // response. Arrays, not fragments: OptionsSliderRows counts its children.
     const MIX_TRACKERS = [
-      { field: 'kicks', what: 'the kicks (the kick drum: the thump felt in the chest)' },
-      { field: 'hits', what: 'the hits (the snare, claps and rim shots: bright counter hits)' },
-      { field: 'band', what: 'the band (the live level of the band set under Band)' },
+      { field: 'thump', what: 'the thump (the low end jumping: a kick, a bass stab)' },
+      { field: 'pierce', what: 'the pierce (a sharp sound cutting through: a snare, a clap)' },
+      { field: 'tick', what: 'the tick (the busy top: hats, shakers)' },
     ] as const
-    const renderMixSliders = (id: string, label: string, mix: VisualizerMix, defaults: VisualizerMix, bandless: boolean, onCommit: (mix: VisualizerMix) => void) => {
+    const renderMixSliders = (id: string, label: string, mix: VisualizerMix, defaults: VisualizerMix, onCommit: (mix: VisualizerMix) => void) => {
       const percent = (value: number) => Math.round(value * 100).toString()
-      return [
-        ...MIX_TRACKERS.filter(({ field }) => !bandless || field !== 'band').map(({ field, what }) => (
-          <CompactScrollbarSlider
-            key={field}
-            id={`${id}-mix-${field}`}
-            min={0}
-            max={1}
-            step={0.01}
-            value={mix[field]}
-            trackLabel={field}
-            tooltipLabel={`How much ${what} drives it, 0 to 100. Contributions add up, and the response is capped at a full one`}
-            ariaLabel={`${label}: contribution of ${field}, 0 to 100`}
-            defaultValue={defaults[field]}
-            formatValue={percent}
-            onCommit={(value) => onCommit({ ...mix, [field]: value })}
-          />
-        )),
-      ]
+      return MIX_TRACKERS.map(({ field, what }) => (
+        <CompactScrollbarSlider
+          key={field}
+          id={`${id}-mix-${field}`}
+          min={0}
+          max={1}
+          step={0.01}
+          value={mix[field]}
+          trackLabel={field}
+          tooltipLabel={`How much ${what} drives it, 0 to 100. Contributions add up, and the response is capped at a full one`}
+          ariaLabel={`${label}: contribution of ${field}, 0 to 100`}
+          defaultValue={defaults[field]}
+          formatValue={percent}
+          onCommit={(value) => onCommit({ ...mix, [field]: value })}
+        />
+      ))
     }
 
     // The three trackers (visualizer.ts, `VisualizerTrackers`): what is
     // detected in the music, once, for every element below.
     const renderTrackers = () => {
       const { trackers } = visualizer
-      const setTracker = <K extends keyof VisualizerTrackers>(key: K, patch: Partial<VisualizerTrackers[K]>) =>
-        setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], ...patch } } }))
-      const contrast = (key: keyof VisualizerTrackers, label: string) => (
-        <CompactScrollbarSlider
-          key="contrast"
-          id={`beat-tracker-${key}-contrast`}
-          min={0}
-          max={BEAT_CONTRAST_MAX}
-          step={0.01}
-          value={trackers[key].contrast}
-          trackLabel="contrast"
-          tooltipLabel={key === 'band' ? 'How loud it must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits' : 'How loud a hit must be before it responds: higher keeps only the loudest hits'}
-          ariaLabel={`${label}: contrast`}
-          defaultValue={layoutVisualizer.trackers[key].contrast}
-          onCommit={(value) => setTracker(key, { contrast: value })}
-        />
-      )
-      const drum = (key: 'kicks' | 'hits', label: string, what: string) => (
+      const tracker = (key: VisualizerTrackerName, label: string, what: string) => (
         <>
           <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
             <OptionsSubsectionLabel tooltip={what}>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
             <OptionsSliderRows rows={[1]}>
-              {[contrast(key, label)]}
+              {[
+                <CompactScrollbarSlider
+                  key="contrast"
+                  id={`beat-tracker-${key}-contrast`}
+                  min={0}
+                  max={BEAT_CONTRAST_MAX}
+                  step={0.01}
+                  value={trackers[key].contrast}
+                  trackLabel="contrast"
+                  tooltipLabel="How strong a hit must be, against the others around it, before it responds: higher keeps only the strongest, and only what is mostly this"
+                  ariaLabel={`${label}: contrast`}
+                  defaultValue={layoutVisualizer.trackers[key].contrast}
+                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { contrast: value } } }))}
+                />,
+              ]}
             </OptionsSliderRows>
           </div>
         </>
       )
       return (
         <>
-          {drum('kicks', 'Kicks', 'The kick drum\'s hits: the boomy thump you feel in the chest')}
-          {drum('hits', 'Hits', 'The snare\'s hits, with claps and rim shots: the bright counter hits piercing through at mid and high frequencies')}
-          <div className="utility-setting-button-row" role="group" aria-label="Band controls">
-            <OptionsSubsectionLabel tooltip="The live level of one band of the music, a bell around a frequency, driving intensity">Band</OptionsSubsectionLabel>
-          </div>
-          <div className="utility-setting-slider-stack" aria-label="Band settings">
-            <OptionsSliderRows rows={[3]}>
-              <CompactScrollbarSlider
-                id="beat-tracker-band-frequency"
-                min={Math.log2(BEAT_FREQUENCY_MIN_HZ)}
-                max={Math.log2(BEAT_FREQUENCY_MAX_HZ)}
-                step={0.01}
-                value={Math.log2(trackers.band.frequencyHz)}
-                trackLabel="freq"
-                tooltipLabel="Hz: the centre of the band, on a scale of octaves"
-                ariaLabel="Band: frequency in Hz"
-                defaultValue={Math.log2(layoutVisualizer.trackers.band.frequencyHz)}
-                formatValue={(value) => Math.round(2 ** value).toString()}
-                onCommit={(value) => setTracker('band', { frequencyHz: Math.max(BEAT_FREQUENCY_MIN_HZ, Math.min(BEAT_FREQUENCY_MAX_HZ, Math.round(2 ** value))) })}
-              />
-              <CompactScrollbarSlider
-                id="beat-tracker-band-octaves"
-                min={BEAT_OCTAVES_MIN}
-                max={BEAT_OCTAVES_MAX}
-                step={0.1}
-                value={trackers.band.octaves}
-                trackLabel="width"
-                tooltipLabel="Octaves: how wide the bell around the frequency is, between its half-power points"
-                ariaLabel="Band: width in octaves"
-                defaultValue={layoutVisualizer.trackers.band.octaves}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setTracker('band', { octaves: value })}
-              />
-              {contrast('band', 'Band')}
-            </OptionsSliderRows>
-          </div>
+          {tracker('thump', 'Thump', 'The low end jumping: a kick, a bass stab, what you feel in the chest')}
+          {tracker('pierce', 'Pierce', 'A sharp sound cutting through the mix: a snare, a clap, a rim shot')}
+          {tracker('tick', 'Tick', 'The busy, rhythmic top: hats and shakers')}
         </>
       )
     }
@@ -1042,7 +999,7 @@ export function SidebarOptionsPanel({
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
             <OptionsSliderRows rows={key === 'edge' ? [3, 3, 2] : [3, 3]}>
-              {renderMixSliders(`beat-${key}`, label, channel.mix, defaults.mix, false, (mix) => set({ mix }))}
+              {renderMixSliders(`beat-${key}`, label, channel.mix, defaults.mix, (mix) => set({ mix }))}
               <CompactScrollbarSlider
                 id={`beat-${key}-effect`}
                 min={-1}
@@ -2562,7 +2519,7 @@ export function SidebarOptionsPanel({
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
             <OptionsSliderRows rows={[3, 4, 3]}>
-              {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, layoutVisualizer.immersive.glazeMix, false, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
+              {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, layoutVisualizer.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2661,7 +2618,7 @@ export function SidebarOptionsPanel({
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
             <OptionsSliderRows rows={[3, 3, 2]}>
-              {renderMixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, layoutVisualizer.immersive.waveMix, false, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
+              {renderMixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, layoutVisualizer.immersive.waveMix, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-wave-boxes"
                 min={WAVE_BOXES_MIN}
@@ -2708,8 +2665,8 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
-            <OptionsSliderRows rows={[2, 3, 3]}>
-              {renderMixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, layoutVisualizer.immersive.pulseMix, true, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
+            <OptionsSliderRows rows={[3, 3, 3]}>
+              {renderMixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, layoutVisualizer.immersive.pulseMix, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
                 min={PULSE_SPEED_MIN}

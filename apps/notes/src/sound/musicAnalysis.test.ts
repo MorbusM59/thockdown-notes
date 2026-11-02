@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MusicAnalysis, type AnalysisAnswer } from './musicAnalysis'
 import type { DecodedChunk, MusicDecodeStream } from './musicDecodeStream'
-import { SignalScore } from './musicScore'
 
 const RATE = 48000
 const CHUNK = 1152
@@ -72,13 +71,12 @@ class FakeStream {
 /** Plays `samples` through the analysis the way `musicBeat.ts` asks it: once a 60Hz frame, from `from`, one frame ahead. */
 async function play(samples: Float32Array, from: number, seconds: number, contrast = 0.5) {
   const streams: FakeStream[] = []
-  // The score is written in-thread here: synchronously, so what it sends is in hand before the next ask.
   const analysis = new MusicAnalysis((url) => {
     const stream = new FakeStream(url, samples)
     streams.push(stream)
     return stream as unknown as MusicDecodeStream
-  }, (publish) => new SignalScore(publish))
-  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, source: 'kicks', frequencyHz: 0, octaves: 0 }], drums: true })
+  })
+  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, channel: 'thump' }], drums: true })
   await Promise.resolve()
   await Promise.resolve()
   const answers: AnalysisAnswer[] = []
@@ -95,8 +93,7 @@ describe('the beat analysis behind the worker', { timeout: 60_000 }, () => {
     const track = kicks(40, 120)
     const { answers } = await play(track.samples, 15, 20)
     const hits = answers.filter((a) => a.raws[0] > 0).map((a) => a.heardTime)
-    // Once the score has learned the kick (its first ten seconds are written ahead of the listener at once), every
-    // kick is answered, once, and only kicks are.
+    // Once the beat map has a few beats to place them by, every kick is a thump, answered once, and nothing else is.
     const expected = track.times.filter((t) => t >= 22 && t < 34)
     const shown = hits.filter((t) => t >= 21.98 && t < 34)
     expect(shown.length).toBe(expected.length)

@@ -1,7 +1,7 @@
 /**
  * The visualizer: elements of the look that follow the playing music, saved
  * with the layout like every other part of it (Options > Visualizer). Three
- * independent BLOCKS, each listening to its own band (or a drum: kick, snare or hat) with
+ * independent BLOCKS, each following the trackers through its own mix with
  * its own timing: the caret, which dips; the active editor's EDGE (an inner shadow); and the
  * PANE (the box outlines in the edit view, a flat wash of colour anywhere else). The edge and the pane each have a colour, picked like any
  * other layout colour (so a theme's invert applies to it as to the rest).
@@ -20,55 +20,32 @@
  * through its own MIX (`VisualizerMix`), so one detection can drive any number
  * of elements and an element can follow several detections at once.
  *
- * - `kicks`, the kick drum's hits: the boomy thump felt in the chest.
- * - `hits`, the snare's hits (and claps and rim shots): the bright counter
- *   hits piercing through at mid and high frequencies.
- * - `band`, the live level of one band of the spectrum, a bell of `octaves`
- *   between its half-power points around `frequencyHz`, smoothed by a fixed
- *   attack and release (the notes app's `sound/musicBeat.ts`) so it does not
- *   flicker.
+ * They are what a listener FEELS rather than which instrument played, the
+ * three channels of the notes app's drum score (`sound/drumScore.ts`):
+ * - `thump`, the low end jumping: a kick, a bass stab.
+ * - `pierce`, a sharp sound cutting through the mix: a snare, a clap.
+ * - `tick`, the busy rhythmic top: hats, shakers.
+ * One sound may be several at once (a snare with low punch is a pierce with
+ * a slight thump); each tracker's contrast decides how much of that shows.
  */
-export type VisualizerTrackerName = 'kicks' | 'hits' | 'band'
+export type VisualizerTrackerName = 'thump' | 'pierce' | 'tick'
 
-export const VISUALIZER_TRACKERS: readonly VisualizerTrackerName[] = ['kicks', 'hits', 'band']
+export const VISUALIZER_TRACKERS: readonly VisualizerTrackerName[] = ['thump', 'pierce', 'tick']
 
 /**
- * A drum tracker's settings. It detects nothing: it reads the score of the
- * music written ahead of the listener (the notes app's `sound/signalMap.ts`),
- * every instance of a signal flagged as its drum, and turns each into a
+ * A tracker's settings. It detects nothing: it reads its channel of the drum
+ * score written ahead of the listener, and turns each instance into a
  * response.
  */
-export interface VisualizerDrumTracker {
-  /** The cut on an instance's intensity (0..1 over -60..0 dBFS) where a response starts: higher keeps only the loudest hits. */
+export interface VisualizerTracker {
+  /** The share of the channel's instances around the listener that show nothing: higher keeps only the strongest, and only what is mostly this channel. */
   contrast: number
 }
 
-/** The band tracker's settings. */
-export interface VisualizerBandTracker {
-  /** The centre of the band, in Hz. */
-  frequencyHz: number
-  /** The band's width, in octaves, between its half-power points. */
-  octaves: number
-  /** Where its response starts, as a share of the band's levels over the surrounding ten seconds. */
-  contrast: number
-}
+export type VisualizerTrackers = Record<VisualizerTrackerName, VisualizerTracker>
 
-export interface VisualizerTrackers {
-  kicks: VisualizerDrumTracker
-  hits: VisualizerDrumTracker
-  band: VisualizerBandTracker
-}
-
-/**
- * How much each tracker drives one element, each 0..1, added and capped
- * (`mixResponse`). The centre pulse takes no band (a level has no
- * hits to set a pulse off), so its `band` is always 0.
- */
-export interface VisualizerMix {
-  kicks: number
-  hits: number
-  band: number
-}
+/** How much each tracker drives one element, each 0..1, added and capped (`mixResponse`). */
+export type VisualizerMix = Record<VisualizerTrackerName, number>
 
 /**
  * An element's response from the trackers' (each 0..1): every tracker's
@@ -77,8 +54,8 @@ export interface VisualizerMix {
  * peak only when several trackers do, lower each contribution (three at a
  * third peak together). No contribution at all is no response.
  */
-export function mixResponse(mix: VisualizerMix, kicks: number, hits: number, band: number): number {
-  return Math.min(1, kicks * mix.kicks + hits * mix.hits + band * mix.band)
+export function mixResponse(mix: VisualizerMix, thump: number, pierce: number, tick: number): number {
+  return Math.min(1, thump * mix.thump + pierce * mix.pierce + tick * mix.tick)
 }
 
 /** Whether a mix reads `tracker` at all. */
@@ -108,7 +85,7 @@ export interface VisualizerChannel {
 
 /**
  * The caret's block: it ticks on a steady beat that follows the music's
- * tempo (the notes app's beat map, `sound/beatMap.ts`) rather than a band or a drum,
+ * tempo (the notes app's beat map, `sound/beatMap.ts`) rather than a tracker,
  * so it has only the depth of each beat (`effect`, as a channel's) and the
  * fall each beat makes (`shape` and `fallSec`, cut at the next beat).
  *
@@ -195,7 +172,7 @@ export interface VisualizerImmersive {
   waveMix: VisualizerMix
   /** How much each tracker's hits push the glaze's linear stacks (`swayPush`); the push slides back on the wave's fall. */
   glazeMix: VisualizerMix
-  /** How much each hit tracker sets off the centre pulse; its `band` is always 0. */
+  /** How much each tracker's hits set off the centre pulse. */
   pulseMix: VisualizerMix
   /**
    * The grid wave's rotation, a step of the music's beat, -5..5
@@ -268,7 +245,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { kicks: 0, hits: 1, band: 0 }, glazeMix: { kicks: 0, hits: 1, band: 0 }, pulseMix: { kicks: 1, hits: 0, band: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -282,10 +259,6 @@ export function glazeLayerShare(position: number, spread: number): number {
   return 1 - amount + amount * ramp
 }
 
-export const BEAT_FREQUENCY_MIN_HZ = 20
-export const BEAT_FREQUENCY_MAX_HZ = 20000
-export const BEAT_OCTAVES_MIN = 0.1
-export const BEAT_OCTAVES_MAX = 4
 export const BEAT_CONTRAST_MAX = 0.95
 /**
  * The fall's length. The shortest still spans six frames at 60Hz, so even the
@@ -322,18 +295,14 @@ function fallOfMass(mass: number): { shape: number; fallSec: number } {
 
 /** A mix following one tracker in full. */
 export function soleMix(tracker: VisualizerTrackerName): VisualizerMix {
-  return { kicks: 0, hits: 0, band: 0, [tracker]: 1 }
+  return { thump: 0, pierce: 0, tick: 0, [tracker]: 1 }
 }
 
-/**
- * The trackers' defaults: each drum as it was followed before the trackers
- * were separated from the blocks (contrast 0.5), and the band the
- * edge's default band was.
- */
+/** The trackers' defaults: half of each channel's instances show. */
 export const DEFAULT_VISUALIZER_TRACKERS: VisualizerTrackers = {
-  kicks: { contrast: 0.5 },
-  hits: { contrast: 0.5 },
-  band: { frequencyHz: 70, octaves: 1, contrast: 0.5 },
+  thump: { contrast: 0.5 },
+  pierce: { contrast: 0.5 },
+  tick: { contrast: 0.5 },
 }
 
 /**
@@ -343,7 +312,7 @@ export const DEFAULT_VISUALIZER_TRACKERS: VisualizerTrackers = {
  */
 export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   effect: 0.6,
-  mix: soleMix('kicks'),
+  mix: soleMix('thump'),
   shape: 0,
   fallSec: 0.25,
 }
@@ -368,7 +337,7 @@ export const DEFAULT_VISUALIZER_EDGE: Omit<VisualizerEdgeChannel, 'color'> = {
 export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
   ...DEFAULT_VISUALIZER_CHANNEL,
   effect: 0.5,
-  mix: soleMix('hits'),
+  mix: soleMix('pierce'),
   fallSec: 0.25,
 }
 
@@ -382,7 +351,7 @@ export function defaultVisualizer(inverted: boolean): VisualizerSettings {
   // Each side is the author's own tuning (dark: the author's dark layout exported 2026-11-01;
   // light: the author's light layout exported 2026-11-01), not one side inverted into the other.
   if (!inverted) return {
-    trackers: { ...DEFAULT_VISUALIZER_TRACKERS, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
+    trackers: DEFAULT_VISUALIZER_TRACKERS,
     caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.988171738655529 },
     edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.451)', fallSec: 0.48243336686426647, spreadPx: 10, blurPx: 200 },
     pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(255, 255, 255, 1)', effect: 1 },
@@ -392,7 +361,7 @@ export function defaultVisualizer(inverted: boolean): VisualizerSettings {
   // diffs against NEUTRAL_BASE, whose visualizer is defaultVisualizer(false)),
   // so every field it leaves out takes the light value.
   return {
-    trackers: { ...DEFAULT_VISUALIZER_TRACKERS, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
+    trackers: DEFAULT_VISUALIZER_TRACKERS,
     caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.515 },
     edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', fallSec: 0.5, spreadPx: 10, blurPx: 200 },
     pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(0, 0, 0, 0.275)', effect: 0.5 },
@@ -404,8 +373,8 @@ const LIGHT_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
   ...DEFAULT_VISUALIZER_IMMERSIVE,
   glazeStrength: 0.075, glazeSpread: 0.5, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 12,
   waveColor: 'rgba(255, 255, 255, 0.314)', waveBoxes: 72, waveTurn: 4, waveShape: -0.5, waveFallSec: 0.49958086198073737,
-  waveMix: { kicks: 0, hits: 0, band: 1 },
-  glazeMix: { kicks: 0, hits: 1, band: 0 },
+  waveMix: { thump: 0, pierce: 0, tick: 1 },
+  glazeMix: { thump: 0, pierce: 1, tick: 0 },
   pulseColor: 'rgba(255, 255, 255, 0.392)', pulseSpeed: 32, pulseHalfLifeSec: 0.5, pulseFadeSec: 1.5, pulseSoftness: 0.49, pulseBoost: 0,
   cutoutRound: 1, accentColor: 'rgba(0, 0, 0, 0.235)', letterboxColor: 'rgba(255, 255, 255, 1)',
 }
@@ -436,14 +405,20 @@ function sanitizeEffect(source: Fields, fallback: number): number {
   return source.invert === true ? -amount : amount
 }
 
-/** A mix, every contribution bounded; `bandless` (the centre pulse's) has none. */
-function sanitizeMix(input: unknown, d: VisualizerMix, bandless = false): VisualizerMix {
+/**
+ * LEGACY: before the drum score's channels (2026-11-02) the trackers were the
+ * KICKS, the HITS and a BAND's level; each is read as the channel that took
+ * its place (the band, a level with no hits, as the tick: its every layout
+ * followed the top of the spectrum).
+ */
+const LEGACY_TRACKER: Record<VisualizerTrackerName, string> = { thump: 'kicks', pierce: 'hits', tick: 'band' }
+
+/** A mix, every contribution bounded; one saved under the legacy names reads as their channels. */
+function sanitizeMix(input: unknown, d: VisualizerMix): VisualizerMix {
   const source = fieldsOf(input)
-  return {
-    kicks: bounded(source.kicks, 0, 1, d.kicks),
-    hits: bounded(source.hits, 0, 1, d.hits),
-    band: bandless ? 0 : bounded(source.band, 0, 1, d.band),
-  }
+  const legacy = VISUALIZER_TRACKERS.every((name) => source[name] === undefined)
+  const of = (name: VisualizerTrackerName) => bounded(legacy ? source[LEGACY_TRACKER[name]] : source[name], 0, 1, d[name])
+  return { thump: of('thump'), pierce: of('pierce'), tick: of('tick') }
 }
 
 /**
@@ -451,18 +426,18 @@ function sanitizeMix(input: unknown, d: VisualizerMix, bandless = false): Visual
  * every block followed ONE source of its own (`source`: a band, the kick,
  * the snare or the hat; a layout older still said the kick with a frequency
  * of 0 and a band with its frequency) with its own band and
- * contrast. Such a block reads as the mix following that source's tracker
- * in full; the hat, which no tracker follows on its own, as the hits (the
- * other bright drum).
+ * contrast. Such a block reads as the mix following that source's channel
+ * in full: the kick the thump, the snare the pierce, the hat and a band the
+ * tick (`LEGACY_TRACKER`).
  */
 function legacyTracker(source: Fields): VisualizerTrackerName | null {
   switch (source.source) {
-    case 'kick': return 'kicks'
-    case 'snare': case 'hat': return 'hits'
-    case 'band': return 'band'
+    case 'kick': return 'thump'
+    case 'snare': return 'pierce'
+    case 'hat': case 'band': return 'tick'
   }
-  if (source.frequencyHz === 0) return 'kicks'
-  if (typeof source.frequencyHz === 'number' && Number.isFinite(source.frequencyHz)) return 'band'
+  if (source.frequencyHz === 0) return 'thump'
+  if (typeof source.frequencyHz === 'number' && Number.isFinite(source.frequencyHz)) return 'tick'
   return null
 }
 
@@ -476,42 +451,33 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
   }
 }
 
-function sanitizeDrumTracker(input: unknown, d: VisualizerDrumTracker): VisualizerDrumTracker {
+function sanitizeTracker(input: unknown, d: VisualizerTracker): VisualizerTracker {
   const source = fieldsOf(input)
   return { contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast) }
-}
-
-function sanitizeBandTracker(input: unknown, d: VisualizerBandTracker): VisualizerBandTracker {
-  const source = fieldsOf(input)
-  return {
-    frequencyHz: bounded(source.frequencyHz, BEAT_FREQUENCY_MIN_HZ, BEAT_FREQUENCY_MAX_HZ, d.frequencyHz),
-    octaves: bounded(source.octaves, BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, d.octaves),
-    contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast),
-  }
 }
 
 /**
  * LEGACY: the trackers of a layout saved before they existed, from its
  * blocks' own settings: each tracker takes the settings of the first block
  * (the edge, then the pane) that followed its source, so the block a reader
- * tuned for a drum or a band keeps that tuning. A tracker no block followed
- * keeps its defaults.
+ * tuned for a drum keeps that tuning. A tracker no block followed keeps its
+ * defaults, and so does the tick: a band's contrast was a share of LEVELS,
+ * which says nothing about a share of hits.
  */
 function legacyTrackers(blocks: unknown[], d: VisualizerTrackers): VisualizerTrackers {
-  const of = (tracker: VisualizerTrackerName) => blocks.map(fieldsOf).find((block) => legacyTracker(block) === tracker)
-  return {
-    kicks: sanitizeDrumTracker(of('kicks'), d.kicks),
-    hits: sanitizeDrumTracker(of('hits'), d.hits),
-    band: sanitizeBandTracker(of('band'), d.band),
-  }
+  const of = (tracker: VisualizerTrackerName) => blocks.map(fieldsOf).find((block) => block.source !== 'hat' && legacyTracker(block) === tracker)
+  return { thump: sanitizeTracker(of('thump'), d.thump), pierce: sanitizeTracker(of('pierce'), d.pierce), tick: d.tick }
 }
 
+/** The trackers, each bounded; a layout saved with the legacy kicks, hits and band reads them as the thump, the pierce and the tick (`LEGACY_TRACKER`). */
 function sanitizeTrackers(input: unknown, d: VisualizerTrackers): VisualizerTrackers {
   const source = fieldsOf(input)
+  const legacy = VISUALIZER_TRACKERS.every((name) => source[name] === undefined)
   return {
-    kicks: sanitizeDrumTracker(source.kicks, d.kicks),
-    hits: sanitizeDrumTracker(source.hits, d.hits),
-    band: sanitizeBandTracker(source.band, d.band),
+    thump: sanitizeTracker(legacy ? source.kicks : source.thump, d.thump),
+    pierce: sanitizeTracker(legacy ? source.hits : source.pierce, d.pierce),
+    // The legacy band's contrast was a share of levels: not carried over.
+    tick: legacy ? d.tick : sanitizeTracker(source.tick, d.tick),
   }
 }
 
@@ -585,7 +551,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     // only a layout that SAVED a wave mix is one of those, so one that saved neither takes the default.
     glazeMix: sanitizeMix(source.glazeMix, source.glazeMix === undefined && (source.waveMix !== undefined || legacyWaveMix)
       ? sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix) : d.glazeMix),
-    pulseMix: sanitizeMix(source.pulseMix, legacyPulseMix ?? d.pulseMix, true),
+    pulseMix: sanitizeMix(source.pulseMix, legacyPulseMix ?? d.pulseMix),
     waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
     waveShape: bounded(source.waveShape, -1, 1, d.waveShape),
     waveFallSec: bounded(source.waveFallSec, FALL_MIN_SEC, FALL_MAX_SEC, d.waveFallSec),
@@ -621,21 +587,19 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCare
   const edge = sanitizeEdgeChannel(edgeInput, d.edge)
   // LEGACY: a layout saved before the trackers had none, and its centre
   // pulse rode the edge's hits; it keeps the edge's drum (a band, which no
-  // pulse takes, reads as the kick, the pulse's default).
+  // pulse took then, reads as the thump, the pulse's default).
   const isLegacy = source.trackers === undefined
   // An edge with no effect subscribed nothing, so it set off no pulse.
   const legacyPulseMix = !isLegacy ? null
-    : edge.effect === 0 ? { kicks: 0, hits: 0, band: 0 }
-    : soleMix(edge.mix.hits > 0 ? 'hits' : 'kicks')
+    : edge.effect === 0 ? { thump: 0, pierce: 0, tick: 0 }
+    : soleMix(edge.mix.pierce > 0 ? 'pierce' : 'thump')
   return {
-    // A legacy layout reads against what the trackers were when it was saved
-    // (the band at 70Hz), not against today's light default.
     trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
     caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
     edge,
     pane: sanitizeColorChannel(paneInput, d.pane),
     // ...and its wave followed the snare, whatever the default wave mix is now.
-    immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('hits') : null),
+    immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('pierce') : null),
   }
 }
 

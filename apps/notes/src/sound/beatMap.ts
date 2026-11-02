@@ -50,7 +50,7 @@
  * has none and the caret blinks there.
  */
 
-/** How far ahead of the listener the map is planned: the look-ahead of the whole score (`musicScore.ts`), which the drum hits are written over too. */
+/** How far ahead of the listener the map is planned, and the drum score written from it (`drumScore.ts`). */
 export const MAP_AHEAD_SEC = 60
 /** How far behind the listener the map keeps what it planned. */
 export const MAP_BEHIND_SEC = 30
@@ -77,6 +77,8 @@ const LOW_BAND: readonly [number, number] = [30, 150]
 const SHARP_BAND: readonly [number, number] = [1000, 8000]
 const ALL_BAND: readonly [number, number] = [30, 16000]
 const HARMONY_BAND: readonly [number, number] = [40, 500]
+/** Only the drum score's (`drumScore.ts`): the hats and shakers above a snare's body. */
+const TICK_BAND: readonly [number, number] = [8000, 16000]
 /** How far either side of a frame its harmony compares, in seconds. */
 const HARMONY_SEC = 0.25
 /** How far back from a frame its features are normalised over, in seconds. */
@@ -111,7 +113,28 @@ export interface MapBeat {
   time: number
   committed: boolean
   one: boolean
+  /** Its place in its bar, 0 (the one) to 3. */
+  position: number
 }
+
+/**
+ * The onset features the drum score reads (`drumScore.ts`), as the map computed them: per BAND (`OnsetBand`), each
+ * frame's raw flux and its normalised value (the flux against its spread over the `NORM_SEC` before).
+ */
+export interface OnsetFeatures {
+  /** The first frame still held and one past the last normalised. */
+  frames(): readonly [number, number]
+  /** The media time of an onset peaking at `frame`, and the frame nearest an onset at `time`. */
+  timeOf(frame: number): number
+  frameOf(time: number): number
+  flux(band: OnsetBand, frame: number): number
+  normalised(band: OnsetBand, frame: number): number
+}
+
+/** The bands an onset is read in: LOW (a kick, a bass note), SHARP (a snare, a clap), TICK (hats, shakers). */
+export type OnsetBand = 0 | 1 | 2
+/** Where each `OnsetBand` lives in the map's feature rings. */
+const ONSET_FEATURE: readonly number[] = [0, 1, 4]
 
 /** The caret's beat at a moment: how far into it, 0..1, and its period (s); NaN for both where there is none. */
 export interface CaretBeat {
@@ -186,12 +209,13 @@ export class BeatMap {
     sharp: [number, number]
     all: [number, number]
     harmony: [number, number]
+    tick: [number, number]
   }
   private previous: Float64Array
   private current: Float64Array
   /** Frames of every ring below; frame f lives at f % capacity. */
   private readonly capacity: number
-  /** Raw features (low, sharp, all, harmony), the harmony band's spectrum per frame, and the normalised features. */
+  /** Raw features (low, sharp, all, harmony, tick), the harmony band's spectrum per frame, and the normalised features. */
   private readonly raw: Float32Array[]
   private readonly spectrum: Float32Array
   private readonly z: Float32Array[]
@@ -216,6 +240,8 @@ export class BeatMap {
   private committedCount = 0
   private planned: PathBeat[] = []
   private plannedAt = -Infinity
+  /** Counts the plans read back: the beats can have moved only when it has changed. */
+  revision = 0
 
   constructor(readonly sampleRate: number) {
     this.hop = Math.max(1, Math.round(sampleRate / FRAME_RATE))
@@ -233,6 +259,7 @@ export class BeatMap {
       sharp: band(SHARP_BAND),
       all: band(ALL_BAND),
       harmony: band(HARMONY_BAND),
+      tick: band(TICK_BAND),
     }
     this.previous = new Float64Array(this.bins.all[1])
     this.current = new Float64Array(this.bins.all[1])
@@ -240,8 +267,8 @@ export class BeatMap {
     this.harmonyFrames = Math.max(1, Math.round(HARMONY_SEC * fps))
     this.normFrames = Math.round(NORM_SEC * fps)
     this.capacity = Math.ceil((MAP_AHEAD_SEC + MAP_BEHIND_SEC + 2 * NORM_SEC + GLIDE_MAX_SEC + 10) * fps)
-    this.raw = [0, 1, 2, 3].map(() => new Float32Array(this.capacity))
-    this.z = [0, 1, 2, 3].map(() => new Float32Array(this.capacity))
+    this.raw = [0, 1, 2, 3, 4].map(() => new Float32Array(this.capacity))
+    this.z = [0, 1, 2, 3, 4].map(() => new Float32Array(this.capacity))
     this.spectrum = new Float32Array(this.capacity * (this.bins.harmony[1] - this.bins.harmony[0]))
     this.minPeriod = Math.round((60 * fps) / MAX_BPM)
     const maxPeriod = Math.round((60 * fps) / MIN_BPM)
@@ -292,6 +319,7 @@ export class BeatMap {
     this.raw[0][at] = flux(this.bins.low)
     this.raw[1][at] = flux(this.bins.sharp)
     this.raw[2][at] = flux(this.bins.all)
+    this.raw[4][at] = flux(this.bins.tick)
     const [h0, h1] = this.bins.harmony
     for (let k = h0; k < h1; k++) this.spectrum[at * (h1 - h0) + k - h0] = this.current[k]
     const swap = this.previous
@@ -330,7 +358,7 @@ export class BeatMap {
       const f = this.normalised
       const lo = Math.max(0, f - W, this.harmonised - this.capacity)
       const hi = f
-      for (let b = 0; b < 4; b++) {
+      for (let b = 0; b < this.raw.length; b++) {
         const x = this.raw[b]
         let s1 = 0
         let s2 = 0
@@ -480,6 +508,7 @@ export class BeatMap {
     this.smooth(path)
     this.judge(path)
     this.planned = path
+    this.revision++
   }
 
   /**
@@ -612,12 +641,21 @@ export class BeatMap {
     return { phase: caret - Math.floor(caret), period: period / scale }
   }
 
+  /** The onset features, read in place (`OnsetFeatures`); valid until the next `feed`. */
+  readonly onsets: OnsetFeatures = {
+    frames: () => [Math.max(0, this.spectra - this.capacity + 1), this.normalised],
+    timeOf: (frame) => this.timeOf(frame),
+    frameOf: (time) => Math.round(((time - ONSET_DELAY_SEC - this.origin) * this.sampleRate - this.size / 2) / this.hop),
+    flux: (band, frame) => this.raw[ONSET_FEATURE[band]][frame % this.capacity],
+    normalised: (band, frame) => this.z[ONSET_FEATURE[band]][frame % this.capacity],
+  }
+
   /** Every shown beat between `from` and `to`. */
   beatsBetween(from: number, to: number): MapBeat[] {
     const out: MapBeat[] = []
     const visit = (b: PathBeat, committed: boolean) => {
       const t = b.time
-      if (b.shown && t >= from && t <= to) out.push({ time: t, committed, one: b.position === 0 })
+      if (b.shown && t >= from && t <= to) out.push({ time: t, committed, one: b.position === 0, position: b.position })
     }
     for (const b of this.committed) visit(b, true)
     for (const b of this.planned) visit(b, false)

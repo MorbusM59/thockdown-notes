@@ -1,36 +1,28 @@
 /**
  * The beat pulse's ANALYSIS, run in a worker (`musicAnalysis.worker.ts`) so
- * that decoding and measuring the music never takes a frame from the page:
- * every restart (a new track, a seek, a changed source or band) decodes and
- * measures the whole window either side of the listener at once, which on
- * the page's thread blocked it for a fifth of a second and more.
+ * that decoding and measuring the music never takes a frame from the page.
  *
  * It owns everything that reads the decoded samples: the decoding
- * (`MusicDecodeStream`), the score of the drum hits (`musicScore.ts`, written
- * in a worker of its own because writing it is heavy) with each drum
- * reader's place in it, each level band's meter and its window of readings,
- * and the window's peak (`PeakWindow`). The page
+ * (`MusicDecodeStream`), the beat map (`beatMap.ts`) and the drum score
+ * written from it (`drumScore.ts`), both planned from the samples as they are
+ * decoded, `MAP_AHEAD_SEC` ahead, each reader's place in the score, and the
+ * peak of the window either side of the listener (`PeakWindow`), handed its
+ * samples from a delay ring when the listener comes in reach. The page
  * (`musicBeat.ts`) keeps what a FRAME needs: the listener's clock, each
  * subscriber's fall, the hits it reports, the loudness gain and the caret's
- * phase. The beat map (`beatMap.ts`) is planned here too, from the samples
- * as they are decoded, `MAP_AHEAD_SEC` ahead, and so is the score; everything measuring the ±5s
- * window is handed them from a delay ring when the listener comes in reach.
+ * phase.
  *
  * The two talk in ASKS. Once a frame the page asks for the moment it will
- * draw next (`AnalysisAsk`): every reader's RAW response there (the loudest
- * instance of its drum in the score since its last ask, past its contrast and
- * weighed by how far its signal is that drum;
- * a level band's stretched level), the beat map's beats around it
- * (`beatMap.ts`), and the window's peak. The answer arrives before that frame, so the
- * worker adds no lag beyond the one frame the page asks ahead by. Every
- * reader's settings (its contrast) come with the ask, so a slider acts
- * at once and nothing restarts, exactly as when this ran on the page.
+ * draw next (`AnalysisAsk`): every reader's RAW response there (the strongest
+ * instance of its channel in the score since its last ask, past its
+ * contrast), the beat map's beat around it, and the window's peak. The answer
+ * arrives before that frame, so the worker adds no lag beyond the one frame
+ * the page asks ahead by. Every reader's settings (its contrast) come with
+ * the ask, so a slider acts at once and nothing restarts.
  */
 
-import { INTENSITY_FLOOR_DB } from './signalMap'
-import { BandLevelMeter, LEVEL_FLOOR_DB } from './bandLevel'
 import { BeatMap, MAP_AHEAD_SEC } from './beatMap'
-import { WorkerScore, type ScoreUpdate, type ScoreWriter } from './musicScore'
+import { writeDrumScore, type DrumChannel, type DrumInstance } from './drumScore'
 import { MusicDecodeStream } from './musicDecodeStream'
 import { PeakWindow } from './peakWindow'
 
@@ -42,29 +34,18 @@ const AHEAD_START_SEC = 10
 const AHEAD_GROWTH = 2
 /** How far past the window's leading edge the decoding is let run, so it never trails the listener. */
 const DECODE_MARGIN_SEC = 1
-/** The share of the window's moments that give a full response. */
+/** The share of a channel's instances that give a full response. */
 const TOP_SHARE = 0.02
-/** The narrowest span the stretch may use, so a near-constant band is not blown up into noise. */
-const MIN_SPAN_DB = 3
 /**
- * A band's RMS level (dBFS, of the decoded track, before the player's volume)
- * that is silence to the stretch (`stretchLevel`): no response at or below
- * it. Well under any audible part of a band in a mastered track, and over a
- * hiss or dither floor, which a narrow band reads further down still.
+ * The narrowest span a reader's stretch may use, in the score's strengths (natural logs of a flux): a channel whose
+ * instances are all alike (a programmed kick) shows each in full rather than blowing their tiny differences up.
  */
-const SILENCE_DB = -70
-/** Histogram resolution, in dB. */
-const BIN_DB = 0.5
-const BINS = Math.ceil(-LEVEL_FLOOR_DB / BIN_DB) + 1
-/** Readings kept per band: twice `LEAD_SEC` and the margin at a hundred a second, with room to spare. */
-const CAPACITY = 4096
+const MIN_SPAN = Math.log(1.5)
 
-/** What a reader follows: the score's kicks or hits, or a band's level. */
+/** What a reader follows: one channel of the drum score. */
 export interface ReaderSource {
   id: number
-  source: 'kicks' | 'hits' | 'band'
-  frequencyHz: number
-  octaves: number
+  channel: DrumChannel
 }
 
 /** A reader's live settings, sent with every ask. */
@@ -80,7 +61,7 @@ export interface AnalysisRestart {
   url: string | null
   listenerTime: number
   readers: ReaderSource[]
-  /** Whether anything reads the beat map or the score (a drum reader, or the caret's clock). */
+  /** Whether anything reads the beat map (a reader, or the caret's clock). */
   drums: boolean
 }
 
@@ -95,7 +76,7 @@ export interface AnalysisAsk {
   trace: boolean
 }
 
-/** Nothing reads the beat map or the score any more: it is dropped until the next restart asks for it. */
+/** Nothing reads the beat map any more: it is dropped until the next restart asks for it. */
 export interface AnalysisDropDrums {
   type: 'dropDrums'
 }
@@ -121,87 +102,10 @@ export interface AnalysisAnswer {
   traceLines: string[]
 }
 
-interface Band {
-  meter: BandLevelMeter | null
-  drum: 'kicks' | 'hits' | null
-  /** The heard moment a drum reader has read the score up to (NaN before its first ask). */
+interface Reader {
+  channel: DrumChannel
+  /** The heard moment the reader has read the score up to (NaN before its first ask). */
   heardTo: number
-  frequencyHz: number
-  octaves: number
-  times: Float64Array
-  levels: Float32Array
-  head: number
-  count: number
-  bins: Uint32Array
-}
-
-function binOf(db: number): number {
-  return Math.min(BINS - 1, Math.max(0, Math.round((db - LEVEL_FLOOR_DB) / BIN_DB)))
-}
-
-function dropOldest(band: Band): void {
-  band.bins[binOf(band.levels[band.head])]--
-  band.head = (band.head + 1) % CAPACITY
-  band.count--
-}
-
-function record(band: Band, time: number, db: number): void {
-  if (band.count === CAPACITY) dropOldest(band)
-  const at = (band.head + band.count) % CAPACITY
-  band.times[at] = time
-  band.levels[at] = db
-  band.count++
-  band.bins[binOf(db)]++
-}
-
-function percentile(band: Band, share: number): number {
-  const target = share * (band.count - 1)
-  let seen = 0
-  for (let b = 0; b < BINS; b++) {
-    seen += band.bins[b]
-    if (seen > target) return LEVEL_FLOOR_DB + b * BIN_DB
-  }
-  return 0
-}
-
-/** A level band's response: its level at `listenerTime`, stretched over the window around it. */
-function stretched(band: Band, listenerTime: number, contrast: number): number {
-  while (band.count > 0 && band.times[band.head] < listenerTime - LEAD_SEC) dropOldest(band)
-  // Before a restart's decoding has reached the listener, every reading
-  // lies ahead of it (or there are none): nothing heard yet to describe.
-  if (band.count === 0 || band.times[band.head] > listenerTime) return 0
-  // The level at the listener's moment, interpolated between the readings
-  // either side of it, so a frame between two readings does not hold the
-  // older one and then step.
-  let level = band.levels[band.head]
-  let before = band.head
-  for (let k = 1; k < band.count; k++) {
-    const at = (band.head + k) % CAPACITY
-    if (band.times[at] > listenerTime) {
-      const span = band.times[at] - band.times[before]
-      const share = span > 0 ? (listenerTime - band.times[before]) / span : 0
-      level = band.levels[before] + (band.levels[at] - band.levels[before]) * share
-      break
-    }
-    before = at
-    level = band.levels[at]
-  }
-  return stretchLevel(level, percentile(band, contrast), percentile(band, 1 - TOP_SHARE))
-}
-
-/**
- * The levels stretch (`musicBeat.ts`'s header) of `level` between the
- * window's `floor` and `top` percentiles, in dB. Neither end is taken below
- * SILENCE_DB: a window of near silence (a track's lead-in, the gap between
- * two songs, a hiss or dither floor) is not stretched into a full response,
- * which would make its noise pulse like the music. Above it the stretch is
- * the window's own, so a quiet but audible passage still reaches a full
- * response.
- */
-export function stretchLevel(level: number, floor: number, top: number): number {
-  const from = Math.max(SILENCE_DB, floor)
-  const to = Math.max(from + MIN_SPAN_DB, top)
-  return Math.max(0, Math.min(1, (level - from) / (to - from)))
 }
 
 /**
@@ -247,30 +151,21 @@ class DelayRing {
 }
 
 /**
- * A drum reader's response to one instance: the same levels stretch a band
- * gets (`musicBeat.ts`'s header), over the intensities of that drum's
- * instances in the score around the listener (`intensities`: intensity and confidence, ascending), so
- * `contrast` means one thing for every source and every track: the
- * `contrast` share of the drum's instances shows nothing and its top
- * `TOP_SHARE` shows in full, whether the track is mastered loud or quiet.
- * `intensity` is the score's, 0..1 over `INTENSITY_FLOOR_DB`..0 dBFS.
+ * A reader's response to one instance of its channel: `strength` stretched
+ * over `strengths` (that channel's in the score around the listener,
+ * ascending), so `contrast` means one thing for every channel and every
+ * track: the `contrast` share of the channel's instances shows nothing and
+ * its top `TOP_SHARE` shows in full, whether the track is mastered loud or
+ * quiet. Raising it is what keeps a channel to what is MOSTLY that channel:
+ * a snare's slight thump is among the thumps' weakest.
  */
-export function instanceResponse(intensity: number, intensities: readonly (readonly [number, number])[], contrast: number): number {
-  if (intensities.length === 0) return 0
-  let total = 0
-  for (const [, weight] of intensities) total += weight
-  // A weighted percentile: each instance counts by its confidence, so a kick that is faintly a hit cannot set the
-  // hits' top.
-  const at = (share: number) => {
-    let seen = 0
-    for (const [value, weight] of intensities) if ((seen += weight) > share * total) return value
-    return intensities[intensities.length - 1][0]
-  }
+export function instanceResponse(strength: number, strengths: readonly number[], contrast: number): number {
+  if (strengths.length === 0) return 0
+  const at = (share: number) => strengths[Math.min(strengths.length - 1, Math.floor(share * strengths.length))]
   const top = at(1 - TOP_SHARE)
-  // At least MIN_SPAN_DB below the top, measured DOWN from it: drums of one loudness (a programmed kick) are all
-  // full, where a span measured up from the floor would leave every one of them at nothing.
-  const floor = Math.min(at(contrast), top - MIN_SPAN_DB / -INTENSITY_FLOOR_DB)
-  return Math.max(0, Math.min(1, (intensity - floor) / (top - floor)))
+  // At least MIN_SPAN below the top, measured DOWN from it: instances of one loudness are all full.
+  const floor = Math.min(at(contrast), top - MIN_SPAN)
+  return Math.max(0, Math.min(1, (strength - floor) / (top - floor)))
 }
 
 /** The worker's whole state; `handle` takes each request in arrival order. */
@@ -280,39 +175,31 @@ export class MusicAnalysis {
   private run = 0
   /** The run whose file is open and whose decoding has started (`restart` waits for the sample rate). */
   private started = -1
-  private readonly bands = new Map<number, Band>()
+  private readonly readers = new Map<number, Reader>()
   private traceOn = false
   private traceLines: string[] = []
   private tracedAt = NaN
   private readonly peaks = new PeakWindow()
   private map: BeatMap | null = null
   private delay: DelayRing | null = null
-  /** Where the score is written, while anything reads it, and the last it sent for this run. */
-  private score: ScoreWriter | null = null
-  private scored: ScoreUpdate | null = null
+  /** The beat map's plan the score was last written from. */
+  private scoredRevision = -1
   /**
-   * Every instance the score has sent for this run and no reader has passed: each update replaces only what it
-   * covers (from its `from` on), so an update that lands late (the score worker busy factorizing) loses nothing
-   * written before it.
+   * Every instance of the score no reader has passed. Each writing replaces what lies from the moment heard on, so an
+   * instance is correctable until it is heard (the beats around it move as the map plans further ahead).
    */
-  private held: ScoreUpdate['instances'] = []
+  private held: DrumInstance[] = []
   /**
-   * Each drum's instances held, as (intensity, confidence) ascending: the range a reader's contrast stretches over.
-   * Built when first read and kept until the held instances change (a score update, or instances passing the
-   * listener): once per heard instance at most, rather than on every frame that reads it.
+   * Each channel's strengths among the held instances, ascending: the range a reader's contrast stretches over. Built
+   * when first read and kept until the held instances change, so once per heard instance at most.
    */
-  private readonly ranges = new Map<'kicks' | 'hits', (readonly [number, number])[]>()
-  /** The track the score was last reset for: a seek in it keeps the signals learned, another track does not. */
-  private scoreUrl: string | null = null
-  /** The heard moment the beat map's beats were last handed to the score at. */
-  private beatsSentAt = NaN
+  private readonly ranges = new Map<DrumChannel, number[]>()
   /** The listener's media time when this run started decoding: the look-ahead grows from it (`aheadSec`). */
   private startedAt = NaN
+  /** The listener's position at the last ask of this run (NaN before one). */
+  private listenerTime = NaN
 
-  constructor(
-    private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url),
-    private readonly createScore: (publish: (update: ScoreUpdate) => void) => ScoreWriter = (publish) => new WorkerScore(publish),
-  ) {}
+  constructor(private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url)) {}
 
   /** Handles one request; an ask is answered, everything else returns null. */
   handle(request: AnalysisRequest): AnalysisAnswer | null {
@@ -323,78 +210,44 @@ export class MusicAnalysis {
       case 'ask':
         return this.ask(request)
       case 'dropDrums':
-        this.map = null
-        this.delay = null
-        this.dropScore()
+        this.dropMap()
         return null
       case 'dispose':
         this.run++
         this.stream?.dispose()
         this.stream = null
-        this.map = null
-        this.delay = null
-        this.dropScore()
-        this.bands.clear()
+        this.dropMap()
+        this.readers.clear()
         return null
     }
   }
 
-  private dropScore(): void {
-    this.score?.dispose()
-    this.score = null
-    this.scored = null
+  private dropMap(): void {
+    this.map = null
+    this.delay = null
+    this.scoredRevision = -1
     this.held = []
     this.ranges.clear()
-    this.scoreUrl = null
   }
 
   private restart(request: AnalysisRestart): void {
     const id = (this.run = request.run)
     this.peaks.reset()
-    this.map = null
-    this.delay = null
-    this.scored = null
-    this.held = []
-    this.ranges.clear()
-    this.beatsSentAt = NaN
+    this.dropMap()
     // A new track is a new stream; a seek in the same one keeps it.
     if (this.stream?.url !== request.url) {
       this.stream?.dispose()
       this.stream = request.url ? this.createStream(request.url) : null
     }
-    if (!request.drums) this.dropScore()
-    this.bands.clear()
-    for (const reader of request.readers) {
-      this.bands.set(reader.id, {
-        meter: null,
-        drum: reader.source === 'band' ? null : reader.source,
-        heardTo: NaN,
-        frequencyHz: reader.frequencyHz,
-        octaves: reader.octaves,
-        times: new Float64Array(CAPACITY),
-        levels: new Float32Array(CAPACITY),
-        head: 0,
-        count: 0,
-        bins: new Uint32Array(BINS),
-      })
-    }
+    this.readers.clear()
+    for (const reader of request.readers) this.readers.set(reader.id, { channel: reader.channel, heardTo: NaN })
     const stream = this.stream
     if (!stream) return
     stream.halt()
     void stream.sampleRate().then((sampleRate) => {
       if (id !== this.run || sampleRate === null) return
-      for (const band of this.bands.values()) {
-        if (!band.drum) band.meter = new BandLevelMeter(sampleRate, band.frequencyHz, band.octaves)
-      }
       this.map = request.drums ? new BeatMap(sampleRate) : null
       this.delay = this.map ? new DelayRing(sampleRate) : null
-      if (request.drums) {
-        // The score keeps the signals it learned through a seek in the same track, judged here rather than when the
-        // restart arrived, since a restart for another track may have been overtaken before reaching this point.
-        this.score ??= this.createScore((update) => this.takeScore(update))
-        this.score.reset(id, sampleRate, this.scoreUrl !== request.url)
-        this.scoreUrl = request.url
-      }
       this.started = id
       // The file may have taken a moment to open: start from where the listener is now.
       const at = Number.isNaN(this.listenerTime) ? request.listenerTime : this.listenerTime
@@ -402,33 +255,19 @@ export class MusicAnalysis {
       stream.run(Math.max(0, at - LEAD_SEC), at + this.aheadSec() + DECODE_MARGIN_SEC, (samples, startTime) => {
         // A chunk decoded for a run a later restart replaced is not this window's.
         if (id !== this.run) return
-        if (!this.delay) return this.analyse(samples, startTime, sampleRate)
-        this.score?.feed(id, samples, startTime)
+        if (!this.delay) return this.peaks.add(samples, startTime, sampleRate)
         this.map?.feed(samples, startTime)
-        this.delay?.write(samples, startTime)
+        this.delay.write(samples, startTime)
         this.releaseUpTo(at + LEAD_SEC + DECODE_MARGIN_SEC)
       })
     })
     this.listenerTime = NaN
   }
 
-  private takeScore(update: ScoreUpdate): void {
-    if (update.run !== this.run) return
-    this.scored = update
-    this.held = [...this.held.filter((x) => x.time < update.from), ...update.instances]
-    this.ranges.clear()
-  }
-
-  /** The listener's position at the last ask of this run (NaN before one). */
-  private listenerTime = NaN
-
-  /** How far ahead of the listener to decode: the beat map's and the score's reach while they are on, else the window's. */
   /**
-   * How far ahead of the listener to decode. With the beat map and the score it starts at AHEAD_START_SEC and grows
-   * AHEAD_GROWTH times as fast as the music plays, to MAP_AHEAD_SEC: decoding the whole look-ahead at once handed the
-   * score a minute of music to factorize before it could judge anything, so a start or a seek showed no kick or hit
-   * for that long. A short start is judged within a couple of seconds, and the growth stays well inside the score's
-   * own pace (several times real time).
+   * How far ahead of the listener to decode. With the beat map it starts at AHEAD_START_SEC and grows AHEAD_GROWTH
+   * times as fast as the music plays, to MAP_AHEAD_SEC, so a start or a seek is planned within moments rather than
+   * after a minute of music has been decoded.
    */
   private aheadSec(): number {
     if (!this.map) return LEAD_SEC
@@ -436,46 +275,47 @@ export class MusicAnalysis {
     return Math.min(MAP_AHEAD_SEC, AHEAD_START_SEC + AHEAD_GROWTH * played)
   }
 
-  /** Measures the decoded samples up to media time `until` into the ±LEAD_SEC window. */
+  /** Hands the decoded samples up to media time `until` to the window's peak. */
   private releaseUpTo(until: number): void {
-    const sampleRate = this.delay?.sampleRate
-    if (sampleRate === undefined) return
-    this.delay?.release(until, (samples, startTime) => this.analyse(samples, startTime, sampleRate))
+    const delay = this.delay
+    if (delay) delay.release(until, (samples, startTime) => this.peaks.add(samples, startTime, delay.sampleRate))
   }
 
-  /** Measures one decoded chunk into the window's peak and every level band. */
-  private analyse(samples: Float32Array, startTime: number, sampleRate: number): void {
-    this.peaks.add(samples, startTime, sampleRate)
-    for (const band of this.bands.values()) {
-      band.meter?.process(samples, startTime, (time, db) => record(band, time, db))
-    }
+  /** Writes the score again from `heardTime` on, if the beat map has planned since it was last written. */
+  private writeScore(heardTime: number): void {
+    const map = this.map
+    if (!map || map.revision === this.scoredRevision) return
+    this.scoredRevision = map.revision
+    const written = writeDrumScore(map.onsets, map.beatsBetween(-Infinity, Infinity), heardTime)
+    let keep = 0
+    while (keep < this.held.length && this.held[keep].time < heardTime) keep++
+    this.held = [...this.held.slice(0, keep), ...written.filter((x) => x.time >= heardTime)]
+    this.ranges.clear()
   }
 
-  /** A drum reader's response at `heardTime`: the loudest instance of its drum heard since its last ask. */
-  private drumResponse(band: Band, heardTime: number, contrast: number): number {
-    const from = band.heardTo
-    band.heardTo = heardTime
-    const scored = this.scored
-    if (!scored || Number.isNaN(from) || heardTime <= from) return 0
+  /** A reader's response at `heardTime`: the strongest instance of its channel heard since its last ask. */
+  private response(reader: Reader, heardTime: number, contrast: number): number {
+    const from = reader.heardTo
+    reader.heardTo = heardTime
+    if (Number.isNaN(from) || heardTime <= from) return 0
     let raw = 0
     for (const x of this.held) {
-      if (x.time <= from || x.time > heardTime) continue
-      // Weighed by how far its signal is this drum: a sound on the edge of being one shows faintly.
-      const confidence = band.drum === 'kicks' ? x.kick : x.hit
-      if (confidence > 0) {
-        const response = confidence * instanceResponse(x.intensity, this.rangeOf(band.drum ?? 'kicks'), contrast)
-        raw = Math.max(raw, response)
-        if (this.traceOn) this.traceLines.push(`score ${band.drum} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)} signal=${x.signal} confidence=${confidence.toFixed(2)} intensity=${x.intensity.toFixed(2)} match=${x.match.toFixed(2)} contrast=${contrast.toFixed(2)} response=${response.toFixed(2)}`)
-      }
+      if (x.time <= from) continue
+      if (x.time > heardTime) break
+      const strength = x[reader.channel]
+      if (Number.isNaN(strength)) continue
+      const response = instanceResponse(strength, this.rangeOf(reader.channel), contrast)
+      raw = Math.max(raw, response)
+      if (this.traceOn) this.traceLines.push(`score ${reader.channel} at=${x.time.toFixed(3)} heard=${heardTime.toFixed(3)}${x.one ? ' one' : ''} strength=${strength.toFixed(2)} contrast=${contrast.toFixed(2)} response=${response.toFixed(2)}`)
     }
     return raw
   }
 
-  private rangeOf(drum: 'kicks' | 'hits'): (readonly [number, number])[] {
-    let range = this.ranges.get(drum)
+  private rangeOf(channel: DrumChannel): number[] {
+    let range = this.ranges.get(channel)
     if (!range) {
-      range = this.held.map((y) => [y.intensity, drum === 'kicks' ? y.kick : y.hit] as const).filter(([, w]) => w > 0).sort((a, b) => a[0] - b[0])
-      this.ranges.set(drum, range)
+      range = this.held.map((x) => x[channel]).filter((v) => !Number.isNaN(v)).sort((a, b) => a - b)
+      this.ranges.set(channel, range)
     }
     return range
   }
@@ -489,37 +329,29 @@ export class MusicAnalysis {
       this.stream?.want(request.listenerTime + this.aheadSec() + DECODE_MARGIN_SEC)
       this.releaseUpTo(request.listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)
       this.map?.update(heardTime)
-      if (this.score && this.map) {
-        this.score.heard(this.run, heardTime)
-        // The beats move only as the map re-plans, which is once a second or more: handed on as often.
-        if (Number.isNaN(this.beatsSentAt) || Math.abs(heardTime - this.beatsSentAt) >= 1) {
-          this.beatsSentAt = heardTime
-          this.score.beats(this.run, this.map.beatsBetween(-Infinity, Infinity).map((b) => b.time))
-        }
-      }
+      if (this.readers.size > 0) this.writeScore(heardTime)
     }
     const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
     const ids: number[] = []
     const raws: number[] = []
-    for (const reader of request.readers) {
-      const band = this.bands.get(reader.id)
-      if (!band) continue
-      ids.push(reader.id)
-      raws.push(band.drum ? this.drumResponse(band, heardTime, reader.contrast) : stretched(band, heardTime, reader.contrast))
+    for (const settings of request.readers) {
+      const reader = this.readers.get(settings.id)
+      if (!reader) continue
+      ids.push(settings.id)
+      raws.push(this.response(reader, heardTime, settings.contrast))
     }
     // What every reader has passed is never read again.
     let passed = Infinity
-    for (const band of this.bands.values()) if (band.drum) passed = Math.min(passed, Number.isNaN(band.heardTo) ? -Infinity : band.heardTo)
+    for (const reader of this.readers.values()) passed = Math.min(passed, Number.isNaN(reader.heardTo) ? -Infinity : reader.heardTo)
     if (this.held.length > 0 && this.held[0].time <= passed) {
       this.held = this.held.filter((x) => x.time > passed)
       this.ranges.clear()
     }
-    if (this.traceOn && this.scored && !(Math.abs(heardTime - this.tracedAt) < 1)) {
+    if (this.traceOn && this.map && !(Math.abs(heardTime - this.tracedAt) < 1)) {
       this.tracedAt = heardTime
-      this.traceLines.push(`score sec heard=${heardTime.toFixed(3)} ahead=${(this.scored.frontier - heardTime).toFixed(1)}s ` + this.scored.signals.map(signalLabel).join(' '))
-      // Every fifth second, why each signal is or is not a kick and a hit: each term of the two flags (`signalMap.ts`'s
-      // `flag`) in ninths, every one of which must be high for the flag to be.
-      if (Math.floor(heardTime) % 5 === 0) for (const s of this.scored.signals) this.traceLines.push(`score why ${s.id} bands=${s.bands.join('/')} ${s.why}`)
+      const count = (channel: DrumChannel) => this.held.filter((x) => !Number.isNaN(x[channel])).length
+      const last = this.held.length > 0 ? this.held[this.held.length - 1].time : heardTime
+      this.traceLines.push(`score sec heard=${heardTime.toFixed(3)} ahead=${(last - heardTime).toFixed(1)}s thump=${count('thump')} pierce=${count('pierce')} tick=${count('tick')}`)
     }
     const traceLines = this.traceLines
     this.traceLines = []
@@ -536,10 +368,3 @@ export class MusicAnalysis {
     }
   }
 }
-
-/** One signal in the trace: its id, its kick and hit confidences in tenths where above zero, and its instances held, e.g. `3k9h1:12`. */
-function signalLabel(signal: { id: number; kick: number; hit: number; instances: number }): string {
-  const tenths = (x: number) => Math.min(9, Math.round(x * 10))
-  return `${signal.id}${signal.kick > 0 ? `k${tenths(signal.kick)}` : ''}${signal.hit > 0 ? `h${tenths(signal.hit)}` : ''}:${signal.instances}`
-}
-

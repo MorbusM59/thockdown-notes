@@ -1,6 +1,6 @@
 # TODO
 
-- [ ] Beat map: before a long break the bar tracker drifts up to 0.1s off the beat for a few beats while its look-ahead ends inside the break (plans a second apart alternate between two paths). The synthetic breakbeat test in `apps/notes/src/sound/beatMap.test.ts` is skipped until fixed. Also: ~20s warm-up on testsong, and the drum score (NMF, ~42% of a core) is still the old one.
+- [ ] Beat map: before a long break the bar tracker drifts up to 0.1s off the beat for a few beats while its look-ahead ends inside the break (plans a second apart alternate between two paths). The synthetic breakbeat test in `apps/notes/src/sound/beatMap.test.ts` is skipped until fixed. Also: ~20s warm-up on testsong.
 - [x] Align edit and render viewport (scroll-sync rewrite: single persisted `anchorBlockIndex` per note/snapshot, mode-agnostic restore, see `docs/editor-contract.md`)
 - [x] Add render-mode in-note search
 - [x] Sort date menu by edited
