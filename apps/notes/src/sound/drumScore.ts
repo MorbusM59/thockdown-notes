@@ -12,16 +12,18 @@
  * punch is a pierce with a slight thump and a ringing kick a thump with a weak
  * pierce. How much of that bleed shows is the reader's CONTRAST.
  *
- * 1. ONSETS: a peak of one band's flux, the largest within `PEAK_FRAMES`
- *    either side, whose normalised value reaches `PEAK_Z`. Peaks of different
- *    bands within `MERGE_FRAMES` of each other are one onset, at the frame of
- *    the most pronounced. A channel's SALIENCE in an onset is its normalised
- *    flux less its `CONTRAST` with the other bands; it is PRESENT when that
- *    reaches `PRESENT_Z`, and its strength is the log of its raw flux times
- *    the share of it the salience keeps (so a strength difference is a
- *    loudness ratio, the reader's stretch means one thing in a quiet intro
- *    and a loud drop, and a sound that is mostly another channel is faint in
- *    this one).
+ * 1. ONSETS: a peak of one band's RISE (`OnsetFeatures`: its total linear
+ *    amplitude growing), the largest within `PEAK_FRAMES` either side, whose
+ *    PROMINENCE (the rise over the median rise of the `LOCAL_FRAMES` around
+ *    it) reaches `PEAK_PROMINENCE`: judged against the hit's own
+ *    surroundings, so one kick is the same onset after a quiet passage and a
+ *    busy one. Peaks of different bands within `MERGE_FRAMES` of each other
+ *    are one onset, at the frame of the most prominent, timed where its rise
+ *    began (`attackOf`). A channel is PRESENT in an onset when its prominence
+ *    reaches `PRESENT_PROMINENCE`, and its strength is the log of its rise
+ *    times its SHARE, its prominence against its `CONTRAST` with the other
+ *    bands' (so a strength difference is a loudness ratio, and a sound that
+ *    is mostly another channel is faint in this one, never absent).
  * 2. THE CLOCK: where the beat map has a bar, each onset is placed on the
  *    sixteenth it lands on, and every channel's strength at every sixteenth of
  *    every bar is read off the flux whether an onset was found there or not.
@@ -55,21 +57,30 @@ export interface DrumInstance {
 
 /** How far either side a peak must be the largest, in frames (10 ms each). */
 const PEAK_FRAMES = 3
-/** The normalised flux a peak must reach to be an onset. */
-const PEAK_Z = 1.5
-/** The normalised flux a channel must reach to be present in an onset, after its CONTRAST. */
-const PRESENT_Z = 0.5
 /**
- * CONTRAST[c][d]: how much of band d's normalised flux counts against channel c's presence. A snare's noise reaches
- * the tick band and a hat's the sharp one, so the two weigh each other heavily and an onset is assigned to whichever
- * it is MORE of; a kick under a snare, or a clap on a kick, is both, so the low band and the sharp one weigh each other
- * lightly.
+ * How far either side a rise is judged against, in frames: the hit's own surroundings and nothing older, so a kick
+ * is the same onset after a quiet passage and a busy one.
+ */
+const LOCAL_FRAMES = 10
+/** How many times its surroundings' median rise a band's peak must reach to be an onset (its PROMINENCE). */
+const PEAK_PROMINENCE = 3
+/** The prominence a channel must have to be present in an onset at all. */
+const PRESENT_PROMINENCE = 2
+/** The least median a prominence is taken against, in the rise's units (about -60 dB of full scale): silence is not a surrounding. */
+const MIN_RISE = 0.5
+/**
+ * CONTRAST[c][d]: how much of band d's prominence counts against channel c's SHARE of an onset. A snare's noise
+ * reaches the tick band and a hat's the sharp one, so the two weigh each other heavily; a kick under a snare, or a
+ * clap on a kick, is both, so the low band and the sharp one weigh each other lightly. It only ever WEAKENS a
+ * channel: a kick under a snare is a fainter thump, never none.
  */
 const CONTRAST: readonly (readonly number[])[] = [
   [0, 0.5, 0],
   [0, 0, 0.8],
   [0, 0.8, 0],
 ]
+/** The share of its peak rise a frame must still show to be part of the rise's attack (`attackOf`). */
+const ATTACK_SHARE = 0.25
 /** Peaks closer than this, in frames, are one onset. */
 const MERGE_FRAMES = 3
 /** How far from a sixteenth an onset may lie and be on it, in frames. */
@@ -95,19 +106,6 @@ const ONE_EMPHASIS = 0.25
 const MAX_BEAT_SEC = 1
 
 const BANDS: readonly OnsetBand[] = [0, 1, 2]
-
-/** The strongest raw flux of `band` within `radius` frames of `frame`, inside what is held. */
-function fluxNear(features: OnsetFeatures, band: OnsetBand, frame: number, radius: number, first: number, end: number): number {
-  let most = 0
-  for (let f = Math.max(first, frame - radius); f <= Math.min(end - 1, frame + radius); f++) most = Math.max(most, features.flux(band, f))
-  return most
-}
-
-function normalisedNear(features: OnsetFeatures, band: OnsetBand, frame: number, first: number, end: number): number {
-  let most = -Infinity
-  for (let f = Math.max(first, frame - 1); f <= Math.min(end - 1, frame + 1); f++) most = Math.max(most, features.normalised(band, f))
-  return most
-}
 
 function median(values: number[]): number {
   if (values.length === 0) return NaN
@@ -154,21 +152,23 @@ export function writeDrumScore(
   pattern: Readonly<Record<DrumChannel, number>> = { thump: DEFAULT_PATTERN, pierce: DEFAULT_PATTERN, tick: DEFAULT_PATTERN },
 ): DrumInstance[] {
   const [first, end] = features.frames()
+  forgetBefore(features, first)
   const start = Math.max(first + PEAK_FRAMES, features.frameOf(from))
   const stop = end - PEAK_FRAMES
   // 1. Peaks of every band, merged into onsets.
   const peaks: { frame: number; z: number }[] = []
   for (const band of BANDS) {
     for (let f = start; f < stop; f++) {
-      const z = features.normalised(band, f)
-      if (z < PEAK_Z) continue
-      const x = features.flux(band, f)
+      const x = features.rise(band, f)
+      if (!(x >= PEAK_PROMINENCE * MIN_RISE)) continue
       let largest = true
       for (let g = f - PEAK_FRAMES; g <= f + PEAK_FRAMES && largest; g++) {
-        const y = features.flux(band, g)
+        const y = features.rise(band, g)
         largest = g < f ? y < x : g === f || y <= x
       }
-      if (largest) peaks.push({ frame: f, z })
+      if (!largest) continue
+      const z = prominence(features, band, f, first, end)
+      if (z >= PEAK_PROMINENCE) peaks.push({ frame: f, z })
     }
   }
   peaks.sort((a, b) => a.frame - b.frame)
@@ -192,21 +192,72 @@ export function writeDrumScore(
     for (let b = 0; b < BANDS.length; b++) if (!Number.isNaN(onset.strength[b])) onset.strength[b] += ONE_EMPHASIS * Math.LN2
   }
   onsets.sort((a, b) => a.frame - b.frame)
-  return onsets.map((onset) => ({ time: features.timeOf(onset.frame), one: onset.one, thump: onset.strength[0], pierce: onset.strength[1], tick: onset.strength[2] }))
+  return onsets.map((onset) => ({ time: features.timeOf(attackOf(features, onset.frame, first)), one: onset.one, thump: onset.strength[0], pierce: onset.strength[1], tick: onset.strength[2] }))
 }
 
 /**
- * A channel's strength in an onset at `frame`: the log of its raw flux there, scaled by the share of its normalised flux
- * its CONTRAST leaves (its SALIENCE), or NaN where that salience is short of PRESENT_Z.
+ * Where the rise that peaks at `frame` began: the earliest frame of the run before it, no further back than
+ * PEAK_FRAMES, that still rises ATTACK_SHARE of the peak in the band that peaks most there. A drum whose body builds
+ * over several frames (a real kick does, a click does not) peaks its rise late; the hit is where it started.
  */
-function strengthAt(features: OnsetFeatures, band: OnsetBand, frame: number, first: number, end: number, presence = PRESENT_Z): number {
-  const own = normalisedNear(features, band, frame, first, end)
-  let salience = own
-  for (const other of BANDS) if (CONTRAST[band][other] > 0) salience -= CONTRAST[band][other] * Math.max(0, normalisedNear(features, other, frame, first, end))
-  if (!(salience >= presence) || !(salience > 0)) return NaN
-  // Only the share of the flux the contrast leaves is this channel's: a snare whose rattle reaches the hats' band is
-  // a faint tick, however loud it is there.
-  return Math.log(fluxNear(features, band, frame, 1, first, end) * (salience / own))
+function attackOf(features: OnsetFeatures, frame: number, first: number): number {
+  let band: OnsetBand = 0
+  for (const b of BANDS) if (features.rise(b, frame) > features.rise(band, frame)) band = b
+  const floor = ATTACK_SHARE * features.rise(band, frame)
+  let at = frame
+  while (at - 1 >= Math.max(first, frame - PEAK_FRAMES) && features.rise(band, at - 1) >= floor) at--
+  return at
+}
+
+/** A band's rise at `frame` over the median rise of the LOCAL_FRAMES either side (at least MIN_RISE). */
+function prominence(features: OnsetFeatures, band: OnsetBand, frame: number, first: number, end: number): number {
+  // Asked for the same frames many times over in one writing (every peak, every sixteenth's neighbourhood, each with
+  // the other bands) and again at every writing after: a frame whose neighbourhood is all decoded never changes, so
+  // it is computed once and kept until the features drop it.
+  const final = frame + LOCAL_FRAMES < end
+  const kept = final ? prominenceKept(features)[band] : null
+  const known = kept?.get(frame)
+  if (known !== undefined) return known
+  const around: number[] = []
+  for (let f = Math.max(first, frame - LOCAL_FRAMES); f <= Math.min(end - 1, frame + LOCAL_FRAMES); f++) around.push(features.rise(band, f))
+  const value = features.rise(band, frame) / Math.max(MIN_RISE, median(around))
+  kept?.set(frame, value)
+  return value
+}
+
+/** The prominences of each band's frames whose neighbourhood is all decoded, per features (one per beat map). */
+const keptProminence = new WeakMap<OnsetFeatures, Map<number, number>[]>()
+
+function prominenceKept(features: OnsetFeatures): Map<number, number>[] {
+  let kept = keptProminence.get(features)
+  if (!kept) keptProminence.set(features, (kept = BANDS.map(() => new Map<number, number>())))
+  return kept
+}
+
+/** Forgets the kept prominences of frames the features no longer hold. */
+function forgetBefore(features: OnsetFeatures, first: number): void {
+  for (const kept of keptProminence.get(features) ?? []) for (const frame of kept.keys()) if (frame < first) kept.delete(frame)
+}
+
+/** The frame within one either side of `frame` where `band` rises most. */
+function peakNear(features: OnsetFeatures, band: OnsetBand, frame: number, first: number, end: number): number {
+  let at = frame
+  for (let f = Math.max(first, frame - 1); f <= Math.min(end - 1, frame + 1); f++) if (features.rise(band, f) > features.rise(band, at)) at = f
+  return at
+}
+
+/**
+ * A channel's strength in an onset at `frame`: the log of its rise there times its SHARE, its prominence over its own
+ * and its CONTRAST's of the others', so a sound that is mostly another channel is faint in this one; NaN where its
+ * prominence is short of `presence`.
+ */
+function strengthAt(features: OnsetFeatures, band: OnsetBand, frame: number, first: number, end: number, presence = PRESENT_PROMINENCE): number {
+  const at = peakNear(features, band, frame, first, end)
+  const own = prominence(features, band, at, first, end)
+  if (!(own >= presence) || !(own > 0)) return NaN
+  let against = 0
+  for (const other of BANDS) if (CONTRAST[band][other] > 0) against += CONTRAST[band][other] * prominence(features, other, peakNear(features, other, frame, first, end), first, end)
+  return Math.log(features.rise(band, at) * (own / (own + against)))
 }
 
 /** A channel's strength at a sixteenth whether an onset was found there or not: its strongest within SNAP_FRAMES, at any salience above none. */

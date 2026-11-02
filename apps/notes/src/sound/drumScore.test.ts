@@ -127,4 +127,31 @@ describe('the drum score', () => {
     // And no pattern lifts nothing: each strength is what the pass before the clock wrote.
     for (const x of found) for (const y of patterned) if (x.time === y.time && !Number.isNaN(x.thump)) expect(y.thump).toBeGreaterThanOrEqual(x.thump)
   })
+
+  it('measures loudness: at no pattern a kick at a quarter of the volume is about a quarter as strong', () => {
+    const weak = 20
+    const { samples } = rock(40, (t) => (Math.abs(t - weak) < 0.01 ? 0.25 : 1))
+    const score = scoreOf(samples, 10, 20, 0)
+    const others = [16, 18, 22, 24].map((t) => near(score, t)!.thump)
+    const typical = others.reduce((a, b) => a + b) / others.length
+    const x = near(score, weak)
+    expect(x?.thump).not.toBeNaN()
+    expect(typical - x!.thump).toBeGreaterThan(0.75 * Math.log(4))
+    expect(typical - x!.thump).toBeLessThan(1.25 * Math.log(4))
+  })
+
+  it('finds a kick under a snare as a thump: contrast weakens a channel and never removes it', () => {
+    const { samples, snares } = rock(40)
+    // A kick added on every snare.
+    for (const t0 of snares) {
+      let phase = 0
+      for (let i = 0; i < 0.25 * RATE; i++) {
+        const at = Math.round(t0 * RATE) + i
+        phase += (2 * Math.PI * (50 + 100 * Math.exp(-i / RATE / 0.03))) / RATE
+        if (at < samples.length) samples[at] += 0.8 * Math.sin(phase) * Math.exp(-i / RATE / 0.1)
+      }
+    }
+    const score = scoreOf(samples, 10, 20, 0)
+    for (const t of snares.filter((t) => t >= 12 && t < 28)) expect(near(score, t)?.thump, `kick under the snare at ${t}`).not.toBeNaN()
+  })
 })

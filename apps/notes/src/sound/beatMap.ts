@@ -118,8 +118,12 @@ export interface MapBeat {
 }
 
 /**
- * The onset features the drum score reads (`drumScore.ts`), as the map computed them: per BAND (`OnsetBand`), each
- * frame's raw flux and its normalised value (the flux against its spread over the `NORM_SEC` before).
+ * The onset features the drum score reads (`drumScore.ts`): per BAND (`OnsetBand`), each frame's RISE, how much the
+ * band's total amplitude (the root of its summed linear power) grew since the frame before, 0 where it fell. Total
+ * and linear on purpose, unlike the beat map's own flux (per bin, on a log spectrum): a drum is a burst of energy
+ * whatever its pitch, so a toneless kick repeating at one pitch rises as much as one that starts a bass note, a bass
+ * line moving between notes (energy leaving one bin for another) barely rises at all, and a hit at a quarter of the
+ * volume rises a quarter as much.
  */
 export interface OnsetFeatures {
   /** The first frame still held and one past the last normalised. */
@@ -127,14 +131,11 @@ export interface OnsetFeatures {
   /** The media time of an onset peaking at `frame`, and the frame nearest an onset at `time`. */
   timeOf(frame: number): number
   frameOf(time: number): number
-  flux(band: OnsetBand, frame: number): number
-  normalised(band: OnsetBand, frame: number): number
+  rise(band: OnsetBand, frame: number): number
 }
 
 /** The bands an onset is read in: LOW (a kick, a bass note), SHARP (a snare, a clap), TICK (hats, shakers). */
 export type OnsetBand = 0 | 1 | 2
-/** Where each `OnsetBand` lives in the map's feature rings. */
-const ONSET_FEATURE: readonly number[] = [0, 1, 4]
 
 /** The caret's beat at a moment: how far into it, 0..1, and its period (s); NaN for both where there is none. */
 export interface CaretBeat {
@@ -217,6 +218,9 @@ export class BeatMap {
   private readonly capacity: number
   /** Raw features (low, sharp, all, harmony, tick), the harmony band's spectrum per frame, and the normalised features. */
   private readonly raw: Float32Array[]
+  /** The drum score's rises per `OnsetBand` (`OnsetFeatures`), and each band's amplitude at the last frame. */
+  private readonly rises: Float32Array[]
+  private readonly amplitude = [0, 0, 0]
   private readonly spectrum: Float32Array
   private readonly z: Float32Array[]
   /** Frames with a spectrum, frames with harmony, frames normalised, frames through the forward pass. */
@@ -267,8 +271,9 @@ export class BeatMap {
     this.harmonyFrames = Math.max(1, Math.round(HARMONY_SEC * fps))
     this.normFrames = Math.round(NORM_SEC * fps)
     this.capacity = Math.ceil((MAP_AHEAD_SEC + MAP_BEHIND_SEC + 2 * NORM_SEC + GLIDE_MAX_SEC + 10) * fps)
-    this.raw = [0, 1, 2, 3, 4].map(() => new Float32Array(this.capacity))
-    this.z = [0, 1, 2, 3, 4].map(() => new Float32Array(this.capacity))
+    this.raw = [0, 1, 2, 3].map(() => new Float32Array(this.capacity))
+    this.z = [0, 1, 2, 3].map(() => new Float32Array(this.capacity))
+    this.rises = [0, 1, 2].map(() => new Float32Array(this.capacity))
     this.spectrum = new Float32Array(this.capacity * (this.bins.harmony[1] - this.bins.harmony[0]))
     this.minPeriod = Math.round((60 * fps) / MAX_BPM)
     const maxPeriod = Math.round((60 * fps) / MIN_BPM)
@@ -319,7 +324,15 @@ export class BeatMap {
     this.raw[0][at] = flux(this.bins.low)
     this.raw[1][at] = flux(this.bins.sharp)
     this.raw[2][at] = flux(this.bins.all)
-    this.raw[4][at] = flux(this.bins.tick)
+    // The drum score's rises (`OnsetFeatures`), from the same spectrum, linear.
+    const drumBands = [this.bins.low, this.bins.sharp, this.bins.tick]
+    for (let b = 0; b < 3; b++) {
+      let power = 0
+      for (let k = drumBands[b][0]; k < drumBands[b][1]; k++) power += this.re[k] * this.re[k] + this.im[k] * this.im[k]
+      const amplitude = Math.sqrt(power)
+      this.rises[b][at] = f > 0 ? Math.max(0, amplitude - this.amplitude[b]) : 0
+      this.amplitude[b] = amplitude
+    }
     const [h0, h1] = this.bins.harmony
     for (let k = h0; k < h1; k++) this.spectrum[at * (h1 - h0) + k - h0] = this.current[k]
     const swap = this.previous
@@ -646,8 +659,7 @@ export class BeatMap {
     frames: () => [Math.max(0, this.spectra - this.capacity + 1), this.normalised],
     timeOf: (frame) => this.timeOf(frame),
     frameOf: (time) => Math.round(((time - ONSET_DELAY_SEC - this.origin) * this.sampleRate - this.size / 2) / this.hop),
-    flux: (band, frame) => this.raw[ONSET_FEATURE[band]][frame % this.capacity],
-    normalised: (band, frame) => this.z[ONSET_FEATURE[band]][frame % this.capacity],
+    rise: (band, frame) => this.rises[band][frame % this.capacity],
   }
 
   /** Every shown beat between `from` and `to`. */
