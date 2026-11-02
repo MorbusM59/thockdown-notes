@@ -136,7 +136,7 @@
    so the scene is the square cutout unchanged. */
 .visualizer-cutout-face {
   position: absolute;
-  inset: 0;
+  inset: 1px;
   /* Its own stacking context, so the stripes (z-index -1) paint over its background. */
   z-index: 0;
   pointer-events: none;
@@ -158,26 +158,29 @@
    a dark theme keeps the light on top rather than flipping it to shadow. */
 .visualizer-cutout-orb {
   position: absolute;
-  inset: 0;
+  inset: 1px;
   z-index: 0;
   pointer-events: none;
   border-radius: var(--visualizer-face-radius, 0);
   overflow: hidden;
   filter: invert(var(--scene-invert, 0));
   background:
-    radial-gradient(ellipse 72% 46% at 50% 22%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 55%, rgba(255, 255, 255, 0) 72%),
-    radial-gradient(ellipse 60% 22% at 50% 90%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
-    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0) 52%, rgba(255, 255, 255, 0.10) 66%, rgba(0, 0, 0, 0.18) 100%);
+    radial-gradient(ellipse 72% 46% at 50% 22%, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 55%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(ellipse 60% 22% at 50% 90%, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0) 52%, rgba(255, 255, 255, 0.04) 66%, rgba(0, 0, 0, 0.08) 100%);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  opacity: 100%;
+  outline: 1px solid var(--visualizer-letterbox-color);
+  border: 1px solid var(--visualizer-accent-color);
 }
 /* The dark crescent: a disc with a lit disc cut out of its top, so what is
-   left is a crescent hugging the bottom rim, darkest at the rim. */
+   left is a crescent hugging the bottom rim, darkest at the rim. 3*/
 .visualizer-cutout-orb::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0) 45%);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0) 45%);
   -webkit-mask-image: radial-gradient(circle at 50% 38%, transparent 58%, #000 68%);
   mask-image: radial-gradient(circle at 50% 38%, transparent 58%, #000 68%);
 }
@@ -188,7 +191,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 40%);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 40%);
   -webkit-mask-image: radial-gradient(circle at 50% 66%, transparent 60%, #000 70%);
   mask-image: radial-gradient(circle at 50% 66%, transparent 60%, #000 70%);
 }
