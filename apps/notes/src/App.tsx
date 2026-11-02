@@ -2140,6 +2140,11 @@ function App() {
   const [isGlazeRadialSeedEditing, setIsGlazeRadialSeedEditing] = useState(false)
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
   const [filterInvert, setFilterInvert] = useState(0)
+  // The scene's invert, for a layer that must keep its own polarity under it
+  // (the visualizer's glass cover, which counter-inverts itself by it).
+  useEffect(() => {
+    document.documentElement.style.setProperty('--scene-invert', String(filterInvert))
+  }, [filterInvert])
   const [filterSepia, setFilterSepia] = useState(0)
   const [filterHueRotate, setFilterHueRotate] = useState(0)
   const [filterBrightness, setFilterBrightness] = useState(1)

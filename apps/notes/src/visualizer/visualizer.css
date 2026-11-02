@@ -149,19 +149,21 @@
   border-radius: inherit;
 }
 
-/* The glass orb over the solid: a sphere inscribed in the face, lit from
-   above (a white crescent fading down from the top rim) and shaded below (a
-   dark crescent rising from the bottom rim), with a soft rim and a faint
-   bounce light. Static gradients on a promoted layer, painted once; the
-   thump (VisualizerScene.tsx) scales it by `transform` alone. Above the face,
-   below the grid line round it (::after, z-index 1). */
+/* The glass cover: a sphere's lighting over the whole face, lit from above
+   (a white crescent fading down from the top rim) and shaded below (a dark
+   crescent rising from the bottom rim), with a soft rim and a faint bounce
+   light. It covers the face exactly, rounded with it (cutoutRing.ts), and
+   never moves: the solid thumps inside it. Static gradients, painted once.
+   Counter-inverted by the scene's own invert (--scene-invert, set by App), so
+   a dark theme keeps the light on top rather than flipping it to shadow. */
 .visualizer-cutout-orb {
   position: absolute;
-  inset: 4%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
-  border-radius: 50%;
-  will-change: transform;
+  border-radius: var(--visualizer-face-radius, 0);
+  overflow: hidden;
+  filter: invert(var(--scene-invert, 0));
   background:
     radial-gradient(ellipse 72% 46% at 50% 22%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.18) 55%, rgba(255, 255, 255, 0) 72%),
     radial-gradient(ellipse 60% 22% at 50% 90%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 100%),
@@ -174,7 +176,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 50%;
+  border-radius: inherit;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0) 45%);
   -webkit-mask-image: radial-gradient(circle at 50% 38%, transparent 58%, #000 68%);
   mask-image: radial-gradient(circle at 50% 38%, transparent 58%, #000 68%);
@@ -185,7 +187,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 50%;
+  border-radius: inherit;
   background: linear-gradient(to bottom, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 40%);
   -webkit-mask-image: radial-gradient(circle at 50% 66%, transparent 60%, #000 70%);
   mask-image: radial-gradient(circle at 50% 66%, transparent 60%, #000 70%);
