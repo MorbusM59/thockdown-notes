@@ -62,12 +62,12 @@ function rock(seconds: number, kickGain: (t: number) => number = () => 1) {
 }
 
 /** The drum score written at `listener` with everything up to `listener + ahead` decoded and the map planned. */
-function scoreOf(samples: Float32Array, listener: number, ahead = 20): DrumInstance[] {
+function scoreOf(samples: Float32Array, listener: number, ahead = 20, pattern = 0.5): DrumInstance[] {
   const map = new BeatMap(RATE)
   const chunk = 1152
   for (let fed = 0; fed < samples.length && fed / RATE < listener + ahead; fed += chunk) map.feed(samples.subarray(fed, fed + chunk), fed / RATE)
   map.update(listener)
-  return writeDrumScore(map.onsets, map.beatsBetween(-Infinity, Infinity), listener)
+  return writeDrumScore(map.onsets, map.beatsBetween(-Infinity, Infinity), listener, { thump: pattern, pierce: pattern, tick: pattern })
 }
 
 function near(score: DrumInstance[], time: number): DrumInstance | undefined {
@@ -113,5 +113,18 @@ describe('the drum score', () => {
     const others = [16, 18, 22, 24].map((t) => near(score, t)!.thump)
     const typical = others.reduce((a, b) => a + b) / others.length
     expect(typical - x!.thump).toBeLessThan(0.75 * Math.log(4))
+  })
+
+  it('adds nothing at no pattern: every instance is an onset found in the signal', () => {
+    const { samples } = rock(40, (t) => (Math.abs(t - 20) < 0.01 ? 0.25 : 1))
+    const found = scoreOf(samples, 10, 20, 0)
+    const patterned = scoreOf(samples, 10, 20, 1)
+    const thumps = (score: DrumInstance[]) => score.filter((x) => !Number.isNaN(x.thump)).map((x) => x.time)
+    // The full pattern finds every heard thump, and possibly more; no pattern finds only those.
+    const heard = thumps(found)
+    for (const t of heard) expect(thumps(patterned)).toContain(t)
+    expect(heard.length).toBeLessThanOrEqual(thumps(patterned).length)
+    // And no pattern lifts nothing: each strength is what the pass before the clock wrote.
+    for (const x of found) for (const y of patterned) if (x.time === y.time && !Number.isNaN(x.thump)) expect(y.thump).toBeGreaterThanOrEqual(x.thump)
   })
 })

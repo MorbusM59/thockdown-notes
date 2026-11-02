@@ -263,7 +263,7 @@ function rebuildAskReaders(): void {
     const index = TRACKER_INDEX[name]
     if (!(analysedTrackers & (1 << index))) continue
     const tracker = trackers[name]
-    askReaders.push({ id: index, contrast: tracker.contrast })
+    askReaders.push({ id: index, contrast: tracker.contrast, pattern: tracker.pattern })
   }
 }
 

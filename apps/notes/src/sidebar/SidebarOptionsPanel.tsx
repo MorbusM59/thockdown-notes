@@ -958,7 +958,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel tooltip={what}>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[1]}>
+            <OptionsSliderRows rows={[2]}>
               {[
                 <CompactScrollbarSlider
                   key="contrast"
@@ -971,7 +971,21 @@ export function SidebarOptionsPanel({
                   tooltipLabel="How strong a hit must be, against the others around it, before it responds: higher keeps only the strongest, and only what is mostly this"
                   ariaLabel={`${label}: contrast`}
                   defaultValue={layoutVisualizer.trackers[key].contrast}
-                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { contrast: value } } }))}
+                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], contrast: value } } }))}
+                />,
+                <CompactScrollbarSlider
+                  key="pattern"
+                  id={`beat-tracker-${key}-pattern`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={trackers[key].pattern}
+                  trackLabel="pattern"
+                  tooltipLabel="How far hits follow the bar's pattern rather than only what is heard: at 0 the signal alone, higher lifts a weak hit toward the same place in the bars around it and fills in expected hits that barely sound"
+                  ariaLabel={`${label}: pattern`}
+                  defaultValue={layoutVisualizer.trackers[key].pattern}
+                  formatValue={(value) => Math.round(value * 100).toString()}
+                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], pattern: value } } }))}
                 />,
               ]}
             </OptionsSliderRows>

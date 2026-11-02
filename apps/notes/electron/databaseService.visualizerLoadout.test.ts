@@ -20,7 +20,7 @@ describe('DatabaseService visualizer loadout', () => {
 
   // Every field different from NEUTRAL_BASE's, so a dropped one shows.
   const visualizer: VisualizerSettings = {
-    trackers: { thump: { contrast: 0.4 }, pierce: { contrast: 0.2 }, tick: { contrast: 0.6 } },
+    trackers: { thump: { contrast: 0.4, pattern: 0.3 }, pierce: { contrast: 0.2, pattern: 0.5 }, tick: { contrast: 0.6, pattern: 0.9 } },
     caret: { followsMusic: true, effect: -0.3, shape: 0.4, fallSec: 0.6 },
     edge: { effect: -0.7, mix: { thump: 0.4, pierce: 0.6, tick: 0.2 }, shape: -0.8, fallSec: 0.15, color: 'rgba(12, 34, 56, 0.5)', spreadPx: 14, blurPx: 70 },
     pane: { effect: 0.5, mix: { thump: 0, pierce: 0.3, tick: 1 }, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },

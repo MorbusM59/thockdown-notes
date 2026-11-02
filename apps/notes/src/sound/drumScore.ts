@@ -27,7 +27,7 @@
  *    every bar is read off the flux whether an onset was found there or not.
  *    The EXPECTATION of a sixteenth is the median of that strength at the
  *    same place in the `PATTERN_BARS` bars either side. A channel that sounds
- *    at a sixteenth it is expected at is lifted `LIFT` of the way to the
+ *    at a sixteenth it is expected at is lifted its PATTERN's share of the way to the
  *    expectation: one kick of a four-on-the-floor that came out weak still
  *    lands. A channel that is expected but was not found, where its flux
  *    still shows `PRESENCE_SHARE` of the expectation, is an onset all the
@@ -76,10 +76,19 @@ const MERGE_FRAMES = 3
 const SNAP_FRAMES = 3
 /** How many bars either side a sixteenth's expectation is read over. */
 const PATTERN_BARS = 4
-/** How far a present channel is lifted toward its expectation. */
-const LIFT = 0.5
-/** The share of its expectation a channel's flux must show at a sixteenth to be found there all the same. */
+/**
+ * How far a present channel is lifted toward its expectation, per unit of the channel's PATTERN (0..1, the
+ * tracker's setting): at 0 the score is the signal alone, at the default 0.5 an onset is lifted half way.
+ */
+const LIFT_PER_PATTERN = 1
+/**
+ * The share of its expectation a channel's flux must show at a sixteenth to be found there all the same, at the
+ * default pattern of 0.5. The share is this raised to `2 * pattern`: 1 at no pattern (nothing is added that is not
+ * as strong as expected), this at the default, its square at a full pattern.
+ */
 const PRESENCE_SHARE = 0.3
+/** Each channel's pattern when nobody says otherwise: what the score was tuned at. */
+export const DEFAULT_PATTERN = 0.5
 /** How much a strength on the one gains, as a share of a doubling (strengths are natural logs). */
 const ONE_EMPHASIS = 0.25
 /** The longest gap between two beats a bar is read across, in seconds (the beat map's slowest tempo, and a margin). */
@@ -138,7 +147,12 @@ function sixteenthsOf(features: OnsetFeatures, beats: readonly MapBeat[]): Sixte
  * The drum score from `from` on, up to what the features hold, in time order: every onset (step 1), placed and
  * lifted by the clock where `beats` (the beat map's shown beats) make bars (steps 2 and 3).
  */
-export function writeDrumScore(features: OnsetFeatures, beats: readonly MapBeat[], from: number): DrumInstance[] {
+export function writeDrumScore(
+  features: OnsetFeatures,
+  beats: readonly MapBeat[],
+  from: number,
+  pattern: Readonly<Record<DrumChannel, number>> = { thump: DEFAULT_PATTERN, pierce: DEFAULT_PATTERN, tick: DEFAULT_PATTERN },
+): DrumInstance[] {
   const [first, end] = features.frames()
   const start = Math.max(first + PEAK_FRAMES, features.frameOf(from))
   const stop = end - PEAK_FRAMES
@@ -171,7 +185,7 @@ export function writeDrumScore(features: OnsetFeatures, beats: readonly MapBeat[
   }
   // 2. The clock.
   const sixteenths = sixteenthsOf(features, beats)
-  if (sixteenths.length > 0) lift(features, onsets, sixteenths, start, first, end)
+  if (sixteenths.length > 0) lift(features, onsets, sixteenths, start, first, end, [pattern.thump, pattern.pierce, pattern.tick])
   // 3. The one.
   for (const onset of onsets) {
     if (!onset.one) continue
@@ -206,7 +220,7 @@ function levelAt(features: OnsetFeatures, band: OnsetBand, frame: number, first:
 }
 
 /** Step 2: places `onsets` on the sixteenths, lifts each expected channel, and adds the expected onsets not found. */
-function lift(features: OnsetFeatures, onsets: Onset[], sixteenths: readonly Sixteenth[], start: number, first: number, end: number): void {
+function lift(features: OnsetFeatures, onsets: Onset[], sixteenths: readonly Sixteenth[], start: number, first: number, end: number, pattern: readonly number[]): void {
   // Every channel's strength at every sixteenth, found or not (-Infinity where it is not there at all).
   const level = BANDS.map((band) => sixteenths.map((s) => levelAt(features, band, s.frame, first, end)))
   // The sixteenths by bar and place, to read a place's expectation across bars.
@@ -227,6 +241,9 @@ function lift(features: OnsetFeatures, onsets: Onset[], sixteenths: readonly Six
     onset.one = sixteenths[k].place === 0
   }
   for (let b = 0; b < BANDS.length; b++) {
+    if (!(pattern[b] > 0)) continue
+    const liftBy = Math.min(1, LIFT_PER_PATTERN * pattern[b])
+    const presence = 2 * pattern[b] * Math.log(PRESENCE_SHARE)
     // The median strength of the channel's onsets: what an expectation must reach to lift anything.
     const typical = median(onsets.map((o) => o.strength[b]).filter((x) => !Number.isNaN(x)))
     if (Number.isNaN(typical)) continue
@@ -240,12 +257,12 @@ function lift(features: OnsetFeatures, onsets: Onset[], sixteenths: readonly Six
       const onset = onsetAt.get(i)
       const own = onset ? onset.strength[b] : NaN
       if (!Number.isNaN(own)) {
-        if (own < expected) onset!.strength[b] = own + LIFT * (expected - own)
+        if (own < expected) onset!.strength[b] = own + liftBy * (expected - own)
         continue
       }
       // Expected and not found: found all the same where the flux still shows a share of the expectation.
-      if (level[b][i] < expected + Math.log(PRESENCE_SHARE)) continue
-      const found = level[b][i] + LIFT * (expected - level[b][i])
+      if (level[b][i] < expected + presence) continue
+      const found = level[b][i] + liftBy * (expected - level[b][i])
       if (onset) onset.strength[b] = found
       else {
         const added: Onset = { frame: s.frame, strength: BANDS.map(() => NaN), one: s.place === 0 }

@@ -48,7 +48,7 @@ describe('a layout saved with the kicks, hits and band trackers', () => {
       edge: { mix: { kicks: 1, hits: 0.5, band: 0.25 } },
       immersive: { waveMix: { kicks: 0, hits: 0, band: 1 } },
     }, false)
-    expect(v.trackers).toEqual({ thump: { contrast: 0.3 }, pierce: { contrast: 0.2 }, tick: DEFAULT_VISUALIZER_TRACKERS.tick })
+    expect(v.trackers).toEqual({ thump: { contrast: 0.3, pattern: 0.5 }, pierce: { contrast: 0.2, pattern: 0.5 }, tick: DEFAULT_VISUALIZER_TRACKERS.tick })
     expect(v.edge.mix).toEqual({ thump: 1, pierce: 0.5, tick: 0.25 })
     expect(v.immersive.waveMix).toEqual(soleMix('tick'))
   })
@@ -62,7 +62,7 @@ describe('a layout saved before the trackers', () => {
     }, false)
     expect(v.edge.mix).toEqual(soleMix('thump'))
     expect(v.pane.mix).toEqual(soleMix('tick'))
-    expect(v.trackers.thump).toEqual({ contrast: 0.3 })
+    expect(v.trackers.thump).toEqual({ contrast: 0.3, pattern: 0.5 })
     // A hat's contrast was the drum score's, not the tick's.
     expect(v.trackers.tick).toEqual(DEFAULT_VISUALIZER_TRACKERS.tick)
     // The pulse rode the edge.

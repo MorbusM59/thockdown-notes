@@ -22,7 +22,7 @@
  */
 
 import { BeatMap, MAP_AHEAD_SEC } from './beatMap'
-import { writeDrumScore, type DrumChannel, type DrumInstance } from './drumScore'
+import { DEFAULT_PATTERN, writeDrumScore, type DrumChannel, type DrumInstance } from './drumScore'
 import { MusicDecodeStream } from './musicDecodeStream'
 import { PeakWindow } from './peakWindow'
 
@@ -52,6 +52,8 @@ export interface ReaderSource {
 export interface ReaderSettings {
   id: number
   contrast: number
+  /** How far the score of the reader's channel follows the bar's pattern rather than the signal alone (`drumScore.ts`), 0..1. */
+  pattern: number
 }
 
 /** Starts the analysis over: decoding from `LEAD_SEC` before `listenerTime`, every window emptied. */
@@ -184,6 +186,8 @@ export class MusicAnalysis {
   private delay: DelayRing | null = null
   /** The beat map's plan the score was last written from. */
   private scoredRevision = -1
+  /** Each channel's pattern the score is written with: the latest its reader asked with. A change rewrites the score at once. */
+  private readonly pattern: Record<DrumChannel, number> = { thump: DEFAULT_PATTERN, pierce: DEFAULT_PATTERN, tick: DEFAULT_PATTERN }
   /**
    * Every instance of the score no reader has passed. Each writing replaces what lies from the moment heard on, so an
    * instance is correctable until it is heard (the beats around it move as the map plans further ahead).
@@ -286,7 +290,7 @@ export class MusicAnalysis {
     const map = this.map
     if (!map || map.revision === this.scoredRevision) return
     this.scoredRevision = map.revision
-    const written = writeDrumScore(map.onsets, map.beatsBetween(-Infinity, Infinity), heardTime)
+    const written = writeDrumScore(map.onsets, map.beatsBetween(-Infinity, Infinity), heardTime, this.pattern)
     let keep = 0
     while (keep < this.held.length && this.held[keep].time < heardTime) keep++
     this.held = [...this.held.slice(0, keep), ...written.filter((x) => x.time >= heardTime)]
@@ -325,6 +329,12 @@ export class MusicAnalysis {
     this.listenerTime = request.listenerTime
     this.traceOn = request.trace
     const { heardTime } = request
+    for (const settings of request.readers) {
+      const reader = this.readers.get(settings.id)
+      if (!reader || this.pattern[reader.channel] === settings.pattern) continue
+      this.pattern[reader.channel] = settings.pattern
+      this.scoredRevision = -1
+    }
     if (this.started === this.run) {
       this.stream?.want(request.listenerTime + this.aheadSec() + DECODE_MARGIN_SEC)
       this.releaseUpTo(request.listenerTime + LEAD_SEC + DECODE_MARGIN_SEC)

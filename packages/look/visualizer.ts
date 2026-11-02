@@ -40,6 +40,12 @@ export const VISUALIZER_TRACKERS: readonly VisualizerTrackerName[] = ['thump', '
 export interface VisualizerTracker {
   /** The share of the channel's instances around the listener that show nothing: higher keeps only the strongest, and only what is mostly this channel. */
   contrast: number
+  /**
+   * How far the channel's score follows the bar's pattern rather than the signal alone, 0..1: at 0 every instance is
+   * what was heard, higher lifts a weak hit toward the same place in the bars around it and finds expected hits that
+   * barely sound. 0.5 is what the score was tuned at.
+   */
+  pattern: number
 }
 
 export type VisualizerTrackers = Record<VisualizerTrackerName, VisualizerTracker>
@@ -300,9 +306,9 @@ export function soleMix(tracker: VisualizerTrackerName): VisualizerMix {
 
 /** The trackers' defaults: half of each channel's instances show. */
 export const DEFAULT_VISUALIZER_TRACKERS: VisualizerTrackers = {
-  thump: { contrast: 0.5 },
-  pierce: { contrast: 0.5 },
-  tick: { contrast: 0.5 },
+  thump: { contrast: 0.5, pattern: 0.5 },
+  pierce: { contrast: 0.5, pattern: 0.5 },
+  tick: { contrast: 0.5, pattern: 0.5 },
 }
 
 /**
@@ -453,7 +459,7 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
 
 function sanitizeTracker(input: unknown, d: VisualizerTracker): VisualizerTracker {
   const source = fieldsOf(input)
-  return { contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast) }
+  return { contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast), pattern: bounded(source.pattern, 0, 1, d.pattern) }
 }
 
 /**

@@ -82,7 +82,7 @@ async function play(samples: Float32Array, from: number, seconds: number, contra
   const answers: AnalysisAnswer[] = []
   for (let frame = 0; frame * (1 / 60) < seconds; frame++) {
     const at = from + frame / 60
-    const answer = analysis.handle({ type: 'ask', run: 1, listenerTime: at, heardTime: at, readers: [{ id: 7, contrast }], trace: false })
+    const answer = analysis.handle({ type: 'ask', run: 1, listenerTime: at, heardTime: at, readers: [{ id: 7, contrast, pattern: 0.5 }], trace: false })
     if (answer) answers.push(answer)
   }
   return { answers, streams, analysis }
