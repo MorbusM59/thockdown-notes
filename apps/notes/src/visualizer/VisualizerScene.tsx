@@ -144,6 +144,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const cutoutRef = useRef<HTMLDivElement | null>(null)
+  const orbRef = useRef<HTMLDivElement | null>(null)
   const [gapColumn, setGapColumn] = useState<number | null>(null)
 
   // The frame loop. Rebuilt when the layout changes, since the number of
@@ -163,21 +164,29 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     if (!element) return
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
     let running: Animation | null = null
+    let runningOrb: Animation | null = null
     const unsubscribe = subscribePulseHits((strength) => {
       if (reducedMotion.matches) return
       const { edgeShape, edgeFallSec, pulseBoost } = readGridWaveSettings()
       const amount = pulseAmount(strength, pulseBoost)
       const keyframes: Keyframe[] = []
+      const orbKeyframes: Keyframe[] = []
       for (let i = 0; i <= THUMP_KEYFRAMES; i++) {
-        const size = `100% 100%, ${(100 * (1 + amount * THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape))).toFixed(2)}% auto`
+        const scale = 1 + amount * THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape)
+        const size = `100% 100%, ${(100 * scale).toFixed(2)}% auto`
         keyframes.push({ maskSize: size, webkitMaskSize: size } as Keyframe)
+        orbKeyframes.push({ transform: `scale(${scale.toFixed(4)})` })
       }
+      const timing = { duration: edgeFallSec * 1000, easing: 'linear' }
       running?.cancel()
-      running = element.animate(keyframes, { duration: edgeFallSec * 1000, easing: 'linear', pseudoElement: '::before' })
+      runningOrb?.cancel()
+      running = element.animate(keyframes, { ...timing, pseudoElement: '::before' })
+      runningOrb = orbRef.current?.animate(orbKeyframes, timing) ?? null
     })
     return () => {
       unsubscribe()
       running?.cancel()
+      runningOrb?.cancel()
     }
   }, [hasCutout])
 
@@ -406,6 +415,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
               onClick={onCutoutClick}
             >
               <div ref={cutoutRef} className="visualizer-cutout-face" />
+              <div ref={orbRef} className="visualizer-cutout-orb" />
             </div>
           )}
         </>
