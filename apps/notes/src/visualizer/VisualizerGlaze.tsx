@@ -42,8 +42,17 @@ type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: 
  * (`parallaxSway.ts`).
  */
 const LINEAR_ANGLE_DEG = 45
-/** At least the screen's diagonal, the side a turned layer needs to cover the screen at any angle. */
-const DIAGONAL = 'calc(100vmax * 1.415)'
+/**
+ * The side a band turned 45deg needs to cover a w x h screen, both along and
+ * across its stripes: the screen's extent projected onto a 45deg axis,
+ * (w + h) / sqrt(2), plus a pixel each side for rounding. Not 1.415 x vmax,
+ * which this was: that is the diagonal of a SQUARE screen and oversized a
+ * 16:9 band by 28% each way. Each stack is promoted (it moves by transform
+ * alone) and rasterized whole, five of them at full count, so the band's area
+ * is the visualizer's largest tile-memory cost and exceeding the
+ * compositor's budget left tiles undrawn.
+ */
+const BAND_SIDE = 'calc((100vw + 100vh) * 0.70711 + 2px)'
 
 function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: number; opacity: number }) {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -53,7 +62,7 @@ function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: numbe
     return registerSwayLayer(element, layer.index, layer.depth, layer.kind === 'linear' ? { periodPx: layer.periodPx, angleDeg: LINEAR_ANGLE_DEG } : null)
   }, [layer.index, layer.depth, layer.kind, layer.periodPx])
   // A radial layer reaches past the screen by the sway's overscan. A linear
-  // stack is a band as tall as the screen's diagonal and longer than it by
+  // stack is a band as tall as BAND_SIDE and longer than it by
   // one period (half each end, what wrapping its position needs), centred
   // and turned to the stacks' angle; its sway across the stripes is
   // invisible, so it needs no overscan that way.
@@ -65,8 +74,8 @@ function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: numbe
       inset: 'auto',
       left: '50%',
       top: '50%',
-      width: `calc(${DIAGONAL} + ${layer.periodPx}px)`,
-      height: DIAGONAL,
+      width: `calc(${BAND_SIDE} + ${layer.periodPx}px)`,
+      height: BAND_SIDE,
       translate: '-50% -50%',
       rotate: `${LINEAR_ANGLE_DEG - 90}deg`,
     }
