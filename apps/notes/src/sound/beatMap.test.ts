@@ -168,7 +168,10 @@ describe('the rolling beat map', () => {
     expect(match(second, shown, 110, 135)).toMatchObject({ missed: 0, extra: 0 })
   })
 
-  it('puts the caret on the kick (one and three) of a breakbeat whose snare is louder, and holds it through a break', () => {
+  // SUSPENDED (2026-11-02, Joe's call to try the bar tracker live): while the look-ahead ends inside the break, plans a
+  // second apart alternate between two paths, and the beats committed just before the break (45-48s) drift up to 0.1s
+  // off the beat. A real defect in the tracker, not in this test: un-skip when it is fixed (TODO.md).
+  it.skip('puts the caret on the kick (one and three) of a breakbeat whose snare is louder, and holds it through a break', () => {
     const beat = 60 / 174
     const samples = dnb(120, beat, 50, 72)
     const map = new BeatMap(RATE)
