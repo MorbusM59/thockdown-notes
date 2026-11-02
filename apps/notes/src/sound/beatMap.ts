@@ -1,144 +1,116 @@
 /**
- * The ROLLING BEAT MAP: every beat of the music around the listener, planned
- * from the decoded track up to `MAP_AHEAD_SEC` ahead, so the caret's pulse
- * lands on each beat by design rather than steering toward a tempo after
- * the fact. Built in the analysis worker (`musicAnalysis.ts`) from the same
- * decoded samples as everything else, and bounded in memory to a window of
- * `MAP_BEHIND_SEC` + `MAP_AHEAD_SEC` whatever the track's length (an
- * eight-hour ambient track and a three-hour set cost the same as a song).
+ * The ROLLING BEAT MAP: every beat of the music around the listener, and
+ * which of them is the ONE of its bar, planned from the decoded track up to
+ * `MAP_AHEAD_SEC` ahead, so the caret's pulse lands on each beat by design
+ * rather than steering toward a tempo after the fact. Built in the analysis
+ * worker (`musicAnalysis.ts`) from the same decoded samples as everything
+ * else, and bounded in memory to a window of `MAP_BEHIND_SEC` +
+ * `MAP_AHEAD_SEC` whatever the track's length.
  *
- * Three stages, each a function of what the one before produced:
+ * It is a BAR-POINTER tracker (Whiteley, Cemgil and Godsill 2006; the state
+ * space of Krebs, Böck and Widmer 2015): a hidden state is a tempo and a
+ * position inside a four-beat bar, the state advances one position per
+ * frame, and a Viterbi pass finds the one path of states that best explains
+ * the music. Tempo, beat and bar are therefore decided TOGETHER, which is
+ * what keeps the beat off the off-beat and the one off beat three.
  *
- * 1. An ONSET ENVELOPE, one value per hop (`HOP_SEC`): how much the music's
- *    energy rose, low end and top end each measured on its own (a kick
- *    rises in the first, a hat or a strum in the second), half-wave
- *    rectified so a decay is not an event.
- * 2. A LOCAL TEMPO CURVE, one estimate a second (`TEMPO_STEP_SEC`): the
- *    autocorrelation of the envelope over `TEMPO_WINDOW_SEC` centred on that
- *    second, weighted towards `PRIOR_BPM` (a listener's preferred tempo, as
- *    in Ellis 2007) and towards the estimate before it (one octave error
- *    between neighbouring seconds is a doubt, not a tempo change). Each
- *    estimate carries a CONFIDENCE: the autocorrelation's peak against its
- *    zero lag, so a passage with no repeating pulse (ambient, a spoken
- *    intro) says so.
- * 3. BEATS by dynamic programming (Ellis, "Beat Tracking by Dynamic
- *    Programming", JNMR 36(1), 2007): the best chain of beats through the
- *    envelope, where each beat scores its onset and each gap is penalised
- *    by how far its length strays from the local tempo's period, on a log
- *    scale (`TIGHTNESS`). The chain is read back from the far end of what
- *    is decoded, so every beat is placed knowing the music on BOTH sides of
- *    it: a ritardando slows the chain beat by beat, and through a silence
- *    (no onsets to score) the chain simply keeps the period, gliding from
- *    the tempo before to the tempo after.
+ * 1. FEATURES, one frame every 1/`FRAME_RATE` s, from one short-time
+ *    spectrum: how much each of three bands rose since the frame before
+ *    (spectral flux, half-wave rectified, on a log magnitude): LOW (a kick,
+ *    a bass note), SHARP (a snare, a clap: what cuts through) and ALL (every
+ *    onset, the hats included); plus HARMONY, how much the bass register's
+ *    spectrum differs between the quarter second after the frame and the
+ *    quarter second before (a chord or bass note changing). Each feature is
+ *    normalised against its own spread over the `NORM_SEC` before it, so the
+ *    weights below mean the same thing in a quiet intro and a loud drop.
+ * 2. WHAT A BAR SOUNDS LIKE, scored at each beat of the path: low on beats
+ *    one and three, sharp on two and four (the backbeat every genre here
+ *    shares), every onset on each beat AND each half beat (so hats hold the
+ *    tempo through a hats-only intro without pulling the beat onto the
+ *    off-beat, which an on-beat-only weight did in house), and harmony on
+ *    the one (which is what tells beat one from beat three, the two being
+ *    alike in drums alone).
+ * 3. THE PATH: each beat may change the tempo by a little, at a cost of
+ *    `TEMPO_CHANGE_COST` per octave, and pays a log-Gaussian prior around
+ *    `PRIOR_BPM`. The cost is what stops a broken beat being read as a
+ *    4:3 of itself for a few bars; a DJ's slow pitch ramp costs almost
+ *    nothing and is followed.
  *
- * Beats are COMMITTED once they are within `COMMIT_SEC` of the listener and
- * never move again: every later chain must pass through the last committed
- * beat, so the pulse already drawn and the one about to be drawn are one
- * chain. Beyond that the plan is revised as more of the track is decoded.
+ * The forward pass runs once per frame as the track is decoded; the path is
+ * read back from the far end of what is decoded every `REPLAN_SEC`, so every
+ * beat is placed knowing the music on both sides of it. Beats are COMMITTED
+ * once within `COMMIT_SEC` of the listener and never move again; the read
+ * back stops at the last committed beat.
  *
- * WHERE THERE IS A BEAT is decided from the confidence (`judge`), with the look-ahead:
- * a passage whose tempo estimates are confident has beats; a gap of
- * unconfident estimates (a silence, a break, a breakdown) no longer than
- * `GLIDE_MAX_SEC` between two confident passages is carried through on the
- * chain; anything longer, or a track with no pulse at all, has none, and the
- * caret blinks there.
+ * WHERE THERE IS A BEAT: the path always has beats, so each carries a
+ * CONFIDENCE, the median of its own and its neighbours' bar scores: a median, because a few loud events at random moments score high on whatever path crosses them, while a pulse scores on most of its beats. A beat is
+ * shown when it is confident, or when it lies in a gap of unconfident beats
+ * no longer than `GLIDE_MAX_SEC` between two confident ones (a break or a
+ * silence is carried on the beat); a longer gap, or a passage with no pulse,
+ * has none and the caret blinks there.
  */
 
-/** The envelope's resolution, in seconds. */
-export const HOP_SEC = 256 / 48000
 /** How far ahead of the listener the map is planned: the look-ahead of the whole score (`musicScore.ts`), which the drum hits are written over too. */
 export const MAP_AHEAD_SEC = 60
 /** How far behind the listener the map keeps what it planned. */
 export const MAP_BEHIND_SEC = 30
 /** Beats this close to the listener (or behind it) are final. */
 export const COMMIT_SEC = 2
-/** The span each tempo estimate is measured over, and how often one is made. */
-const TEMPO_WINDOW_SEC = 4
-const TEMPO_STEP_SEC = 1
-/** The tempo estimate's smoothing of the envelope, in hops either side. */
-const SMOOTH_HOPS = 4
-/** The tempos considered, in beats a minute. */
-const MIN_BPM = 50
-const MAX_BPM = 220
-/** The tempo prior: a log-Gaussian centred here, `PRIOR_OCTAVES` wide. */
-const PRIOR_BPM = 120
-const PRIOR_OCTAVES = 1
-/**
- * How much a tempo estimate is drawn to the last one: a log-Gaussian this many octaves wide, worth at most
- * CONTINUITY_PULL of a candidate's score. It breaks near-ties only: as a quarter-to-one factor it outvoted the music
- * itself, so a near-tie the first window decided wrongly (a 3:2 or 4:3 of the beat) held for the whole track.
- */
-const CONTINUITY_OCTAVES = 0.15
-const CONTINUITY_PULL = 0.1
-/** Least strength (autocorrelation peak against zero lag) an estimate needs to count at all. */
-const MIN_STRENGTH = 0.2
-/**
- * How far two estimates' periods may differ, octaves aside, and still agree.
- * A tempo ramp of a couple of beats a minute per second moves about this
- * much between two estimates `AGREE_STEP` apart.
- */
-const AGREE_RATIO = 0.06
-/** Estimates this many steps apart look at windows that do not overlap. */
-const AGREE_STEP = Math.round(TEMPO_WINDOW_SEC / TEMPO_STEP_SEC)
-/** The longest unconfident gap carried through on the beat between two confident passages. */
+/** The longest stretch of unconfident beats carried through between two confident ones. */
 export const GLIDE_MAX_SEC = 16
-/** How strongly a gap is held to the local period (Ellis's alpha, for an envelope of unit spread). */
-const TIGHTNESS = 1600
-/**
- * The KICK band: below this the envelope's second, low-only measure
- * (`kickEnvelope`), which decides where the caret's beat falls in the bar.
- */
-const KICK_HZ = 90
-/**
- * How many beats either side a beat's time is SMOOTHED over (`regularize`):
- * a local quadratic fit through the chain, so a steady tempo is a rigid grid
- * however busy the break played over it, while a ritardando, which is
- * smooth over that span, is followed.
- */
-const SMOOTH_BEATS = 8
-/** How many beats of look-ahead decide where the caret's beat falls (`decideCaret`). */
-const CARET_DECIDE_BEATS = 32
-/** How much stronger another placement of the caret's beat must read to replace the held one. */
-const CARET_SWITCH_RATIO = 1.5
-/** How much more of the track must be decoded before the chain is planned again. */
-const REPLAN_SEC = 1
-/** The energy smoothing per hop for each band (one-pole, the hop's share). */
-const LOW_HZ = 150
-const ENERGY_FLOOR = 1e-10
-
-/** One planned beat: its media time and whether it is final. */
-export interface MapBeat {
-  time: number
-  committed: boolean
-}
-
-/**
- * One tempo estimate: the second it is centred on, the period (s) and the
- * strength; then, judged against its neighbours (`judge`), whether it is
- * CONFIDENT and its period folded onto the octave of the beat before it.
- */
-interface TempoFrame {
-  time: number
-  period: number
-  strength: number
-  confident: boolean
-  folded: number
-}
-
 /** The caret's tempo range, in beats a minute: from CARET_MIN_BPM up to but not including twice it. */
 export const CARET_MIN_BPM = 70
 
+/** Feature frames a second. */
+const FRAME_RATE = 100
+/** The spectrum's length in samples at 48 kHz (scaled with the sample rate): about 43 ms. */
+const FFT_SIZE_48K = 2048
 /**
- * Where the caret's beat falls from map beat number `from` on: a caret beat
- * at every map beat position `from + phase + m / scale` (whole m), `scale`
- * being the caret's beats per map beat (a power of two) and `phase` in map
- * beats, in halves. `period` is the map's beat period (s) it was decided at.
+ * How long after the centre of the spectrum whose flux it peaks an onset happened. The log magnitude takes most of a
+ * transient's rise as soon as it enters the window, so the flux peaks while the onset is still in the window's later
+ * half: an impulse fed through these features peaks the flux 9 to 16 ms (the frame's quantisation) before it, 12 ms
+ * on average.
  */
-interface CaretPlacement {
-  from: number
-  scale: number
-  phase: number
-  period: number
+const ONSET_DELAY_SEC = 0.012
+/** The bands, in Hz. */
+const LOW_BAND: readonly [number, number] = [30, 150]
+const SHARP_BAND: readonly [number, number] = [1000, 8000]
+const ALL_BAND: readonly [number, number] = [30, 16000]
+const HARMONY_BAND: readonly [number, number] = [40, 500]
+/** How far either side of a frame its harmony compares, in seconds. */
+const HARMONY_SEC = 0.25
+/** How far back from a frame its features are normalised over, in seconds. */
+const NORM_SEC = 8
+/** The tempos considered, in beats a minute. */
+const MIN_BPM = 70
+const MAX_BPM = 180
+/** The tempo prior: a log-Gaussian in octaves around this, weighted by TEMPO_PRIOR_WEIGHT per beat. */
+const PRIOR_BPM = 120
+const TEMPO_PRIOR_WEIGHT = 2
+/** What changing tempo costs at a beat, per octave of change. */
+const TEMPO_CHANGE_COST = 100
+/** The most a beat may change the period by, in frames. */
+const TEMPO_STEP_FRAMES = 2
+/** Weights of the bar's score (see the overview): every onset at each beat and half beat, harmony on the one. */
+const TICK_WEIGHT = 0.5
+/** How much a beat's drum score loses for the OTHER drum sounding there: a kick on the backbeat or a snare on the one counts against the bar. */
+const CONTRAST = 0.5
+const HARMONY_WEIGHT = 1
+/** A beat's confidence is the median of its bar score over this many beats either side, and it is confident at this. */
+const CONFIDENCE_BEATS = 8
+/** How many beats either side a beat's time is smoothed over (`smooth`). */
+const SMOOTH_BEATS = 4
+const MIN_CONFIDENCE = 0.5
+/** How much more of the track must be decoded before the path is read back again. */
+const REPLAN_SEC = 1
+/** A feature's spread below this is silence: it is 0 there rather than amplified noise. */
+const MIN_SPREAD = 1e-3
+
+/** One planned beat: its media time, whether it is final, and whether it is the one of its bar. */
+export interface MapBeat {
+  time: number
+  committed: boolean
+  one: boolean
 }
 
 /** The caret's beat at a moment: how far into it, 0..1, and its period (s); NaN for both where there is none. */
@@ -147,578 +119,508 @@ export interface CaretBeat {
   period: number
 }
 
-/** The value at `at` of the least-squares quadratic through (j, values[j]) for j in lo..hi. */
-function quadraticAt(values: number[], lo: number, hi: number, at: number): number {
-  // Centred on `at` for conditioning: fit y = a + b x + c x^2 with x = j - at, and a is the answer.
-  let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, t0 = 0, t1 = 0, t2 = 0
-  for (let j = lo; j <= hi; j++) {
-    const x = j - at
-    const y = values[j] - values[at]
-    const x2 = x * x
-    s0 += 1; s1 += x; s2 += x2; s3 += x2 * x; s4 += x2 * x2
-    t0 += y; t1 += x * y; t2 += x2 * y
-  }
-  // Cramer's rule on the normal equations, for a.
-  const det = s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2)
-  if (Math.abs(det) < 1e-9) return values[at]
-  const a = t0 * (s2 * s4 - s3 * s3) - s1 * (t1 * s4 - s3 * t2) + s2 * (t1 * s3 - s2 * t2)
-  return values[at] + a / det
+/** A beat of the path: its frame and time, its place in the bar (0 is the one), its bar score and whether it is shown. */
+interface PathBeat {
+  frame: number
+  /** Its media time: the frame's, smoothed over its neighbours (`smooth`). */
+  time: number
+  position: number
+  score: number
+  shown: boolean
 }
 
-function logGaussian(x: number, centre: number, octaves: number): number {
-  const d = Math.log2(x / centre) / octaves
-  return Math.exp(-0.5 * d * d)
+function fft(re: Float64Array, im: Float64Array): void {
+  const n = re.length
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1
+    for (; j & bit; bit >>= 1) j ^= bit
+    j ^= bit
+    if (i < j) {
+      const r = re[i]
+      re[i] = re[j]
+      re[j] = r
+      const m = im[i]
+      im[i] = im[j]
+      im[j] = m
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const angle = (-2 * Math.PI) / len
+    const wr = Math.cos(angle)
+    const wi = Math.sin(angle)
+    const half = len >> 1
+    for (let i = 0; i < n; i += len) {
+      let cr = 1
+      let ci = 0
+      for (let k = 0; k < half; k++) {
+        const a = i + k
+        const b = a + half
+        const vr = re[b] * cr - im[b] * ci
+        const vi = re[b] * ci + im[b] * cr
+        re[b] = re[a] - vr
+        im[b] = im[a] - vi
+        re[a] += vr
+        im[a] += vi
+        const t = cr * wr - ci * wi
+        ci = cr * wi + ci * wr
+        cr = t
+      }
+    }
+  }
 }
 
 export class BeatMap {
-  private readonly hopFrames: number
-  private readonly lowCoeff: number
-  /** The envelope, a ring; `envStart` is the media time of the hop at index `envHead`'s position 0. */
-  private readonly capacity: number
-  private readonly envelope: Float32Array
-  /** Index (in hops since the map started) of the oldest hop kept, and of the next to be written. */
-  private first = 0
-  private next = 0
-  /** Media time of hop 0. */
+  private readonly hop: number
+  private readonly size: number
+  private readonly frameSec: number
+  private readonly window: Float64Array
+  private readonly re: Float64Array
+  private readonly im: Float64Array
+  /** The last `size` samples, a ring, and how many samples were fed in all. */
+  private readonly samples: Float32Array
+  private fed = 0
+  /** Media time of sample 0. */
   private origin = NaN
-  /** The open hop's accumulators. */
-  private filled = 0
-  private low = 0
-  private lastX = 0
-  private lowEnergy = 0
-  private highEnergy = 0
-  private prevLowDb = NaN
-  private prevHighDb = NaN
-  private readonly tempos: TempoFrame[] = []
-  /** Committed beats, as hop indices (fractional, from the chain's whole hops), oldest first; trimmed behind. */
-  private committed: number[] = []
-  /** Beats ever committed: the count of the one after the last committed, so every beat has a number. */
+  private readonly bins: {
+    low: [number, number]
+    sharp: [number, number]
+    all: [number, number]
+    harmony: [number, number]
+  }
+  private previous: Float64Array
+  private current: Float64Array
+  /** Frames of every ring below; frame f lives at f % capacity. */
+  private readonly capacity: number
+  /** Raw features (low, sharp, all, harmony), the harmony band's spectrum per frame, and the normalised features. */
+  private readonly raw: Float32Array[]
+  private readonly spectrum: Float32Array
+  private readonly z: Float32Array[]
+  /** Frames with a spectrum, frames with harmony, frames normalised, frames through the forward pass. */
+  private spectra = 0
+  private harmonised = 0
+  private normalised = 0
+  private passed = 0
+  private readonly harmonyFrames: number
+  private readonly normFrames: number
+  /** The state space: periods minPeriod..minPeriod+periods-1 frames, each with 4 * period positions from `offsets[i]`. */
+  private readonly minPeriod: number
+  private readonly periods: number
+  private readonly offsets: Int32Array
+  private readonly prior: Float64Array
+  private score: Float64Array
+  private nextScore: Float64Array
+  /** For each frame, period and beat in the bar: the period index the beat was entered from. */
+  private readonly back: Int16Array
+  /** Committed beats then planned ones, in order; `committedCount` counts every beat ever committed. */
+  private committed: PathBeat[] = []
   private committedCount = 0
-  /** The last plan read back: provisional beats after the last committed one. */
-  private planned: number[] = []
-  private dirty = false
-  /** The kick band's rise per hop, a ring alongside `envelope`, and its filter state. */
-  private readonly kickEnvelope: Float32Array
-  private readonly kickCoeff: number
-  private kick1 = 0
-  private kick2 = 0
-  private kickEnergy = 0
-  private prevKickDb = NaN
-  /** Where the CARET's beat falls (`decideCaret`), each decision from its beat on, oldest first. */
-  private carets: CaretPlacement[] = []
-  /** Scratch for one tempo window's smoothed envelope. */
-  private readonly smoothed: Float64Array
-  /** The frontier the last plan was made at. */
-  private plannedAt = NaN
+  private planned: PathBeat[] = []
+  private plannedAt = -Infinity
 
   constructor(readonly sampleRate: number) {
-    this.hopFrames = Math.max(1, Math.round(HOP_SEC * sampleRate))
-    this.lowCoeff = 1 - Math.exp((-2 * Math.PI * LOW_HZ) / sampleRate)
-    this.capacity = Math.ceil((MAP_AHEAD_SEC + MAP_BEHIND_SEC + TEMPO_WINDOW_SEC + 4) / this.hopSec)
-    this.envelope = new Float32Array(this.capacity)
-    this.kickEnvelope = new Float32Array(this.capacity)
-    this.kickCoeff = 1 - Math.exp((-2 * Math.PI * KICK_HZ) / sampleRate)
-    this.smoothed = new Float64Array(Math.round(TEMPO_WINDOW_SEC / this.hopSec) + 1)
+    this.hop = Math.max(1, Math.round(sampleRate / FRAME_RATE))
+    this.frameSec = this.hop / sampleRate
+    this.size = 2 ** Math.round(Math.log2((FFT_SIZE_48K * sampleRate) / 48000))
+    this.window = new Float64Array(this.size)
+    for (let i = 0; i < this.size; i++) this.window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / this.size)
+    this.re = new Float64Array(this.size)
+    this.im = new Float64Array(this.size)
+    this.samples = new Float32Array(this.size)
+    const bin = (hz: number) => Math.min(this.size / 2, Math.max(1, Math.round((hz * this.size) / sampleRate)))
+    const band = (b: readonly [number, number]): [number, number] => [bin(b[0]), bin(b[1])]
+    this.bins = {
+      low: band(LOW_BAND),
+      sharp: band(SHARP_BAND),
+      all: band(ALL_BAND),
+      harmony: band(HARMONY_BAND),
+    }
+    this.previous = new Float64Array(this.bins.all[1])
+    this.current = new Float64Array(this.bins.all[1])
+    const fps = 1 / this.frameSec
+    this.harmonyFrames = Math.max(1, Math.round(HARMONY_SEC * fps))
+    this.normFrames = Math.round(NORM_SEC * fps)
+    this.capacity = Math.ceil((MAP_AHEAD_SEC + MAP_BEHIND_SEC + 2 * NORM_SEC + GLIDE_MAX_SEC + 10) * fps)
+    this.raw = [0, 1, 2, 3].map(() => new Float32Array(this.capacity))
+    this.z = [0, 1, 2, 3].map(() => new Float32Array(this.capacity))
+    this.spectrum = new Float32Array(this.capacity * (this.bins.harmony[1] - this.bins.harmony[0]))
+    this.minPeriod = Math.round((60 * fps) / MAX_BPM)
+    const maxPeriod = Math.round((60 * fps) / MIN_BPM)
+    this.periods = maxPeriod - this.minPeriod + 1
+    this.offsets = new Int32Array(this.periods + 1)
+    for (let i = 0; i < this.periods; i++) this.offsets[i + 1] = this.offsets[i] + 4 * (this.minPeriod + i)
+    this.prior = new Float64Array(this.periods)
+    for (let i = 0; i < this.periods; i++) this.prior[i] = TEMPO_PRIOR_WEIGHT * Math.log2((60 * fps) / (this.minPeriod + i) / PRIOR_BPM) ** 2
+    this.score = new Float64Array(this.offsets[this.periods])
+    this.nextScore = new Float64Array(this.offsets[this.periods])
+    this.back = new Int16Array(this.capacity * this.periods * 4)
   }
 
-  get hopSec(): number {
-    return this.hopFrames / this.sampleRate
-  }
-
-  /** The media time the map has heard up to: the end of the last whole hop. */
-  get frontier(): number {
-    return Number.isNaN(this.origin) ? NaN : this.timeOf(this.next)
-  }
-
-  private timeOf(hop: number): number {
-    return this.origin + hop * this.hopSec
-  }
-
-  private env(hop: number): number {
-    return this.envelope[hop % this.capacity]
+  /**
+   * The media time an onset that peaks the flux at frame `frame` happened: the centre of its spectrum, plus
+   * ONSET_DELAY_SEC.
+   */
+  private timeOf(frame: number): number {
+    return this.origin + (frame * this.hop + this.size / 2) / this.sampleRate + ONSET_DELAY_SEC
   }
 
   /** Takes decoded mono `samples`, the first at media time `startTime`, contiguous with what came before. */
   feed(samples: Float32Array, startTime: number): void {
     if (Number.isNaN(this.origin)) this.origin = startTime
     for (let i = 0; i < samples.length; i++) {
-      const x = samples[i]
-      this.low += (x - this.low) * this.lowCoeff
-      const high = x - this.lastX
-      this.lastX = x
-      this.lowEnergy += this.low * this.low
-      this.highEnergy += high * high
-      this.kick1 += (x - this.kick1) * this.kickCoeff
-      this.kick2 += (this.kick1 - this.kick2) * this.kickCoeff
-      this.kickEnergy += this.kick2 * this.kick2
-      if (++this.filled === this.hopFrames) this.closeHop()
+      this.samples[this.fed % this.size] = samples[i]
+      this.fed++
+      if (this.fed >= this.size && (this.fed - this.size) % this.hop === 0) this.addSpectrum()
     }
-    this.dirty = true
   }
 
-  private closeHop(): void {
-    const lowDb = 10 * Math.log10(ENERGY_FLOOR + this.lowEnergy / this.hopFrames)
-    const highDb = 10 * Math.log10(ENERGY_FLOOR + this.highEnergy / this.hopFrames)
-    const rise = (Number.isNaN(this.prevLowDb) ? 0 : Math.max(0, lowDb - this.prevLowDb)) + (Number.isNaN(this.prevHighDb) ? 0 : Math.max(0, highDb - this.prevHighDb))
-    // Below the floor of anything audible a rise is noise, not an onset.
-    const audible = Math.max(lowDb, highDb) > -70
-    this.prevLowDb = lowDb
-    this.prevHighDb = highDb
-    this.envelope[this.next % this.capacity] = audible ? rise : 0
-    const kickDb = 10 * Math.log10(ENERGY_FLOOR + this.kickEnergy / this.hopFrames)
-    this.kickEnvelope[this.next % this.capacity] = audible && !Number.isNaN(this.prevKickDb) ? Math.max(0, kickDb - this.prevKickDb) : 0
-    this.prevKickDb = kickDb
-    this.kickEnergy = 0
-    this.next++
-    if (this.next - this.first > this.capacity) this.first = this.next - this.capacity
-    this.filled = 0
-    this.lowEnergy = 0
-    this.highEnergy = 0
+  private addSpectrum(): void {
+    const f = this.spectra
+    const start = this.fed - this.size
+    for (let i = 0; i < this.size; i++) {
+      this.re[i] = this.samples[(start + i) % this.size] * this.window[i]
+      this.im[i] = 0
+    }
+    fft(this.re, this.im)
+    const top = this.bins.all[1]
+    for (let k = 0; k < top; k++) this.current[k] = Math.log1p(100 * Math.hypot(this.re[k], this.im[k]))
+    const flux = (b: [number, number]) => {
+      let d = 0
+      if (f > 0) for (let k = b[0]; k < b[1]; k++) d += Math.max(0, this.current[k] - this.previous[k])
+      return d
+    }
+    const at = f % this.capacity
+    this.raw[0][at] = flux(this.bins.low)
+    this.raw[1][at] = flux(this.bins.sharp)
+    this.raw[2][at] = flux(this.bins.all)
+    const [h0, h1] = this.bins.harmony
+    for (let k = h0; k < h1; k++) this.spectrum[at * (h1 - h0) + k - h0] = this.current[k]
+    const swap = this.previous
+    this.previous = this.current
+    this.current = swap
+    this.spectra++
+    this.advance()
+  }
+
+  /** Brings harmony, normalisation and the forward pass as far as the spectra allow. */
+  private advance(): void {
+    const H = this.harmonyFrames
+    const [h0, h1] = this.bins.harmony
+    const width = h1 - h0
+    // Harmony of frame g needs spectra g-H .. g+H-1.
+    for (; this.harmonised + H <= this.spectra; this.harmonised++) {
+      const g = this.harmonised
+      let d = 0
+      if (g >= H) {
+        for (let k = 0; k < width; k++) {
+          let after = 0
+          let before = 0
+          for (let j = 0; j < H; j++) {
+            after += this.spectrum[((g + j) % this.capacity) * width + k]
+            before += this.spectrum[((g - H + j) % this.capacity) * width + k]
+          }
+          d += Math.abs(after - before) / H
+        }
+      }
+      this.raw[3][g % this.capacity] = d
+    }
+    // A frame is normalised against the NORM_SEC before it: what came before only, so the map is never NORM_SEC short of
+    // the decoded frontier (a track's last seconds would otherwise have no beat).
+    const W = this.normFrames
+    for (; this.normalised < this.harmonised; this.normalised++) {
+      const f = this.normalised
+      const lo = Math.max(0, f - W, this.harmonised - this.capacity)
+      const hi = f
+      for (let b = 0; b < 4; b++) {
+        const x = this.raw[b]
+        let s1 = 0
+        let s2 = 0
+        for (let j = lo; j <= hi; j++) {
+          const v = x[j % this.capacity]
+          s1 += v
+          s2 += v * v
+        }
+        const n = hi - lo + 1
+        const mean = s1 / n
+        const spread = Math.sqrt(Math.max(0, s2 / n - mean * mean))
+        this.z[b][f % this.capacity] = spread < MIN_SPREAD ? 0 : (x[f % this.capacity] - mean) / spread
+      }
+    }
+    // The pass reads each feature's largest value within a frame either side: a beat and its onset's peak may straddle two frames.
+    for (; this.passed + 1 < this.normalised; this.passed++) this.step(this.passed)
+  }
+
+  /** The feature `b` at frame `f`, the largest within a frame either side. */
+  private feature(b: number, f: number): number {
+    const z = this.z[b]
+    let most = z[f % this.capacity]
+    if (f > 0) most = Math.max(most, z[(f - 1) % this.capacity])
+    return Math.max(most, z[(f + 1) % this.capacity])
+  }
+
+  /** The bar's score for a beat at `position` (0 is the one) at frame `f`. */
+  private beatScore(f: number, position: number): number {
+    const low = this.feature(0, f)
+    const sharp = this.feature(1, f)
+    const drum = position % 2 === 0 ? low - CONTRAST * sharp : sharp - CONTRAST * low
+    return drum + TICK_WEIGHT * this.feature(2, f) + (position === 0 ? HARMONY_WEIGHT * this.feature(3, f) : 0)
+  }
+
+  /** One frame of the forward pass. */
+  private step(f: number): void {
+    const { score, nextScore, offsets, minPeriod, periods } = this
+    const tick = TICK_WEIGHT * this.feature(2, f)
+    // Inside a beat every state moves one position on; the half beat collects the tick.
+    for (let i = 0; i < periods; i++) {
+      const T = minPeriod + i
+      const half = T >> 1
+      const base = offsets[i]
+      for (let m = 4 * T - 1; m >= 1; m--) {
+        const r = m % T
+        if (r !== 0) nextScore[base + m] = score[base + m - 1] + (r === half ? tick : 0)
+      }
+    }
+    // A beat is entered from the end of the beat before, at a period up to TEMPO_STEP_FRAMES away.
+    const backAt = (f % this.capacity) * periods * 4
+    for (let k = 0; k < 4; k++) {
+      const observed = this.beatScore(f, k)
+      for (let j = 0; j < periods; j++) {
+        const T2 = minPeriod + j
+        let best = -Infinity
+        let from = j
+        for (let i = Math.max(0, j - TEMPO_STEP_FRAMES); i <= Math.min(periods - 1, j + TEMPO_STEP_FRAMES); i++) {
+          const T = minPeriod + i
+          const end = offsets[i] + (k === 0 ? 4 * T : k * T) - 1
+          const s = score[end] - TEMPO_CHANGE_COST * Math.abs(Math.log2(T2 / T))
+          if (s > best) {
+            best = s
+            from = i
+          }
+        }
+        nextScore[offsets[j] + k * T2] = best + observed - this.prior[j]
+        this.back[backAt + j * 4 + k] = from
+      }
+    }
+    this.score = nextScore
+    this.nextScore = score
+    // Only differences matter; keep the numbers small.
+    if (f % 512 === 0) {
+      let most = -Infinity
+      for (let s = 0; s < this.score.length; s++) if (this.score[s] > most) most = this.score[s]
+      for (let s = 0; s < this.score.length; s++) this.score[s] -= most
+    }
   }
 
   /**
-   * Brings the plan up to date for a listener at `listenerTime`: tempo
-   * estimates for every whole window decoded, the chain re-planned from the
-   * last committed beat, and every beat within COMMIT_SEC of the listener
-   * committed. Cheap when nothing new was decoded.
+   * Brings the plan up to date for a listener at `listenerTime`: the path
+   * read back again once REPLAN_SEC more is decoded, and every beat within
+   * COMMIT_SEC of the listener committed.
    */
   update(listenerTime: number): void {
     if (Number.isNaN(this.origin)) return
     this.trim(listenerTime)
-    // Re-planned once a REPLAN_SEC more of the track is decoded, not per
-    // chunk: a plan spans the whole look-ahead, and what a quarter second
-    // more adds to it is at its far end.
-    if (this.dirty && (Number.isNaN(this.plannedAt) || this.frontier - this.plannedAt >= REPLAN_SEC)) {
-      this.dirty = false
-      this.plannedAt = this.frontier
-      this.estimateTempos()
-      this.judge()
+    // Re-planned once REPLAN_SEC more has passed, or on any new frame once the listener is near the frontier (the end of
+    // a track, where the last fraction of a REPLAN_SEC would otherwise never be planned).
+    const at = (this.passed - 1) * this.frameSec
+    const nearFrontier = this.timeOf(this.passed - 1) < listenerTime + COMMIT_SEC + REPLAN_SEC
+    if (this.passed > 0 && (at >= this.plannedAt + REPLAN_SEC || (nearFrontier && at > this.plannedAt))) {
+      this.plannedAt = at
       this.plan()
     }
     this.commit(listenerTime)
   }
 
-  /** Forgets what lies further behind the listener than MAP_BEHIND_SEC. */
+  /** Forgets what lies further behind the listener than MAP_BEHIND_SEC, keeping a bar to count the ones from. */
   private trim(listenerTime: number): void {
     const keepFrom = listenerTime - MAP_BEHIND_SEC
-    while (this.tempos.length > 0 && this.tempos[0].time < keepFrom - TEMPO_WINDOW_SEC) this.tempos.shift()
-    // The newest committed beat anchors the chain, so it is kept whatever its age.
-    while (this.committed.length > 1 && this.timeOf(this.committed[0]) < keepFrom) this.committed.shift()
-    // Every decision but the one in force at the oldest beat kept.
-    const oldest = this.committedCount - this.committed.length
-    while (this.carets.length > 1 && this.carets[1].from <= oldest) this.carets.shift()
+    while (this.committed.length > 4 && this.committed[0].time < keepFrom) this.committed.shift()
   }
 
-  private estimateTempos(): void {
-    const window = Math.round(TEMPO_WINDOW_SEC / this.hopSec)
-    const minLag = Math.floor(60 / MAX_BPM / this.hopSec)
-    const maxLag = Math.ceil(60 / MIN_BPM / this.hopSec)
-    // Lags up to twice the slowest beat, for the half bar each candidate is judged with.
-    const maxLag2 = Math.min(2 * maxLag + 1, window - 1)
-    const scores = new Float64Array(maxLag2 + 2)
-    for (;;) {
-      const last = this.tempos.length > 0 ? this.tempos[this.tempos.length - 1].time : this.timeOf(this.first) + TEMPO_WINDOW_SEC / 2 - TEMPO_STEP_SEC
-      const centre = last + TEMPO_STEP_SEC
-      const from = Math.round((centre - this.origin) / this.hopSec) - (window >> 1)
-      if (from < this.first || from + window > this.next) {
-        if (from < this.first && from + window <= this.next) {
-          // The first window after a start: the envelope began later than it reaches.
-          this.tempos.push({ time: centre, period: NaN, strength: 0, confident: false, folded: NaN })
-          continue
-        }
-        return
-      }
-      // Smoothed (a triangle SMOOTH_HOPS either side), so an onset a few hops
-      // early or late against the beat before it (a tempo moving under the
-      // window) still correlates; and mean-removed, so a dense passage does
-      // not correlate with itself at every lag.
-      const smooth = this.smoothed
-      for (let i = 0; i < window; i++) {
-        let sum = 0
-        let weights = 0
-        for (let d = -SMOOTH_HOPS; d <= SMOOTH_HOPS; d++) {
-          const h = from + i + d
-          if (h < this.first || h >= this.next) continue
-          const w = SMOOTH_HOPS + 1 - Math.abs(d)
-          sum += w * this.env(h)
-          weights += w
-        }
-        smooth[i] = sum / weights
-      }
-      let mean = 0
-      for (let i = 0; i < window; i++) mean += smooth[i]
-      mean /= window
-      for (let i = 0; i < window; i++) smooth[i] -= mean
-      let zero = 0
-      for (let i = 0; i < window; i++) zero += smooth[i] ** 2
-      const previous = this.lastPeriod()
-      let best = -Infinity
-      let bestLag = NaN
-      let bestRaw = 0
-      for (let lag = minLag; lag <= maxLag2; lag++) {
-        let sum = 0
-        for (let i = lag; i < window; i++) sum += smooth[i] * smooth[i - lag]
-        scores[lag] = sum / (window - lag)
-      }
-      for (let lag = minLag + 1; lag < maxLag; lag++) {
-        // A peak of the autocorrelation, not a shoulder of one.
-        if (scores[lag] < scores[lag - 1] || scores[lag] < scores[lag + 1] || scores[lag] <= 0) continue
-        const period = lag * this.hopSec
-        const weight = logGaussian(period, 60 / PRIOR_BPM, PRIOR_OCTAVES) * (Number.isNaN(previous) ? 1 : 1 - CONTINUITY_PULL + CONTINUITY_PULL * logGaussian(period, previous, CONTINUITY_OCTAVES))
-        // A beat is judged with everything it builds: its lag AND every whole
-        // multiple of it the window holds (the k-th weighed 1/k). A
-        // syncopated loop can correlate as strongly at one and a half beats
-        // as at one, and the lag alone cannot tell them apart (a seek into
-        // such a loop locked onto 1.5 beats); the real pulse's multiples
-        // land on the half bar and the bar, one and a half's do not.
-        let comb = scores[lag]
-        for (let k = 2; k * lag <= maxLag2; k++) comb += Math.max(0, this.peakNear(scores, k * lag, maxLag2)) / k
-        if (comb * weight > best) {
-          best = comb * weight
-          // The peak's position refined between hops by a parabola through it and its neighbours.
-          const l = scores[lag - 1]
-          const c = scores[lag]
-          const r = scores[lag + 1]
-          const denominator = l - 2 * c + r
-          bestLag = lag + (denominator < 0 ? (0.5 * (l - r)) / denominator : 0)
-          bestRaw = c
-        }
-      }
-      const strength = zero > 0 ? bestRaw / (zero / window) : 0
-      this.tempos.push({ time: centre, period: Number.isNaN(bestLag) ? NaN : bestLag * this.hopSec, strength, confident: false, folded: NaN })
-    }
-  }
-
-  /** The autocorrelation's largest value within one hop of `lag` (a doubled lag lands between hops). */
-  private peakNear(scores: Float64Array, lag: number, top: number): number {
-    let best = -Infinity
-    for (let l = Math.max(0, lag - 1); l <= Math.min(top, lag + 1); l++) best = Math.max(best, scores[l])
-    return best
-  }
-
-  private lastPeriod(): number {
-    for (let i = this.tempos.length - 1; i >= 0; i--) {
-      if (this.tempos[i].strength >= MIN_STRENGTH && !Number.isNaN(this.tempos[i].period)) return this.tempos[i].period
-    }
-    return NaN
-  }
-
-  /**
-   * Which estimates are CONFIDENT: a strong one whose period AGREES (octaves
-   * aside) with estimates over windows that do not overlap it, two steps of
-   * AGREE_STEP in a row, on either side or one each. Strength alone does not
-   * tell a pulse from chance: a dense mix's true beat and a random scatter of
-   * hits both peak at about a third of the zero lag, but only the pulse
-   * names the same period window after window. Every confident period is
-   * folded onto the octave of the confident one before it, so a window that
-   * reads the beat at half or double speed does not halve or double the chain.
-   */
-  private judge(): void {
-    const frames = this.tempos
-    const usable = (i: number) => i >= 0 && i < frames.length && frames[i].strength >= MIN_STRENGTH && !Number.isNaN(frames[i].period)
-    const agree = (i: number, j: number) => {
-      if (!usable(i) || !usable(j)) return false
-      const octaves = Math.log2(frames[i].period / frames[j].period)
-      return Math.abs(octaves - Math.round(octaves)) <= Math.log2(1 + AGREE_RATIO)
-    }
-    const k = AGREE_STEP
-    let previous = NaN
-    for (let i = 0; i < frames.length; i++) {
-      const frame = frames[i]
-      frame.confident = (agree(i, i - k) && agree(i - k, i - 2 * k)) || (agree(i, i - k) && agree(i, i + k)) || (agree(i, i + k) && agree(i + k, i + 2 * k))
-      if (!frame.confident) {
-        frame.folded = NaN
-        continue
-      }
-      frame.folded = Number.isNaN(previous) ? frame.period : frame.period * 2 ** Math.round(Math.log2(previous / frame.period))
-      previous = frame.folded
-    }
-  }
-
-  /**
-   * Whether media time `time` lies in a passage with a beat (header, WHERE
-   * THERE IS A BEAT), and the period there: a confident estimate's own, or
-   * across a gap short enough to carry through, the two sides' periods
-   * blended on a log scale by where in the gap `time` falls.
-   */
-  periodAt(time: number): number {
-    const frames = this.tempos
-    if (frames.length === 0) return NaN
-    const confident = (f: TempoFrame) => f.confident
-    // The estimate nearest `time`.
-    let i = Math.round((time - frames[0].time) / TEMPO_STEP_SEC)
-    i = Math.max(0, Math.min(frames.length - 1, i))
-    if (confident(frames[i])) {
-      // Between two confident estimates, the period moves smoothly from one to the other.
-      const j = time >= frames[i].time ? i + 1 : i - 1
-      if (j < 0 || j >= frames.length || !confident(frames[j])) return frames[i].folded
-      const share = Math.abs(time - frames[i].time) / TEMPO_STEP_SEC
-      return frames[i].folded * (frames[j].folded / frames[i].folded) ** share
-    }
-    let before = i
-    while (before >= 0 && !confident(frames[before])) before--
-    let after = i
-    while (after < frames.length && !confident(frames[after])) after++
-    if (before < 0 || after >= frames.length) return NaN
-    const gap = frames[after].time - frames[before].time
-    if (gap > GLIDE_MAX_SEC + TEMPO_STEP_SEC) return NaN
-    const share = (time - frames[before].time) / gap
-    return frames[before].folded * (frames[after].folded / frames[before].folded) ** Math.max(0, Math.min(1, share))
-  }
-
-  /**
-   * Plans the chain (header, 3) from the last committed beat, or from the
-   * oldest hop kept, to the frontier, and reads it back from the best beat
-   * near the frontier. The envelope is scaled to unit spread over the span,
-   * so TIGHTNESS means the same on a quiet track as on a loud one.
-   */
+  /** Reads the best path back from the last frame passed to the last committed beat, and judges where it is shown. */
   private plan(): void {
-    // The last committed beat anchors the chain, unless a gap no chain can
-    // carry across lies between it and the frontier (a long silence, a
-    // stretch with no pulse): then the chain starts afresh, and the plan
-    // never spans more than the look-ahead and that gap.
-    const lastCommitted = this.committed.length > 0 ? Math.round(this.committed[this.committed.length - 1]) : -1
-    const fresh = lastCommitted < 0 || lastCommitted < this.first || this.next - lastCommitted > (MAP_AHEAD_SEC + COMMIT_SEC + GLIDE_MAX_SEC) / this.hopSec
-    const anchor = fresh ? -1 : lastCommitted
-    const start = anchor >= 0 ? anchor : Math.max(this.first, this.next - Math.ceil((MAP_AHEAD_SEC + COMMIT_SEC + GLIDE_MAX_SEC) / this.hopSec))
-    const end = this.next - 1
-    if (end - start < 2) {
-      this.planned = []
-      return
+    const last = this.passed - 1
+    let bestPeriod = 0
+    let bestPosition = 0
+    let best = -Infinity
+    for (let i = 0; i < this.periods; i++) {
+      for (let m = 0; m < 4 * (this.minPeriod + i); m++) {
+        const s = this.score[this.offsets[i] + m]
+        if (s > best) {
+          best = s
+          bestPeriod = i
+          bestPosition = m
+        }
+      }
     }
-    const n = end - start + 1
-    let mean = 0
-    for (let h = start; h <= end; h++) mean += this.env(h)
-    mean /= n
-    let spread = 0
-    for (let h = start; h <= end; h++) spread += (this.env(h) - mean) ** 2
-    spread = Math.sqrt(spread / n) || 1
-    const score = new Float64Array(n)
-    const from = new Int32Array(n).fill(-1)
-    const periods = new Float64Array(n)
-    for (let k = 0; k < n; k++) periods[k] = this.periodAt(this.timeOf(start + k)) / this.hopSec
-    for (let k = 0; k < n; k++) {
-      const onset = this.env(start + k) / spread
-      const period = periods[k]
-      if (anchor >= 0 && k === 0) {
-        score[k] = onset
-        continue
-      }
-      if (Number.isNaN(period)) {
-        // No beat here: a chain may start afresh on the far side.
-        score[k] = anchor >= 0 ? -Infinity : onset
-        continue
-      }
-      let best = -Infinity
-      let bestFrom = -1
-      const lo = Math.max(0, Math.floor(k - 2 * period))
-      const hi = Math.min(k - 1, Math.ceil(k - period / 2))
+    const anchor = this.committed.length > 0 ? this.committed[this.committed.length - 1].frame : -1
+    const oldest = Math.max(0, this.passed - this.capacity + 1)
+    const path: PathBeat[] = []
+    let f = last
+    let i = bestPeriod
+    let m = bestPosition
+    for (;;) {
+      const T = this.minPeriod + i
+      const k = Math.floor(m / T)
+      f -= m - k * T
+      // A path read from a later frontier may place the committed beat a frame or two away: that is the same beat.
+      if (f <= anchor + (this.minPeriod >> 1) || f < oldest) break
+      path.push({
+        frame: f,
+        time: NaN,
+        position: k,
+        score: this.beatScore(f, k),
+        shown: false,
+      })
+      const from = this.back[(f % this.capacity) * this.periods * 4 + i * 4 + k]
+      const T0 = this.minPeriod + from
+      i = from
+      m = (k === 0 ? 4 * T0 : k * T0) - 1
+      f -= 1
+    }
+    path.reverse()
+    this.smooth(path)
+    this.judge(path)
+    this.planned = path
+  }
+
+  /**
+   * Gives each beat of `path` its time: the least-squares quadratic (so a ritardando is not cut short) through the frame times of the SMOOTH_BEATS beats
+   * either side, read at the beat. A frame is 1/FRAME_RATE s and a period a whole number of frames, so a path at a
+   * tempo between two periods alternates them, a frame early then a frame late; the fit puts each beat where the
+   * tempo around it does. The committed beats before the path take part as neighbours and keep their times.
+   */
+  private smooth(path: PathBeat[]): void {
+    const all = [...this.committed, ...path]
+    const from = this.committed.length
+    for (let at = from; at < all.length; at++) {
+      const lo = Math.max(0, at - SMOOTH_BEATS)
+      const hi = Math.min(all.length - 1, at + SMOOTH_BEATS)
+      // Centred on the beat for conditioning: y = a + b x + c x^2 with x = j - at, and a is the answer.
+      const y0 = this.timeOf(all[at].frame)
+      let s0 = 0,
+        s1 = 0,
+        s2 = 0,
+        s3 = 0,
+        s4 = 0,
+        t0 = 0,
+        t1 = 0,
+        t2 = 0
       for (let j = lo; j <= hi; j++) {
-        if (score[j] === -Infinity) continue
-        const stray = Math.log((k - j) / period)
-        const value = score[j] - TIGHTNESS * stray * stray
-        if (value > best) {
-          best = value
-          bestFrom = j
-        }
+        const x = j - at
+        const y = this.timeOf(all[j].frame) - y0
+        const x2 = x * x
+        s0 += 1
+        s1 += x
+        s2 += x2
+        s3 += x2 * x
+        s4 += x2 * x2
+        t0 += y
+        t1 += x * y
+        t2 += x2 * y
       }
-      if (bestFrom < 0) {
-        score[k] = anchor >= 0 && k < 2 * period ? -Infinity : onset
+      const det = s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2)
+      const a = t0 * (s2 * s4 - s3 * s3) - s1 * (t1 * s4 - s3 * t2) + s2 * (t1 * s3 - s2 * t2)
+      all[at].time = y0 + (Math.abs(det) < 1e-9 ? 0 : a / det)
+    }
+  }
+
+  /** Marks each beat of `path` shown or not, reading the committed beats before it as context. */
+  private judge(path: PathBeat[]): void {
+    const all = [...this.committed, ...path]
+    const from = this.committed.length
+    const confident = all.map((_, at) => {
+      const lo = Math.max(0, at - CONFIDENCE_BEATS)
+      const hi = Math.min(all.length - 1, at + CONFIDENCE_BEATS)
+      const scores: number[] = []
+      for (let j = lo; j <= hi; j++) scores.push(all[j].score)
+      scores.sort((a, b) => a - b)
+      return scores[scores.length >> 1] >= MIN_CONFIDENCE
+    })
+    const glide = GLIDE_MAX_SEC / this.frameSec
+    let before = -Infinity
+    for (let at = 0; at < all.length; at++) if (confident[at] && at < from) before = all[at].frame
+    for (let at = from; at < all.length; at++) {
+      if (confident[at]) {
+        path[at - from].shown = true
+        before = all[at].frame
         continue
       }
-      score[k] = onset + best
-      from[k] = bestFrom
-    }
-    // Read back passage by passage, from the frontier towards the plan's start: from the best beat within the last
-    // period a chain reaches, back to where that chain began, then on from before it. Reading back one chain only, from
-    // the frontier, lost every passage before a break (a stretch with no beat) once the frontier was past it, and found
-    // nothing at all while the frontier lay in one (an anchored chain cannot reach it; the track's last seconds have no
-    // tempo window either): the map went dark until the frontier moved on.
-    const chain: number[] = []
-    let reached = n - 1
-    let k: number
-    while (reached >= 0) {
-      while (reached >= 0 && score[reached] === -Infinity) reached--
-      if (reached < 0) break
-      const lastPeriod = periods[reached]
-      const reach = Number.isNaN(lastPeriod) ? 1 : Math.ceil(lastPeriod)
-      let best = -Infinity
-      k = -1
-      for (let j = Math.max(0, reached + 1 - reach); j <= reached; j++) {
-        if (score[j] > best) {
-          best = score[j]
-          k = j
+      let after = Infinity
+      for (let j = at + 1; j < all.length && all[j].frame - all[at].frame <= glide; j++) {
+        if (confident[j]) {
+          after = all[j].frame
+          break
         }
       }
-      while (k > 0 && from[k] >= 0) {
-        chain.push(start + k)
-        k = from[k]
-      }
-      // The chain's first beat: the anchor itself (already committed) or the
-      // start of a fresh chain, whether at the plan's start or after a gap.
-      if (k >= 0 && start + k !== anchor) chain.push(start + k)
-      // An earlier passage only across a stretch with no beat: a chain that began afresh where there was a beat began
-      // on what the chain before it could not explain, and what lies before it is not a passage of its own.
-      if (k <= 0 || !Number.isNaN(periods[k - 1])) break
-      reached = k - 1
+      path[at - from].shown = after - before <= glide
     }
-    chain.reverse()
-    // A fresh chain never reaches back over beats already committed.
-    if (lastCommitted >= 0) {
-      const after = lastCommitted
-      while (chain.length > 0 && chain[0] <= after) chain.shift()
-    }
-    // Only the parts of the chain in a passage with a beat are beats.
-    this.planned = this.regularize(chain.filter((h) => !Number.isNaN(this.periodAt(this.timeOf(h)))))
-  }
-
-  /**
-   * The planned beats SMOOTHED (header of SMOOTH_BEATS): each moved onto a
-   * quadratic fitted by least squares through the beats within SMOOTH_BEATS
-   * of it, committed ones included, in the same run (no gap of more than
-   * twice the local period between neighbours). The chain says where the
-   * beats are; the fit says where a steady hand would put them, which is
-   * what a break's ghost notes and flams must not move.
-   */
-  private regularize(chain: number[]): number[] {
-    const context = Math.min(this.committed.length, SMOOTH_BEATS)
-    const all = [...this.committed.slice(this.committed.length - context), ...chain]
-    const out = new Array<number>(chain.length)
-    for (let i = 0; i < chain.length; i++) {
-      const at = context + i
-      // The run around beat `at`: stop at a gap no beat bridges.
-      let lo = at
-      while (lo > 0 && at - lo < SMOOTH_BEATS && all[lo] - all[lo - 1] < 2 * this.periodHopsAt(all[lo])) lo--
-      let hi = at
-      while (hi < all.length - 1 && hi - at < SMOOTH_BEATS && all[hi + 1] - all[hi] < 2 * this.periodHopsAt(all[hi])) hi++
-      out[i] = hi - lo >= 4 ? quadraticAt(all, lo, hi, at) : chain[i]
-    }
-    return out
-  }
-
-  private periodHopsAt(hop: number): number {
-    const period = this.periodAt(this.timeOf(hop))
-    return Number.isNaN(period) ? Infinity : period / this.hopSec
-  }
-
-  private kickAt(hop: number): number {
-    // The strongest rise within two hops: a beat's time and its kick's onset differ by the envelope's smear.
-    const h = Math.round(hop)
-    let most = 0
-    for (let j = h - 2; j <= h + 2; j++) if (j >= this.first && j < this.next) most = Math.max(most, this.kickEnvelope[j % this.capacity])
-    return most
-  }
-
-  /**
-   * Decides where the caret's beat falls, from map beat number `from` on
-   * (whose time is `beats[0]`, the beats after it following): the caret's
-   * octave (a power of two of the map's tempo inside MIN_BPM..MAX_BPM), and
-   * of the placements that octave allows (every map beat or half beat in one
-   * caret beat), the one whose positions carry the most KICK over the next
-   * CARET_DECIDE_BEATS map beats: the bar's one and three, wherever the
-   * loudest onsets fall. A held placement is kept unless another reads
-   * CARET_SWITCH_RATIO stronger, so a break that drops the kick for a bar
-   * does not move it.
-   */
-  private decideCaret(from: number, beats: number[], keep: boolean): void {
-    // The look-ahead stops at a gap no beat bridges: past it is another passage.
-    let reach = 1
-    while (reach < beats.length && reach <= CARET_DECIDE_BEATS && beats[reach] - beats[reach - 1] < 2 * this.periodHopsAt(beats[reach - 1])) reach++
-    const count = reach - 1
-    if (count < 1) return
-    const period = ((beats[count] - beats[0]) / count) * this.hopSec
-    const scale = 2 ** -Math.floor(Math.log2(60 / period / CARET_MIN_BPM))
-    // The placements one caret beat allows, in halves of a map beat.
-    const placements = Math.max(1, Math.round(2 / scale))
-    const strength = new Float64Array(placements)
-    for (let i = 0; i < count; i++) {
-      strength[(2 * i) % placements] += this.kickAt(beats[i])
-      strength[(2 * i + 1) % placements] += this.kickAt((beats[i] + beats[i + 1]) / 2)
-    }
-    let best = 0
-    for (let p = 1; p < placements; p++) if (strength[p] > strength[best]) best = p
-    const last = this.carets[this.carets.length - 1]
-    if (keep && last && last.scale === scale) {
-      // The held placement, in this decision's terms.
-      const held = (((Math.round(2 * (last.from + last.phase - from)) % placements) + placements) % placements)
-      if (!(strength[best] > CARET_SWITCH_RATIO * strength[held])) {
-        last.period = period
-        return
-      }
-    }
-    this.carets.push({ from, scale, phase: best / 2, period })
-  }
-
-  /**
-   * The caret's beat at media time `time` (`CaretBeat`): the map's beats
-   * either side of it, read through the caret placement in force there.
-   */
-  caretAt(time: number): CaretBeat {
-    const { previous, next, index } = this.beatsAround(time)
-    if (Number.isNaN(previous) || Number.isNaN(next) || Number.isNaN(index)) return { phase: NaN, period: NaN }
-    let placement: CaretPlacement | undefined
-    for (const c of this.carets) if (c.from <= index) placement = c
-    if (!placement) return { phase: NaN, period: NaN }
-    const position = index - placement.from + (time - previous) / (next - previous)
-    const caret = (position - placement.phase) * placement.scale
-    return { phase: caret - Math.floor(caret), period: (next - previous) / placement.scale }
   }
 
   private commit(listenerTime: number): void {
     const limit = listenerTime + COMMIT_SEC
     let taken = 0
-    while (taken < this.planned.length && this.timeOf(this.planned[taken]) <= limit) {
-      const beat = this.planned[taken]
-      const before = this.committed.length > 0 ? this.committed[this.committed.length - 1] : NaN
-      const period = this.periodHopsAt(beat)
-      // A new passage (the first beat, or one after a gap no beat bridges)
-      // decides the caret afresh; within one, only a real change of tempo
-      // reopens the decision, and then the held placement is preferred.
-      const ahead = this.planned.slice(taken)
-      const held = this.carets[this.carets.length - 1]
-      if (!held || !(beat - before < 2 * period)) this.decideCaret(this.committedCount, ahead, false)
-      else if (Math.abs(Math.log2((period * this.hopSec) / held.period)) > Math.log2(1 + AGREE_RATIO)) this.decideCaret(this.committedCount, ahead, true)
-      this.committed.push(beat)
-      this.committedCount++
-      taken++
-    }
-    if (taken > 0) this.planned = this.planned.slice(taken)
+    while (taken < this.planned.length && this.planned[taken].time <= limit) taken++
+    if (taken === 0) return
+    for (let j = 0; j < taken; j++) this.committed.push(this.planned[j])
+    this.committedCount += taken
+    this.planned = this.planned.slice(taken)
   }
 
   /**
-   * The beats either side of media time `time` (the last at or before it
-   * and the first after it, committed or planned) or NaN where there is
-   * none (no beat there, or not decoded that far), and the NUMBER of the one
-   * before (beats counted since the map began), so a reader can take every
-   * other beat or halve each one consistently.
+   * The shown beats either side of media time `time` (the last at or before
+   * it and the first after it, committed or planned) or NaN where there is
+   * none, the NUMBER of the one before (beats counted since the map began),
+   * and its place in its bar (0 is the one).
    */
-  beatsAround(time: number): { previous: number; next: number; index: number } {
-    let previous = NaN
-    let next = NaN
-    let index = NaN
-    const beats = this.committed.length
-    const visit = (hop: number, at: number) => {
-      const t = this.timeOf(hop)
-      if (t <= time) {
-        previous = t
-        index = at
-      } else if (Number.isNaN(next)) next = t
+  beatsAround(time: number): {
+    previous: number
+    next: number
+    index: number
+    position: number
+  } {
+    const none = { previous: NaN, next: NaN, index: NaN, position: NaN }
+    const all = this.committed.length + this.planned.length
+    const at = (j: number) => (j < this.committed.length ? this.committed[j] : this.planned[j - this.committed.length])
+    let before = -1
+    for (let j = 0; j < all; j++) {
+      if (at(j).time <= time) before = j
+      else break
     }
-    for (let i = 0; i < beats; i++) visit(this.committed[i], this.committedCount - beats + i)
-    for (let i = 0; i < this.planned.length; i++) visit(this.planned[i], this.committedCount + i)
-    // Two beats a gap with no beat in it apart are not one beat's span.
-    if (!Number.isNaN(previous) && !Number.isNaN(next)) {
-      const period = this.periodAt(time)
-      if (Number.isNaN(period) || next - previous > 2.5 * period) return { previous: NaN, next: NaN, index: NaN }
+    if (before < 0 || before + 1 >= all) return none
+    const a = at(before)
+    const b = at(before + 1)
+    if (!a.shown || !b.shown) return none
+    return {
+      previous: a.time,
+      next: b.time,
+      index: this.committedCount - this.committed.length + before,
+      position: a.position,
     }
-    return { previous, next, index }
   }
 
-  /** Every beat between `from` and `to`, for tests and the trace. */
+  /**
+   * The caret's beat at media time `time` (`CaretBeat`): the map's beat
+   * there, folded to a power of two of itself inside CARET_MIN_BPM up to
+   * twice it, counted from the bar's one, so a halved caret falls on one and
+   * three and a doubled one on every half beat.
+   */
+  caretAt(time: number): CaretBeat {
+    const { previous, next, position } = this.beatsAround(time)
+    if (Number.isNaN(previous)) return { phase: NaN, period: NaN }
+    const period = next - previous
+    const scale = 2 ** -Math.floor(Math.log2(60 / period / CARET_MIN_BPM))
+    const caret = (position + (time - previous) / period) * scale
+    return { phase: caret - Math.floor(caret), period: period / scale }
+  }
+
+  /** Every shown beat between `from` and `to`. */
   beatsBetween(from: number, to: number): MapBeat[] {
     const out: MapBeat[] = []
-    for (const h of this.committed) if (this.timeOf(h) >= from && this.timeOf(h) <= to) out.push({ time: this.timeOf(h), committed: true })
-    for (const h of this.planned) if (this.timeOf(h) >= from && this.timeOf(h) <= to) out.push({ time: this.timeOf(h), committed: false })
+    const visit = (b: PathBeat, committed: boolean) => {
+      const t = b.time
+      if (b.shown && t >= from && t <= to) out.push({ time: t, committed, one: b.position === 0 })
+    }
+    for (const b of this.committed) visit(b, true)
+    for (const b of this.planned) visit(b, false)
     return out
   }
 }
