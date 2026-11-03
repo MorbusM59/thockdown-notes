@@ -41,7 +41,9 @@
 import { cutoutClosure } from './cutoutRing'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
+import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, roundedSquareOffsetGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
+import { canUseShaderPulse } from './glazeShaderSupport'
+import { PulseRingsCanvas, type PulseRingsHandle } from './PulseRingsCanvas'
 import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
 import { emitPulseHit, pulseAmount, subscribePulseHits } from './pulseHits'
 import { setSwayReturnFall, swaySnareHit } from './parallaxSway'
@@ -235,11 +237,17 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   // Animation of `transform` sampled from that curve: the compositor runs it,
   // nothing repaints.
   const pulseRefs = useRef<Array<HTMLDivElement | null>>([])
+  // With WebGL2 the rings are a real wavefront (PulseRingsCanvas.tsx): the
+  // face's offset curves rather than its scaled copies, so the gauge the
+  // exit is measured on is the offset one too.
+  const shaderPulse = useMemo(() => canUseShaderPulse(), [])
+  const pulseCanvasRef = useRef<PulseRingsHandle>(null)
+  const exitGauge = shaderPulse ? roundedSquareOffsetGauge : roundedSquareGauge
   const pulseInnerPx = cutout && cutout.size > 0 ? (cutout.size / 2) * (1 - PULSE_RING_SHARE) : 0
   // The ring is the cutout face's shape, so its inner edge clears the scene
   // when the farthest corner lies on it: that corner's gauge, in half-sides.
   const pulseExitScale = sceneBox && cutout && pulseInnerPx > 0
-    ? roundedSquareGauge(
+    ? exitGauge(
       Math.max(cutout.left + cutout.size / 2, sceneBox.width - cutout.left - cutout.size / 2) / (cutout.size / 2),
       Math.max(cutout.top + cutout.size / 2, sceneBox.height - cutout.top - cutout.size / 2) / (cutout.size / 2),
       cutoutRound,
@@ -250,8 +258,8 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   // roundness or size and then only scaled.
   const pulseRingSize = cutout?.size ?? 0
   const pulseRingImage = useMemo(
-    () => (pulseRingSize > 0 ? drawPulseRing(pulseRingSize, cutoutRound, pulseColor, pulseSoftness) : 'none'),
-    [pulseRingSize, cutoutRound, pulseColor, pulseSoftness],
+    () => (pulseRingSize > 0 && !shaderPulse ? drawPulseRing(pulseRingSize, cutoutRound, pulseColor, pulseSoftness) : 'none'),
+    [pulseRingSize, cutoutRound, pulseColor, pulseSoftness, shaderPulse],
   )
   // Read through a ref, so a resize or a slider changes the next pulse
   // without cancelling the pulses under way.
@@ -260,7 +268,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   const hasPulse = pulseInnerPx > 0
   useEffect(() => {
     const layers = pulseRefs.current.filter((layer): layer is HTMLDivElement => layer !== null)
-    if (layers.length === 0) return
+    if (layers.length === 0 && !shaderPulse) return
     const running: Array<Animation | null> = layers.map(() => null)
     const startedAt: number[] = layers.map(() => -Infinity)
     const unsubscribe = subscribePulseHits((strength) => {
@@ -271,6 +279,13 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       // Done when it has left the screen or faded out, whichever is first;
       // a ring the half-life stops short has faded by then all the same.
       const durationSec = Math.min(pulseTimeToTravel(exitBoxes, speed, halfLife), fadeSec)
+      if (shaderPulse) {
+        pulseCanvasRef.current?.launch({
+          durationSec,
+          sample: (t) => ({ scale: PULSE_START_SCALE + (pulseTravelBoxes(t, speed, halfLife) * box) / innerPx, opacity: amount * (1 - t / fadeSec) }),
+        })
+        return
+      }
       const keyframes: Keyframe[] = []
       for (let i = 0; i <= PULSE_KEYFRAMES; i++) {
         const t = (i / PULSE_KEYFRAMES) * durationSec
@@ -290,7 +305,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       unsubscribe()
       for (const animation of running) animation?.cancel()
     }
-  }, [host, hasPulse])
+  }, [host, hasPulse, shaderPulse])
 
   // The rotating layer is a square as wide as the scene's diagonal, centred
   // on the scene, so the bands cover every corner at every angle.
@@ -351,7 +366,16 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
             >
               <div ref={bandsRef} className="visualizer-grid-wave-bands" />
             </div>
-            {cutout && cutout.size > 0 ? Array.from({ length: PULSE_LAYERS }, (_, i) => (
+            {cutout && cutout.size > 0 && shaderPulse ? (
+              <PulseRingsCanvas
+                ref={pulseCanvasRef}
+                face={cutout}
+                round={cutoutRound}
+                inner={1 - PULSE_RING_SHARE}
+                color={pulseColor}
+                softness={pulseSoftness}
+              />
+            ) : cutout && cutout.size > 0 ? Array.from({ length: PULSE_LAYERS }, (_, i) => (
               <div
                 key={i}
                 ref={(layer) => { pulseRefs.current[i] = layer }}

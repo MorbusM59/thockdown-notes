@@ -662,3 +662,22 @@ export function pulseRingStrength(gauge: number, softness: number, inner = 0.75)
   const x = Math.min(1, (1 - Math.abs(u)) / Math.max(softness, 1e-3))
   return x * x * (3 - 2 * x)
 }
+
+/**
+ * The centre pulse's gauge when it travels as a real wavefront rather than a
+ * scaled copy of the face: `1 + d`, where `d` is the signed distance from
+ * (x, y) to the face (half-side 1, corner radius `round`), in half-sides.
+ * Its level sets are the face's OFFSET curves, the shape a wave launched from
+ * every point of the face's edge actually has: the straight sides move out
+ * unchanged and each corner becomes an arc whose radius grows by the
+ * distance travelled, so a square face sends out a rounded square that tends
+ * to a circle. For a circle (`round` 1) it equals `roundedSquareGauge`.
+ * The same function `PulseRingsCanvas.tsx`'s shader evaluates.
+ */
+export function roundedSquareOffsetGauge(x: number, y: number, round: number): number {
+  const r = Math.max(0, Math.min(1, round))
+  const qx = Math.abs(x) - (1 - r)
+  const qy = Math.abs(y) - (1 - r)
+  const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0))
+  return 1 + outside + Math.min(Math.max(qx, qy), 0) - r
+}

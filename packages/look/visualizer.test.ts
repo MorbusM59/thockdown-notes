@@ -260,3 +260,13 @@ describe('pulseRingStrength', () => {
     expect(pulseRingStrength(0.76, 0)).toBe(1)
   })
 })
+
+describe('roundedSquareOffsetGauge', () => {
+  it('equals the scaled gauge for a circle and keeps a square side straight', async () => {
+    const { roundedSquareOffsetGauge } = await import('./visualizer')
+    for (const [x, y] of [[0.3, 0.4], [2, 1], [-1.5, 3]]) expect(roundedSquareOffsetGauge(x, y, 1)).toBeCloseTo(roundedSquareGauge(x, y, 1))
+    expect(roundedSquareOffsetGauge(2, 0.9, 0)).toBeCloseTo(2)
+    // A square's corner rounds off: the point at distance 1 diagonally from its corner.
+    expect(roundedSquareOffsetGauge(1 + Math.SQRT1_2, 1 + Math.SQRT1_2, 0)).toBeCloseTo(2)
+  })
+})
