@@ -78,8 +78,53 @@ function withFlowTrail(loadout: UiLayoutLoadout): UiLayoutLoadout {
   return { ...loadout, highlightColors: { ...loadout.highlightColors, flowTrail } };
 }
 
+// The saved custom layout's sparse visualizer values, completed from the
+// neutral light defaults. Factory presets share its tuning but keep their
+// own element colours.
+const FACTORY_VISUALIZER_SETTINGS = (() => {
+  const base = defaultVisualizer(false);
+  return {
+    ...base,
+    caret: { ...base.caret, fallSec: 1.5 },
+    edge: { ...base.edge, fallSec: 0.5 },
+    pane: { ...base.pane, effect: 0.7, fallSec: 0.3, shape: -0.2 },
+    immersive: {
+      ...base.immersive,
+      glazeStrength: 0.06,
+      glazeSpread: -1,
+      swayDrift: 10,
+      waveFallSec: 1.5,
+      waveMix: { ...base.immersive.waveMix, pierce: 1 },
+      pulseSpeed: 35,
+      pulseHalfLifeSec: 0.75,
+      pulseFadeSec: 1.5,
+      pulseSoftness: 0.5,
+      pulseBoost: 0.5,
+    },
+  };
+})();
+
+function withFactoryVisualizerSettings(loadout: UiLayoutLoadout): UiLayoutLoadout {
+  const colors = loadout.visualizer;
+  return {
+    ...loadout,
+    visualizer: {
+      ...FACTORY_VISUALIZER_SETTINGS,
+      edge: { ...FACTORY_VISUALIZER_SETTINGS.edge, color: colors.edge.color },
+      pane: { ...FACTORY_VISUALIZER_SETTINGS.pane, color: colors.pane.color },
+      immersive: {
+        ...FACTORY_VISUALIZER_SETTINGS.immersive,
+        accentColor: colors.immersive.accentColor,
+        waveColor: colors.immersive.waveColor,
+        pulseColor: colors.immersive.pulseColor,
+        letterboxColor: colors.immersive.letterboxColor,
+      },
+    },
+  };
+}
+
 function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
-  return withDerivedColors({
+  return withFactoryVisualizerSettings(withDerivedColors({
     ...NEUTRAL_BASE,
     ...overrides,
     glaze: {
@@ -100,7 +145,7 @@ function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
       editorEditText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorEditText, overrides.textureMaterials?.editorEditText),
       editorRenderText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorRenderText, overrides.textureMaterials?.editorRenderText),
     },
-  });
+  }));
 }
 
 // A neutral, untextured, unfiltered baseline shared by both default-custom
