@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 

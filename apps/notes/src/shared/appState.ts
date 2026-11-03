@@ -1,3 +1,4 @@
+import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
@@ -170,29 +171,10 @@ export interface PersistedMenuState {
   audioReverbAmount?: number;
   pitchJitterAmount?: number;
   audioSpatial?: number;
-  reduceVisualEffects?: boolean;
   /** The sidebar's date/category/archive/trash views list stored images instead of notes (imageLibrary/). */
   sidebarShowsImages?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;
-  reducedCaretAnimation?: boolean;
-  deferPreviewOnRapidInput?: boolean;
-  /**
-   * Where the reader has put the line between a note whose scrollbar is
-   * measured in pixels and one whose scrollbar counts characters. In BLOCKS
-   * (shown to the reader as paragraphs); see editor/documentPosition.ts for
-   * what the two sides mean and why blocks are the unit.
-   */
-  noteSizeThresholdBlocks?: number;
-  /**
-   * Put every note on the character-counting side, whatever its size.
-   *
-   * Not the same as setting the threshold to zero, which is why it is its own
-   * field: it says "never measure a document for the scrollbar" as a
-   * standing preference, and it survives the reader moving the threshold
-   * slider around underneath it.
-   */
-  forceCharacterScrollbarThumb?: boolean;
   typingSoundEnabled?: boolean;
   typingSoundSet?: 'A' | 'B' | 'C' | 'D';
   /**
@@ -225,12 +207,12 @@ export interface PersistedMenuState {
   renderScrollBaseDistanceRows?: number;
   renderScrollMaxDurationMultiplier?: number;
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
-  debuggingEnabled?: boolean;
-  spellCheckEnabled?: boolean;
-  /** Typing flow (Options > Tools); see flow/flowModel.ts. */
+  /** Which features exist at all: the toggle bar at the top of Options. See shared/features.ts. */
+  features?: FeatureToggles;
+  /** Typing flow's tuning (Options > Flow; on/off is `features.flow`); see flow/flowModel.ts. */
   flow?: FlowSettings;
   speedReading?: SpeedReadingSettings;
-  /** Beat pulse (Options > Tools); see sound/musicBeat.ts. */
+  /** The visualizer's per-device delay (Options > Visualizer; on/off is `features.visualizer`); see sound/musicBeat.ts. */
   beat?: BeatSettings;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   chapterBarMode?: 'tags' | 'tabs';
@@ -250,14 +232,6 @@ export interface PersistedMenuState {
   slotOverlay?: SlotOverlay | null;
   /** Whether "double size" mode (2x page zoom + doubled window minimum) is on. See App.tsx's isDoubleSizeMode. */
   isDoubleSizeMode?: boolean;
-  /**
-   * Whether the custom animated mouse cursor overlay is on (Options > Mouse
-   * options). Deliberately kept out of UiLayoutLoadout and always defaults
-   * to off -- it must persist across layout switches and app restarts
-   * independent of whichever layout is active. Its appearance settings
-   * (colors, size, speed, etc.) live in UiLayoutLoadout instead.
-   */
-  customCursorEnabled?: boolean;
   /** Line-number gutter visibility, keyed per editor slot (sectionId), not per note. See App.tsx's reviewGutterVisibleBySection. */
   reviewGutterVisibleBySection?: Record<string, boolean>;
   /**

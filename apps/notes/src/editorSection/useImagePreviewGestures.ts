@@ -74,7 +74,6 @@ interface Context {
   readEditorText: () => string
   canEdit: boolean
   /** Debug-tagged notes refuse edits made from outside the text, as dropping into the editor does. */
-  activeNoteHasDebugTagRef: MutableRefObject<boolean>
 }
 
 /** The image's line, its index among the images drawn from that line, and how many there are. */
@@ -163,7 +162,7 @@ function lengthIn(px: number, unit: ImageLength['unit'] | undefined, frame: HTML
   return { value: Math.max(0.5, Math.round((px / fontSizePx) * 2) / 2), unit: 'em' }
 }
 
-export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef, readEditorText, canEdit, activeNoteHasDebugTagRef }: Context): void {
+export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef, readEditorText, canEdit }: Context): void {
   const noteRef = useRef(activeNoteId)
   noteRef.current = activeNoteId
   const canEditRef = useRef(canEdit)
@@ -173,7 +172,7 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
     if (!scroller || !canEdit) return
 
     const apply = (text: string, edit: ImageEdit | ImageEdit[] | null) => {
-      if (edit && !activeNoteHasDebugTagRef.current) adapterRef.current?.applyEdit(Array.isArray(edit) ? edit : [edit], text)
+      if (edit) adapterRef.current?.applyEdit(Array.isArray(edit) ? edit : [edit], text)
     }
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -382,7 +381,7 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
       scroller.removeEventListener('dragover', handleDragOver)
       scroller.removeEventListener('drop', handleDrop)
     }
-  }, [activeNoteHasDebugTagRef, adapterRef, canEdit, readEditorText, scrollerRef, activeNoteId])
+  }, [adapterRef, canEdit, readEditorText, scrollerRef, activeNoteId])
 }
 
 /**

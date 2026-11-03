@@ -1,8 +1,10 @@
+// verify: reads-temp (scripts/verify.mjs, "what a test reads from disk")
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { StateService } from './stateService'
+import type { PersistedMenuState } from '../src/shared/appState'
 import { UI_FONT_SCALE_MAX, UI_FONT_SCALE_MIN } from '../src/shared/UiTypography'
 import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
@@ -202,50 +204,6 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.wheelStepLines).toBe(2.7)
   })
 
-  it('persists the note size threshold and its override across a save -> fresh-instance load', async () => {
-    // The pair that decides whether a note's scrollbar is measured in pixels
-    // or counts characters (editor/documentPosition.ts). Both halves are
-    // here for the reason the wheel-slider test above records: sanitizeMenu
-    // is a hand-maintained allowlist, and a field missing from it is dropped
-    // on every real read and write however correct the renderer side is.
-    // `false` is asserted explicitly rather than assumed, because a dropped
-    // boolean and a stored `false` are indistinguishable from the renderer.
-    const writer = new StateService(dataRoot)
-    await writer.saveAppState({
-      selectedNoteId: null,
-      menu: {
-        sidebarMode: 'date',
-        selectedMonths: [],
-        selectedYears: [],
-        searchQuery: '',
-        noteSizeThresholdBlocks: 73,
-        forceCharacterScrollbarThumb: true,
-      },
-    })
-
-    const reader = new StateService(dataRoot)
-    const loaded = await reader.loadAppState()
-    expect(loaded.menu?.noteSizeThresholdBlocks).toBe(73)
-    expect(loaded.menu?.forceCharacterScrollbarThumb).toBe(true)
-
-    const offWriter = new StateService(dataRoot)
-    await offWriter.saveAppState({
-      selectedNoteId: null,
-      menu: {
-        sidebarMode: 'date',
-        selectedMonths: [],
-        selectedYears: [],
-        searchQuery: '',
-        noteSizeThresholdBlocks: 10,
-        forceCharacterScrollbarThumb: false,
-      },
-    })
-    const offReader = new StateService(dataRoot)
-    const offLoaded = await offReader.loadAppState()
-    expect(offLoaded.menu?.noteSizeThresholdBlocks).toBe(10)
-    expect(offLoaded.menu?.forceCharacterScrollbarThumb).toBe(false)
-  })
-
   it('round-trips every other boolean menu toggle touched by the same persistMenuStateNow consolidation (App.tsx/CLAUDE.md)', async () => {
     const writer = new StateService(dataRoot)
     await writer.saveAppState({
@@ -376,22 +334,22 @@ describe('StateService app-state field round-trip', () => {
     expect((await new StateService(dataRoot).loadAppState()).menu?.allowRemoteImages).toBe(false)
   })
 
-  it('persists the unified global spellcheck toggle across a save -> fresh-instance load', async () => {
-    const writer = new StateService(dataRoot)
-    await writer.saveAppState({
-      selectedNoteId: null,
-      menu: {
-        sidebarMode: 'date',
-        selectedMonths: [],
-        selectedYears: [],
-        searchQuery: '',
-        spellCheckEnabled: true,
-      },
-    })
+  it('persists the feature toggles across a save -> fresh-instance load', async () => {
+    const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
+    const features = { spellCheck: true, customCursor: false, keySounds: false, visualizer: true, glaze: false, flow: true, caretBlink: false }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, features } })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual(features)
+  })
 
-    const reader = new StateService(dataRoot)
-    const loaded = await reader.loadAppState()
-    expect(loaded.menu?.spellCheckEnabled).toBe(true)
+  it('reads an older save\'s separate flags into the feature toggles', async () => {
+    const legacy = {
+      sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '',
+      spellCheckEnabled: true, customCursorEnabled: false, reducedCaretAnimation: true, beat: { enabled: true }, flow: { enabled: true },
+    }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: legacy as unknown as PersistedMenuState })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual({
+      spellCheck: true, customCursor: false, keySounds: true, visualizer: true, glaze: true, flow: true, caretBlink: false,
+    })
   })
 
   // The music player's sound-options row replaced the sidebar's volume/reverb
@@ -459,7 +417,6 @@ describe('StateService app-state field round-trip', () => {
         selectedYears: [2024],
         searchQuery: 'stale query',
         slotOverlay: { kind: 'guide', sectionId: 'section-1', previousNoteId: 'note-2' },
-        debuggingEnabled: true,
       },
     })
 
@@ -471,7 +428,6 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.sidebarMode).toBe('date')
     expect(loaded.menu?.searchQuery).toBe('')
     expect(loaded.menu?.slotOverlay).toBeUndefined()
-    expect(loaded.menu?.debuggingEnabled).toBe(false)
   })
 })
 

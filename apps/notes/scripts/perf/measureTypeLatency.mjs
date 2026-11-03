@@ -44,7 +44,7 @@ import {
 function parseArgs(argv) {
   const args = {
     chars: 400000, keystrokes: 25, position: 'middle', port: 5191,
-    headed: false, json: false, key: 'x', throttle: 1, gap: 250, view: 'edit', profile: false, stacks: false, lagLog: false, external: false, defer: false, shape: 'prose', prod: false,
+    headed: false, json: false, key: 'x', throttle: 1, gap: 250, view: 'edit', profile: false, stacks: false, lagLog: false, external: false, shape: 'prose', prod: false,
   }
   for (const raw of argv) {
     const [key, value] = raw.replace(/^--/, '').split('=')
@@ -54,7 +54,6 @@ function parseArgs(argv) {
     else if (key === 'stacks') args.stacks = true
     else if (key === 'lagLog') args.lagLog = true
     else if (key === 'external') args.external = true
-    else if (key === 'defer') args.defer = true
     else if (key === 'shape') args.shape = value
     else if (key === 'json') args.json = true
     else if (key === 'key') args.key = value
@@ -179,20 +178,6 @@ async function main() {
     // Set before the seed's own reload, so the flag is already in place when
     // the app boots into the note rather than a reload later.
     if (args.lagLog) await page.evaluate(() => window.localStorage.setItem('thockdown:debug-input-lag', '1'))
-    // deferPreviewOnRapidInput is a persisted menu setting that defaults to
-    // false, so by default EVERY keystroke commits setActiveNoteText
-    // synchronously and re-renders the whole app + preview pipeline. Seeded
-    // through the persisted state before the boot that matters, because the
-    // app reads it once on load.
-    if (args.defer) {
-      await page.evaluate(async () => {
-        const state = await window.thockdownState.loadAppState()
-        await window.thockdownState.saveAppState({
-          ...state,
-          menu: { ...state.menu, deferPreviewOnRapidInput: true },
-        })
-      })
-    }
     // `indented` is a document of list items, which is what makes Enter and
     // Backspace take the markdown TRANSFORM path (auto-indent continuation)
     // rather than CM6's native insert -- the difference the reporter can hear

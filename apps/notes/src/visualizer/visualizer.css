@@ -1,0 +1,270 @@
+/* The visualizer mode (F3): the scene over the active slot (VisualizerScene.tsx)
+   and the swaying glaze (VisualizerGlaze.tsx). */
+
+/* Nothing of the slot's chrome stays: immersive mode keeps the render view's
+   thumb (layout.css), which describes the hidden note. */
+.app-grid.is-visualizer .editor-scrollbar-slot.is-preview-mode {
+  display: none;
+}
+
+/* The beat edge reads larger over a full screen: twice the layout's blur and
+   10px more spread (editor.css, .editor-beat-edge). */
+.app-grid.is-visualizer .editor-beat-edge {
+  --beat-edge-blur-scale: 2;
+  --beat-edge-spread-extra: 10px;
+}
+
+/* The slot's own contents stay mounted and laid out underneath, so the note
+   returns exactly as it was, but are not drawn. Opacity, not visibility: a
+   descendant can set `visibility: visible` and show through (the edit view's
+   root does, inline, CM6Editor.tsx), while no descendant can undo an
+   ancestor's opacity. A layer at opacity 0 is not drawn. */
+.editor-stage.is-visualizer > :not(.visualizer-scene) {
+  opacity: 0;
+}
+
+.editor-stage .visualizer-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  overflow: hidden;
+  outline: none;
+}
+
+.visualizer-scene > * {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* Layered bottom to top: the surfaces (z 1, in DOM order), the editor's two
+   grid layers, the letters, the progress track's press target, the cutout. */
+.visualizer-strip,
+.visualizer-letter-box,
+.visualizer-lit,
+.visualizer-spectrum {
+  z-index: 1;
+}
+
+.visualizer-strip {
+  left: 0;
+  right: 0;
+}
+.visualizer-strip.is-top {
+  top: 0;
+  background-color: var(--visualizer-letterbox-color, var(--color-bg-leading));
+}
+/* The three zones sit side by side on the stage's own background, exactly as
+   the editor's zone divs do (CM6Editor.tsx), never stacked on a regular-colour
+   backdrop: a translucent zone colour over another zone colour comes out a
+   different colour from the editor's. */
+.visualizer-strip.is-middle {
+  background-color: var(--color-bg-regular);
+}
+.visualizer-strip.is-bottom {
+  bottom: 0;
+  background-color: var(--visualizer-letterbox-color, var(--color-bg-trailing));
+}
+
+.visualizer-letter-box {
+  background-color: var(--color-bg-regular);
+}
+
+.visualizer-lit {
+  background-color: var(--visualizer-accent-color, var(--color-caret));
+}
+
+.visualizer-scene > .visualizer-grid {
+  inset: 0 0 -1px 0;
+}
+.visualizer-scene > .visualizer-grid.thockdown-grid-outline-lines {
+  z-index: 3;
+}
+
+.visualizer-letter {
+  z-index: 5;
+  text-align: center;
+  font-family: var(--visualizer-font);
+  font-size: var(--visualizer-font-size);
+  color: var(--visualizer-accent-color, var(--color-caret));
+  white-space: pre;
+}
+
+.visualizer-scene > .visualizer-progress-hit {
+  z-index: 6;
+  pointer-events: auto;
+}
+
+/* The empty scene's solid, in a square of whole boxes: the empty state's
+   plate and its masked stripes (editor.css, .editor-empty-state::before). */
+.visualizer-scene > .visualizer-cutout {
+  z-index: 7;
+  pointer-events: auto;
+  /* Behind the face: with rounded corners the grid closes round the face
+     (cutoutRing.ts), and the square's corners outside it are left
+     uncovered so the boxes show through. */
+  border: none;
+}
+
+/* The outline ring the grid closes round a rounded face with (cutoutRing.ts),
+   at the outline grid's layer. The grid ring is the cutout's own outline
+   (::after below), which follows the face's radius. */
+.visualizer-scene > .visualizer-cutout-ring {
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+}
+.visualizer-scene > .visualizer-cutout-ring.is-outline {
+  z-index: 3;
+  background-color: var(--color-grid-outline);
+}
+
+/* The grid line round the face: its own layer above the face, so it paints
+   over the face's outer glow exactly as it did when both were on one
+   element, and rounded with the face, so with rounded corners it is the
+   grid ring (cutoutRing.ts). */
+.visualizer-scene > .visualizer-cutout::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: var(--visualizer-face-radius, 0);
+  outline: 1px solid var(--color-grid-bg);
+}
+
+/* The face: the cutout's panel and the solid's stripes. Its corners are
+   rounded inline (cutoutRing.ts); at roundness 0 it covers the hole exactly,
+   so the scene is the square cutout unchanged. */
+.visualizer-cutout-face {
+  position: absolute;
+  inset: 1px;
+  /* Its own stacking context, so the stripes (z-index -1) paint over its background. */
+  z-index: 0;
+  pointer-events: none;
+  border-radius: var(--visualizer-face-radius, 0);
+  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
+  box-shadow: var(--box-shadow-inverted-filtered);
+}
+
+.visualizer-cutout-face::before {
+  border-radius: inherit;
+}
+
+/* The glass cover: a sphere's lighting over the whole face, lit from above
+   (a white crescent fading down from the top rim) and shaded below (a dark
+   crescent rising from the bottom rim), with a soft rim and a faint bounce
+   light. It covers the face exactly, rounded with it (cutoutRing.ts), and
+   never moves: the solid thumps inside it. Static gradients, painted once.
+   Counter-inverted by the scene's own invert (--scene-invert, set by App), so
+   a dark theme keeps the light on top rather than flipping it to shadow. */
+.visualizer-cutout-orb {
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: var(--visualizer-face-radius, 0);
+  overflow: hidden;
+  filter: invert(var(--scene-invert, 0));
+  background:
+    radial-gradient(ellipse 72% 46% at 50% 22%, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 55%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(ellipse 60% 22% at 50% 90%, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%),
+    radial-gradient(circle at 50% 30%, rgba(255, 255, 255, 0) 52%, rgba(255, 255, 255, 0.04) 66%, rgba(0, 0, 0, 0.08) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  opacity: 100%;
+  outline: 1px solid var(--visualizer-letterbox-color);
+  border: 1px solid var(--visualizer-accent-color);
+}
+/* The dark crescent: a disc with a lit disc cut out of its top, so what is
+   left is a crescent hugging the bottom rim, darkest at the rim. 3*/
+.visualizer-cutout-orb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0) 45%);
+  -webkit-mask-image: radial-gradient(circle at 50% 38%, transparent 58%, #000 68%);
+  mask-image: radial-gradient(circle at 50% 38%, transparent 58%, #000 68%);
+}
+/* The white crescent: a bright band along the top rim, cut the same way
+   from below, over the softer sheen. */
+.visualizer-cutout-orb::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 40%);
+  -webkit-mask-image: radial-gradient(circle at 50% 66%, transparent 60%, #000 70%);
+  mask-image: radial-gradient(circle at 50% 66%, transparent 60%, #000 70%);
+}
+
+/* Each swayed layer is promoted once and only moved after that, so a frame
+   of the sway composites and never repaints. */
+.visualizer-glaze-layer {
+  will-change: transform;
+}
+
+/* The smooth wave (GridWave.tsx): portalled into .app-saturate-wrapper and
+   painted just above the glaze (.glaze-overlay-stack, z-index 6000), masked
+   to the scene's grid lines with the centre cutout left out. */
+.visualizer-scene > .visualizer-grid-wave-anchor {
+  inset: 0;
+  pointer-events: none;
+}
+
+.visualizer-grid-wave {
+  --grid-wave-period: calc(var(--visualizer-wave-boxes, 128) * var(--grid-wave-box));
+  position: fixed;
+  z-index: 6001;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.visualizer-grid-wave-lines {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.visualizer-grid-wave-turn {
+  position: absolute;
+  /* Turned by GridWave.tsx from the music's beat, one transform per frame. */
+  will-change: transform;
+}
+
+.visualizer-grid-wave-bands {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--grid-wave-period));
+  right: 0;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    var(--visualizer-wave-color) calc(var(--grid-wave-period) / 2),
+    transparent var(--grid-wave-period)
+  );
+  will-change: transform;
+  animation: visualizer-grid-wave var(--visualizer-wave-sec, 6s) linear infinite;
+}
+
+.visualizer-grid-wave-pulse {
+  position: absolute;
+  /* The ring, in the cutout face's shape, is an image GridWave.tsx draws (pulseRingImage). */
+  background-size: 100% 100%;
+  /* Above the turning wave. */
+  z-index: 1;
+  /* Shown only while GridWave.tsx animates it (its keyframes carry the
+     opacity), so its resting place does not matter. */
+  opacity: 0;
+  will-change: transform;
+}
+
+@keyframes visualizer-grid-wave {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--grid-wave-period)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .visualizer-grid-wave-bands {
+    animation: none;
+  }
+}

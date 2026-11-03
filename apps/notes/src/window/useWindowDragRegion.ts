@@ -147,6 +147,9 @@ export function useWindowDragRegion() {
       const target = event.target
       if (!(target instanceof Element) || target.closest(WINDOW_DRAG_EXCLUDED_SELECTOR)) return
       if (!target.closest(WINDOW_TITLEBAR_SELECTOR)) return
+      // In mini mode the title bar is the whole window, so a double-click
+      // anywhere in it would leave mini mode and maximize; it does nothing.
+      if (target.closest('.window-controls-grid.is-collapsed')) return
       controls!.toggleMaximize?.()
     }
 

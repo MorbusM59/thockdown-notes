@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
 import { watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 

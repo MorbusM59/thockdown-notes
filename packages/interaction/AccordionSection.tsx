@@ -17,6 +17,7 @@
 // reader opened or closed since as it is.
 
 import { type MouseEvent, type ReactNode, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { AccordionSectionOpenContext } from './accordionSectionOpen'
 import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from './ScrollCurvePlan'
 import { type OptionsSearchSection, applyOptionsSelection, indexOptionsSection, selectOptions } from './optionsSearch'
 
@@ -317,7 +318,7 @@ export function AccordionSection({
           {heading}
         </summary>
         <div ref={contentRef} className="sidebar-options-accordion-body">
-          {children}
+          <AccordionSectionOpenContext.Provider value={isOpen}>{children}</AccordionSectionOpenContext.Provider>
         </div>
       </details>
     </section>

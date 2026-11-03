@@ -1,3 +1,4 @@
+// verify: reads-repository (scripts/verify.mjs, "what a module reads from disk")
 // Measures the chapter bar at the REFERENCE LAYOUT and writes the numbers
 // src/escapeMenu/chapterBarWidth.ts estimates strip widths from.
 //

@@ -278,6 +278,12 @@ export interface CM6EditorProps {
    * purpose -- the ref and "the ref is worth reading" are one fact.
    */
   onSurfaceReady?: () => void;
+  /**
+   * Receives the box-outline grid layer while it is mounted, so something
+   * drawn outside the edit pane can line up with it (the beat pulse's
+   * outline, `flow/useBeatGridMirror.ts`) without reaching into the pane.
+   */
+  gridOutlineRef?: (el: HTMLDivElement | null) => void;
   // Whether this editor's own split-view section is the currently active
   // one -- see navigateToFlaggedLine's own doc comment for why the
   // flag-jump controls need this (a click on a still-inactive section's
@@ -983,6 +989,7 @@ export function CM6Editor({
   bindings,
   adapterRef,
   onSurfaceReady,
+  gridOutlineRef,
   isSectionActive = true,
   isEditPaneVisible = true,
   noteId,
@@ -1615,9 +1622,11 @@ export function CM6Editor({
     }
 
     if (isEditScrollInteractionBlocked() && !options?.force) {
+      // Whether there is anything to scroll is not known here, so the flag
+      // keeps its last answer: immersive mode hides the scrollbar on it, and
+      // a transition or a restore must not blink the column out.
       setScrollThumbHeightPx(0);
       setScrollThumbTopPx(0);
-      setIsScrollThumbActive(false);
       paintScrollThumb(0, 0);
       return;
     }
@@ -5094,7 +5103,13 @@ export function CM6Editor({
       const pan = fingerPan;
       fingerPan = null;
       if (event.type !== 'pointerup' || isEditScrollInteractionBlocked()) return;
-      const coast = releaseFingerPan(pan, event.timeStamp, wheelSpinThresholdMs());
+      // The fastest a coast may start: one row per row-height at the speed a
+      // held PageDown reaches (see `startPageReleaseRampDown`).
+      const lineHeightPx = lineHeightPxRef.current;
+      const visibleRows = computeVisibleMiddleRows(view.scrollDOM.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPx);
+      const topSpeedPxPerSec = resolveApexSpeedPxPerSecFromCurrentParams(visibleRows * lineHeightPx) * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER;
+      const minGapMs = topSpeedPxPerSec > 0 ? (lineHeightPx / topSpeedPxPerSec) * 1000 : 0;
+      const coast = releaseFingerPan(pan, event.timeStamp, wheelSpinThresholdMs(), minGapMs);
       if (!coast) return;
       startWheelSpinCoast(wheelSpinState, { nowMs: performance.now(), direction: coast.direction, averageGapMs: coast.averageGapMs, rowsPerNudge: 1 });
       scheduleWheelSpinNudge();
@@ -6601,6 +6616,7 @@ export function CM6Editor({
       {hasViewportLines && fontReady && (
         <>
           <div
+            ref={gridOutlineRef}
             className="absolute pointer-events-none thockdown-grid-outline-lines"
             style={{ inset: '0 0 -1px 0', zIndex: 6, backgroundPosition: `${halfCellWidthPx - 1}px ${halfLineHeightPx - 1}px` }}
           />
@@ -6672,7 +6688,7 @@ export function CM6Editor({
         <>
           <div
             ref={gridScrollPaintRef}
-            className="absolute pointer-events-none immersive-scroll-column"
+            className={`absolute pointer-events-none immersive-scroll-column${isScrollThumbActive ? '' : ' is-inactive'}`}
             style={{ top: halfLineHeightPx, left: immersiveScrollColumnLeftPx, width: cellWidthPx, height: immersiveTrackRows * lineHeightPx, zIndex: 2 }}
           />
           <div

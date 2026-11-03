@@ -35,7 +35,7 @@ on a 12,000-line note — real, but not the dominant cost.
 
 The actual dominant cost was `splitMarkdownIntoPreviewBlocks()` in
 `apps/notes/src/editor/PreviewBlockSplit.ts`: a full remark structural parse of the **entire document**,
-run on every single keystroke (not gated by `deferPreviewOnRapidInput` at the per-call level —
+run on every single keystroke (not gated by `deferPreviewOnRapidInput` at the per-call level — *(Superseded 2026-10-25: "Allow asynchronous input" and `documentCommitCoalescer.ts` were removed; the editor's change handler commits text and selection together, synchronously.)*
 that toggle only changes how *often per second* this fires, not its O(document length) cost
 per call). Measured on the 12,000-line note: **~1.6–4.6 seconds per call**. A 40-keystroke
 held-key burst took **148.8 seconds wall-clock** (3.7s/keystroke), of which this one function
@@ -3308,7 +3308,7 @@ Read this section before touching `CM6Editor.tsx`'s hydration effect.
 React holds a second copy (`activeNoteText`). The hydration effect's same-note
 branch force-matches the live document to React's copy via
 `computeMinimalTextReplacement`. React's copy is routinely behind: the commit
-carrying it is coalesced onto a frame (`documentCommitCoalescer.ts`, which commits the selection in the same frame so the pair never disagrees), and
+carrying it is coalesced onto a frame (`documentCommitCoalescer.ts`, which commits the selection in the same frame so the pair never disagrees), and *(Superseded 2026-10-25: "Allow asynchronous input" and `documentCommitCoalescer.ts` were removed; the editor's change handler commits text and selection together, synchronously.)*
 on a large note the render it triggers takes long enough that more keystrokes
 land before the effect runs. The effect then "corrects" the document by
 deleting whatever was typed in the meantime.

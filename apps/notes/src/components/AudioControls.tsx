@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
+import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -29,6 +30,7 @@ import {
 import { useHoldToAdjust } from '../shared/useHoldToAdjust'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
+import { publishNowPlaying } from '../sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
@@ -799,9 +801,17 @@ export const AudioControls = memo(function AudioControls({
     const session = navigator.mediaSession
     if (!session) return
     session.metadata = currentSong
-      ? new MediaMetadata({ title: currentSong.title || '?', artist: currentSong.artist, album: 'Thockdown Notes' })
+      ? new MediaMetadata({ title: songTitleText(currentSong), artist: songArtistText(currentSong), album: songAlbumText(currentSong) })
       : null
   }, [currentSong])
+
+  // The same song and the same previous/next for the visualizer mode's
+  // now-playing strip (sound/nowPlaying.ts). Through the ref, so the action
+  // published once stays current.
+  const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
+  useEffect(() => {
+    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong })
+  }, [currentSong, publishedJumpSong])
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -812,7 +822,7 @@ export const AudioControls = memo(function AudioControls({
   // ---------------------------------------------------------------- song label
 
   const songLabel = currentSong
-    ? `${currentSong.favorability} | ${currentSong.title || '?'}${currentSong.artist ? ` (${currentSong.artist})` : ''}`
+    ? `${currentSong.favorability} | ${songTitleText(currentSong)} (${songArtistText(currentSong)})`
     : 'No song'
 
   // ---------------------------------------------------------------- sound options

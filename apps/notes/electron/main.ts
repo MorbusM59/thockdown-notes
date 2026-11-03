@@ -1,3 +1,5 @@
+// verify: reads-repository (scripts/verify.mjs, "what a module reads from disk")
+import { installHangLog } from './hangLog'
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, powerMonitor, protocol, shell, screen } from 'electron'
 import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
@@ -221,7 +223,6 @@ let utilityCollapseRestoreState: WindowState | null = null;
 // every resize during full screen saved the screen's size as the window's
 // own, and the next launch opened at screen size.
 let preFullScreenWindowState: WindowState | null = null;
-let alwaysOnTopBeforeUtilityCollapse: boolean | null = null;
 let windowDragState: { startCursorX: number; startCursorY: number; startWinX: number; startWinY: number } | null = null;
 
 const UTILITY_COLLAPSE_MIN_WIDTH_PX = 96;
@@ -1485,6 +1486,22 @@ function applyNormalWindowConstraints(windowRef: BrowserWindow): void {
   windowRef.setMinimumSize(width, height);
 }
 
+// Mini mode is the only thing that puts the window on top, so leaving it
+// always means "not on top" -- the window's previous always-on-top flag used
+// to be read back and restored, which let a z-order state the OS had gotten
+// wrong be carried into the next entry. Entering re-asserts the topmost band
+// from scratch (off, then on at an explicit level) and moves the window to the
+// top of that band. Windows can drop a window out of the topmost band while it
+// is minimized or hidden and leave Electron's flag saying it is still there,
+// which is how mini mode ended up below other windows; so the same call runs
+// whenever a collapsed window is restored or shown. On Wayland a client cannot
+// set its own stacking at all, so this is a request the compositor may ignore.
+function raiseMiniModeWindow(windowRef: BrowserWindow): void {
+  windowRef.setAlwaysOnTop(false);
+  windowRef.setAlwaysOnTop(true, 'floating');
+  windowRef.moveTop();
+}
+
 function collapseWindowToUtilityGrid(targetSize: { width: number; height: number }): boolean {
   if (!win || win.isDestroyed()) return false;
   if (windowIsUtilityCollapsed) return true;
@@ -1503,11 +1520,10 @@ function collapseWindowToUtilityGrid(targetSize: { width: number; height: number
   const nextX = currentBounds.x + (currentBounds.width - targetSize.width);
   const nextY = currentBounds.y;
 
-  alwaysOnTopBeforeUtilityCollapse = win.isAlwaysOnTop();
   windowIsUtilityCollapsed = true;
   applyUtilityCollapseWindowConstraints(win);
-  win.setAlwaysOnTop(true);
   win.setBounds({ x: nextX, y: nextY, width: targetSize.width, height: targetSize.height });
+  raiseMiniModeWindow(win);
   emitWindowCollapsedState();
   return true;
 }
@@ -1526,11 +1542,8 @@ function restoreWindowFromUtilityCollapse(): boolean {
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
 
-  const shouldKeepAlwaysOnTop = alwaysOnTopBeforeUtilityCollapse ?? false;
-  alwaysOnTopBeforeUtilityCollapse = null;
-
   applyNormalWindowConstraints(win);
-  win.setAlwaysOnTop(shouldKeepAlwaysOnTop);
+  win.setAlwaysOnTop(false);
   if (restoreState) {
     if (typeof restoreState.x === 'number' && typeof restoreState.y === 'number') {
       const collapsedTopRightX = collapsedBounds.x + collapsedBounds.width;
@@ -1607,7 +1620,6 @@ async function createWindow() {
   const initialMinSize = computeEffectiveMinSize();
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
-  alwaysOnTopBeforeUtilityCollapse = null;
 
   // If the saved state is maximized, its x/y/width/height can't be trusted
   // as the window's pre-maximize ("restore") geometry -- they may have been
@@ -1644,6 +1656,8 @@ async function createWindow() {
   // get registered. Catch them directly at the native input level instead --
   // this fires before the renderer's own keydown handling, so it can't be
   // swallowed by the app's global shortcut interception either.
+  installHangLog(win, resolveDataRoot());
+
   win.webContents.on('before-input-event', (_event, input) => {
     if (input.type !== 'keyDown') return
     const isDevToolsShortcut = input.key === 'F12'
@@ -1739,6 +1753,11 @@ async function createWindow() {
   })
   // Windows: the session is ending (shutdown or log off).
   win.on('session-end', () => { void quitRoutine.quit('the session is ending') })
+  const raiseIfMiniMode = () => {
+    if (windowIsUtilityCollapsed && win && !win.isDestroyed()) raiseMiniModeWindow(win);
+  };
+  win.on('restore', raiseIfMiniMode);
+  win.on('show', raiseIfMiniMode);
 
   win.webContents.on('did-finish-load', () => {
     if (win) emitWindowEvent(win.webContents, 'maximizeState', win.isMaximized())

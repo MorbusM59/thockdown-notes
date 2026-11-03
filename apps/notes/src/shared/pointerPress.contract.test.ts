@@ -1,3 +1,4 @@
+// verify: reads-repository (scripts/verify.mjs, "what a test reads from disk")
 import { describe, expect, it } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import { readFileSync, readdirSync } from 'node:fs'

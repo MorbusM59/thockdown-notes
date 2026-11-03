@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react'
+import { useCallback, useMemo, useRef, useEffect, useLayoutEffect } from 'react'
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { PersistedViewportState } from '../shared/appState'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -66,7 +66,6 @@ import { ScrollTransitionController } from '../editor/ScrollTransitionController
 import type { PreviewScrollToSourceLineFn } from './usePreviewMarkdownRendering'
 import { createPreviewSettleGate, type PreviewSettleGate } from './previewSettleGate'
 import { traceSettle } from './previewSettleTrace'
-import { createDocumentCommitCoalescer } from './documentCommitCoalescer'
 import { buildPersistedBlockMap } from '../editor/persistedBlockMap'
 import type { NoteUiStatePayload } from '../shared/noteLifecycle'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
@@ -135,15 +134,11 @@ export interface UseEditorSectionMountOptions {
   previewedSnapshotId: number | null
   persistenceReady: boolean
   lineHeightPx: number
-  /** Opt-in perf toggle: coalesces the preview-driving text commit onto a single requestAnimationFrame per user-input burst instead of firing once per keystroke, so fast key-repeat (e.g. held Backspace) doesn't queue a full ReactMarkdown reparse per tick. Undo/redo/programmatic sources always stay synchronous. */
-  deferPreviewOnRapidInput: boolean
   latestEditorTextRef: MutableRefObject<string>
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
 
   /** The full shared notes list -- read (not just written) by onTextChange's external-note bookkeeping. */
   notes: NoteSummary[]
-  /** A ref, not a direct value: activeNoteHasDebugTag is computed later in App.tsx than this hook is called, and every usage here is a synchronous read-at-call-time guard, never a reactive dependency. */
-  activeNoteHasDebugTagRef: MutableRefObject<boolean>
   setIsCaretSuspended: Dispatch<SetStateAction<boolean>>
 
   /** Queues a write of the note's document (useNoteSaveQueue): the text written is the document's when the write starts, so none is passed. */
@@ -158,8 +153,6 @@ export interface UseEditorSectionMountOptions {
   publishText: (noteId: string, text: string, from?: { previousText: string; edit: EditorTextEdit | null }) => void
   queueAppStateSave: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreview: (nextText: string) => void
-  /** Only ever referenced in bindings' own dependency array (matching the original code), never actually called here. */
-  writeDebugEntry: (functionName: string, lines: string[]) => Promise<void>
 
   /** Markdown formatting commands -- shared with toolbar buttons, so they stay owned in App.tsx and get called from here, not moved in. */
   /**
@@ -183,8 +176,7 @@ export interface UseEditorSectionMountOptions {
   /**
    * The content of whichever Timeline snapshot `previewedSnapshotId` refers
    * to, or null when showing the live note. Populated as a plain ref mutation during
-   * EditorSection's render (same pattern as `activeNoteHasDebugTagRef.current
-   * = ...`) rather than an effect, because useNoteSnapshotTimeline (the
+   * EditorSection's render rather than an effect, because useNoteSnapshotTimeline (the
    * source of this content) is mounted later in the same component than this
    * hook -- writing it during render guarantees this hook's own effects see
    * the up-to-date value on the same commit that changed
@@ -315,11 +307,9 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     previewedSnapshotId,
     persistenceReady,
     lineHeightPx,
-    deferPreviewOnRapidInput,
     latestEditorTextRef,
     latestEditorSelectionRef,
     notes,
-    activeNoteHasDebugTagRef,
     setIsCaretSuspended,
     queueSave,
     publishText,
@@ -467,33 +457,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     return next
   }, [])
 
-  // The single writer of the displayed document's text AND selection state
-  // from editor events -- see documentCommitCoalescer.ts for why the two
-  // must commit as one snapshot under deferPreviewOnRapidInput. Created once
-  // per mount; it reads its sinks through this ref, so a new setter or title
-  // callback never orphans a pending frame. latestEditorTextRef and
-  // latestEditorSelectionRef are already current on every tick, so a frame
-  // commits whatever they hold when it fires rather than every intermediate
-  // value. The frame also carries the title preview: deriveNoteTitleFromText
-  // is its own O(document length) scan, and running it per tick would defeat
-  // the point for a large note under rapid input.
-  const documentCommitSinksRef = useRef({ readEditorText, commitEditorText, latestEditorSelectionRef, setEditorSelection, updateActiveNoteTitlePreview })
-  documentCommitSinksRef.current = { readEditorText, commitEditorText, latestEditorSelectionRef, setEditorSelection, updateActiveNoteTitlePreview }
-  const [documentCommit] = useState(() => createDocumentCommitCoalescer({
-    requestFrame: (callback) => requestAnimationFrame(callback),
-    cancelFrame: (handle) => cancelAnimationFrame(handle),
-    commitText: (reason) => {
-      const sinks = documentCommitSinksRef.current
-      sinks.commitEditorText()
-      if (reason === 'frame') sinks.updateActiveNoteTitlePreview(sinks.readEditorText())
-    },
-    commitSelection: () => {
-      const sinks = documentCommitSinksRef.current
-      sinks.setEditorSelection(sinks.latestEditorSelectionRef.current)
-    },
-  }))
-
-  useEffect(() => () => documentCommit.cancel(), [documentCommit])
 
   const readCurrentEditUiPayload = useCallback((): { progressEdit: number; cursorPos: number; scrollTop: number; sourceAnchorLine: number } | null => {
     const selection = latestEditorSelectionRef.current
@@ -1552,8 +1515,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     latestEditorTextRef.current = change.text
     advanceMarkdownInlineCache(change.text, previousText, previousText === change.previousText ? change.edit : null)
     sectionRequiresScrollUpdateRef.current = true
-    documentCommit.text(true)
-  }, [advanceMarkdownInlineCache, documentCommit, latestEditorTextRef])
+    commitEditorText()
+  }, [advanceMarkdownInlineCache, commitEditorText, latestEditorTextRef])
 
   const commitTransformResult = useCallback((next: EditorTransformResult): EditorTransformResult => {
     // The inline-state cache is deliberately NOT advanced here. A transform's
@@ -1684,8 +1647,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         // rest of this frame, and nothing more -- it is not this section's to
         // publish, save or play a sound for. The caret was mapped through it,
         // so its offsets moved too.
-        documentCommit.text(true)
-        documentCommit.selection()
+        commitEditorText()
+        setEditorSelection(event.selection)
         sectionRequiresScrollUpdateRef.current = true
         return
       }
@@ -1699,11 +1662,15 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         if (shownNoteId) publishText(shownNoteId, canonicalText, { previousText: event.previousText, edit: event.edit })
       }
 
-      const isDeferredPreviewTick = deferPreviewOnRapidInput && event.source === 'user-input'
-      documentCommit.text(isDeferredPreviewTick)
-      debugLogCheckpoint('after documentCommit.text')
+      // Text and selection are committed together, in one batch: every
+      // consumer of the pair (the formatting toolbar's active state,
+      // extract-to-chapter, ...) indexes the selection into the text, so a
+      // selection one keystroke newer than its text is a wrong answer.
+      commitEditorText()
+      setEditorSelection(event.selection)
+      debugLogCheckpoint('after committing text and selection')
 
-      if (!activeNoteId || !persistenceReady || activeNoteHasDebugTagRef.current) return
+      if (!activeNoteId || !persistenceReady) return
 
       const isUserEditableSource =
         event.source === 'user-input' || event.source === 'history-undo' || event.source === 'history-redo'
@@ -1733,14 +1700,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
 
-      // Deferred already covers this: documentCommit's coalesced frame calls
-      // updateActiveNoteTitlePreview itself once the frame fires, using
-      // whatever text is latest by then -- calling it again here would
-      // just redo the same O(document length) title derivation twice for
-      // no benefit.
-      if (!isDeferredPreviewTick) {
-        updateActiveNoteTitlePreview(canonicalText)
-      }
+      updateActiveNoteTitlePreview(canonicalText)
       debugLogCheckpoint('after updateActiveNoteTitlePreview')
       queueSave(event.selection.end)
       debugLogCheckpoint('after queueSave (onTextChange end)')
@@ -1757,14 +1717,14 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       }
 
       latestEditorSelectionRef.current = event.selection
-      documentCommit.selection()
+      setEditorSelection(event.selection)
       recordLiveSelectionInSnapshotCache(event.selection)
     },
     onTabIndentTransform: ({ shiftKey, text, selection }) => {
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1842,7 +1802,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1870,7 +1830,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1894,7 +1854,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
 
       // Canonical by construction -- CM6Editor.tsx's canonicalTextFilter is
       // the document's ingress invariant. Re-normalizing here would cost the
@@ -1920,7 +1880,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       suppressNextPlainTypingSoundOnce()
       void typingSoundManager.playRandomClick(ENTER_KEY_VOICE)
       // The section's shared inline-state cache turns Enter's fenced-code
@@ -1940,7 +1900,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       const next = modifier === 'ctrl-shift'
         ? resolveTableDeleteColumnTransform({ text, selection }, isInFence(text))
         : resolveTableDeleteTransform({ modifier, text, selection }, isInFence(text))
@@ -1951,7 +1911,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       const drop = resolveTableCellDrop({ text, selection, targetOffset }, isInFence(text))
       return drop ? commitTransformResult(drop.result) : null
     },
@@ -1959,7 +1919,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       if (previewedSnapshotId !== null) {
         return null
       }
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       // A table's keys win over an image's: an image inside a table cell is
       // shaped in the preview, and its row and column still move here.
       const next = resolveTableMoveTransform({ direction, text, selection }, isInFence(text))
@@ -1968,7 +1928,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     },
     importImageFiles: async (files) => {
       if (previewedSnapshotId !== null) return null
-      if (!activeNoteId || activeNoteHasDebugTagRef.current) return null
+      if (!activeNoteId) return null
       return importImageFilesAsMarkdown(files)
     },
     onViewportChange: (event: EditorViewportChangeEvent) => {
@@ -2068,19 +2028,18 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     isPreviewMode,
     persistenceReady,
     previewedSnapshotId,
-    deferPreviewOnRapidInput,
     queueSave,
     publishText,
     queueAppStateSave,
     applyEditRestoreSnapshot,
     updateActiveNoteTitlePreview,
     updateEditModeSnapshotCache,
-    activeNoteHasDebugTagRef,
     buildTextDecorationTransformRef,
     buildToggleBulletedListTransformRef,
     buildToggleCurrentLineHeadingTransformRef,
     buildToggleNumberedListTransformRef,
-    documentCommit,
+    commitEditorText,
+    setEditorSelection,
     deriveTypingSoundKeyId,
     resolveTypingSoundSpatialPan,
     latestEditorSelectionRef,
@@ -3088,8 +3047,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     )
   }, [getPreviewBlocksForText, activeNoteId, applyEditRestoreSnapshot, previewedSnapshotId, previewedSnapshotContentRef, latestEditViewportRef, latestViewportRef])
   const applyProgrammaticEditorText = useCallback((nextText: string, selectionStart?: number, selectionEnd?: number) => {
-    if (activeNoteHasDebugTagRef.current) return
-
     const canonicalText = normalizeInternalText(nextText)
     commitEditorText(canonicalText)
     const shownNoteId = activeNoteIdRef.current
@@ -3127,7 +3084,6 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
     queueSave,
     publishText,
     updateActiveNoteTitlePreview,
-    activeNoteHasDebugTagRef,
     latestEditorSelectionRef,
     commitEditorText,
     setEditorSelection,

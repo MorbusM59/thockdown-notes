@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
 import { buildObjectDiff, formatPresetLine, formatPresetScalar, parsePresetLines, stableStringify } from '@thockdown/soundscape/presetFile';
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
@@ -36,6 +37,7 @@ import {
   DEFAULT_CUSTOM_DARK,
 } from '@thockdown/look/presets';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
+import { defaultVisualizer, sanitizeVisualizer } from '@thockdown/look/visualizer';
 import {
   DEFAULT_CUSTOM_CURSOR_SETTINGS,
   CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
@@ -72,6 +74,7 @@ import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/
 import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult, type ImageRenameResult, type StoredImageSummary, renameImageReferences } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
+import { readAudioTags } from './audioTags';
 import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, MAX_PLAYLIST_SLOT } from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
@@ -208,6 +211,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
+  visualizer: defaultVisualizer(false),
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -590,6 +594,9 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
     caretAnimationDurationMs: clampInteger(source.caretAnimationDurationMs, CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationDurationMs),
     caretFrameDurationMs: clampInteger(source.caretFrameDurationMs, CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretFrameDurationMs),
     caretEffectStrengthPercent: clampInteger(source.caretEffectStrengthPercent, CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT, DEFAULT_UI_LAYOUT_LOADOUT.caretEffectStrengthPercent),
+    // A layout saved before the visualizer existed gets the defaults for its
+    // own inversion (its colours are picked before the theme's invert).
+    visualizer: sanitizeVisualizer(source.visualizer, (source.filterInvert ?? 0) > 0.5, source.caretAnimationPreset),
   };
 }
 
@@ -622,7 +629,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
 // Keys whose values are nested objects; they're emitted as inline JSON when
 // they differ from NEUTRAL_BASE (DEFAULT_CUSTOM_LIGHT).
 const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
-  'glaze', 'highlightColors', 'editorTextColors', 'textureMaterials',
+  'glaze', 'highlightColors', 'editorTextColors', 'textureMaterials', 'visualizer',
 ];
 
 /** Build the override fragment of one .tdl line against NEUTRAL_BASE. */
@@ -3511,7 +3518,22 @@ export class DatabaseService {
   // Music player
   // ---------------------------------------------------------------------------
 
-  private rowToSongEntry(row: Record<string, unknown>): MusicSongEntry {
+  /**
+   * A song row as the renderer sees it. A song added before tags were read
+   * (`tagsRead` 0: its title and artist are the old filename guess) has its
+   * tags read here and stored, once -- lazily, one song at a time as songs
+   * are played or touched, so an existing library is never read in one go.
+   * `getMusicPlaylist` passes `readTags: false`: listing a whole bucket must
+   * not open every file in it.
+   */
+  private rowToSongEntry(row: Record<string, unknown>, readTags = true): MusicSongEntry {
+    if (readTags && !row['tagsRead']) {
+      const tags = readAudioTags(row['filePath'] as string);
+      this.requireDb().prepare(
+        'UPDATE music_songs SET title = ?, artist = ?, album = ?, tagsRead = 1 WHERE id = ?'
+      ).run(tags.title, tags.artist, tags.album, row['id']);
+      row = { ...row, ...tags, tagsRead: 1 };
+    }
     return {
       id:           row['id'] as number,
       filePath:     row['filePath'] as string,
@@ -3520,6 +3542,7 @@ export class DatabaseService {
       favorability: row['favorability'] as number,
       title:        row['title'] as string,
       artist:       row['artist'] as string,
+      album:        (row['album'] as string | undefined) ?? '',
       durationSec:  row['durationSec'] as number,
     };
   }
@@ -3529,7 +3552,7 @@ export class DatabaseService {
     const rows = db.prepare(
       'SELECT * FROM music_songs WHERE playlistSlot = ? ORDER BY priority ASC, id ASC'
     ).all(slot) as Record<string, unknown>[];
-    return rows.map((r) => this.rowToSongEntry(r));
+    return rows.map((r) => this.rowToSongEntry(r, false));
   }
 
   getMusicSongById(id: number): MusicSongEntry | null {
@@ -3541,22 +3564,17 @@ export class DatabaseService {
   addMusicSongs(slot: PlaylistSlot, filePaths: string[]): MusicSongEntry[] {
     const db = this.requireDb();
     const insert = db.prepare(`
-      INSERT INTO music_songs (filePath, playlistSlot, title, artist)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO music_songs (filePath, playlistSlot, title, artist, album, tagsRead)
+      VALUES (?, ?, ?, ?, ?, 1)
       ON CONFLICT(filePath) DO NOTHING
     `);
 
+    // Read before the transaction, so the write lock is not held across file reads.
+    const songs = filePaths
+      .filter((fp) => AUDIO_EXTENSIONS.has(path.extname(fp).toLowerCase()))
+      .map((fp) => ({ fp, tags: readAudioTags(fp) }));
     const tx = db.transaction(() => {
-      for (const fp of filePaths) {
-        const ext = path.extname(fp).toLowerCase();
-        if (!AUDIO_EXTENSIONS.has(ext)) continue;
-        const baseName = path.basename(fp, ext);
-        // Simple heuristic: "Artist - Title" or just use the full basename as title.
-        const dashIndex = baseName.indexOf(' - ');
-        const title  = dashIndex >= 0 ? baseName.slice(dashIndex + 3).trim() : baseName;
-        const artist = dashIndex >= 0 ? baseName.slice(0, dashIndex).trim()  : '';
-        insert.run(fp, slot, title, artist);
-      }
+      for (const { fp, tags } of songs) insert.run(fp, slot, tags.title, tags.artist, tags.album);
     });
     tx();
     return this.getMusicPlaylist(slot);
@@ -3870,7 +3888,9 @@ export class DatabaseService {
         favorability INTEGER NOT NULL DEFAULT 1,
         title       TEXT    NOT NULL DEFAULT '',
         artist      TEXT    NOT NULL DEFAULT '',
-        durationSec REAL    NOT NULL DEFAULT 0
+        durationSec REAL    NOT NULL DEFAULT 0,
+        album       TEXT    NOT NULL DEFAULT '',
+        tagsRead    INTEGER NOT NULL DEFAULT 0
       );
 
       CREATE INDEX IF NOT EXISTS idx_music_songs_slot     ON music_songs(playlistSlot);
@@ -4129,6 +4149,11 @@ export class DatabaseService {
     // is a no-op on a database that already has the table, so a widened
     // CHECK constraint only reaches an existing install through a rebuild.
     this.migrateMusicSongsSlotRange();
+    // After the rebuild above, which knows only the original columns: a
+    // rebuilt table gets these back empty and unread, and the tags are read
+    // again on next use.
+    this.ensureMusicSongsColumn('album', "TEXT NOT NULL DEFAULT ''");
+    this.ensureMusicSongsColumn('tagsRead', 'INTEGER NOT NULL DEFAULT 0');
     this.migrateStoredContentOutOfFts();
     this.purgeParentlessChapters();
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
@@ -4241,6 +4266,16 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE note_snapshots ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureMusicSongsColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(music_songs)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    db.exec(`ALTER TABLE music_songs ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureChaptersColumn(columnName: string, columnDefinition: string): void {

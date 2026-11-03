@@ -212,7 +212,6 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Hold the right click down to keep paging continuously, just like holding \`Page Up\`/\`Page Down\` on the keyboard. It stops when you release the button, or as soon as the thumb reaches your cursor.
 - **What the thumb measures depends on the size of the note.** On a smaller note it represents actual screen space, the way a scrollbar normally does, so you keep the familiar sense of orientation as you write. On a larger one — which in practice usually means an external file — it represents character count instead, to give you an exact idea of how much information is left in the document regardless of that note's internal geometry.
 - That second reading is why, on a large note in render view, your position means the same thing whatever your view settings are: changing the font size or the pane width can re-flow every line without moving the thumb, and dragging it to the bottom of the track lands at the end of the note whether or not you've read your way down there before.
-- **Where that line falls is yours to move.** The **note size threshold** slider in [Performance]($#performance) sets how many paragraphs a note may have before it switches to the second reading, and a toggle beside it puts every note on the character reading regardless of size.
 
 ### [Word and Character Count](#word-and-character-count)
 
@@ -241,7 +240,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Spell Check](#spell-check)
 
 > **Where?**
-> Settings panel → Tools.
+> Settings panel → [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}).
 
 *Underlines misspelled words using your OS's native spell checker.*
 
@@ -250,27 +249,30 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Typing Flow](#typing-flow)
 
 > **Where?**
-> Settings panel → Tools.
+> Switched on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}), tuned in Settings panel → Flow.
 
 *Steady, fast typing builds a flow that the colours, the reverb and the caret answer, and a playing soundscape's weather picks up with it, and playing music gets a punchier EQ.*
 
 - Every character you type adds flow, and flow drains steadily all the time, faster once you stop. An unhurried, even pace is enough to fill the meter and hold it.
 - Corrections and arrow keys never cost flow; only stopping does.
 - While you type, the word count shows your current speed instead, in letters per second: a number for your own reference, not for comparing with others. It switches back when you pause.
-- In flow, each character you type lights the grid lines above and below it, paler at low flow and in its full colour at full flow, and the caret's cell is framed in the same lines as its source; it fades over the time and shape set in the flow options, and its colour and its alpha are under Colors, in Boxes.
+- In flow, each character you type lights the grid lines above and below it, paler at low flow and in its full colour at full flow, and the caret's cell is framed in the same lines as its source; it fades over the time and shape set in the flow options, and its colour and its alpha are under Colors, in Editor Boxes.
 - **look**, **reverb** and **trail** set how strongly each answers, and **amp** how strongly playing music's EQ does.
 - While you type, the caret stops blinking and holds steady; when you stop, it eases back into its blink.
 
-### [Beat Pulse](#beat-pulse)
+### [Visualizer](#visualizer)
 
 > **Where?**
-> Settings panel → Tools.
+> Settings panel → Visualizer.
 
-*The caret and the active editor's inner shade follow the bass of the music you are playing.*
+*The caret, the active editor's edge and its pane follow the music you are playing.*
 
-- While the caret follows the music it stops blinking and holds steady, and the music dips it; the shade deepens with it.
-- Each has its own **amount**; its **freq** and **width**, the band of the music it listens to (the lowest freq, **beat**, follows the kick drum instead); and **contrast**, how far the band must rise above the music around it before it responds; and **fall** and **shape**, how a peak falls away after a hit. It adjusts itself to each track and to your volume, and starts a few seconds into a track or after a jump.
-- It switches itself off while nothing is playing, and with Reduce visual effects.
+- Its switch in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) turns it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
+- Everything else belongs to the layout, so each layout can have its own visualizer.
+- Caret, edge and pane are three separate blocks. The edge is a soft inner shadow along the editor's border. The pane is drawn over the box grid in the edit view, and as an even wash of its colour over the whole editor in any view without a grid. The caret takes part only while the basketball at the end of its blink buttons (Settings panel → Caret) is on: then, while music plays and a beat is found, it stops blinking and holds steady, and the music dips it on the beat. Without a beat it blinks as selected.
+- What the music is listened for is set once, in three groups: **Thump** (the low end jumping: a kick, a bass stab), **Pierce** (a sharp sound cutting through: a snare, a clap) and **Tick** (the busy top: hats, shakers). One sound can be a little of two (a snare with some punch is a pierce with a slight thump). Each has a **contrast**: how strong a hit must be against the others around it before it responds, so raising it keeps only the strongest, and only what is mostly that group. Each block then has three sliders for how much the thump, the pierce and the tick drive it; they add up, capped at full. Then its **effect**: right of centre a hit adds the block, left of centre it is inverted, resting at full strength while music plays with a hit taking it away, and the centre turns it off; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
+- The edge's and the pane's colours are set with the swatches above the blocks, the same way as the cursor's and caret's.
+- It switches itself off while nothing is playing.
 
 ### [Speed Reading](#speed-reading)
 
@@ -365,9 +367,9 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > Never typed directly — applied automatically by the corresponding action.
 
-*Four reserved tag names (\`archived\`, \`deleted\`, \`external\`, \`debug\`) that track note state rather than your own organization.*
+*Three reserved tag names (\`archived\`, \`deleted\`, \`external\`) that track note state rather than your own organization.*
 
-- Set and cleared only through [Archiving and Trash](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')}), [Restoring from Archive or Trash](${guideLink('ARCHIVE-TRASH', 'restoring-from-archive-or-trash')}), [Opening an External File](${guideLink('EXTERNAL-FILES', 'opening-an-external-file')}), and [Debugging](${guideLink('APPEARANCE-SETTINGS', 'debugging')}).
+- Set and cleared only through [Archiving and Trash](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')}), [Restoring from Archive or Trash](${guideLink('ARCHIVE-TRASH', 'restoring-from-archive-or-trash')}), and [Opening an External File](${guideLink('EXTERNAL-FILES', 'opening-an-external-file')}).
 - Can't be typed into the tag field directly, and are excluded from the suggested-tags list.
 `,
   `## Sidebar & Search
@@ -774,17 +776,16 @@ ${shortcutTable()}
 
 *The home for every appearance, sound, sync, and performance control in the app, organized into collapsible sections.*
 
-- Most controls apply live, and separately to edit mode and preview mode where the two differ (e.g. typography, text color).
+- Most controls apply live. Every section is always shown, whichever view you are in: where edit mode and render view differ, the editor's controls are headed "Editor" and the render view's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
 - Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
 
 ### [Editor Font](#editor-font)
 
 > **Where?**
-> Settings panel, directly below the theme presets.
+> Settings panel, directly below the feature switches, followed by Reader Font.
 
-*Font family, size, spacing, and padding for the editor and the rendered preview.*
+*Font family, size, spacing, and padding: Editor Font for edit mode (font family, size, glyph padding, line height), Reader Font for the render view (font family, size, letter spacing, line height).*
 
-- Separate controls for the editor (font family, size, line height, glyph padding) and the preview (font family, size, letter spacing, line height).
 - You can also change these from the text itself: hold \`Ctrl\` and roll the wheel over the text of a note to change its size by one step per notch, \`Ctrl+Alt\` for the horizontal spacing (letter spacing in render view, glyph padding in edit mode), \`Ctrl+Shift\` for the line height. It changes the settings of whichever view the pointer is over, not the slot you are typing in, so with an edit slot and a render slot side by side you adjust each by pointing at it.
 
 ### [Presets](#presets)
@@ -795,6 +796,16 @@ ${shortcutTable()}
 *A row of built-in light and dark theme presets.*
 
 - A "Custom" marker preset activates automatically once you've changed anything away from a built-in preset.
+
+### [Features](#features)
+
+> **Where?**
+> Settings panel, the row below the theme presets.
+
+*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), the [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}), [Glaze]($#glaze) and [Typing Flow](${guideLink('NOTES-EDITING', 'typing-flow')}).*
+
+- A feature that is off is gone, not just hidden: its settings leave the panel and it costs nothing while it is off. Switch it back on and everything is as you left it.
+- These switches are the same for every layout. A layout still decides how a feature looks and sounds, and can have silent keys or no glaze of its own.
 
 ### [Custom Layouts](#custom-layouts)
 
@@ -811,9 +822,13 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Colors.
 
-*A "paint bucket" system for recoloring and retexturing individual UI elements.*
+*One staged colour, shown at the top of every section that has colours.*
 
-- Click a source swatch — or an active color, or a texture preview — to pick it up, then click any target swatch (UI elements, text colors, textures) to apply it there.
+- Click a colour to link it: the picker takes its colour and paints it as you move the sliders. Click it again, choose a channel or fold the section to let go. The picker keeps the colour, so you can carry it to another section.
+- Right-click a colour to paint it with the picker's colour.
+- The H, S, V and A letters choose which channels a right-click paints; Shift adds or removes one. The colour button selects all four.
+- Right-click a slider to type a value.
+- Surface textures: link a surface to edit its texture with the seed and the sliders; click the preview to switch its texture on or off. Right-clicking another surface gives it the linked texture as well as the colour, unless that texture is off.
 
 ### [Borders](#borders-and-spacing)
 
@@ -827,7 +842,7 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → UI Font.
 
-*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the editor/preview content fonts under [Editor Font]($#editor-font).*
+*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the note fonts under [Editor Font]($#editor-font).*
 
 - Twelve bundled UI fonts, from the general-purpose IBM Plex Sans to full-personality display fonts, alongside the app's default system font.
 - The size slider scales UI text only; icons and button sizing stay fixed.
@@ -840,7 +855,7 @@ ${shortcutTable()}
 *A decorative multi-layer light overlay on top of the UI — purely cosmetic.*
 
 - Independent linear ("glare") and radial ("flair") gradient layers, plus dark and light gradient accents ("gloom" and "sheen"), each with its own position, shape, opacity, and randomizable seed.
-- Safe to leave at defaults, or turn off entirely via [Performance]($#performance).
+- Safe to leave at defaults, or turn off entirely in [Features]($#features).
 
 ### [Filters](#filters)
 
@@ -893,7 +908,7 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Cursor.
 
-*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Performance]($#performance).*
+*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Features]($#features); while it is on, the native cursor is hidden everywhere in the app, not just the editor.*
 
 - Top-left button is a halo color swatch. The 4 buttons beside it (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click a swatch (halo, circling dots, center dot, trail) to paint it onto that element; hold right-click on a swatch to load its current color back into H/S/V/A.
 - Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), trail thickness (0–12px, 0 hides it), dot size (0–12px, 0 hides it), center dot size (0–12px, 0 hides it), halo radius (0 hides it, capped at the same max as orbit radius), fall-off (0–100 — how far out the halo's glow stays near-opaque before fading to nothing at its edge; low values fade fast near the center, high values stay bright almost all the way to the rim), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. The halo is rendered centered behind the center dot. Colors and these sliders are saved per layout, same as the rest of your theming.
@@ -917,7 +932,7 @@ ${shortcutTable()}
 - **Cycle** (100–5000ms) is how long one full blink takes.
 - **Frame** (5–500ms) is how long the caret holds each step of the blink. At its lowest the blink is smooth; wind it up and the caret animates in visible chunks, like a machine that only redraws itself so often. Steps never cross a shape's own turning points — a step longer than the stretch it lands in just holds that whole stretch, and one that would split a stretch unevenly is spread evenly across it instead.
 - **Effect** (0–100%) is how much of the chosen shape actually reaches the caret. At 100 you get the blink at full strength; at 0 the caret is simply static, sitting at whatever colors you gave it; in between is a straight blend of the two, so you can keep a rhythm you like and just take the edge off it.
-- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, use **Reduce caret animation** in [Performance]($#performance).
+- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, press the selected shape again; pressing any shape brings it back.
 
 ### [Sounds](#keystroke-sounds)
 
@@ -961,20 +976,6 @@ ${shortcutTable()}
 - Export or import your custom appearance presets as a \`.tdl\` file, so you can carry your look between machines.
 - Export or import your custom soundscapes as a \`.tds\` file the same way. Importing adds them after your own, skipping any you already have, up to twelve.
 
-### [Performance](#performance)
-
-> **Where?**
-> Settings panel → Performance.
-
-*Toggles for easing load on constrained machines, the custom cursor switch, and where a note stops being small.*
-
-- **Reduce visual effects** forces [Glaze]($#glaze), [Filters]($#filters), and the colorize filter off, without discarding your slider positions (Invert is kept, since it's often load-bearing for dark layouts).
-- **Reduce caret animation** stops the idle caret blink, easing compositor load.
-- **Allow asynchronous input** coalesces preview updates onto one frame during fast key-repeat (e.g. held Backspace).
-- **Force character based scrollbar thumb** puts every note on the character reading described under [Scrollbar Navigation](${guideLink('NOTES-EDITING', 'scrollbar-navigation')}), however short it is.
-- **Note size threshold** is where that switch happens when the toggle above is off: how many paragraphs a note may have before its scrollbar starts counting characters instead of measuring height. A whole list counts as one paragraph, as does a table or a code block. Hover the slider to read the current number.
-- The mouse button switches the [custom cursor]($#mouse-options) off (it is lit while the cursor is off); while the custom cursor is on, the native cursor is hidden everywhere in the app, not just the editor — sidebar, toolbar, dialogs, all of it. This toggle always starts on for a fresh install and isn't part of a layout — it stays as you left it across layout switches and app restarts until you flip it again.
-
 ### [Debugging](#debugging)
 
 > **Where?**
@@ -982,7 +983,6 @@ ${shortcutTable()}
 
 *Tools for diagnosing problems, not intended for everyday use.*
 
-- **Debug logging** routes the app's debug log into a dedicated note tagged \`debug\` — see [Protected Tags](${guideLink('TAGS', 'protected-tags')}).
 - A button opens a detached DevTools window.
 `,
   `## Music Player

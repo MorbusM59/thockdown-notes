@@ -32,6 +32,7 @@ export const HIGH_IMPACT = [
   /^scripts\/(verify|impact|land|release)\.mjs$/,
   /(^|\/)electron-builder[^/]*\.json5$/,
   /^vitest\.workspace\.ts$/,
+  /^eslint\.config\.js$/,
   /(^|\/)vite(\.[a-z]+)?\.config\.ts$/,
   /(^|\/)tsconfig(\.[a-z]+)?\.json$/,
 ]

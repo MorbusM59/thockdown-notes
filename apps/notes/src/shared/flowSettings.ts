@@ -2,11 +2,11 @@
  * Typing flow: the reader's settings. The model they drive is
  * `flow/flowModel.ts`; this file is only the persisted shape, its defaults and
  * its sanitizer, kept free of the DOM so the main process's `sanitizeMenu`
- * can use the same sanitizer the renderer does.
+ * can use the same sanitizer the renderer does. Whether flow is on at all is
+ * a feature toggle (shared/features.ts).
  */
 
 export interface FlowSettings {
-  enabled: boolean
   /** The share of a full meter, in percent, that one hit adds before its rhythm bonus (`flowModel.ts`). */
   gainPercent: number
   /** Per 50ms tick, the meter loses this percent of itself AND this percent of a full meter. */
@@ -47,7 +47,6 @@ export const FLOW_IDLE_DURATION_MIN = 0.2
 export const FLOW_IDLE_DURATION_MAX = 10
 
 export const DEFAULT_FLOW_SETTINGS: FlowSettings = {
-  enabled: false,
   gainPercent: 5,
   decayPercent: 0.25,
   idleGraceMs: 500,
@@ -70,7 +69,6 @@ export function sanitizeFlowSettings(input: unknown): FlowSettings {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof FlowSettings, unknown>>
   const d = DEFAULT_FLOW_SETTINGS
   return {
-    enabled: typeof source.enabled === 'boolean' ? source.enabled : d.enabled,
     // Fixed at their defaults: not offered in the options panel (a reader
     // tuning their own meter is the competitive element the panel avoids),
     // so a value saved while they were is not read back. The fields and

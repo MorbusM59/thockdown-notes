@@ -1,41 +1,51 @@
 /**
- * The beat pulse's model: each subscriber names one band of the playing
- * music (`BeatChannel`) and is told a RESPONSE, 0..1, once a frame it moved.
+ * The beat pulse's model. THREE TRACKERS listen to the playing music, once
+ * each whatever reads them (`VisualizerTrackers`, set by `setVisualizerTrackers`):
+ * the THUMP, the PIERCE and the TICK, the channels of the drum score
+ * (`drumScore.ts`). Each subscriber (an element: the edge, the pane, the grid wave, the
+ * centre pulse) names a MIX of the three (`VisualizerMix`, `mixResponse`) and
+ * is told its RESPONSE, 0..1, once a frame it moved. A tracker no mix reads is
+ * not analysed at all.
  *
- * The response is a LEVELS STRETCH of the band's level, the way an image
- * editor's auto-contrast stretches brightness: over a window of
- * twice `LEAD_SEC` centred on the moment being heard, the `contrast` percentile
- * of the band's levels is no response and its top `TOP_SHARE` is a full one.
- * So a full response always means "as loud as this band gets around here",
- * on any track at any volume.
+ * Everything that reads the decoded samples runs in a WORKER
+ * (`musicAnalysis.ts`), which this module asks once a frame, one frame
+ * ahead, for every reader's raw response, the caret's beat and the window's
+ * peak; what stays here is the frame: the listener's clock, the falls, the
+ * hits, the loudness gain and the caret's steady beat.
  *
- * The window looks AHEAD as well as back, without analysing the file in
- * advance (tracks run to an hour, which decoded is hundreds of megabytes):
- * a second copy of the track, the SCOUT, plays `LEAD_SEC` ahead of the one
- * being heard, into the bands' filters and analysers and nowhere else, so
- * it is never audible. Its readings are kept, stamped with the scout's own
- * media time, for `LEAD_SEC` behind the listener as well; what the listener
- * is hearing is read back from the middle. Memory is a few kilobytes per
- * band whatever the track's length.
+ * The window looks AHEAD as well as back, and is filled from the track
+ * DECODED (`musicDecodeStream.ts`), never from what is playing: decoding is
+ * far faster than playback, so whenever the analysis starts over (a new
+ * track, a seek, a changed setting) the whole window either side of the
+ * listener is decoded and measured at once, and from then on the decoding is
+ * kept `LEAD_SEC` (and a margin) ahead of the listener. Memory is a few
+ * a few decoded chunks, whatever the track's length.
+ * A second, silent copy of the track played `LEAD_SEC` ahead stood here,
+ * and as it could only be heard in real time, every new start left the
+ * pulse absent for the whole of the look-ahead.
  *
- * The scout is kept `LEAD_SEC` ahead by comparing media positions each
- * frame: a gap off by more than `RESYNC_SEC` (a seek, a new track, a stall)
- * puts it back and starts the window afresh. The listener reaches the
- * scout's first reading `LEAD_SEC` later, so the pulse is absent for that
- * long after a seek or a new track, and stretches from a part-filled window
- * for `LEAD_SEC` after that.
+ * A CLOCK channel (the caret's, `subscribeMusicClock`) follows no tracker: it pulses on the beat map's caret (`beatMap.ts`, planned in the
+ * worker `MAP_AHEAD_SEC` ahead), which lands on every beat through tempo changes and
+ * carries across a gap, and is held here through a missing beat for up to
+ * `MAP_BEAT_LOSS_SEC`. Its pulse is the same fall a
+ * hit makes (`pulseCurve`), restarted on every beat and never longer than
+ * one.
  *
- * A channel at `BEAT_FREQUENCY` follows KICK-DRUM HITS instead of a band's
- * level. A kick and a bass line share the low band, so its level cannot
- * tell them apart; their attacks can: a kick climbs from its trough to full
- * in a few milliseconds, a bass note swells or holds. So a beat band reads
- * the kick's band (`KICK_HZ`) and records its RISE: the level now above the
- * lowest it was over the last `RISE_SEC`. Measured against a short history
- * rather than the previous frame, because consecutive readings of a low band
- * differ by the phase of its cycle within the window, and that difference
- * is noise as large as a kick. The rise goes through the same window,
- * stretch and fall as a level, offset by `ONSET_OFFSET_DB` into the
- * histogram's range; the fall is what turns an attack into a pulse.
+ * The trackers detect nothing: they read the DRUM SCORE (`drumScore.ts`),
+ * every onset of the music written ahead of the listener with its strength
+ * in each channel. Each asks, per frame, for the strongest instance of its
+ * channel heard since it last asked, past its contrast, which is read live,
+ * so changing it restarts nothing. The decoded samples carry exact media
+ * times, so the score and the music agree by construction.
+ *
+ * Each element's FALL (its shape and length) is its own and applies to its
+ * mixed response (`respond`), so a hit the trackers report once is drawn as
+ * that element's decay.
+ *
+ * What the listener HEARS trails the element's media time by the output's
+ * latency (`AudioContext.outputLatency` and `baseLatency`, tens of
+ * milliseconds, far more over Bluetooth), so every tracker is answered for the
+ * heard moment rather than the reported one.
  *
  * Runs only while there is a subscriber, the music is playing and the window
  * is visible: the frame loop is started by the play-state and visibility
@@ -45,324 +55,438 @@
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import { BEAT_FREQUENCY, type BeatChannel } from '../shared/beatSettings'
-import { fadeCurve } from '../flow/flowTrail'
+import type { VisualizerCaret, VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
+import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
+import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
+import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
+import { loudnessGain } from './peakWindow'
 
-/** How far ahead of the listener the scout plays, in seconds: half the window. */
-const LEAD_SEC = 5
-/** A scout this far from its lead is put back (a seek, a new track, a stall). */
+/** A listener this far from where its clock put it has jumped (a seek, a stall), and the analysis starts over. */
 const RESYNC_SEC = 0.75
-/** The share of the window's moments that give a full response. */
-const TOP_SHARE = 0.02
-/** The narrowest span the stretch may use, so a near-constant band is not blown up into noise. */
-const MIN_SPAN_DB = 3
-/** A level this far below full scale counts as silence (the floor of the dB readings). */
-const FLOOR_DB = -100
-/** Histogram resolution, in dB. */
-const BIN_DB = 0.5
-const BINS = Math.ceil(-FLOOR_DB / BIN_DB) + 1
-/** Readings kept per band: a window's worth at well over any display's frame rate. */
-const CAPACITY = 4096
-/** The bounds of a band's analyser window, in samples. */
-const MIN_TAP_SIZE = 256
-const MAX_TAP_SIZE = 8192
-/** A beat band's kick band, in Hz and octaves. */
-const KICK_HZ = 55
-const KICK_OCTAVES = 1.5
-/** How far back a beat band looks for the trough an attack rises from. */
-const RISE_SEC = 0.12
-/** Readings of recent kick levels kept, enough for `RISE_SEC` at any display rate. */
-const RISE_CAPACITY = 64
-/** A beat band's analyser window: about two cycles of the kick, short enough not to smear its attack. */
-const ONSET_TAP_SIZE = 2048
-/** Where an onset of no rise sits in the histogram (whose range ends at 0 dB). */
-const ONSET_OFFSET_DB = -60
 /** The smallest change a subscriber is told of. */
 const MIN_STEP = 0.001
+
+/** What an element follows: its mix and the fall its response takes. */
+export interface MusicMixChannel {
+  mix: VisualizerMix
+  shape: number
+  /** Seconds; 0 is no fall, so every rise from nothing is a hit and a response is only ever this frame's. */
+  fallSec: number
+}
+
+/** A tracker's id in the analysis (`musicAnalysis.ts`'s reader id), and its index in `trackerRaw`. */
+const TRACKER_INDEX: Record<VisualizerTrackerName, number> = { thump: 0, pierce: 1, tick: 2 }
+
+let trackers: VisualizerTrackers = DEFAULT_VISUALIZER_TRACKERS
 
 type BeatListener = (response: number) => void
 
 interface Band {
-  channel: BeatChannel
+  channel: MusicMixChannel
   listener: BeatListener
-  filter: BiquadFilterNode | null
-  analyser: AnalyserNode | null
-  samples: Float32Array<ArrayBuffer> | null
-  /** A beat band's recent kick levels (scout time, dB), oldest at `riseHead`. */
-  riseTimes: Float64Array
-  riseLevels: Float32Array
-  riseHead: number
-  riseCount: number
-  /** The last peak of the response and the listener time it was reached at, for the fall (`fallSec`, `fallShape`). */
+  /** The last peak of the response and the listener time it was reached at, for the fall (`pulseCurve`). */
   peak: number
   peakTime: number
-  /** Ring of readings: scout media time and level in dB, oldest at `head`. */
-  times: Float64Array
-  levels: Float32Array
-  head: number
-  count: number
-  bins: Uint32Array
   published: number
+  /** Told of each HIT (`respond`): the response rising to a new peak after falling, with that peak. */
+  onHit: ((strength: number) => void) | null
+  /** Whether the response rose at the last frame, so a hit is the first rising frame after a fall. */
+  rising: boolean
 }
 
 const bands = new Set<Band>()
+
+/** A CLOCK subscriber (the caret's): a steady beat and the fall each beat makes. */
+interface Clock {
+  caret: VisualizerCaret
+  listener: BeatListener
+  published: number
+  /** Told whenever the clock gains or loses a beat (`locked`). */
+  lockListener: LockListener
+  /** Whether the clock has a beat to follow: music playing and a tempo found since the last track started. */
+  locked: boolean
+}
+
+type LockListener = (locked: boolean) => void
+
+function setLocked(subscriber: Clock, locked: boolean): void {
+  if (subscriber.locked === locked) return
+  subscriber.locked = locked
+  subscriber.lockListener(locked)
+}
+
+const clocks = new Set<Clock>()
+
+/** A TEMPO subscriber: the heard media time and the steady beat's period, every frame (NaN while there is no beat). */
+interface Counter {
+  listener: (timeSec: number, periodSec: number) => void
+}
+
+const counters = new Set<Counter>()
+
+/** Everything the frame loop answers. */
+function subscriberCount(): number {
+  return bands.size + clocks.size + counters.size
+}
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
 
-let scout: HTMLAudioElement | null = null
-let scoutSource: MediaElementAudioSourceNode | null = null
-let scoutUrl: string | null = null
-let lastScoutTime = -1
+/** The loudness gain the last frame read (`tick`). */
+let gain = 1
+/** How far below full scale a window's peak may be and still give a full response (`loudnessGain`); the reader's Response setting. */
+let headroomDb = 5
 
-/** A bandpass's Q for a bell `octaves` wide between its half-power points. */
-function bandQ(octaves: number): number {
-  const ratio = 2 ** Math.max(0.05, octaves)
-  return Math.sqrt(ratio) / (ratio - 1)
+/** The analysis worker, created with the first subscriber and ended with the last. */
+let worker: Worker | null = null
+/** The track the analysis was last restarted on. */
+let analysedUrl: string | null | undefined
+/** Bumped by every restart, so answers to an older run's asks are dropped. */
+let run = 0
+/** Something the analysis depends on changed (a tracker newly read, the beat map newly needed): the next frame starts it over. */
+let stale = true
+/** The listener's position at the last frame, and the context time then (NaN while stopped). */
+let lastListener = NaN
+let lastNow = NaN
+
+/**
+ * What the answers received since the last frame say, per tracker
+ * (`TRACKER_INDEX`). A raw response is a hit since the tracker's last ask,
+ * so two answers landing between two frames are both kept (the larger).
+ */
+const pendingRaw = new Float64Array(VISUALIZER_TRACKERS.length)
+/** This frame's response of each tracker, read by every element's mix. */
+const trackerRaw = new Float64Array(VISUALIZER_TRACKERS.length)
+/** The trackers the analysis was last restarted with (`readsOf`), as a bit mask by `TRACKER_INDEX`. */
+let analysedTrackers = 0
+/** Whether the analysis was last restarted with the beat map (`needsDrums`). */
+let analysedDrums = false
+
+/** How long the map may answer no beat before the caret is let go to its own blink. */
+const MAP_BEAT_LOSS_SEC = 4
+
+/** The map's caret as last answered: its phase at media time `mapTime` and its period (`BeatMap.caretAt`). */
+let mapTime = NaN
+let mapPhase = NaN
+let mapPeriod = NaN
+
+/** The map's caret at `time`, run on from the last answer at its period; NaN where there is no beat. */
+function mapCaretAt(time: number): { phase: number; period: number } {
+  if (Number.isNaN(mapPhase) || !(mapPeriod > 0)) return { phase: NaN, period: NaN }
+  const at = mapPhase + (time - mapTime) / mapPeriod
+  return { phase: at - Math.floor(at), period: mapPeriod }
 }
 
-function binOf(db: number): number {
-  return Math.min(BINS - 1, Math.max(0, Math.round((db - FLOOR_DB) / BIN_DB)))
+
+/** Dips the caret's clock subscribers drew since the last caret trace line (a jump up in the published response). */
+let drawnDips = 0
+/** Frames ticked since the last caret trace line. */
+let framesSinceTrace = 0
+
+/** When the last side-by-side caret line was traced (`traceCaret`). */
+let lastCaretTrace = -Infinity
+
+/**
+ * One trace line a second while the beat trace is on: where the playback
+ * element is, the time heard, and the beat each caret source puts before it
+ * with its period (the map's, which drives the caret), and how many dips the
+ * caret drew. A drift between the map and the music shows as `mapBeat`
+ * walking against the thumps heard (the `score thump` lines) while `el` and
+ * `heard` keep their constant offset.
+ */
+function traceCaret(listenerTime: number, heardTime: number): void {
+  if (!isBeatTraceOn() || Math.abs(heardTime - lastCaretTrace) < 1) return
+  lastCaretTrace = heardTime
+  const map = mapCaretAt(heardTime)
+  appendBeatTrace(`caret el=${musicPlayerService.currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} drawn=${drawnDips} clocks=${clocks.size} frames=${framesSinceTrace}`)
+  drawnDips = 0
+  framesSinceTrace = 0
 }
 
-function clearWindow(band: Band): void {
-  band.head = 0
-  band.count = 0
-  band.bins.fill(0)
-  band.peak = 0
-  band.riseHead = 0
-  band.riseCount = 0
+function send(request: AnalysisRequest): void {
+  worker?.postMessage(request)
 }
 
-function isBeat(channel: BeatChannel): boolean {
-  return channel.frequencyHz === BEAT_FREQUENCY
-}
-
-function attachBand(band: Band): void {
-  if (!scoutSource || band.filter) return
-  const context = scoutSource.context
-  const filter = context.createBiquadFilter()
-  filter.type = 'bandpass'
-  const analyser = context.createAnalyser()
-  scoutSource.connect(filter)
-  filter.connect(analyser)
-  band.filter = filter
-  band.analyser = analyser
-  tuneBand(band)
-}
-
-/** Points a band's filter and analyser at its channel's frequency and width. */
-function tuneBand(band: Band): void {
-  const { filter, analyser } = band
-  if (!filter || !analyser) return
-  if (isBeat(band.channel)) {
-    filter.frequency.value = KICK_HZ
-    filter.Q.value = bandQ(KICK_OCTAVES)
-    analyser.fftSize = ONSET_TAP_SIZE
-    band.samples = new Float32Array(ONSET_TAP_SIZE)
-    return
+function receive(answer: AnalysisAnswer): void {
+  if (answer.run !== run) return
+  for (let i = 0; i < answer.ids.length; i++) {
+    const index = answer.ids[i]
+    const raw = answer.raws[i]
+    pendingRaw[index] = Math.max(pendingRaw[index], raw)
   }
-  filter.frequency.value = band.channel.frequencyHz
-  filter.Q.value = bandQ(band.channel.octaves)
-  // About three periods of the band's centre, so a low band is not read
-  // from a window shorter than one of its own cycles.
-  const wanted = (3 * analyser.context.sampleRate) / band.channel.frequencyHz
-  analyser.fftSize = Math.min(MAX_TAP_SIZE, Math.max(MIN_TAP_SIZE, 2 ** Math.ceil(Math.log2(wanted))))
-  if (band.samples?.length !== analyser.fftSize) band.samples = new Float32Array(analyser.fftSize)
-}
-
-function detachBand(band: Band): void {
-  if (band.filter && scoutSource) scoutSource.disconnect(band.filter)
-  band.filter?.disconnect()
-  band.filter = null
-  band.analyser = null
-}
-
-/** The scout for the playing track, built (or re-pointed) on demand. */
-function ensureScout(url: string): HTMLAudioElement {
-  const context = outputContext()
-  if (!scout || scoutSource?.context !== context) {
-    teardownScout()
-    scout = document.createElement('audio')
-    scout.crossOrigin = 'anonymous'
-    scout.preload = 'auto'
-    // Routed into the graph and never to an output: once an element has a
-    // MediaElementSource its sound goes only where that node is connected.
-    scoutSource = context.createMediaElementSource(scout)
+  // A beat the map answers is taken at once. A missing one (an unconfident
+  // stretch, a frame between replans) does not drop the caret back to its
+  // own blink: the last beat runs on at its period until the map has had no
+  // beat for MAP_BEAT_LOSS_SEC, so only a sustained absence lets it go.
+  if (!Number.isNaN(answer.caretPhase) && answer.caretPeriod > 0) {
+    mapTime = answer.heardTime
+    mapPhase = answer.caretPhase
+    mapPeriod = answer.caretPeriod
+  } else if (!(answer.heardTime - mapTime < MAP_BEAT_LOSS_SEC)) {
+    mapTime = mapPhase = mapPeriod = NaN
   }
-  if (scoutUrl !== url) {
-    scoutUrl = url
-    scout.src = url
-    for (const band of bands) clearWindow(band)
-  }
-  for (const band of bands) attachBand(band)
-  return scout
+  // Until the decoding has reached the listener there is no peak to read:
+  // the last gain holds rather than reading as silence.
+  if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
+  for (const line of answer.traceLines) appendBeatTrace(line)
 }
 
-function teardownScout(): void {
-  for (const band of bands) detachBand(band)
-  if (scout) {
-    scout.pause()
-    scout.removeAttribute('src')
-    scout.load()
-  }
-  scoutSource?.disconnect()
-  scout = null
-  scoutSource = null
-  scoutUrl = null
-  lastScoutTime = -1
+function ensureWorker(): void {
+  if (worker) return
+  worker = new Worker(new URL('./musicAnalysis.worker.ts', import.meta.url), { type: 'module' })
+  worker.onmessage = (event: MessageEvent<AnalysisAnswer>) => receive(event.data)
+  // A worker that fails to load answers nothing, and the pulse would go flat with no word why.
+  worker.onerror = (event) => console.error('beat analysis worker failed', event.message)
 }
 
-/** Keeps the scout LEAD_SEC ahead; true when it was put back and the windows restart. */
-function keepScoutAhead(listenerTime: number): boolean {
-  const url = musicPlayerService.trackUrl
-  if (!url) return false
-  const element = ensureScout(url)
-  if (element.paused) void element.play().catch(() => { /* retried by the next play-state change */ })
-  // Before its metadata the scout has no position to compare; the seek below
-  // is taken once it has one.
-  if (element.readyState < HTMLMediaElement.HAVE_METADATA) return false
-  const duration = element.duration
-  const target = Number.isFinite(duration) ? Math.min(duration, listenerTime + LEAD_SEC) : listenerTime + LEAD_SEC
-  if (Math.abs(element.currentTime - target) <= RESYNC_SEC) return false
-  element.currentTime = target
-  lastScoutTime = -1
-  for (const band of bands) clearWindow(band)
-  return true
-}
-
-/** Takes one reading from the scout into each band's window. */
-function sample(scoutTime: number): void {
+/** The trackers some element's mix reads, as a bit mask by `TRACKER_INDEX`. */
+function readsOf(): number {
+  let mask = 0
   for (const band of bands) {
-    if (!band.analyser || !band.samples) continue
-    let db = levelDb(band.analyser, band.samples)
-    if (isBeat(band.channel)) {
-      db = ONSET_OFFSET_DB + Math.max(0, riseOf(band, scoutTime, db))
-    }
-    if (band.count === CAPACITY) dropOldest(band)
-    const at = (band.head + band.count) % CAPACITY
-    band.times[at] = scoutTime
-    band.levels[at] = db
-    band.count++
-    band.bins[binOf(db)]++
+    const { mix } = band.channel
+    for (const name of VISUALIZER_TRACKERS) if (mix[name] > 0) mask |= 1 << TRACKER_INDEX[name]
+  }
+  return mask
+}
+
+/** Whether anything reads the beat map: a tracker some mix reads (the score is written from it), or a clock for its beat. */
+function needsDrums(): boolean {
+  return clocks.size > 0 || counters.size > 0 || readsOf() !== 0
+}
+
+/** The asks' reader settings, rebuilt only when the trackers or what reads them change (`readersAsked`). */
+let askReaders: ReaderSettings[] = []
+
+function rebuildAskReaders(): void {
+  askReaders = []
+  for (const name of VISUALIZER_TRACKERS) {
+    const index = TRACKER_INDEX[name]
+    if (!(analysedTrackers & (1 << index))) continue
+    const tracker = trackers[name]
+    askReaders.push({ id: index, contrast: tracker.contrast, pattern: tracker.pattern })
   }
 }
 
-/** How far `db` stands above the lowest kick level of the last RISE_SEC, recording it. */
-function riseOf(band: Band, scoutTime: number, db: number): number {
-  while (band.riseCount > 0 && band.riseTimes[band.riseHead] < scoutTime - RISE_SEC) {
-    band.riseHead = (band.riseHead + 1) % RISE_CAPACITY
-    band.riseCount--
+/**
+ * Starts the analysis over at the listener: every window emptied, the
+ * decoding put back to `LEAD_SEC` behind `listenerTime` and run to the
+ * window's leading edge at once (`musicAnalysis.ts`).
+ */
+function restartAnalysis(listenerTime: number): void {
+  stale = false
+  const url = musicPlayerService.trackUrl
+  for (const band of bands) band.peak = 0
+  pendingRaw.fill(0)
+  trackerRaw.fill(0)
+  mapTime = mapPhase = mapPeriod = NaN
+  const id = ++run
+  analysedUrl = url
+  if (isBeatTraceOn() && url) appendBeatTrace(`beat RESYNC at=${listenerTime.toFixed(3)}`)
+  analysedTrackers = readsOf()
+  analysedDrums = needsDrums()
+  rebuildAskReaders()
+  const readers: ReaderSource[] = []
+  for (const name of VISUALIZER_TRACKERS) {
+    const index = TRACKER_INDEX[name]
+    if (!(analysedTrackers & (1 << index))) continue
+    readers.push({ id: index, channel: name })
   }
-  let trough = db
-  for (let k = 0; k < band.riseCount; k++) trough = Math.min(trough, band.riseLevels[(band.riseHead + k) % RISE_CAPACITY])
-  if (band.riseCount === RISE_CAPACITY) {
-    band.riseHead = (band.riseHead + 1) % RISE_CAPACITY
-    band.riseCount--
-  }
-  const at = (band.riseHead + band.riseCount) % RISE_CAPACITY
-  band.riseTimes[at] = scoutTime
-  band.riseLevels[at] = db
-  band.riseCount++
-  return db - trough
+  send({ type: 'restart', run: id, url, listenerTime, readers, drums: needsDrums() })
 }
 
-/** An analyser's current level in dB, floored at FLOOR_DB. */
-function levelDb(analyser: AnalyserNode, samples: Float32Array<ArrayBuffer>): number {
-  analyser.getFloatTimeDomainData(samples)
-  let sum = 0
-  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i]
-  const rms = Math.sqrt(sum / samples.length)
-  return rms > 0 ? Math.max(FLOOR_DB, 20 * Math.log10(rms)) : FLOOR_DB
-}
-
-function dropOldest(band: Band): void {
-  band.bins[binOf(band.levels[band.head])]--
-  band.head = (band.head + 1) % CAPACITY
-  band.count--
-}
-
-function percentile(band: Band, share: number): number {
-  const target = share * (band.count - 1)
-  let seen = 0
-  for (let b = 0; b < BINS; b++) {
-    seen += band.bins[b]
-    if (seen > target) return FLOOR_DB + b * BIN_DB
-  }
-  return 0
-}
-
-/** The response for what the listener hears at `listenerTime`, from the window around it. */
-function respond(band: Band, listenerTime: number): number {
-  while (band.count > 0 && band.times[band.head] < listenerTime - LEAD_SEC) dropOldest(band)
-  // Right after a resync the scout's readings all lie ahead of the listener:
-  // nothing has been heard yet that the window can describe.
-  if (band.count === 0 || band.times[band.head] > listenerTime) return 0
-  // The level at the listener's moment, interpolated between the readings
-  // either side of it, so a frame between two readings does not hold the
-  // older one and then step.
-  let level = band.levels[band.head]
-  let before = band.head
-  for (let k = 1; k < band.count; k++) {
-    const at = (band.head + k) % CAPACITY
-    if (band.times[at] > listenerTime) {
-      const span = band.times[at] - band.times[before]
-      const share = span > 0 ? (listenerTime - band.times[before]) / span : 0
-      level = band.levels[before] + (band.levels[at] - band.levels[before]) * share
-      break
-    }
-    before = at
-    level = band.levels[at]
-  }
-  const floor = percentile(band, band.channel.contrast)
-  const top = Math.max(floor + MIN_SPAN_DB, percentile(band, 1 - TOP_SHARE))
-  const raw = Math.max(0, Math.min(1, (level - floor) / (top - floor)))
+/**
+ * The response for what the listener hears at `listenerTime`, from the
+ * element's mixed response (`raw`, `mixResponse` of the trackers'), at `gain` (`loudnessGain`: how near full scale the track's peak
+ * around the listener comes), so a track mixed quiet, or a quiet passage
+ * between loud ones, pulses less than one at full scale. Every tracker is
+ * scaled alike, and a hit's strength (`onHit`) with it; a clock
+ * (the caret's beat) is not, being a beat rather than a level.
+ */
+function respond(band: Band, raw: number, listenerTime: number, gain: number): number {
   // The fall: a response never drops faster than its last peak fades, on
-  // flow's fade curve (fallSec long, fallShape). A rise is taken at once.
-  const held = band.peak * fadeCurve(listenerTime - band.peakTime, band.channel.fallSec, band.channel.fallShape)
-  if (raw >= held) {
+  // the block's own curve and length. A rise is taken at once.
+  const { fallSec, shape } = band.channel
+  const held = fallSec > 0 ? band.peak * pulseCurve((listenerTime - band.peakTime) / fallSec, shape) : 0
+  if (raw > 0 && raw >= held) {
+    // A hit is where a rise begins: every instance a tracker reports
+    // (between instances it reads 0) that climbs out of the fall.
+    // Judged before the gain, which only scales what is shown: a gain that
+    // moves (the decoding reaching the listener, a loud passage coming into
+    // the window) must not read as the music rising.
+    if (!band.rising) band.onHit?.(gain * raw)
+    band.rising = true
     band.peak = raw
     band.peakTime = listenerTime
-    return raw
+    return gain * raw
   }
-  return held
+  band.rising = false
+  return gain * held
 }
 
-function publish(band: Band, response: number): void {
-  if (Math.abs(response - band.published) < MIN_STEP && !(response === 0 && band.published !== 0)) return
-  band.published = response
-  band.listener(response)
+/** A clock's response: its fall, restarted on each of its beats and cut at the next. */
+function pulse(subscriber: Clock, listenerTime: number): number {
+  const { phase, period } = mapCaretAt(listenerTime)
+  setLocked(subscriber, !Number.isNaN(phase))
+  if (Number.isNaN(phase)) return 0
+  const { fallSec, shape } = subscriber.caret
+  return pulseCurve((phase * period) / Math.min(fallSec, period), shape)
 }
 
-function tick(): void {
+/** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
+function count(counter: Counter, listenerTime: number): void {
+  const { phase, period } = mapCaretAt(listenerTime)
+  counter.listener(listenerTime, Number.isNaN(phase) ? NaN : period)
+}
+
+function publish(subscriber: Band | Clock, response: number): void {
+  if (Math.abs(response - subscriber.published) < MIN_STEP && !(response === 0 && subscriber.published !== 0)) return
+  subscriber.published = response
+  subscriber.listener(response)
+}
+
+let visualDelaySec = 0
+
+/** Sets how far below full scale a track's peak may be and still give a full response (`BeatSettings.responseDb`). */
+export function setBeatResponseHeadroomDb(db: number): void {
+  headroomDb = db
+}
+
+/**
+ * Draws the pulse this much later than the latency the audio stack reports
+ * (the reader's per-device delay, `BeatSettings.delayMsByDevice`).
+ */
+export function setBeatVisualDelaySec(sec: number): void {
+  visualDelaySec = sec
+}
+
+/** How far behind the media time the listener hears it: the output context's processing and output latency. */
+function outputLatencySec(): number {
+  const context = outputContext()
+  return (context.baseLatency || 0) + (context.outputLatency || 0)
+}
+
+/**
+ * How long after the audio graph handles a sample it should be DRAWN: what
+ * the audio stack reports plus the reader's per-device delay. The beat pulse
+ * and the visualizer mode's spectrum (`visualizer/spectrumTap.ts`) both draw
+ * on it, so they cannot disagree about when the listener hears something.
+ */
+export function heardLagSec(): number {
+  return outputLatencySec() + visualDelaySec
+}
+
+/**
+ * The position the LISTENER is at, for drawing: the element's position run on
+ * the FRAME's clock (the `requestAnimationFrame` timestamp, the moment the
+ * frame is shown), and steered toward each report rather than set to it.
+ * The element reports its position in steps (a chunk of the graph's pulls at
+ * a time), and taking each report as it comes jumps the time back and forth
+ * by up to a chunk several times a second; a fall read off a time that jumps
+ * is drawn in steps. The audio context's clock stood here as the time between
+ * reports and steps the same way: it advances once per audio callback (ten
+ * milliseconds and more, far more over Bluetooth), so frames between two
+ * callbacks read one time, and a fall drawn off it repeated a value and then
+ * jumped. The frame's clock advances by exactly one frame per frame. A report
+ * further off than `SNAP_SEC` is a seek and is taken at once; anything nearer
+ * closes a share of the gap per report, and the time never runs backwards.
+ * Reset while the music is stopped, as the frame's clock runs on through a
+ * pause.
+ */
+class SmoothClock {
+  private static readonly SNAP_SEC = 0.5
+  private static readonly STEER = 0.1
+  private offset = NaN
+  private reported = NaN
+  private last = -Infinity
+
+  reset(): void {
+    this.offset = NaN
+    this.reported = NaN
+    this.last = -Infinity
+  }
+
+  read(reported: number, now: number): number {
+    if (reported !== this.reported) {
+      this.reported = reported
+      const gap = reported - now - this.offset
+      if (!Number.isFinite(this.offset) || Math.abs(gap) > SmoothClock.SNAP_SEC) {
+        this.offset = reported - now
+        this.last = -Infinity
+      } else {
+        this.offset += gap * SmoothClock.STEER
+      }
+    }
+    this.last = Math.max(this.last, now + this.offset)
+    return this.last
+  }
+}
+
+const listenerClock = new SmoothClock()
+
+function tick(frameTimeMs: number): void {
   frame = null
-  if (!musicPlayerService.isPlaying || document.hidden || bands.size === 0) {
+  if (!musicPlayerService.isPlaying || document.hidden || subscriberCount() === 0) {
     stop()
     return
   }
-  const listenerTime = musicPlayerService.currentTime
-  keepScoutAhead(listenerTime)
-  const scoutTime = scout?.currentTime ?? 0
-  if (scoutTime !== lastScoutTime) {
-    // One reading per scout position: a frame that lands before the scout's
-    // clock moves would only repeat the last one.
-    lastScoutTime = scoutTime
-    sample(scoutTime)
+  const now = frameTimeMs / 1000
+  const listenerTime = listenerClock.read(musicPlayerService.currentTime, now)
+  // Where the listener would be had nothing jumped: carried on by the
+  // clock from the last frame, or where it was when the music stopped.
+  const frameSec = Number.isNaN(lastNow) ? 0 : now - lastNow
+  const expected = Number.isNaN(lastNow) ? lastListener : lastListener + frameSec
+  const jumped = !(Math.abs(listenerTime - expected) <= RESYNC_SEC)
+  lastListener = listenerTime
+  lastNow = now
+  if (stale || jumped || analysedUrl !== musicPlayerService.trackUrl) restartAnalysis(listenerTime)
+  const heardTime = listenerTime - heardLagSec()
+  // What the answers since the last frame said, each hit taken once (and cleared, so the next frame reads none unless
+  // another lands).
+  trackerRaw.set(pendingRaw)
+  pendingRaw.fill(0)
+  const [thump, pierce, ticks] = trackerRaw
+  for (const band of bands) publish(band, respond(band, mixResponse(band.channel.mix, thump, pierce, ticks), heardTime, gain))
+  for (const subscriber of clocks) {
+    const response = pulse(subscriber, heardTime)
+    // A dip as DRAWN: the response jumping up, which is a beat starting on screen.
+    if (response - subscriber.published > 0.3) drawnDips++
+    publish(subscriber, response)
   }
-  for (const band of bands) publish(band, respond(band, listenerTime))
+  for (const counter of counters) count(counter, heardTime)
+  framesSinceTrace++
+  traceCaret(listenerTime, heardTime)
+  // Asked one frame AHEAD: the answer is back before the next frame, which
+  // shows the moment it is for, so the worker costs no lag.
+  send({
+    type: 'ask',
+    run,
+    listenerTime,
+    heardTime: heardTime + frameSec,
+    readers: askReaders,
+    trace: isBeatTraceOn(),
+  })
   frame = requestAnimationFrame(tick)
 }
 
 function start(): void {
-  if (frame !== null || bands.size === 0 || !musicPlayerService.isPlaying || document.hidden) return
+  if (frame !== null || subscriberCount() === 0 || !musicPlayerService.isPlaying || document.hidden) return
   frame = requestAnimationFrame(tick)
 }
 
 function stop(): void {
   if (frame !== null) cancelAnimationFrame(frame)
   frame = null
-  scout?.pause()
+  lastNow = NaN
+  listenerClock.reset()
+  // An answer to the last ask before the stop describes a moment that has passed.
+  pendingRaw.fill(0)
+  trackerRaw.fill(0)
   for (const band of bands) publish(band, 0)
+  for (const subscriber of clocks) {
+    publish(subscriber, 0)
+    setLocked(subscriber, false)
+  }
+  for (const counter of counters) counter.listener(NaN, NaN)
 }
 
 function onVisibility(): void {
@@ -370,65 +494,125 @@ function onVisibility(): void {
   else start()
 }
 
-export interface MusicBandSubscription {
-  /**
-   * Retunes the band in place. The window of readings is kept: a new
-   * frequency or width fills it with readings of the new band as they
-   * arrive, rather than starting the measurement over.
-   */
-  update: (channel: BeatChannel) => void
+export interface MusicMixSubscription {
+  /** Follows the element's new mix and fall; a mix that reads a tracker nothing read before starts the analysis over. */
+  update: (channel: MusicMixChannel) => void
   unsubscribe: () => void
 }
 
-/** Follows one band of the music; `listener` gets the response whenever it moves. */
-export function subscribeMusicBand(channel: BeatChannel, listener: BeatListener): MusicBandSubscription {
-  const band: Band = {
-    channel,
-    listener,
-    filter: null,
-    analyser: null,
-    samples: null,
-    riseTimes: new Float64Array(RISE_CAPACITY),
-    riseLevels: new Float32Array(RISE_CAPACITY),
-    riseHead: 0,
-    riseCount: 0,
-    peak: 0,
-    peakTime: 0,
-    times: new Float64Array(CAPACITY),
-    levels: new Float32Array(CAPACITY),
-    head: 0,
-    count: 0,
-    bins: new Uint32Array(BINS),
-    published: 0,
-  }
-  bands.add(band)
-  attachBand(band)
-  if (bands.size === 1) {
+export interface MusicClockSubscription {
+  /** Follows a new fall (and effect, which the clock does not read); nothing starts over, as the beat does not depend on either. */
+  update: (caret: VisualizerCaret) => void
+  unsubscribe: () => void
+}
+
+/** The first subscriber starts listening for play state and visibility; every new one marks the analysis stale. */
+function added(): void {
+  // A subscriber that reads only what is already analysed changes nothing: restarting would throw away the beat map
+  // and the score planned ahead every time an element mounts (entering the visualizer mounts
+  // three). One reading a tracker, or the beat map, the analysis was not started with starts it over.
+  if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
+  ensureWorker()
+  if (subscriberCount() === 1) {
     unsubscribePlaying = musicPlayerService.subscribePlaying((playing) => (playing ? start() : stop()))
     document.addEventListener('visibilitychange', onVisibility)
   }
   start()
-  const update = (next: BeatChannel) => {
-    const retune = next.frequencyHz !== band.channel.frequencyHz || next.octaves !== band.channel.octaves
-    const rebuild = isBeat(next) !== isBeat(band.channel)
+}
+
+/** After a subscriber left: drops the drum analysis if nothing reads it, and everything once nothing is left. */
+function removed(): void {
+  if (subscriberCount() > 0) {
+    if (!needsDrums() && analysedDrums) {
+      analysedDrums = false
+      send({ type: 'dropDrums' })
+    }
+    return
+  }
+  stop()
+  run++
+  send({ type: 'dispose' })
+  worker?.terminate()
+  worker = null
+  analysedUrl = undefined
+  stale = true
+  lastListener = NaN
+  unsubscribePlaying?.()
+  unsubscribePlaying = null
+  document.removeEventListener('visibilitychange', onVisibility)
+}
+
+/** Sets the three trackers (`VisualizerTrackers`); their contrast is read live with every ask, so nothing starts over. */
+export function setVisualizerTrackers(next: VisualizerTrackers): void {
+  trackers = next
+  rebuildAskReaders()
+}
+
+/** Follows one element's mix of the trackers; `listener` gets the response whenever it moves, and `onHit` each hit (`respond`: where a rise begins). */
+export function subscribeMusicMix(channel: MusicMixChannel, listener: BeatListener, onHit: ((strength: number) => void) | null = null): MusicMixSubscription {
+  const band: Band = {
+    channel,
+    listener,
+    peak: 0,
+    peakTime: 0,
+    published: 0,
+    onHit,
+    rising: false,
+  }
+  bands.add(band)
+  added()
+  const update = (next: MusicMixChannel) => {
     band.channel = next
-    if (rebuild) {
-      // A level and an onset are different quantities: the window holds one
-      // or the other, never a mixture.
-      detachBand(band)
-      clearWindow(band)
-      attachBand(band)
-    } else if (retune) tuneBand(band)
+    // A tracker no element read before is not being analysed: the window is
+    // measured again from the decoded track, which is immediate. One no
+    // longer read is simply ignored until the next restart.
+    if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
   }
   const unsubscribe = () => {
     bands.delete(band)
-    detachBand(band)
-    if (bands.size > 0) return
-    stop()
-    teardownScout()
-    unsubscribePlaying?.()
-    unsubscribePlaying = null
-    document.removeEventListener('visibilitychange', onVisibility)
+    removed()
   }
   return { update, unsubscribe }
 }
+
+/**
+ * Pulses on a steady beat that follows the music's tempo (the header's CLOCK); of `caret` only the fall is read.
+ * `lockListener` is told when the clock gains a beat (music playing and a
+ * tempo found since the track started; a break is carried through on the
+ * beat it had) and when it loses it (paused, hidden, a new track not yet
+ * read), so the caret can blink whenever there is no beat to follow.
+ */
+export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener, lockListener: LockListener): MusicClockSubscription {
+  const subscriber: Clock = { caret, listener, published: 0, lockListener, locked: false }
+  const update = (next: VisualizerCaret) => {
+    subscriber.caret = next
+  }
+  clocks.add(subscriber)
+  added()
+  const unsubscribe = () => {
+    clocks.delete(subscriber)
+    removed()
+  }
+  return { update, unsubscribe }
+}
+
+/**
+ * The steady beat's TEMPO every frame while music plays: the media time heard
+ * and the period, in seconds, of the beat the caret follows (the header's
+ * CLOCK), with NaN for both whenever there is no beat: paused, hidden, or a
+ * track not yet read. Tempo and not position, deliberately: a clock that
+ * re-seats after a seek or a change of section takes the new grid's PHASE as
+ * it is, so its position jumps by up to half a beat, while its period is
+ * continuous apart from a change of tempo. A reader that only needs to move
+ * at the music's rate integrates time over period and never sees the jump.
+ */
+export function subscribeMusicTempo(listener: (timeSec: number, periodSec: number) => void): () => void {
+  const counter: Counter = { listener }
+  counters.add(counter)
+  added()
+  return () => {
+    counters.delete(counter)
+    removed()
+  }
+}
+

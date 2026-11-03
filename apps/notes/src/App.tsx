@@ -53,20 +53,12 @@ import { musicPlayerService } from './sound/MusicPlayerService'
 import { registerQuitParticipant, settleForQuit } from './shared/quitParticipants'
 import { installExternalFileSync } from './editorSection/externalFileSync'
 import { getNoteListMetaKind } from './shared/noteListMeta'
-import {
-  DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-  clampContinuousDocumentThreshold,
-} from './editor/documentPosition'
+import { DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS } from './editor/documentPosition'
 import { resolveIdentityLabel } from './shared/tabLabels'
 import { formatIdWithSigil } from './shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
 import {
-  type RgbaColor,
-  type HsvaColor,
-  parseCssColorToRgba,
   rgbaToCssColor,
-  rgbaToHex,
-  rgbaToHsva,
   hsvaToRgba,
 } from '@thockdown/look/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
@@ -133,6 +125,7 @@ import {
 } from './shared/uiBounds'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
+import { VisualizerGlaze } from './visualizer/VisualizerGlaze'
 import { FlowOverlays } from './flow/FlowOverlays'
 import { useFlowFeedback } from './flow/useFlowFeedback'
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
@@ -140,7 +133,8 @@ import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type Spee
 import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
-import { DEBUG_TAG_NAME, normalizeTagName } from './shared/tags'
+import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
+import { defaultVisualizer, sanitizeVisualizer, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -273,7 +267,7 @@ import {
   TEXTURE_VSTEPS_MAX,
 } from '@thockdown/look/textureTypes'
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
-import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
+import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
@@ -330,11 +324,7 @@ const EMPTY_MAP = new Map<string, NotePrimedAction>()
 const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
 const DEFAULT_BORDER_ALPHA_PERCENT = 100
 const DEFAULT_BOX_SHADOW_ALPHA_PERCENT = 100
-const TEXTURE_PREVIEW_SURFACE: TextureSurfaceKey = 'appGrid'
-// Holding a swatch to copy its colour is "I meant this one" -- the app's
-// CONFIRM threshold (`shared/holdTiming.ts`), which also announces the
-// completion in the cursor. Was 300ms of its own.
-const COLOR_BUTTON_ARM_HOLD_MS = HOLD_CONFIRM_MS
+const TEXTURE_FALLBACK_SURFACE: TextureSurfaceKey = 'appGrid'
 
 /** The font sizes that are remembered per size mode (see fontSizesByMode in App). */
 interface FontSizeSet {
@@ -432,9 +422,6 @@ type ViewStyleKey =
   | 'bubblerone'
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 
-type HsvaControlKey = 'h' | 's' | 'v' | 'a'
-type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
-type CaretColorTargetKey = 'outline' | 'halo'
 
 // Fallbacks for chrome reading through the section registry before any
 // section has registered -- never actually hit in practice (registration
@@ -466,32 +453,6 @@ const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
   matrix: { filterInvert: 1, filterSepia: 1, filterHueRotate: 70,  filterBrightness: 0.4,  filterContrast: 1.1,  filterSaturate: 0.8633, filterColorize: 0 },
 }
 
-
-type HsvaDragState = {
-  control: HsvaControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type TextureControlKey = 'granularity' | 'smoothness'
-
-type TextureControlDragState = {
-  control: TextureControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type ColorArmSource =
-  | { kind: 'hsva'; key: HsvaControlKey }
-  | { kind: 'active-color' }
-  | { kind: 'texture-preview' }
-
-type ElementPreviewCopySource =
-  | { kind: 'element'; key: HighlightColorKey }
-  | { kind: 'texture'; key: TextureSurfaceKey }
-  | { kind: 'text'; key: EditorTextColorTargetKey }
 
 type SidebarViewState = {
   scrollTop: number
@@ -704,12 +665,8 @@ function cloneTextureMaterials(source: Partial<TextureMaterialsBySurface> | null
   }
 }
 
-function cloneTextureMaterial(source: unknown, fallback: TextureMaterialSettings = DEFAULT_TEXTURE_MATERIALS[TEXTURE_PREVIEW_SURFACE]): TextureMaterialSettings {
+function cloneTextureMaterial(source: unknown, fallback: TextureMaterialSettings = DEFAULT_TEXTURE_MATERIALS[TEXTURE_FALLBACK_SURFACE]): TextureMaterialSettings {
   return normalizeTextureMaterial(source, fallback)
-}
-
-function toTexturePreviewMaterial(source: unknown): TextureMaterialSettings {
-  return normalizeTextureMaterial(source, DEFAULT_TEXTURE_MATERIALS[TEXTURE_PREVIEW_SURFACE])
 }
 
 function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
@@ -878,25 +835,12 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
     caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
     caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
+    visualizer: sanitizeVisualizer(source.visualizer, toFiniteNumber(source.filterInvert, 0) > 0.5, source.caretAnimationPreset),
   }
 }
 
 function buildUiLoadoutSignature(loadout: UiLayoutLoadout): string {
   return stableStringify(normalizeUiLoadoutForSignature(loadout))
-}
-
-function areHsvaEqual(a: HsvaColor, b: HsvaColor): boolean {
-  return a.h === b.h && a.s === b.s && a.v === b.v && a.a === b.a
-}
-
-function areTextureMaterialsEqual(a: TextureMaterialSettings, b: TextureMaterialSettings): boolean {
-  return (
-    a.enabled === b.enabled
-    && a.seed === b.seed
-    && a.granularity === b.granularity
-    && a.vSteps === b.vSteps
-    && areHsvaEqual(a.color, b.color)
-  )
 }
 
 const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
@@ -1434,7 +1378,6 @@ function App() {
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const documentReplaceInputRef = useRef<HTMLInputElement | null>(null)
   const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
-  const textureSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeLinearSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeRadialSeedInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNoteSummaries] = useState<NoteSummary[]>([])
@@ -1489,10 +1432,13 @@ function App() {
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
-  const [debuggingEnabled, setDebuggingEnabled] = useState(false)
-  const [spellCheckEnabled, setSpellCheckEnabled] = useState(false)
+  // Which features exist at all (shared/features.ts): the toggle bar at the
+  // top of Options. Each consumer below reads its own flag and tears its
+  // feature down when it is off.
+  const [features, setFeatures] = useState<FeatureToggles>(DEFAULT_FEATURE_TOGGLES)
+  const spellCheckEnabled = features.spellCheck
   const [flowSettings, setFlowSettings] = useState<FlowSettings>(DEFAULT_FLOW_SETTINGS)
-  useFlowFeedback(flowSettings)
+  useFlowFeedback(features.flow, flowSettings)
   // Every change is persisted at once, through the one sanctioned path (see
   // persistMenuStateNowRef). An effect rather than a call in the setter, so
   // the snapshot is built from the render that already holds the new value.
@@ -1507,8 +1453,8 @@ function App() {
   useEffect(() => onSpeedReadingSettingsCommit(setSpeedReadingSettings), [])
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [flowSettings, beatSettings, speedReadingSettings])
-  const [customCursorEnabled, setCustomCursorEnabled] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
+  }, [flowSettings, beatSettings, speedReadingSettings, features])
+  const customCursorEnabled = features.customCursor
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
   const [customCursorTrailColor, setCustomCursorTrailColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.trailColor)
@@ -1543,30 +1489,8 @@ function App() {
   const [caretAnimationDurationMs, setCaretAnimationDurationMs] = useState(DEFAULT_CARET_SETTINGS.animationDurationMs)
   const [caretFrameDurationMs, setCaretFrameDurationMs] = useState(DEFAULT_CARET_SETTINGS.frameDurationMs)
   const [caretEffectStrengthPercent, setCaretEffectStrengthPercent] = useState(DEFAULT_CARET_SETTINGS.effectStrengthPercent)
-  // Staged HSVA for the Caret section's own H/S/V/A drag controls -- a closed
-  // loop over that section's two targets (outline, halo), exactly like
-  // cursorColorHsva is for the Mouse section's four. See that state's comment.
-  const [caretColorHsva, setCaretColorHsva] = useState<HsvaColor>(() => {
-    const seed = parseCssColorToRgba(DEFAULT_CARET_SETTINGS.outlineColor) ?? { r: 120, g: 115, b: 112, a: 1 }
-    return rgbaToHsva(seed)
-  })
-  const [caretHsvaDragState, setCaretHsvaDragState] = useState<HsvaDragState | null>(null)
-  const caretColorArmTimerRef = useRef<(() => void) | null>(null)
-  // Local "staged" HSVA color for the Mouse options row-1 H/S/V/A drag
-  // controls -- deliberately not tied to the app-wide activeColorHsva/
-  // primedColorSource rig (that system arms a swatch anywhere in the app;
-  // this one is a closed loop scoped to the 3 row-2 targets below it).
-  // Seeded from a real color, same as activeColorHsva below -- HSV is
-  // degenerate at v=0 (pure black regardless of h/s), so starting there
-  // like a naive {h:0,s:0,v:0,a:1} would make the saturation control look
-  // broken (dragging it produces no visible change until v is raised).
-  const [cursorColorHsva, setCursorColorHsva] = useState<HsvaColor>(() => {
-    const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 1 }
-    return rgbaToHsva(seed)
-  })
-  const [cursorHsvaDragState, setCursorHsvaDragState] = useState<HsvaDragState | null>(null)
-  const cursorColorArmTimerRef = useRef<(() => void) | null>(null)
-  const debugNoteIdRef = useRef<string | null>(null)
+  // The visualizer's blocks, part of the layout (Options > Visualizer).
+  const [visualizer, setVisualizer] = useState<VisualizerSettings>(() => defaultVisualizer(false))
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
@@ -1727,6 +1651,17 @@ function App() {
   const [itemsPerPage, setItemsPerPage] = useState(20)
   const [showPagination, setShowPagination] = useState(false)
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
+  // The sidebar's own scroller, as state as well as a ref: immersive mode
+  // unmounts the sidebar and restores it with nothing else changed, so the
+  // custom scrollbar's listeners and observers -- and the thumb's position,
+  // which is written imperatively -- must key on the element itself or they
+  // stay attached to the detached one (the options view, which scrolls this
+  // element, came back with a thumb that never moved again).
+  const [sidebarContentEl, setSidebarContentEl] = useState<HTMLDivElement | null>(null)
+  const setSidebarContentRef = useCallback((el: HTMLDivElement | null) => {
+    sidebarContentRef.current = el
+    setSidebarContentEl(el)
+  }, [])
   // Set when the startup bootstrap (loading the note list / database) fails
   // repeatedly. Surfaced as a visible banner -- previously a failure here
   // just retried silently forever with only a console.error, leaving the
@@ -1744,25 +1679,43 @@ function App() {
   // every sidebar toggle, and so did everything laid out from it.
   const [appShellMeasuredWidthPx, setAppShellMeasuredWidthPx] = useState(0)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
-  // Immersive mode: the active slot alone, full screen, no chrome. Transient
-  // by design -- never persisted, so a launch always opens in the ordinary
-  // layout. While it lasts the sidebar is off screen WITHOUT its saved setting
-  // changing: isSidebarShown, not isSidebarVisible, is what the layout and
-  // anything asking "is the sidebar on screen" read. isSidebarVisible stays
-  // the reader's setting, and is exactly what leaving immersive returns to.
-  const [isImmersiveMode, setIsImmersiveMode] = useState(false)
+  // Immersion, ONE setting with three values. Immersive mode: the active
+  // slot alone, full screen, no chrome. The visualizer (F3) is immersive mode
+  // with the active slot showing the visualizer scene over its note
+  // (visualizer/VisualizerScene.tsx); being one setting rather than a second
+  // flag beside the first, "visualizer but not immersive" cannot be
+  // expressed. Transient by design -- never persisted, so a launch always
+  // opens in the ordinary layout. While it lasts the sidebar is off screen
+  // WITHOUT its saved setting changing: isSidebarShown, not
+  // isSidebarVisible, is what the layout and anything asking "is the sidebar
+  // on screen" read. isSidebarVisible stays the reader's setting, and is
+  // exactly what leaving immersion returns to.
+  const [immersion, setImmersionState] = useState<'off' | 'immersive' | 'visualizer'>('off')
+  const isImmersiveMode = immersion !== 'off'
+  const isVisualizerMode = immersion === 'visualizer'
+  // What F3 (or Escape) returns to when the visualizer is left.
+  const immersionBeforeVisualizerRef = useRef<'off' | 'immersive'>('off')
   const isSidebarShown = isSidebarVisible && !isImmersiveMode
   const appShellWidthPx = Math.max(
     isSidebarShown ? appShellMinWidthPx : appShellMinWidthPx - (sidebarWidthPx + GRID_DIVIDER_PX),
     appShellMeasuredWidthPx,
   )
-  const setImmersiveMode = useCallback((next: boolean) => {
+  const setImmersion = useCallback((next: 'off' | 'immersive' | 'visualizer') => {
     // Mini mode is the app at its smallest, immersive the editor at its
     // largest; the one is not a way into the other.
-    if (next && windowIsCollapsed) return
-    setIsImmersiveMode(next)
-    window.windowControls?.setFullScreen?.(next)
+    if (next !== 'off' && windowIsCollapsed) return
+    setImmersionState(next)
+    window.windowControls?.setFullScreen?.(next !== 'off')
   }, [windowIsCollapsed])
+  const setImmersiveMode = useCallback((next: boolean) => setImmersion(next ? 'immersive' : 'off'), [setImmersion])
+  const toggleVisualizerMode = useCallback(() => {
+    if (immersion === 'visualizer') {
+      setImmersion(immersionBeforeVisualizerRef.current)
+      return
+    }
+    immersionBeforeVisualizerRef.current = immersion
+    setImmersion('visualizer')
+  }, [immersion, setImmersion])
   const [isEscapeHoldPanelOpen, setIsEscapeHoldPanelOpen] = useState(false)
   const escapeHoldTimerRef = useRef<number | null>(null)
   const escapeHoldTriggeredRef = useRef(false)
@@ -2199,9 +2152,6 @@ function App() {
   }))
   const [textureEnabled] = useState(true)
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
-  const [texturePreviewMaterial, setTexturePreviewMaterial] = useState<TextureMaterialSettings>(() => toTexturePreviewMaterial(DEFAULT_TEXTURE_MATERIALS.appGrid))
-  const [textureSeedInput, setTextureSeedInput] = useState(() => String(DEFAULT_TEXTURE_MATERIALS.appGrid.seed))
-  const [isTextureSeedEditing, setIsTextureSeedEditing] = useState(false)
   const [glazeSettings, setGlazeSettings] = useState<GlazeSettings>(() => DEFAULT_GLAZE_SETTINGS)
   const [glazeLinearSeedInput, setGlazeLinearSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.linearSeed))
   const [isGlazeLinearSeedEditing, setIsGlazeLinearSeedEditing] = useState(false)
@@ -2209,6 +2159,11 @@ function App() {
   const [isGlazeRadialSeedEditing, setIsGlazeRadialSeedEditing] = useState(false)
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
   const [filterInvert, setFilterInvert] = useState(0)
+  // The scene's invert, for a layer that must keep its own polarity under it
+  // (the visualizer's glass cover, which counter-inverts itself by it).
+  useEffect(() => {
+    document.documentElement.style.setProperty('--scene-invert', String(filterInvert))
+  }, [filterInvert])
   const [filterSepia, setFilterSepia] = useState(0)
   const [filterHueRotate, setFilterHueRotate] = useState(0)
   const [filterBrightness, setFilterBrightness] = useState(1)
@@ -2224,16 +2179,16 @@ function App() {
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [audioSpatial, setAudioSpatial] = useState(0)
-  const [reduceVisualEffects, setReduceVisualEffects] = useState(false)
-  // A pulse is exactly the kind of visual effect that flag turns off.
-  useBeatFeedback(beatSettings, reduceVisualEffects)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
-  const [reducedCaretAnimation, setReducedCaretAnimation] = useState(false)
-  const [deferPreviewOnRapidInput, setDeferPreviewOnRapidInput] = useState(false)
-  const [noteSizeThresholdBlocks, setNoteSizeThresholdBlocks] = useState(DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS)
-  const [forceCharacterScrollbarThumb, setForceCharacterScrollbarThumb] = useState(false)
+  // Where a note stops being measured in pixels and its scrollbar counts
+  // characters instead (editor/documentPosition.ts), and whether every note
+  // counts characters. These were reader settings and are fixed now, at the
+  // largest threshold; they stay props so the line can be tuned here.
+  const noteSizeThresholdBlocks = DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS
+  const forceCharacterScrollbarThumb = false
   const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
   const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C' | 'D'>(DEFAULT_TYPING_SOUND_SET)
   const [musicVolume, setMusicVolume] = useState(0.8)
@@ -2265,16 +2220,7 @@ function App() {
     positionSec: 0,
     wasPlaying: false,
   })
-  const [primedColorSource, setPrimedColorSource] = useState<ColorArmSource>({ kind: 'active-color' })
-  const [activeColorHsva, setActiveColorHsva] = useState<HsvaColor>(() => {
-    const seed = parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
-    return rgbaToHsva(seed)
-  })
-  const [hsvaDragState, setHsvaDragState] = useState<HsvaDragState | null>(null)
-  const [textureControlDragState, setTextureControlDragState] = useState<TextureControlDragState | null>(null)
-  const colorArmTimerRef = useRef<(() => void) | null>(null)
   const pendingUpdateDebounceRef = useRef<number | null>(null)
-  type ConsoleMethodName = 'log' | 'info' | 'warn' | 'error' | 'debug'
   const appStateSaveTimerRef = useRef<number | null>(null)
   const noteTransitionLockRef = useRef(false)
   // Mirrors useSectionTabs' chapterBarMode so buildMenuStateSnapshot (defined
@@ -2283,9 +2229,6 @@ function App() {
   const chapterBarModeRef = useRef<'tags' | 'tabs'>('tabs')
   const [restoredTabBarMode, setRestoredTabBarMode] = useState<'tags' | 'tabs' | null>(null)
 
-  const originalConsoleMethodsRef = useRef<Partial<Record<ConsoleMethodName, (...args: unknown[]) => void>>>({})
-  const isWritingDebugEntryRef = useRef(false)
-  const debugNoteCreationPromiseRef = useRef<Promise<string | null> | null>(null)
   const externalNoteOriginalTextByIdRef = useRef<Map<string, string>>(new Map())
   const [externalFileConflictIds, setExternalFileConflictIds] = useState<ReadonlySet<string>>(() => new Set())
   // An open external note follows its file: taken over when the reader has
@@ -2372,22 +2315,10 @@ function App() {
     surface: 'editorRenderText',
     material: textureMaterials.editorRenderText,
   })
-  const texturePreviewCss = useTextureSurface({
-    enabled: true,
-    surface: TEXTURE_PREVIEW_SURFACE,
-    material: texturePreviewMaterial,
-    usePersistentCache: false,
-  })
-  const activeColorRgba = useMemo(() => hsvaToRgba(activeColorHsva), [activeColorHsva])
-  const activeColorCss = useMemo(() => rgbaToCssColor(activeColorRgba), [activeColorRgba])
-  const activeColorHex = useMemo(() => rgbaToHex(activeColorRgba), [activeColorRgba])
-  const texturePreviewRgba = useMemo(() => hsvaToRgba(texturePreviewMaterial.color), [texturePreviewMaterial.color])
-  const texturePreviewHex = useMemo(() => rgbaToHex(texturePreviewRgba), [texturePreviewRgba])
   const appGridTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.appGrid.color)), [textureMaterials.appGrid.color])
   const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
   const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
   const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
-  const texturePreviewTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(texturePreviewMaterial.color)), [texturePreviewMaterial.color])
   // Everything the visual loadout decides about the look, in one place
   // (shared/loadoutTheme.ts), which the mobile app uses as well.
   const theme = useMemo(() => themeFrame({
@@ -2406,7 +2337,7 @@ function App() {
     filterSaturate,
     filterColorize,
   }, {
-    reduceVisualEffects,
+    glaze: features.glaze,
     isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
   }), [
     borderRadiusRegularPx,
@@ -2423,7 +2354,7 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-    reduceVisualEffects,
+    features.glaze,
     activeSectionSnapshot?.isPreviewMode,
   ])
 
@@ -2474,30 +2405,6 @@ function App() {
   }, [
     textureMaterials,
   ])
-
-  const hsvaDisplayColors = useMemo(() => {
-    const hColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 1, v: 1, a: 1 }))
-    const sColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: activeColorHsva.s, v: 1, a: 1 }))
-    const vColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 0, v: activeColorHsva.v, a: 1 }))
-    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: activeColorHsva.h, s: 0, v: 0, a: activeColorHsva.a }))
-    return { hColor, sColor, vColor, aGhostColor }
-  }, [activeColorHsva])
-
-  const cursorHsvaDisplayColors = useMemo(() => {
-    const hColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 1, v: 1, a: 1 }))
-    const sColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: cursorColorHsva.s, v: 1, a: 1 }))
-    const vColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 0, v: cursorColorHsva.v, a: 1 }))
-    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: cursorColorHsva.h, s: 0, v: 0, a: cursorColorHsva.a }))
-    return { hColor, sColor, vColor, aGhostColor }
-  }, [cursorColorHsva])
-
-  const caretHsvaDisplayColors = useMemo(() => {
-    const hColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 1, v: 1, a: 1 }))
-    const sColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: caretColorHsva.s, v: 1, a: 1 }))
-    const vColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 0, v: caretColorHsva.v, a: 1 }))
-    const aGhostColor = rgbaToCssColor(hsvaToRgba({ h: caretColorHsva.h, s: 0, v: 0, a: caretColorHsva.a }))
-    return { hColor, sColor, vColor, aGhostColor }
-  }, [caretColorHsva])
 
   const customCursorSettings: CustomCursorSettings = useMemo(() => ({
     // Never on Linux, whatever the setting says (shared/platform.ts).
@@ -2556,77 +2463,16 @@ function App() {
     })
   }, [])
 
-  const applyTexturePreviewToSurface = useCallback((surface: TextureSurfaceKey) => {
-    const preview = cloneTextureMaterial(texturePreviewMaterial)
-    setTextureMaterials((previous) => {
-      const next = cloneTextureMaterials(previous)
-      next[surface] = {
-        ...preview,
-        enabled: true,
-      }
-      return next
-    })
-  }, [texturePreviewMaterial])
-
-  const updateHighlightColor = useCallback((key: HighlightColorKey, color: RgbaColor) => {
-    setHighlightColors((previous) => ({
-      ...previous,
-      [key]: rgbaToCssColor(color),
-    }))
+  const setHighlightColorCss = useCallback((key: HighlightColorKey, css: string) => {
+    setHighlightColors((previous) => (previous[key] === css ? previous : { ...previous, [key]: css }))
   }, [])
 
-  const resolveEditorTextColor = useCallback((source: Record<EditorTextColorTargetKey, string>, key: EditorTextColorTargetKey): RgbaColor => {
-    return parseCssColorToRgba(source[key])
-      ?? parseCssColorToRgba(DEFAULT_EDITOR_TEXT_COLORS[key])
-      ?? { r: 0, g: 0, b: 0, a: 1 }
+  const setEditorTextColorCss = useCallback((target: EditorTextColorTargetKey, css: string) => {
+    setEditorTextColors((previous) => (previous[target] === css ? previous : { ...previous, [target]: css }))
   }, [])
 
-  const updateEditorTextColor = useCallback((target: EditorTextColorTargetKey, color: RgbaColor) => {
-    setEditorTextColors((previous) => ({
-      ...previous,
-      [target]: rgbaToCssColor(color),
-    }))
-  }, [])
-
-  const applyHsvaValueToEditorText = useCallback((sourceKey: HsvaControlKey, targetKey: EditorTextColorTargetKey) => {
-    setEditorTextColors((previous) => {
-      const target = resolveEditorTextColor(previous, targetKey)
-      const targetHsva = rgbaToHsva(target)
-      const sourceValue = activeColorHsva[sourceKey]
-
-      const nextHsva: HsvaColor = {
-        ...targetHsva,
-        [sourceKey]: sourceKey === 'h'
-          ? Math.max(0, Math.min(360, sourceValue))
-          : Math.max(0, Math.min(1, sourceValue)),
-      }
-
-      return {
-        ...previous,
-        [targetKey]: rgbaToCssColor(hsvaToRgba(nextHsva)),
-      }
-    })
-  }, [activeColorHsva, resolveEditorTextColor])
-
-  const applyActiveColorToEditorText = useCallback((targetKey: EditorTextColorTargetKey) => {
-    setEditorTextColors((previous) => ({
-      ...previous,
-      [targetKey]: activeColorCss,
-    }))
-  }, [activeColorCss])
-
-  const updateTextureColor = useCallback((surface: TextureSurfaceKey, color: RgbaColor, enabled = true) => {
-    const nextHsva = rgbaToHsva(color)
-    updateTextureMaterial(surface, (current) => ({
-      ...current,
-      enabled: enabled,
-      color: {
-        h: nextHsva.h,
-        s: nextHsva.s,
-        v: nextHsva.v,
-        a: nextHsva.a,
-      },
-    }))
+  const setTextureMaterial = useCallback((surface: TextureSurfaceKey, material: TextureMaterialSettings) => {
+    updateTextureMaterial(surface, () => cloneTextureMaterial(material))
   }, [updateTextureMaterial])
 
   const applyDarkModePreset = useCallback((key: DarkModeKey) => {
@@ -2733,6 +2579,7 @@ function App() {
       caretAnimationDurationMs,
       caretFrameDurationMs,
       caretEffectStrengthPercent,
+      visualizer,
     }
   }, [
     borderRadiusRegularPx,
@@ -2793,6 +2640,7 @@ function App() {
     caretAnimationDurationMs,
     caretFrameDurationMs,
     caretEffectStrengthPercent,
+    visualizer,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
@@ -2993,6 +2841,7 @@ function App() {
       Math.round(loadout.caretEffectStrengthPercent ?? DEFAULT_CARET_SETTINGS.effectStrengthPercent),
       CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
     ))
+    setVisualizer(loadout.visualizer)
   }, [applyDarkModePreset])
 
   const capturedUiLayoutLoadout = useMemo(
@@ -3060,8 +2909,6 @@ function App() {
 
   const applyEntryToLiveState = useCallback((entry: UiLoadoutEntry) => {
     applyUiLayoutLoadout(entry.payload)
-    const caretColorRgba = parseCssColorToRgba(entry.payload.highlightColors.caret) ?? { r: 120, g: 115, b: 112, a: 0.8 }
-    setActiveColorHsva(rgbaToHsva(caretColorRgba))
   }, [applyUiLayoutLoadout])
 
   const selectLoadoutPreset = useCallback(async (id: number) => {
@@ -3230,565 +3077,24 @@ function App() {
     })
   }, [uiLoadoutEntries, applyEntryToLiveState])
 
-  const clearColorArmTimer = useCallback(() => {
-    if (colorArmTimerRef.current === null) return
-    colorArmTimerRef.current()
-    colorArmTimerRef.current = null
-  }, [])
-
-  const resolveHighlightColor = useCallback((source: HighlightColors, key: HighlightColorKey): RgbaColor => {
-    return parseCssColorToRgba(source[key])
-      ?? parseCssColorToRgba(DEFAULT_HIGHLIGHT_COLORS[key])
-      ?? { r: 233, g: 230, b: 227, a: 1 }
-  }, [])
-
-  const resolveTextureColor = useCallback((source: TextureMaterialsBySurface, surface: TextureSurfaceKey): RgbaColor => {
-    return hsvaToRgba(source[surface].color)
-  }, [])
-
-  const applyHsvaValueToElement = useCallback((sourceKey: HsvaControlKey, targetKey: HighlightColorKey) => {
-    setHighlightColors((previous) => {
-      const target = resolveHighlightColor(previous, targetKey)
-      const targetHsva = rgbaToHsva(target)
-      const sourceValue = activeColorHsva[sourceKey]
-
-      const nextHsva: HsvaColor = {
-        ...targetHsva,
-        [sourceKey]: sourceKey === 'h'
-          ? Math.max(0, Math.min(360, sourceValue))
-          : Math.max(0, Math.min(1, sourceValue)),
-      }
-
-      return {
-        ...previous,
-        [targetKey]: rgbaToCssColor(hsvaToRgba(nextHsva)),
-      }
-    })
-  }, [activeColorHsva, resolveHighlightColor])
-
-  const applyHsvaValueToTexture = useCallback((sourceKey: HsvaControlKey, targetSurface: TextureSurfaceKey) => {
-    const target = resolveTextureColor(textureMaterials, targetSurface)
-    const targetHsva = rgbaToHsva(target)
-    const sourceValue = activeColorHsva[sourceKey]
-
-    const nextHsva: HsvaColor = {
-      ...targetHsva,
-      [sourceKey]: sourceKey === 'h'
-        ? Math.max(0, Math.min(360, sourceValue))
-        : Math.max(0, Math.min(1, sourceValue)),
-    }
-
-    updateTextureColor(targetSurface, hsvaToRgba(nextHsva))
-  }, [activeColorHsva, resolveTextureColor, textureMaterials, updateTextureColor])
-
-  const applyActiveColorToElement = useCallback((targetKey: HighlightColorKey) => {
-    setHighlightColors((previous) => ({
-      ...previous,
-      [targetKey]: activeColorCss,
-    }))
-  }, [activeColorCss])
-
-  const applyActiveColorToTexture = useCallback((targetSurface: TextureSurfaceKey) => {
-    updateTextureColor(targetSurface, activeColorRgba, false)
-  }, [activeColorRgba, updateTextureColor])
-
-  useEffect(() => {
-    setTexturePreviewMaterial((current) => ({
-      ...current,
-      color: areHsvaEqual(current.color, activeColorHsva)
-        ? current.color
-        : {
-            h: activeColorHsva.h,
-            s: activeColorHsva.s,
-            v: activeColorHsva.v,
-            a: activeColorHsva.a,
-          },
-    }))
-  }, [activeColorHsva])
-
-  const copyElementValuesToPreviews = useCallback((source: ElementPreviewCopySource) => {
-    if (source.kind === 'element') {
-      const rgba = resolveHighlightColor(highlightColors, source.key)
-      const hsva = rgbaToHsva(rgba)
-      setActiveColorHsva((previous) => (areHsvaEqual(previous, hsva) ? previous : hsva))
-      return
-    }
-
-    if (source.kind === 'text') {
-      const rgba = resolveEditorTextColor(editorTextColors, source.key)
-      const hsva = rgbaToHsva(rgba)
-      setActiveColorHsva((previous) => (areHsvaEqual(previous, hsva) ? previous : hsva))
-      return
-    }
-
-    const material = cloneTextureMaterial(textureMaterials[source.key])
-    setTexturePreviewMaterial((previous) => (areTextureMaterialsEqual(previous, material) ? previous : material))
-    setActiveColorHsva((previous) => (areHsvaEqual(previous, material.color) ? previous : {
-      h: material.color.h,
-      s: material.color.s,
-      v: material.color.v,
-      a: material.color.a,
-    }))
-  }, [editorTextColors, highlightColors, resolveEditorTextColor, resolveHighlightColor, textureMaterials])
-
-  const startColorArmHold = useCallback((source: ColorArmSource, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearColorArmTimer()
-
-    colorArmTimerRef.current = armHold(() => {
-      setPrimedColorSource(source)
-      colorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearColorArmTimer])
-
-  const startElementPreviewCopyHold = useCallback((source: ElementPreviewCopySource, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearColorArmTimer()
-
-    colorArmTimerRef.current = armHold(() => {
-      copyElementValuesToPreviews(source)
-      colorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearColorArmTimer, copyElementValuesToPreviews])
-
-  const updateHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
-    setActiveColorHsva((previous) => {
-      if (control === 'h') {
-        const nextHue = Math.max(0, Math.min(360, rawValue))
-        return {
-          ...previous,
-          h: nextHue,
-        }
-      }
-
-      const normalized = Math.max(0, Math.min(1, rawValue / 255))
-      return {
-        ...previous,
-        [control]: normalized,
-      }
-    })
-  }, [])
-
-  const getWheelStepDirection = useCallback((event: React.WheelEvent<HTMLElement>) => {
-    const dominantDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
-    if (dominantDelta === 0) return 0
-    return dominantDelta > 0 ? -1 : 1
-  }, [])
-
-  const wheelAdjustHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    const baseValue = control === 'h'
-      ? activeColorHsva.h
-      : activeColorHsva[control] * 255
-
-    updateHsvaControlValue(control, baseValue + stepDirection)
-  }, [activeColorHsva, getWheelStepDirection, updateHsvaControlValue])
-
-  const startHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-
-    event.preventDefault()
-
-    const baseValue = control === 'h'
-      ? activeColorHsva.h
-      : activeColorHsva[control] * 255
-
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setHsvaDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateHsvaControlValue(control, baseValue)
-  }, [activeColorHsva, updateHsvaControlValue])
-
-  const handleHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = hsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateHsvaControlValue(control, currentDrag.baseValue + delta)
-  }, [hsvaDragState, updateHsvaControlValue])
-
-  const stopHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = hsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setHsvaDragState(null)
-  }, [hsvaDragState])
-
-  // Mouse-cursor-overlay color widget (Options > Mouse options): a local
-  // closed loop, not tied to primedColorSource/colorArmTimerRef above -- see
-  // cursorColorHsva's declaration for why. Left-click on a row-2 swatch
-  // applies the staged H/S/V/A; holding right-click on one copies its color
-  // back into the staged H/S/V/A, mirroring startElementPreviewCopyHold.
-  const clearCursorColorArmTimer = useCallback(() => {
-    if (cursorColorArmTimerRef.current === null) return
-    cursorColorArmTimerRef.current()
-    cursorColorArmTimerRef.current = null
-  }, [])
-
-  const applyCursorColorToTarget = useCallback((target: CursorColorTargetKey) => {
-    const css = rgbaToCssColor(hsvaToRgba(cursorColorHsva))
-    if (target === 'dot') setCustomCursorDotColor(css)
-    else if (target === 'center') setCustomCursorCenterColor(css)
-    else if (target === 'halo') setCustomCursorHaloColor(css)
-    else setCustomCursorTrailColor(css)
-  }, [cursorColorHsva])
-
-  const copyCursorTargetColorToHsva = useCallback((target: CursorColorTargetKey) => {
-    const css = target === 'dot' ? customCursorDotColor
-      : target === 'center' ? customCursorCenterColor
-      : target === 'halo' ? customCursorHaloColor
-      : customCursorTrailColor
-    const rgba = parseCssColorToRgba(css)
-    if (!rgba) return
-    setCursorColorHsva(rgbaToHsva(rgba))
-  }, [customCursorDotColor, customCursorCenterColor, customCursorHaloColor, customCursorTrailColor])
-
-  const startCursorColorCopyHold = useCallback((target: CursorColorTargetKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearCursorColorArmTimer()
-
-    cursorColorArmTimerRef.current = armHold(() => {
-      copyCursorTargetColorToHsva(target)
-      cursorColorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearCursorColorArmTimer, copyCursorTargetColorToHsva])
-
-  const updateCursorHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
-    setCursorColorHsva((previous) => {
-      if (control === 'h') {
-        const nextHue = Math.max(0, Math.min(360, rawValue))
-        return { ...previous, h: nextHue }
-      }
-
-      const normalized = Math.max(0, Math.min(1, rawValue / 255))
-      return { ...previous, [control]: normalized }
-    })
-  }, [])
-
-  const wheelAdjustCursorHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    const baseValue = control === 'h'
-      ? cursorColorHsva.h
-      : cursorColorHsva[control] * 255
-
-    updateCursorHsvaControlValue(control, baseValue + stepDirection)
-  }, [cursorColorHsva, getWheelStepDirection, updateCursorHsvaControlValue])
-
-  const startCursorHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-
-    event.preventDefault()
-
-    const baseValue = control === 'h'
-      ? cursorColorHsva.h
-      : cursorColorHsva[control] * 255
-
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setCursorHsvaDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateCursorHsvaControlValue(control, baseValue)
-  }, [cursorColorHsva, updateCursorHsvaControlValue])
-
-  const handleCursorHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = cursorHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateCursorHsvaControlValue(control, currentDrag.baseValue + delta)
-  }, [cursorHsvaDragState, updateCursorHsvaControlValue])
-
-  const stopCursorHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = cursorHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setCursorHsvaDragState(null)
-  }, [cursorHsvaDragState])
-
-  // Caret color widget (Options > Caret): the same closed-loop pattern as the
-  // mouse-cursor one directly above -- left-click a target swatch to apply the
-  // staged H/S/V/A to it, hold right-click on one to copy its color back into
-  // the staged H/S/V/A. Kept separate from the cursor's staging so tuning a
-  // caret color can't disturb a cursor color mid-edit, and vice versa.
-  const clearCaretColorArmTimer = useCallback(() => {
-    if (caretColorArmTimerRef.current === null) return
-    caretColorArmTimerRef.current()
-    caretColorArmTimerRef.current = null
-  }, [])
-
-  const applyCaretColorToTarget = useCallback((target: CaretColorTargetKey) => {
-    const css = rgbaToCssColor(hsvaToRgba(caretColorHsva))
-    if (target === 'outline') setCaretOutlineColor(css)
-    else setCaretHaloColor(css)
-  }, [caretColorHsva])
-
-  const copyCaretTargetColorToHsva = useCallback((target: CaretColorTargetKey) => {
-    const css = target === 'outline' ? caretOutlineColor : caretHaloColor
-    const rgba = parseCssColorToRgba(css)
-    if (!rgba) return
-    setCaretColorHsva(rgbaToHsva(rgba))
-  }, [caretOutlineColor, caretHaloColor])
-
-  const startCaretColorCopyHold = useCallback((target: CaretColorTargetKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearCaretColorArmTimer()
-
-    caretColorArmTimerRef.current = armHold(() => {
-      copyCaretTargetColorToHsva(target)
-      caretColorArmTimerRef.current = null
-    }, COLOR_BUTTON_ARM_HOLD_MS)
-  }, [clearCaretColorArmTimer, copyCaretTargetColorToHsva])
-
-  const updateCaretHsvaControlValue = useCallback((control: HsvaControlKey, rawValue: number) => {
-    setCaretColorHsva((previous) => {
-      if (control === 'h') {
-        const nextHue = Math.max(0, Math.min(360, rawValue))
-        return { ...previous, h: nextHue }
-      }
-
-      const normalized = Math.max(0, Math.min(1, rawValue / 255))
-      return { ...previous, [control]: normalized }
-    })
-  }, [])
-
-  const wheelAdjustCaretHsvaControl = useCallback((control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    const baseValue = control === 'h'
-      ? caretColorHsva.h
-      : caretColorHsva[control] * 255
-
-    updateCaretHsvaControlValue(control, baseValue + stepDirection)
-  }, [caretColorHsva, getWheelStepDirection, updateCaretHsvaControlValue])
-
-  const startCaretHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-
-    event.preventDefault()
-
-    const baseValue = control === 'h'
-      ? caretColorHsva.h
-      : caretColorHsva[control] * 255
-
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setCaretHsvaDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateCaretHsvaControlValue(control, baseValue)
-  }, [caretColorHsva, updateCaretHsvaControlValue])
-
-  const handleCaretHsvaDragMove = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = caretHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateCaretHsvaControlValue(control, currentDrag.baseValue + delta)
-  }, [caretHsvaDragState, updateCaretHsvaControlValue])
-
-  const stopCaretHsvaDrag = useCallback((control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = caretHsvaDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setCaretHsvaDragState(null)
-  }, [caretHsvaDragState])
-
-  const getTextureControlBounds = useCallback((control: TextureControlKey) => {
-    if (control === 'granularity') {
-      return {
-        min: TEXTURE_GRANULARITY_MIN,
-        max: TEXTURE_GRANULARITY_MAX,
-      }
-    }
-
-    return {
-      min: TEXTURE_VSTEPS_MIN,
-      max: TEXTURE_VSTEPS_MAX,
-    }
-  }, [])
-
-  const getTextureControlValue = useCallback((control: TextureControlKey) => {
-    if (control === 'granularity') {
-      return texturePreviewMaterial.granularity
-    }
-
-    return texturePreviewMaterial.vSteps
-  }, [texturePreviewMaterial.granularity, texturePreviewMaterial.vSteps])
-
-  const updateTextureControlValue = useCallback((control: TextureControlKey, rawValue: number) => {
-    const bounds = getTextureControlBounds(control)
-    const nextValue = clamp(Math.round(rawValue), bounds.min, bounds.max)
-
-    setTexturePreviewMaterial((current) => {
-      if (control === 'granularity') {
-        if (current.granularity === nextValue) return current
-        return {
-          ...current,
-          granularity: nextValue,
-        }
-      }
-
-      if (current.vSteps === nextValue) return current
-      return {
-        ...current,
-        vSteps: nextValue,
-      }
-    })
-  }, [getTextureControlBounds])
-
-  const wheelAdjustTextureControl = useCallback((control: TextureControlKey, event: React.WheelEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    const stepDirection = getWheelStepDirection(event)
-    if (stepDirection === 0) return
-
-    updateTextureControlValue(control, getTextureControlValue(control) + stepDirection)
-  }, [getTextureControlValue, getWheelStepDirection, updateTextureControlValue])
-
-  const startTextureControlDrag = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button !== 0) return
-    event.preventDefault()
-
-    const baseValue = getTextureControlValue(control)
-    event.currentTarget.setPointerCapture(event.pointerId)
-
-    setTextureControlDragState({
-      control,
-      pointerId: event.pointerId,
-      startY: event.clientY,
-      baseValue,
-    })
-
-    updateTextureControlValue(control, baseValue)
-  }, [getTextureControlValue, updateTextureControlValue])
-
-  const handleTextureControlDragMove = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = textureControlDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    event.preventDefault()
-    const delta = currentDrag.startY - event.clientY
-    updateTextureControlValue(control, currentDrag.baseValue + delta)
-  }, [textureControlDragState, updateTextureControlValue])
-
-  const stopTextureControlDrag = useCallback((control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => {
-    const currentDrag = textureControlDragState
-    if (!currentDrag) return
-    if (currentDrag.control !== control) return
-    if (currentDrag.pointerId !== event.pointerId) return
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-
-    setTextureControlDragState(null)
-  }, [textureControlDragState])
-
-  useEffect(() => {
-    // Hidden during a value drag only when the custom cursor stands in for
-    // it; the native cursor stays visible throughout.
-    if (!customCursorSettings.enabled || (!hsvaDragState && !textureControlDragState)) {
-      document.body.classList.remove('hsva-dragging')
-      return
-    }
-
-    document.body.classList.add('hsva-dragging')
-    return () => {
-      document.body.classList.remove('hsva-dragging')
-    }
-  }, [customCursorSettings.enabled, hsvaDragState, textureControlDragState])
-
-  useEffect(() => {
-    if (sidebarMode !== 'options') return
-
-    const optionsContentEl = optionsContentRef.current
-    if (!optionsContentEl) return
-
-    const handleOptionsWheelCapture = (event: WheelEvent) => {
-      const target = event.target
-      if (!(target instanceof Element)) return
-
-      if (!target.closest('.options-hsva-control, .options-texture-control-btn')) {
-        return
-      }
-
-      event.preventDefault()
-    }
-
-    optionsContentEl.addEventListener('wheel', handleOptionsWheelCapture, { capture: true, passive: false })
-    return () => {
-      optionsContentEl.removeEventListener('wheel', handleOptionsWheelCapture, true)
-    }
-  }, [sidebarMode])
-
-  useEffect(() => {
-    return () => {
-      clearColorArmTimer()
-    }
-  }, [clearColorArmTimer])
+  /**
+   * Steps the current mode's layout to the next (+1) or previous (-1) preset,
+   * wrapping, in the order the options panel lists them: the factory presets,
+   * then the saved custom slots. From an entry outside that list (unsaved
+   * changes, or the default custom layout) the step starts from before the
+   * first preset, so +1 lands on the first and -1 on the last. Selecting goes
+   * through `selectLoadoutPreset`, the same path as pressing the preset's
+   * button, so the choice is persisted the same way.
+   */
+  const stepLayoutPreset = useCallback((direction: 1 | -1) => {
+    const cycle = [...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode]
+    if (cycle.length === 0) return
+    const current = cycle.findIndex((entry) => entry.id === activeEntryForCurrentMode?.id)
+    const next = current < 0
+      ? (direction > 0 ? 0 : cycle.length - 1)
+      : (current + direction + cycle.length) % cycle.length
+    void selectLoadoutPreset(cycle[next].id)
+  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
 
   // Runs once persistence has fully restored appState (including uiMode,
   // set deep inside the bootstrap effect further below). Firing this on
@@ -3828,18 +3134,6 @@ function App() {
     // effect's job is only the one-time apply-on-launch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistenceReady])
-
-  useEffect(() => {
-    const handleGlobalSecondaryPress = (event: globalThis.PointerEvent) => {
-      if (event.button !== 2) return
-      clearColorArmTimer()
-    }
-
-    window.addEventListener('pointerdown', handleGlobalSecondaryPress, true)
-    return () => {
-      window.removeEventListener('pointerdown', handleGlobalSecondaryPress, true)
-    }
-  }, [clearColorArmTimer])
 
   // Debounced: whenever the live captured state drifts from the active entry
   // for the current mode, push it to the pending row (+/-7) on the backend.
@@ -3883,11 +3177,9 @@ function App() {
   const queueAppStateSaveRef = useRef<(selectedNoteId: string | null) => void>(() => {})
   const updateActiveNoteTitlePreviewRef = useRef<(nextText: string) => void>(() => {})
   const revealNoteInMenuRef = useRef<() => void>(() => {})
-  const writeDebugEntryRef = useRef<(functionName: string, lines: string[]) => Promise<void>>(async () => {})
-  const activeNoteHasDebugTagRef = useRef(false)
-  // Same ref-proxy technique as the four above, for the same TDZ reason --
+  // Same ref-proxy technique as the three above, for the same TDZ reason --
   // persistMenuStateNow is declared later than handleToggleDoubleSizeMode/
-  // toggleSidebarVisible, which both need to call it. Unlike those four,
+  // toggleSidebarVisible, which both need to call it. Unlike those three,
   // nothing needs a *stable-identity* wrapper around this one (it's only
   // ever called directly, never handed to a prop or another hook's deps
   // array), so there's no xStable counterpart -- callers just use
@@ -3930,7 +3222,6 @@ function App() {
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
   const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
-  const writeDebugEntryStable = useCallback((functionName: string, lines: string[]) => writeDebugEntryRef.current(functionName, lines), [])
 
 
   const buildMenuStateSnapshot = useCallback((overrides?: {
@@ -4063,8 +3354,7 @@ function App() {
           collapsedSecondary: archiveCollapsedSecondary,
         },
       },
-      debuggingEnabled,
-      spellCheckEnabled,
+      features,
       flow: flowSettings,
       beat: beatSettings,
       speedReading: speedReadingSettings,
@@ -4086,36 +3376,20 @@ function App() {
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
       reviewFlagsVisibleBySection: overrides?.reviewFlagsVisibleBySection ?? reviewFlagsVisibleBySection,
       adventure: overrides && 'adventure' in overrides ? overrides.adventure ?? null : adventureSave,
-      // Machine-level performance prefs, deliberately NOT part of
-      // UiLayoutLoadout -- these must survive switching between layouts
-      // rather than being reset to whatever each layout last had stored.
-      reduceVisualEffects,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
-      reducedCaretAnimation,
-      deferPreviewOnRapidInput,
-      noteSizeThresholdBlocks,
-      forceCharacterScrollbarThumb,
-      customCursorEnabled,
     }
   }, [
     archiveCollapsedPrimary,
     archiveCollapsedSecondary,
-    customCursorEnabled,
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
-    debuggingEnabled,
-    spellCheckEnabled,
+    features,
     flowSettings,
     beatSettings,
     speedReadingSettings,
-    reduceVisualEffects,
     allowRemoteImages,
     sidebarShowsImages,
-    reducedCaretAnimation,
-    deferPreviewOnRapidInput,
-    noteSizeThresholdBlocks,
-    forceCharacterScrollbarThumb,
     fontSizesByMode,
     editorGlyphPaddingPx,
     uiFontStyle,
@@ -4226,8 +3500,8 @@ function App() {
       return sidebarTreeScrollerEl
     }
 
-    return sidebarContentRef.current
-  }, [sidebarTreeScrollerEl])
+    return sidebarContentEl
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const captureSidebarModeState = useCallback((mode: SidebarMode): SidebarViewState => {
     const baseline = sidebarViewStateByMode[mode] ?? sanitizeSidebarViewState(undefined)
@@ -4568,7 +3842,7 @@ function App() {
   // no longer has.
   useEffect(() => {
     const unsubscribe = window.windowControls?.onFullScreenStateChange?.((isFullScreen) => {
-      if (!isFullScreen) setIsImmersiveMode(false)
+      if (!isFullScreen) setImmersionState('off')
     })
     return () => unsubscribe?.()
   }, [])
@@ -4757,189 +4031,6 @@ function App() {
     document.documentElement.dataset.uiFont = uiFontStyle
   }, [uiFontStyle, uiFontScale])
 
-  // Writes a structured debug entry to a session-scoped debug note (tagged
-  // "debug"). No-ops when debuggingEnabled is false. Safe to call from any
-  // async or sync context â€” creation and tagging are fire-and-forget.
-  const createDebugNote = useCallback(async (): Promise<string | null> => {
-    if (!window.thockdownNotes) return null
-
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-    const title = `# Debug: ${dateStr} / ${pad(now.getHours())}:${pad(now.getMinutes())}`
-
-    try {
-      const created = await window.thockdownNotes.createNote({ initialText: `${title}\n` })
-      debugNoteIdRef.current = created.id
-      setNotes((previous) => {
-        const index = previous.findIndex(n => n.id === created.id)
-        if (index >= 0) return previous
-        return [created, ...previous]
-      })
-      await window.thockdownNotes.addTagToNote({ id: created.id, tagName: DEBUG_TAG_NAME, position: 0 }).catch(() => {})
-      return created.id
-    } catch (error) {
-      console.error('Failed to create debug note', error)
-      return null
-    }
-  }, [setNotes])
-
-  const findExistingDebugNoteId = useCallback(async (): Promise<string | null> => {
-    if (!window.thockdownNotes) return null
-
-    try {
-      const listed = await window.thockdownNotes.listNotes()
-      const existing = listed.find((note) => {
-        const normalizedTags = new Set(note.tags.map((tag) => normalizeTagName(tag)))
-        return normalizedTags.has(DEBUG_TAG_NAME) && !normalizedTags.has('deleted') && !normalizedTags.has('archived')
-      })
-
-      if (!existing) return null
-
-      debugNoteIdRef.current = existing.id
-      setNotes((previous) => {
-        const index = previous.findIndex((note) => note.id === existing.id)
-        if (index >= 0) return previous
-        return [existing, ...previous]
-      })
-      return existing.id
-    } catch {
-      return null
-    }
-  }, [setNotes])
-
-  const ensureDebugNoteExists = useCallback(async (): Promise<string | null> => {
-    if (!debuggingEnabled || !window.thockdownNotes) return null
-
-    if (debugNoteIdRef.current) {
-      try {
-        const loaded = await window.thockdownNotes.loadNote({ id: debugNoteIdRef.current })
-        const normalizedTags = new Set(loaded.tags.map((tag) => normalizeTagName(tag)))
-        const isDeletedOrArchived = normalizedTags.has('deleted') || normalizedTags.has('archived')
-        const isDebugTagged = normalizedTags.has(DEBUG_TAG_NAME)
-
-        if (isDebugTagged && !isDeletedOrArchived) {
-          return debugNoteIdRef.current
-        }
-      } catch {
-        // stale or deleted note id; fall through and create a fresh debug note.
-      }
-
-      debugNoteIdRef.current = null
-    }
-
-    if (debugNoteCreationPromiseRef.current) {
-      return debugNoteCreationPromiseRef.current
-    }
-
-    const promise = (async (): Promise<string | null> => {
-      const existingId = await findExistingDebugNoteId()
-      if (existingId) {
-        return existingId
-      }
-
-      return createDebugNote()
-    })()
-
-    debugNoteCreationPromiseRef.current = promise
-    const result = await promise
-    debugNoteCreationPromiseRef.current = null
-    return result
-  }, [createDebugNote, debuggingEnabled, findExistingDebugNoteId])
-
-  useEffect(() => {
-    if (!debuggingEnabled) return
-    if (!persistenceReady) return
-
-    void ensureDebugNoteExists()
-  }, [ensureDebugNoteExists, debuggingEnabled, persistenceReady])
-
-  const writeDebugEntry = useCallback(async (functionName: string, lines: string[]) => {
-    if (!debuggingEnabled) return
-    if (!window.thockdownNotes) return
-    if (isWritingDebugEntryRef.current) return
-
-    const noteId = await ensureDebugNoteExists()
-    if (!noteId) return
-
-    isWritingDebugEntryRef.current = true
-    const now = new Date()
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-    const section = `\n## ${timeStr} / ${functionName}\n${lines.map(l => `- ${l}`).join('\n')}`
-
-    try {
-      // Through the note's document when a slot has it open, so the slot
-      // shows the entry and no later write of its older text drops it.
-      if (noteDocuments.change(noteId, (text) => `${text}${section}`)) {
-        await noteDocuments.flushSave(noteId)
-      } else {
-        const loaded = await window.thockdownNotes.loadNote({ id: noteId })
-        const savedText = `${loaded.text}${section}`
-        const updated = await window.thockdownNotes.saveNote({ id: noteId, text: savedText })
-        setNotes((previous) => withSavedNote(previous, updated, savedText))
-      }
-    } catch (error) {
-      const originalError = originalConsoleMethodsRef.current.error ?? console.error
-      originalError.call(console, 'Failed to write debug entry', error)
-    } finally {
-      isWritingDebugEntryRef.current = false
-    }
-  }, [debuggingEnabled, ensureDebugNoteExists, setNotes, noteDocuments])
-  writeDebugEntryRef.current = writeDebugEntry
-
-  useEffect(() => {
-    const consoleMethods: ConsoleMethodName[] = ['log', 'info', 'warn', 'error', 'debug']
-
-    if (!debuggingEnabled) {
-      if (originalConsoleMethodsRef.current.log) {
-        consoleMethods.forEach((method) => {
-          const original = originalConsoleMethodsRef.current[method]
-          if (original) {
-            console[method] = original
-          }
-        })
-        originalConsoleMethodsRef.current = {}
-      }
-      return
-    }
-
-    consoleMethods.forEach((method) => {
-      if (!originalConsoleMethodsRef.current[method]) {
-        originalConsoleMethodsRef.current[method] = console[method].bind(console)
-      }
-      console[method] = (...args: unknown[]) => {
-        const original = originalConsoleMethodsRef.current[method]
-        if (original) {
-          original(...args)
-        }
-        if (isWritingDebugEntryRef.current) {
-          return
-        }
-        const stringified = args.map((arg) => {
-          try {
-            if (typeof arg === 'string') return arg
-            if (arg instanceof Error) return arg.stack || arg.message
-            return JSON.stringify(arg)
-          } catch {
-            return String(arg)
-          }
-        })
-        void writeDebugEntry(`console.${method}`, stringified)
-      }
-    })
-
-    return () => {
-      consoleMethods.forEach((method) => {
-        const original = originalConsoleMethodsRef.current[method]
-        if (original) {
-          console[method] = original
-        }
-      })
-      originalConsoleMethodsRef.current = {}
-    }
-  }, [debuggingEnabled, writeDebugEntry])
-
   const [clearAppStatePrimed, setClearAppStatePrimed] = useState(false)
 
   const clearPersistedAppState = useCallback(async () => {
@@ -4949,9 +4040,6 @@ function App() {
     }
 
     setClearAppStatePrimed(false)
-
-    setDebuggingEnabled(false)
-    debugNoteIdRef.current = null
 
     if (!window.thockdownState) return
     await window.thockdownState.clearAppState()
@@ -6158,18 +5246,8 @@ ${markdownHtml}
             setAudioReverbSpace(appState.menu.audioReverbSpace ?? 0)
             setPitchJitterAmount(appState.menu.pitchJitterAmount ?? 0)
             setAudioSpatial(appState.menu.audioSpatial ?? 0)
-            setReduceVisualEffects(appState.menu.reduceVisualEffects ?? false)
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
-            setReducedCaretAnimation(appState.menu.reducedCaretAnimation ?? false)
-            setDeferPreviewOnRapidInput(appState.menu.deferPreviewOnRapidInput ?? false)
-            // Clamped on the way in as well as on the way out: a stored value
-            // predating a change to the slider's range would otherwise put the
-            // handle off its own track.
-            setNoteSizeThresholdBlocks(clampContinuousDocumentThreshold(
-              appState.menu.noteSizeThresholdBlocks ?? DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-            ))
-            setForceCharacterScrollbarThumb(appState.menu.forceCharacterScrollbarThumb ?? false)
             setTypingSoundEnabled(appState.menu.typingSoundEnabled ?? false)
             setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
             if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
@@ -6247,8 +5325,7 @@ ${markdownHtml}
             })
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
-            setDebuggingEnabled(appState.menu.debuggingEnabled ?? false)
-            setSpellCheckEnabled(appState.menu.spellCheckEnabled ?? false)
+            setFeatures(sanitizeFeatureToggles(appState.menu))
             setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
@@ -6273,10 +5350,6 @@ ${markdownHtml}
 
             // Cursor appearance (color/size/speed) now lives in the active
             // UiLayoutLoadout, restored when that loadout is applied below.
-            // enabled is kept out of layouts on purpose -- always defaults
-            // to off and persists independently in app state.
-            setCustomCursorEnabled(appState.menu.customCursorEnabled ?? DEFAULT_CUSTOM_CURSOR_SETTINGS.enabled)
-
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
             setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
             setCategoryCollapsedSecondary(loadedSidebarViewState.category.collapsedSecondary)
@@ -7236,26 +6309,12 @@ ${markdownHtml}
   }, [applyResolvedSections, editorSections, toSlotWidthUpdates])
 
   useEffect(() => {
-    // Prime immediately once assets are loaded, not just on a later user
-    // gesture (see the effect below): Electron's default autoplay policy is
-    // no-user-gesture-required, so there's nothing to wait for, and if the
-    // user's first action after launch is typing rather than clicking, the
-    // pointerdown/focus listeners below would never have fired before that
-    // first keystroke -- leaving the ~100-300ms hardware spin-up to land on
-    // it anyway.
-    void typingSoundManager.load().then(() => {
-      typingSoundManager.primeAudioContext()
-    })
-  }, [])
-
-  useEffect(() => {
-    // Belt-and-suspenders fallback for contexts where the eager prime above
-    // couldn't run (resume() rejected, or load() still in flight when a
-    // gesture happens first anyway) -- resume the AudioContext on the
-    // earliest real user gesture (window focus, first pointer press) rather
-    // than waiting for the first keystroke. primeAudioContext()'s own
-    // ensureContextRunning() no-ops once the context is already running, so
-    // this is safe to fire alongside the eager prime above.
+    // Belt-and-suspenders fallback for contexts where the eager prime in
+    // TypingSoundManager.setTypingSoundEnabled couldn't run (resume()
+    // rejected) -- resume the AudioContext on the earliest real user gesture
+    // (window focus, first pointer press) rather than waiting for the first
+    // keystroke. primeAudioContext() no-ops while key sounds are off and once
+    // the context is already running, so this is safe to fire alongside it.
     const primeAudio = () => {
       typingSoundManager.primeAudioContext()
     }
@@ -7287,9 +6346,13 @@ ${markdownHtml}
     typingSoundManager.setTypingSoundSet(typingSoundSet)
   }, [typingSoundSet])
 
+  // Sounding keys needs both the keystroke-sounds feature (shared/features.ts)
+  // and the layout's own choice of a sound set. Off either way, the manager
+  // suspends its AudioContext; it loads and primes it the first time it is on.
+  const keySoundsAudible = features.keySounds && typingSoundEnabled
   useEffect(() => {
-    typingSoundManager.setTypingSoundEnabled(typingSoundEnabled)
-  }, [typingSoundEnabled])
+    typingSoundManager.setTypingSoundEnabled(keySoundsAudible)
+  }, [keySoundsAudible])
 
   useEffect(() => {
     typingSoundManager.setReverbStrength(audioReverbStrength)
@@ -7308,14 +6371,16 @@ ${markdownHtml}
   }, [audioSpatial])
 
   useEffect(() => {
-    // The blink animation keeps the compositor busy indefinitely while the
-    // caret is idle, not just while typing -- toggled via a body class
-    // rather than threading a prop through BlockCaretPlugin/Editor.tsx.
-    document.body.classList.toggle('thockdown-reduced-caret-animation', reducedCaretAnimation)
+    // The caret blink feature (shared/features.ts). The blink animation keeps
+    // the compositor busy indefinitely while the caret is idle, not just while
+    // typing, so switching it off removes the animation outright -- a body
+    // class rather than a prop threaded through the editor's caret layer.
+    const blinkOff = !features.caretBlink
+    document.body.classList.toggle('thockdown-caret-blink-off', blinkOff)
     return () => {
-      document.body.classList.remove('thockdown-reduced-caret-animation')
+      document.body.classList.remove('thockdown-caret-blink-off')
     }
-  }, [reducedCaretAnimation])
+  }, [features.caretBlink])
 
   useEffect(() => {
     typingSoundManager.setLayerGain('treble', audioTrebleVolume)
@@ -7769,7 +6834,7 @@ ${markdownHtml}
       return
     }
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
@@ -7780,15 +6845,15 @@ ${markdownHtml}
     const thumb = scrollThumbFor(scroller, track.clientHeight, sidebarScrollbarThumbRef.current?.offsetWidth ?? 0)
     applySidebarThumbDom(thumb.top, thumb.height)
     setIsSidebarScrollThumbActive(thumb.active)
-  }, [applySidebarThumbDom, isSidebarScrollbarMode, sidebarTreeScrollerEl])
+  }, [applySidebarThumbDom, isSidebarScrollbarMode, sidebarContentEl, sidebarTreeScrollerEl])
 
   const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
 
     scroller.scrollTop = scrollTopForThumb(scroller, track.clientHeight, sidebarScrollThumbHeightRef.current, thumbTopPx)
-  }, [sidebarTreeScrollerEl])
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const pagedVisibleNotes = useMemo(() => {
     if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
@@ -8023,7 +7088,7 @@ ${markdownHtml}
     // entirely and would measure nonsense. Elsewhere the last good
     // measurement stands (or the arithmetic, if there hasn't been one yet).
     if ((sidebarMode !== 'date' && sidebarMode !== 'trash') || isImageLibraryShown) return
-    const contentEl = sidebarContentRef.current
+    const contentEl = sidebarContentEl
     const sidebarEl = contentEl?.closest('.notes-sidebar') as HTMLElement | null
     if (!contentEl || !sidebarEl) return
 
@@ -8096,9 +7161,9 @@ ${markdownHtml}
     // totalPagedNotes/itemsPerPage are in here so the card measurement re-runs
     // once notes actually populate the list -- the observers above only fire on
     // box changes, and filling an already-sized list isn't one.
-  // isSidebarShown, not isSidebarVisible: this measures the sidebar's DOM,
-  // which immersive mode unmounts and restores without the setting changing.
-  }, [isImageLibraryShown, isSidebarShown, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
+  // Keyed on the element: immersive mode unmounts the sidebar and restores
+  // it without any setting changing.
+  }, [isImageLibraryShown, sidebarContentEl, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
 
   useLayoutEffect(() => {
     // The image library's cards are not the notes being paged: measuring
@@ -8135,7 +7200,7 @@ ${markdownHtml}
       setShowPagination(shouldShowPagination)
     }
 
-    const container = sidebarContentRef.current
+    const container = sidebarContentEl
     const resizeObserver = new ResizeObserver(compute)
 
     if (container) {
@@ -8149,7 +7214,7 @@ ${markdownHtml}
       resizeObserver.disconnect()
       window.removeEventListener('resize', compute)
     }
-  }, [currentPage, isImageLibraryShown, itemsPerPage, sidebarMode, totalPagedNotes])
+  }, [currentPage, isImageLibraryShown, itemsPerPage, sidebarContentEl, sidebarMode, totalPagedNotes])
 
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
@@ -8159,7 +7224,7 @@ ${markdownHtml}
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
 
     const onScroll = () => {
@@ -8168,12 +7233,12 @@ ${markdownHtml}
 
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [isSidebarScrollbarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [isSidebarScrollbarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
     if (!isSidebarScrollbarMode) return
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
 
     // Coalesced, not debounced: a request while one is pending joins it. It
@@ -8227,7 +7292,7 @@ ${markdownHtml}
         sidebarScrollbarRafRef.current = null
       }
     }
-  }, [isSidebarScrollbarMode, sidebarMode, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [isSidebarScrollbarMode, sidebarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
     if (!isDraggingSidebarScrollThumb) return
@@ -8264,12 +7329,12 @@ ${markdownHtml}
     const thumbHeightPx = sidebarScrollThumbHeightRef.current
     const targetThumbTop = clickY - (thumbHeightPx / 2)
 
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
     const targetScrollTop = scrollTopForThumb(scroller, track.clientHeight, thumbHeightPx, targetThumbTop)
 
     scrollToNonQuantizedSmooth(scroller, targetScrollTop)
-  }, [sidebarTreeScrollerEl])
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const handleSidebarThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
@@ -8291,12 +7356,6 @@ ${markdownHtml}
       setPageJumpInput(String(effectiveCurrentPage))
     }
   }, [effectiveCurrentPage, isPageJumpEditing])
-
-  useEffect(() => {
-    if (!isTextureSeedEditing) {
-      setTextureSeedInput(String(texturePreviewMaterial.seed))
-    }
-  }, [isTextureSeedEditing, texturePreviewMaterial.seed])
 
   useEffect(() => {
     if (!isGlazeLinearSeedEditing) {
@@ -8339,20 +7398,6 @@ ${markdownHtml}
     })
   }, [isPageJumpEditing])
 
-  const commitTextureSeedEdit = useCallback(() => {
-    const parsed = Number.parseInt(textureSeedInput.trim(), 10)
-    const safeSeed = Number.isFinite(parsed)
-      ? clamp(parsed, 0, 1000000)
-      : clamp(texturePreviewMaterial.seed, 0, 1000000)
-
-    setTexturePreviewMaterial((current) => ({
-      ...current,
-      seed: safeSeed,
-    }))
-    setTextureSeedInput(String(safeSeed))
-    setIsTextureSeedEditing(false)
-  }, [texturePreviewMaterial.seed, textureSeedInput])
-
   const commitGlazeLinearSeedEdit = useCallback(() => {
     const parsed = Number.parseInt(glazeLinearSeedInput.trim(), 10)
     const safeSeed = Number.isFinite(parsed)
@@ -8382,11 +7427,6 @@ ${markdownHtml}
   }, [glazeRadialSeedInput, glazeSettings.radialSeed])
 
 
-  const cancelTextureSeedEdit = useCallback(() => {
-    setTextureSeedInput(String(texturePreviewMaterial.seed))
-    setIsTextureSeedEditing(false)
-  }, [texturePreviewMaterial.seed])
-
   const cancelGlazeLinearSeedEdit = useCallback(() => {
     setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
     setIsGlazeLinearSeedEditing(false)
@@ -8396,16 +7436,6 @@ ${markdownHtml}
     setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
     setIsGlazeRadialSeedEditing(false)
   }, [glazeSettings.radialSeed])
-
-  const randomizeTextureSeed = useCallback(() => {
-    if (isTextureSeedEditing) return
-
-    const nextSeed = Math.floor(Math.random() * 1000001)
-    setTexturePreviewMaterial((current) => ({
-      ...current,
-      seed: nextSeed,
-    }))
-  }, [isTextureSeedEditing])
 
   const randomizeGlazeLinearSeed = useCallback(() => {
     if (isGlazeLinearSeedEditing) return
@@ -8427,11 +7457,6 @@ ${markdownHtml}
     }))
   }, [isGlazeRadialSeedEditing])
 
-  const startTextureSeedEdit = useCallback(() => {
-    setTextureSeedInput(String(texturePreviewMaterial.seed))
-    setIsTextureSeedEditing(true)
-  }, [texturePreviewMaterial.seed])
-
   const startGlazeLinearSeedEdit = useCallback(() => {
     setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
     setIsGlazeLinearSeedEditing(true)
@@ -8441,14 +7466,6 @@ ${markdownHtml}
     setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
     setIsGlazeRadialSeedEditing(true)
   }, [glazeSettings.radialSeed])
-
-  useEffect(() => {
-    if (!isTextureSeedEditing) return
-    window.requestAnimationFrame(() => {
-      textureSeedInputRef.current?.focus()
-      textureSeedInputRef.current?.select()
-    })
-  }, [isTextureSeedEditing])
 
   useEffect(() => {
     if (!isGlazeLinearSeedEditing) return
@@ -8475,16 +7492,44 @@ ${markdownHtml}
       }
       if (event.defaultPrevented) return
 
+      // The visualizer, from anywhere: F3 in and out, and Escape out as well
+      // -- the press is spent on leaving, so its release does not also switch
+      // the hidden note's view. A held key toggles once, not per repeat.
+      if (matchShortcut(event, 'visualizer') || (isVisualizerMode && event.key === 'Escape')) {
+        event.preventDefault()
+        if (event.key === 'Escape') escapeConsumedByFieldRef.current = true
+        if (!event.repeat) toggleVisualizerMode()
+        return
+      }
+
+      // In the visualizer the scene holds the keyboard and the note under it
+      // is hidden, so Space and Enter are free: Space steps through the
+      // current mode's layout presets (Shift+Space backwards) and Enter
+      // switches between light and dark. Repeats are ignored, so holding a
+      // key does not race through the presets.
+      if (isVisualizerMode) {
+        const layoutChord = matchShortcut(event, 'visualizerNextLayout')
+          ? 1
+          : matchShortcut(event, 'visualizerPreviousLayout') ? -1 : 0
+        if (layoutChord !== 0 || matchShortcut(event, 'visualizerLightDark')) {
+          event.preventDefault()
+          if (!event.repeat) {
+            if (layoutChord !== 0) stepLayoutPreset(layoutChord)
+            else toggleUiMode()
+          }
+          return
+        }
+      }
+
       const target = event.target instanceof HTMLElement ? event.target : null
       const isEditorTarget = Boolean(target?.closest('.editor-stage'))
       const isSearchField = target === sidebarSearchInputRef.current
       const isReplaceField = target === documentReplaceInputRef.current
       const isTagField = target === activeSection?.tagInputRef.current
       const isPageJumpField = target === pageJumpInputRef.current
-      const isTextureSeedField = target === textureSeedInputRef.current
       const isGlazeLinearSeedField = target === glazeLinearSeedInputRef.current
       const isGlazeRadialSeedField = target === glazeRadialSeedInputRef.current
-      const isEditorControlField = isSearchField || isReplaceField || isTagField || isPageJumpField || isTextureSeedField || isGlazeLinearSeedField || isGlazeRadialSeedField
+      const isEditorControlField = isSearchField || isReplaceField || isTagField || isPageJumpField || isGlazeLinearSeedField || isGlazeRadialSeedField
 
       // THE FIND/REPLACE PAIR IS THE ONE PLACE TAB STEPS SIDEWAYS, and it
       // now does so by NAME rather than by riding the browser's tab order.
@@ -8799,10 +7844,14 @@ ${markdownHtml}
     isImmersiveMode,
     isReplaceMode,
     isSidebarShown,
+    isVisualizerMode,
     markSectionActive,
     setImmersiveMode,
     showSidebarInMode,
+    stepLayoutPreset,
     toggleSidebarVisible,
+    toggleUiMode,
+    toggleVisualizerMode,
   ])
 
   /**
@@ -8821,6 +7870,12 @@ ${markdownHtml}
    */
   const returnKeyboardToActiveSurface = useCallback(() => {
     const slot = document.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(activeSectionId)}"]`)
+    // The visualizer's scene is the slot's surface while it is up: it takes
+    // F3 and Escape, and the hidden note must not take keystrokes.
+    if (isVisualizerMode) {
+      slot?.querySelector<HTMLElement>('[data-visualizer-scene]')?.focus({ preventScroll: true })
+      return
+    }
     if (isEscapeRingUp) {
       focusEscapeHoldRing(slot)
       return
@@ -8838,7 +7893,7 @@ ${markdownHtml}
       return
     }
     section?.scheduleFocusEditorInEditMode()
-  }, [activeSectionId, getActiveSection, isEscapeRingUp])
+  }, [activeSectionId, getActiveSection, isEscapeRingUp, isVisualizerMode])
 
   /**
    * TAB HAS ONE OWNER OF LAST RESORT.
@@ -8973,7 +8028,10 @@ ${markdownHtml}
   useEffect(() => {
     const reconcile = (onActivation = false) => {
       const holder = document.activeElement
-      if (holder && holder !== document.body && mayHoldKeyboard(holder)) {
+      // While the visualizer is up only its scene may hold the keyboard: the
+      // note under it would otherwise go on taking keystrokes unseen.
+      const isCoveredByVisualizer = isVisualizerMode && !holder?.closest('[data-visualizer-scene]')
+      if (holder && holder !== document.body && mayHoldKeyboard(holder) && !isCoveredByVisualizer) {
         // A holder inside ANOTHER slot is legitimate only until the active
         // slot changes: once it has, the keyboard belongs to the new slot,
         // with or without a note in it. Asked only on activation, never on
@@ -9006,7 +8064,7 @@ ${markdownHtml}
       window.removeEventListener('focusin', onFocusIn)
       window.removeEventListener('focusout', onFocusOut)
     }
-  }, [returnKeyboardToActiveSurface, activeSectionId, activeSection?.activeNoteId, activeSection?.isPreviewMode])
+  }, [returnKeyboardToActiveSurface, activeSectionId, activeSection?.activeNoteId, activeSection?.isPreviewMode, isVisualizerMode])
 
   /**
    * A PRESS DOES NOT MOVE THE KEYBOARD.
@@ -9119,10 +8177,10 @@ ${markdownHtml}
   }, [])
 
   const syncSidebarTexture = useCallback(() => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentRef.current
+    const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller || !sidebarTextureRef.current) return
     syncTextureToScroll(scroller.scrollTop, sidebarTextureRef.current)
-  }, [sidebarTreeScrollerEl])
+  }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const handleSidebarScroll = useCallback(() => {
     syncSidebarTexture()
@@ -9181,7 +8239,13 @@ ${markdownHtml}
       ) : null}
       <style>{caretBlinkKeyframesCss}</style>
       <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
-        <ThemeGlazeLayers glaze={theme.glaze} radialAboveLinear={glazeSettings.radialAboveLinear} />
+        {/* In the visualizer the linear and radial glaze sway, drawn by
+            VisualizerGlaze at full count; gloom and sheen stay as they are. */}
+        <ThemeGlazeLayers
+          glaze={isVisualizerMode ? { ...theme.glaze, linear: 'none', radial: 'none' } : theme.glaze}
+          radialAboveLinear={glazeSettings.radialAboveLinear}
+        />
+        {isVisualizerMode ? <VisualizerGlaze glaze={glazeSettings} immersive={visualizer.immersive} /> : null}
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
             it like MouseCursorOverlay) deliberately -- unlike the cursor
             overlay, tooltips should still pick up this wrapper's own
@@ -9193,14 +8257,20 @@ ${markdownHtml}
         ) : null}
         <div className="app-sheen">
           <div
-            className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}${windowIsCollapsed ? ' is-window-collapsed' : ''}${isImmersiveMode ? ' is-immersive' : ''}`}
+            className={`app-shell app-grid${filterInvert > 0.5 ? ' shadow-flip' : ''}${windowIsCollapsed ? ' is-window-collapsed' : ''}${isImmersiveMode ? ' is-immersive' : ''}${isVisualizerMode ? ' is-visualizer' : ''}`}
             ref={appShellRef}
             style={appShellStyle}
           >
-            {isSidebarShown ? (
+            {/* Mounted whenever the reader's setting shows it, immersion or
+                not: immersion only takes it off screen (layout.css keeps it
+                laid out at its own width but unrendered and inert), so its
+                scroll positions and component state are exactly as they were
+                when immersion ends. Unmounting it lost them. */}
+            {isSidebarVisible ? (
             <aside
               className="notes-sidebar"
-              style={{ gridArea: 'sidebar' }}
+              style={isImmersiveMode ? { gridArea: 'sidebar', width: sidebarWidthPx } : { gridArea: 'sidebar' }}
+              {...(isImmersiveMode ? ({ inert: '' } as object) : {})}
               // An image shown from the sidebar is a glance: any click back
               // in the sidebar gives the slot its note again. The click still
               // reaches its target.
@@ -9392,7 +8462,7 @@ ${markdownHtml}
                 <div className="sidebar-wrapper">
                   <div
                     className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') && !isImageLibraryShown ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
-                    ref={sidebarContentRef}
+                    ref={setSidebarContentRef}
                     onScroll={handleSidebarScroll}
                   >
                     <div ref={sidebarTextureRef} className="sidebar-content-texture" />
@@ -9542,7 +8612,6 @@ ${markdownHtml}
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
-                        isPreviewMode={activeSection?.isPreviewMode ?? false}
                         uiMode={uiMode}
                         optionsContentRef={optionsContentRef}
                         viewStyle={viewStyle}
@@ -9580,49 +8649,18 @@ ${markdownHtml}
                         saveCustomLoadout={saveCustomLoadout}
                         resetCustomLoadout={resetCustomLoadout}
                         resetCustomLayoutPrimed={resetCustomLayoutPrimed}
-                        primedColorSource={primedColorSource}
-                        setPrimedColorSource={setPrimedColorSource}
+                        setHighlightColorCss={setHighlightColorCss}
+                        setEditorTextColorCss={setEditorTextColorCss}
+                        setTextureMaterial={setTextureMaterial}
+                        setCustomCursorDotColor={setCustomCursorDotColor}
+                        setCustomCursorCenterColor={setCustomCursorCenterColor}
+                        setCustomCursorTrailColor={setCustomCursorTrailColor}
+                        setCustomCursorHaloColor={setCustomCursorHaloColor}
+                        setCaretOutlineColor={setCaretOutlineColor}
+                        setCaretHaloColor={setCaretHaloColor}
                         highlightColors={highlightColors}
                         editorTextColors={editorTextColors}
-                        applyActiveColorToElement={applyActiveColorToElement}
-                        updateHighlightColor={updateHighlightColor}
-                        applyHsvaValueToElement={applyHsvaValueToElement}
-                        applyActiveColorToEditorText={applyActiveColorToEditorText}
-                        updateEditorTextColor={updateEditorTextColor}
-                        applyHsvaValueToEditorText={applyHsvaValueToEditorText}
-                        startElementPreviewCopyHold={startElementPreviewCopyHold}
-                        clearColorArmTimer={clearColorArmTimer}
-                        hsvaDragState={hsvaDragState}
-                        hsvaDisplayColors={hsvaDisplayColors}
-                        activeColorHsva={activeColorHsva}
-                        activeColorHex={activeColorHex}
-                        activeColorCss={activeColorCss}
-                        startHsvaDrag={startHsvaDrag}
-                        handleHsvaDragMove={handleHsvaDragMove}
-                        stopHsvaDrag={stopHsvaDrag}
-                        startColorArmHold={startColorArmHold}
-                        wheelAdjustHsvaControl={wheelAdjustHsvaControl}
-                        applyActiveColorToTexture={applyActiveColorToTexture}
-                        applyTexturePreviewToSurface={applyTexturePreviewToSurface}
-                        applyHsvaValueToTexture={applyHsvaValueToTexture}
                         textureMaterials={textureMaterials}
-                        texturePreviewMaterial={texturePreviewMaterial}
-                        texturePreviewHex={texturePreviewHex}
-                        texturePreviewTintCss={texturePreviewTintCss}
-                        texturePreviewCss={texturePreviewCss}
-                        isTextureSeedEditing={isTextureSeedEditing}
-                        textureSeedInputRef={textureSeedInputRef}
-                        textureSeedInput={textureSeedInput}
-                        setTextureSeedInput={setTextureSeedInput}
-                        commitTextureSeedEdit={commitTextureSeedEdit}
-                        cancelTextureSeedEdit={cancelTextureSeedEdit}
-                        randomizeTextureSeed={randomizeTextureSeed}
-                        startTextureSeedEdit={startTextureSeedEdit}
-                        textureControlDragState={textureControlDragState}
-                        startTextureControlDrag={startTextureControlDrag}
-                        handleTextureControlDragMove={handleTextureControlDragMove}
-                        stopTextureControlDrag={stopTextureControlDrag}
-                        wheelAdjustTextureControl={wheelAdjustTextureControl}
                         glazeSettings={glazeSettings}
                         setGlazeSettings={setGlazeSettings}
                         isGlazeLinearSeedEditing={isGlazeLinearSeedEditing}
@@ -9697,26 +8735,18 @@ ${markdownHtml}
                         setPitchJitterAmount={setPitchJitterAmount}
                         audioSpatial={audioSpatial}
                         setAudioSpatial={setAudioSpatial}
-                        reduceVisualEffects={reduceVisualEffects}
-                        setReduceVisualEffects={setReduceVisualEffects}
                         allowRemoteImages={allowRemoteImages}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
-                        spellCheckEnabled={spellCheckEnabled}
-                        setSpellCheckEnabled={setSpellCheckEnabled}
+                        features={features}
+                        setFeatures={setFeatures}
                         flowSettings={flowSettings}
                         setFlowSettings={setFlowSettings}
                         speedReadingSettings={speedReadingSettings}
                         setSpeedReadingSettings={setSpeedReadingSettings}
                         beatSettings={beatSettings}
+                        visualizer={visualizer}
+                        setVisualizer={setVisualizer}
                         setBeatSettings={setBeatSettings}
-                        reducedCaretAnimation={reducedCaretAnimation}
-                        setReducedCaretAnimation={setReducedCaretAnimation}
-                        deferPreviewOnRapidInput={deferPreviewOnRapidInput}
-                        setDeferPreviewOnRapidInput={setDeferPreviewOnRapidInput}
-                        noteSizeThresholdBlocks={noteSizeThresholdBlocks}
-                        setNoteSizeThresholdBlocks={setNoteSizeThresholdBlocks}
-                        forceCharacterScrollbarThumb={forceCharacterScrollbarThumb}
-                        setForceCharacterScrollbarThumb={setForceCharacterScrollbarThumb}
                         borderRadiusRegularPx={borderRadiusRegularPx}
                         setBorderRadiusRegularPx={setBorderRadiusRegularPx}
                         spacingRegularPx={spacingRegularPx}
@@ -9735,15 +8765,8 @@ ${markdownHtml}
                         setAdventureSettings={setAdventureSettings}
                         setAdventureTrueMode={setAdventureTrueMode}
                         adventureTrueModeWouldWipe={adventureTrueModeWouldWipe}
-                        debuggingEnabled={debuggingEnabled}
-                        setDebuggingEnabled={setDebuggingEnabled}
                         clearAppState={clearPersistedAppState}
                         clearAppStatePrimed={clearAppStatePrimed}
-                        debugNoteIdRef={debugNoteIdRef}
-                        queueAppStateSave={queueAppStateSave}
-                        activeNoteId={activeSection?.activeNoteId ?? null}
-                        customCursorEnabled={customCursorEnabled}
-                        setCustomCursorEnabled={setCustomCursorEnabled}
                         customCursorDotColor={customCursorDotColor}
                         customCursorCenterColor={customCursorCenterColor}
                         customCursorTrailColor={customCursorTrailColor}
@@ -9782,16 +8805,6 @@ ${markdownHtml}
                         setCustomCursorClickMinHoldMs={setCustomCursorClickMinHoldMs}
                         customCursorClickBalance={customCursorClickBalance}
                         setCustomCursorClickBalance={setCustomCursorClickBalance}
-                        cursorColorHsva={cursorColorHsva}
-                        cursorHsvaDisplayColors={cursorHsvaDisplayColors}
-                        cursorHsvaDragState={cursorHsvaDragState}
-                        startCursorHsvaDrag={startCursorHsvaDrag}
-                        handleCursorHsvaDragMove={handleCursorHsvaDragMove}
-                        stopCursorHsvaDrag={stopCursorHsvaDrag}
-                        wheelAdjustCursorHsvaControl={wheelAdjustCursorHsvaControl}
-                        applyCursorColorToTarget={applyCursorColorToTarget}
-                        startCursorColorCopyHold={startCursorColorCopyHold}
-                        clearCursorColorArmTimer={clearCursorColorArmTimer}
                         caretSizeDeviationPx={caretSizeDeviationPx}
                         setCaretSizeDeviationPx={setCaretSizeDeviationPx}
                         caretOutlineWidthPx={caretOutlineWidthPx}
@@ -9810,16 +8823,6 @@ ${markdownHtml}
                         setCaretFrameDurationMs={setCaretFrameDurationMs}
                         caretEffectStrengthPercent={caretEffectStrengthPercent}
                         setCaretEffectStrengthPercent={setCaretEffectStrengthPercent}
-                        caretColorHsva={caretColorHsva}
-                        caretHsvaDisplayColors={caretHsvaDisplayColors}
-                        caretHsvaDragState={caretHsvaDragState}
-                        startCaretHsvaDrag={startCaretHsvaDrag}
-                        handleCaretHsvaDragMove={handleCaretHsvaDragMove}
-                        stopCaretHsvaDrag={stopCaretHsvaDrag}
-                        wheelAdjustCaretHsvaControl={wheelAdjustCaretHsvaControl}
-                        applyCaretColorToTarget={applyCaretColorToTarget}
-                        startCaretColorCopyHold={startCaretColorCopyHold}
-                        clearCaretColorArmTimer={clearCaretColorArmTimer}
                       />
                     ) : (
                       <div
@@ -9847,7 +8850,20 @@ ${markdownHtml}
                 </div>
 
                 {isSidebarScrollbarMode ? (
-                  <aside className="sidebar-scrollbar-slot" aria-hidden="true">
+                  <aside
+                    className="sidebar-scrollbar-slot"
+                    aria-hidden="true"
+                    // The rail sits beside the scroller, not inside it, so a
+                    // wheel over any part of it would otherwise scroll
+                    // nothing. Hand the wheel's travel to the list it
+                    // belongs to, in the browser's own units.
+                    onWheel={(event) => {
+                      const scroller = getSidebarScrollerForMode(sidebarMode)
+                      if (!scroller || event.ctrlKey) return
+                      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? scroller.clientHeight : 1
+                      scroller.scrollBy({ top: event.deltaY * unit })
+                    }}
+                  >
                     <div className="sidebar-scrollbar-slot-inner">
                       <div className="thockdown-scroll-rail sidebar-thockdown-scroll-rail">
                         <div
@@ -10217,8 +9233,6 @@ ${markdownHtml}
                   queueAppStateSaveStable={queueAppStateSaveStable}
                   updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}
                   revealNoteInMenuStable={revealNoteInMenuStable}
-                  writeDebugEntryStable={writeDebugEntryStable}
-                  activeNoteHasDebugTagRef={activeNoteHasDebugTagRef}
                   saveSelectedNoteState={saveSelectedNoteState}
                   refreshNotes={refreshNotes}
                   noteTransitionLockRef={noteTransitionLockRef}
@@ -10231,7 +9245,6 @@ ${markdownHtml}
                   restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
                   documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
                   editorRuntimeMetrics={editorRuntimeMetrics}
-                  deferPreviewOnRapidInput={deferPreviewOnRapidInput}
                   noteSizeThresholdBlocks={noteSizeThresholdBlocks}
                   forceCharacterScrollbarThumb={forceCharacterScrollbarThumb}
                   viewStyle={viewStyle}
@@ -10255,11 +9268,11 @@ ${markdownHtml}
                   isExportingMd={isExportingMd}
                   borderRadiusRegularPx={borderRadiusRegularPx}
                   spacingRegularPx={spacingRegularPx}
-                  reduceVisualEffects={reduceVisualEffects}
                   caretSizeDeviationPx={caretSizeDeviationPx}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
                   isImmersiveMode={isImmersiveMode}
+                  isVisualizerMode={isVisualizerMode && entry.id === activeSectionId}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}
                   onToggleReviewFlags={() => handleToggleReviewFlags(entry.id)}
                 />
@@ -10282,7 +9295,7 @@ ${markdownHtml}
         <ImageCorrectionFilter theme={theme} />
       </div>
       {/* After the filter wrapper, not inside it: see FlowOverlays. */}
-      <FlowOverlays strength={flowSettings.enabled && !reduceVisualEffects ? flowSettings.look : 0} />
+      <FlowOverlays strength={features.flow ? flowSettings.look : 0} />
       {/* Mounted once, app-wide -- not scoped to the editor. See that
           component's own doc comment for why it's a sibling of
           .app-saturate-wrapper (not nested inside it) and how it tracks the

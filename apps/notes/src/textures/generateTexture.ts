@@ -111,9 +111,17 @@ function shapeValue(raw: number, featureBias: number): number {
   return Math.pow(Math.max(0, Math.min(1, raw)), exponent);
 }
 
-function quantizeValue(value: number, vSteps: number): number {
-  const safeSteps = Math.max(2, Math.min(20, Math.round(vSteps)));
-  return Math.round(value * (safeSteps - 1)) / (safeSteps - 1);
+/**
+ * Smoothness N splits the value range 0..1 into N + 1 equal bands and maps
+ * band k to mask alpha k / N: the lowest band is transparent, the highest is
+ * fully opaque, and each step of smoothness adds one alpha level in between.
+ * (Rounding to N levels instead made the end bands half as wide as the
+ * others, and clamped 1 to 2, so smoothness 1 and 2 drew the same mask.)
+ */
+export function quantizeValue(value: number, vSteps: number): number {
+  const steps = Math.max(1, Math.min(20, Math.round(vSteps)));
+  const band = Math.floor(Math.max(0, Math.min(1, value)) * (steps + 1));
+  return Math.min(band, steps) / steps;
 }
 
 export function generateTextureRgba(params: {

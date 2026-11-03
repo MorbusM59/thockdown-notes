@@ -203,7 +203,7 @@ export class TypingSoundManager {
   }
   private reversedFlippedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
   private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
-  private enabled = true
+  private enabled = false
   private keyVariance = 0
   private pitch = 0
   private pitchJitterAmount = 0
@@ -333,6 +333,7 @@ export class TypingSoundManager {
       }
 
       this.loaded = true
+      this.applyContextState()
       this.maybeStartPrewarm()
     })()
 
@@ -343,6 +344,7 @@ export class TypingSoundManager {
   // so the one-time hardware spin-up cost lands on an earlier user gesture
   // (window focus, first click) instead of stalling the first typing sound.
   primeAudioContext(): void {
+    if (!this.enabled) return
     void this.ensureContextRunning()
   }
 
@@ -537,12 +539,30 @@ export class TypingSoundManager {
     }
   }
 
+  // Off, nothing here may cost anything: the samples are not loaded until
+  // the first time it is on, and a running AudioContext renders silence on
+  // the audio thread for as long as it exists, so it is suspended. On, the
+  // samples load and the context is primed at once rather than on the first
+  // keystroke -- Electron's autoplay policy needs no gesture, and a typed
+  // first action would otherwise take the ~100-300ms hardware spin-up.
   setTypingSoundEnabled(enabled: boolean): void {
     if (this.enabled !== enabled) {
       this.enabled = enabled
       // invalidateKeySoundCaches() also (re)starts prewarming when enabled
       // is now true, since maybeStartPrewarm() checks this.enabled.
       this.invalidateKeySoundCaches()
+    }
+    if (enabled) void this.load()
+    this.applyContextState()
+  }
+
+  // Runs again when a load finishes, since the setting may have changed
+  // while it was in flight and the context is created running.
+  private applyContextState(): void {
+    if (this.enabled) {
+      void this.ensureContextRunning()
+    } else if (this.audioContext && this.audioContext.state !== 'closed') {
+      void this.audioContext.suspend()
     }
   }
 
@@ -1197,6 +1217,9 @@ export class TypingSoundManager {
     } catch {
       // If resume fails, the next user gesture may still allow playback.
     }
+    // Switched off while the resume was in flight (a quick on-off, or a
+    // sound already past its own enabled check): put it back to sleep.
+    if (!this.enabled) this.applyContextState()
   }
 
   private createAudioContext(): AudioContext {

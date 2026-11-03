@@ -37,14 +37,19 @@
 //   - The click that follows a completed drag's release is swallowed, since
 //     the press was a drag and not a click.
 //
-// A FINGER STARTS A DRAG BY HOLDING, not by travelling. On a touch screen a
-// finger moving across a list is a request to scroll it, and the browser
-// claims the touch for panning on its first movement, so a drag that waited
-// for 5px of travel would either never start (the list scrolls) or start on
-// every swipe. A touch press therefore becomes a drag once it has been held
-// still for `HOLD_CONFIRM_MS` (through `armHold`, like every hold), and a
-// finger that travels the threshold before then is left to scroll. From the
-// moment the drag begins the touch is kept from panning
+// The threshold is the hold grace (`holdTiming.ts`): a press held in place
+// is a hold, and one that leaves the radius is a drag and abandons any hold
+// armed on it -- one rule for every press in the app.
+//
+// A FINGER PICKS A DRAG UP BY HOLDING, then drags by travelling. On a touch
+// screen a finger moving across a list is a request to scroll it, and the
+// browser claims the touch for panning on its first movement, so a drag that
+// started on travel alone would start on every swipe. A finger that travels
+// before `HOLD_CONFIRM_MS` is left to scroll; one held still that long picks
+// the source up, and the drag begins when it then leaves the grace radius.
+// If the source has a hold of its own that completed while the finger rested,
+// the press was that hold and no drag follows. From the moment the source is
+// picked up the touch is kept from panning
 // (`holdTouchPanning`), because a drag source is not `touch-action: none` --
 // that property is read when the finger lands, before anyone knows whether
 // it will hold or swipe, and setting it there would stop swipes from
@@ -54,15 +59,14 @@
 // starts and are untouched: they remain the browser's own drag events.
 
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
+import { armHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from '@thockdown/interaction/holdTiming'
 import { holdTouchPanning } from '@thockdown/interaction/touchInput'
-import { TOUCH_SLOP_PX } from '@thockdown/interaction/touchGesture'
 
 /**
  * How far a press must travel, in screen pixels, before it is a drag rather
  * than a click. Below it, the press is a click however it wobbled.
  */
-export const DRAG_THRESHOLD_PX = 5
+export const DRAG_THRESHOLD_PX = HOLD_GRACE_PX
 
 /**
  * The attribute marking an element a press may drag. It replaces
@@ -82,7 +86,7 @@ export const DRAG_ACTIVE_BODY_CLASS = 'is-pointer-dragging'
  * this module and the window-move gesture.
  */
 export function hasTravelledDragThreshold(startX: number, startY: number, x: number, y: number): boolean {
-  return Math.hypot(x - startX, y - startY) >= DRAG_THRESHOLD_PX
+  return hasLeftHoldGrace({ pointerType: 'mouse', screenX: startX, screenY: startY, clientX: startX, clientY: startY }, { screenX: x, screenY: y, clientX: x, clientY: y })
 }
 
 let activeDragCancel: (() => void) | null = null
@@ -92,7 +96,7 @@ let activeDragCancel: (() => void) | null = null
  * element's `onPointerDown`; the element must carry `DRAG_SOURCE_ATTRIBUTE`.
  *
  * Nothing happens until the pointer has travelled `DRAG_THRESHOLD_PX` (for a
- * finger: until it has been held still for `HOLD_CONFIRM_MS`); a release
+ * finger: held still for `HOLD_CONFIRM_MS`, then travelled); a release
  * before that is left entirely to the ordinary click. Past it, a
  * `dragstart` is dispatched on the source and its handler fills the
  * `DataTransfer` exactly as it would for the browser's drag; cancelling that
@@ -105,10 +109,7 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
   if (event.button !== 0 || !event.isPrimary) return
   const source = event.currentTarget
   const pointerId = event.pointerId
-  const startScreenX = event.screenX
-  const startScreenY = event.screenY
-  const startClientX = event.clientX
-  const startClientY = event.clientY
+  const origin = { pointerType: event.pointerType, screenX: event.screenX, screenY: event.screenY, clientX: event.clientX, clientY: event.clientY }
 
   // A second press while a drag is live (another finger, a pen) ends the
   // first rather than running two.
@@ -116,6 +117,7 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
 
   const isTouch = event.pointerType === 'touch'
   let cancelTouchHold: (() => void) | null = null
+  let pickedUp = false
   let releasePanning: (() => void) | null = null
 
   let dataTransfer: DataTransfer | null = null
@@ -189,16 +191,13 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     lastClientX = moveEvent.clientX
     lastClientY = moveEvent.clientY
     if (!dataTransfer) {
-      // A finger that travels before its hold completes is scrolling. It is
-      // judged by the touch layer's own stillness (`TOUCH_SLOP_PX`): a
-      // fingertip's reported centre drifts by more than a mouse's threshold
-      // while it rests, and that drift must not abort the hold.
-      if (isTouch) {
-        if (Math.hypot(moveEvent.clientX - startClientX, moveEvent.clientY - startClientY) <= TOUCH_SLOP_PX) return
+      if (!hasLeftHoldGrace(origin, moveEvent)) return
+      // A finger that travels before it was picked up is scrolling, and one
+      // whose press a hold of the source's own already claimed was that hold.
+      if (isTouch && (!pickedUp || holdCompletedDuringPress(pointerId))) {
         finish(false)
         return
       }
-      if (!hasTravelledDragThreshold(startScreenX, startScreenY, moveEvent.screenX, moveEvent.screenY)) return
       begin()
       if (!dataTransfer) return
     }
@@ -264,9 +263,9 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
   if (isTouch) {
     cancelTouchHold = armHold(() => {
       cancelTouchHold = null
+      pickedUp = true
       releasePanning = holdTouchPanning()
-      begin()
-    }, HOLD_CONFIRM_MS)
+    }, HOLD_CONFIRM_MS, { isDragPickup: true })
   }
 }
 

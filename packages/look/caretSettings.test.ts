@@ -76,8 +76,8 @@ describe('buildCaretBlinkKeyframesCss', () => {
       for (const frameDurationMs of [CARET_FRAME_DURATION_MIN_MS, 100, CARET_FRAME_DURATION_MAX_MS]) {
         const css = build({ presetKey, frameDurationMs })
         expect(css).not.toContain('color-mix')
-        // Flow's halo growth, effect blend and alpha boost are the only var()s.
-        expect(css.replace(/var\(--flow-caret-effect, 0\)/g, '')).not.toContain('var(')
+        // The two holds (the flow's and the music's) are the only var()s.
+        expect(css.replace(/var\(--(flow-caret-effect|beat-caret-hold), 0\)/g, '')).not.toContain('var(')
       }
     }
   })
@@ -85,9 +85,9 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('resolves each surface off its own colour, scaling only alpha', () => {
     const css = build({ presetKey: 'bigBeat' })
     // The 65% apex scales every surface's own alpha by 0.9.
-    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0)))')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.72 + (0.8 - 0.72) * var(--flow-caret-effect, 0)))')
-    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, calc(0.45 + (0.5 - 0.45) * var(--flow-caret-effect, 0)))')
+    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.27 + (0.3 - 0.27) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0))))')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.72 + (0.8 - 0.72) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0))))')
+    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, calc(0.45 + (0.5 - 0.45) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0))))')
   })
 
   it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
@@ -158,7 +158,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
   })
 
   it('caps how many steps it will bake, however extreme the settings', () => {
-    const css = build({ presetKey: 'bounce', animationDurationMs: 5000, frameDurationMs: 20 })
+    const css = build({ presetKey: 'heartbeat', animationDurationMs: 5000, frameDurationMs: 20 })
     expect(stopsOf(css).length).toBeLessThanOrEqual((CARET_MAX_BAKED_STEPS * 2) + 1)
   })
 
@@ -191,28 +191,28 @@ describe('buildCaretBlinkKeyframesCss', () => {
   it('blends every surface by the same amount', () => {
     const css = build({ presetKey: 'bigBeat', effectStrengthPercent: 0 })
     // Each surface lands on its own colour's own alpha, untouched.
-    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.3 + (0.3 - 0.3) * var(--flow-caret-effect, 0)))')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.8 + (0.8 - 0.8) * var(--flow-caret-effect, 0)))')
-    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, calc(0.5 + (0.5 - 0.5) * var(--flow-caret-effect, 0)))')
+    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.3 + (0.3 - 0.3) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0))))')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.8 + (0.8 - 0.8) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0))))')
+    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, calc(0.5 + (0.5 - 0.5) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0))))')
   })
 
   it('holds the blink at its peak while typing without changing the saved strength', () => {
     const css = build()
     expect(fillAlphaExpressionsOf(css)).toEqual([
-      'calc(0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0))',
-      'calc(0.03 + (0.3 - 0.03) * var(--flow-caret-effect, 0))',
-      'calc(0.27 + (0.3 - 0.27) * var(--flow-caret-effect, 0))',
-      'calc(0.09 + (0.3 - 0.09) * var(--flow-caret-effect, 0))',
-      'calc(0.18 + (0.3 - 0.18) * var(--flow-caret-effect, 0))',
+      'calc(0.18 + (0.3 - 0.18) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))',
+      'calc(0.03 + (0.3 - 0.03) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))',
+      'calc(0.27 + (0.3 - 0.27) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))',
+      'calc(0.09 + (0.3 - 0.09) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))',
+      'calc(0.18 + (0.3 - 0.18) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))',
     ])
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.48 + (0.8 - 0.48) * var(--flow-caret-effect, 0))')
-    expect(css).toContain('rgba(200, 100, 50, calc(0.3 + (0.5 - 0.3) * var(--flow-caret-effect, 0)')
+    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.48 + (0.8 - 0.48) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))')
+    expect(css).toContain('rgba(200, 100, 50, calc(0.3 + (0.5 - 0.3) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0))')
   })
 
   it('leaves a zero-strength blink with nothing to repaint', () => {
     // Every stop identical means the computed style never changes, so the
     // animation costs no invalidation even though it is still running.
-    const stops = stopsOf(build({ presetKey: 'bounce', effectStrengthPercent: 0, frameDurationMs: 100 }))
+    const stops = stopsOf(build({ presetKey: 'heartbeat', effectStrengthPercent: 0, frameDurationMs: 100 }))
     const declarations = stops.map((line) => line.slice(line.indexOf('{')))
     expect(new Set(declarations).size).toBe(1)
   })

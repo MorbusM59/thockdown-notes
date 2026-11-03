@@ -1,3 +1,4 @@
+// verify: reads-temp (scripts/verify.mjs, "what a test reads from disk")
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -36,7 +37,7 @@ describe('DatabaseService caret loadout fields', () => {
     caretHaloSpreadPx: 17,
     caretHaloBlurPx: 11,
     caretHaloColor: 'rgba(210, 120, 30, 0.4)',
-    caretAnimationPreset: 'bounce',
+    caretAnimationPreset: 'fadeLate',
     caretAnimationDurationMs: 2600,
     caretFrameDurationMs: 85,
     caretEffectStrengthPercent: 42,

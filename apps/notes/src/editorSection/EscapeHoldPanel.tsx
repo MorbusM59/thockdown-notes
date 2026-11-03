@@ -27,10 +27,6 @@ import { directionFromKey } from './escapeHoldDirection'
 // is spec-guaranteed to fire in delay order.
 const FOCUS_GRAB_DELAY_MS = 0
 
-// Cheap fallback speed for reduceVisualEffects: true -- see the component
-// doc comment for why that mode skips the curve engine below entirely
-// instead of trying to feed it a "reduced" version of the same math.
-const SIMPLE_ROTATION_TRANSITION_MS = 200
 
 
 // While a key is held, native OS auto-repeat keydowns are throttled to at
@@ -87,8 +83,6 @@ export interface EscapeHoldPanelProps {
   /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- fed straight into escapeHoldRingLayout.ts so the ring's shape tracks .editor-empty-state's actual on-screen corner radius/inset instead of a stale hardcoded value. */
   borderRadiusRegularPx: number
   spacingRegularPx: number
-  /** The Performance section's "Reduce visual effects" toggle -- see the component doc comment for what it switches between. */
-  reduceVisualEffects: boolean
   onCreateNote: () => void | Promise<void>
   onCreateChapter: () => void | Promise<void>
   onExportPdf: (scope: ExportScope) => void | Promise<void>
@@ -218,15 +212,6 @@ interface PanelCell {
  * machinery exists right now; it'll be rebuilt deliberately, case by case,
  * on top of this baseline once it's solid.
  *
- * All of the above only runs when `reduceVisualEffects` is false (the
- * Performance section's "Reduce visual effects" toggle). When true, the
- * whole curve engine is skipped -- every keydown just steps `topIndex` by 1
- * immediately, and `.editor-escape-hold-panel-btn`'s own plain CSS
- * transition (added via the `is-simple-rotation` class only in this mode --
- * see editor.css) eases the position change instead. Cheaper, and there's
- * no dial-specific settings to keep in sync with a "reduced" mode since
- * this mode doesn't touch the curve engine at all.
- *
  * The animation itself is driven imperatively, not through React state per
  * frame: a rAF loop writes each button's `style.transform` directly from a
  * continuously-updating `rotationOffsetRef` (a possibly-fractional slot
@@ -320,7 +305,6 @@ export function EscapeHoldPanel({
   isExportingMd,
   borderRadiusRegularPx,
   spacingRegularPx,
-  reduceVisualEffects,
   onCreateNote,
   onCreateChapter,
   onExportPdf,
@@ -468,10 +452,7 @@ export function EscapeHoldPanel({
       return undefined
     }
     const count = cellsRef.current.length
-    // The cheap-visuals path gets the sounds and none of the staging: a
-    // fade-and-grow is a visual effect, and this flag is what the reader
-    // sets to not have those.
-    setArrivedCount(reduceVisualEffects ? count : 0)
+    setArrivedCount(0)
 
     // ONE READING of the reader's scroll duration for the whole screen, so
     // the gap between notes and the arrival they are offset by cannot come
@@ -518,7 +499,7 @@ export function EscapeHoldPanel({
     // cellsRef rather than `cells`: the burst is about the screen ARRIVING,
     // so it must not re-fire when a cell's label or availability changes
     // underneath a screen that is already up.
-  }, [ringResetKey, isOpen, reduceVisualEffects])
+  }, [ringResetKey, isOpen])
   // The ring element itself, for the native wheel listener below, and a
   // mirror of `isOpen` the two imperative handlers can read.
   const ringRef = useRef<HTMLDivElement | null>(null)
@@ -910,23 +891,6 @@ export function EscapeHoldPanel({
     // outside every ring and close the panel on the player's first choice.
   }, [isOpen, isSectionActive, focusedIndex, ringResetKey])
 
-  // Cheap fallback path for reduceVisualEffects: true -- see the component
-  // doc comment. No curve engine at all: every keydown steps by exactly one
-  // slot immediately, and the CSS transition added by `is-simple-rotation`
-  // (editor.css) eases the position change.
-  const stepSimple = (direction: 1 | -1) => {
-    const count = cells.length
-    if (count === 0) return
-    const next = ((topIndex + direction) % count + count) % count
-    rotationOffsetRef.current = next
-    setTopIndex(next)
-    setFocusedIndex(next)
-    // Here CSS owns the movement, so the cells are not where they are going
-    // to be yet. Waiting out the transition we ourselves set the duration of
-    // is not a retry -- it is the one moment the answer exists.
-    window.setTimeout(refreshHoverFromPointer, SIMPLE_ROTATION_TRANSITION_MS)
-  }
-
   /**
    * ONE STEP OF THE DIAL, whatever asked for it -- an arrow key, or a notch
    * of the wheel. Everything below this line is about the dial and nothing
@@ -939,13 +903,8 @@ export function EscapeHoldPanel({
     // this function, for exactly the reason the function exists: an arrow,
     // a Tab and a wheel notch are one motion, and giving them separate
     // sounds is the first thing that would let them drift apart
-    // (escapeMenu/menuSounds.ts). Above the reduceVisualEffects branch, so
-    // the cheap rotation path is not also the silent one.
+    // (escapeMenu/menuSounds.ts).
     void typingSoundManager.playRandomClick(dialStepVoice(direction))
-    if (reduceVisualEffects) {
-      stepSimple(direction)
-      return
-    }
 
     const count = cellsRef.current.length
     if (count === 0) return
@@ -1274,10 +1233,9 @@ export function EscapeHoldPanel({
             // frame, so the ring's shape, its refs, its focus target and
             // everything hit-testable are the same throughout, and only what
             // the cell says is staged.
-            className={`editor-escape-hold-panel-btn${reduceVisualEffects ? ' is-simple-rotation' : ''}${index === hoveredIndex ? ' is-hovered' : ''}${slotArrived(index) ? '' : ' is-unarrived'}`}
+            className={`editor-escape-hold-panel-btn${index === hoveredIndex ? ' is-hovered' : ''}${slotArrived(index) ? '' : ' is-unarrived'}`}
             style={{
               transform: `translate(-50%, -50%) translate(${point.x}px, ${point.y}px)`,
-              '--rotation-duration': `${SIMPLE_ROTATION_TRANSITION_MS}ms`,
               '--cell-arrival': `${arrivalMs}ms`,
             } as CSSProperties}
             tabIndex={index === focusedIndex ? 0 : -1}

@@ -107,6 +107,17 @@
   display: none !important;
 }
 
+/* The sidebar is the exception: display:none would discard its scroll
+   positions, so it stays laid out at its own width, out of the grid's flow,
+   and skips rendering (content-visibility keeps its rendering state). App.tsx
+   marks it inert, so nothing in it can take focus or a press. */
+.app-grid.is-immersive > .notes-sidebar {
+  display: flex !important;
+  position: absolute;
+  visibility: hidden;
+  content-visibility: hidden;
+}
+
 .app-grid.is-immersive .editor-section-divider,
 .app-grid.is-immersive .editor-section-slot.is-immersive-hidden {
   display: none;
@@ -153,6 +164,17 @@
   background: transparent;
   border-color: transparent;
   box-shadow: none;
+}
+
+/* Nothing to scroll, nothing drawn: in immersive mode a scrollbar appears only
+   while there is something to scroll. "Something to scroll" is the scrollbar
+   logic's own is-inactive, which also covers a slot with no note (the empty
+   scene). Hidden rather than removed, so the track keeps its geometry and the
+   text keeps its reserved column -- the layout does not move when a note
+   grows past one screen. */
+.app-grid.is-immersive .editor-scrollbar-slot .thockdown-scroll-thumb.is-inactive,
+.app-grid.is-immersive .immersive-scroll-column.is-inactive {
+  visibility: hidden;
 }
 
 /* The edit view's grid scrollbar (CM6Editor.tsx): track boxes in the gutter

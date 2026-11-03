@@ -206,6 +206,8 @@ export class MusicPlayerService {
   private currentDuration = 0;
   private _isPlaying = false;
   private playingListeners = new Set<(playing: boolean) => void>();
+  /** The visualizer's taps on the processed music (`tapProcessed`), whose gain undoes the volume. */
+  private processedTaps = new Set<GainNode>();
 
   get isPlaying(): boolean { return this._isPlaying; }
 
@@ -294,6 +296,38 @@ export class MusicPlayerService {
   }
 
   /**
+   * The music as it is HEARD, processing included (the flow EQ, the reverb
+   * and its mix), for the visualizer mode's spectrum
+   * (`visualizer/spectrumTap.ts`), with the volume divided back out so the
+   * reader's volume slider does not shrink what is drawn. Taken before the
+   * shared limiter, which the soundscape and the key sounds pass through too.
+   * Connects the tap to `target` and returns its disconnect. A tap belongs to
+   * the context it was made in, like the rest of the music graph.
+   */
+  tapProcessed(target: AudioNode): () => void {
+    const context = this.ensureAudioContext();
+    const dry = this.dryGain!;
+    const wet = this.wetGain!;
+    const tap = context.createGain();
+    tap.gain.value = this.volumeCompensation();
+    dry.connect(tap);
+    wet.connect(tap);
+    tap.connect(target);
+    this.processedTaps.add(tap);
+    return () => {
+      this.processedTaps.delete(tap);
+      dry.disconnect(tap);
+      wet.disconnect(tap);
+      tap.disconnect();
+    };
+  }
+
+  /** The gain that undoes the volume: none at all at silence, where there is nothing to undo. */
+  private volumeCompensation(): number {
+    return this.config.volume > 1e-3 ? 1 / this.config.volume : 0;
+  }
+
+  /**
    * How much of the flow EQ is applied, 0..1: each band's gain is its
    * `gainDb` times this. Moved with a short time constant so the meter's
    * per-frame updates do not step the filters audibly.
@@ -327,6 +361,7 @@ export class MusicPlayerService {
       const now = this.audioCtx.currentTime;
       this.gainNode.gain.cancelScheduledValues(now);
       this.gainNode.gain.setValueAtTime(this.config.volume, now);
+      for (const tap of this.processedTaps) tap.gain.setValueAtTime(this.volumeCompensation(), now);
     }
     if (this.dryGain && this.wetGain && this.audioCtx) {
       const now = this.audioCtx.currentTime;

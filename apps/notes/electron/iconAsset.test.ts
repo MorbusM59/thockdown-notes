@@ -1,3 +1,4 @@
+// verify: reads-repository (scripts/verify.mjs, "what a test reads from disk")
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

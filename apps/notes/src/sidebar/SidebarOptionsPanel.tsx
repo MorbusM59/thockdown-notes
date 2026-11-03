@@ -1,7 +1,6 @@
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
-import type * as React from 'react'
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
@@ -14,32 +13,48 @@ import {
   type FlowSettings,
 } from '../shared/flowSettings'
 import {
-  BEAT_FREQUENCY_MAX_HZ,
-  BEAT_FREQUENCY,
-  BEAT_FREQUENCY_MIN_HZ,
-  BEAT_OCTAVES_MAX,
-  BEAT_OCTAVES_MIN,
-  BEAT_CONTRAST_MAX,
-  BEAT_FALL_MAX_SEC,
-  BEAT_FALL_MIN_SEC,
-  BEAT_FALL_SHAPE_MAX,
-  BEAT_FALL_SHAPE_MIN,
-  DEFAULT_BEAT_CHANNEL,
-  type BeatChannel,
+  BEAT_DELAY_MAX_MS,
+  BEAT_DELAY_MIN_MS,
+  BEAT_RESPONSE_MAX_DB,
+  BEAT_RESPONSE_MIN_DB,
+  DEFAULT_BEAT_SETTINGS,
   type BeatSettings,
 } from '../shared/beatSettings'
+import {
+  BEAT_CONTRAST_MAX,
+  FALL_MAX_SEC,
+  FALL_MIN_SEC,
+  IMMERSIVE_GLAZE_STRENGTH_MAX,
+  IMMERSIVE_SWAY_RANGE_MAX_PX,
+  WAVE_BOXES_MAX,
+  WAVE_BOXES_MIN,
+  WAVE_SEC_MAX,
+  PULSE_SEC_MAX,
+  SWAY_DRIFT_MAX_PX,
+  SWAY_PUSH_MAX_PX,
+  PULSE_SEC_MIN,
+  PULSE_SPEED_MAX,
+  PULSE_SPEED_MIN,
+  WAVE_SEC_MIN,
+  WAVE_TURN_MAX,
+  waveTertiaryBeats,
+  EDGE_BLUR_MAX_PX,
+  EDGE_SPREAD_MAX_PX,
+  type VisualizerChannel,
+  type VisualizerMix,
+  type VisualizerTrackerName,
+  type VisualizerSettings,
+  defaultVisualizer,
+} from '@thockdown/look/visualizer'
+import { ColorPickerRow } from '../colorPicker/ColorPickerRow'
+import { ColorTargetButton } from '../colorPicker/ColorTargetButton'
+import { SurfaceTexturePicker } from '../colorPicker/SurfaceTexturePicker'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
-import {
-  CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS,
-  CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS,
-  CONTINUOUS_DOCUMENT_THRESHOLD_STEP_BLOCKS,
-  DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS,
-  clampContinuousDocumentThreshold,
-} from '../editor/documentPosition'
-import { type RgbaColor, type HsvaColor, rgbaToCssColor, hsvaToRgba } from '@thockdown/look/colorMath'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
+import type { FeatureToggles } from '../shared/features'
+import { FeatureToggleBar } from './FeatureToggleBar'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
@@ -88,10 +103,6 @@ import {
   type CaretAnimationPresetKey,
 } from '@thockdown/look/caretSettings'
 import {
-  TEXTURE_GRANULARITY_MIN,
-  TEXTURE_GRANULARITY_MAX,
-  TEXTURE_VSTEPS_MIN,
-  TEXTURE_VSTEPS_MAX,
   type TextureSurfaceKey,
   type TextureMaterialsBySurface,
   type TextureMaterialSettings,
@@ -203,6 +214,7 @@ import {
 import { LOADOUT_FACTORY_PRESET_COUNT, type UiLoadoutEntry } from '@thockdown/look/loadouts'
 import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 import { typingSoundManager } from '../sound/TypingSoundManager'
+import { useOutputDevice } from '../sound/outputDevice'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
   DEFAULT_WHEEL_SPIN_THRESHOLD_MS,
@@ -275,35 +287,6 @@ type ViewStyleKey =
   | 'fredericka'
   | 'bubblerone'
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
-type HsvaControlKey = 'h' | 's' | 'v' | 'a'
-type TextureControlKey = 'granularity' | 'smoothness'
-type CursorColorTargetKey = 'dot' | 'center' | 'trail' | 'halo'
-type CaretColorTargetKey = 'outline' | 'halo'
-
-type HsvaDragState = {
-  control: HsvaControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type TextureControlDragState = {
-  control: TextureControlKey
-  pointerId: number
-  startY: number
-  baseValue: number
-}
-
-type ColorArmSource =
-  | { kind: 'hsva'; key: HsvaControlKey }
-  | { kind: 'active-color' }
-  | { kind: 'texture-preview' }
-
-type ElementPreviewCopySource =
-  | { kind: 'element'; key: HighlightColorKey }
-  | { kind: 'texture'; key: TextureSurfaceKey }
-  | { kind: 'text'; key: EditorTextColorTargetKey }
-
 // ── Panel-local option/lookup data ─────────────────────────────────────────
 // Only ever read by this panel, so these live here rather than in a shared
 // module (unlike the analogous EDITOR_STYLE_OPTIONS etc., which App.tsx
@@ -365,10 +348,6 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   markdownUnchecked: 'Markdown unchecked task color',
 }
 
-/** The beat frequency slider's BEAT position: half an octave below the lowest band, chosen by the lower half of that stretch. */
-const BEAT_SLIDER_MIN = Math.log2(BEAT_FREQUENCY_MIN_HZ) - 0.5
-const BEAT_SLIDER_SPLIT = Math.log2(BEAT_FREQUENCY_MIN_HZ) - 0.25
-
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   caret: 'fa-solid fa-i',
   search: 'fa-solid fa-magnifying-glass',
@@ -400,22 +379,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   markdownUnchecked: 'fa-regular fa-square',
 }
 
-const TEXTURE_SURFACE_TITLES: Record<TextureSurfaceKey, string> = {
-  appGrid: 'App grid texture color',
-  sidebarContent: 'Sidebar texture color',
-  editorEditText: 'Edit text panel texture color',
-  editorRenderText: 'Render text panel texture color',
-}
-
-const TEXTURE_SURFACE_ICONS: Record<TextureSurfaceKey, string> = {
-  appGrid: 'fa-solid fa-table-columns',
-  sidebarContent: 'fa-solid fa-list',
-  editorEditText: 'fa-solid fa-align-justify',
-  editorRenderText: 'fa-solid fa-align-justify',
-}
-
 export interface SidebarOptionsPanelProps {
-  isPreviewMode: boolean
   uiMode: 'light' | 'dark'
   optionsContentRef: MutableRefObject<HTMLDivElement | null>
   /** The options search term; while it is non-empty only what it appears in is shown (AccordionGroup's `filter`). */
@@ -458,50 +422,19 @@ export interface SidebarOptionsPanelProps {
   resetCustomLoadout: () => Promise<void>
   resetCustomLayoutPrimed: boolean
 
-  primedColorSource: ColorArmSource
-  setPrimedColorSource: (source: ColorArmSource) => void
   highlightColors: HighlightColors
+  setHighlightColorCss: (key: HighlightColorKey, css: string) => void
+  setEditorTextColorCss: (key: EditorTextColorTargetKey, css: string) => void
+  setTextureMaterial: (surface: TextureSurfaceKey, material: TextureMaterialSettings) => void
+  setCustomCursorDotColor: (css: string) => void
+  setCustomCursorCenterColor: (css: string) => void
+  setCustomCursorTrailColor: (css: string) => void
+  setCustomCursorHaloColor: (css: string) => void
+  setCaretOutlineColor: (css: string) => void
+  setCaretHaloColor: (css: string) => void
   editorTextColors: Record<EditorTextColorTargetKey, string>
-  applyActiveColorToElement: (key: HighlightColorKey) => void
-  updateHighlightColor: (key: HighlightColorKey, color: RgbaColor) => void
-  applyHsvaValueToElement: (sourceKey: HsvaControlKey, targetKey: HighlightColorKey) => void
-  applyActiveColorToEditorText: (key: EditorTextColorTargetKey) => void
-  updateEditorTextColor: (key: EditorTextColorTargetKey, color: RgbaColor) => void
-  applyHsvaValueToEditorText: (sourceKey: HsvaControlKey, targetKey: EditorTextColorTargetKey) => void
-  startElementPreviewCopyHold: (source: ElementPreviewCopySource, event: PointerEvent<HTMLButtonElement>) => void
-  clearColorArmTimer: () => void
-  hsvaDragState: HsvaDragState | null
-  hsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
-  activeColorHsva: HsvaColor
-  activeColorHex: string
-  activeColorCss: string
-  startHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  startColorArmHold: (source: ColorArmSource, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
 
-  applyActiveColorToTexture: (surface: TextureSurfaceKey) => void
-  applyTexturePreviewToSurface: (surface: TextureSurfaceKey) => void
-  applyHsvaValueToTexture: (sourceKey: HsvaControlKey, surface: TextureSurfaceKey) => void
   textureMaterials: TextureMaterialsBySurface
-  texturePreviewMaterial: TextureMaterialSettings
-  texturePreviewHex: string
-  texturePreviewTintCss: string
-  texturePreviewCss: string
-  isTextureSeedEditing: boolean
-  textureSeedInputRef: MutableRefObject<HTMLInputElement | null>
-  textureSeedInput: string
-  setTextureSeedInput: (value: string) => void
-  commitTextureSeedEdit: () => void
-  cancelTextureSeedEdit: () => void
-  randomizeTextureSeed: () => void
-  startTextureSeedEdit: () => void
-  textureControlDragState: TextureControlDragState | null
-  startTextureControlDrag: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleTextureControlDragMove: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopTextureControlDrag: (control: TextureControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustTextureControl: (control: TextureControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
 
   glazeSettings: GlazeSettings
   setGlazeSettings: (updater: (previous: GlazeSettings) => GlazeSettings) => void
@@ -570,26 +503,18 @@ export interface SidebarOptionsPanelProps {
   setPitchJitterAmount: (value: number) => void
   audioSpatial: number
   setAudioSpatial: (value: number) => void
-  reduceVisualEffects: boolean
-  setReduceVisualEffects: (value: boolean) => void
   allowRemoteImages: boolean
   onAllowRemoteImagesChange: (value: boolean) => void
-  spellCheckEnabled: boolean
-  setSpellCheckEnabled: (updater: (previous: boolean) => boolean) => void
+  features: FeatureToggles
+  setFeatures: (updater: (previous: FeatureToggles) => FeatureToggles) => void
   flowSettings: FlowSettings
   setFlowSettings: (updater: (previous: FlowSettings) => FlowSettings) => void
   speedReadingSettings: SpeedReadingSettings
   setSpeedReadingSettings: (updater: (previous: SpeedReadingSettings) => SpeedReadingSettings) => void
   beatSettings: BeatSettings
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
-  reducedCaretAnimation: boolean
-  setReducedCaretAnimation: (value: boolean) => void
-  deferPreviewOnRapidInput: boolean
-  setDeferPreviewOnRapidInput: (value: boolean) => void
-  noteSizeThresholdBlocks: number
-  setNoteSizeThresholdBlocks: (value: number) => void
-  forceCharacterScrollbarThumb: boolean
-  setForceCharacterScrollbarThumb: (value: boolean) => void
+  visualizer: VisualizerSettings
+  setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
 
   borderRadiusRegularPx: number
   setBorderRadiusRegularPx: (value: number) => void
@@ -627,16 +552,9 @@ export interface SidebarOptionsPanelProps {
   setAdventureTrueMode: (value: boolean) => void
   /** Whether turning true mode on would cost a run -- past level one. */
   adventureTrueModeWouldWipe: boolean
-  debuggingEnabled: boolean
-  setDebuggingEnabled: (value: boolean) => void
   clearAppState: () => void
   clearAppStatePrimed: boolean
-  debugNoteIdRef: MutableRefObject<string | null>
-  queueAppStateSave: (selectedNoteId: string | null) => void
-  activeNoteId: string | null
 
-  customCursorEnabled: boolean
-  setCustomCursorEnabled: (value: boolean) => void
   customCursorDotColor: string
   customCursorCenterColor: string
   customCursorTrailColor: string
@@ -675,16 +593,6 @@ export interface SidebarOptionsPanelProps {
   setCustomCursorClickMinHoldMs: (value: number) => void
   customCursorClickBalance: number
   setCustomCursorClickBalance: (value: number) => void
-  cursorColorHsva: HsvaColor
-  cursorHsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
-  cursorHsvaDragState: HsvaDragState | null
-  startCursorHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleCursorHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopCursorHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustCursorHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
-  applyCursorColorToTarget: (target: CursorColorTargetKey) => void
-  startCursorColorCopyHold: (target: CursorColorTargetKey, event: PointerEvent<HTMLButtonElement>) => void
-  clearCursorColorArmTimer: () => void
   caretSizeDeviationPx: number
   setCaretSizeDeviationPx: (value: number) => void
   caretOutlineWidthPx: number
@@ -713,16 +621,6 @@ export interface SidebarOptionsPanelProps {
   setCaretFrameDurationMs: (value: number) => void
   caretEffectStrengthPercent: number
   setCaretEffectStrengthPercent: (value: number) => void
-  caretColorHsva: HsvaColor
-  caretHsvaDisplayColors: { hColor: string; sColor: string; vColor: string; aGhostColor: string }
-  caretHsvaDragState: HsvaDragState | null
-  startCaretHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  handleCaretHsvaDragMove: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  stopCaretHsvaDrag: (control: HsvaControlKey, event: PointerEvent<HTMLButtonElement>) => void
-  wheelAdjustCaretHsvaControl: (control: HsvaControlKey, event: React.WheelEvent<HTMLButtonElement>) => void
-  applyCaretColorToTarget: (target: CaretColorTargetKey) => void
-  startCaretColorCopyHold: (target: CaretColorTargetKey, event: PointerEvent<HTMLButtonElement>) => void
-  clearCaretColorArmTimer: () => void
 }
 
 /**
@@ -732,7 +630,6 @@ export interface SidebarOptionsPanelProps {
  * App.tsx with zero behavior change.
  */
 export function SidebarOptionsPanel({
-  isPreviewMode,
   uiMode,
   optionsContentRef,
   searchQuery,
@@ -771,49 +668,18 @@ export function SidebarOptionsPanel({
   saveCustomLoadout,
   resetCustomLoadout,
   resetCustomLayoutPrimed,
-  primedColorSource,
-  setPrimedColorSource,
   highlightColors,
+  setHighlightColorCss,
+  setEditorTextColorCss,
+  setTextureMaterial,
+  setCustomCursorDotColor,
+  setCustomCursorCenterColor,
+  setCustomCursorTrailColor,
+  setCustomCursorHaloColor,
+  setCaretOutlineColor,
+  setCaretHaloColor,
   editorTextColors,
-  applyActiveColorToElement,
-  updateHighlightColor,
-  applyHsvaValueToElement,
-  applyActiveColorToEditorText,
-  updateEditorTextColor,
-  applyHsvaValueToEditorText,
-  startElementPreviewCopyHold,
-  clearColorArmTimer,
-  hsvaDragState,
-  hsvaDisplayColors,
-  activeColorHsva,
-  activeColorHex,
-  activeColorCss,
-  startHsvaDrag,
-  handleHsvaDragMove,
-  stopHsvaDrag,
-  startColorArmHold,
-  wheelAdjustHsvaControl,
-  applyActiveColorToTexture,
-  applyTexturePreviewToSurface,
-  applyHsvaValueToTexture,
   textureMaterials,
-  texturePreviewMaterial,
-  texturePreviewHex,
-  texturePreviewTintCss,
-  texturePreviewCss,
-  isTextureSeedEditing,
-  textureSeedInputRef,
-  textureSeedInput,
-  setTextureSeedInput,
-  commitTextureSeedEdit,
-  cancelTextureSeedEdit,
-  randomizeTextureSeed,
-  startTextureSeedEdit,
-  textureControlDragState,
-  startTextureControlDrag,
-  handleTextureControlDragMove,
-  stopTextureControlDrag,
-  wheelAdjustTextureControl,
   glazeSettings,
   setGlazeSettings,
   isGlazeLinearSeedEditing,
@@ -878,26 +744,18 @@ export function SidebarOptionsPanel({
   setPitchJitterAmount,
   audioSpatial,
   setAudioSpatial,
-  reduceVisualEffects,
-  setReduceVisualEffects,
   allowRemoteImages,
   onAllowRemoteImagesChange,
-  spellCheckEnabled,
-  setSpellCheckEnabled,
+  features,
+  setFeatures,
   flowSettings,
   setFlowSettings,
   speedReadingSettings,
   setSpeedReadingSettings,
   beatSettings,
   setBeatSettings,
-  reducedCaretAnimation,
-  setReducedCaretAnimation,
-  deferPreviewOnRapidInput,
-  setDeferPreviewOnRapidInput,
-  noteSizeThresholdBlocks,
-  setNoteSizeThresholdBlocks,
-  forceCharacterScrollbarThumb,
-  setForceCharacterScrollbarThumb,
+  visualizer,
+  setVisualizer,
   borderRadiusRegularPx,
   setBorderRadiusRegularPx,
   spacingRegularPx,
@@ -916,15 +774,8 @@ export function SidebarOptionsPanel({
   setAdventureSettings,
   setAdventureTrueMode,
   adventureTrueModeWouldWipe,
-  debuggingEnabled,
-  setDebuggingEnabled,
   clearAppState,
   clearAppStatePrimed,
-  debugNoteIdRef,
-  queueAppStateSave,
-  activeNoteId,
-  customCursorEnabled,
-  setCustomCursorEnabled,
   customCursorDotColor,
   customCursorCenterColor,
   customCursorTrailColor,
@@ -963,16 +814,6 @@ export function SidebarOptionsPanel({
   setCustomCursorClickMinHoldMs,
   customCursorClickBalance,
   setCustomCursorClickBalance,
-  cursorColorHsva,
-  cursorHsvaDisplayColors,
-  cursorHsvaDragState,
-  startCursorHsvaDrag,
-  handleCursorHsvaDragMove,
-  stopCursorHsvaDrag,
-  wheelAdjustCursorHsvaControl,
-  applyCursorColorToTarget,
-  startCursorColorCopyHold,
-  clearCursorColorArmTimer,
   caretSizeDeviationPx,
   setCaretSizeDeviationPx,
   caretOutlineWidthPx,
@@ -1001,64 +842,220 @@ export function SidebarOptionsPanel({
   setCaretFrameDurationMs,
   caretEffectStrengthPercent,
   setCaretEffectStrengthPercent,
-  caretColorHsva,
-  caretHsvaDisplayColors,
-  caretHsvaDragState,
-  startCaretHsvaDrag,
-  handleCaretHsvaDragMove,
-  stopCaretHsvaDrag,
-  wheelAdjustCaretHsvaControl,
-  applyCaretColorToTarget,
-  startCaretColorCopyHold,
-  clearCaretColorArmTimer,
 }: SidebarOptionsPanelProps) {
-    // One element's five beat sliders: the same five for every element that follows the music.
-    const renderBeatChannel = (key: 'caret' | 'shade', label: string, effect: string) => {
-      const channel = beatSettings[key]
-      const set = (patch: Partial<BeatChannel>) => setBeatSettings((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
-      const slider = (field: keyof BeatChannel, trackLabel: string, min: number, max: number, step: number, tooltipLabel: string, ariaName: string, digits?: number) => (
+    // What a slider resets to is THIS layout's default, light or dark (`defaultVisualizer`).
+    const layoutVisualizer = useMemo(() => defaultVisualizer(filterInvert > 0.5), [filterInvert])
+    // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
+    // With the Visualizer off it cannot be used at all, so it is disabled (and
+    // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
+    const caretFollowUnavailable = !features.visualizer
+    const caretFollowWaits = caretFollowUnavailable || (visualizer.caret.followsMusic && visualizer.caret.effect === 0)
+    const outputDevice = useOutputDevice(features.visualizer)
+    // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
+    // length, the length on a log track so each step of it feels the same.
+    // An array, not a fragment: OptionsSliderRows counts its children.
+    type Fall = Pick<VisualizerChannel, 'shape' | 'fallSec'>
+    const renderFallSliders = (id: string, ariaPrefix: string, fall: Fall, defaults: Fall, what: string, onCommit: (patch: Partial<Fall>) => void) => [
+      <CompactScrollbarSlider
+        key="shape"
+        id={`${id}-shape`}
+        min={-1}
+        max={1}
+        step={0.01}
+        value={fall.shape}
+        trackLabel="shape"
+        tooltipLabel={`The shape of ${what}'s fall. Right of centre a sharp point that drops at once into a long, low tail, like a ride cymbal; left of centre it holds its full weight and then lets go, like a heavy thump`}
+        ariaLabel={`${ariaPrefix}: fall shape`}
+        defaultValue={defaults.shape}
+        formatValue={(value) => value.toFixed(2)}
+        onCommit={(value) => onCommit({ shape: value })}
+      />,
+      <CompactScrollbarSlider
+        key="fall"
+        id={`${id}-fall`}
+        min={Math.log(FALL_MIN_SEC)}
+        max={Math.log(FALL_MAX_SEC)}
+        // A step that puts the default length exactly on the grid counted from the minimum, so a reset lands on it.
+        step={Math.log(defaults.fallSec / FALL_MIN_SEC) / 90}
+        value={Math.log(fall.fallSec)}
+        trackLabel="fall"
+        tooltipLabel={`Milliseconds: how long ${what} takes to fall to nothing. A hit always lands at once`}
+        ariaLabel={`${ariaPrefix}: fall in milliseconds`}
+        defaultValue={Math.log(defaults.fallSec)}
+        formatValue={(value) => Math.round(Math.exp(value) * 1000).toString()}
+        onCommit={(value) => onCommit({ fallSec: Math.exp(value) })}
+      />,
+    ]
+
+    // The caret's block: it ticks on a steady clock that follows the music's
+    // tempo (musicBeat.ts, `subscribeMusicClock`), so it has only a depth and a fall.
+    const renderBeatCaret = () => {
+      const caret = visualizer.caret
+      const slider = (field: 'effect', min: number, tooltipLabel: string, ariaName: string) => (
         <CompactScrollbarSlider
-          id={`beat-${key}-${field}`}
+          id={`beat-caret-${field}`}
           min={min}
-          max={max}
-          step={step}
-          value={channel[field]}
-          trackLabel={trackLabel}
+          max={1}
+          step={0.01}
+          value={caret[field]}
+          trackLabel={field}
           tooltipLabel={tooltipLabel}
-          ariaLabel={`${label}: ${ariaName}`}
-          defaultValue={DEFAULT_BEAT_CHANNEL[field]}
-          formatValue={digits === undefined ? undefined : (value) => value.toFixed(digits)}
-          onCommit={(value) => set({ [field]: value })}
+          ariaLabel={`Caret: ${ariaName}`}
+          defaultValue={layoutVisualizer.caret[field]}
+          onCommit={(value) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, [field]: value } }))}
         />
       )
       return (
         <>
-          <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
+          <div className="utility-setting-button-row" role="group" aria-label="Caret controls">
+            <OptionsSubsectionLabel>Caret</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Caret settings">
+            <OptionsSliderRows rows={[1, 2]}>
+              {slider('effect', -1, 'How far the caret dips from its peak on each beat. Right of centre a beat adds it; left of centre it is inverted, resting at that much while music plays and a beat takes it away; the centre turns it off. The caret keeps a steady beat that follows the tempo of the music playing now', 'effect, negative inverts')}
+              {renderFallSliders('beat-caret', 'Caret', caret, layoutVisualizer.caret, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
+            </OptionsSliderRows>
+          </div>
+        </>
+      )
+    }
+
+    // An element's MIX of the three trackers (visualizer.ts, `mixResponse`):
+    // one contribution per tracker side by side, added and capped at a full
+    // response. Arrays, not fragments: OptionsSliderRows counts its children.
+    const MIX_TRACKERS = [
+      { field: 'thump', what: 'the thump (the low end jumping: a kick, a bass stab)' },
+      { field: 'pierce', what: 'the pierce (a sharp sound cutting through: a snare, a clap)' },
+      { field: 'tick', what: 'the tick (the busy top: hats, shakers)' },
+    ] as const
+    const renderMixSliders = (id: string, label: string, mix: VisualizerMix, defaults: VisualizerMix, onCommit: (mix: VisualizerMix) => void) => {
+      const percent = (value: number) => Math.round(value * 100).toString()
+      return MIX_TRACKERS.map(({ field, what }) => (
+        <CompactScrollbarSlider
+          key={field}
+          id={`${id}-mix-${field}`}
+          min={0}
+          max={1}
+          step={0.01}
+          value={mix[field]}
+          trackLabel={field}
+          tooltipLabel={`How much ${what} drives it, 0 to 100. Contributions add up, and the response is capped at a full one`}
+          ariaLabel={`${label}: contribution of ${field}, 0 to 100`}
+          defaultValue={defaults[field]}
+          formatValue={percent}
+          onCommit={(value) => onCommit({ ...mix, [field]: value })}
+        />
+      ))
+    }
+
+    // The three trackers (visualizer.ts, `VisualizerTrackers`): what is
+    // detected in the music, once, for every element below.
+    const renderTrackers = () => {
+      const { trackers } = visualizer
+      const tracker = (key: VisualizerTrackerName, label: string, what: string) => (
+        <>
+          <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
+            <OptionsSubsectionLabel tooltip={what}>{label}</OptionsSubsectionLabel>
+          </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2, 2, 2]}>
-              {slider('amount', 'amount', 0, 1, 0.01, `How far ${effect} at a full response; 0 leaves it as it is`, 'amount')}
-              {/* Frequency is heard on a log scale, so the slider moves in octaves (log2 Hz) and shows Hz.
-                  Half an octave below the lowest band is one more position, BEAT, which follows
-                  kick-drum hits rather than a band; the lower half of that stretch selects it. */}
+            <OptionsSliderRows rows={[2]}>
+              {[
+                <CompactScrollbarSlider
+                  key="contrast"
+                  id={`beat-tracker-${key}-contrast`}
+                  min={0}
+                  max={BEAT_CONTRAST_MAX}
+                  step={0.01}
+                  value={trackers[key].contrast}
+                  trackLabel="contrast"
+                  tooltipLabel="How strong a hit must be, against the others around it, before it responds: higher keeps only the strongest, and only what is mostly this"
+                  ariaLabel={`${label}: contrast`}
+                  defaultValue={layoutVisualizer.trackers[key].contrast}
+                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], contrast: value } } }))}
+                />,
+                <CompactScrollbarSlider
+                  key="pattern"
+                  id={`beat-tracker-${key}-pattern`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={trackers[key].pattern}
+                  trackLabel="pattern"
+                  tooltipLabel="How far hits follow the bar's pattern rather than only what is heard: at 0 the signal alone, higher lifts a weak hit toward the same place in the bars around it and fills in expected hits that barely sound"
+                  ariaLabel={`${label}: pattern`}
+                  defaultValue={layoutVisualizer.trackers[key].pattern}
+                  formatValue={(value) => Math.round(value * 100).toString()}
+                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], pattern: value } } }))}
+                />,
+              ]}
+            </OptionsSliderRows>
+          </div>
+        </>
+      )
+      return (
+        <>
+          {tracker('thump', 'Thump', 'The low end jumping: a kick, a bass stab, what you feel in the chest')}
+          {tracker('pierce', 'Pierce', 'A sharp sound cutting through the mix: a snare, a clap, a rim shot')}
+          {tracker('tick', 'Tick', 'The busy, rhythmic top: hats and shakers')}
+        </>
+      )
+    }
+
+    // One coloured block: its mix, its effect and fall, plus the edge's spread and blur.
+    const renderBeatChannel = (key: 'edge' | 'pane', label: string, effect: string) => {
+      const channel: VisualizerChannel = visualizer[key]
+      const defaults: VisualizerChannel = key === 'edge' ? layoutVisualizer.edge : layoutVisualizer.pane
+      const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
+      return (
+        <>
+          <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
+            <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
+            <OptionsSliderRows rows={key === 'edge' ? [3, 3, 2] : [3, 3]}>
+              {renderMixSliders(`beat-${key}`, label, channel.mix, defaults.mix, (mix) => set({ mix }))}
               <CompactScrollbarSlider
-                id={`beat-${key}-frequencyHz`}
-                min={BEAT_SLIDER_MIN}
-                max={Math.log2(BEAT_FREQUENCY_MAX_HZ)}
+                id={`beat-${key}-effect`}
+                min={-1}
+                max={1}
                 step={0.01}
-                value={channel.frequencyHz === BEAT_FREQUENCY ? BEAT_SLIDER_MIN : Math.log2(channel.frequencyHz)}
-                trackLabel="freq"
-                tooltipLabel="Hz: the centre of the band it listens to, from sub-bass to hi-hats. The lowest position, beat, follows kick-drum hits instead"
-                ariaLabel={`${label}: frequency in Hz, or beat`}
-                defaultValue={Math.log2(DEFAULT_BEAT_CHANNEL.frequencyHz)}
-                formatValue={(value) => (value < BEAT_SLIDER_SPLIT ? 'beat' : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)).toString())}
-                onCommit={(value) => set({
-                  frequencyHz: value < BEAT_SLIDER_SPLIT ? BEAT_FREQUENCY : Math.max(BEAT_FREQUENCY_MIN_HZ, Math.round(2 ** value)),
-                })}
+                value={channel.effect}
+                trackLabel="effect"
+                tooltipLabel={`How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`}
+                ariaLabel={`${label}: effect, negative inverts`}
+                defaultValue={defaults.effect}
+                onCommit={(value) => set({ effect: value })}
               />
-              {slider('octaves', 'width', BEAT_OCTAVES_MIN, BEAT_OCTAVES_MAX, 0.1, 'Octaves: how wide the bell around the frequency is', 'band width in octaves', 1)}
-              {slider('contrast', 'contrast', 0, BEAT_CONTRAST_MAX, 0.01, 'How loud the band must be, against the ten seconds around it, before it responds: higher keeps only the biggest hits', 'contrast')}
-              {slider('fallSec', 'fall', BEAT_FALL_MIN_SEC, BEAT_FALL_MAX_SEC, 0.01, 'Seconds a peak takes to fall to nothing; a hit lifts it at once', 'fall time in seconds', 2)}
-              {slider('fallShape', 'shape', BEAT_FALL_SHAPE_MIN, BEAT_FALL_SHAPE_MAX, 0.1, 'Fall shape: 0 falls evenly, higher drops early, lower holds and drops late', 'fall shape', 1)}
+              {renderFallSliders(`beat-${key}`, label, channel, defaults, 'each hit', set)}
+              {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}
+              {key === 'edge' && [
+                  <CompactScrollbarSlider
+                    key="spread"
+                    id="beat-edge-spread"
+                    min={0}
+                    max={EDGE_SPREAD_MAX_PX}
+                    step={1}
+                    value={visualizer.edge.spreadPx}
+                    trackLabel="spread"
+                    tooltipLabel="Pixels: how far the edge reaches in from the editor's edges before it starts to fade"
+                    ariaLabel="Edge: spread in pixels"
+                    defaultValue={layoutVisualizer.edge.spreadPx}
+                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, spreadPx: Math.round(value) } }))}
+                  />,
+                  <CompactScrollbarSlider
+                    key="blur"
+                    id="beat-edge-blur"
+                    min={0}
+                    max={EDGE_BLUR_MAX_PX}
+                    step={1}
+                    value={visualizer.edge.blurPx}
+                    trackLabel="blur"
+                    tooltipLabel="Pixels: how soft the edge fades inward; 0 is a hard line"
+                    ariaLabel="Edge: blur in pixels"
+                    defaultValue={layoutVisualizer.edge.blurPx}
+                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, blurPx: Math.round(value) } }))}
+                  />,
+              ]}
             </OptionsSliderRows>
           </div>
         </>
@@ -1099,107 +1096,30 @@ export function SidebarOptionsPanel({
      */
     const remoteImagesHoldRef = useRef<(() => void) | null>(null)
     const remoteImagesHoldPressRef = useRef(false)
-    const topRowHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons']
-    const middleRowHighlightKeys: HighlightColorKey[] = [
-      isPreviewMode ? 'textEmbossRender' : 'textEmbossEdit',
-      'caret',
-      isPreviewMode ? 'selectionRender' : 'selectionEdit',
-      'textBase',
-      'textEmbossUi',
-    ]
-    const textureTargets = ['appGrid', 'sidebarContent', isPreviewMode ? 'editorRenderText' : 'editorEditText'] as TextureSurfaceKey[]
-
+    // Every colour is always on offer, whichever view the active slot shows:
+    // a colour that belongs to one view only sits under an "Editor" or
+    // "Reader" heading instead of being swapped in and out with the mode.
+    const interfaceHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons', 'textBase', 'textEmbossUi']
+    const editorTextHighlightKeys: HighlightColorKey[] = ['textEmbossEdit', 'caret', 'selectionEdit']
+    const readerTextHighlightKeys: HighlightColorKey[] = ['textEmbossRender', 'search', 'selectionRender']
     const renderHighlightSwatchButton = (key: HighlightColorKey) => {
-      const resolvedKey: HighlightColorKey = isPreviewMode && key === 'caret' ? 'search' : key
-      const isSearchHighlightControl = key === 'caret' && isPreviewMode
-      const buttonTitle = isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]
-      const buttonIcon = isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]
-
+      const isSearchHighlightControl = key === 'search'
       return (
-        <button
+        <ColorTargetButton
           key={key}
-          type="button"
-          className={`btn-icon options-color-swatch${isSearchHighlightControl ? ' search-highlight-color-button' : ''}${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon' : ''}`}
-          onClick={() => {
-            if (primedColorSource.kind === 'active-color') {
-              applyActiveColorToElement(resolvedKey)
-              return
-            }
-
-            if (primedColorSource.kind === 'texture-preview') {
-              updateHighlightColor(resolvedKey, hsvaToRgba(texturePreviewMaterial.color))
-              return
-            }
-
-            if (primedColorSource.kind === 'hsva') {
-              applyHsvaValueToElement(primedColorSource.key, resolvedKey)
-            }
-          }}
-          onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'element', key: resolvedKey }, event)}
-          onPointerUp={(event) => {
-            if (event.button !== 2) return
-            clearColorArmTimer()
-          }}
-          onMouseLeave={() => {
-            clearColorArmTimer()
-          }}
-          data-secondary-press="action"
-          onContextMenu={(event) => {
-            event.preventDefault()
-            clearColorArmTimer()
-          }}
-          style={{ '--options-swatch-color': highlightColors[resolvedKey] } as React.CSSProperties}
-          data-tooltip={buttonTitle}
-        >
-          <span className={`options-color-swatch-glyph ${buttonIcon}`} aria-hidden="true" />
-        </button>
+          className={`${isSearchHighlightControl ? 'search-highlight-color-button' : ''}${key === 'textBase' ? ' text-ui-icon' : ''}${key === 'lineNumber' ? ' text-icon text-icon-edit' : ''}`}
+          color={highlightColors[key]}
+          glyph={isSearchHighlightControl ? 'fa-solid fa-magnifying-glass' : HIGHLIGHT_COLOR_ICONS[key]}
+          tooltip={isSearchHighlightControl ? 'Search highlight color' : HIGHLIGHT_COLOR_TITLES[key]}
+          onApply={(css) => setHighlightColorCss(key, css)}
+        />
       )
     }
-
-    const renderTextureSwatchButton = (surface: TextureSurfaceKey) => (
-      <button
-        key={surface}
-        type="button"
-        className="btn-icon options-color-swatch"
-        onClick={() => {
-          if (primedColorSource.kind === 'active-color') {
-            applyActiveColorToTexture(surface)
-            return
-          }
-
-          if (primedColorSource.kind === 'texture-preview') {
-            applyTexturePreviewToSurface(surface)
-            return
-          }
-
-          if (primedColorSource.kind === 'hsva') {
-            applyHsvaValueToTexture(primedColorSource.key, surface)
-          }
-        }}
-        onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'texture', key: surface }, event)}
-        onPointerUp={(event) => {
-          if (event.button !== 2) return
-          clearColorArmTimer()
-        }}
-        onMouseLeave={() => {
-          clearColorArmTimer()
-        }}
-        data-secondary-press="action"
-        onContextMenu={(event) => {
-          event.preventDefault()
-          clearColorArmTimer()
-        }}
-        style={{ '--options-swatch-color': rgbaToCssColor(hsvaToRgba(textureMaterials[surface].color)) } as React.CSSProperties}
-        data-tooltip={TEXTURE_SURFACE_TITLES[surface]}
-      >
-        <span className={`options-color-swatch-glyph ${TEXTURE_SURFACE_ICONS[surface]}`} aria-hidden="true" />
-      </button>
-    )
 
     return (
     <div
       ref={optionsContentRef}
-      className={`options-content sidebar-options-content ${isPreviewMode ? 'mode-view' : 'mode-edit'}`}
+      className="options-content sidebar-options-content"
       aria-label="Settings panel"
     >
       <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
@@ -1233,79 +1153,15 @@ export function SidebarOptionsPanel({
           </button>
         </div>
       </div>
+      <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
+        <FeatureToggleBar features={features} setFeatures={setFeatures} />
+      </div>
       <AccordionGroup filter={searchQuery}>
       <AccordionSection
         className="sidebar-options-section-editor-font"
         ariaLabel="Editor Font"
         heading="Editor Font"
       >
-        {isPreviewMode ? (
-          <div className="typography-grid" role="group" aria-label="Render typography">
-            {VIEW_STYLE_OPTIONS.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' is-active' : ''}`}
-                data-tooltip={option.label}
-                aria-label={option.label}
-                aria-pressed={viewStyle === option.key}
-                onClick={() => setViewStyle(option.key)}
-              >
-                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {isPreviewMode ? (
-          <div className="typography-sliders">
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="typography-font-size"
-                min={EDITOR_FONT_SIZE_MIN_PX}
-                max={EDITOR_FONT_SIZE_MAX_PX}
-                step={EDITOR_FONT_SIZE_STEP_PX}
-                value={viewFontSize}
-                trackLabel="size"
-                ariaLabel="Render font size"
-                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
-                onCommit={(value) => setViewFontSize(
-                  clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
-                )}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="view-letter-spacing"
-                min={VIEW_LETTER_SPACING_MIN_EM}
-                max={VIEW_LETTER_SPACING_MAX_EM}
-                step={VIEW_LETTER_SPACING_STEP_EM}
-                value={viewLetterSpacingEm}
-                trackLabel="spacing"
-                ariaLabel="Render letter spacing in em"
-                defaultValue={DEFAULT_VIEW_LETTER_SPACING_EM}
-                onCommit={(value) => setViewLetterSpacingEm(
-                  clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM),
-                )}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="typography-spacing"
-                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
-                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
-                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
-                value={viewSpacing}
-                trackLabel="height"
-                ariaLabel="Render line height"
-                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
-                onCommit={(value) => setViewSpacing(
-                  clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
-                )}
-              />
-            </div>
-          </div>
-        ) : null}
-        {!isPreviewMode ? (
           <div className="typography-grid" role="group" aria-label="Editor typography">
             {EDITOR_STYLE_OPTIONS.map((option) => (
               <button
@@ -1324,8 +1180,6 @@ export function SidebarOptionsPanel({
               </button>
             ))}
           </div>
-        ) : null}
-        {!isPreviewMode ? (
           <div className="typography-sliders">
             <div className="typography-slider">
               <CompactScrollbarSlider
@@ -1386,7 +1240,75 @@ export function SidebarOptionsPanel({
               />
             </div>
           </div>
-        ) : null}
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-reader-font"
+        ariaLabel="Reader Font"
+        heading="Reader Font"
+      >
+          <div className="typography-grid" role="group" aria-label="Render typography">
+            {VIEW_STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' is-active' : ''}`}
+                data-tooltip={option.label}
+                aria-label={option.label}
+                aria-pressed={viewStyle === option.key}
+                onClick={() => setViewStyle(option.key)}
+              >
+                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
+              </button>
+            ))}
+          </div>
+          <div className="typography-sliders">
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="reader-font-size"
+                min={EDITOR_FONT_SIZE_MIN_PX}
+                max={EDITOR_FONT_SIZE_MAX_PX}
+                step={EDITOR_FONT_SIZE_STEP_PX}
+                value={viewFontSize}
+                trackLabel="size"
+                ariaLabel="Render font size"
+                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
+                onCommit={(value) => setViewFontSize(
+                  clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+                )}
+              />
+            </div>
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="view-letter-spacing"
+                min={VIEW_LETTER_SPACING_MIN_EM}
+                max={VIEW_LETTER_SPACING_MAX_EM}
+                step={VIEW_LETTER_SPACING_STEP_EM}
+                value={viewLetterSpacingEm}
+                trackLabel="spacing"
+                ariaLabel="Render letter spacing in em"
+                defaultValue={DEFAULT_VIEW_LETTER_SPACING_EM}
+                onCommit={(value) => setViewLetterSpacingEm(
+                  clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM),
+                )}
+              />
+            </div>
+            <div className="typography-slider">
+              <CompactScrollbarSlider
+                id="reader-line-height"
+                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
+                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
+                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
+                value={viewSpacing}
+                trackLabel="height"
+                ariaLabel="Render line height"
+                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
+                onCommit={(value) => setViewSpacing(
+                  clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+                )}
+              />
+            </div>
+          </div>
       </AccordionSection>
 
       <AccordionSection
@@ -1491,416 +1413,51 @@ export function SidebarOptionsPanel({
         iconClass="fa-rectangle-list"
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
-        <div className="options-color-layout" aria-label="Color and texture controls">
-          <div className="options-color-grid options-hsva-grid" role="group" aria-label="HSVA value controls">
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'h' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'h' ? ' is-active' : ''}`}
-              style={{ background: hsvaDisplayColors.hColor }}
-              data-live-tooltip={`Hue: ${Math.round(activeColorHsva.h)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('h', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'h' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('h', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('h', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('h', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('h', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('h', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 's' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 's' ? ' is-active' : ''}`}
-              style={{ background: hsvaDisplayColors.sColor }}
-              data-live-tooltip={`Saturation: ${Math.round(activeColorHsva.s * 255)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('s', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 's' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('s', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('s', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('s', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('s', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('s', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-hsva-control${hsvaDragState?.control === 'v' ? ' is-dragging' : ''}${primedColorSource.kind === 'hsva' && primedColorSource.key === 'v' ? ' is-active' : ''}`}
-              style={{ background: hsvaDisplayColors.vColor }}
-              data-live-tooltip={`Value: ${Math.round(activeColorHsva.v * 255)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('v', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'v' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('v', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('v', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('v', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('v', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('v', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={[
-                'btn-icon',
-                'options-color-swatch',
-                'options-hsva-control',
-                'options-hsva-alpha',
-                hsvaDragState?.control === 'a' ? 'is-dragging' : '',
-                primedColorSource.kind === 'hsva' && primedColorSource.key === 'a' ? 'is-active' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              style={{ background: 'var(--color-background-light)', color: hsvaDisplayColors.aGhostColor }}
-              data-live-tooltip={`Alpha: ${Math.round(activeColorHsva.a * 255)}\n${activeColorHex}`}
-              onPointerDown={(event) => {
-                startHsvaDrag('a', event)
-                if (event.button === 2) startColorArmHold({ kind: 'hsva', key: 'a' }, event)
-              }}
-              onPointerMove={(event) => {
-                handleHsvaDragMove('a', event)
-              }}
-              onPointerUp={(event) => {
-                stopHsvaDrag('a', event)
-                if (event.button === 2) clearColorArmTimer()
-              }}
-              onPointerCancel={(event) => {
-                stopHsvaDrag('a', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopHsvaDrag('a', event)
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onWheel={(event) => {
-                wheelAdjustHsvaControl('a', event)
-              }}
-            ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-active-color${primedColorSource.kind === 'active-color' ? ' is-active' : ''}`}
-              data-tooltip={`Active color:\n${activeColorHex}`}
-              style={{ background: `linear-gradient(${activeColorCss}, ${activeColorCss}), var(--color-background-light)` }}
-              onPointerDown={(event) => {
-                if (event.button !== 2) return
-                startColorArmHold({ kind: 'active-color' }, event)
-              }}
-              onPointerUp={(event) => {
-                if (event.button !== 2) return
-                clearColorArmTimer()
-              }}
-              onMouseLeave={clearColorArmTimer}
-              data-secondary-press="action"
-              onContextMenu={(event) => {
-                event.preventDefault()
-                clearColorArmTimer()
-              }}
-              onClick={() => {}}
-            />
-          </div>
-          <div className="options-texture-settings" aria-label="Texture generation settings">
-            <div className="options-texture-preview-row">
-              <button
-                type="button"
-                className={`btn-icon options-color-swatch options-active-color options-texture-preview${primedColorSource.kind === 'texture-preview' ? ' is-active' : ''}`}
-                data-tooltip={`Texture preview: ${texturePreviewHex}`}
-                style={{
-                  '--texture-preview-color': texturePreviewTintCss,
-                  '--texture-preview-mask': texturePreviewCss,
-                } as React.CSSProperties}
-                onPointerDown={(event) => {
-                  if (event.button !== 2) return
-                  startColorArmHold({ kind: 'texture-preview' }, event)
-                }}
-                onPointerUp={(event) => {
-                  if (event.button !== 2) return
-                  clearColorArmTimer()
-                }}
-                onMouseLeave={clearColorArmTimer}
-                data-secondary-press="action"
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  clearColorArmTimer()
-                }}
-                onClick={() => {
-                  setPrimedColorSource({ kind: 'texture-preview' })
-                }}
-              />
-            </div>
-            <div className="options-texture-seed-slot">
-              <div className="options-seed-editor" aria-label="Texture seed">
-                {isTextureSeedEditing ? (
-                  <label className="options-seed-btn is-editing" aria-label="Edit texture seed">
-                    <input
-                      ref={textureSeedInputRef}
-                      type="number"
-                      min={0}
-                      max={1000000}
-                      step={1}
-                      inputMode="numeric"
-                      spellCheck={false}
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      className="sidebar-page-number-input sidebar-page-number-input--edit"
-                      value={textureSeedInput}
-                      onChange={(event) => {
-                        setTextureSeedInput(event.target.value.replace(/[^0-9]/g, ''))
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          commitTextureSeedEdit()
-                          scheduleFocusEditorInEditMode()
-                          return
-                        }
+        <ColorPickerRow />
 
-                        if (event.key === 'Escape' || event.key === 'Tab') {
-                          event.preventDefault()
-                          cancelTextureSeedEdit()
-                          scheduleFocusEditorInEditMode()
-                        }
-                      }}
-                      onBlur={() => {
-                        window.setTimeout(() => {
-                          if (!isTextEntryElement(document.activeElement)) {
-                            scheduleFocusEditorInEditMode()
-                          }
-                        }, 0)
-                      }}
-                    />
-                  </label>
-                ) : (
-                  <button
-                    type="button"
-                    className="options-seed-btn"
-                    aria-label={`Texture seed ${texturePreviewMaterial.seed}. Left click to randomize. Right click to edit.`}
-                    data-tooltip="Left click: random seed. Right click: edit seed."
-                    onClick={randomizeTextureSeed}
-                    data-secondary-press="action"
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      startTextureSeedEdit()
-                    }}
-                  ><span className="fa-solid fa-seedling" />
-                  </button>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              role="slider"
-              aria-label="Texture granularity"
-              aria-orientation="vertical"
-              aria-valuemin={TEXTURE_GRANULARITY_MIN}
-              aria-valuemax={TEXTURE_GRANULARITY_MAX}
-              aria-valuenow={texturePreviewMaterial.granularity}
-              className={[
-                'btn-icon',
-                'options-color-swatch',
-                'options-hsva-control',
-                'options-hsva-alpha',
-                'options-texture-control-btn',
-                'options-texture-control-btn-granularity',
-                textureControlDragState?.control === 'granularity' ? 'is-dragging' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              data-live-tooltip={`Granularity (${texturePreviewMaterial.granularity})`}
-              onPointerDown={(event) => {
-                startTextureControlDrag('granularity', event)
-              }}
-              onPointerMove={(event) => {
-                handleTextureControlDragMove('granularity', event)
-              }}
-              onPointerUp={(event) => {
-                stopTextureControlDrag('granularity', event)
-              }}
-              onPointerCancel={(event) => {
-                stopTextureControlDrag('granularity', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopTextureControlDrag('granularity', event)
-              }}
-              data-secondary-press="none"
-              onContextMenu={(event) => {
-                event.preventDefault()
-              }}
-              onWheel={(event) => {
-                wheelAdjustTextureControl('granularity', event)
-              }}
-            >
-              <span className="options-hsva-glyph fa-solid fa-chess-board" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              role="slider"
-              aria-label="Texture smoothness"
-              aria-orientation="vertical"
-              aria-valuemin={TEXTURE_VSTEPS_MIN}
-              aria-valuemax={TEXTURE_VSTEPS_MAX}
-              aria-valuenow={texturePreviewMaterial.vSteps}
-              className={[
-                'btn-icon',
-                'options-color-swatch',
-                'options-hsva-control',
-                'options-hsva-alpha',
-                'options-texture-control-btn',
-                'options-texture-control-btn-smoothness',
-                textureControlDragState?.control === 'smoothness' ? 'is-dragging' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              data-live-tooltip={`Smoothness (${texturePreviewMaterial.vSteps})`}
-              onPointerDown={(event) => {
-                startTextureControlDrag('smoothness', event)
-              }}
-              onPointerMove={(event) => {
-                handleTextureControlDragMove('smoothness', event)
-              }}
-              onPointerUp={(event) => {
-                stopTextureControlDrag('smoothness', event)
-              }}
-              onPointerCancel={(event) => {
-                stopTextureControlDrag('smoothness', event)
-              }}
-              onLostPointerCapture={(event) => {
-                stopTextureControlDrag('smoothness', event)
-              }}
-              data-secondary-press="none"
-              onContextMenu={(event) => {
-                event.preventDefault()
-              }}
-              onWheel={(event) => {
-                wheelAdjustTextureControl('smoothness', event)
-              }}
-            >
-              <span className="options-hsva-glyph fa-solid fa-pen-nib" aria-hidden="true" />
-            </button>
-          </div>
+        <OptionsSubsectionLabel>Interface</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="Interface colors">
+          {interfaceHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
 
-        <OptionsSubsectionLabel>Surfaces</OptionsSubsectionLabel>
+        <OptionsSubsectionLabel>Surface textures</OptionsSubsectionLabel>
+        <SurfaceTexturePicker materials={textureMaterials} onWrite={setTextureMaterial} />
 
-        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="App base and texture colors">
-          {topRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
-          {textureTargets.map((surface) => renderTextureSwatchButton(surface))}
+        <OptionsSubsectionLabel>Editor Text</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Editor text and selection colors">
+          <ColorTargetButton
+            className="text-icon text-icon-edit"
+            color={editorTextColors.editorEditText}
+            glyph="fa-solid fa-font"
+            tooltip="Edit mode text color"
+            onApply={(css) => setEditorTextColorCss('editorEditText', css)}
+          />
+          {editorTextHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
 
-        <OptionsSubsectionLabel>Text</OptionsSubsectionLabel>
-
-        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Mode text and selection colors">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch text-icon"
-            onClick={() => {
-              const target: EditorTextColorTargetKey = isPreviewMode ? 'editorRenderText' : 'editorEditText'
-
-              if (primedColorSource.kind === 'active-color') {
-                applyActiveColorToEditorText(target)
-                return
-              }
-
-              if (primedColorSource.kind === 'texture-preview') {
-                updateEditorTextColor(target, hsvaToRgba(texturePreviewMaterial.color))
-                return
-              }
-
-              if (primedColorSource.kind === 'hsva') {
-                applyHsvaValueToEditorText(primedColorSource.key, target)
-              }
-            }}
-            onPointerDown={(event) => startElementPreviewCopyHold({ kind: 'text', key: isPreviewMode ? 'editorRenderText' : 'editorEditText' }, event)}
-            onPointerUp={(event) => {
-              if (event.button !== 2) return
-              clearColorArmTimer()
-            }}
-            onMouseLeave={() => {
-              clearColorArmTimer()
-            }}
-            data-secondary-press="action"
-            onContextMenu={(event) => {
-              event.preventDefault()
-              clearColorArmTimer()
-            }}
-            style={{
-              '--options-swatch-color': editorTextColors[isPreviewMode ? 'editorRenderText' : 'editorEditText'],
-            } as React.CSSProperties}
-            data-tooltip={isPreviewMode ? 'Render mode text color' : 'Edit mode text color'}
-          >
-            <span className="options-color-swatch-glyph fa-solid fa-font" aria-hidden="true" />
-          </button>
-
-          {middleRowHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
+        <OptionsSubsectionLabel>Reader Text</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Reader text and selection colors">
+          <ColorTargetButton
+            className="text-icon text-icon-render"
+            color={editorTextColors.editorRenderText}
+            glyph="fa-solid fa-font"
+            tooltip="Render mode text color"
+            onApply={(css) => setEditorTextColorCss('editorRenderText', css)}
+          />
+          {readerTextHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
 
-        {!isPreviewMode ? (
-          <>
-            <OptionsSubsectionLabel>Boxes</OptionsSubsectionLabel>
-            <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
-              {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
-            </div>
-            <OptionsSubsectionLabel>Markdown</OptionsSubsectionLabel>
-            <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
-              {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
-            </div>
-          </>
-        ) : null}
+        <OptionsSubsectionLabel>Editor Boxes</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
+          {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
+        </div>
+        <OptionsSubsectionLabel>Editor Markdown</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
+          {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
+        </div>
       </AccordionSection>
 
+      {features.glaze ? (
       <AccordionSection
         ariaLabel="Glaze"
         heading="Glaze"
@@ -2234,6 +1791,7 @@ export function SidebarOptionsPanel({
           </div>
         </div>
       </AccordionSection>
+      ) : null}
 
       <AccordionSection
         ariaLabel="Filters"
@@ -2337,7 +1895,7 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
-      {!IS_LINUX_DESKTOP ? (
+      {features.customCursor && !IS_LINUX_DESKTOP ? (
       <AccordionSection
         className="sidebar-options-section-mouse"
         ariaLabel="Cursor"
@@ -2345,33 +1903,16 @@ export function SidebarOptionsPanel({
         iconClass="fa-rectangle-list"
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
+        <ColorPickerRow />
         <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch "
-            style={{ background: customCursorCenterColor }}
-            data-tooltip="Center dot color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('center')}
-            onPointerDown={(event) => startCursorColorCopyHold('center', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-regular fa-circle-dot" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: customCursorHaloColor }}
-            data-tooltip="Halo color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('halo')}
-            onPointerDown={(event) => startCursorColorCopyHold('halo', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-circle" aria-hidden="true" /></button>
+          <div className="options-mouse-target-grid">
+            <ColorTargetButton color={customCursorCenterColor} glyph="fa-regular fa-circle-dot" tooltip="Center dot color" onApply={setCustomCursorCenterColor} />
+            <ColorTargetButton color={customCursorHaloColor} glyph="fa-solid fa-circle" tooltip="Halo color" onApply={setCustomCursorHaloColor} />
+            <ColorTargetButton color={customCursorDotColor} glyph="fa-solid fa-spinner" tooltip="Circling dots color" onApply={setCustomCursorDotColor} />
+            <ColorTargetButton color={customCursorTrailColor} glyph="fa-solid fa-cancer" tooltip="Trail color" onApply={setCustomCursorTrailColor} />
+          </div>
 
-          <div className="options-mouse-center-grid" aria-hidden="true">
+          <div className="options-mouse-center-grid options-mouse-center-grid-wide" aria-hidden="true">
             <div className="options-glaze-cell options-glaze-cell-span-2">
               <CompactScrollbarSlider
                 id="cursor-trail-thickness"
@@ -2411,84 +1952,7 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setCustomCursorCenterSizePx(clamp(value, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX))}
               />
             </div>
-
           </div>
-
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
-            style={{ background: cursorHsvaDisplayColors.hColor }}
-            data-live-tooltip={`Hue: ${Math.round(cursorColorHsva.h)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('h', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('h', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('h', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('h', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('h', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('h', event)}
-          ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 's' ? ' is-dragging' : ''}`}
-            style={{ background: cursorHsvaDisplayColors.sColor }}
-            data-live-tooltip={`Saturation: ${Math.round(cursorColorHsva.s * 255)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('s', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('s', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('s', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('s', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('s', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('s', event)}
-          ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
-
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: customCursorDotColor }}
-            data-tooltip="Circling dots color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('dot')}
-            onPointerDown={(event) => startCursorColorCopyHold('dot', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-spinner" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: customCursorTrailColor }}
-            data-tooltip="Trail color — click to apply, hold right-click to copy"
-            onClick={() => applyCursorColorToTarget('trail')}
-            onPointerDown={(event) => startCursorColorCopyHold('trail', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCursorColorArmTimer() }}
-            onMouseLeave={clearCursorColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCursorColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-cancer" aria-hidden="true" /></button>
-
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${cursorHsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
-            style={{ background: cursorHsvaDisplayColors.vColor }}
-            data-live-tooltip={`Value: ${Math.round(cursorColorHsva.v * 255)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('v', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('v', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('v', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('v', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('v', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('v', event)}
-          ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control options-hsva-alpha${cursorHsvaDragState?.control === 'a' ? ' is-dragging' : ''}`}
-            style={{ background: 'var(--color-background-light)', color: cursorHsvaDisplayColors.aGhostColor }}
-            data-live-tooltip={`Alpha: ${Math.round(cursorColorHsva.a * 255)}`}
-            onPointerDown={(event) => startCursorHsvaDrag('a', event)}
-            onPointerMove={(event) => handleCursorHsvaDragMove('a', event)}
-            onPointerUp={(event) => stopCursorHsvaDrag('a', event)}
-            onPointerCancel={(event) => stopCursorHsvaDrag('a', event)}
-            onLostPointerCapture={(event) => stopCursorHsvaDrag('a', event)}
-            onWheel={(event) => wheelAdjustCursorHsvaControl('a', event)}
-          ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
-
 
           <OptionsSubsectionLabel>Trail</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-3">
@@ -2689,86 +2153,15 @@ export function SidebarOptionsPanel({
         iconClass="fa-rectangle-list"
         iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
       >
+        <ColorPickerRow />
         <div className="options-caret-settings-grid" role="group" aria-label="Caret appearance controls">
-          {/* Row 1: the two colour targets this section owns. The caret's FILL
+          {/* The two colour targets this section owns. The caret's FILL
               colour is not here on purpose -- it is highlightColors.caret,
               edited in Colors with every other highlight colour;
               duplicating it here would be a second control for one value. */}
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: caretOutlineColor }}
-            data-tooltip="Caret outline color — click to apply, hold right-click to copy"
-            onClick={() => applyCaretColorToTarget('outline')}
-            onPointerDown={(event) => startCaretColorCopyHold('outline', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
-            onMouseLeave={clearCaretColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-regular fa-square" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className="btn-icon options-color-swatch"
-            style={{ background: caretHaloColor }}
-            data-tooltip="Caret halo color — click to apply, hold right-click to copy"
-            onClick={() => applyCaretColorToTarget('halo')}
-            onPointerDown={(event) => startCaretColorCopyHold('halo', event)}
-            onPointerUp={(event) => { if (event.button !== 2) return; clearCaretColorArmTimer() }}
-            onMouseLeave={clearCaretColorArmTimer}
-            data-secondary-press="action"
-            onContextMenu={(event) => { event.preventDefault(); clearCaretColorArmTimer() }}
-          ><span className="options-color-swatch-glyph fa-solid fa-square" aria-hidden="true" /></button>
-
-          {/* The staged H/S/V/A the two swatches above apply -- same closed-loop
-              widget as the Cursor section's, scoped to this section. */}
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 'h' ? ' is-dragging' : ''}`}
-            style={{ background: caretHsvaDisplayColors.hColor }}
-            data-live-tooltip={`Hue: ${Math.round(caretColorHsva.h)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('h', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('h', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('h', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('h', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('h', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('h', event)}
-          ><span className="options-hsva-glyph fa-solid fa-rainbow" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 's' ? ' is-dragging' : ''}`}
-            style={{ background: caretHsvaDisplayColors.sColor }}
-            data-live-tooltip={`Saturation: ${Math.round(caretColorHsva.s * 255)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('s', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('s', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('s', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('s', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('s', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('s', event)}
-          ><span className="options-hsva-glyph fa-solid fa-droplet" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control${caretHsvaDragState?.control === 'v' ? ' is-dragging' : ''}`}
-            style={{ background: caretHsvaDisplayColors.vColor }}
-            data-live-tooltip={`Value: ${Math.round(caretColorHsva.v * 255)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('v', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('v', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('v', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('v', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('v', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('v', event)}
-          ><span className="options-hsva-glyph fa-solid fa-circle-half-stroke" aria-hidden="true" /></button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-hsva-control options-hsva-alpha${caretHsvaDragState?.control === 'a' ? ' is-dragging' : ''}`}
-            style={{ background: 'var(--color-background-light)', color: caretHsvaDisplayColors.aGhostColor }}
-            data-live-tooltip={`Alpha: ${Math.round(caretColorHsva.a * 255)}`}
-            onPointerDown={(event) => startCaretHsvaDrag('a', event)}
-            onPointerMove={(event) => handleCaretHsvaDragMove('a', event)}
-            onPointerUp={(event) => stopCaretHsvaDrag('a', event)}
-            onPointerCancel={(event) => stopCaretHsvaDrag('a', event)}
-            onLostPointerCapture={(event) => stopCaretHsvaDrag('a', event)}
-            onWheel={(event) => wheelAdjustCaretHsvaControl('a', event)}
-          ><span className="options-hsva-glyph fa-solid fa-eye" aria-hidden="true" /></button>
+          <ColorTargetButton color={caretOutlineColor} glyph="fa-regular fa-square" tooltip="Caret outline color" onApply={setCaretOutlineColor} />
+          <ColorTargetButton color={caretHaloColor} glyph="fa-solid fa-square" tooltip="Caret halo color" onApply={setCaretHaloColor} />
+          <div className="options-caret-target-spacer" aria-hidden="true" />
 
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
@@ -2825,23 +2218,58 @@ export function SidebarOptionsPanel({
 
           <OptionsSubsectionLabel>Blink</OptionsSubsectionLabel>
           {/* Animation shape. One button per curve, same visual language as the
-              custom-layout slots -- the selected one carries .is-active. */}
+              custom-layout slots -- the selected one carries .is-active.
+              Pressing the active one switches the blink off altogether (the
+              caretBlink feature, shared/features.ts): the caret holds steady,
+              no animation runs, and the sliders below leave the panel.
+              Pressing any shape switches it back on. */}
           <div className="options-caret-preset-row" role="group" aria-label="Caret blink animation">
-            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => (
-              <button
-                key={presetKey}
-                type="button"
-                className={`btn-icon options-color-swatch options-caret-preset-btn${caretAnimationPreset === presetKey ? ' is-active' : ''}`}
-                data-tooltip={CARET_ANIMATION_PRESETS[presetKey].label}
-                aria-label={CARET_ANIMATION_PRESETS[presetKey].label}
-                aria-pressed={caretAnimationPreset === presetKey}
-                onClick={() => setCaretAnimationPreset(presetKey)}
-              >
-                <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
-              </button>
-            ))}
+            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => {
+              const isActive = features.caretBlink && caretAnimationPreset === presetKey
+              const label = CARET_ANIMATION_PRESETS[presetKey].label
+              return (
+                <button
+                  key={presetKey}
+                  type="button"
+                  className={`btn-icon options-color-swatch options-caret-preset-btn${isActive ? ' is-active' : ''}`}
+                  data-tooltip={isActive ? `${label}: press again to stop the blink` : label}
+                  aria-label={label}
+                  aria-pressed={isActive}
+                  onClick={() => {
+                    if (isActive) {
+                      setFeatures((prev) => ({ ...prev, caretBlink: false }))
+                      return
+                    }
+                    setCaretAnimationPreset(presetKey)
+                    if (!features.caretBlink) setFeatures((prev) => ({ ...prev, caretBlink: true }))
+                  }}
+                >
+                  <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
+                </button>
+              )
+            })}
+            {/* Not a blink but a switch beside them: the blink selected above
+                stays selected and is what the caret falls back to whenever
+                there is no beat to follow (VisualizerCaret.followsMusic). */}
+            <button
+              type="button"
+              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}${caretFollowWaits ? ' is-dimmed' : ''}`}
+              data-tooltip={caretFollowUnavailable
+                ? 'Follow the music needs the Visualizer: switch it on (the drum) in the feature bar. Until then the caret blinks as selected'
+                : caretFollowWaits
+                ? "Follow the music is on but not in effect: the caret's effect under Visualizer is at its centre. Until then the caret blinks as selected"
+                : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected'}
+              aria-label="Caret follows the music"
+              aria-pressed={visualizer.caret.followsMusic}
+              // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
+              aria-disabled={caretFollowUnavailable}
+              onClick={() => caretFollowUnavailable || setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
+            >
+              <span className="fa-solid fa-music" aria-hidden="true" />
+            </button>
           </div>
 
+          {features.caretBlink ? (<>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="caret-animation-duration"
@@ -2881,9 +2309,11 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setCaretEffectStrengthPercent(clamp(Math.round(value), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT))}
             />
           </div>
+          </>) : null}
         </div>
       </AccordionSection>
 
+      {features.keySounds ? (
       <AccordionSection
         className="sidebar-options-section-audio"
         ariaLabel="Sounds"
@@ -2899,7 +2329,6 @@ export function SidebarOptionsPanel({
               className={`btn-icon options-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
               onClick={() => {
                 setTypingSoundEnabled(false)
-                typingSoundManager.setTypingSoundEnabled(false)
               }}
               aria-pressed={!typingSoundEnabled}
               data-tooltip="No Key Sounds"
@@ -2914,7 +2343,6 @@ export function SidebarOptionsPanel({
                 onClick={() => {
                   setTypingSoundEnabled(true)
                   setTypingSoundSet(setId)
-                  typingSoundManager.setTypingSoundEnabled(true)
                   typingSoundManager.setTypingSoundSet(setId)
                 }}
                 aria-pressed={typingSoundEnabled && typingSoundSet === setId}
@@ -3047,51 +2475,306 @@ export function SidebarOptionsPanel({
           </OptionsSliderRows>
         </div>
       </AccordionSection>
+      ) : null}
+
+      {features.visualizer ? (
+      <AccordionSection
+        className="sidebar-options-section-visualizer"
+        ariaLabel="Visualizer"
+        heading="Visualizer"
+        iconClass="fa-rectangle-list"
+        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout. Its delay is kept for every layout."
+      >
+          <ColorPickerRow />
+          <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
+            <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
+            <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3), shown on each hit of its mix" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit of its mix, in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.accentColor || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum, the progress track and the song text in the visualizer mode (F3). Until picked it follows the caret colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, accentColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.letterboxColor || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F3). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, letterboxColor: css } }))} />
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Beat timing">
+            <OptionsSliderRows rows={[1, 1]}>
+              <CompactScrollbarSlider
+                id="beat-delay"
+                min={BEAT_DELAY_MIN_MS}
+                max={BEAT_DELAY_MAX_MS}
+                step={5}
+                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
+                trackLabel="delay"
+                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
+                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
+                defaultValue={0}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="beat-response"
+                min={BEAT_RESPONSE_MIN_DB}
+                max={BEAT_RESPONSE_MAX_DB}
+                step={1}
+                value={beatSettings.responseDb}
+                trackLabel="response"
+                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half. Kept for every layout"
+                ariaLabel="Beat pulse: dB below full scale that still gives a full response"
+                defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
+              />
+            </OptionsSliderRows>
+          </div>
+          {renderTrackers()}
+          {visualizer.caret.followsMusic && renderBeatCaret()}
+          {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
+          {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
+          <div className="utility-setting-button-row" role="group" aria-label="Immersive glaze controls">
+            <OptionsSubsectionLabel>Glaze (immersive)</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
+            <OptionsSliderRows rows={[3, 4, 3]}>
+              {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, layoutVisualizer.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
+              <CompactScrollbarSlider
+                id="visualizer-glaze-strength"
+                min={0}
+                max={IMMERSIVE_GLAZE_STRENGTH_MAX}
+                step={0.005}
+                value={visualizer.immersive.glazeStrength}
+                trackLabel="glaze"
+                tooltipLabel="Strength of the glaze that sways in the visualizer mode (F3): every linear and radial layer of this layout's glaze, at this strength"
+                ariaLabel="Immersive: strength of the visualizer's glaze"
+                defaultValue={layoutVisualizer.immersive.glazeStrength}
+                formatValue={(value) => value.toFixed(3)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeStrength: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-glaze-spread"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.glazeSpread}
+                trackLabel="spread"
+                tooltipLabel="How the visualizer's glaze strength is shared between its layers by depth: the centre gives every layer all of it; left fades the farthest out and keeps the nearest, right the reverse"
+                ariaLabel="Immersive: spread of the visualizer's glaze strength across its layers, negative favours the nearest"
+                defaultValue={layoutVisualizer.immersive.glazeSpread}
+                formatValue={(value) => value.toFixed(2)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeSpread: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-range"
+                min={0}
+                max={IMMERSIVE_SWAY_RANGE_MAX_PX}
+                step={1}
+                value={visualizer.immersive.swayRangePx}
+                trackLabel="range"
+                tooltipLabel="px the nearest glaze layer sways from rest in the visualizer mode, at the music's usual loudness (louder passages widen it, silence calms it)"
+                ariaLabel="Immersive: how far the nearest glaze layer sways, in pixels"
+                defaultValue={layoutVisualizer.immersive.swayRangePx}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayRangePx: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-spread"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.swaySpread}
+                trackLabel="depth"
+                tooltipLabel="How much less each glaze layer sways than the one in front of it: at the left every layer sways as far as the nearest, at the right each sways half as far as the one in front"
+                ariaLabel="Immersive: how much less each glaze layer sways than the one in front of it"
+                defaultValue={layoutVisualizer.immersive.swaySpread}
+                formatValue={(value) => value.toFixed(2)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-push"
+                min={-SWAY_PUSH_MAX_PX}
+                max={SWAY_PUSH_MAX_PX}
+                step={0.1}
+                value={visualizer.immersive.swayPush}
+                trackLabel="push"
+                tooltipLabel="px each hit of the glaze's mix above pushes the glaze's light stripes across them, for the nearest: right of centre forward, left of centre in reverse, 0 at the centre not at all"
+                ariaLabel="Immersive: how far each hit of the glaze mix pushes the glaze stripes, pixels"
+                defaultValue={layoutVisualizer.immersive.swayPush}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: Math.round(value * 10) / 10 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-return"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.swayReturn}
+                trackLabel="return"
+                tooltipLabel="How far the glaze slides back after a push, in percent, on the wave's fall: 0 keeps the whole push, 100 returns it to where it was"
+                ariaLabel="Immersive: share of each push the glaze slides back, percent"
+                defaultValue={layoutVisualizer.immersive.swayReturn}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayReturn: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-drift"
+                min={-SWAY_DRIFT_MAX_PX}
+                max={SWAY_DRIFT_MAX_PX}
+                step={1}
+                value={visualizer.immersive.swayDrift}
+                trackLabel="drift"
+                tooltipLabel="A steady, endless drift of the glaze's light stripes across them, in px a second for the nearest: the centre holds them still, right drifts them one way and left the other"
+                ariaLabel="Immersive: steady drift of the glaze stripes, pixels per second, negative drifts the other way"
+                defaultValue={layoutVisualizer.immersive.swayDrift}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
+              />
+            </OptionsSliderRows>
+          </div>
+          <div className="utility-setting-button-row" role="group" aria-label="Immersive wave controls">
+            <OptionsSubsectionLabel>Wave (immersive)</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
+            <OptionsSliderRows rows={[3, 3, 2]}>
+              {renderMixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, layoutVisualizer.immersive.waveMix, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
+              <CompactScrollbarSlider
+                id="visualizer-wave-boxes"
+                min={WAVE_BOXES_MIN}
+                max={WAVE_BOXES_MAX}
+                step={1}
+                value={visualizer.immersive.waveBoxes}
+                trackLabel="wave"
+                tooltipLabel="Boxes from one band of the grid wave to the next, in the visualizer mode (F3)"
+                ariaLabel="Immersive: grid wave length in boxes"
+                defaultValue={layoutVisualizer.immersive.waveBoxes}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveBoxes: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-wave-sec"
+                min={WAVE_SEC_MIN}
+                max={WAVE_SEC_MAX}
+                step={0.1}
+                value={visualizer.immersive.waveSec}
+                trackLabel="travel"
+                tooltipLabel="Seconds a band of the grid wave takes to travel one wave length"
+                ariaLabel="Immersive: seconds the grid wave takes to travel one wave length"
+                defaultValue={layoutVisualizer.immersive.waveSec}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveSec: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-wave-turn"
+                min={-WAVE_TURN_MAX}
+                max={WAVE_TURN_MAX}
+                step={1}
+                value={visualizer.immersive.waveTurn}
+                trackLabel="turn"
+                tooltipLabel="Beats per turn of the grid wave's fastest pivot, with the music's beat: the centre holds it still, right turns it clockwise and left counter-clockwise (shown negative), at 16, 8, 4, 2 and 1 beats towards either end. Three pivots turn together (the screen's centre, a quarter of the screen to its left and a quarter to its right), the outer two 16 and 4 times slower"
+                ariaLabel="Immersive: beats per turn of the grid wave's fastest pivot, negative counter-clockwise, 0 still"
+                defaultValue={layoutVisualizer.immersive.waveTurn}
+                formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurn: Math.round(value) } }))}
+              />
+              {renderFallSliders('visualizer-wave', 'Immersive wave', { shape: visualizer.immersive.waveShape, fallSec: visualizer.immersive.waveFallSec }, { shape: layoutVisualizer.immersive.waveShape, fallSec: layoutVisualizer.immersive.waveFallSec }, 'the wave after each hit', (patch) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, ...(patch.shape !== undefined ? { waveShape: patch.shape } : {}), ...(patch.fallSec !== undefined ? { waveFallSec: patch.fallSec } : {}) } })))}
+            </OptionsSliderRows>
+          </div>
+          <div className="utility-setting-button-row" role="group" aria-label="Immersive pulse controls">
+            <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
+            <OptionsSliderRows rows={[3, 3, 3]}>
+              {renderMixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, layoutVisualizer.immersive.pulseMix, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
+              <CompactScrollbarSlider
+                id="visualizer-pulse-speed"
+                min={PULSE_SPEED_MIN}
+                max={PULSE_SPEED_MAX}
+                step={1}
+                value={visualizer.immersive.pulseSpeed}
+                trackLabel="pulse"
+                tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on each hit of its mix"
+                ariaLabel="Immersive: centre pulse starting speed, boxes per second"
+                defaultValue={layoutVisualizer.immersive.pulseSpeed}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSpeed: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-half-life"
+                min={PULSE_SEC_MIN}
+                max={PULSE_SEC_MAX}
+                step={0.1}
+                value={visualizer.immersive.pulseHalfLifeSec}
+                trackLabel="slow"
+                tooltipLabel="How quickly the centre pulse slows, in milliseconds: its speed halves every this long. A short half-life can stop the ring before it leaves the screen"
+                ariaLabel="Immersive: centre pulse speed half-life, milliseconds"
+                defaultValue={layoutVisualizer.immersive.pulseHalfLifeSec}
+                formatValue={(value) => String(Math.round(value * 1000))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseHalfLifeSec: Math.round(value * 10) / 10 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-boost"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.pulseBoost}
+                trackLabel="boost"
+                tooltipLabel="Signal boost of the centre pulse, in percent: at 100 every hit sends a full ring and thump, at 0 each is as strong as the hit that set it off"
+                ariaLabel="Immersive: centre pulse signal boost, percent"
+                defaultValue={layoutVisualizer.immersive.pulseBoost}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseBoost: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-fade"
+                min={PULSE_SEC_MIN}
+                max={PULSE_SEC_MAX}
+                step={0.1}
+                value={visualizer.immersive.pulseFadeSec}
+                trackLabel="fade"
+                tooltipLabel="How long each centre pulse takes to fade from full to nothing, in milliseconds"
+                ariaLabel="Immersive: centre pulse fade duration, milliseconds"
+                defaultValue={layoutVisualizer.immersive.pulseFadeSec}
+                formatValue={(value) => String(Math.round(value * 1000))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseFadeSec: Math.round(value * 10) / 10 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pulse-softness"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.pulseSoftness}
+                trackLabel="soft"
+                tooltipLabel="How softly the centre pulse's ring fades at its edges, in percent: 0 is a band with hard edges, 100 a smooth swell with no flat middle"
+                ariaLabel="Immersive: centre pulse edge softness, percent"
+                defaultValue={layoutVisualizer.immersive.pulseSoftness}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSoftness: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-cutout-round"
+                min={0}
+                max={1}
+                step={0.01}
+                value={visualizer.immersive.cutoutRound}
+                trackLabel="round"
+                tooltipLabel="How round the centre panel's corners are, in percent: 0 square, 100 a circle. The grid around it stays whole boxes either way"
+                ariaLabel="Immersive: centre panel corner roundness, percent"
+                defaultValue={layoutVisualizer.immersive.cutoutRound}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, cutoutRound: value } }))}
+              />
+            </OptionsSliderRows>
+          </div>
+      </AccordionSection>
+      ) : null}
 
       <SoundscapeOptions
         preferences={soundscapePreferences}
         onChange={onSoundscapePreferencesChange}
       />
 
+      {features.flow ? (
       <AccordionSection
-        className="sidebar-options-section-tools"
-        ariaLabel="Tools"
-        heading="Tools"
+        className="sidebar-options-section-flow"
+        ariaLabel="Flow"
+        heading="Flow"
       >
-<div className="utility-setting-button-row" role="group" aria-label="Tool controls">
-          <button
-            type="button"
-            className={`btn-icon${spellCheckEnabled ? ' is-active' : ''}`}
-            onClick={() => {
-              setSpellCheckEnabled((prev) => !prev)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={spellCheckEnabled}
-            data-tooltip={spellCheckEnabled ? 'Disable spell check' : 'Enable spell check'}
-          >
-            <span className="fa-solid fa-spell-check" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon${flowSettings.enabled ? ' is-active' : ''}`}
-            onClick={() => setFlowSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
-            aria-pressed={flowSettings.enabled}
-            data-tooltip={flowSettings.enabled ? 'Disable typing flow' : 'Enable typing flow: steady, fast typing builds a flow that the look, the reverb, the caret and its trail answer'}
-          >
-            <span className="fa-solid fa-water" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon${beatSettings.enabled ? ' is-active' : ''}`}
-            onClick={() => setBeatSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
-            aria-pressed={beatSettings.enabled}
-            data-tooltip={beatSettings.enabled ? 'Disable beat pulse' : 'Enable beat pulse: the caret and the active editor\'s inner shade pulse with the bass of the playing music'}
-          >
-            <span className="fa-solid fa-drum" aria-hidden="true" />
-          </button>
-        </div>
-        {flowSettings.enabled ? (<>
-          <OptionsSubsectionLabel>Flow</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
             {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
             <OptionsSliderRows rows={[2, 2, 2]}>
@@ -3171,12 +2854,8 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
-        </>) : null}
-        {beatSettings.enabled ? (<>
-          {renderBeatChannel('caret', 'Caret beat', 'the caret dips from its peak')}
-          {renderBeatChannel('shade', 'Shade beat', 'the active editor\'s inner shade deepens')}
-        </>) : null}
       </AccordionSection>
+      ) : null}
 
       <AccordionSection
         className="sidebar-options-section-animations"
@@ -3450,109 +3129,6 @@ export function SidebarOptionsPanel({
               )}
             />
           </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-performance"
-        ariaLabel="Performance"
-        heading="Performance"
-      >
-        <OptionsSubsectionLabel>Modes</OptionsSubsectionLabel>
-<div className="utility-setting-button-row" role="group" aria-label="Performance controls">
-          <button
-            type="button"
-            className={`btn-icon${reduceVisualEffects ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !reduceVisualEffects
-              setReduceVisualEffects(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={reduceVisualEffects}
-            data-tooltip="Reduce visual effects"
-          >
-            <span className="fa-solid fa-spray-can-sparkles" aria-hidden="true" />
-          </button>
-          {!IS_LINUX_DESKTOP ? (
-            <button
-              type="button"
-              className={`btn-icon${!customCursorEnabled ? ' is-active' : ''}`}
-              onClick={() => setCustomCursorEnabled(!customCursorEnabled)}
-              aria-pressed={!customCursorEnabled}
-              data-tooltip="Disable custom mouse cursor"
-            >
-              <span className="fa-solid fa-computer-mouse" aria-hidden="true" />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={`btn-icon${deferPreviewOnRapidInput ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !deferPreviewOnRapidInput
-              setDeferPreviewOnRapidInput(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={deferPreviewOnRapidInput}
-            data-tooltip="Allow asynchronous input"
-          >
-            <span className="fa-solid fa-gauge-high" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon${reducedCaretAnimation ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !reducedCaretAnimation
-              setReducedCaretAnimation(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={reducedCaretAnimation}
-            data-tooltip="Reduce caret animation"
-          >
-            <span className="fa-solid fa-square" aria-hidden="true" />
-          </button>
-          {/* Puts every note on the character-counting side of the line
-              below, whatever its size -- which is why it also takes the
-              slider out of play rather than sitting beside it as an equal.
-              Deliberately not the same thing as dragging the slider to its
-              floor: this is a standing preference, and the slider keeps its
-              own value underneath it for when this is switched back off. */}
-          <button
-            type="button"
-            className={`btn-icon${forceCharacterScrollbarThumb ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !forceCharacterScrollbarThumb
-              setForceCharacterScrollbarThumb(next)
-              queueAppStateSave(activeNoteId)
-            }}
-            aria-pressed={forceCharacterScrollbarThumb}
-            data-tooltip="Force character based scrollbar thumb"
-          >
-            <span className="fa-solid fa-text-height" aria-hidden="true" />
-          </button>
-        </div>
-        <OptionsSubsectionLabel>Large notes</OptionsSubsectionLabel>
-        {/* Where the reader puts the line between a note whose scrollbar is
-            measured in pixels and one whose scrollbar counts characters --
-            see editor/documentPosition.ts for what each side means and why
-            the choice is theirs. The rail names the setting; the tooltip
-            names the unit, which is the more useful of the two on hover. */}
-        <div className="utility-setting-slider-stack" aria-label="Note size threshold">
-          <CompactScrollbarSlider
-            id="note-size-threshold"
-            min={CONTINUOUS_DOCUMENT_MIN_THRESHOLD_BLOCKS}
-            max={CONTINUOUS_DOCUMENT_MAX_THRESHOLD_BLOCKS}
-            step={CONTINUOUS_DOCUMENT_THRESHOLD_STEP_BLOCKS}
-            value={noteSizeThresholdBlocks}
-            trackLabel="note size threshold"
-            tooltipLabel="paragraphs"
-            ariaLabel="Note size threshold: how many paragraphs a note may have before its scrollbar counts characters instead of measuring height."
-            defaultValue={DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS}
-            disabled={forceCharacterScrollbarThumb}
-            onCommit={(value) => {
-              setNoteSizeThresholdBlocks(clampContinuousDocumentThreshold(value))
-              queueAppStateSave(activeNoteId)
-            }}
-          />
         </div>
       </AccordionSection>
 
@@ -3876,25 +3452,6 @@ export function SidebarOptionsPanel({
         heading="Debugging"
       >
 <div className="options-loadout-grid" role="group" aria-label="Debug tools">
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${debuggingEnabled ? ' is-active' : ''}`}
-            onClick={() => {
-              const next = !debuggingEnabled
-              setDebuggingEnabled(next)
-              if (!next) {
-                // Reset session debug note so a fresh note is created if
-                // debugging is re-enabled later in the same session
-                debugNoteIdRef.current = null
-              }
-              queueAppStateSave(activeNoteId)
-            }}
-            data-tooltip={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-label={debuggingEnabled ? 'Disable debug logging' : 'Enable debug logging to a note'}
-            aria-pressed={debuggingEnabled}
-          >
-            <span className="fa-solid fa-bug" aria-hidden="true" />
-          </button>
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"

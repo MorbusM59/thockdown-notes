@@ -89,7 +89,7 @@ export function MobileSoundscapeApp() {
   // the same shared theme code the desktop uses (shared/loadoutTheme.ts).
   const [look, setLook] = useState<MobileLook>(loadLook)
   const loadout = PRESETS[look.mode][look.preset[look.mode]]
-  const theme = useMemo(() => themeFrame(loadout, { reduceVisualEffects: false, isPreviewMode: false }), [loadout])
+  const theme = useMemo(() => themeFrame(loadout, { glaze: true, isPreviewMode: false }), [loadout])
 
   const customPresets = preferences.customPresets
   // Whether the native session plays (playbackMode.ts); the engine is not
@@ -319,7 +319,7 @@ export function MobileSoundscapeApp() {
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
-              <div ref={pageScrollerRef} className={`options-content sidebar-options-content mode-edit thockdown-custom-scrollbar mobile-page-scroller${helpMode ? ' is-help' : ''}`}>
+              <div ref={pageScrollerRef} className={`options-content sidebar-options-content thockdown-custom-scrollbar mobile-page-scroller${helpMode ? ' is-help' : ''}`}>
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Master')!} /> : (<>
