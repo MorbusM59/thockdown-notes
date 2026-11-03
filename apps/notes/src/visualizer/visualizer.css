@@ -242,8 +242,8 @@
     var(--visualizer-wave-color) calc(var(--grid-wave-period) / 2),
     transparent var(--grid-wave-period)
   );
+  /* Moved by GridWave.tsx at the music's tempo, one transform per frame. */
   will-change: transform;
-  animation: visualizer-grid-wave var(--visualizer-wave-sec, 6s) linear infinite;
 }
 
 .visualizer-grid-wave-pulse {
@@ -258,13 +258,3 @@
   will-change: transform;
 }
 
-@keyframes visualizer-grid-wave {
-  from { transform: translateX(0); }
-  to { transform: translateX(var(--grid-wave-period)); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .visualizer-grid-wave-bands {
-    animation: none;
-  }
-}

@@ -41,7 +41,7 @@
 import { cutoutClosure } from './cutoutRing'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, roundedSquareOffsetGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
+import { FALL_MIN_SEC, WAVE_FALLBACK_BEAT_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, roundedSquareOffsetGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
 import { canUseShaderPulse } from './glazeShaderSupport'
 import { PulseRingsCanvas, type PulseRingsHandle } from './PulseRingsCanvas'
 import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
@@ -112,7 +112,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   }, [])
 
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, glazePushes, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, glazePushes, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
   // transform written per frame on the beat loop's own frame: each frame
@@ -149,13 +149,38 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     })
   }, [host])
 
+  // The bands TRAVEL one wave length every `waveBeats` beats, at the same
+  // eased tempo the turn follows (`createTempoFollower`), so a seek's phase
+  // jump never moves them. While the beat map has no beat (its warm-up, or a
+  // passage it cannot follow) they keep travelling at WAVE_FALLBACK_BEAT_SEC,
+  // eased into and out of like any change of tempo, so the wave never freezes
+  // under a hit. Frames run only while music plays; a pause holds the place
+  // reached. The place is a share of one wave length, so a change of length
+  // or of beats changes the speed and never jumps the bands.
+  const bandsRef = useRef<HTMLDivElement>(null)
+  const travelInputs = useRef({ waveBeats, periodPx: waveBoxes * boxPx })
+  travelInputs.current = { waveBeats, periodPx: waveBoxes * boxPx }
+  useEffect(() => {
+    const bands = bandsRef.current
+    if (!bands) return
+    bands.style.transform = ''
+    let share = 0
+    const follow = createTempoFollower()
+    return subscribeMusicTempo((timeSec, periodSec) => {
+      const beats = follow(timeSec, periodSec > 0 ? periodSec : (Number.isFinite(timeSec) ? WAVE_FALLBACK_BEAT_SEC : NaN))
+      const { waveBeats: perLength, periodPx } = travelInputs.current
+      if (beats <= 0 || reducedMotion.matches) return
+      share = (share + beats / perLength) % 1
+      bands.style.transform = `translateX(${(share * periodPx).toFixed(2)}px)`
+    })
+  }, [host])
+
   // The wave SHOWS ON ITS MIX's hits (the layout's `waveMix` of the
   // trackers, the snare's hits by default), as an edge or pane block does:
   // its response (full on a hit, falling to nothing on the layout's fall)
   // written as the bands' opacity. Subscribed here rather than with the other
   // blocks, so the trackers are followed only while the visualizer is up;
   // retuned in place when the mix or the fall changes.
-  const bandsRef = useRef<HTMLDivElement>(null)
   const waveChannel = useMemo<MusicMixChannel>(() => ({ mix: waveMix, shape: waveShape, fallSec: waveFallSec }), [waveMix, waveShape, waveFallSec])
   const waveChannelRef = useRef(waveChannel)
   waveChannelRef.current = waveChannel

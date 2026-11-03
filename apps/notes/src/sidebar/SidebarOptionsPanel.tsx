@@ -28,14 +28,14 @@ import {
   IMMERSIVE_SWAY_RANGE_MAX_PX,
   WAVE_BOXES_MAX,
   WAVE_BOXES_MIN,
-  WAVE_SEC_MAX,
+  WAVE_BEATS_MAX,
   PULSE_SEC_MAX,
   SWAY_DRIFT_MAX_PX,
   SWAY_PUSH_MAX_PX,
   PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
-  WAVE_SEC_MIN,
+  WAVE_BEATS_MIN,
   WAVE_TURN_MAX,
   waveTertiaryBeats,
   EDGE_BLUR_MAX_PX,
@@ -2647,17 +2647,17 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveBoxes: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
-                id="visualizer-wave-sec"
-                min={WAVE_SEC_MIN}
-                max={WAVE_SEC_MAX}
-                step={0.1}
-                value={visualizer.immersive.waveSec}
+                id="visualizer-wave-beats"
+                min={WAVE_BEATS_MIN}
+                max={WAVE_BEATS_MAX}
+                step={1}
+                value={visualizer.immersive.waveBeats}
                 trackLabel="travel"
-                tooltipLabel="Seconds a band of the grid wave takes to travel one wave length"
-                ariaLabel="Immersive: seconds the grid wave takes to travel one wave length"
-                defaultValue={layoutVisualizer.immersive.waveSec}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveSec: value } }))}
+                tooltipLabel="Beats a band of the grid wave takes to travel one wave length (at 120 BPM while no beat is found)"
+                ariaLabel="Immersive: beats the grid wave takes to travel one wave length"
+                defaultValue={layoutVisualizer.immersive.waveBeats}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveBeats: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-wave-turn"

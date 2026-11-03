@@ -104,9 +104,9 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
   const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveSec, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, accentColor, letterboxColor } = visualizer.immersive
+  const { waveColor, waveBoxes, waveBeats, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, accentColor, letterboxColor } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
-  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, glazePushes: swayPush !== 0, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
+  useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, glazePushes: swayPush !== 0, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)
@@ -115,7 +115,6 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     root.setProperty('--beat-pane-color', paneColor)
     root.setProperty('--visualizer-wave-color', waveColor)
     root.setProperty('--visualizer-wave-boxes', String(waveBoxes))
-    root.setProperty('--visualizer-wave-sec', `${waveSec}s`)
     root.setProperty('--visualizer-pulse-color', pulseColor)
     // Empty means "follow the theme": the property is removed so the CSS
     // fallback (the caret, the zone colours) applies.
@@ -123,7 +122,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     else root.removeProperty('--visualizer-accent-color')
     if (letterboxColor) root.setProperty('--visualizer-letterbox-color', letterboxColor)
     else root.removeProperty('--visualizer-letterbox-color')
-  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, waveSec, pulseColor, pulseSoftness, accentColor, letterboxColor])
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, pulseColor, pulseSoftness, accentColor, letterboxColor])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

@@ -104,6 +104,8 @@ export function waveTurnTransform(angles: WaveAngles, widthPx: number, periodPx:
 export interface GridWaveSettings {
   waveTurn: number
   waveBoxes: number
+  /** Beats a band takes to travel one wave length. */
+  waveBeats: number
   pulseSpeed: number
   pulseHalfLifeSec: number
   pulseFadeSec: number
@@ -128,11 +130,11 @@ export interface GridWaveSettings {
   pulseBoost: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, glazeMix: DEFAULT_VISUALIZER_IMMERSIVE.glazeMix, glazePushes: false, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, waveBeats: 4, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, glazeMix: DEFAULT_VISUALIZER_IMMERSIVE.glazeMix, glazePushes: false, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
-  if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes
+  if (next.waveTurn === settings.waveTurn && next.waveBoxes === settings.waveBoxes && next.waveBeats === settings.waveBeats
     && next.pulseSpeed === settings.pulseSpeed && next.pulseHalfLifeSec === settings.pulseHalfLifeSec && next.pulseFadeSec === settings.pulseFadeSec
     && next.waveShape === settings.waveShape && next.waveFallSec === settings.waveFallSec
     && next.waveMix === settings.waveMix && next.glazeMix === settings.glazeMix && next.glazePushes === settings.glazePushes && next.pulseMix === settings.pulseMix

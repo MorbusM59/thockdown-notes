@@ -24,7 +24,7 @@ describe('DatabaseService visualizer loadout', () => {
     caret: { followsMusic: true, effect: -0.3, shape: 0.4, fallSec: 0.6 },
     edge: { effect: -0.7, mix: { thump: 0.4, pierce: 0.6, tick: 0.2 }, shape: -0.8, fallSec: 0.15, color: 'rgba(12, 34, 56, 0.5)', spreadPx: 14, blurPx: 70 },
     pane: { effect: 0.5, mix: { thump: 0, pierce: 0.3, tick: 1 }, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },
-    immersive: { glazeStrength: 0.15, glazeSpread: -0.4, swayRangePx: 120, swaySpread: 0.8, swayPush: 4.5, swayReturn: 0.6, swayDrift: -30, waveColor: 'rgba(10, 200, 90, 0.3)', waveBoxes: 40, waveSec: 3.5, waveMix: { thump: 0.2, pierce: 0.9, tick: 0.1 }, glazeMix: { thump: 0.6, pierce: 0, tick: 0.4 }, pulseMix: { thump: 0.8, pierce: 0.5, tick: 0.3 }, waveTurn: -2, waveShape: -0.4, waveFallSec: 0.5, pulseColor: 'rgba(1, 2, 3, 0.4)', pulseSpeed: 30, pulseHalfLifeSec: 1.2, pulseFadeSec: 0.7, pulseSoftness: 0.3, pulseBoost: 0.4, cutoutRound: 0, accentColor: 'rgba(250, 20, 120, 1)', letterboxColor: 'rgba(5, 6, 7, 1)' },
+    immersive: { glazeStrength: 0.15, glazeSpread: -0.4, swayRangePx: 120, swaySpread: 0.8, swayPush: 4.5, swayReturn: 0.6, swayDrift: -30, waveColor: 'rgba(10, 200, 90, 0.3)', waveBoxes: 40, waveBeats: 7, waveMix: { thump: 0.2, pierce: 0.9, tick: 0.1 }, glazeMix: { thump: 0.6, pierce: 0, tick: 0.4 }, pulseMix: { thump: 0.8, pierce: 0.5, tick: 0.3 }, waveTurn: -2, waveShape: -0.4, waveFallSec: 0.5, pulseColor: 'rgba(1, 2, 3, 0.4)', pulseSpeed: 30, pulseHalfLifeSec: 1.2, pulseFadeSec: 0.7, pulseSoftness: 0.3, pulseBoost: 0.4, cutoutRound: 0, accentColor: 'rgba(250, 20, 120, 1)', letterboxColor: 'rgba(5, 6, 7, 1)' },
   }
 
   const activeLight = (service: DatabaseService): UiLayoutLoadout => {

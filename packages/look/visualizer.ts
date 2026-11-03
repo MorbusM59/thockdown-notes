@@ -172,8 +172,8 @@ export interface VisualizerImmersive {
   waveColor: string
   /** The grid wave's length, in boxes, from one band's peak to the next. */
   waveBoxes: number
-  /** Seconds a wave band takes to travel one wave length. */
-  waveSec: number
+  /** Beats of the music (`subscribeMusicTempo`) a wave band takes to travel one wave length. */
+  waveBeats: number
   /** How much each tracker shows the grid wave. */
   waveMix: VisualizerMix
   /** How much each tracker's hits push the glaze's linear stacks (`swayPush`); the push slides back on the wave's fall. */
@@ -231,8 +231,14 @@ export const SWAY_DRIFT_MAX_PX = 200
 export const SWAY_PUSH_MAX_PX = 10
 export const WAVE_BOXES_MIN = 2
 export const WAVE_BOXES_MAX = 256
-export const WAVE_SEC_MIN = 0.5
-export const WAVE_SEC_MAX = 30
+export const WAVE_BEATS_MIN = 1
+export const WAVE_BEATS_MAX = 64
+/**
+ * The tempo the wave travels at while the beat map has no beat (its warm-up
+ * at the start of a track or after a seek, or a passage it cannot follow),
+ * and the tempo a layout saved in seconds (before 2026-11-03) is read at.
+ */
+export const WAVE_FALLBACK_BEAT_SEC = 0.5
 export const PULSE_SPEED_MIN = 2
 export const PULSE_SPEED_MAX = 100
 export const PULSE_SEC_MIN = 0.1
@@ -251,7 +257,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveSec: 6, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -388,7 +394,7 @@ const LIGHT_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
 const DARK_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
   ...LIGHT_VISUALIZER_IMMERSIVE,
   glazeStrength: 0.1, glazeSpread: 0, swayDrift: 10,
-  waveColor: 'rgba(255, 255, 255, 1)', waveSec: 2, waveFallSec: 1.9949745588310244,
+  waveColor: 'rgba(255, 255, 255, 1)', waveFallSec: 1.9949745588310244,
   pulseColor: 'rgba(0, 0, 0, 0.137)', pulseSpeed: 35, pulseHalfLifeSec: 0.7, pulseFadeSec: 1.4, pulseSoftness: 0, pulseBoost: 1,
   accentColor: '', letterboxColor: '',
 }
@@ -540,7 +546,7 @@ function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): Visualiz
 }
 
 function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null, legacyWaveMix: VisualizerMix | null): VisualizerImmersive {
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive, unknown>>
+  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive | 'waveSec', unknown>>
   return {
     glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
@@ -551,7 +557,8 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX_PX, SWAY_DRIFT_MAX_PX, d.swayDrift),
     waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
-    waveSec: bounded(source.waveSec, WAVE_SEC_MIN, WAVE_SEC_MAX, d.waveSec),
+    // A layout saved before the travel counted beats (2026-11-03) saved seconds, read at the fallback tempo.
+    waveBeats: Math.round(bounded(source.waveBeats ?? (typeof source.waveSec === 'number' ? source.waveSec / WAVE_FALLBACK_BEAT_SEC : undefined), WAVE_BEATS_MIN, WAVE_BEATS_MAX, d.waveBeats)),
     waveMix: sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix),
     // A layout saved before the glaze had its own mix (2026-11-01) was pushed by the wave's;
     // only a layout that SAVED a wave mix is one of those, so one that saved neither takes the default.
