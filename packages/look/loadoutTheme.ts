@@ -221,17 +221,21 @@ export function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
  * period along the gradient looks exactly the same, which is what lets the
  * visualizer move one without bound (`parallaxSway.ts`).
  */
-export function buildLinearGlazeStacks(settings: GlazeSettings, angleDeg: number): Array<{ image: string; periodPx: number }> {
+/** One lit stripe of a linear stack: where it starts and ends along the gradient, in px from the period's start, and its colour (0..255, alpha 0..1). */
+export type GlazeStripe = { startPx: number; endPx: number; rgba: [number, number, number, number] }
+
+export function buildLinearGlazeStacks(settings: GlazeSettings, angleDeg: number): Array<{ image: string; periodPx: number; stripes: GlazeStripe[] }> {
   if (settings.linearStackCount <= 0 || settings.linearOpacity <= 0) return []
 
   const rand = mulberry32(settings.linearSeed)
   const averageDistancePx = 28 + (rand() * 128)
   const lightRatio = 0.2 + (rand() * 0.65)
-  const layers: Array<{ image: string; periodPx: number }> = []
+  const layers: Array<{ image: string; periodPx: number; stripes: GlazeStripe[] }> = []
 
   for (let layerIndex = 0; layerIndex < settings.linearStackCount; layerIndex += 1) {
     const phase = rand() * averageDistancePx
     const stops: string[] = []
+    const stripes: GlazeStripe[] = []
     let cursor = 0
     let lastStop = 0
 
@@ -250,13 +254,14 @@ export function buildLinearGlazeStacks(settings: GlazeSettings, angleDeg: number
       stops.push(`transparent ${Math.max(0, clearEnd - phase).toFixed(1)}px`)
       stops.push(`rgba(${red}, ${green}, ${blue}, ${lightAlpha.toFixed(3)}) ${Math.max(0, clearEnd - phase).toFixed(1)}px`)
       stops.push(`rgba(${red}, ${green}, ${blue}, ${lightAlpha.toFixed(3)}) ${Math.max(0, lightEnd - phase).toFixed(1)}px`)
+      stripes.push({ startPx: Math.max(0, clearEnd - phase), endPx: Math.max(0, lightEnd - phase), rgba: [red, green, blue, Number(lightAlpha.toFixed(3))] })
       lastStop = Number(Math.max(0, lightEnd - phase).toFixed(1))
       cursor += distance
     }
 
     // The pattern repeats over its last stop, the first being at 0; the
     // period is the rounded figure the gradient itself was written with.
-    layers.push({ image: `repeating-linear-gradient(${angleDeg}deg, ${stops.join(', ')})`, periodPx: lastStop })
+    layers.push({ image: `repeating-linear-gradient(${angleDeg}deg, ${stops.join(', ')})`, periodPx: lastStop, stripes })
   }
 
   return layers

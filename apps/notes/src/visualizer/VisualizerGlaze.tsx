@@ -22,7 +22,8 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
-import { buildLinearGlazeStacks, buildRadialGlazeLayers } from '@thockdown/look/loadoutTheme'
+import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
+import { GlazeStripesCanvas, canUseShaderGlaze } from './GlazeStripesCanvas'
 import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /**
@@ -33,7 +34,7 @@ import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setSwayMotion, setSwayRange, s
  * between the two kinds would turn the picture brighter or darker rather
  * than deeper.
  */
-type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: number; depth: number; index: number; linearPosition: number | null }
+type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: number; stripes: GlazeStripe[]; depth: number; index: number; linearPosition: number | null }
 
 /**
  * The angle the ordinary glaze draws its linear stacks at. Here each stack's
@@ -97,9 +98,9 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     const settings = visualizerGlazeSettings(glaze, immersive.glazeStrength)
     // Nearest first: the top linear stack (each list is in stacking order,
     // the first drawn on top), unless radial sits above linear.
-    const linear = buildLinearGlazeStacks(settings, 90).map(({ image, periodPx }) => ({ kind: 'linear' as const, image, periodPx }))
+    const linear = buildLinearGlazeStacks(settings, 90).map(({ image, periodPx, stripes }) => ({ kind: 'linear' as const, image, periodPx, stripes }))
     const radialImages = buildRadialGlazeLayers(settings)
-    const radial = radialImages.length > 0 ? [{ kind: 'radial' as const, image: radialImages.join(', '), periodPx: 0 }] : []
+    const radial = radialImages.length > 0 ? [{ kind: 'radial' as const, image: radialImages.join(', '), periodPx: 0, stripes: [] }] : []
     const nearestFirst = glaze.radialAboveLinear ? [...radial, ...linear] : [...linear, ...radial]
     let linearIndex = 0
     return nearestFirst.map((layer, index) => {
@@ -109,11 +110,33 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     })
   }, [glaze, immersive.glazeStrength, immersive.swaySpread])
 
+  // The linear stacks on the shader (GlazeStripesCanvas.tsx) where it can
+  // run: one canvas instead of a promoted layer per stack, and composited
+  // among themselves before one blend onto the scene, exactly as the still
+  // glaze's single multi-image element already is.
+  const shader = useMemo(() => canUseShaderGlaze(), [])
+  const shaderStacks = useMemo(() => {
+    if (!shader) return null
+    const linear = layers.filter((layer) => layer.kind === 'linear')
+    return {
+      stacks: linear.map((layer) => ({ stripes: layer.stripes, periodPx: layer.periodPx, share: glazeLayerShare(layer.linearPosition ?? 1, immersive.glazeSpread) })),
+      sway: linear.map((layer) => ({ index: layer.index, depth: layer.depth })),
+    }
+  }, [shader, layers, immersive.glazeSpread])
+
   // Drawn farthest first, so the nearest is on top within its kind (the
   // kinds' own order is the stack's z-index rule, as in the ordinary glaze).
   return (
     <div className={`glaze-overlay-stack visualizer-glaze${glaze.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
-      {[...layers].reverse().map((layer) => (
+      {shaderStacks && shaderStacks.stacks.length > 0 ? (
+        <GlazeStripesCanvas
+          className="glaze-overlay-layer glaze-overlay-layer-linear"
+          stacks={shaderStacks.stacks}
+          sway={shaderStacks.sway}
+          angleDeg={LINEAR_ANGLE_DEG}
+        />
+      ) : null}
+      {[...layers].reverse().filter((layer) => !(shaderStacks && layer.kind === 'linear')).map((layer) => (
         <SwayLayer
           key={layer.key}
           layer={layer}

@@ -121,7 +121,19 @@ export function breathScales(breath: number): { amplitude: number; speed: number
  * `s` is the sway projected onto the gradient, plus the drift, plus the
  * snare's pushes, none of them bounded.
  */
-type SwayLayer = { element: HTMLElement; index: number; depth: number; linear: { periodPx: number; angleDeg: number } | null }
+/**
+ * A swayed layer. A radial layer and a CSS linear stack are an ELEMENT moved
+ * by `transform`; a linear stack drawn by the shader (`GlazeStripesCanvas.tsx`)
+ * has no element of its own and takes its offset along the gradient through
+ * `slide` instead, so both renderers read one sway.
+ */
+type SwayLayer = {
+  element: HTMLElement | null
+  index: number
+  depth: number
+  linear: { periodPx: number; angleDeg: number } | null
+  slide: ((alongPx: number) => void) | null
+}
 const layers = new Set<SwayLayer>()
 /** The nearest layer's range in px at the music's usual level: the reader's setting, published by the component that draws the layers. */
 let rangePx = 0
@@ -131,12 +143,22 @@ export function setSwayRange(px: number): void {
 }
 
 export function registerSwayLayer(element: HTMLElement, index: number, depth: number, linear: { periodPx: number; angleDeg: number } | null = null): () => void {
-  const layer = { element, index, depth, linear }
+  const layer: SwayLayer = { element, index, depth, linear, slide: null }
   layers.add(layer)
   return () => {
     layers.delete(layer)
     element.style.transform = ''
   }
+}
+
+/**
+ * A linear stack with no element: `slide` receives its UNWRAPPED offset along
+ * the gradient each frame (the caller wraps it by its own period).
+ */
+export function registerLinearSlide(index: number, depth: number, angleDeg: number, slide: (alongPx: number) => void): () => void {
+  const layer: SwayLayer = { element: null, index, depth, linear: { periodPx: 0, angleDeg }, slide }
+  layers.add(layer)
+  return () => { layers.delete(layer) }
 }
 
 /** The push per hit in px for the nearest stack (signed), the share of it slid back, and the drift in px per second of sway. */
@@ -204,13 +226,17 @@ export function applySway(phaseSec: number, breathAmplitude: number, nowMs: numb
   for (const layer of layers) {
     const { x, y } = swayOffset(layer.index, layer.depth, phaseSec, amplitudePx)
     if (layer.linear === null) {
-      layer.element.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`
+      if (layer.element) layer.element.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`
       continue
     }
     // The gradient's direction on screen (CSS angles run clockwise from up; y points down).
     const radians = (layer.linear.angleDeg * Math.PI) / 180
     const along = x * Math.sin(radians) - y * Math.cos(radians)
     const s = along + layer.depth * (driftPxPerSec * phaseSec + pushedPx)
-    layer.element.style.transform = `translate3d(${wrapToPeriod(s, layer.linear.periodPx).toFixed(2)}px, 0, 0)`
+    if (layer.slide) {
+      layer.slide(s)
+      continue
+    }
+    if (layer.element) layer.element.style.transform = `translate3d(${wrapToPeriod(s, layer.linear.periodPx).toFixed(2)}px, 0, 0)`
   }
 }
