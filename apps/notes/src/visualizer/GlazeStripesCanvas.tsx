@@ -30,8 +30,7 @@ import { registerLinearSlide } from './parallaxSway'
  */
 
 // ---- Tuning: the parameters to adjust by eye ---------------------------------
-/** false = the old CSS stacks everywhere (for comparing the two). */
-export const USE_SHADER_GLAZE = true
+// (The A/B switch, USE_SHADER_GLAZE, is in glazeShaderSupport.ts.)
 /** How the finished canvas blends onto the scene (any CSS mix-blend-mode). */
 export const CANVAS_BLEND_MODE = 'luminosity'
 /** Multiplies every stripe's alpha (1 = the stack's own alpha). */
@@ -110,15 +109,6 @@ function buildRows(stacks: ShaderStack[]): { data: Uint8Array; width: number } {
     }
   })
   return { data, width }
-}
-
-export function canUseShaderGlaze(): boolean {
-  if (!USE_SHADER_GLAZE || typeof document === 'undefined') return false
-  try {
-    return document.createElement('canvas').getContext('webgl2') !== null
-  } catch {
-    return false
-  }
 }
 
 export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {

@@ -23,7 +23,8 @@ import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
-import { GlazeStripesCanvas, canUseShaderGlaze } from './GlazeStripesCanvas'
+import { GlazeStripesCanvas } from './GlazeStripesCanvas'
+import { canUseShaderGlaze } from './glazeShaderSupport'
 import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /**
