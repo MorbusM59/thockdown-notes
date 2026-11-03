@@ -25,18 +25,18 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 // ---- Tuning: the parameters to adjust by eye ---------------------------------
 // (The A/B switch, USE_SHADER_PULSE, is in glazeShaderSupport.ts.)
 /** 1 = the ring keeps widening with distance, as the scaled ring did; 0 = it keeps its starting width. */
-export const RING_WIDTH_GROWTH = 1
+export const RING_WIDTH_GROWTH = 0.8
 /**
  * How much dimmer a ring gets where it is a corner's arc rather than a side:
  * a side sends its energy straight out, a corner spreads it over an arc that
  * grows with distance. 0 = no dimming; 1 = the full 1/sqrt(arc radius) of a
  * cylindrical wave. Has no effect on a circle (all of it is "side" to itself).
  */
-export const CORNER_DIMMING = 0.5
+export const CORNER_DIMMING = 0.8
 // -----------------------------------------------------------------------------
 
 /** At most this many rings out at once; a hit past it takes the oldest (as GridWave's layer stack did). */
-export const MAX_PULSES = 6
+export const MAX_PULSES = 20
 
 export interface PulseLaunch {
   /** Seconds the pulse lasts. */
