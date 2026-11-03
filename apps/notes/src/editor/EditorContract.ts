@@ -3,7 +3,9 @@ export type EditorChangeSource =
   | 'programmatic'
   | 'history-undo'
   | 'history-redo'
-  | 'initial-load';
+  | 'initial-load'
+  // Another view of the same note changed it (EditorAdapter.applyExternalChange).
+  | 'remote';
 
 export type EditorLifecyclePhase = 'mounted' | 'ready' | 'destroyed';
 
@@ -299,6 +301,19 @@ export interface EditorAdapter {
    * editor to apply it to, or `expectedText` is no longer what it holds.
    */
   applyEdit(changes: readonly { from: number; to: number; insert: string }[], expectedText: string): boolean;
+  /**
+   * Applies a change another view of note `noteId` made (the note's document,
+   * editorSection/noteDocumentStore.ts), outside this editor's undo history
+   * and reported with `source: 'remote'`. Uses `change.edit` when the editor
+   * holds exactly `change.previousText`, and otherwise the smallest change
+   * that reaches `change.text`. True exactly when it dispatched, so the
+   * editor's change report carries the new text to the section. False, and
+   * nothing done, when the editor already holds `change.text`, or is not
+   * showing `noteId`'s live text -- a Time Machine snapshot of it, or a note
+   * it has not been switched to yet; the caller then records the text itself,
+   * and hydration brings the editor up to date when it shows the note.
+   */
+  applyExternalChange(noteId: string, change: { previousText: string; text: string; edit: EditorTextEdit | null }): boolean;
   // Calls `listener` whenever the visible range may have moved -- today, on
   // every scroll. Returns its own unsubscribe.
   //

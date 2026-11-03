@@ -8,10 +8,9 @@ export interface UsePreviewedSnapshotResult {
 }
 
 /**
- * Which snapshot (or live text) a section is currently displaying -- the
- * state `useSnapshotFreeze` reads and writes to hibernate/restore a
- * section, and that manual Time Machine browsing (clicking the timeline,
- * the present-state circle, hold-to-branch) also drives directly. Not
+ * Which snapshot (or live text) a section is currently displaying, driven by
+ * Time Machine browsing (clicking the timeline, the present-state circle,
+ * hold-to-branch). Not
  * referenced by buildMenuStateSnapshot, so this doesn't need the
  * ref-mirror pattern used for chapterBarMode / isDocumentFindCaseSensitive.
  */

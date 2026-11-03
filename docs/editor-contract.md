@@ -77,6 +77,37 @@ This contract isolates app features from editor engine internals. Features that 
   If reading and landing ever use different offsets, every switch shifts the
   position by the difference and repeated switches walk the document.
 
+### One note in several slots
+A note open in more than one slot is ONE document shown in several views
+(`apps/notes/src/editorSection/noteDocumentStore.ts`). The store holds the
+note's live text; a slot owns only what is about how it is looking at it.
+- **Text**: every view shows the store's text. An edit in one view is
+  published as the edit that made it and applied to the others with
+  `EditorAdapter.applyExternalChange` (reported as `source = remote`), so it
+  costs what it changed. A view showing a Time Machine snapshot of the note
+  is not showing the live text and takes nothing until it returns to it.
+- **Saving**: one queue per note, debounced, writing the store's text as it
+  is when the write starts; a slot never writes a copy of its own.
+- **Opening** a note that is already open shows the live text, unsaved
+  typing included, never the database's older copy.
+- **Undo is per view**: each view undoes its own edits; another view's edits
+  arrive outside its history and its history is mapped through them, which
+  is CodeMirror's collaborative model. One shared history would let an undo
+  in one view take back typing the reader did somewhere else.
+- **Caret, scroll, selection, render or edit view** belong to the slot.
+- **The remembered position** (where a note reopens) is written with each
+  save from the slot that queued it, so with two slots typing in one note
+  it is the caret of whichever slot saved last.
+- **An external note's file** is reconciled with the live document when the
+  note opens and whenever the file changes on disk while it is open
+  (`apps/notes/src/editorSection/externalFileSync.ts`): the file's text is
+  taken over when the note has no edits since the file was last seen, and
+  otherwise kept on the Timeline as a from-disk snapshot while the reader's
+  text stays. It reaches the views as an outside `change`, like any other.
+- **Deleted elsewhere**: the main process announces a deletion
+  (`notes:deleted`), every view of the note lets go of it, and a save that
+  arrives afterwards is refused rather than writing the note back.
+
 ### Lifecycle Model
 - `mounted`: component mounted.
 - `ready`: editor surface is ready to receive integration calls.
@@ -102,6 +133,7 @@ This contract isolates app features from editor engine internals. Features that 
   - `restore` updates map to `programmatic`.
   - `history-redo` tag maps to `history-redo`.
   - `historic` updates map to `history-undo`.
+  - an applied `applyExternalChange` maps to `remote`.
   - default remains `user-input`.
 
 ## Adapter Semantics

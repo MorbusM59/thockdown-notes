@@ -28,6 +28,12 @@ export interface WindowControlsApi {
   onMaximizeStateChange(callback: (isMaximized: boolean) => void): () => void;
   onCollapsedStateChange(callback: (isCollapsed: boolean) => void): () => void;
   onFullScreenStateChange(callback: (isFullScreen: boolean) => void): () => void;
+  /**
+   * The app is quitting (electron/quitRoutine.ts): the window writes
+   * everything it holds and then answers `quitPrepared` with the same token.
+   */
+  onPrepareToQuit(callback: (token: number) => void): () => void;
+  quitPrepared(token: number): void;
 }
 
 export const WINDOW_CONTROL_SEND_CHANNELS = {
@@ -45,6 +51,7 @@ export const WINDOW_CONTROL_SEND_CHANNELS = {
   moveWindowDrag: 'window-drag:move',
   endWindowDrag: 'window-drag:end',
   restoreMaximizedWindow: 'window-drag:restore-maximized',
+  quitPrepared: 'window-control:quit-prepared',
 } as const satisfies SendChannels<WindowControlsApi>;
 
 export const WINDOW_CONTROL_INVOKE_CHANNELS = {
@@ -56,10 +63,12 @@ export interface WindowEvents {
   maximizeState: boolean;
   collapsedState: boolean;
   fullScreenState: boolean;
+  prepareToQuit: number;
 }
 
 export const WINDOW_EVENT_CHANNELS = {
   maximizeState: 'window-maximize-state',
   collapsedState: 'window-collapsed-state',
   fullScreenState: 'window-fullscreen-state',
+  prepareToQuit: 'window-prepare-to-quit',
 } as const satisfies EventChannels<WindowEvents>;

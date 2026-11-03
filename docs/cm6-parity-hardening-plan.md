@@ -898,7 +898,7 @@ or streamlining gap could live, then verify live in the browser — not the reve
    list still matches every real unload point, not new design work.
 8. **Split-view / multi-section** — the rough edges already named in `TODO.md`'s own "Split-view
    rough edges" section (shared `editorStageRef`, shared `pendingViewportRestoreRef`/
-   `isApplyingInitialViewportRef`, hibernation never exercised under real N>1 typing load,
+   `isApplyingInitialViewportRef`, hibernation never exercised under real N>1 typing load (hibernation since deleted),
    cold-start restore with 2+ sections never verified against a real Electron restart). Treat that
    TODO list as this item's starting checklist rather than re-deriving it.
 9. **Performance-infrastructure loose ends** — `ParagraphOffsetIndex.ts` dead-code removal (found
@@ -2883,6 +2883,13 @@ clean, `npm run lint` clean apart from one pre-existing `App.tsx:2260` unused-di
 on `main` before this change.
 
 ### Follow-up: the settle gate must not fire on section hibernation
+
+> **Superseded.** Section hibernation (`useSnapshotFreeze`) is deleted: a
+> note open in several slots is now one live document
+> (`apps/notes/src/editorSection/noteDocumentStore.ts`, `docs/editor-contract.md`
+> "One note in several slots"), so there is no frozen preview for the gate to
+> skip and the `isFrozenSectionPreviewRef` branch described below is gone. The
+> general rule at the end of this entry still holds.
 
 **The regression** (introduced by the gate above, found by the user): switching which slot is active
 made *both* panes blank briefly. Section hibernation (`useSnapshotFreeze`) freezes the section

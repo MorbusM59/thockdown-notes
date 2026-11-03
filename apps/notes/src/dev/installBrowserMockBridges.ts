@@ -516,6 +516,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
   /** External notes' from-disk baselines, in memory only (see saveNoteSnapshot below). */
   const fromDiskBaselineById = new Map<string, { content: string; timestamp: string }>()
   const getById = (id: string): MockNote | undefined => storeRef.current.notes.find((note) => note.id === id)
+  const deletedListeners = new Set<(payload: { id: string }) => void>()
 
   const mutate = <T,>(transform: (store: BrowserMockStore) => T): T => {
     const result = transform(storeRef.current)
@@ -688,8 +689,7 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
 
     async saveNoteSnapshot(input: { id: string; content: string; isManual?: boolean; isFromDisk?: boolean; timestamp?: string }): Promise<number> {
       // Browser mock does not persist snapshot history; synthesize an ID so
-      // callers that need one (e.g. freeze-on-hibernate) still get a valid
-      // contract. The one exception is an external note's from-disk
+      // callers that need one still get a valid contract. The one exception is an external note's from-disk
       // baseline, kept in memory so activation finds it the way the real
       // app does instead of taking the legacy backfill path every time.
       if (input.isFromDisk) {
@@ -765,8 +765,13 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
       })
     },
 
+    onNoteDeleted(callback) {
+      deletedListeners.add(callback)
+      return () => { deletedListeners.delete(callback) }
+    },
+
     async deleteNote(input: DeleteNoteInput): Promise<void> {
-      mutate((store) => {
+      const deleted = mutate((store) => {
         // Chapters have no life outside their parent -- deleting a parent
         // note deletes its chapters with it (one level only; chapters can't
         // have sub-chapters). Mirrors databaseService.ts's deleteNote.
@@ -781,7 +786,10 @@ function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycl
           store.appState.selectedNoteId = null
         }
         store.noteTabs = store.noteTabs.filter((tab) => !idsToDelete.has(tab.noteId))
+        return idsToDelete
       })
+      // As the main process does: every deleted note, chapters included.
+      for (const id of deleted) for (const listener of deletedListeners) listener({ id })
     },
 
     async getNoteTags(input: NoteTagsInput): Promise<string[]> {
