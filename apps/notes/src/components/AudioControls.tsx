@@ -949,7 +949,7 @@ export const AudioControls = memo(function AudioControls({
           style={{ gridColumn: 'span 2' }}
         >
           <span
-            className={`fa-solid ${isPlaying ? 'fa-stop' : 'fa-play'}`}
+            className={`fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'}`}
             aria-hidden="true"
           />
         </button>
