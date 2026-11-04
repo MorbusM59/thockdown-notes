@@ -113,7 +113,7 @@ import { SpeedReadingEditOverlay } from '../speedReading/SpeedReadingEditOverlay
  * gap that put the caret/selection above the text instead of behind it,
  * ported the background box-grid lines (thockdown-grid-outline-lines/
  * thockdown-grid-lines), ported the custom scrollbar in full (rendering
- * via a portal into scrollbarHost, passive geometry sync, thumb drag, track
+ * via a portal into scrollbarHost, observed geometry sync, thumb drag, track
  * click-to-jump, and track right-click-hold-to-page), hid CM6's own native
  * scrollbars (this app draws its own; native ones were pure visual noise),
  * and fixed two more real CM6-base-theme defaults (.cm-line's 6px left
@@ -1393,12 +1393,6 @@ export function CM6Editor({
   // fighting an active thumb drag.
   const isDraggingScrollThumbRef = useRef(false);
   const scrollThumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null);
-  const lastPassiveScrollbarMetricsRef = useRef<{
-    scrollTopPx: number;
-    scrollHeightPx: number;
-    clientHeightPx: number;
-    trackHeightPx: number;
-  } | null>(null);
   const scrollbarRightHoldRef = useRef<{
     key: 'PageUp' | 'PageDown';
     direction: 1 | -1;
@@ -2009,6 +2003,7 @@ export function CM6Editor({
   const immersiveTrackRows = isImmersive && lineHeightPx > 0
     ? Math.max(0, Math.floor((scrollerClientHeightPx - halfLineHeightPx) / lineHeightPx))
     : 0;
+  const hasImmersiveTrack = immersiveScrollColumnLeftPx !== null && immersiveTrackRows > 0;
   // Whether the gutter's static top/bottom edge box (see
   // ReviewGutterEdgeLines) should show an up/down-long "jump" arrow -- true
   // iff a flagged line exists strictly past that edge (above
@@ -2133,8 +2128,8 @@ export function CM6Editor({
   // effects. Runs after the portal target (scrollbarHost) or any layout
   // input the thumb geometry depends on changes; the mount-once effect's own
   // scroll/updateListener/resize wiring (below) covers ongoing sync once
-  // mounted, and the passive rAF loop further below catches anything those
-  // miss (e.g. scrollHeight drift from an async font load reflow).
+  // mounted. Content and track size observers cover geometry changes that do
+  // not arrive through a document update or a scroll event.
   useLayoutEffect(() => {
     syncCustomScrollbar();
     requestAnimationFrame(() => syncCustomScrollbar());
@@ -2143,59 +2138,26 @@ export function CM6Editor({
   // one before paint.
   }, [syncCustomScrollbar, scrollbarHost, isImmersive, immersiveScrollColumnLeftPx, immersiveTrackRows]);
 
+  useLayoutEffect(() => {
+    const content = viewRef.current?.contentDOM;
+    const track = scrollbarTrackRef.current;
+    if (!content && !track) return;
+
+    const observer = new ResizeObserver(() => syncCustomScrollbar());
+    if (content) observer.observe(content);
+    if (track) observer.observe(track);
+    return () => observer.disconnect();
+  }, [syncCustomScrollbar, viewMountGeneration, scrollbarHost, isImmersive, hasImmersiveTrack]);
+
   useEffect(() => {
     syncCustomScrollbar();
     // hasViewportLines/isSnapshotRestorePending are deliberately deps here,
-    // not just refs read inside isEditScrollInteractionBlocked: the passive
-    // rAF loop below only re-syncs when raw scroll metrics (scrollTop/
-    // scrollHeight/clientHeight/trackHeight) change, so if this gate lifts
-    // (large-note hydration finishing) while those metrics happen to be
-    // unchanged, the thumb would otherwise stay hidden at 0/0 until some
-    // unrelated event nudges a metric. This effect closes that race by
-    // re-syncing the moment the gate itself flips.
+    // not just refs read inside isEditScrollInteractionBlocked: size observers
+    // only re-sync when geometry changes, so if this gate lifts (large-note
+    // hydration finishing) while geometry stays unchanged, the thumb would
+    // otherwise stay hidden at 0/0. This effect closes that race by re-syncing
+    // the moment the gate itself flips.
   }, [syncCustomScrollbar, scrollerClientHeightPx, textKey, topBoundaryPxDisplay, bottomBoundaryPxDisplay, hasViewportLines, isSnapshotRestorePending]);
-
-  useEffect(() => {
-    let rafId: number | null = null;
-
-    const runPassiveSync = () => {
-      const scroller = viewRef.current?.scrollDOM;
-      const track = scrollbarTrackRef.current;
-
-      if (scroller && track) {
-        const nextMetrics = {
-          scrollTopPx: Math.round(scroller.scrollTop),
-          scrollHeightPx: Math.round(scroller.scrollHeight),
-          clientHeightPx: Math.round(scroller.clientHeight),
-          trackHeightPx: Math.round(track.clientHeight),
-        };
-
-        const previousMetrics = lastPassiveScrollbarMetricsRef.current;
-        const changed =
-          !previousMetrics ||
-          previousMetrics.scrollTopPx !== nextMetrics.scrollTopPx ||
-          previousMetrics.scrollHeightPx !== nextMetrics.scrollHeightPx ||
-          previousMetrics.clientHeightPx !== nextMetrics.clientHeightPx ||
-          previousMetrics.trackHeightPx !== nextMetrics.trackHeightPx;
-
-        if (changed) {
-          lastPassiveScrollbarMetricsRef.current = nextMetrics;
-          syncCustomScrollbar();
-        }
-      }
-
-      rafId = requestAnimationFrame(runPassiveSync);
-    };
-
-    rafId = requestAnimationFrame(runPassiveSync);
-
-    return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      lastPassiveScrollbarMetricsRef.current = null;
-    };
-  }, [syncCustomScrollbar]);
 
   const buildViewport = (view: EditorView): EditorViewportState => ({
     topBoundaryPx: topBoundaryPxRef.current,
@@ -4680,7 +4642,7 @@ export function CM6Editor({
           scheduleSelectionHighlightUpdate();
           debugCheckpoint('after scheduleSelectionHighlightUpdate');
         }
-        if (update.docChanged) {
+        if (update.geometryChanged) {
           syncCustomScrollbar();
           debugCheckpoint('after syncCustomScrollbar');
         }
@@ -6684,7 +6646,7 @@ export function CM6Editor({
           and a transparent hit target above the text layer, which would
           otherwise take every click on the column. The hit target is also the
           track the scrollbar geometry measures. */}
-      {immersiveScrollColumnLeftPx !== null && immersiveTrackRows > 0 && (
+      {hasImmersiveTrack && (
         <>
           <div
             ref={gridScrollPaintRef}
