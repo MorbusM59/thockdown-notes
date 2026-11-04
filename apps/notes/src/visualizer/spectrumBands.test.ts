@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { FftPlan } from '@thockdown/soundscape/fft'
 import {
   PEAK_HOLD_SEC,
+  SEMITONE_BRIGHTNESS_CEILING_DB,
   SEMITONE_CONTRAST_DB,
   SEMITONE_FADE_SEC,
-  SEMITONE_HARMONIC_BOOST,
-  SEMITONE_LIGHT_LEVELS,
   RELEASE_DB_PER_SEC,
   SPECTRUM_CEILING_DB,
   SPECTRUM_FLOOR_DB,
@@ -16,13 +15,14 @@ import {
   TrackTuningEstimator,
   bandCentreHz,
   createBandLevelPlan,
-  createSemitoneHarmonicPlan,
+  createSemitoneAttributionPlan,
+  createSemitoneAttributionWorkspace,
   createSemitonePlan,
   litRows,
   logBandEdges,
   semitoneShare,
+  writeAttributedSemitoneLevels,
   writeBandLevelsWithPlan,
-  writeHarmonicSemitoneLevels,
   writeBandLevels,
   writeSemitoneLevels,
 } from './spectrumBands'
@@ -231,47 +231,71 @@ describe('writeBandLevels', () => {
     })
   })
 
-  describe('writeHarmonicSemitoneLevels', () => {
-    it('adds weighted harmonic evidence without changing or replacing measured frequencies', () => {
-      const boxCount = 37
-      const a4 = Math.floor(boxCount / 2)
-      const raw = new Float32Array(boxCount).fill(-Infinity)
-      const mapped = new Float32Array(boxCount)
-      const powerByBox = new Float64Array(boxCount)
-      raw[a4] = -30
-      raw[a4 + 12] = -20
+  describe('writeAttributedSemitoneLevels', () => {
+    function spectrumForNotes(
+      plan: ReturnType<typeof createSemitoneAttributionPlan>,
+      notes: ReadonlyArray<[number, number]>,
+    ): Float32Array {
+      const powers = new Float64Array(plan.boxCount)
+      for (const [note, strength] of notes) {
+        const offset = note * plan.boxCount
+        for (let band = 0; band < plan.boxCount; band += 1) {
+          powers[band] += strength * plan.templates[offset + band]
+        }
+      }
+      return Float32Array.from(powers, (power) => power > 0 ? 10 * Math.log10(power) : -Infinity)
+    }
 
-      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount), mapped, powerByBox)
+    it("attributes one note's partials to that note instead of lighting their semitone bins", () => {
+      const plan = createSemitoneAttributionPlan(49)
+      const raw = spectrumForNotes(plan, [[12, 1e-3]])
+      const mapped = new Float32Array(plan.boxCount)
+      writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
 
-      const expectedPower = 10 ** (-30 / 10) + SEMITONE_HARMONIC_BOOST * 0.5 * 10 ** (-20 / 10)
-      expect(mapped[a4]).toBeCloseTo(10 * Math.log10(expectedPower), 4)
-      expect(mapped[a4 + 12]).toBe(-20)
-      expect(raw[a4]).toBe(-30)
+      expect(mapped[12]).toBeCloseTo(-30, 1)
+      expect(mapped[24]).toBeLessThan(SEMITONE_CONTRAST_DB)
+      expect(mapped[31]).toBeLessThan(SEMITONE_CONTRAST_DB)
+      expect(raw[24]).toBeGreaterThan(-40)
     })
 
-    it('interpolates partials that fall between semitone boxes', () => {
-      const boxCount = 49
-      const a3 = 12
-      const raw = new Float32Array(boxCount).fill(-Infinity)
-      const mapped = new Float32Array(boxCount)
-      const powerByBox = new Float64Array(boxCount)
-      raw[a3 + 19] = -20
-      raw[a3 + 20] = -40
+    it('recovers simultaneous notes and their relative strengths', () => {
+      const plan = createSemitoneAttributionPlan(49)
+      const raw = spectrumForNotes(plan, [[12, 1.58e-5], [24, 3.98e-6]])
+      const mapped = new Float32Array(plan.boxCount)
+      writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
 
-      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount, 3), mapped, powerByBox)
-
-      expect(mapped[a3]).toBeGreaterThan(-30)
-      expect(raw[a3]).toBe(-Infinity)
+      expect(mapped[12]).toBeCloseTo(-48, 0)
+      expect(mapped[24]).toBeCloseTo(-54, 0)
+      expect(mapped[12]).toBeGreaterThan(mapped[24])
+      expect(semitoneShare(mapped[12])).toBeGreaterThan(semitoneShare(mapped[24]))
     })
 
-    it('does not allow the weighted map to overwrite its raw input', () => {
+    it('rejects diffuse energy below the note contrast threshold', () => {
+      const plan = createSemitoneAttributionPlan(49)
+      const raw = new Float32Array(plan.boxCount).fill(SEMITONE_CONTRAST_DB - 10)
+      const mapped = new Float32Array(plan.boxCount)
+      writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
+
+      expect(mapped.every((level) => level <= SEMITONE_CONTRAST_DB)).toBe(true)
+    })
+
+    it('does not allow the attribution output to overwrite its input', () => {
       const levels = Float32Array.of(-20, -30)
-      expect(() => writeHarmonicSemitoneLevels(levels, createSemitoneHarmonicPlan(2), levels, new Float64Array(2))).toThrow(RangeError)
+      expect(() =>
+        writeAttributedSemitoneLevels(
+          levels,
+          createSemitoneAttributionPlan(2),
+          levels,
+          createSemitoneAttributionWorkspace(2),
+        ),
+      ).toThrow(RangeError)
     })
 
-    it('requires a power workspace matching the plan', () => {
+    it('requires workspace buffers matching the plan', () => {
       const levels = Float32Array.of(-20, -30)
-      expect(() => writeHarmonicSemitoneLevels(levels, createSemitoneHarmonicPlan(2), new Float32Array(2), new Float64Array(1))).toThrow(RangeError)
+      const plan = createSemitoneAttributionPlan(2)
+      const workspace = createSemitoneAttributionWorkspace(1)
+      expect(() => writeAttributedSemitoneLevels(levels, plan, new Float32Array(2), workspace)).toThrow(RangeError)
     })
   })
 
@@ -342,32 +366,15 @@ describe('litRows', () => {
 })
 
 describe('semitoneShare', () => {
-  const atSignalShare = (share: number) =>
-    SEMITONE_CONTRAST_DB + share * (SPECTRUM_CEILING_DB - SEMITONE_CONTRAST_DB)
-
-  it('is off at zero levels and binary at one level', () => {
-    expect(semitoneShare(SPECTRUM_CEILING_DB, 0)).toBe(0)
-    expect(semitoneShare(SEMITONE_CONTRAST_DB, 1)).toBe(0)
-    expect(semitoneShare(atSignalShare(0.01), 1)).toBe(1)
-    expect(semitoneShare(SPECTRUM_CEILING_DB + 20, 1)).toBe(1)
-  })
-
-  it('uses equal signal ranges for each discrete light level', () => {
-    expect(semitoneShare(atSignalShare(0.01), 4)).toBe(0.25)
-    expect(semitoneShare(atSignalShare(0.24), 4)).toBe(0.25)
-    expect(semitoneShare(atSignalShare(0.25), 4)).toBe(0.5)
-    expect(semitoneShare(atSignalShare(0.49), 4)).toBe(0.5)
-    expect(semitoneShare(atSignalShare(0.5), 4)).toBe(0.75)
-    expect(semitoneShare(atSignalShare(0.74), 4)).toBe(0.75)
-    expect(semitoneShare(atSignalShare(0.75), 4)).toBe(1)
-  })
-
-  it('uses the internal level-count parameter by default', () => {
-    expect(semitoneShare(atSignalShare(0.01))).toBe(1 / SEMITONE_LIGHT_LEVELS)
-  })
-
-  it('rejects a fractional level count', () => {
-    expect(() => semitoneShare(SPECTRUM_CEILING_DB, 1.5)).toThrow(RangeError)
+  it('maps note levels continuously from the contrast cutoff to the ceiling', () => {
+    expect(semitoneShare(SEMITONE_CONTRAST_DB)).toBe(0)
+    const span = SEMITONE_BRIGHTNESS_CEILING_DB - SEMITONE_CONTRAST_DB
+    expect(semitoneShare(SEMITONE_CONTRAST_DB + span * 0.25)).toBeCloseTo(0.25)
+    expect(semitoneShare(SEMITONE_CONTRAST_DB + span * 0.5)).toBeCloseTo(0.5)
+    expect(semitoneShare(SEMITONE_CONTRAST_DB + span * 0.75)).toBeCloseTo(0.75)
+    expect(semitoneShare(-12)).toBeGreaterThan(semitoneShare(-18))
+    expect(semitoneShare(SEMITONE_BRIGHTNESS_CEILING_DB)).toBe(1)
+    expect(semitoneShare(SEMITONE_BRIGHTNESS_CEILING_DB + 20)).toBe(1)
   })
 })
 

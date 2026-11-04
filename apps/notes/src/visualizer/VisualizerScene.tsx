@@ -1,7 +1,7 @@
 /**
  * The visualizer mode's scene (F3), drawn over the active slot in place of
  * its note: a grid of square boxes framing the empty scene's tumbling solid,
- * the music's spectrum along the bottom, its semitone energy above it and
+ * the music's spectrum along the bottom, its estimated semitone notes above it and
  * what is playing along the top. Where everything goes is
  * `visualizerLayout.ts`; the spectrum reads `spectrumBands.ts` and
  * `spectrumTap.ts`, while the time-indexed semitone score is prepared by
@@ -35,14 +35,14 @@ import { MUSIC_SEMITONE_CONFIRM_SEC } from '../sound/musicSemitoneScore'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
-  SEMITONE_LIGHT_LEVELS,
   SemitoneActivityFilter,
   SemitoneFade,
   SpectrumBallistics,
-  createSemitoneHarmonicPlan,
+  createSemitoneAttributionPlan,
+  createSemitoneAttributionWorkspace,
   litRows,
   semitoneShare,
-  writeHarmonicSemitoneLevels,
+  writeAttributedSemitoneLevels,
 } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
@@ -210,10 +210,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     const chromaContext = chromaCanvas?.getContext('2d') ?? null
     const semitoneMeter = chromaContext ? new SemitoneFade(columns) : null
     const semitoneTargets = semitoneMeter ? new Float32Array(columns) : null
-    const harmonicPlan = semitoneMeter ? createSemitoneHarmonicPlan(columns) : null
-    const harmonicLevels = semitoneMeter ? new Float32Array(columns) : null
-    const harmonicAfterLevels = semitoneMeter ? new Float32Array(columns) : null
-    const harmonicPowerByBox = semitoneMeter ? new Float64Array(columns) : null
+    const attributionPlan = semitoneMeter ? createSemitoneAttributionPlan(columns) : null
+    const attributedLevels = semitoneMeter ? new Float32Array(columns) : null
+    const attributedAfterLevels = semitoneMeter ? new Float32Array(columns) : null
+    const attributionWorkspace = semitoneMeter ? createSemitoneAttributionWorkspace(columns) : null
     const semitoneActivity = semitoneMeter ? new SemitoneActivityFilter(columns, MUSIC_SEMITONE_CONFIRM_SEC) : null
     const drawnSemitones = new Int16Array(columns).fill(-1)
     const breath = new MusicBreath()
@@ -354,16 +354,19 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
         semitoneActivity?.reset()
       }
       if (semitoneAt && semitoneAfter && Number.isFinite(semitoneTime) && semitoneMeter && semitoneTargets) {
-        if (!harmonicPlan || !harmonicLevels || !harmonicAfterLevels || !harmonicPowerByBox) throw new Error('Semitone rendering started without a harmonic plan')
+        if (!attributionPlan || !attributedLevels || !attributedAfterLevels || !attributionWorkspace) {
+          throw new Error('Semitone rendering started without an attribution plan')
+        }
         if (semitoneAt !== mappedSemitoneAt || semitoneAfter !== mappedSemitoneAfter) {
-          writeHarmonicSemitoneLevels(semitoneAt, harmonicPlan, harmonicLevels, harmonicPowerByBox)
-          writeHarmonicSemitoneLevels(semitoneAfter, harmonicPlan, harmonicAfterLevels, harmonicPowerByBox)
+          writeAttributedSemitoneLevels(semitoneAt, attributionPlan, attributedLevels, attributionWorkspace)
+          writeAttributedSemitoneLevels(semitoneAfter, attributionPlan, attributedAfterLevels, attributionWorkspace)
           mappedSemitoneAt = semitoneAt
           mappedSemitoneAfter = semitoneAfter
         }
-        const activeLevels = semitoneActivity?.step(harmonicLevels, harmonicAfterLevels, semitoneTime) ?? harmonicLevels
+        const activeLevels =
+          semitoneActivity?.step(attributedLevels, attributedAfterLevels, semitoneTime) ?? attributedLevels
         for (let boxIndex = 0; boxIndex < columns; boxIndex += 1) {
-          semitoneTargets[boxIndex] = semitoneShare(activeLevels[boxIndex], SEMITONE_LIGHT_LEVELS)
+          semitoneTargets[boxIndex] = semitoneShare(activeLevels[boxIndex])
         }
       } else {
         semitoneTargets?.fill(0)

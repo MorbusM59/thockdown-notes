@@ -24,6 +24,11 @@ import { pulseCurve } from '@thockdown/look/visualizer'
  * such a band reads the spectrum INTERPOLATED at its centre (linearly, in
  * dB, between the two nearest bins) and scales it by its share of a bin.
  *
+ * The semitone row estimates a polyphonic set of notes by fitting their
+ * fundamentals and partials jointly in linear power. This attributes energy
+ * already explained by a note's partials instead of adding it to every
+ * possible lower-note candidate.
+ *
  * The scale is FIXED, from `SPECTRUM_FLOOR_DB` to `SPECTRUM_CEILING_DB`, so
  * a quiet track draws low bars. An auto-ranging scale would make every track
  * look equally loud.
@@ -43,11 +48,12 @@ export const SPECTRUM_CEILING_DB = -40
 export const SPECTRUM_FLOOR_DB = -80
 /** Semitone levels below this are hidden; raising it increases key contrast. */
 export const SEMITONE_CONTRAST_DB = -60
-/** Number of nonzero brightness levels: 0 hides keys, 1 is binary, higher values add steps. */
-export const SEMITONE_LIGHT_LEVELS = 4
-/** How strongly a semitone is boosted by its higher harmonics. */
-export const SEMITONE_HARMONIC_BOOST = 1
-const SEMITONE_MAX_HARMONIC = 8
+/** Top of the semitone brightness range; note bins can be much stronger than spectrum columns. */
+export const SEMITONE_BRIGHTNESS_CEILING_DB = -10
+const SEMITONE_MAX_HARMONIC = 12
+const SEMITONE_ATTRIBUTION_PASSES = 12
+/** Sparse penalty set below the visible contrast floor to discourage diffuse note fits. */
+const SEMITONE_ATTRIBUTION_PENALTY = dbToPower(SEMITONE_CONTRAST_DB - 6)
 /** Seconds for a lit key to fall to a quieter target. */
 export const SEMITONE_FADE_SEC = 0.25
 /** The neutral shared visualizer fall shape: a quadratic decay. */
@@ -213,78 +219,128 @@ export function createSemitonePlan(binCount: number, binHz: number, boxCount: nu
   return { lowerBox, upperShare }
 }
 
-/** Precomputed harmonic locations for every semitone box; each harmonic is sampled between boxes in linear power. */
-export interface SemitoneHarmonicPlan {
+/** Precomputed linear-power note templates, with a fundamental and its partials in semitone bins. */
+export interface SemitoneAttributionPlan {
   boxCount: number
-  lowerBox: Int32Array
-  upperShare: Float32Array
-  weights: Float32Array
+  templates: Float64Array
+  squaredNorms: Float64Array
 }
 
-export function createSemitoneHarmonicPlan(
+export interface SemitoneAttributionWorkspace {
+  residual: Float64Array
+  notePowers: Float64Array
+}
+
+export function createSemitoneAttributionPlan(
   boxCount: number,
   maxHarmonic = SEMITONE_MAX_HARMONIC,
-): SemitoneHarmonicPlan {
+): SemitoneAttributionPlan {
   if (!Number.isInteger(boxCount) || boxCount < 0) throw new RangeError('Semitone band count must be a non-negative integer')
-  if (!Number.isInteger(maxHarmonic) || maxHarmonic < 2) throw new RangeError('At least two harmonics are required')
+  if (!Number.isInteger(maxHarmonic) || maxHarmonic < 1) throw new RangeError('At least one harmonic is required')
 
-  const harmonicCount = maxHarmonic - 1
-  const lowerBox = new Int32Array(boxCount * harmonicCount).fill(NO_SEMITONE)
-  const upperShare = new Float32Array(boxCount * harmonicCount)
-  const weights = new Float32Array(harmonicCount)
-  for (let harmonic = 2; harmonic <= maxHarmonic; harmonic += 1) {
-    const harmonicIndex = harmonic - 2
-    const semitoneShift = 12 * Math.log2(harmonic)
-    weights[harmonicIndex] = 1 / harmonic
-    for (let box = 0; box < boxCount; box += 1) {
+  const templates = new Float64Array(boxCount * boxCount)
+  const squaredNorms = new Float64Array(boxCount)
+  for (let box = 0; box < boxCount; box += 1) {
+    const templateOffset = box * boxCount
+    for (let harmonic = 1; harmonic <= maxHarmonic; harmonic += 1) {
+      const semitoneShift = 12 * Math.log2(harmonic)
       const position = box + semitoneShift
       if (position > boxCount - 1) continue
-      const offset = harmonicIndex * boxCount + box
-      lowerBox[offset] = Math.floor(position)
-      upperShare[offset] = position - lowerBox[offset]
+      const lower = Math.floor(position)
+      const share = position - lower
+      // Real partials vary; this deliberately predicts more power than an ideal 1/h² decay.
+      const powerWeight = 1 / harmonic ** 1.5
+      templates[templateOffset + lower] += powerWeight * (1 - share)
+      if (lower + 1 < boxCount) templates[templateOffset + lower + 1] += powerWeight * share
     }
+
+    let squaredNorm = 0
+    for (let band = 0; band < boxCount; band += 1) {
+      const contribution = templates[templateOffset + band]
+      squaredNorm += contribution * contribution
+    }
+    squaredNorms[box] = squaredNorm
   }
-  return { boxCount, lowerBox, upperShare, weights }
+  return { boxCount, templates, squaredNorms }
+}
+
+export function createSemitoneAttributionWorkspace(boxCount: number): SemitoneAttributionWorkspace {
+  if (!Number.isInteger(boxCount) || boxCount < 0) throw new RangeError('Semitone band count must be a non-negative integer')
+  return {
+    residual: new Float64Array(boxCount),
+    notePowers: new Float64Array(boxCount),
+  }
 }
 
 /**
- * Keeps each semitone's measured power and adds attenuated evidence from its
- * higher harmonics. `powerByBox` is reusable caller-owned workspace; the raw
- * input is never changed or reused as an output.
+ * Fits the measured spectrum as a non-negative mixture of note templates.
+ * Harmonic power is attributed to its source note instead of independently
+ * boosting every candidate note that could own it.
  */
-export function writeHarmonicSemitoneLevels(
+export function writeAttributedSemitoneLevels(
   rawLevels: Float32Array,
-  plan: SemitoneHarmonicPlan,
+  plan: SemitoneAttributionPlan,
   out: Float32Array,
-  powerByBox: Float64Array,
-  boost = SEMITONE_HARMONIC_BOOST,
+  workspace: SemitoneAttributionWorkspace,
 ): void {
-  if (rawLevels.length !== plan.boxCount || out.length !== plan.boxCount || powerByBox.length !== plan.boxCount) {
-    throw new RangeError('Harmonic semitone buffers must match the plan band count')
+  const { boxCount } = plan
+  if (
+    rawLevels.length !== boxCount ||
+    out.length !== boxCount ||
+    workspace.residual.length !== boxCount ||
+    workspace.notePowers.length !== boxCount
+  ) {
+    throw new RangeError('Semitone attribution buffers must match the plan band count')
   }
-  if (rawLevels === out) throw new RangeError('Harmonic semitone output must not overwrite raw levels')
-  if (!Number.isFinite(boost) || boost < 0) throw new RangeError('Harmonic boost must be non-negative')
+  if (rawLevels === out) throw new RangeError('Semitone attribution output must not overwrite raw levels')
 
-  for (let box = 0; box < plan.boxCount; box += 1) {
-    powerByBox[box] = dbToPower(rawLevels[box])
+  let anyPower = false
+  for (let band = 0; band < boxCount; band += 1) {
+    const power = dbToPower(rawLevels[band])
+    workspace.residual[band] = power
+    anyPower ||= power > 0
+  }
+  workspace.notePowers.fill(0)
+  if (!anyPower) {
+    out.fill(-Infinity)
+    return
   }
 
-  for (let box = 0; box < plan.boxCount; box += 1) {
-    let power = powerByBox[box]
-    for (let harmonicIndex = 0; harmonicIndex < plan.weights.length; harmonicIndex += 1) {
-      const offset = harmonicIndex * plan.boxCount + box
-      const lower = plan.lowerBox[offset]
-      if (lower === NO_SEMITONE) continue
-      const share = plan.upperShare[offset]
-      const lowerPower = powerByBox[lower]
-      const upperPower = lower + 1 < plan.boxCount ? powerByBox[lower + 1] : lowerPower
-      const harmonicPower = lowerPower * (1 - share) + upperPower * share
-      power += boost * plan.weights[harmonicIndex] * harmonicPower
+  for (let pass = 0; pass < SEMITONE_ATTRIBUTION_PASSES; pass += 1) {
+    for (let note = 0; note < boxCount; note += 1) {
+      const norm = plan.squaredNorms[note]
+      if (norm === 0) continue
+      const templateOffset = note * boxCount
+      let correlation = 0
+      for (let band = 0; band < boxCount; band += 1) {
+        correlation += plan.templates[templateOffset + band] * workspace.residual[band]
+      }
+
+      const previous = workspace.notePowers[note]
+      const next = Math.max(0, (correlation + norm * previous - SEMITONE_ATTRIBUTION_PENALTY) / norm)
+      const change = next - previous
+      if (change === 0) continue
+      workspace.notePowers[note] = next
+      for (let band = 0; band < boxCount; band += 1) {
+        workspace.residual[band] -= change * plan.templates[templateOffset + band]
+      }
     }
-    out[box] = power > 0 ? 10 * Math.log10(power) : -Infinity
+  }
+
+  for (let note = 0; note < boxCount; note += 1) {
+    const power = workspace.notePowers[note]
+    out[note] = power > 0 ? 10 * Math.log10(power) : -Infinity
   }
 }
 
+/** Unquantized brightness above the contrast cutoff, capped at the semitone brightness ceiling. */
+export function semitoneShare(levelDb: number): number {
+  if (!(levelDb > SEMITONE_CONTRAST_DB)) return 0
+  return Math.max(
+    0,
+    Math.min(1, (levelDb - SEMITONE_CONTRAST_DB) / (SEMITONE_BRIGHTNESS_CEILING_DB - SEMITONE_CONTRAST_DB)),
+  )
+}
 const TUNING_MIN_HZ = 80
 const TUNING_MAX_HZ = 5000
 const TUNING_MIN_PEAK_DB = -65
@@ -426,16 +482,6 @@ export function litRows(levelDb: number, maxRows: number): number {
 export function levelShare(levelDb: number): number {
   if (!(levelDb > SPECTRUM_FLOOR_DB)) return 0
   return Math.max(0, Math.min(1, (levelDb - SPECTRUM_FLOOR_DB) / (SPECTRUM_CEILING_DB - SPECTRUM_FLOOR_DB)))
-}
-
-/** A semitone box's brightness above the contrast cutoff, capped at the spectrum ceiling. */
-export function semitoneShare(levelDb: number, lightLevels = SEMITONE_LIGHT_LEVELS): number {
-  if (!Number.isInteger(lightLevels) || lightLevels < 0) {
-    throw new RangeError('Semitone light level count must be a non-negative integer')
-  }
-  if (lightLevels === 0 || !(levelDb > SEMITONE_CONTRAST_DB)) return 0
-  const signalShare = Math.max(0, Math.min(1, (levelDb - SEMITONE_CONTRAST_DB) / (SPECTRUM_CEILING_DB - SEMITONE_CONTRAST_DB)))
-  return Math.min(lightLevels, Math.floor(signalShare * lightLevels) + 1) / lightLevels
 }
 
 /** Shaped, time-based fading for the key row's normalized light levels. */

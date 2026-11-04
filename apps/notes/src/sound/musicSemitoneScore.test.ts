@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { MusicSemitoneScore } from './musicSemitoneScore'
+import {
+  SEMITONE_BRIGHTNESS_CEILING_DB,
+  SEMITONE_CONTRAST_DB,
+  createSemitoneAttributionPlan,
+  createSemitoneAttributionWorkspace,
+  semitoneShare,
+  writeAttributedSemitoneLevels,
+} from '../visualizer/spectrumBands'
 
 const RATE = 48000
 const BANDS = 48
@@ -12,12 +20,12 @@ function toneTrack(frequency: number, seconds: number, toneStart: number, toneEn
   return samples
 }
 
-function harmonicTrack(frequency: number, seconds: number): Float32Array {
+function harmonicTrack(frequency: number, seconds: number, amplitude = 1): Float32Array {
   const samples = new Float32Array(Math.round(RATE * seconds))
   for (let i = Math.floor(0.1 * RATE); i < Math.ceil((seconds - 0.1) * RATE); i += 1) {
     const time = i / RATE
     for (let harmonic = 1; harmonic <= 10; harmonic += 1) {
-      samples[i] += Math.sin(2 * Math.PI * frequency * harmonic * time) / harmonic
+      samples[i] += amplitude * Math.sin(2 * Math.PI * frequency * harmonic * time) / harmonic
     }
   }
   return samples
@@ -51,5 +59,49 @@ describe('MusicSemitoneScore', () => {
     expect(levels[a4]).toBeGreaterThan(-45)
     expect(levels[a4]).toBeGreaterThan(levels[a4 - 1])
     expect(levels[a4]).toBeGreaterThan(levels[a4 + 1])
+  })
+
+  it('keeps simultaneously played notes while attributing their overtones', () => {
+    const score = new MusicSemitoneScore(RATE, BANDS)
+    const samples = harmonicTrack(220, 3)
+    const secondNote = harmonicTrack(220 * 2 ** (7 / 12), 3, 0.5)
+    for (let i = 0; i < samples.length; i += 1) samples[i] += secondNote[i]
+    score.feed(samples, 0)
+
+    const raw = new Float32Array(BANDS)
+    score.levelsAt(2.5, raw)
+    const attributed = new Float32Array(BANDS)
+    const plan = createSemitoneAttributionPlan(BANDS)
+    writeAttributedSemitoneLevels(raw, plan, attributed, createSemitoneAttributionWorkspace(BANDS))
+
+    const a3 = BANDS / 2
+    const e4 = a3 + 7
+    const a4 = a3 + 12
+    expect(attributed[a3]).toBeGreaterThan(attributed[a4])
+    expect(attributed[a4]).toBeLessThan(SEMITONE_CONTRAST_DB)
+    expect(attributed[e4]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
+    expect(attributed[a3]).toBeGreaterThan(attributed[e4])
+    expect(semitoneShare(attributed[a3])).toBeGreaterThan(semitoneShare(attributed[e4]))
+  })
+
+  it('keeps a real octave note when its own partials support it', () => {
+    const bands = 60
+    const score = new MusicSemitoneScore(RATE, bands)
+    const samples = harmonicTrack(220, 3)
+    const octave = harmonicTrack(440, 3, 0.4)
+    for (let i = 0; i < samples.length; i += 1) samples[i] += octave[i]
+    score.feed(samples, 0)
+
+    const raw = new Float32Array(bands)
+    score.levelsAt(2.5, raw)
+    const attributed = new Float32Array(bands)
+    const plan = createSemitoneAttributionPlan(bands)
+    writeAttributedSemitoneLevels(raw, plan, attributed, createSemitoneAttributionWorkspace(bands))
+
+    const a3 = bands / 2
+    const a4 = a3 + 12
+    expect(attributed[a4]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
+    expect(attributed[a3]).toBeGreaterThan(attributed[a4])
+    expect(attributed[a4]).toBeLessThan(SEMITONE_BRIGHTNESS_CEILING_DB)
   })
 })
