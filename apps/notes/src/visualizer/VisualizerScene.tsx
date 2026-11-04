@@ -213,6 +213,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     const harmonicPlan = semitoneMeter ? createSemitoneHarmonicPlan(columns) : null
     const harmonicLevels = semitoneMeter ? new Float32Array(columns) : null
     const harmonicAfterLevels = semitoneMeter ? new Float32Array(columns) : null
+    const harmonicPowerByBox = semitoneMeter ? new Float64Array(columns) : null
     const semitoneActivity = semitoneMeter ? new SemitoneActivityFilter(columns, MUSIC_SEMITONE_CONFIRM_SEC) : null
     const drawnSemitones = new Int16Array(columns).fill(-1)
     const breath = new MusicBreath()
@@ -353,10 +354,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
         semitoneActivity?.reset()
       }
       if (semitoneAt && semitoneAfter && Number.isFinite(semitoneTime) && semitoneMeter && semitoneTargets) {
-        if (!harmonicPlan || !harmonicLevels || !harmonicAfterLevels) throw new Error('Semitone rendering started without a harmonic plan')
+        if (!harmonicPlan || !harmonicLevels || !harmonicAfterLevels || !harmonicPowerByBox) throw new Error('Semitone rendering started without a harmonic plan')
         if (semitoneAt !== mappedSemitoneAt || semitoneAfter !== mappedSemitoneAfter) {
-          writeHarmonicSemitoneLevels(semitoneAt, harmonicPlan, harmonicLevels)
-          writeHarmonicSemitoneLevels(semitoneAfter, harmonicPlan, harmonicAfterLevels)
+          writeHarmonicSemitoneLevels(semitoneAt, harmonicPlan, harmonicLevels, harmonicPowerByBox)
+          writeHarmonicSemitoneLevels(semitoneAfter, harmonicPlan, harmonicAfterLevels, harmonicPowerByBox)
           mappedSemitoneAt = semitoneAt
           mappedSemitoneAfter = semitoneAfter
         }

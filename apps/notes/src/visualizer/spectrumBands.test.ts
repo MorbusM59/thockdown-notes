@@ -237,10 +237,11 @@ describe('writeBandLevels', () => {
       const a4 = Math.floor(boxCount / 2)
       const raw = new Float32Array(boxCount).fill(-Infinity)
       const mapped = new Float32Array(boxCount)
+      const powerByBox = new Float64Array(boxCount)
       raw[a4] = -30
       raw[a4 + 12] = -20
 
-      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount), mapped)
+      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount), mapped, powerByBox)
 
       const expectedPower = 10 ** (-30 / 10) + SEMITONE_HARMONIC_BOOST * 0.5 * 10 ** (-20 / 10)
       expect(mapped[a4]).toBeCloseTo(10 * Math.log10(expectedPower), 4)
@@ -253,10 +254,11 @@ describe('writeBandLevels', () => {
       const a3 = 12
       const raw = new Float32Array(boxCount).fill(-Infinity)
       const mapped = new Float32Array(boxCount)
+      const powerByBox = new Float64Array(boxCount)
       raw[a3 + 19] = -20
       raw[a3 + 20] = -40
 
-      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount, 3), mapped)
+      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount, 3), mapped, powerByBox)
 
       expect(mapped[a3]).toBeGreaterThan(-30)
       expect(raw[a3]).toBe(-Infinity)
@@ -264,7 +266,12 @@ describe('writeBandLevels', () => {
 
     it('does not allow the weighted map to overwrite its raw input', () => {
       const levels = Float32Array.of(-20, -30)
-      expect(() => writeHarmonicSemitoneLevels(levels, createSemitoneHarmonicPlan(2), levels)).toThrow(RangeError)
+      expect(() => writeHarmonicSemitoneLevels(levels, createSemitoneHarmonicPlan(2), levels, new Float64Array(2))).toThrow(RangeError)
+    })
+
+    it('requires a power workspace matching the plan', () => {
+      const levels = Float32Array.of(-20, -30)
+      expect(() => writeHarmonicSemitoneLevels(levels, createSemitoneHarmonicPlan(2), new Float32Array(2), new Float64Array(1))).toThrow(RangeError)
     })
   })
 

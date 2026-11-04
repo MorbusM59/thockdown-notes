@@ -249,29 +249,35 @@ export function createSemitoneHarmonicPlan(
 
 /**
  * Keeps each semitone's measured power and adds attenuated evidence from its
- * higher harmonics. The input is never changed or reused as an output.
+ * higher harmonics. `powerByBox` is reusable caller-owned workspace; the raw
+ * input is never changed or reused as an output.
  */
 export function writeHarmonicSemitoneLevels(
   rawLevels: Float32Array,
   plan: SemitoneHarmonicPlan,
   out: Float32Array,
+  powerByBox: Float64Array,
   boost = SEMITONE_HARMONIC_BOOST,
 ): void {
-  if (rawLevels.length !== plan.boxCount || out.length !== plan.boxCount) {
+  if (rawLevels.length !== plan.boxCount || out.length !== plan.boxCount || powerByBox.length !== plan.boxCount) {
     throw new RangeError('Harmonic semitone buffers must match the plan band count')
   }
   if (rawLevels === out) throw new RangeError('Harmonic semitone output must not overwrite raw levels')
   if (!Number.isFinite(boost) || boost < 0) throw new RangeError('Harmonic boost must be non-negative')
 
   for (let box = 0; box < plan.boxCount; box += 1) {
-    let power = dbToPower(rawLevels[box])
+    powerByBox[box] = dbToPower(rawLevels[box])
+  }
+
+  for (let box = 0; box < plan.boxCount; box += 1) {
+    let power = powerByBox[box]
     for (let harmonicIndex = 0; harmonicIndex < plan.weights.length; harmonicIndex += 1) {
       const offset = harmonicIndex * plan.boxCount + box
       const lower = plan.lowerBox[offset]
       if (lower === NO_SEMITONE) continue
       const share = plan.upperShare[offset]
-      const lowerPower = dbToPower(rawLevels[lower])
-      const upperPower = lower + 1 < plan.boxCount ? dbToPower(rawLevels[lower + 1]) : lowerPower
+      const lowerPower = powerByBox[lower]
+      const upperPower = lower + 1 < plan.boxCount ? powerByBox[lower + 1] : lowerPower
       const harmonicPower = lowerPower * (1 - share) + upperPower * share
       power += boost * plan.weights[harmonicIndex] * harmonicPower
     }
