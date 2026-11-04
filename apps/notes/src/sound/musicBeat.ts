@@ -85,7 +85,15 @@ export function subscribeMusicSemitoneScore(
   listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null) => void,
 ): { update: (bands: number) => void; unsubscribe: () => void } {
   if (!Number.isInteger(bands) || bands <= 0) throw new RangeError('Semitone score row width must be a positive integer')
-  const subscriber: SemitoneSubscriber = { bands, listener }
+  const subscriber: SemitoneSubscriber = {
+    bands,
+    listener,
+    sourceAt: null,
+    sourceAfter: null,
+    viewBands: 0,
+    viewAt: null,
+    viewAfter: null,
+  }
   semitoneSubscribers.add(subscriber)
   added()
   return {
@@ -152,8 +160,14 @@ const counters = new Set<Counter>()
 interface SemitoneSubscriber {
   bands: number
   listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null) => void
+  sourceAt: Float32Array | null
+  sourceAfter: Float32Array | null
+  viewBands: number
+  viewAt: Float32Array | null
+  viewAfter: Float32Array | null
 }
 const semitoneSubscribers = new Set<SemitoneSubscriber>()
+let latestSemitoneScore: NonNullable<AnalysisAnswer['semitones']> | null = null
 
 function semitoneBandCount(): number {
   let bands = 0
@@ -244,6 +258,7 @@ function send(request: AnalysisRequest): void {
 
 function receive(answer: AnalysisAnswer): void {
   if (answer.run !== run) return
+  if ('semitones' in answer) latestSemitoneScore = answer.semitones ?? null
   for (let i = 0; i < answer.ids.length; i++) {
     const index = answer.ids[i]
     const raw = answer.raws[i]
@@ -266,16 +281,27 @@ function receive(answer: AnalysisAnswer): void {
   for (const line of answer.traceLines) appendBeatTrace(line)
   if (semitoneSubscribers.size > 0) {
     for (const subscriber of semitoneSubscribers) {
-      const score = answer.semitones
+      const score = latestSemitoneScore
       if (!score || score.at.length < subscriber.bands) {
         subscriber.listener(answer.heardTime, null, null)
         continue
       }
-      const offset = Math.floor(score.at.length / 2) - Math.floor(subscriber.bands / 2)
+      if (
+        subscriber.sourceAt !== score.at ||
+        subscriber.sourceAfter !== score.after ||
+        subscriber.viewBands !== subscriber.bands
+      ) {
+        const offset = Math.floor(score.at.length / 2) - Math.floor(subscriber.bands / 2)
+        subscriber.sourceAt = score.at
+        subscriber.sourceAfter = score.after
+        subscriber.viewBands = subscriber.bands
+        subscriber.viewAt = score.at.subarray(offset, offset + subscriber.bands)
+        subscriber.viewAfter = score.after.subarray(offset, offset + subscriber.bands)
+      }
       subscriber.listener(
         answer.heardTime,
-        score.at.subarray(offset, offset + subscriber.bands),
-        score.after.subarray(offset, offset + subscriber.bands),
+        subscriber.viewAt,
+        subscriber.viewAfter,
       )
     }
   }
@@ -324,6 +350,7 @@ function rebuildAskReaders(): void {
  */
 function restartAnalysis(listenerTime: number): void {
   stale = false
+  latestSemitoneScore = null
   const url = musicPlayerService.trackUrl
   for (const band of bands) band.peak = 0
   pendingRaw.fill(0)
@@ -537,6 +564,7 @@ function stop(): void {
   frame = null
   lastNow = NaN
   listenerClock.reset()
+  latestSemitoneScore = null
   // An answer to the last ask before the stop describes a moment that has passed.
   pendingRaw.fill(0)
   trackerRaw.fill(0)

@@ -113,7 +113,7 @@ export interface AnalysisAnswer {
   caretPhase: number
   caretPeriod: number
   /** The decoded-track semitone levels at `heardTime` and after the lookahead confirmation window. */
-  semitones: { at: Float32Array; after: Float32Array } | null
+  semitones?: { at: Float32Array; after: Float32Array } | null
   traceLines: string[]
 }
 
@@ -190,6 +190,10 @@ export class MusicAnalysis {
   private semitoneScore: MusicSemitoneScore | null = null
   private semitoneBands = 0
   private semitoneGeneration = 0
+  private semitoneAtFrame: number | null | undefined
+  private semitoneAfterFrame: number | null | undefined
+  private semitoneAtLevels: Float32Array | null = null
+  private semitoneAfterLevels: Float32Array | null = null
   /** The run the page last restarted; chunks and asks of an older one are dropped. */
   private run = 0
   /** The run whose file is open and whose decoding has started (`restart` waits for the sample rate). */
@@ -367,13 +371,21 @@ export class MusicAnalysis {
     }
     this.semitoneStream?.want(request.listenerTime + MUSIC_SEMITONE_AHEAD_SEC)
     const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
-    let semitones: AnalysisAnswer['semitones'] = null
+    let semitones: AnalysisAnswer['semitones']
     if (this.semitoneScore && this.semitoneBands > 0) {
-      const at = new Float32Array(this.semitoneBands)
-      const after = new Float32Array(this.semitoneBands)
-      this.semitoneScore.levelsAt(heardTime, at)
-      this.semitoneScore.levelsAt(heardTime + MUSIC_SEMITONE_CONFIRM_SEC, after)
-      semitones = { at, after }
+      const atFrame = this.semitoneScore.frameIndexAt(heardTime)
+      const afterFrame = this.semitoneScore.frameIndexAt(heardTime + MUSIC_SEMITONE_CONFIRM_SEC)
+      if (atFrame !== this.semitoneAtFrame || afterFrame !== this.semitoneAfterFrame) {
+        this.semitoneAtLevels = new Float32Array(this.semitoneBands)
+        this.semitoneAfterLevels = new Float32Array(this.semitoneBands)
+        this.semitoneScore.levelsAt(heardTime, this.semitoneAtLevels)
+        this.semitoneScore.levelsAt(heardTime + MUSIC_SEMITONE_CONFIRM_SEC, this.semitoneAfterLevels)
+        this.semitoneAtFrame = atFrame
+        this.semitoneAfterFrame = afterFrame
+        semitones = { at: this.semitoneAtLevels, after: this.semitoneAfterLevels }
+      }
+    } else {
+      semitones = null
     }
     const ids: number[] = []
     const raws: number[] = []
@@ -398,7 +410,7 @@ export class MusicAnalysis {
     }
     const traceLines = this.traceLines
     this.traceLines = []
-    return {
+    const answer: AnalysisAnswer = {
       type: 'answer',
       run: this.run,
       heardTime,
@@ -407,15 +419,20 @@ export class MusicAnalysis {
       peak: this.peaks.isEmpty ? NaN : this.peaks.peakSince(heardTime - LEAD_SEC),
       caretPhase: caret.phase,
       caretPeriod: caret.period,
-      semitones,
       traceLines,
     }
+    if (semitones !== undefined) answer.semitones = semitones
+    return answer
   }
 
   private restartSemitone(url: string | null, at: number, bands: number): void {
     if (!Number.isInteger(bands) || bands < 0) throw new RangeError('Semitone band count must be non-negative')
     const generation = ++this.semitoneGeneration
     this.semitoneScore = null
+    this.semitoneAtFrame = undefined
+    this.semitoneAfterFrame = undefined
+    this.semitoneAtLevels = null
+    this.semitoneAfterLevels = null
     if (bands === 0 || !url) {
       this.disposeSemitoneStream()
       return

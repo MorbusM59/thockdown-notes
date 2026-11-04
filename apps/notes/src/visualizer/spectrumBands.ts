@@ -81,6 +81,110 @@ function dbToPower(db: number): number {
   return db > -400 ? 10 ** (db / 10) : 0
 }
 
+/** Precomputed frequency-bin contributions for a fixed FFT shape and band range. */
+export interface BandLevelPlan {
+  fromBand: number
+  bandCount: number
+  narrow: Uint8Array
+  below: Uint32Array
+  above: Uint32Array
+  share: Float64Array
+  widthShare: Float64Array
+  offsets: Uint32Array
+  bins: Uint32Array
+  weights: Float64Array
+  tilt: Float64Array
+}
+
+/**
+ * Builds the fixed bin geometry once, so sampling a spectrum does no
+ * per-band frequency, overlap, or tilt calculations.
+ */
+export function createBandLevelPlan(
+  binCount: number,
+  binHz: number,
+  edges: Float64Array,
+  fromBand = 0,
+  toBand = edges.length - 1,
+): BandLevelPlan {
+  const bandCount = Math.max(0, toBand - fromBand)
+  const narrow = new Uint8Array(bandCount)
+  const below = new Uint32Array(bandCount)
+  const above = new Uint32Array(bandCount)
+  const share = new Float64Array(bandCount)
+  const widthShare = new Float64Array(bandCount)
+  const offsets = new Uint32Array(bandCount + 1)
+  const bins: number[] = []
+  const weights: number[] = []
+  const tilt = new Float64Array(bandCount)
+  const lastBin = binCount - 1
+
+  for (let localBand = 0; localBand < bandCount; localBand += 1) {
+    const band = fromBand + localBand
+    const lo = edges[band]
+    const hi = edges[band + 1]
+    const centre = bandCentreHz(edges, band)
+    tilt[localBand] = TILT_DB_PER_OCTAVE * Math.log2(centre / TILT_PIVOT_HZ)
+
+    if (hi - lo < binHz) {
+      narrow[localBand] = 1
+      const at = Math.min(lastBin, Math.max(0, centre / binHz))
+      const lower = Math.floor(at)
+      below[localBand] = lower
+      above[localBand] = Math.min(lastBin, lower + 1)
+      share[localBand] = at - lower
+      widthShare[localBand] = (hi - lo) / binHz
+    } else {
+      const first = Math.max(0, Math.floor(lo / binHz + 0.5))
+      const last = Math.min(lastBin, Math.floor(hi / binHz + 0.5))
+      for (let bin = first; bin <= last; bin += 1) {
+        const binLo = (bin - 0.5) * binHz
+        const binHi = (bin + 0.5) * binHz
+        const overlap = Math.min(hi, binHi) - Math.max(lo, binLo)
+        if (overlap > 0) {
+          bins.push(bin)
+          weights.push(overlap / binHz)
+        }
+      }
+    }
+    offsets[localBand + 1] = bins.length
+  }
+
+  return {
+    fromBand,
+    bandCount,
+    narrow,
+    below,
+    above,
+    share,
+    widthShare,
+    offsets,
+    bins: Uint32Array.from(bins),
+    weights: Float64Array.from(weights),
+    tilt,
+  }
+}
+
+/** Applies a precomputed frequency-bin plan to one analyser frame. */
+export function writeBandLevelsWithPlan(spectrumDb: Float32Array, plan: BandLevelPlan, out: Float32Array): void {
+  for (let localBand = 0; localBand < plan.bandCount; localBand += 1) {
+    let power = 0
+    if (plan.narrow[localBand]) {
+      const a = spectrumDb[plan.below[localBand]]
+      const b = spectrumDb[plan.above[localBand]]
+      const share = plan.share[localBand]
+      const db = Number.isFinite(a) && Number.isFinite(b) ? a + (b - a) * share : Math.max(a, b)
+      power = dbToPower(db) * plan.widthShare[localBand]
+    } else {
+      for (let i = plan.offsets[localBand]; i < plan.offsets[localBand + 1]; i += 1) {
+        power += dbToPower(spectrumDb[plan.bins[i]]) * plan.weights[i]
+      }
+    }
+    const band = plan.fromBand + localBand
+    out[band] = power > 0 ? 10 * Math.log10(power) + plan.tilt[localBand] : -Infinity
+  }
+}
+
 /**
  * The fixed frequency-to-semitone mapping for one FFT shape, row width and
  * tuning offset. Building it once keeps logarithms out of the frame loop.
@@ -300,38 +404,11 @@ export function writeBandLevels(
   toBand: number,
   out: Float32Array,
 ): void {
-  const lastBin = spectrumDb.length - 1
-  for (let band = fromBand; band < toBand; band += 1) {
-    const lo = edges[band]
-    const hi = edges[band + 1]
-    let power = 0
-    if (hi - lo < binHz) {
-      // Narrower than a bin: the spectrum interpolated at the centre, as a
-      // density (per bin), times the share of a bin the band spans.
-      const at = Math.min(lastBin, Math.max(0, bandCentreHz(edges, band) / binHz))
-      const below = Math.floor(at)
-      const above = Math.min(lastBin, below + 1)
-      const share = at - below
-      const a = spectrumDb[below]
-      const b = spectrumDb[above]
-      const db = Number.isFinite(a) && Number.isFinite(b) ? a + (b - a) * share : Math.max(a, b)
-      power = dbToPower(db) * ((hi - lo) / binHz)
-    } else {
-      // Every bin the band overlaps, weighted by how much of the bin it
-      // covers (bin k spans [k - 0.5, k + 0.5) bins), so a band boundary
-      // between two bins splits them rather than giving each wholly to one.
-      const first = Math.max(0, Math.floor(lo / binHz + 0.5))
-      const last = Math.min(lastBin, Math.floor(hi / binHz + 0.5))
-      for (let bin = first; bin <= last; bin += 1) {
-        const binLo = (bin - 0.5) * binHz
-        const binHi = (bin + 0.5) * binHz
-        const overlap = Math.min(hi, binHi) - Math.max(lo, binLo)
-        if (overlap > 0) power += dbToPower(spectrumDb[bin]) * (overlap / binHz)
-      }
-    }
-    const tilt = TILT_DB_PER_OCTAVE * Math.log2(bandCentreHz(edges, band) / TILT_PIVOT_HZ)
-    out[band] = power > 0 ? 10 * Math.log10(power) + tilt : -Infinity
-  }
+  writeBandLevelsWithPlan(
+    spectrumDb,
+    createBandLevelPlan(spectrumDb.length, binHz, edges, fromBand, toBand),
+    out,
+  )
 }
 
 /** How many of `maxRows` boxes a level lights: none at or below the floor, all at the ceiling, linear in dB between. */

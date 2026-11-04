@@ -68,24 +68,25 @@ export class MusicSemitoneScore {
     }
   }
 
+  /** The frame nearest `timeSec`, or null when it is unavailable or expired. */
+  frameIndexAt(timeSec: number): number | null {
+    if (!Number.isFinite(timeSec) || Number.isNaN(this.origin)) return null
+    const frame = Math.round(((timeSec - this.origin) * this.sampleRate - MUSIC_SEMITONE_FFT_SIZE / 2) / this.hop)
+    const historyFrames = this.historyStart.length
+    if (frame < 0 || frame >= this.frames || frame < this.frames - historyFrames) return null
+    const slot = frame % historyFrames
+    return this.historyStart[slot] === frame ? frame : null
+  }
+
   /** Writes the score nearest `timeSec`; unavailable or expired frames read as silence. */
   levelsAt(timeSec: number, out: Float32Array): void {
     if (out.length !== this.bands) throw new RangeError('Semitone score output must match its band count')
-    if (!Number.isFinite(timeSec) || Number.isNaN(this.origin)) {
+    const frame = this.frameIndexAt(timeSec)
+    if (frame === null) {
       out.fill(-Infinity)
       return
     }
-    const frame = Math.round(((timeSec - this.origin) * this.sampleRate - MUSIC_SEMITONE_FFT_SIZE / 2) / this.hop)
-    const historyFrames = this.historyStart.length
-    if (frame < 0 || frame >= this.frames || frame < this.frames - historyFrames) {
-      out.fill(-Infinity)
-      return
-    }
-    const slot = frame % historyFrames
-    if (this.historyStart[slot] !== frame) {
-      out.fill(-Infinity)
-      return
-    }
+    const slot = frame % this.historyStart.length
     out.set(this.history.subarray(slot * this.bands, (slot + 1) * this.bands))
   }
 

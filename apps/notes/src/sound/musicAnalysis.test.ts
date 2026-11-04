@@ -164,7 +164,10 @@ describe('the beat analysis behind the worker', { timeout: 60_000 }, () => {
     restart(1, 'a', 0)
     await Promise.resolve()
     await Promise.resolve()
-    const atTone = ask(1, 0.3)?.semitones
+    const firstAtTone = ask(1, 0.3)
+    const atTone = firstAtTone?.semitones
+    expect(atTone).toBeDefined()
+    expect(ask(1, 0.3)?.semitones).toBeUndefined()
     const afterTone = ask(1, 0.5)?.semitones
     expect(atTone?.at[Math.floor(SEMITONE_BANDS / 2) + 12]).toBeGreaterThan(-45)
     expect(atTone?.after.every((level) => level === -Infinity)).toBe(true)

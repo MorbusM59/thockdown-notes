@@ -222,6 +222,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     let semitoneTime = NaN
     let semitoneAt: Float32Array | null = null
     let semitoneAfter: Float32Array | null = null
+    let mappedSemitoneAt: Float32Array | null = null
+    let mappedSemitoneAfter: Float32Array | null = null
     const unsubscribeSemitoneScore = semitoneActivity
       ? subscribeMusicSemitoneScore(columns, (timeSec, at, after) => {
           if (!Number.isFinite(timeSec) || !at || !after) {
@@ -346,12 +348,18 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
         semitoneTime = NaN
         semitoneAt = null
         semitoneAfter = null
+        mappedSemitoneAt = null
+        mappedSemitoneAfter = null
         semitoneActivity?.reset()
       }
       if (semitoneAt && semitoneAfter && Number.isFinite(semitoneTime) && semitoneMeter && semitoneTargets) {
         if (!harmonicPlan || !harmonicLevels || !harmonicAfterLevels) throw new Error('Semitone rendering started without a harmonic plan')
-        writeHarmonicSemitoneLevels(semitoneAt, harmonicPlan, harmonicLevels)
-        writeHarmonicSemitoneLevels(semitoneAfter, harmonicPlan, harmonicAfterLevels)
+        if (semitoneAt !== mappedSemitoneAt || semitoneAfter !== mappedSemitoneAfter) {
+          writeHarmonicSemitoneLevels(semitoneAt, harmonicPlan, harmonicLevels)
+          writeHarmonicSemitoneLevels(semitoneAfter, harmonicPlan, harmonicAfterLevels)
+          mappedSemitoneAt = semitoneAt
+          mappedSemitoneAfter = semitoneAfter
+        }
         const activeLevels = semitoneActivity?.step(harmonicLevels, harmonicAfterLevels, semitoneTime) ?? harmonicLevels
         for (let boxIndex = 0; boxIndex < columns; boxIndex += 1) {
           semitoneTargets[boxIndex] = semitoneShare(activeLevels[boxIndex], SEMITONE_LIGHT_LEVELS)

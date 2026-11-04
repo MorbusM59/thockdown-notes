@@ -15,11 +15,13 @@ import {
   TILT_DB_PER_OCTAVE,
   TrackTuningEstimator,
   bandCentreHz,
+  createBandLevelPlan,
   createSemitoneHarmonicPlan,
   createSemitonePlan,
   litRows,
   logBandEdges,
   semitoneShare,
+  writeBandLevelsWithPlan,
   writeHarmonicSemitoneLevels,
   writeBandLevels,
   writeSemitoneLevels,
@@ -69,6 +71,40 @@ function spectrumWithPeaks(binCount: number, binHz: number, peakHz: number[]): F
   return spectrum
 }
 
+function referenceBandLevels(
+  spectrumDb: Float32Array,
+  binHz: number,
+  edges: Float64Array,
+  fromBand: number,
+  toBand: number,
+  out: Float32Array,
+): void {
+  for (let band = fromBand; band < toBand; band += 1) {
+    const lo = edges[band]
+    const hi = edges[band + 1]
+    let power = 0
+    if (hi - lo < binHz) {
+      const at = Math.min(spectrumDb.length - 1, Math.max(0, bandCentreHz(edges, band) / binHz))
+      const below = Math.floor(at)
+      const above = Math.min(spectrumDb.length - 1, below + 1)
+      const share = at - below
+      const a = spectrumDb[below]
+      const b = spectrumDb[above]
+      const db = Number.isFinite(a) && Number.isFinite(b) ? a + (b - a) * share : Math.max(a, b)
+      power = (db > -400 ? 10 ** (db / 10) : 0) * ((hi - lo) / binHz)
+    } else {
+      const first = Math.max(0, Math.floor(lo / binHz + 0.5))
+      const last = Math.min(spectrumDb.length - 1, Math.floor(hi / binHz + 0.5))
+      for (let bin = first; bin <= last; bin += 1) {
+        const overlap = Math.min(hi, (bin + 0.5) * binHz) - Math.max(lo, (bin - 0.5) * binHz)
+        if (overlap > 0) power += (spectrumDb[bin] > -400 ? 10 ** (spectrumDb[bin] / 10) : 0) * (overlap / binHz)
+      }
+    }
+    const tilt = TILT_DB_PER_OCTAVE * Math.log2(bandCentreHz(edges, band) / 1000)
+    out[band] = power > 0 ? 10 * Math.log10(power) + tilt : -Infinity
+  }
+}
+
 /** Pink noise (power falling 3 dB an octave), `rms` overall, built in the frequency domain with random phases. */
 function pinkNoise(seed: number, rms: number): Float64Array {
   const rand = mulberry32(seed)
@@ -101,6 +137,21 @@ describe('logBandEdges', () => {
 })
 
 describe('writeBandLevels', () => {
+  it('matches the direct calculation when reusing plans for both FFT ranges', () => {
+    const bands = 96
+    const split = 37
+    const binHz = 187.5
+    const edges = logBandEdges(bands)
+    const spectrum = Float32Array.from({ length: 256 }, (_, bin) => bin % 11 === 0 ? -Infinity : -90 + (bin * 17) % 70)
+    const expected = new Float32Array(bands)
+    const actual = new Float32Array(bands)
+    referenceBandLevels(spectrum, binHz, edges, 0, split, expected)
+    referenceBandLevels(spectrum, binHz, edges, split, bands, expected)
+    writeBandLevelsWithPlan(spectrum, createBandLevelPlan(spectrum.length, binHz, edges, 0, split), actual)
+    writeBandLevelsWithPlan(spectrum, createBandLevelPlan(spectrum.length, binHz, edges, split, bands), actual)
+    expect(Array.from(actual)).toEqual(Array.from(expected))
+  })
+
   it('draws pink noise flat apart from the stated tilt', () => {
     const bands = 100
     const edges = logBandEdges(bands)

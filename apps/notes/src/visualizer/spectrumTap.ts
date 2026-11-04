@@ -23,9 +23,11 @@ import { musicPlayerService } from '../sound/MusicPlayerService'
 import { heardLagSec } from '../sound/musicBeat'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
+  createBandLevelPlan,
   bandCentreHz,
   logBandEdges,
-  writeBandLevels,
+  writeBandLevelsWithPlan,
+  type BandLevelPlan,
 } from './spectrumBands'
 
 export const CROSSOVER_HZ = 640
@@ -47,6 +49,8 @@ export class SpectrumTap {
   private short: AnalyserNode | null = null
   private longBins: Float32Array<ArrayBuffer> | null = null
   private shortBins: Float32Array<ArrayBuffer> | null = null
+  private longPlan: BandLevelPlan | null = null
+  private shortPlan: BandLevelPlan | null = null
   private disconnect: (() => void) | null = null
   private readonly history: Frame[]
   private newest = -1
@@ -84,6 +88,20 @@ export class SpectrumTap {
     this.short = short
     this.longBins = new Float32Array(long.frequencyBinCount)
     this.shortBins = new Float32Array(short.frequencyBinCount)
+    this.longPlan = createBandLevelPlan(
+      long.frequencyBinCount,
+      context.sampleRate / LONG_FFT,
+      this.edges,
+      0,
+      this.split,
+    )
+    this.shortPlan = createBandLevelPlan(
+      short.frequencyBinCount,
+      context.sampleRate / SHORT_FFT,
+      this.edges,
+      this.split,
+      this.bands,
+    )
     this.disconnect = () => {
       untap()
       input.disconnect()
@@ -95,6 +113,8 @@ export class SpectrumTap {
     this.disconnect = null
     this.long = null
     this.short = null
+    this.longPlan = null
+    this.shortPlan = null
     this.count = 0
   }
 
@@ -104,25 +124,24 @@ export class SpectrumTap {
    * With the music stopped nothing is read and `out` is silence.
    */
   sample(nowSec: number, out: Float32Array): void {
-    if (!this.long || !this.short || !this.longBins || !this.shortBins || !musicPlayerService.isPlaying) {
+    if (!this.long || !this.short || !this.longBins || !this.shortBins || !this.longPlan || !this.shortPlan || !musicPlayerService.isPlaying) {
       out.fill(-Infinity)
       this.count = 0
       return
     }
-    const sampleRate = this.long.context.sampleRate
     this.newest = (this.newest + 1) % HISTORY
     this.count = Math.min(HISTORY, this.count + 1)
     const frame = this.history[this.newest]
     frame.timeSec = nowSec
     this.long.getFloatFrequencyData(this.longBins)
     this.short.getFloatFrequencyData(this.shortBins)
-    writeBandLevels(this.longBins, sampleRate / LONG_FFT, this.edges, 0, this.split, frame.levels)
-    writeBandLevels(this.shortBins, sampleRate / SHORT_FFT, this.edges, this.split, this.bands, frame.levels)
+    writeBandLevelsWithPlan(this.longBins, this.longPlan, frame.levels)
+    writeBandLevelsWithPlan(this.shortBins, this.shortPlan, frame.levels)
 
     const lag = heardLagSec()
-    const longAt = nowSec - Math.max(0, lag - LONG_FFT / 2 / sampleRate)
+    const longAt = nowSec - Math.max(0, lag - LONG_FFT / 2 / this.long.context.sampleRate)
     this.copyHeard(longAt, 0, this.split, out)
-    this.copyHeard(nowSec - Math.max(0, lag - SHORT_FFT / 2 / sampleRate), this.split, this.bands, out)
+    this.copyHeard(nowSec - Math.max(0, lag - SHORT_FFT / 2 / this.short.context.sampleRate), this.split, this.bands, out)
   }
 
   /** The power (linear) of the bass bands in `levels`, for the sway's music response. */
@@ -141,12 +160,20 @@ export class SpectrumTap {
   }
 
   private frameAtOrBefore(atSec: number): Frame {
-    let chosen = this.history[this.newest]
-    for (let back = 0; back < this.count; back += 1) {
-      const frame = this.history[(this.newest - back + HISTORY) % HISTORY]
-      chosen = frame
-      if (frame.timeSec <= atSec) break
+    const oldest = (this.newest - this.count + 1 + HISTORY) % HISTORY
+    let low = 0
+    let high = this.count - 1
+    let chosen = 0
+    while (low <= high) {
+      const middle = (low + high) >>> 1
+      const frame = this.history[(oldest + middle) % HISTORY]
+      if (frame.timeSec <= atSec) {
+        chosen = middle
+        low = middle + 1
+      } else {
+        high = middle - 1
+      }
     }
-    return chosen
+    return this.history[(oldest + chosen) % HISTORY]
   }
 }
