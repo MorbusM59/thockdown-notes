@@ -41,6 +41,7 @@ import {
   createSemitoneAttributionPlan,
   createSemitoneAttributionWorkspace,
   litRows,
+  semitoneLoudnessOffsetDb,
   semitoneShare,
   writeAttributedSemitoneLevels,
 } from './spectrumBands'
@@ -210,6 +211,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     const chromaContext = chromaCanvas?.getContext('2d') ?? null
     const semitoneMeter = chromaContext ? new SemitoneFade(columns) : null
     const semitoneTargets = semitoneMeter ? new Float32Array(columns) : null
+    const normalizedSemitoneLevels = semitoneMeter ? new Float32Array(columns) : null
+    const normalizedSemitoneAfterLevels = semitoneMeter ? new Float32Array(columns) : null
     const attributionPlan = semitoneMeter ? createSemitoneAttributionPlan(columns) : null
     const attributedLevels = semitoneMeter ? new Float32Array(columns) : null
     const attributedAfterLevels = semitoneMeter ? new Float32Array(columns) : null
@@ -223,10 +226,12 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     let semitoneTime = NaN
     let semitoneAt: Float32Array | null = null
     let semitoneAfter: Float32Array | null = null
+    let semitonePeak = 1
     let mappedSemitoneAt: Float32Array | null = null
     let mappedSemitoneAfter: Float32Array | null = null
     const unsubscribeSemitoneScore = semitoneActivity
-      ? subscribeMusicSemitoneScore(columns, (timeSec, at, after) => {
+      ? subscribeMusicSemitoneScore(columns, (timeSec, at, after, peak) => {
+          semitonePeak = peak
           if (!Number.isFinite(timeSec) || !at || !after) {
             semitoneTime = NaN
             semitoneAt = null
@@ -354,7 +359,14 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
         semitoneActivity?.reset()
       }
       if (semitoneAt && semitoneAfter && Number.isFinite(semitoneTime) && semitoneMeter && semitoneTargets) {
-        if (!attributionPlan || !attributedLevels || !attributedAfterLevels || !attributionWorkspace) {
+        if (
+          !attributionPlan ||
+          !attributedLevels ||
+          !attributedAfterLevels ||
+          !attributionWorkspace ||
+          !normalizedSemitoneLevels ||
+          !normalizedSemitoneAfterLevels
+        ) {
           throw new Error('Semitone rendering started without an attribution plan')
         }
         if (semitoneAt !== mappedSemitoneAt || semitoneAfter !== mappedSemitoneAfter) {
@@ -363,8 +375,14 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
           mappedSemitoneAt = semitoneAt
           mappedSemitoneAfter = semitoneAfter
         }
+        const normalizationDb = Number.isFinite(semitonePeak) ? semitoneLoudnessOffsetDb(semitonePeak) : 0
+        for (let boxIndex = 0; boxIndex < columns; boxIndex += 1) {
+          normalizedSemitoneLevels[boxIndex] = attributedLevels[boxIndex] + normalizationDb
+          normalizedSemitoneAfterLevels[boxIndex] = attributedAfterLevels[boxIndex] + normalizationDb
+        }
         const activeLevels =
-          semitoneActivity?.step(attributedLevels, attributedAfterLevels, semitoneTime) ?? attributedLevels
+          semitoneActivity?.step(normalizedSemitoneLevels, normalizedSemitoneAfterLevels, semitoneTime) ??
+          normalizedSemitoneLevels
         for (let boxIndex = 0; boxIndex < columns; boxIndex += 1) {
           semitoneTargets[boxIndex] = semitoneShare(activeLevels[boxIndex])
         }

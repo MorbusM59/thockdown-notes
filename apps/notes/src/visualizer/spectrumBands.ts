@@ -44,12 +44,12 @@ const NO_SEMITONE = -2
  * turned into power and summed). A full-scale sine fills about the top row,
  * and a loud modern master spread over ~100 bands sits in the upper half.
  */
-export const SPECTRUM_CEILING_DB = -40
+export const SPECTRUM_CEILING_DB = -20
 export const SPECTRUM_FLOOR_DB = -80
 /** Semitone levels below this are hidden; raising it increases key contrast. */
 export const SEMITONE_CONTRAST_DB = -60
 /** Top of the semitone brightness range; note bins can be much stronger than spectrum columns. */
-export const SEMITONE_BRIGHTNESS_CEILING_DB = -10
+export const SEMITONE_BRIGHTNESS_CEILING_DB = -20
 const SEMITONE_MAX_HARMONIC = 12
 const SEMITONE_ATTRIBUTION_PASSES = 12
 /** Sparse penalty set below the visible contrast floor to discourage diffuse note fits. */
@@ -57,7 +57,7 @@ const SEMITONE_ATTRIBUTION_PENALTY = dbToPower(SEMITONE_CONTRAST_DB - 6)
 /** Seconds for a lit key to fall to a quieter target. */
 export const SEMITONE_FADE_SEC = 0.25
 /** The neutral shared visualizer fall shape: a quadratic decay. */
-export const SEMITONE_FADE_SHAPE = 0
+export const SEMITONE_FADE_SHAPE = -0.5
 
 /** Extra slope applied about `TILT_PIVOT_HZ`, on top of pink reading flat. */
 export const TILT_DB_PER_OCTAVE = 1.5
@@ -341,6 +341,15 @@ export function semitoneShare(levelDb: number): number {
     Math.min(1, (levelDb - SEMITONE_CONTRAST_DB) / (SEMITONE_BRIGHTNESS_CEILING_DB - SEMITONE_CONTRAST_DB)),
   )
 }
+
+/** dB offset that normalizes the mix peak to full scale, bounded by the visible note range. */
+export function semitoneLoudnessOffsetDb(peak: number): number {
+  if (!Number.isFinite(peak) || peak < 0) throw new RangeError('Peak amplitude must be finite and non-negative')
+  if (peak === 0 || peak === 1) return 0
+  const range = SEMITONE_BRIGHTNESS_CEILING_DB - SEMITONE_CONTRAST_DB
+  return Math.max(-range, Math.min(range, -20 * Math.log10(peak)))
+}
+
 const TUNING_MIN_HZ = 80
 const TUNING_MAX_HZ = 5000
 const TUNING_MIN_PEAK_DB = -65

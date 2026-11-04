@@ -78,11 +78,12 @@ export interface MusicMixChannel {
 /**
  * Reads the decoded track's semitone score at the heard time and a short
  * lookahead after it. Subscribers of different widths share the widest score,
- * centered on the same A3, and receive the matching centered slice.
+ * centered on the same A3, and receive the matching centered slice and the
+ * peak-window sample magnitude.
  */
 export function subscribeMusicSemitoneScore(
   bands: number,
-  listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null) => void,
+  listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null, peak: number) => void,
 ): { update: (bands: number) => void; unsubscribe: () => void } {
   if (!Number.isInteger(bands) || bands <= 0) throw new RangeError('Semitone score row width must be a positive integer')
   const subscriber: SemitoneSubscriber = {
@@ -159,7 +160,7 @@ interface Counter {
 const counters = new Set<Counter>()
 interface SemitoneSubscriber {
   bands: number
-  listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null) => void
+  listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null, peak: number) => void
   sourceAt: Float32Array | null
   sourceAfter: Float32Array | null
   viewBands: number
@@ -283,7 +284,7 @@ function receive(answer: AnalysisAnswer): void {
     for (const subscriber of semitoneSubscribers) {
       const score = latestSemitoneScore
       if (!score || score.at.length < subscriber.bands) {
-        subscriber.listener(answer.heardTime, null, null)
+        subscriber.listener(answer.heardTime, null, null, answer.peak)
         continue
       }
       if (
@@ -302,6 +303,7 @@ function receive(answer: AnalysisAnswer): void {
         answer.heardTime,
         subscriber.viewAt,
         subscriber.viewAfter,
+        answer.peak,
       )
     }
   }
@@ -574,7 +576,7 @@ function stop(): void {
     setLocked(subscriber, false)
   }
   for (const counter of counters) counter.listener(NaN, NaN)
-  for (const subscriber of semitoneSubscribers) subscriber.listener(NaN, null, null)
+  for (const subscriber of semitoneSubscribers) subscriber.listener(NaN, null, null, NaN)
 }
 
 function onVisibility(): void {

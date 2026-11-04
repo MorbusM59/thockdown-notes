@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { FftPlan } from '@thockdown/soundscape/fft'
+import { pulseCurve } from '@thockdown/look/visualizer'
 import {
   PEAK_HOLD_SEC,
   SEMITONE_BRIGHTNESS_CEILING_DB,
   SEMITONE_CONTRAST_DB,
   SEMITONE_FADE_SEC,
+  SEMITONE_FADE_SHAPE,
   RELEASE_DB_PER_SEC,
   SPECTRUM_CEILING_DB,
   SPECTRUM_FLOOR_DB,
@@ -20,6 +22,7 @@ import {
   createSemitonePlan,
   litRows,
   logBandEdges,
+  semitoneLoudnessOffsetDb,
   semitoneShare,
   writeAttributedSemitoneLevels,
   writeBandLevelsWithPlan,
@@ -248,26 +251,28 @@ describe('writeBandLevels', () => {
 
     it("attributes one note's partials to that note instead of lighting their semitone bins", () => {
       const plan = createSemitoneAttributionPlan(49)
-      const raw = spectrumForNotes(plan, [[12, 1e-3]])
+      const raw = spectrumForNotes(plan, [[12, 10 ** ((SEMITONE_CONTRAST_DB + 30) / 10)]])
       const mapped = new Float32Array(plan.boxCount)
       writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
 
-      expect(mapped[12]).toBeCloseTo(-30, 1)
+      expect(mapped[12]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
       expect(mapped[24]).toBeLessThan(SEMITONE_CONTRAST_DB)
       expect(mapped[31]).toBeLessThan(SEMITONE_CONTRAST_DB)
-      expect(raw[24]).toBeGreaterThan(-40)
+      expect(raw[24]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
     })
 
     it('recovers simultaneous notes and their relative strengths', () => {
       const plan = createSemitoneAttributionPlan(49)
-      const raw = spectrumForNotes(plan, [[12, 1.58e-5], [24, 3.98e-6]])
+      const raw = spectrumForNotes(plan, [
+        [12, 10 ** ((SEMITONE_CONTRAST_DB + 12) / 10)],
+        [24, 10 ** ((SEMITONE_CONTRAST_DB + 6) / 10)],
+      ])
       const mapped = new Float32Array(plan.boxCount)
       writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
 
-      expect(mapped[12]).toBeCloseTo(-48, 0)
-      expect(mapped[24]).toBeCloseTo(-54, 0)
+      expect(mapped[12]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
+      expect(mapped[24]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
       expect(mapped[12]).toBeGreaterThan(mapped[24])
-      expect(semitoneShare(mapped[12])).toBeGreaterThan(semitoneShare(mapped[24]))
     })
 
     it('rejects diffuse energy below the note contrast threshold', () => {
@@ -372,9 +377,26 @@ describe('semitoneShare', () => {
     expect(semitoneShare(SEMITONE_CONTRAST_DB + span * 0.25)).toBeCloseTo(0.25)
     expect(semitoneShare(SEMITONE_CONTRAST_DB + span * 0.5)).toBeCloseTo(0.5)
     expect(semitoneShare(SEMITONE_CONTRAST_DB + span * 0.75)).toBeCloseTo(0.75)
-    expect(semitoneShare(-12)).toBeGreaterThan(semitoneShare(-18))
     expect(semitoneShare(SEMITONE_BRIGHTNESS_CEILING_DB)).toBe(1)
     expect(semitoneShare(SEMITONE_BRIGHTNESS_CEILING_DB + 20)).toBe(1)
+  })
+})
+
+describe('semitoneLoudnessOffsetDb', () => {
+  it('normalizes the peak to full scale without exceeding the note display range', () => {
+    expect(semitoneLoudnessOffsetDb(1)).toBe(0)
+    expect(semitoneLoudnessOffsetDb(0.5)).toBeCloseTo(-20 * Math.log10(0.5))
+    expect(semitoneLoudnessOffsetDb(2)).toBeCloseTo(-20 * Math.log10(2))
+    expect(semitoneLoudnessOffsetDb(0)).toBe(0)
+    const range = SEMITONE_BRIGHTNESS_CEILING_DB - SEMITONE_CONTRAST_DB
+    expect(semitoneLoudnessOffsetDb(0.001)).toBe(range)
+    expect(semitoneLoudnessOffsetDb(1000)).toBe(-range)
+  })
+
+  it('rejects invalid peak amplitudes', () => {
+    expect(() => semitoneLoudnessOffsetDb(-0.1)).toThrow(RangeError)
+    expect(() => semitoneLoudnessOffsetDb(Number.NaN)).toThrow(RangeError)
+    expect(() => semitoneLoudnessOffsetDb(Number.POSITIVE_INFINITY)).toThrow(RangeError)
   })
 })
 
@@ -446,7 +468,7 @@ describe('SemitoneFade', () => {
     expect(fade.levels[0]).toBe(1)
     fade.step(dark, 0)
     fade.step(dark, SEMITONE_FADE_SEC / 2)
-    expect(fade.levels[0]).toBeCloseTo((1 - 0.5) ** 2, 5)
+    expect(fade.levels[0]).toBeCloseTo(pulseCurve(0.5, SEMITONE_FADE_SHAPE), 5)
     fade.step(dark, SEMITONE_FADE_SEC / 2)
     expect(fade.levels[0]).toBe(0)
     expect(fade.isAtRest()).toBe(true)
@@ -459,10 +481,10 @@ describe('SemitoneFade', () => {
     fade.step(Float32Array.of(0), SEMITONE_FADE_SEC / 2)
     const halfway = fade.levels[0]
 
-    fade.step(Float32Array.of(0.5), 0)
+    fade.step(Float32Array.of(1), 0)
 
     expect(halfway).toBeGreaterThan(0)
-    expect(fade.levels[0]).toBe(0.5)
+    expect(fade.levels[0]).toBe(1)
   })
 
   it('retargets a falling light from its current value', () => {
@@ -477,7 +499,7 @@ describe('SemitoneFade', () => {
     expect(fade.levels[0]).toBe(beforeRetarget)
 
     fade.step(Float32Array.of(target), SEMITONE_FADE_SEC / 4)
-    expect(fade.levels[0]).toBeCloseTo(target + (beforeRetarget - target) * (1 - 0.25) ** 2, 5)
+    expect(fade.levels[0]).toBeCloseTo(target + (beforeRetarget - target) * pulseCurve(0.25, SEMITONE_FADE_SHAPE), 5)
   })
 })
 

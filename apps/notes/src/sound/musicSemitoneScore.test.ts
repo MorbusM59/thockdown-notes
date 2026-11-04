@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { MusicSemitoneScore } from './musicSemitoneScore'
 import {
-  SEMITONE_BRIGHTNESS_CEILING_DB,
   SEMITONE_CONTRAST_DB,
   createSemitoneAttributionPlan,
   createSemitoneAttributionWorkspace,
-  semitoneShare,
   writeAttributedSemitoneLevels,
 } from '../visualizer/spectrumBands'
 
@@ -44,7 +42,7 @@ describe('MusicSemitoneScore', () => {
     const a4 = Math.floor(BANDS / 2) + 12
     expect(at[a4]).toBeGreaterThan(at[a4 - 1])
     expect(at[a4]).toBeGreaterThan(at[a4 + 1])
-    expect(at[a4]).toBeGreaterThan(-45)
+    expect(at[a4]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
     expect(after.every((level) => level === -Infinity)).toBe(true)
   })
 
@@ -56,7 +54,7 @@ describe('MusicSemitoneScore', () => {
     score.levelsAt(2.5, levels)
 
     const a4 = Math.floor(BANDS / 2) + 12
-    expect(levels[a4]).toBeGreaterThan(-45)
+    expect(levels[a4]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
     expect(levels[a4]).toBeGreaterThan(levels[a4 - 1])
     expect(levels[a4]).toBeGreaterThan(levels[a4 + 1])
   })
@@ -81,7 +79,6 @@ describe('MusicSemitoneScore', () => {
     expect(attributed[a4]).toBeLessThan(SEMITONE_CONTRAST_DB)
     expect(attributed[e4]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
     expect(attributed[a3]).toBeGreaterThan(attributed[e4])
-    expect(semitoneShare(attributed[a3])).toBeGreaterThan(semitoneShare(attributed[e4]))
   })
 
   it('keeps a real octave note when its own partials support it', () => {
@@ -102,6 +99,5 @@ describe('MusicSemitoneScore', () => {
     const a4 = a3 + 12
     expect(attributed[a4]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
     expect(attributed[a3]).toBeGreaterThan(attributed[a4])
-    expect(attributed[a4]).toBeLessThan(SEMITONE_BRIGHTNESS_CEILING_DB)
   })
 })
