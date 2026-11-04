@@ -55,9 +55,9 @@ const SEMITONE_ATTRIBUTION_PENALTY = dbToPower(SEMITONE_CONTRAST_DB - 6)
 // A note must add at least 1% of the strongest candidate's fit improvement to count as independently supported.
 const SEMITONE_MIN_RELATIVE_FIT_SUPPORT = 0.01
 /** Seconds for a lit key to fall to a quieter target. */
-export const SEMITONE_FADE_SEC = 0.25
+export const SEMITONE_FADE_SEC = 1.25
 /** The neutral shared visualizer fall shape: a quadratic decay. */
-export const SEMITONE_FADE_SHAPE = -0.5
+export const SEMITONE_FADE_SHAPE = -0.2
 
 /** Extra slope applied about `TILT_PIVOT_HZ`, on top of pink reading flat. */
 export const TILT_DB_PER_OCTAVE = 1.5
