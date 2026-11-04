@@ -943,7 +943,7 @@ export const AudioControls = memo(function AudioControls({
           type="button"
           className={`audio-ctrl-btn audio-play-btn${isPlaying ? ' is-active' : ''}`}
           data-tooltip={songLabel}
-          aria-label={isPlaying ? 'Stop music' : 'Play music'}
+          aria-label={isPlaying ? 'Pause music' : 'Play music'}
           aria-pressed={isPlaying}
           onClick={() => { void handlePlayToggle() }}
           style={{ gridColumn: 'span 2' }}
