@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MusicSemitoneScore } from './musicSemitoneScore'
-import {
-  SEMITONE_CONTRAST_DB,
-  createSemitoneAttributionPlan,
-  createSemitoneAttributionWorkspace,
-  writeAttributedSemitoneLevels,
-} from '../visualizer/spectrumBands'
+import { SEMITONE_CONTRAST_DB } from '../visualizer/spectrumBands'
 
 const RATE = 48000
 const BANDS = 48
@@ -66,11 +61,8 @@ describe('MusicSemitoneScore', () => {
     for (let i = 0; i < samples.length; i += 1) samples[i] += secondNote[i]
     score.feed(samples, 0)
 
-    const raw = new Float32Array(BANDS)
-    score.levelsAt(2.5, raw)
     const attributed = new Float32Array(BANDS)
-    const plan = createSemitoneAttributionPlan(BANDS)
-    writeAttributedSemitoneLevels(raw, plan, attributed, createSemitoneAttributionWorkspace(BANDS))
+    score.levelsAt(2.5, attributed)
 
     const a3 = BANDS / 2
     const e4 = a3 + 7
@@ -89,15 +81,44 @@ describe('MusicSemitoneScore', () => {
     for (let i = 0; i < samples.length; i += 1) samples[i] += octave[i]
     score.feed(samples, 0)
 
-    const raw = new Float32Array(bands)
-    score.levelsAt(2.5, raw)
     const attributed = new Float32Array(bands)
-    const plan = createSemitoneAttributionPlan(bands)
-    writeAttributedSemitoneLevels(raw, plan, attributed, createSemitoneAttributionWorkspace(bands))
+    score.levelsAt(2.5, attributed)
 
     const a3 = bands / 2
     const a4 = a3 + 12
     expect(attributed[a4]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
     expect(attributed[a3]).toBeGreaterThan(attributed[a4])
+  })
+
+  it('does not light neighboring notes from one tone across different FFT-bin offsets', () => {
+    const center = Math.floor(BANDS / 2)
+    for (const midiOffset of [-12, -5, 0, 7, 12]) {
+      const frequency = 220 * 2 ** (midiOffset / 12)
+      const score = new MusicSemitoneScore(RATE, BANDS)
+      score.feed(harmonicTrack(frequency, 2), 0)
+
+      const levels = new Float32Array(BANDS)
+      score.levelsAt(1.5, levels)
+      const note = center + midiOffset
+      expect(levels[note]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
+      expect(levels[note - 1]).toBeLessThanOrEqual(SEMITONE_CONTRAST_DB)
+      expect(levels[note + 1]).toBeLessThanOrEqual(SEMITONE_CONTRAST_DB)
+    }
+  })
+
+  it('retains both notes in an adjacent-semitone dyad', () => {
+    const score = new MusicSemitoneScore(RATE, BANDS)
+    const lowerFrequency = 220
+    const samples = harmonicTrack(lowerFrequency, 3)
+    const upperNote = harmonicTrack(lowerFrequency * 2 ** (1 / 12), 3, 0.3)
+    for (let i = 0; i < samples.length; i += 1) samples[i] += upperNote[i]
+    score.feed(samples, 0)
+
+    const levels = new Float32Array(BANDS)
+    score.levelsAt(2.5, levels)
+    const lower = BANDS / 2
+    expect(levels[lower]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
+    expect(levels[lower + 1]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
+    expect(levels[lower]).toBeGreaterThan(levels[lower + 1])
   })
 })

@@ -37,8 +37,6 @@ import { pulseCurve } from '@thockdown/look/visualizer'
 export const SPECTRUM_MIN_HZ = 20
 export const SPECTRUM_MAX_HZ = 20000
 
-const NO_SEMITONE = -2
-
 /**
  * The drawn range, as band power in dB (the analyser's dBFS bin values
  * turned into power and summed). A full-scale sine fills about the top row,
@@ -51,9 +49,11 @@ export const SEMITONE_CONTRAST_DB = -60
 /** Top of the semitone brightness range; note bins can be much stronger than spectrum columns. */
 export const SEMITONE_BRIGHTNESS_CEILING_DB = -20
 const SEMITONE_MAX_HARMONIC = 12
-const SEMITONE_ATTRIBUTION_PASSES = 12
+const SEMITONE_ATTRIBUTION_REFIT_PASSES = 3
 /** Sparse penalty set below the visible contrast floor to discourage diffuse note fits. */
 const SEMITONE_ATTRIBUTION_PENALTY = dbToPower(SEMITONE_CONTRAST_DB - 6)
+// A note must add at least 1% of the strongest candidate's fit improvement to count as independently supported.
+const SEMITONE_MIN_RELATIVE_FIT_SUPPORT = 0.01
 /** Seconds for a lit key to fall to a quieter target. */
 export const SEMITONE_FADE_SEC = 0.25
 /** The neutral shared visualizer fall shape: a quadratic decay. */
@@ -191,145 +191,254 @@ export function writeBandLevelsWithPlan(spectrumDb: Float32Array, plan: BandLeve
   }
 }
 
-/**
- * The fixed frequency-to-semitone mapping for one FFT shape, row width and
- * tuning offset. Building it once keeps logarithms out of the frame loop.
- */
-export interface SemitonePlan {
-  lowerBox: Int32Array
-  upperShare: Float32Array
-}
+const SEMITONE_WINDOW_LOBE_RADIUS = 4
+const WINDOW_A0 = 0.42
+const WINDOW_A1 = 0.5
+const WINDOW_A2 = 0.08
 
-export function createSemitonePlan(binCount: number, binHz: number, boxCount: number, tuningOffsetCents = 0): SemitonePlan {
-  const lowerBox = new Int32Array(binCount).fill(NO_SEMITONE)
-  const upperShare = new Float32Array(binCount)
-  const tunedA3Hz = 220 * 2 ** (tuningOffsetCents / 1200)
-  const centreBox = Math.floor(boxCount / 2)
-  for (let bin = 1; bin < binCount; bin += 1) {
-    const hz = bin * binHz
-    if (hz < SPECTRUM_MIN_HZ || hz >= SPECTRUM_MAX_HZ) continue
-    const rawPosition = centreBox + 12 * Math.log2(hz / tunedA3Hz)
-    const nearestBox = Math.round(rawPosition)
-    const position = Math.abs(rawPosition - nearestBox) < 1e-10 ? nearestBox : rawPosition
-    if (position < -1 || position >= boxCount) continue
-    const lower = Math.floor(position)
-    lowerBox[bin] = lower
-    upperShare[bin] = position - lower
-  }
-  return { lowerBox, upperShare }
-}
-
-/** Precomputed linear-power note templates, with a fundamental and its partials in semitone bins. */
+/** Sparse spectral templates for notes and their Blackman-windowed partials. */
 export interface SemitoneAttributionPlan {
   boxCount: number
-  templates: Float64Array
+  binCount: number
+  offsets: Uint32Array
+  bins: Uint32Array
+  weights: Float64Array
   squaredNorms: Float64Array
 }
 
 export interface SemitoneAttributionWorkspace {
   residual: Float64Array
   notePowers: Float64Array
+  selected: Uint8Array
+  support: Float64Array
+}
+
+type Complex = readonly [real: number, imaginary: number]
+
+function dirichlet(fftSize: number, delta: number): Complex {
+  const reduced = delta - Math.round(delta / fftSize) * fftSize
+  if (Math.abs(reduced) < 1e-12) return [fftSize, 0]
+  const ratio = Math.sin(Math.PI * reduced) / Math.sin((Math.PI * reduced) / fftSize)
+  const phase = (Math.PI * reduced * (fftSize - 1)) / fftSize
+  return [ratio * Math.cos(phase), -ratio * Math.sin(phase)]
+}
+
+function addScaled(target: [number, number], value: Complex, scale: number): void {
+  target[0] += value[0] * scale
+  target[1] += value[1] * scale
+}
+
+function blackmanResponse(fftSize: number, delta: number): Complex {
+  const response: [number, number] = [0, 0]
+  addScaled(response, dirichlet(fftSize, delta), WINDOW_A0)
+  addScaled(response, dirichlet(fftSize, delta - 1), -WINDOW_A1 / 2)
+  addScaled(response, dirichlet(fftSize, delta + 1), -WINDOW_A1 / 2)
+  addScaled(response, dirichlet(fftSize, delta - 2), WINDOW_A2 / 2)
+  addScaled(response, dirichlet(fftSize, delta + 2), WINDOW_A2 / 2)
+  return response
+}
+
+function sinusoidBinPower(fftSize: number, frequencyBin: number, bin: number): number {
+  const positive = blackmanResponse(fftSize, bin - frequencyBin)
+  const negative = blackmanResponse(fftSize, bin + frequencyBin)
+  const real = (positive[0] + negative[0]) / 2
+  const imaginary = (positive[1] + negative[1]) / 2
+  return real * real + imaginary * imaginary
 }
 
 export function createSemitoneAttributionPlan(
+  sampleRate: number,
+  fftSize: number,
   boxCount: number,
+  tuningOffsetCents = 0,
   maxHarmonic = SEMITONE_MAX_HARMONIC,
 ): SemitoneAttributionPlan {
   if (!Number.isInteger(boxCount) || boxCount < 0) throw new RangeError('Semitone band count must be a non-negative integer')
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new RangeError('Semitone sample rate must be positive')
+  if (!Number.isInteger(fftSize) || fftSize < 2 || fftSize % 2 !== 0) throw new RangeError('Semitone FFT size must be a positive even integer')
+  if (!Number.isFinite(tuningOffsetCents)) throw new RangeError('Semitone tuning offset must be finite')
   if (!Number.isInteger(maxHarmonic) || maxHarmonic < 1) throw new RangeError('At least one harmonic is required')
 
-  const templates = new Float64Array(boxCount * boxCount)
+  const binCount = fftSize / 2
+  const binHz = sampleRate / fftSize
+  const tunedA3Hz = 220 * 2 ** (tuningOffsetCents / 1200)
+  const centreBox = Math.floor(boxCount / 2)
+  const noteTemplates: Map<number, number>[] = Array.from({ length: boxCount }, () => new Map())
   const squaredNorms = new Float64Array(boxCount)
-  for (let box = 0; box < boxCount; box += 1) {
-    const templateOffset = box * boxCount
+  for (let note = 0; note < boxCount; note += 1) {
+    const noteHz = tunedA3Hz * 2 ** ((note - centreBox) / 12)
+    if (noteHz < SPECTRUM_MIN_HZ || noteHz >= SPECTRUM_MAX_HZ) continue
+    const template = noteTemplates[note]
     for (let harmonic = 1; harmonic <= maxHarmonic; harmonic += 1) {
-      const semitoneShift = 12 * Math.log2(harmonic)
-      const position = box + semitoneShift
-      if (position > boxCount - 1) continue
-      const lower = Math.floor(position)
-      const share = position - lower
-      // Real partials vary; this deliberately predicts more power than an ideal 1/h² decay.
-      const powerWeight = 1 / harmonic ** 1.5
-      templates[templateOffset + lower] += powerWeight * (1 - share)
-      if (lower + 1 < boxCount) templates[templateOffset + lower + 1] += powerWeight * share
-    }
+      const partialHz = noteHz * harmonic
+      if (partialHz > SPECTRUM_MAX_HZ || partialHz >= sampleRate / 2) break
+      const frequencyBin = partialHz / binHz
+      const firstBin = Math.max(1, Math.ceil(frequencyBin - SEMITONE_WINDOW_LOBE_RADIUS))
+      const lastBin = Math.min(binCount - 1, Math.floor(frequencyBin + SEMITONE_WINDOW_LOBE_RADIUS))
+      let peakPower = 0
+      for (let bin = firstBin; bin <= lastBin; bin += 1) {
+        peakPower = Math.max(peakPower, sinusoidBinPower(fftSize, frequencyBin, bin))
+      }
+      if (peakPower === 0) continue
 
-    let squaredNorm = 0
-    for (let band = 0; band < boxCount; band += 1) {
-      const contribution = templates[templateOffset + band]
-      squaredNorm += contribution * contribution
+      const partialWeight = 1 / harmonic ** 1.5
+      for (let bin = firstBin; bin <= lastBin; bin += 1) {
+        const weight = partialWeight * sinusoidBinPower(fftSize, frequencyBin, bin) / peakPower
+        template.set(bin, (template.get(bin) ?? 0) + weight)
+      }
     }
-    squaredNorms[box] = squaredNorm
+    for (const weight of template.values()) squaredNorms[note] += weight * weight
   }
-  return { boxCount, templates, squaredNorms }
+
+  const offsets = new Uint32Array(boxCount + 1)
+  const sparseBins: number[] = []
+  const sparseWeights: number[] = []
+  for (let note = 0; note < boxCount; note += 1) {
+    offsets[note] = sparseBins.length
+    const entries = [...noteTemplates[note]].sort(([left], [right]) => left - right)
+    for (const [bin, weight] of entries) {
+      sparseBins.push(bin)
+      sparseWeights.push(weight)
+    }
+  }
+  offsets[boxCount] = sparseBins.length
+  return {
+    boxCount,
+    binCount,
+    offsets,
+    bins: Uint32Array.from(sparseBins),
+    weights: Float64Array.from(sparseWeights),
+    squaredNorms,
+  }
 }
 
-export function createSemitoneAttributionWorkspace(boxCount: number): SemitoneAttributionWorkspace {
+export function createSemitoneAttributionWorkspace(binCount: number, boxCount: number): SemitoneAttributionWorkspace {
+  if (!Number.isInteger(binCount) || binCount < 0) throw new RangeError('Semitone FFT bin count must be a non-negative integer')
   if (!Number.isInteger(boxCount) || boxCount < 0) throw new RangeError('Semitone band count must be a non-negative integer')
   return {
-    residual: new Float64Array(boxCount),
+    residual: new Float64Array(binCount),
     notePowers: new Float64Array(boxCount),
+    selected: new Uint8Array(boxCount),
+    support: new Float64Array(boxCount),
   }
 }
 
 /**
- * Fits the measured spectrum as a non-negative mixture of note templates.
- * Harmonic power is attributed to its source note instead of independently
- * boosting every candidate note that could own it.
+ * Fits the original FFT power as a non-negative mixture of window-aware note
+ * templates. The sparse fit keeps a Blackman lobe's neighbouring bins attached
+ * to its source partial rather than splitting them into separate notes first.
  */
 export function writeAttributedSemitoneLevels(
-  rawLevels: Float32Array,
+  spectrumDb: Float32Array,
   plan: SemitoneAttributionPlan,
   out: Float32Array,
   workspace: SemitoneAttributionWorkspace,
 ): void {
-  const { boxCount } = plan
+  const { boxCount, binCount } = plan
   if (
-    rawLevels.length !== boxCount ||
+    spectrumDb.length !== binCount ||
     out.length !== boxCount ||
-    workspace.residual.length !== boxCount ||
-    workspace.notePowers.length !== boxCount
+    workspace.residual.length !== binCount ||
+    workspace.notePowers.length !== boxCount ||
+    workspace.selected.length !== boxCount ||
+    workspace.support.length !== boxCount
   ) {
-    throw new RangeError('Semitone attribution buffers must match the plan band count')
+    throw new RangeError('Semitone attribution buffers must match the plan dimensions')
   }
-  if (rawLevels === out) throw new RangeError('Semitone attribution output must not overwrite raw levels')
+  if (spectrumDb === out) throw new RangeError('Semitone attribution output must not overwrite the spectrum')
 
   let anyPower = false
-  for (let band = 0; band < boxCount; band += 1) {
-    const power = dbToPower(rawLevels[band])
-    workspace.residual[band] = power
+  for (let bin = 0; bin < binCount; bin += 1) {
+    const power = dbToPower(spectrumDb[bin])
+    workspace.residual[bin] = power
     anyPower ||= power > 0
   }
   workspace.notePowers.fill(0)
+  workspace.selected.fill(0)
+  workspace.support.fill(0)
   if (!anyPower) {
     out.fill(-Infinity)
     return
   }
 
-  for (let pass = 0; pass < SEMITONE_ATTRIBUTION_PASSES; pass += 1) {
+  let strongestImprovement = 0
+  for (let selection = 0; selection < boxCount; selection += 1) {
+    let bestNote = -1
+    let bestPower = 0
+    let bestImprovement = 0
     for (let note = 0; note < boxCount; note += 1) {
+      if (workspace.selected[note]) continue
       const norm = plan.squaredNorms[note]
       if (norm === 0) continue
-      const templateOffset = note * boxCount
+      const start = plan.offsets[note]
+      const end = plan.offsets[note + 1]
       let correlation = 0
-      for (let band = 0; band < boxCount; band += 1) {
-        correlation += plan.templates[templateOffset + band] * workspace.residual[band]
+      for (let index = start; index < end; index += 1) {
+        correlation += plan.weights[index] * workspace.residual[plan.bins[index]]
       }
+      const excess = correlation - SEMITONE_ATTRIBUTION_PENALTY
+      if (excess <= 0) continue
+      const power = excess / norm
+      const improvement = excess * power
+      if (improvement > bestImprovement) {
+        bestNote = note
+        bestPower = power
+        bestImprovement = improvement
+      }
+    }
+    if (bestNote < 0) break
+    if (selection === 0) strongestImprovement = bestImprovement
+    else if (bestImprovement < strongestImprovement * SEMITONE_MIN_RELATIVE_FIT_SUPPORT) break
 
-      const previous = workspace.notePowers[note]
-      const next = Math.max(0, (correlation + norm * previous - SEMITONE_ATTRIBUTION_PENALTY) / norm)
-      const change = next - previous
-      if (change === 0) continue
-      workspace.notePowers[note] = next
-      for (let band = 0; band < boxCount; band += 1) {
-        workspace.residual[band] -= change * plan.templates[templateOffset + band]
+    workspace.selected[bestNote] = 1
+    workspace.notePowers[bestNote] = bestPower
+    const bestStart = plan.offsets[bestNote]
+    const bestEnd = plan.offsets[bestNote + 1]
+    for (let index = bestStart; index < bestEnd; index += 1) {
+      workspace.residual[plan.bins[index]] -= bestPower * plan.weights[index]
+    }
+
+    for (let pass = 0; pass < SEMITONE_ATTRIBUTION_REFIT_PASSES; pass += 1) {
+      for (let note = 0; note < boxCount; note += 1) {
+        if (!workspace.selected[note]) continue
+        const norm = plan.squaredNorms[note]
+        const start = plan.offsets[note]
+        const end = plan.offsets[note + 1]
+        let correlation = 0
+        for (let index = start; index < end; index += 1) {
+          correlation += plan.weights[index] * workspace.residual[plan.bins[index]]
+        }
+        const previous = workspace.notePowers[note]
+        const next = Math.max(0, (correlation + norm * previous - SEMITONE_ATTRIBUTION_PENALTY) / norm)
+        const change = next - previous
+        if (change === 0) continue
+        workspace.notePowers[note] = next
+        for (let index = start; index < end; index += 1) {
+          workspace.residual[plan.bins[index]] -= change * plan.weights[index]
+        }
       }
     }
   }
 
+  let strongestSupport = 0
+  for (let note = 0; note < boxCount; note += 1) {
+    if (!workspace.selected[note]) continue
+    const norm = plan.squaredNorms[note]
+    const start = plan.offsets[note]
+    const end = plan.offsets[note + 1]
+    let correlation = norm * workspace.notePowers[note]
+    for (let index = start; index < end; index += 1) {
+      correlation += plan.weights[index] * workspace.residual[plan.bins[index]]
+    }
+    const excess = Math.max(0, correlation - SEMITONE_ATTRIBUTION_PENALTY)
+    const support = (excess * excess) / norm
+    workspace.support[note] = support
+    strongestSupport = Math.max(strongestSupport, support)
+  }
   for (let note = 0; note < boxCount; note += 1) {
     const power = workspace.notePowers[note]
-    out[note] = power > 0 ? 10 * Math.log10(power) : -Infinity
+    const supported = workspace.support[note] >= strongestSupport * SEMITONE_MIN_RELATIVE_FIT_SUPPORT
+    out[note] = power > 0 && supported ? 10 * Math.log10(power) : -Infinity
   }
 }
 
@@ -430,33 +539,6 @@ export class TrackTuningEstimator {
     if (offset < -50) offset += 100
     this.lockedOffsetCents = offset
     return offset
-  }
-}
-
-/**
- * Adds each FFT bin's power to its nearest semitone boxes. Bins between two
- * semitones are shared in log-frequency, so a coarse FFT bin stays smooth.
- */
-export function writeSemitoneLevels(spectrumDb: Float32Array, plan: SemitonePlan, out: Float32Array): void {
-  out.fill(0)
-  const bins = Math.min(spectrumDb.length, plan.lowerBox.length, plan.upperShare.length)
-  for (let bin = 1; bin < bins; bin += 1) {
-    const lowerBox = plan.lowerBox[bin]
-    if (lowerBox === NO_SEMITONE) continue
-    const db = spectrumDb[bin]
-    if (!Number.isFinite(db)) continue
-    const upperShare = plan.upperShare[bin]
-    const power = dbToPower(db)
-    if (lowerBox < 0) {
-      if (out.length > 0) out[0] += power * upperShare
-      continue
-    }
-    if (lowerBox >= out.length) continue
-    out[lowerBox] += power * (1 - upperShare)
-    if (lowerBox + 1 < out.length) out[lowerBox + 1] += power * upperShare
-  }
-  for (let box = 0; box < out.length; box += 1) {
-    out[box] = out[box] > 0 ? 10 * Math.log10(out[box]) : -Infinity
   }
 }
 

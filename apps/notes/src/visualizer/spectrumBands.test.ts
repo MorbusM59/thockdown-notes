@@ -17,17 +17,12 @@ import {
   TrackTuningEstimator,
   bandCentreHz,
   createBandLevelPlan,
-  createSemitoneAttributionPlan,
-  createSemitoneAttributionWorkspace,
-  createSemitonePlan,
   litRows,
   logBandEdges,
   semitoneLoudnessOffsetDb,
   semitoneShare,
-  writeAttributedSemitoneLevels,
   writeBandLevelsWithPlan,
   writeBandLevels,
-  writeSemitoneLevels,
 } from './spectrumBands'
 
 const SAMPLE_RATE = 48000
@@ -176,132 +171,6 @@ describe('writeBandLevels', () => {
     }
     const mean = untilted.reduce((a, b) => a + b, 0) / untilted.length
     for (const level of untilted) expect(Math.abs(level - mean)).toBeLessThan(1.5)
-  })
-
-  describe('writeSemitoneLevels', () => {
-    it('maps every semitone to its own box around A3', () => {
-      const boxCount = 25
-      const centreBox = Math.floor(boxCount / 2)
-      for (let midi = 45; midi <= 69; midi += 1) {
-        const binHz = 440 * 2 ** ((midi - 69) / 12)
-        const spectrum = Float32Array.of(-Infinity, -20)
-        const levels = new Float32Array(boxCount)
-        writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, binHz, boxCount), levels)
-        const expectedBox = centreBox + midi - 57
-        expect(levels[expectedBox]).toBeGreaterThan(-25)
-        for (let other = 0; other < boxCount; other += 1) {
-          if (other !== expectedBox) expect(levels[other]).toBe(-Infinity)
-        }
-      }
-    })
-
-    it('keeps octaves in separate boxes', () => {
-      const spectrum = Float32Array.of(-Infinity, -20, -20)
-      const levels = new Float32Array(49)
-      writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, 110, levels.length), levels)
-      expect(levels[12]).toBeCloseTo(-20, 3)
-      expect(levels[24]).toBeCloseTo(-20, 3)
-    })
-
-    it('puts tuned A3 in the center box or the right-center box for even widths', () => {
-      const tunedA3Hz = 220 * 2 ** (20 / 1200)
-      const spectrum = Float32Array.of(-Infinity, -20)
-      for (const boxCount of [24, 25]) {
-        const levels = new Float32Array(boxCount)
-        const expectedBox = Math.floor(boxCount / 2)
-        writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, tunedA3Hz, boxCount, 20), levels)
-        expect(levels[expectedBox]).toBeGreaterThan(-21)
-        for (let other = 0; other < boxCount; other += 1) {
-          if (other !== expectedBox) expect(levels[other]).toBe(-Infinity)
-        }
-      }
-    })
-
-    it('shares coarse-bin energy between adjacent semitones and ignores out-of-row frequencies', () => {
-      const binHz = SAMPLE_RATE / FFT_SIZE
-      const spectrum = new Float32Array(FFT_SIZE / 2).fill(-Infinity)
-      const lowBin = Math.round(27.5 / binHz)
-      const middleBin = Math.round((220 * 2 ** (0.5 / 12)) / binHz)
-      const highBin = Math.round(21000 / binHz)
-      spectrum[lowBin] = -20
-      spectrum[middleBin] = -20
-      spectrum[highBin] = -20
-      const levels = new Float32Array(25)
-      writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, binHz, levels.length), levels)
-      expect(levels[12]).toBeGreaterThan(-30)
-      expect(levels[13]).toBeGreaterThan(-30)
-      expect(levels.filter((level) => Number.isFinite(level))).toHaveLength(2)
-    })
-  })
-
-  describe('writeAttributedSemitoneLevels', () => {
-    function spectrumForNotes(
-      plan: ReturnType<typeof createSemitoneAttributionPlan>,
-      notes: ReadonlyArray<[number, number]>,
-    ): Float32Array {
-      const powers = new Float64Array(plan.boxCount)
-      for (const [note, strength] of notes) {
-        const offset = note * plan.boxCount
-        for (let band = 0; band < plan.boxCount; band += 1) {
-          powers[band] += strength * plan.templates[offset + band]
-        }
-      }
-      return Float32Array.from(powers, (power) => power > 0 ? 10 * Math.log10(power) : -Infinity)
-    }
-
-    it("attributes one note's partials to that note instead of lighting their semitone bins", () => {
-      const plan = createSemitoneAttributionPlan(49)
-      const raw = spectrumForNotes(plan, [[12, 10 ** ((SEMITONE_CONTRAST_DB + 30) / 10)]])
-      const mapped = new Float32Array(plan.boxCount)
-      writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
-
-      expect(mapped[12]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
-      expect(mapped[24]).toBeLessThan(SEMITONE_CONTRAST_DB)
-      expect(mapped[31]).toBeLessThan(SEMITONE_CONTRAST_DB)
-      expect(raw[24]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
-    })
-
-    it('recovers simultaneous notes and their relative strengths', () => {
-      const plan = createSemitoneAttributionPlan(49)
-      const raw = spectrumForNotes(plan, [
-        [12, 10 ** ((SEMITONE_CONTRAST_DB + 12) / 10)],
-        [24, 10 ** ((SEMITONE_CONTRAST_DB + 6) / 10)],
-      ])
-      const mapped = new Float32Array(plan.boxCount)
-      writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
-
-      expect(mapped[12]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
-      expect(mapped[24]).toBeGreaterThan(SEMITONE_CONTRAST_DB)
-      expect(mapped[12]).toBeGreaterThan(mapped[24])
-    })
-
-    it('rejects diffuse energy below the note contrast threshold', () => {
-      const plan = createSemitoneAttributionPlan(49)
-      const raw = new Float32Array(plan.boxCount).fill(SEMITONE_CONTRAST_DB - 10)
-      const mapped = new Float32Array(plan.boxCount)
-      writeAttributedSemitoneLevels(raw, plan, mapped, createSemitoneAttributionWorkspace(plan.boxCount))
-
-      expect(mapped.every((level) => level <= SEMITONE_CONTRAST_DB)).toBe(true)
-    })
-
-    it('does not allow the attribution output to overwrite its input', () => {
-      const levels = Float32Array.of(-20, -30)
-      expect(() =>
-        writeAttributedSemitoneLevels(
-          levels,
-          createSemitoneAttributionPlan(2),
-          levels,
-          createSemitoneAttributionWorkspace(2),
-        ),
-      ).toThrow(RangeError)
-    })
-
-    it('requires workspace buffers matching the plan', () => {
-      const levels = Float32Array.of(-20, -30)
-      const plan = createSemitoneAttributionPlan(2)
-      const workspace = createSemitoneAttributionWorkspace(1)
-      expect(() => writeAttributedSemitoneLevels(levels, plan, new Float32Array(2), workspace)).toThrow(RangeError)
-    })
   })
 
   describe('TrackTuningEstimator', () => {

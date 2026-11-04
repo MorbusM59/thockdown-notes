@@ -1,9 +1,11 @@
 import { FftPlan } from '@thockdown/soundscape/fft'
 import {
   TrackTuningEstimator,
-  createSemitonePlan,
-  writeSemitoneLevels,
-  type SemitonePlan,
+  createSemitoneAttributionPlan,
+  createSemitoneAttributionWorkspace,
+  writeAttributedSemitoneLevels,
+  type SemitoneAttributionPlan,
+  type SemitoneAttributionWorkspace,
 } from '../visualizer/spectrumBands'
 
 export const MUSIC_SEMITONE_FFT_SIZE = 8192
@@ -23,10 +25,11 @@ export class MusicSemitoneScore {
   private readonly im: Float64Array
   private readonly spectrumDb: Float32Array
   private readonly levels: Float32Array
+  private readonly attributionWorkspace: SemitoneAttributionWorkspace
   private readonly history: Float32Array
   private readonly historyStart: Float64Array
   private readonly tuning = new TrackTuningEstimator()
-  private plan: SemitonePlan
+  private plan: SemitoneAttributionPlan
   private origin = NaN
   private fed = 0
   private frames = 0
@@ -49,10 +52,11 @@ export class MusicSemitoneScore {
     this.im = new Float64Array(MUSIC_SEMITONE_FFT_SIZE)
     this.spectrumDb = new Float32Array(MUSIC_SEMITONE_FFT_SIZE / 2)
     this.levels = new Float32Array(bands)
+    this.attributionWorkspace = createSemitoneAttributionWorkspace(this.spectrumDb.length, bands)
     const historyFrames = Math.ceil(HISTORY_SEC / this.frameSec)
     this.history = new Float32Array(historyFrames * bands)
     this.historyStart = new Float64Array(historyFrames).fill(NaN)
-    this.plan = createSemitonePlan(this.spectrumDb.length, sampleRate / MUSIC_SEMITONE_FFT_SIZE, bands)
+    this.plan = createSemitoneAttributionPlan(sampleRate, MUSIC_SEMITONE_FFT_SIZE, bands)
   }
 
   /** Adds contiguous mono samples whose first sample plays at `startTime`. */
@@ -103,15 +107,10 @@ export class MusicSemitoneScore {
     if (this.frames % Math.max(1, Math.round(0.25 / this.frameSec)) === 0) {
       const offset = this.tuning.addFrame(this.spectrumDb, this.sampleRate / MUSIC_SEMITONE_FFT_SIZE)
       if (offset !== null) {
-        this.plan = createSemitonePlan(
-          this.spectrumDb.length,
-          this.sampleRate / MUSIC_SEMITONE_FFT_SIZE,
-          this.bands,
-          offset,
-        )
+        this.plan = createSemitoneAttributionPlan(this.sampleRate, MUSIC_SEMITONE_FFT_SIZE, this.bands, offset)
       }
     }
-    writeSemitoneLevels(this.spectrumDb, this.plan, this.levels)
+    writeAttributedSemitoneLevels(this.spectrumDb, this.plan, this.levels, this.attributionWorkspace)
 
     const historyFrames = this.historyStart.length
     const slot = this.frames % historyFrames
