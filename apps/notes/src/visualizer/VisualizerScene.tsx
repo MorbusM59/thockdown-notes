@@ -1,9 +1,11 @@
 /**
  * The visualizer mode's scene (F3), drawn over the active slot in place of
  * its note: a grid of square boxes framing the empty scene's tumbling solid,
- * the music's spectrum along the bottom and what is playing along the top.
- * Where everything goes is `visualizerLayout.ts`; what the spectrum shows is
- * `spectrumBands.ts` and `spectrumTap.ts`; the glaze's sway is
+ * the music's spectrum along the bottom, its semitone energy above it and
+ * what is playing along the top. Where everything goes is
+ * `visualizerLayout.ts`; the spectrum reads `spectrumBands.ts` and
+ * `spectrumTap.ts`, while the time-indexed semitone score is prepared by
+ * `musicSemitoneScore.ts`; the glaze's sway is
  * `parallaxSway.ts`, moved from this scene's frame loop because this is
  * where the music is read.
  *
@@ -15,8 +17,9 @@
  * pane copies (`gridOutlineRef`), so the beat's grid flash lands on these
  * boxes.
  *
- * ONE FRAME LOOP, while the scene is mounted: it reads the analysers, moves
- * the bars, draws them into one canvas only when a box actually changed,
+ * ONE FRAME LOOP, while the scene is mounted: it reads the spectrum
+ * analysers and latest semitone score, moves the bars and key lights, draws
+ * them into canvases only when a box actually changed,
  * says when the playhead crosses into another box (the gap itself is state,
  * so React draws it and a re-render cannot leave it stale),
  * and sways the glaze. With the OS asking for reduced motion the glaze holds
@@ -27,9 +30,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { musicPlayerService } from '../sound/MusicPlayerService'
+import { subscribeMusicMix, subscribeMusicSemitoneScore } from '../sound/musicBeat'
+import { MUSIC_SEMITONE_CONFIRM_SEC } from '../sound/musicSemitoneScore'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
-import { SpectrumBallistics, litRows } from './spectrumBands'
+import {
+  SEMITONE_LIGHT_LEVELS,
+  SemitoneActivityFilter,
+  SemitoneFade,
+  SpectrumBallistics,
+  createSemitoneHarmonicPlan,
+  litRows,
+  semitoneShare,
+  writeHarmonicSemitoneLevels,
+} from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
@@ -134,7 +148,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
-  const { columns, originXPx, originYPx, stripRows, spectrumTopRow, cutout } = layout
+  const { columns, originXPx, originYPx, stripRows, spectrumTopRow, chromaRow, cutout } = layout
   const cutoutRound = useSyncExternalStore(subscribeGridWaveSettings, readCutoutRound)
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
@@ -143,6 +157,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
   const credits = nowPlaying.song ? creditsLine(songArtistText(nowPlaying.song), songAlbumText(nowPlaying.song), columns) : []
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const chromaCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const cutoutRef = useRef<HTMLDivElement | null>(null)
   const [gapColumn, setGapColumn] = useState<number | null>(null)
 
@@ -191,13 +206,54 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     const levels = new Float32Array(columns)
     const drawnLit = new Int16Array(columns).fill(-1)
     const drawnPeak = new Int16Array(columns).fill(-1)
+    const chromaCanvas = chromaCanvasRef.current
+    const chromaContext = chromaCanvas?.getContext('2d') ?? null
+    const semitoneMeter = chromaContext ? new SemitoneFade(columns) : null
+    const semitoneTargets = semitoneMeter ? new Float32Array(columns) : null
+    const harmonicPlan = semitoneMeter ? createSemitoneHarmonicPlan(columns) : null
+    const harmonicLevels = semitoneMeter ? new Float32Array(columns) : null
+    const harmonicAfterLevels = semitoneMeter ? new Float32Array(columns) : null
+    const semitoneActivity = semitoneMeter ? new SemitoneActivityFilter(columns, MUSIC_SEMITONE_CONFIRM_SEC) : null
+    const drawnSemitones = new Int16Array(columns).fill(-1)
     const breath = new MusicBreath()
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
     const context = canvas?.getContext('2d') ?? null
     const dpr = window.devicePixelRatio || 1
+    let semitoneTime = NaN
+    let semitoneAt: Float32Array | null = null
+    let semitoneAfter: Float32Array | null = null
+    const unsubscribeSemitoneScore = semitoneActivity
+      ? subscribeMusicSemitoneScore(columns, (timeSec, at, after) => {
+          if (!Number.isFinite(timeSec) || !at || !after) {
+            semitoneTime = NaN
+            semitoneAt = null
+            semitoneAfter = null
+            semitoneActivity.reset()
+            return
+          }
+          if (Number.isFinite(semitoneTime) && (timeSec <= semitoneTime || timeSec - semitoneTime > 0.1)) {
+            semitoneActivity.reset()
+          }
+          semitoneTime = timeSec
+          semitoneAt = at
+          semitoneAfter = after
+        })
+      : null
+    const transientBand = semitoneActivity
+      ? subscribeMusicMix(
+          { mix: { thump: 1, pierce: 1, tick: 0 }, shape: 1, fallSec: 0 },
+          () => {},
+          (strength, timeSec) => semitoneActivity.recordTransient(timeSec, strength),
+        )
+      : null
+    let activityTrackUrl = musicPlayerService.trackUrl
     if (canvas) {
       canvas.width = Math.round(columns * boxPx * dpr)
       canvas.height = Math.round(stripRows * boxPx * dpr)
+    }
+    if (chromaCanvas) {
+      chromaCanvas.width = Math.round(columns * boxPx * dpr)
+      chromaCanvas.height = Math.round(boxPx * dpr)
     }
 
     // The accent colour (the layout's own, or the caret's when it has none, as
@@ -210,6 +266,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       const style = getComputedStyle(scene)
       accentColor = style.getPropertyValue('--visualizer-accent-color').trim() || style.getPropertyValue('--color-caret').trim()
       drawnLit.fill(-1)
+      drawnSemitones.fill(-1)
     }
     readColor()
     const restyle = new MutationObserver(readColor)
@@ -224,28 +281,51 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
     }
 
     const draw = () => {
-      if (!context || !canvas) return
-      let changed = false
-      for (let band = 0; band < columns; band += 1) {
-        const lit = litRows(meter.levels[band], stripRows)
-        const peak = litRows(meter.peaks[band], stripRows)
-        if (lit !== drawnLit[band] || peak !== drawnPeak[band]) {
-          changed = true
-          drawnLit[band] = lit
-          drawnPeak[band] = peak
+      if (context && canvas) {
+        let changed = false
+        for (let band = 0; band < columns; band += 1) {
+          const lit = litRows(meter.levels[band], stripRows)
+          const peak = litRows(meter.peaks[band], stripRows)
+          if (lit !== drawnLit[band] || peak !== drawnPeak[band]) {
+            changed = true
+            drawnLit[band] = lit
+            drawnPeak[band] = peak
+          }
+        }
+        if (changed) {
+          context.setTransform(dpr, 0, 0, dpr, 0, 0)
+          context.clearRect(0, 0, columns * boxPx, stripRows * boxPx)
+          context.fillStyle = accentColor
+          for (let band = 0; band < columns; band += 1) {
+            const lit = drawnLit[band]
+            const x = band * boxPx
+            if (lit > 0) context.fillRect(x, (stripRows - lit) * boxPx, boxPx, lit * boxPx)
+            const peak = drawnPeak[band]
+            if (peak > lit) context.fillRect(x, (stripRows - peak) * boxPx, boxPx, boxPx)
+          }
         }
       }
-      if (!changed) return
-      context.setTransform(dpr, 0, 0, dpr, 0, 0)
-      context.clearRect(0, 0, columns * boxPx, stripRows * boxPx)
-      context.fillStyle = accentColor
-      for (let band = 0; band < columns; band += 1) {
-        const lit = drawnLit[band]
-        const x = band * boxPx
-        if (lit > 0) context.fillRect(x, (stripRows - lit) * boxPx, boxPx, lit * boxPx)
-        // The peak box, where it stands above the bar.
-        const peak = drawnPeak[band]
-        if (peak > lit) context.fillRect(x, (stripRows - peak) * boxPx, boxPx, boxPx)
+
+      if (chromaContext && semitoneMeter && chromaCanvas) {
+        let changed = false
+        for (let boxIndex = 0; boxIndex < columns; boxIndex += 1) {
+          const alpha = Math.round(semitoneMeter.levels[boxIndex] * 255)
+          if (alpha !== drawnSemitones[boxIndex]) {
+            changed = true
+            drawnSemitones[boxIndex] = alpha
+          }
+        }
+        if (!changed) return
+        chromaContext.setTransform(dpr, 0, 0, dpr, 0, 0)
+        chromaContext.clearRect(0, 0, columns * boxPx, boxPx)
+        chromaContext.fillStyle = accentColor
+        for (let boxIndex = 0; boxIndex < columns; boxIndex += 1) {
+          const alpha = drawnSemitones[boxIndex]
+          if (alpha === 0) continue
+          chromaContext.globalAlpha = alpha / 255
+          chromaContext.fillRect(boxIndex * boxPx, 0, boxPx, boxPx)
+        }
+        chromaContext.globalAlpha = 1
       }
     }
 
@@ -259,8 +339,28 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       if (tap) {
         tap.sample(nowMs / 1000, levels)
         meter.step(levels, dt)
-        draw()
       }
+      const trackUrl = musicPlayerService.trackUrl
+      if (trackUrl !== activityTrackUrl) {
+        activityTrackUrl = trackUrl
+        semitoneTime = NaN
+        semitoneAt = null
+        semitoneAfter = null
+        semitoneActivity?.reset()
+      }
+      if (semitoneAt && semitoneAfter && Number.isFinite(semitoneTime) && semitoneMeter && semitoneTargets) {
+        if (!harmonicPlan || !harmonicLevels || !harmonicAfterLevels) throw new Error('Semitone rendering started without a harmonic plan')
+        writeHarmonicSemitoneLevels(semitoneAt, harmonicPlan, harmonicLevels)
+        writeHarmonicSemitoneLevels(semitoneAfter, harmonicPlan, harmonicAfterLevels)
+        const activeLevels = semitoneActivity?.step(harmonicLevels, harmonicAfterLevels, semitoneTime) ?? harmonicLevels
+        for (let boxIndex = 0; boxIndex < columns; boxIndex += 1) {
+          semitoneTargets[boxIndex] = semitoneShare(activeLevels[boxIndex], SEMITONE_LIGHT_LEVELS)
+        }
+      } else {
+        semitoneTargets?.fill(0)
+      }
+      if (semitoneMeter && semitoneTargets) semitoneMeter.step(semitoneTargets, dt)
+      draw()
       moveGap()
       const still = reducedMotion.matches
       const { amplitude, speed } = breathScales(breath.step(tap ? tap.bassPower(levels) : 0, dt))
@@ -270,7 +370,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       }
       // Nothing left to move: the music is stopped, the bars have fallen and
       // the glaze holds still. Woken again by the music or the motion setting.
-      if (still && !musicPlayerService.isPlaying && meter.isAtRest()) {
+      if (still && !musicPlayerService.isPlaying && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
         lastMs = NaN
         return
       }
@@ -290,9 +390,11 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
       restyle.disconnect()
       unsubscribePlaying()
       unsubscribeSong()
+      unsubscribeSemitoneScore?.unsubscribe()
+      transientBand?.unsubscribe()
       reducedMotion.removeEventListener('change', wake)
     }
-  }, [scene, columns, stripRows, boxPx])
+  }, [scene, columns, stripRows, boxPx, chromaRow])
 
   const handleProgressPress = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -370,6 +472,18 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
               ref={canvasRef}
               className="visualizer-spectrum"
               style={{ left: originXPx, top: rowTop(spectrumTopRow), width: columns * box, height: stripRows * box }}
+            />
+          )}
+          {chromaRow !== null && (
+            <canvas
+              ref={chromaCanvasRef}
+              className="visualizer-chroma"
+              style={{
+                left: originXPx,
+                top: rowTop(chromaRow),
+                width: columns * box,
+                height: box,
+              }}
             />
           )}
 

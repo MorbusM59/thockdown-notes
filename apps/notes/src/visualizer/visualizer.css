@@ -41,7 +41,8 @@
 .visualizer-strip,
 .visualizer-letter-box,
 .visualizer-lit,
-.visualizer-spectrum {
+.visualizer-spectrum,
+.visualizer-chroma {
   z-index: 1;
 }
 
@@ -257,4 +258,3 @@
   opacity: 0;
   will-change: transform;
 }
-

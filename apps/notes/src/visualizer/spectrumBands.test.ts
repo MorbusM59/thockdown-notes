@@ -2,15 +2,27 @@ import { describe, expect, it } from 'vitest'
 import { FftPlan } from '@thockdown/soundscape/fft'
 import {
   PEAK_HOLD_SEC,
+  SEMITONE_CONTRAST_DB,
+  SEMITONE_FADE_SEC,
+  SEMITONE_HARMONIC_BOOST,
+  SEMITONE_LIGHT_LEVELS,
   RELEASE_DB_PER_SEC,
   SPECTRUM_CEILING_DB,
   SPECTRUM_FLOOR_DB,
+  SemitoneActivityFilter,
+  SemitoneFade,
   SpectrumBallistics,
   TILT_DB_PER_OCTAVE,
+  TrackTuningEstimator,
   bandCentreHz,
+  createSemitoneHarmonicPlan,
+  createSemitonePlan,
   litRows,
   logBandEdges,
+  semitoneShare,
+  writeHarmonicSemitoneLevels,
   writeBandLevels,
+  writeSemitoneLevels,
 } from './spectrumBands'
 
 const SAMPLE_RATE = 48000
@@ -43,6 +55,18 @@ function analyse(samples: Float64Array): Float32Array {
   const out = new Float32Array(n / 2)
   for (let k = 0; k < n / 2; k += 1) out[k] = 20 * Math.log10(Math.hypot(re[k], im[k]) / n)
   return out
+}
+
+function spectrumWithPeaks(binCount: number, binHz: number, peakHz: number[]): Float32Array {
+  const spectrum = new Float32Array(binCount).fill(-100)
+  for (const hz of peakHz) {
+    const centre = hz / binHz
+    for (let bin = Math.max(0, Math.floor(centre) - 2); bin <= Math.min(binCount - 1, Math.ceil(centre) + 2); bin += 1) {
+      const level = -18 - 2 * (bin - centre) ** 2
+      spectrum[bin] = Math.max(spectrum[bin], level)
+    }
+  }
+  return spectrum
 }
 
 /** Pink noise (power falling 3 dB an octave), `rms` overall, built in the frequency domain with random phases. */
@@ -100,6 +124,126 @@ describe('writeBandLevels', () => {
     for (const level of untilted) expect(Math.abs(level - mean)).toBeLessThan(1.5)
   })
 
+  describe('writeSemitoneLevels', () => {
+    it('maps every semitone to its own box around A3', () => {
+      const boxCount = 25
+      const centreBox = Math.floor(boxCount / 2)
+      for (let midi = 45; midi <= 69; midi += 1) {
+        const binHz = 440 * 2 ** ((midi - 69) / 12)
+        const spectrum = Float32Array.of(-Infinity, -20)
+        const levels = new Float32Array(boxCount)
+        writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, binHz, boxCount), levels)
+        const expectedBox = centreBox + midi - 57
+        expect(levels[expectedBox]).toBeGreaterThan(-25)
+        for (let other = 0; other < boxCount; other += 1) {
+          if (other !== expectedBox) expect(levels[other]).toBe(-Infinity)
+        }
+      }
+    })
+
+    it('keeps octaves in separate boxes', () => {
+      const spectrum = Float32Array.of(-Infinity, -20, -20)
+      const levels = new Float32Array(49)
+      writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, 110, levels.length), levels)
+      expect(levels[12]).toBeCloseTo(-20, 3)
+      expect(levels[24]).toBeCloseTo(-20, 3)
+    })
+
+    it('puts tuned A3 in the center box or the right-center box for even widths', () => {
+      const tunedA3Hz = 220 * 2 ** (20 / 1200)
+      const spectrum = Float32Array.of(-Infinity, -20)
+      for (const boxCount of [24, 25]) {
+        const levels = new Float32Array(boxCount)
+        const expectedBox = Math.floor(boxCount / 2)
+        writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, tunedA3Hz, boxCount, 20), levels)
+        expect(levels[expectedBox]).toBeGreaterThan(-21)
+        for (let other = 0; other < boxCount; other += 1) {
+          if (other !== expectedBox) expect(levels[other]).toBe(-Infinity)
+        }
+      }
+    })
+
+    it('shares coarse-bin energy between adjacent semitones and ignores out-of-row frequencies', () => {
+      const binHz = SAMPLE_RATE / FFT_SIZE
+      const spectrum = new Float32Array(FFT_SIZE / 2).fill(-Infinity)
+      const lowBin = Math.round(27.5 / binHz)
+      const middleBin = Math.round((220 * 2 ** (0.5 / 12)) / binHz)
+      const highBin = Math.round(21000 / binHz)
+      spectrum[lowBin] = -20
+      spectrum[middleBin] = -20
+      spectrum[highBin] = -20
+      const levels = new Float32Array(25)
+      writeSemitoneLevels(spectrum, createSemitonePlan(spectrum.length, binHz, levels.length), levels)
+      expect(levels[12]).toBeGreaterThan(-30)
+      expect(levels[13]).toBeGreaterThan(-30)
+      expect(levels.filter((level) => Number.isFinite(level))).toHaveLength(2)
+    })
+  })
+
+  describe('writeHarmonicSemitoneLevels', () => {
+    it('adds weighted harmonic evidence without changing or replacing measured frequencies', () => {
+      const boxCount = 37
+      const a4 = Math.floor(boxCount / 2)
+      const raw = new Float32Array(boxCount).fill(-Infinity)
+      const mapped = new Float32Array(boxCount)
+      raw[a4] = -30
+      raw[a4 + 12] = -20
+
+      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount), mapped)
+
+      const expectedPower = 10 ** (-30 / 10) + SEMITONE_HARMONIC_BOOST * 0.5 * 10 ** (-20 / 10)
+      expect(mapped[a4]).toBeCloseTo(10 * Math.log10(expectedPower), 4)
+      expect(mapped[a4 + 12]).toBe(-20)
+      expect(raw[a4]).toBe(-30)
+    })
+
+    it('interpolates partials that fall between semitone boxes', () => {
+      const boxCount = 49
+      const a3 = 12
+      const raw = new Float32Array(boxCount).fill(-Infinity)
+      const mapped = new Float32Array(boxCount)
+      raw[a3 + 19] = -20
+      raw[a3 + 20] = -40
+
+      writeHarmonicSemitoneLevels(raw, createSemitoneHarmonicPlan(boxCount, 3), mapped)
+
+      expect(mapped[a3]).toBeGreaterThan(-30)
+      expect(raw[a3]).toBe(-Infinity)
+    })
+
+    it('does not allow the weighted map to overwrite its raw input', () => {
+      const levels = Float32Array.of(-20, -30)
+      expect(() => writeHarmonicSemitoneLevels(levels, createSemitoneHarmonicPlan(2), levels)).toThrow(RangeError)
+    })
+  })
+
+  describe('TrackTuningEstimator', () => {
+    it('locks to a stable tuning offset from recurring partials', () => {
+      const binHz = SAMPLE_RATE / FFT_SIZE
+      const tunedA3Hz = 220 * 2 ** (24 / 1200)
+      const partials = Array.from({ length: Math.floor(5000 / tunedA3Hz) }, (_, index) => tunedA3Hz * (index + 1))
+      const spectrum = spectrumWithPeaks(FFT_SIZE / 2, binHz, partials)
+      const estimator = new TrackTuningEstimator()
+
+      for (let frame = 0; frame < 7; frame += 1) {
+        expect(estimator.addFrame(spectrum, binHz)).toBeNull()
+      }
+      const offset = estimator.addFrame(spectrum, binHz)
+      if (offset === null) throw new Error('Expected the estimator to lock after consistent partials')
+      expect(Math.abs(offset - 24)).toBeLessThan(4)
+      expect(estimator.addFrame(new Float32Array(FFT_SIZE / 2).fill(-Infinity), binHz)).toBe(offset)
+    })
+
+    it('does not estimate a track from silence', () => {
+      const binHz = SAMPLE_RATE / FFT_SIZE
+      const estimator = new TrackTuningEstimator()
+      const silence = new Float32Array(FFT_SIZE / 2).fill(-Infinity)
+      for (let frame = 0; frame < 12; frame += 1) {
+        expect(estimator.addFrame(silence, binHz)).toBeNull()
+      }
+    })
+  })
+
   it('has no staircase where bands are narrower than a bin', () => {
     // Below ~130 Hz a band is narrower than one 5.9 Hz bin: neighbouring
     // bands there must still differ, rather than repeating one bin's value.
@@ -136,6 +280,124 @@ describe('litRows', () => {
     expect(litRows(SPECTRUM_CEILING_DB, 10)).toBe(10)
     expect(litRows(SPECTRUM_CEILING_DB + 30, 10)).toBe(10)
     expect(litRows((SPECTRUM_FLOOR_DB + SPECTRUM_CEILING_DB) / 2, 10)).toBe(5)
+  })
+})
+
+describe('semitoneShare', () => {
+  const atSignalShare = (share: number) =>
+    SEMITONE_CONTRAST_DB + share * (SPECTRUM_CEILING_DB - SEMITONE_CONTRAST_DB)
+
+  it('is off at zero levels and binary at one level', () => {
+    expect(semitoneShare(SPECTRUM_CEILING_DB, 0)).toBe(0)
+    expect(semitoneShare(SEMITONE_CONTRAST_DB, 1)).toBe(0)
+    expect(semitoneShare(atSignalShare(0.01), 1)).toBe(1)
+    expect(semitoneShare(SPECTRUM_CEILING_DB + 20, 1)).toBe(1)
+  })
+
+  it('uses equal signal ranges for each discrete light level', () => {
+    expect(semitoneShare(atSignalShare(0.01), 4)).toBe(0.25)
+    expect(semitoneShare(atSignalShare(0.24), 4)).toBe(0.25)
+    expect(semitoneShare(atSignalShare(0.25), 4)).toBe(0.5)
+    expect(semitoneShare(atSignalShare(0.49), 4)).toBe(0.5)
+    expect(semitoneShare(atSignalShare(0.5), 4)).toBe(0.75)
+    expect(semitoneShare(atSignalShare(0.74), 4)).toBe(0.75)
+    expect(semitoneShare(atSignalShare(0.75), 4)).toBe(1)
+  })
+
+  it('uses the internal level-count parameter by default', () => {
+    expect(semitoneShare(atSignalShare(0.01))).toBe(1 / SEMITONE_LIGHT_LEVELS)
+  })
+
+  it('rejects a fractional level count', () => {
+    expect(() => semitoneShare(SPECTRUM_CEILING_DB, 1.5)).toThrow(RangeError)
+  })
+})
+
+describe('SemitoneActivityFilter', () => {
+  it('carries established keys through a hit and raises the threshold for new keys as the field fills', () => {
+    const filter = new SemitoneActivityFilter(5, 0.2)
+    const levels = new Float32Array(5).fill(-Infinity)
+    levels[0] = -30
+    filter.step(levels, levels, 0)
+
+    filter.recordTransient(1, 1)
+    levels.fill(-34)
+    levels[0] = -44
+    const future = new Float32Array(5).fill(-Infinity)
+    filter.step(levels, future, 1)
+
+    expect(filter.levels[0]).toBe(-44)
+    expect(Array.from(filter.levels.slice(1)).every((level) => level === -Infinity)).toBe(true)
+  })
+
+  it('rejects a short broadband transient before it can become a key set', () => {
+    const filter = new SemitoneActivityFilter(4, 0.2)
+    const levels = new Float32Array(4).fill(-Infinity)
+    const future = new Float32Array(4).fill(-Infinity)
+    filter.step(levels, future, 0)
+    filter.recordTransient(0.01, 1)
+
+    levels.fill(-25)
+    filter.step(levels, future, 0.02)
+    filter.step(levels, future, 0.15)
+    expect(Array.from(filter.levels).every((level) => level === -Infinity)).toBe(true)
+
+    levels.fill(-Infinity)
+    filter.step(levels, future, 0.16)
+    filter.step(levels, future, 0.25)
+    expect(Array.from(filter.levels).every((level) => level === -Infinity)).toBe(true)
+  })
+
+  it('lets sustained future evidence confirm a transient at its original audio time', () => {
+    const filter = new SemitoneActivityFilter(1, 0.2)
+    const levels = Float32Array.of(-Infinity)
+    const future = Float32Array.of(-Infinity)
+    filter.step(levels, future, 0)
+    filter.recordTransient(0.01, 1)
+
+    levels[0] = -20
+    filter.step(levels, future, 0.02)
+    expect(filter.levels[0]).toBe(-Infinity)
+
+    future[0] = -20
+    filter.step(levels, future, 0.03)
+    expect(filter.levels[0]).toBe(-20)
+  })
+
+  it('activates a qualified key immediately when no transient needs filtering', () => {
+    const filter = new SemitoneActivityFilter(1, 0.2)
+    const levels = Float32Array.of(-30)
+    expect(filter.step(levels, levels, 0)[0]).toBe(-30)
+  })
+})
+
+describe('SemitoneFade', () => {
+  it('rises immediately and fades to zero on the configured shape and duration', () => {
+    const fade = new SemitoneFade(1)
+    const bright = Float32Array.of(1)
+    const dark = Float32Array.of(0)
+
+    fade.step(bright, 0)
+    expect(fade.levels[0]).toBe(1)
+    fade.step(dark, 0)
+    fade.step(dark, SEMITONE_FADE_SEC / 2)
+    expect(fade.levels[0]).toBeCloseTo((1 - 0.5) ** 2, 5)
+    fade.step(dark, SEMITONE_FADE_SEC / 2)
+    expect(fade.levels[0]).toBe(0)
+    expect(fade.isAtRest()).toBe(true)
+  })
+
+  it('brightens immediately and retargets a fall from its current value', () => {
+    const fade = new SemitoneFade(1)
+    fade.step(Float32Array.of(1), 0)
+    fade.step(Float32Array.of(0), 0)
+    fade.step(Float32Array.of(0), SEMITONE_FADE_SEC / 2)
+    const halfway = fade.levels[0]
+
+    fade.step(Float32Array.of(0.5), 0)
+
+    expect(halfway).toBeGreaterThan(0)
+    expect(fade.levels[0]).toBe(0.5)
   })
 })
 

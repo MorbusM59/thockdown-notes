@@ -4,6 +4,7 @@ import type { DecodedChunk, MusicDecodeStream } from './musicDecodeStream'
 
 const RATE = 48000
 const CHUNK = 1152
+const SEMITONE_BANDS = 48
 
 /** Kicks on every beat at `bpm` (a falling sine and a click), nothing else. */
 function kicks(seconds: number, bpm: number): { samples: Float32Array; times: number[] } {
@@ -23,6 +24,14 @@ function kicks(seconds: number, bpm: number): { samples: Float32Array; times: nu
     }
   }
   return { samples, times }
+}
+
+function pitchedTrack(frequency: number): Float32Array {
+  const samples = new Float32Array(RATE)
+  for (let i = Math.floor(0.2 * RATE); i < Math.ceil(0.4 * RATE); i += 1) {
+    samples[i] = Math.sin((2 * Math.PI * frequency * i) / RATE)
+  }
+  return samples
 }
 
 /** A stand-in for the decoder: hands out `samples` chunk by chunk, synchronously, as far as `want` lets it. */
@@ -76,13 +85,13 @@ async function play(samples: Float32Array, from: number, seconds: number, contra
     streams.push(stream)
     return stream as unknown as MusicDecodeStream
   })
-  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, channel: 'thump' }], drums: true })
+  analysis.handle({ type: 'restart', run: 1, url: 'track', listenerTime: from, readers: [{ id: 7, channel: 'thump' }], drums: true, semitoneBands: 0 })
   await Promise.resolve()
   await Promise.resolve()
   const answers: AnalysisAnswer[] = []
   for (let frame = 0; frame * (1 / 60) < seconds; frame++) {
     const at = from + frame / 60
-    const answer = analysis.handle({ type: 'ask', run: 1, listenerTime: at, heardTime: at, readers: [{ id: 7, contrast, pattern: 0.5 }], trace: false })
+    const answer = analysis.handle({ type: 'ask', run: 1, listenerTime: at, heardTime: at, readers: [{ id: 7, contrast, pattern: 0.5 }], trace: false, semitoneBands: 0 })
     if (answer) answers.push(answer)
   }
   return { answers, streams, analysis }
@@ -112,16 +121,65 @@ describe('the beat analysis behind the worker', { timeout: 60_000 }, () => {
 
   it('drops an ask for a run the page has since restarted', async () => {
     const { analysis } = await play(kicks(20, 120).samples, 5, 1)
-    analysis.handle({ type: 'restart', run: 2, url: 'track', listenerTime: 8, readers: [], drums: false })
-    expect(analysis.handle({ type: 'ask', run: 1, listenerTime: 8, heardTime: 8, readers: [], trace: false })).toBeNull()
+    analysis.handle({ type: 'restart', run: 2, url: 'track', listenerTime: 8, readers: [], drums: false, semitoneBands: 0 })
+    expect(analysis.handle({ type: 'ask', run: 1, listenerTime: 8, heardTime: 8, readers: [], trace: false, semitoneBands: 0 })).toBeNull()
   })
 
   it('keeps the stream through a seek and replaces it for a new track', async () => {
     const { analysis, streams } = await play(kicks(20, 120).samples, 5, 1)
-    analysis.handle({ type: 'restart', run: 2, url: 'track', listenerTime: 12, readers: [], drums: false })
+    analysis.handle({ type: 'restart', run: 2, url: 'track', listenerTime: 12, readers: [], drums: false, semitoneBands: 0 })
     expect(streams.length).toBe(1)
-    analysis.handle({ type: 'restart', run: 3, url: 'other', listenerTime: 0, readers: [], drums: false })
+    analysis.handle({ type: 'restart', run: 3, url: 'other', listenerTime: 0, readers: [], drums: false, semitoneBands: 0 })
     expect(streams.length).toBe(2)
     expect(streams[0].disposed).toBe(true)
+  })
+
+  it('answers pitch energy at the requested time and rebuilds the score after seeks and track changes', async () => {
+    const tracks = new Map([
+      ['a', pitchedTrack(440)],
+      ['b', pitchedTrack(523.25)],
+    ])
+    const analysis = new MusicAnalysis((url) =>
+      new FakeStream(url, tracks.get(url) ?? new Float32Array(RATE)) as unknown as MusicDecodeStream,
+    )
+    const restart = (run: number, url: string, listenerTime: number) => analysis.handle({
+      type: 'restart',
+      run,
+      url,
+      listenerTime,
+      readers: [],
+      drums: false,
+      semitoneBands: SEMITONE_BANDS,
+    })
+    const ask = (run: number, time: number) => analysis.handle({
+      type: 'ask',
+      run,
+      listenerTime: time,
+      heardTime: time,
+      readers: [],
+      trace: false,
+      semitoneBands: SEMITONE_BANDS,
+    })
+
+    restart(1, 'a', 0)
+    await Promise.resolve()
+    await Promise.resolve()
+    const atTone = ask(1, 0.3)?.semitones
+    const afterTone = ask(1, 0.5)?.semitones
+    expect(atTone?.at[Math.floor(SEMITONE_BANDS / 2) + 12]).toBeGreaterThan(-45)
+    expect(atTone?.after.every((level) => level === -Infinity)).toBe(true)
+    expect(afterTone?.at.every((level) => level === -Infinity)).toBe(true)
+
+    restart(2, 'a', 0.8)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(ask(2, 0.8)?.semitones?.at.every((level) => level === -Infinity)).toBe(true)
+
+    restart(3, 'b', 0)
+    await Promise.resolve()
+    await Promise.resolve()
+    const changedTrack = ask(3, 0.3)?.semitones?.at
+    expect(changedTrack?.[Math.floor(SEMITONE_BANDS / 2) + 15]).toBeGreaterThan(-45)
+    expect(changedTrack?.[Math.floor(SEMITONE_BANDS / 2) + 12]).toBeLessThan(-45)
   })
 })

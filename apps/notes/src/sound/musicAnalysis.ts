@@ -5,9 +5,10 @@
  * It owns everything that reads the decoded samples: the decoding
  * (`MusicDecodeStream`), the beat map (`beatMap.ts`) and the drum score
  * written from it (`drumScore.ts`), both planned from the samples as they are
- * decoded, `MAP_AHEAD_SEC` ahead, each reader's place in the score, and the
- * peak of the window either side of the listener (`PeakWindow`), handed its
- * samples from a delay ring when the listener comes in reach. The page
+ * decoded, `MAP_AHEAD_SEC` ahead, the time-indexed semitone energy score,
+ * each reader's place in the drum score, and the peak of the window either
+ * side of the listener (`PeakWindow`), handed its samples from a delay ring
+ * when the listener comes in reach. The page
  * (`musicBeat.ts`) keeps what a FRAME needs: the listener's clock, each
  * subscriber's fall, the hits it reports, the loudness gain and the caret's
  * phase.
@@ -15,7 +16,8 @@
  * The two talk in ASKS. Once a frame the page asks for the moment it will
  * draw next (`AnalysisAsk`): every reader's RAW response there (the strongest
  * instance of its channel in the score since its last ask, past its
- * contrast), the beat map's beat around it, and the window's peak. The answer
+ * contrast), the beat map's caret phase, the window's peak, and the
+ * semitone score at that audio time and a short future time. The answer
  * arrives before that frame, so the worker adds no lag beyond the one frame
  * the page asks ahead by. Every reader's settings (its contrast) come with
  * the ask, so a slider acts at once and nothing restarts.
@@ -24,6 +26,11 @@
 import { BeatMap, MAP_AHEAD_SEC } from './beatMap'
 import { DEFAULT_PATTERN, writeDrumScore, type DrumChannel, type DrumInstance } from './drumScore'
 import { MusicDecodeStream } from './musicDecodeStream'
+import {
+  MUSIC_SEMITONE_AHEAD_SEC,
+  MUSIC_SEMITONE_CONFIRM_SEC,
+  MusicSemitoneScore,
+} from './musicSemitoneScore'
 import { PeakWindow } from './peakWindow'
 
 /** How far either side of the listener the window reaches, in seconds. */
@@ -65,6 +72,8 @@ export interface AnalysisRestart {
   readers: ReaderSource[]
   /** Whether anything reads the beat map (a reader, or the caret's clock). */
   drums: boolean
+  /** Number of semitone boxes to score, or 0 when the key row is not subscribed. */
+  semitoneBands: number
 }
 
 export interface AnalysisAsk {
@@ -76,6 +85,8 @@ export interface AnalysisAsk {
   heardTime: number
   readers: ReaderSettings[]
   trace: boolean
+  /** Number of semitone boxes to score, or 0 when the key row is not subscribed. */
+  semitoneBands: number
 }
 
 /** Nothing reads the beat map any more: it is dropped until the next restart asks for it. */
@@ -101,6 +112,8 @@ export interface AnalysisAnswer {
   /** The caret's beat at `heardTime` (`BeatMap.caretAt`): how far into it, 0..1, and its period (s); NaN where there is none. */
   caretPhase: number
   caretPeriod: number
+  /** The decoded-track semitone levels at `heardTime` and after the lookahead confirmation window. */
+  semitones: { at: Float32Array; after: Float32Array } | null
   traceLines: string[]
 }
 
@@ -173,6 +186,10 @@ export function instanceResponse(strength: number, strengths: readonly number[],
 /** The worker's whole state; `handle` takes each request in arrival order. */
 export class MusicAnalysis {
   private stream: MusicDecodeStream | null = null
+  private semitoneStream: MusicDecodeStream | null = null
+  private semitoneScore: MusicSemitoneScore | null = null
+  private semitoneBands = 0
+  private semitoneGeneration = 0
   /** The run the page last restarted; chunks and asks of an older one are dropped. */
   private run = 0
   /** The run whose file is open and whose decoding has started (`restart` waits for the sample rate). */
@@ -220,6 +237,7 @@ export class MusicAnalysis {
         this.run++
         this.stream?.dispose()
         this.stream = null
+        this.disposeSemitoneStream()
         this.dropMap()
         this.readers.clear()
         return null
@@ -236,6 +254,7 @@ export class MusicAnalysis {
 
   private restart(request: AnalysisRestart): void {
     const id = (this.run = request.run)
+    this.semitoneBands = request.semitoneBands
     this.peaks.reset()
     this.dropMap()
     // A new track is a new stream; a seek in the same one keeps it.
@@ -245,6 +264,7 @@ export class MusicAnalysis {
     }
     this.readers.clear()
     for (const reader of request.readers) this.readers.set(reader.id, { channel: reader.channel, heardTo: NaN })
+    this.restartSemitone(request.url, request.listenerTime, request.semitoneBands)
     const stream = this.stream
     if (!stream) return
     stream.halt()
@@ -328,6 +348,10 @@ export class MusicAnalysis {
     if (request.run !== this.run) return null
     this.listenerTime = request.listenerTime
     this.traceOn = request.trace
+    if (request.semitoneBands !== this.semitoneBands) {
+      this.semitoneBands = request.semitoneBands
+      this.restartSemitone(this.stream?.url ?? null, request.listenerTime, request.semitoneBands)
+    }
     const { heardTime } = request
     for (const settings of request.readers) {
       const reader = this.readers.get(settings.id)
@@ -341,7 +365,16 @@ export class MusicAnalysis {
       this.map?.update(heardTime)
       if (this.readers.size > 0) this.writeScore(heardTime)
     }
+    this.semitoneStream?.want(request.listenerTime + MUSIC_SEMITONE_AHEAD_SEC)
     const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
+    let semitones: AnalysisAnswer['semitones'] = null
+    if (this.semitoneScore && this.semitoneBands > 0) {
+      const at = new Float32Array(this.semitoneBands)
+      const after = new Float32Array(this.semitoneBands)
+      this.semitoneScore.levelsAt(heardTime, at)
+      this.semitoneScore.levelsAt(heardTime + MUSIC_SEMITONE_CONFIRM_SEC, after)
+      semitones = { at, after }
+    }
     const ids: number[] = []
     const raws: number[] = []
     for (const settings of request.readers) {
@@ -374,7 +407,41 @@ export class MusicAnalysis {
       peak: this.peaks.isEmpty ? NaN : this.peaks.peakSince(heardTime - LEAD_SEC),
       caretPhase: caret.phase,
       caretPeriod: caret.period,
+      semitones,
       traceLines,
     }
+  }
+
+  private restartSemitone(url: string | null, at: number, bands: number): void {
+    if (!Number.isInteger(bands) || bands < 0) throw new RangeError('Semitone band count must be non-negative')
+    const generation = ++this.semitoneGeneration
+    this.semitoneScore = null
+    if (bands === 0 || !url) {
+      this.disposeSemitoneStream()
+      return
+    }
+    if (this.semitoneStream?.url !== url) {
+      this.semitoneStream?.dispose()
+      this.semitoneStream = this.createStream(url)
+    }
+    const stream = this.semitoneStream
+    if (!stream) return
+    void stream.sampleRate().then((sampleRate) => {
+      if (generation !== this.semitoneGeneration || stream !== this.semitoneStream || sampleRate === null) return
+      const score = new MusicSemitoneScore(sampleRate, bands)
+      this.semitoneScore = score
+      const from = Math.max(0, at - 1)
+      stream.run(from, at + MUSIC_SEMITONE_AHEAD_SEC, (samples, startTime) => {
+        if (generation !== this.semitoneGeneration || score !== this.semitoneScore) return
+        score.feed(samples, startTime)
+      })
+    })
+  }
+
+  private disposeSemitoneStream(): void {
+    this.semitoneGeneration += 1
+    this.semitoneStream?.dispose()
+    this.semitoneStream = null
+    this.semitoneScore = null
   }
 }

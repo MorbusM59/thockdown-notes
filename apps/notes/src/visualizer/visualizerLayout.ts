@@ -46,6 +46,8 @@ export type VisualizerLayout = {
   creditsRow: number | null
   /** The first row of the spectrum strip. */
   spectrumTopRow: number
+  /** The full-width semitone row in the top strip, or null when it would collide with existing content. */
+  chromaRow: number | null
   /** The cutout, in boxes. Size zero when there is no room for it between the strips. */
   cutout: { column: number; row: number; size: number }
 }
@@ -65,6 +67,7 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   const progressRow = stripRows < 1 ? null : creditsRow === null ? 0 : 2
   const titleRow = stripRows >= 3 ? progressRow! + 2 : null
   const spectrumTopRow = rows - stripRows
+  const chromaRow = stripRows >= 6 && columns > 0 ? stripRows - 1 : null
 
   const middleRows = rows - 2 * stripRows
   const wanted = Math.max(1, Math.round(cutoutPx / box))
@@ -75,7 +78,20 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
     size,
   }
 
-  return { boxPx: box, originXPx, originYPx, columns, rows, stripRows, progressRow, titleRow, creditsRow, spectrumTopRow, cutout }
+  return {
+    boxPx: box,
+    originXPx,
+    originYPx,
+    columns,
+    rows,
+    stripRows,
+    progressRow,
+    titleRow,
+    creditsRow,
+    spectrumTopRow,
+    chromaRow,
+    cutout,
+  }
 }
 
 /**

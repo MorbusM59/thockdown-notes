@@ -1,7 +1,8 @@
 /**
  * The visualizer mode's ears: the processed music read by two analysers and
  * delayed until the listener hears it. The arithmetic is `spectrumBands.ts`;
- * this is the Web Audio half and the timing.
+ * this is the Web Audio half and the timing. The semitone score is prepared
+ * from decoded track audio in `musicSemitoneScore.ts`.
  *
  * TWO RESOLUTIONS, split at `CROSSOVER_HZ`. One FFT cannot be both fine
  * enough for the bass (an 8192-point frame resolves 6 Hz at 48 kHz, and with
@@ -21,7 +22,11 @@
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { heardLagSec } from '../sound/musicBeat'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import { bandCentreHz, logBandEdges, writeBandLevels } from './spectrumBands'
+import {
+  bandCentreHz,
+  logBandEdges,
+  writeBandLevels,
+} from './spectrumBands'
 
 export const CROSSOVER_HZ = 640
 const LONG_FFT = 8192
@@ -55,7 +60,10 @@ export class SpectrumTap {
     let bass = 0
     while (bass < bands && bandCentreHz(this.edges, bass) < BASS_MAX_HZ) bass += 1
     this.bassBands = bass
-    this.history = Array.from({ length: HISTORY }, () => ({ timeSec: -Infinity, levels: new Float32Array(bands).fill(-Infinity) }))
+    this.history = Array.from({ length: HISTORY }, () => ({
+      timeSec: -Infinity,
+      levels: new Float32Array(bands).fill(-Infinity),
+    }))
   }
 
   /** Starts listening to the music. Idempotent. */
@@ -112,7 +120,8 @@ export class SpectrumTap {
     writeBandLevels(this.shortBins, sampleRate / SHORT_FFT, this.edges, this.split, this.bands, frame.levels)
 
     const lag = heardLagSec()
-    this.copyHeard(nowSec - Math.max(0, lag - LONG_FFT / 2 / sampleRate), 0, this.split, out)
+    const longAt = nowSec - Math.max(0, lag - LONG_FFT / 2 / sampleRate)
+    this.copyHeard(longAt, 0, this.split, out)
     this.copyHeard(nowSec - Math.max(0, lag - SHORT_FFT / 2 / sampleRate), this.split, this.bands, out)
   }
 
@@ -127,12 +136,17 @@ export class SpectrumTap {
 
   /** Copies bands `[from, to)` of the newest frame taken at or before `atSec`, or of the oldest kept if none is that old yet. */
   private copyHeard(atSec: number, from: number, to: number, out: Float32Array): void {
+    const chosen = this.frameAtOrBefore(atSec)
+    out.set(chosen.levels.subarray(from, to), from)
+  }
+
+  private frameAtOrBefore(atSec: number): Frame {
     let chosen = this.history[this.newest]
     for (let back = 0; back < this.count; back += 1) {
       const frame = this.history[(this.newest - back + HISTORY) % HISTORY]
       chosen = frame
       if (frame.timeSec <= atSec) break
     }
-    out.set(chosen.levels.subarray(from, to), from)
+    return chosen
   }
 }

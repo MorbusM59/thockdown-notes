@@ -75,6 +75,31 @@ export interface MusicMixChannel {
   fallSec: number
 }
 
+/**
+ * Reads the decoded track's semitone score at the heard time and a short
+ * lookahead after it. Subscribers of different widths share the widest score,
+ * centered on the same A3, and receive the matching centered slice.
+ */
+export function subscribeMusicSemitoneScore(
+  bands: number,
+  listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null) => void,
+): { update: (bands: number) => void; unsubscribe: () => void } {
+  if (!Number.isInteger(bands) || bands <= 0) throw new RangeError('Semitone score row width must be a positive integer')
+  const subscriber: SemitoneSubscriber = { bands, listener }
+  semitoneSubscribers.add(subscriber)
+  added()
+  return {
+    update(nextBands) {
+      if (!Number.isInteger(nextBands) || nextBands <= 0) throw new RangeError('Semitone score row width must be a positive integer')
+      subscriber.bands = nextBands
+    },
+    unsubscribe() {
+      semitoneSubscribers.delete(subscriber)
+      removed()
+    },
+  }
+}
+
 /** A tracker's id in the analysis (`musicAnalysis.ts`'s reader id), and its index in `trackerRaw`. */
 const TRACKER_INDEX: Record<VisualizerTrackerName, number> = { thump: 0, pierce: 1, tick: 2 }
 
@@ -90,7 +115,7 @@ interface Band {
   peakTime: number
   published: number
   /** Told of each HIT (`respond`): the response rising to a new peak after falling, with that peak. */
-  onHit: ((strength: number) => void) | null
+  onHit: ((strength: number, timeSec: number) => void) | null
   /** Whether the response rose at the last frame, so a hit is the first rising frame after a fall. */
   rising: boolean
 }
@@ -124,10 +149,21 @@ interface Counter {
 }
 
 const counters = new Set<Counter>()
+interface SemitoneSubscriber {
+  bands: number
+  listener: (timeSec: number, at: Float32Array | null, after: Float32Array | null) => void
+}
+const semitoneSubscribers = new Set<SemitoneSubscriber>()
+
+function semitoneBandCount(): number {
+  let bands = 0
+  for (const subscriber of semitoneSubscribers) bands = Math.max(bands, subscriber.bands)
+  return bands
+}
 
 /** Everything the frame loop answers. */
 function subscriberCount(): number {
-  return bands.size + clocks.size + counters.size
+  return bands.size + clocks.size + counters.size + semitoneSubscribers.size
 }
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
@@ -176,7 +212,6 @@ function mapCaretAt(time: number): { phase: number; period: number } {
   const at = mapPhase + (time - mapTime) / mapPeriod
   return { phase: at - Math.floor(at), period: mapPeriod }
 }
-
 
 /** Dips the caret's clock subscribers drew since the last caret trace line (a jump up in the published response). */
 let drawnDips = 0
@@ -229,6 +264,21 @@ function receive(answer: AnalysisAnswer): void {
   // the last gain holds rather than reading as silence.
   if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
   for (const line of answer.traceLines) appendBeatTrace(line)
+  if (semitoneSubscribers.size > 0) {
+    for (const subscriber of semitoneSubscribers) {
+      const score = answer.semitones
+      if (!score || score.at.length < subscriber.bands) {
+        subscriber.listener(answer.heardTime, null, null)
+        continue
+      }
+      const offset = Math.floor(score.at.length / 2) - Math.floor(subscriber.bands / 2)
+      subscriber.listener(
+        answer.heardTime,
+        score.at.subarray(offset, offset + subscriber.bands),
+        score.after.subarray(offset, offset + subscriber.bands),
+      )
+    }
+  }
 }
 
 function ensureWorker(): void {
@@ -291,7 +341,15 @@ function restartAnalysis(listenerTime: number): void {
     if (!(analysedTrackers & (1 << index))) continue
     readers.push({ id: index, channel: name })
   }
-  send({ type: 'restart', run: id, url, listenerTime, readers, drums: needsDrums() })
+  send({
+    type: 'restart',
+    run: id,
+    url,
+    listenerTime,
+    readers,
+    drums: needsDrums(),
+    semitoneBands: semitoneBandCount(),
+  })
 }
 
 /**
@@ -313,7 +371,7 @@ function respond(band: Band, raw: number, listenerTime: number, gain: number): n
     // Judged before the gain, which only scales what is shown: a gain that
     // moves (the decoding reaching the listener, a loud passage coming into
     // the window) must not read as the music rising.
-    if (!band.rising) band.onHit?.(gain * raw)
+    if (!band.rising)     band.onHit?.(gain * raw, listenerTime)
     band.rising = true
     band.peak = raw
     band.peakTime = listenerTime
@@ -464,6 +522,7 @@ function tick(frameTimeMs: number): void {
     heardTime: heardTime + frameSec,
     readers: askReaders,
     trace: isBeatTraceOn(),
+    semitoneBands: semitoneBandCount(),
   })
   frame = requestAnimationFrame(tick)
 }
@@ -487,6 +546,7 @@ function stop(): void {
     setLocked(subscriber, false)
   }
   for (const counter of counters) counter.listener(NaN, NaN)
+  for (const subscriber of semitoneSubscribers) subscriber.listener(NaN, null, null)
 }
 
 function onVisibility(): void {
@@ -549,7 +609,11 @@ export function setVisualizerTrackers(next: VisualizerTrackers): void {
 }
 
 /** Follows one element's mix of the trackers; `listener` gets the response whenever it moves, and `onHit` each hit (`respond`: where a rise begins). */
-export function subscribeMusicMix(channel: MusicMixChannel, listener: BeatListener, onHit: ((strength: number) => void) | null = null): MusicMixSubscription {
+export function subscribeMusicMix(
+  channel: MusicMixChannel,
+  listener: BeatListener,
+  onHit: ((strength: number, timeSec: number) => void) | null = null,
+): MusicMixSubscription {
   const band: Band = {
     channel,
     listener,
@@ -607,7 +671,7 @@ export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListen
  * at the music's rate integrates time over period and never sees the jump.
  */
 export function subscribeMusicTempo(listener: (timeSec: number, periodSec: number) => void): () => void {
-  const counter: Counter = { listener }
+  const counter: Counter = { listener: (timeSec, periodSec) => listener(timeSec, periodSec) }
   counters.add(counter)
   added()
   return () => {
@@ -615,4 +679,3 @@ export function subscribeMusicTempo(listener: (timeSec: number, periodSec: numbe
     removed()
   }
 }
-

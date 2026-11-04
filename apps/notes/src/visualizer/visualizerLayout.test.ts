@@ -37,6 +37,15 @@ describe('computeVisualizerLayout', () => {
     expect(at(2)).toMatchObject({ progressRow: 0, titleRow: null, creditsRow: null })
   })
 
+  it('places a full-width chroma row at the top strip bottom when it fits without overlapping content', () => {
+    const at = (stripRowsWanted: number, columns: number) =>
+      computeVisualizerLayout(columns * 20, (stripRowsWanted * 20) / 0.2 + 1, 20, 220)
+    expect(at(10, 40)).toMatchObject({ chromaRow: 9 })
+    expect(at(5, 40)).toMatchObject({ chromaRow: null })
+    expect(at(10, 11)).toMatchObject({ chromaRow: 9 })
+    expect(at(10, 0)).toMatchObject({ chromaRow: null })
+  })
+
   it('sizes the cutout to the empty scene in whole boxes, centred', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
     expect(layout.cutout.size).toBe(11)
