@@ -445,7 +445,7 @@ describe('SemitoneFade', () => {
     expect(fade.isAtRest()).toBe(true)
   })
 
-  it('brightens immediately and retargets a fall from its current value', () => {
+  it('brightens immediately', () => {
     const fade = new SemitoneFade(1)
     fade.step(Float32Array.of(1), 0)
     fade.step(Float32Array.of(0), 0)
@@ -456,6 +456,21 @@ describe('SemitoneFade', () => {
 
     expect(halfway).toBeGreaterThan(0)
     expect(fade.levels[0]).toBe(0.5)
+  })
+
+  it('retargets a falling light from its current value', () => {
+    const fade = new SemitoneFade(1)
+    fade.step(Float32Array.of(1), 0)
+    fade.step(Float32Array.of(0), 0)
+    fade.step(Float32Array.of(0), SEMITONE_FADE_SEC / 2)
+    const beforeRetarget = fade.levels[0]
+    const target = 0.1
+
+    fade.step(Float32Array.of(target), 0)
+    expect(fade.levels[0]).toBe(beforeRetarget)
+
+    fade.step(Float32Array.of(target), SEMITONE_FADE_SEC / 4)
+    expect(fade.levels[0]).toBeCloseTo(target + (beforeRetarget - target) * (1 - 0.25) ** 2, 5)
   })
 })
 

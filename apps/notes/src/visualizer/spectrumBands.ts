@@ -39,19 +39,19 @@ const NO_SEMITONE = -2
  * turned into power and summed). A full-scale sine fills about the top row,
  * and a loud modern master spread over ~100 bands sits in the upper half.
  */
-export const SPECTRUM_CEILING_DB = -18
-export const SPECTRUM_FLOOR_DB = -78
+export const SPECTRUM_CEILING_DB = -40
+export const SPECTRUM_FLOOR_DB = -80
 /** Semitone levels below this are hidden; raising it increases key contrast. */
-export const SEMITONE_CONTRAST_DB = -45
+export const SEMITONE_CONTRAST_DB = -60
 /** Number of nonzero brightness levels: 0 hides keys, 1 is binary, higher values add steps. */
-export const SEMITONE_LIGHT_LEVELS = 5
+export const SEMITONE_LIGHT_LEVELS = 4
 /** How strongly a semitone is boosted by its higher harmonics. */
-export const SEMITONE_HARMONIC_BOOST = 0.5
+export const SEMITONE_HARMONIC_BOOST = 1
 const SEMITONE_MAX_HARMONIC = 8
 /** Seconds for a lit key to fall to a quieter target. */
-export const SEMITONE_FADE_SEC = 4
-/** The shared visualizer fall shape: 0 is between a held swell and a sharp tail. */
-export const SEMITONE_FADE_SHAPE = 1
+export const SEMITONE_FADE_SEC = 0.25
+/** The neutral shared visualizer fall shape: a quadratic decay. */
+export const SEMITONE_FADE_SHAPE = 0
 
 /** Extra slope applied about `TILT_PIVOT_HZ`, on top of pink reading flat. */
 export const TILT_DB_PER_OCTAVE = 1.5
