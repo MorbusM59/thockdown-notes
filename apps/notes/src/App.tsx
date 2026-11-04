@@ -7503,10 +7503,10 @@ ${markdownHtml}
       }
 
       // In the visualizer the scene holds the keyboard and the note under it
-      // is hidden, so Space and Enter are free: Space steps through the
-      // current mode's layout presets (Shift+Space backwards) and Enter
-      // switches between light and dark. Repeats are ignored, so holding a
-      // key does not race through the presets.
+      // is hidden, so Tab/Shift+Tab step through the layout presets and Enter
+      // switches between light and dark. Space and the arrow keys belong to
+      // the music controls. Repeats are ignored so a held layout key moves
+      // only once.
       if (isVisualizerMode) {
         const layoutChord = matchShortcut(event, 'visualizerNextLayout')
           ? 1
@@ -9012,6 +9012,7 @@ ${markdownHtml}
             >
 
               <AudioControls
+                isVisualizerMode={isVisualizerMode}
                 volume={musicVolume}
                 onVolumeChange={setMusicVolume}
                 isMuted={musicMuted}
@@ -9307,5 +9308,3 @@ ${markdownHtml}
 }
 
 export default App
-
-

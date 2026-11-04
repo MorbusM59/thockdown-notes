@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import type { PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react'
+import type { MutableRefObject, PointerEvent as ReactPointerEvent, MouseEvent as ReactMouseEvent } from 'react'
 import {
   buildHoldRampPlan,
   holdFullTravelSec,
@@ -56,6 +56,12 @@ export interface HoldToAdjustOptions {
   disabled?: boolean
 }
 
+export interface HoldToAdjustKeyboardController {
+  start: (button: 0 | 2) => void
+  end: () => void
+  cancel: () => void
+}
+
 const defaultDirectionForButton = (button: number): -1 | 0 | 1 => {
   if (button === 0) return -1
   if (button === 2) return 1
@@ -83,12 +89,15 @@ interface ActiveHold {
   startValue: number
   startedAtMs: number
   plan: HoldRampPlan
-  pointerId: number
+  pointerId: number | null
   /** Steps applied so far, so the release knows whether the curve moved at all. */
   appliedSteps: number
 }
 
-export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandlers {
+export function useHoldToAdjust(
+  options: HoldToAdjustOptions,
+  keyboardControllerRef?: MutableRefObject<HoldToAdjustKeyboardController | null>,
+): HoldToAdjustHandlers {
   const optionsRef = useRef(options)
   optionsRef.current = options
 
@@ -135,6 +144,50 @@ export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandl
     }
   }, [applySteps, stopTicking])
 
+  const startHold = useCallback((button: number, pointerId: number | null) => {
+    const opts = optionsRef.current
+    if (opts.disabled || holdRef.current) return false
+    const direction = (opts.directionForButton ?? defaultDirectionForButton)(button)
+    if (direction === 0) return false
+    const plan = buildHoldRampPlan(opts.max - opts.min, opts.fullTravelSec ?? holdFullTravelSec())
+    if (!plan) return false
+
+    opts.onHoldStart?.()
+    holdRef.current = {
+      direction,
+      startValue: opts.getValue(),
+      startedAtMs: performance.now(),
+      plan,
+      pointerId,
+      appliedSteps: 0,
+    }
+
+    stopTicking()
+    tickRef.current = setInterval(() => {
+      const hold = holdRef.current
+      if (!hold) return
+      const elapsedSec = (performance.now() - hold.startedAtMs) / 1000
+      const step = optionsRef.current.step ?? 1
+      const steps = quantizeHoldTravel(sampleHoldTravel(hold.plan, elapsedSec), step) / step
+      if (steps !== hold.appliedSteps) applySteps(steps)
+    }, HOLD_TICK_MS)
+    return true
+  }, [applySteps, stopTicking])
+
+  const startKeyboardHold = useCallback((button: 0 | 2) => {
+    startHold(button, null)
+  }, [startHold])
+
+  const endKeyboardHold = useCallback(() => {
+    if (holdRef.current?.pointerId === null) endHold()
+  }, [endHold])
+
+  const cancelKeyboardHold = useCallback(() => {
+    if (holdRef.current?.pointerId !== null) return
+    stopTicking()
+    holdRef.current = null
+  }, [stopTicking])
+
   const handlePointerDown = useCallback((event: ReactPointerEvent) => {
     const opts = optionsRef.current
     if (opts.disabled) return
@@ -145,10 +198,7 @@ export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandl
     if (holdRef.current) return
 
     event.preventDefault()
-    const plan = buildHoldRampPlan(opts.max - opts.min, opts.fullTravelSec ?? holdFullTravelSec())
-    if (!plan) return
-
-    opts.onHoldStart?.()
+    if (!startHold(event.button, event.pointerId)) return
 
     // Pointer capture keeps a hold alive when the pointer drifts off what is
     // often a very small button, and guarantees the matching pointerup lands
@@ -159,27 +209,7 @@ export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandl
       // Capture is an improvement, not a requirement.
     }
 
-    holdRef.current = {
-      direction,
-      startValue: opts.getValue(),
-      startedAtMs: performance.now(),
-      plan,
-      pointerId: event.pointerId,
-      appliedSteps: 0,
-    }
-
-    stopTicking()
-    tickRef.current = setInterval(() => {
-      const hold = holdRef.current
-      if (!hold) return
-      // Recomputed from wall-clock elapsed rather than accumulated per tick, so
-      // a late or dropped tick costs nothing and the curve stays exact.
-      const elapsedSec = (performance.now() - hold.startedAtMs) / 1000
-      const step = optionsRef.current.step ?? 1
-      const steps = quantizeHoldTravel(sampleHoldTravel(hold.plan, elapsedSec), step) / step
-      if (steps !== hold.appliedSteps) applySteps(steps)
-    }, HOLD_TICK_MS)
-  }, [applySteps, stopTicking])
+  }, [startHold])
 
   const handlePointerUp = useCallback((event: ReactPointerEvent) => {
     const hold = holdRef.current
@@ -215,7 +245,24 @@ export function useHoldToAdjust(options: HoldToAdjustOptions): HoldToAdjustHandl
     event.preventDefault()
   }, [])
 
-  useEffect(() => stopTicking, [stopTicking])
+  useEffect(() => {
+    if (!keyboardControllerRef) return
+    const controller = {
+      start: startKeyboardHold,
+      end: endKeyboardHold,
+      cancel: cancelKeyboardHold,
+    }
+    keyboardControllerRef.current = controller
+    return () => {
+      if (keyboardControllerRef.current === controller) keyboardControllerRef.current = null
+      cancelKeyboardHold()
+    }
+  }, [keyboardControllerRef, startKeyboardHold, endKeyboardHold, cancelKeyboardHold])
+
+  useEffect(() => () => {
+    stopTicking()
+    holdRef.current = null
+  }, [stopTicking])
 
   return {
     onPointerDown: handlePointerDown,

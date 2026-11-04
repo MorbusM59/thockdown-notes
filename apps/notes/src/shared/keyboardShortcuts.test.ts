@@ -46,4 +46,14 @@ describe('keyboard shortcut declarations', () => {
     expect(formatShortcut(SHORTCUTS.redo, true)).toBe('Cmd+Shift+Z')
     expect(formatShortcut(SHORTCUTS.redo, false)).toBe('Ctrl+Y')
   })
+
+  it('reserves visualizer layout and audio keys for their declared actions', () => {
+    expect(matchShortcut(press('Tab'), 'visualizerNextLayout')).not.toBeNull()
+    expect(matchShortcut(press('Tab', { shift: true }), 'visualizerPreviousLayout')).not.toBeNull()
+    expect(matchShortcut(press(' ', { code: 'Space' }), 'visualizerPlayPause')).not.toBeNull()
+    expect(matchShortcut(press('ArrowLeft'), 'visualizerSeekBack')).not.toBeNull()
+    expect(matchShortcut(press('ArrowRight'), 'visualizerSeekForward')).not.toBeNull()
+    expect(matchShortcut(press('ArrowDown'), 'visualizerVolumeDown')).not.toBeNull()
+    expect(matchShortcut(press('ArrowUp'), 'visualizerVolumeUp')).not.toBeNull()
+  })
 })

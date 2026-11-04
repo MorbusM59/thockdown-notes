@@ -27,7 +27,11 @@ import {
   pushPlayed,
   stepBack,
 } from '../shared/musicPlayHistory'
-import { useHoldToAdjust } from '../shared/useHoldToAdjust'
+import {
+  useHoldToAdjust,
+  type HoldToAdjustHandlers,
+  type HoldToAdjustKeyboardController,
+} from '../shared/useHoldToAdjust'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
 import { publishNowPlaying } from '../sound/nowPlaying'
@@ -41,6 +45,13 @@ import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 // (`shared/holdTiming.ts`), which also announces the completion in the
 // cursor. Was 700ms of its own.
 const HOLD_THRESHOLD_MS = HOLD_COMMIT_MS
+const VISUALIZER_DOUBLE_PRESS_MS = 300
+const SEEK_HOLD_DELAY_MS = 200
+const SEEK_INTERVAL_MS = 100
+const SEEK_HOLD_STEP = 0.05
+const SEEK_CLICK_STEP = 0.2
+
+type SeekDirection = 1 | -1
 
 
 
@@ -53,6 +64,8 @@ export interface MusicPlaybackSnapshot {
 }
 
 export interface AudioControlsProps {
+  /** Whether fullscreen visualizer keyboard controls are active. */
+  isVisualizerMode: boolean
   /**
    * 0–1 volume for the music player. This is the LEVEL, not the audibility:
    * it keeps its value while muted (see `isMuted`) so unmuting restores it
@@ -109,6 +122,7 @@ export interface AudioControlsProps {
 }
 
 export const AudioControls = memo(function AudioControls({
+  isVisualizerMode,
   volume,
   onVolumeChange,
   isMuted,
@@ -143,6 +157,8 @@ export const AudioControls = memo(function AudioControls({
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isSeekScrubbing = useRef(false)
+  const lastVisualizerSeekPressRef = useRef<{ direction: SeekDirection; atMs: number } | null>(null)
+  const visualizerKeysDownRef = useRef(new Set<string>())
   /**
    * Set by the release that ends a scrub, to swallow the click the browser
    * dispatches right after it: pointerup has already cleared
@@ -496,17 +512,6 @@ export const AudioControls = memo(function AudioControls({
   // the neighbouring song rather than stalling against the file boundary, so a
   // held rewind walks backwards through the tally continuously.
 
-  // Deliberately NOT one of holdTiming.ts's two thresholds: this is when a
-  // held seek starts REPEATING, not when a gesture completes. Nothing is
-  // confirmed at 200ms here, so there is nothing to acknowledge either.
-  const SEEK_HOLD_DELAY_MS = 200
-  const SEEK_INTERVAL_MS = 100
-  const SEEK_HOLD_STEP = 0.05
-  const SEEK_CLICK_STEP = 0.2
-
-  /** +1 seeks forward, -1 rewinds. */
-  type SeekDirection = 1 | -1
-
   /**
    * Seek within the current track, continuing into the next or previous song
    * with whatever the track could not absorb.
@@ -563,6 +568,19 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [advanceToNextSong, playPreviousSong])
 
+  const startSeekHold = useCallback((direction: SeekDirection) => {
+    seekTimerRef.current = setTimeout(() => {
+      seekTimerRef.current = null
+      lastVisualizerSeekPressRef.current = null
+      isSeekScrubbing.current = true
+      musicPlayerService.beginScrub()
+      void seekBy(direction * SEEK_HOLD_STEP)
+      seekIntervalRef.current = setInterval(() => {
+        void seekBy(direction * SEEK_HOLD_STEP)
+      }, SEEK_INTERVAL_MS)
+    }, SEEK_HOLD_DELAY_MS)
+  }, [seekBy])
+
   const stopSeekScrub = useCallback(() => {
     if (seekTimerRef.current) {
       clearTimeout(seekTimerRef.current)
@@ -581,15 +599,8 @@ export const AudioControls = memo(function AudioControls({
   const handleSeekPointerDown = useCallback((event: React.PointerEvent, direction: SeekDirection) => {
     if (event.button !== 0 && event.button !== 2) return
     event.preventDefault()
-    seekTimerRef.current = setTimeout(() => {
-      isSeekScrubbing.current = true
-      musicPlayerService.beginScrub()
-      void seekBy(direction * SEEK_HOLD_STEP)
-      seekIntervalRef.current = setInterval(() => {
-        void seekBy(direction * SEEK_HOLD_STEP)
-      }, SEEK_INTERVAL_MS)
-    }, SEEK_HOLD_DELAY_MS)
-  }, [seekBy])
+    startSeekHold(direction)
+  }, [startSeekHold])
 
   /**
    * The right-click action fires from pointer-up rather than from the
@@ -635,11 +646,11 @@ export const AudioControls = memo(function AudioControls({
     )
 
     if (outcome.kind === 'within') {
-      musicPlayerService.setCurrentTime(outcome.timeSec)
+      await musicPlayerService.seekWithFade(outcome.timeSec)
       return
     }
     if (outcome.kind === 'restart') {
-      musicPlayerService.setCurrentTime(0)
+      await musicPlayerService.seekWithFade(0)
       return
     }
 
@@ -925,6 +936,115 @@ export const AudioControls = memo(function AudioControls({
     onReverbRoomChange(fromDisplayLevel(display))
   }, [onReverbRoomChange])
 
+  const volumeHoldControllerRef = useRef<HoldToAdjustKeyboardController | null>(null)
+  const reverbHoldControllerRef = useRef<HoldToAdjustKeyboardController | null>(null)
+  const roomHoldControllerRef = useRef<HoldToAdjustKeyboardController | null>(null)
+  const volumeDisplayRef = useRef(toDisplayLevel(volume))
+  const reverbDisplayRef = useRef(toDisplayLevel(reverbAmount))
+  const roomDisplayRef = useRef(toDisplayLevel(reverbRoom))
+  volumeDisplayRef.current = toDisplayLevel(volume)
+  reverbDisplayRef.current = toDisplayLevel(reverbAmount)
+  roomDisplayRef.current = toDisplayLevel(reverbRoom)
+
+  const volumeHoldHandlers = useHoldToAdjust({
+    getValue: () => volumeDisplayRef.current,
+    onChange: handleVolumeLevel,
+    onHoldStart: unmuteForAdjust,
+    min: 0,
+    max: SOUND_LEVEL_MAX_DISPLAY,
+  }, volumeHoldControllerRef)
+  const reverbHoldHandlers = useHoldToAdjust({
+    getValue: () => reverbDisplayRef.current,
+    onChange: handleReverbLevel,
+    onHoldStart: unbypassForAdjust,
+    min: 0,
+    max: SOUND_LEVEL_MAX_DISPLAY,
+  }, reverbHoldControllerRef)
+  const roomHoldHandlers = useHoldToAdjust({
+    getValue: () => roomDisplayRef.current,
+    onChange: handleRoomLevel,
+    onHoldStart: unbypassForAdjust,
+    min: 0,
+    max: SOUND_LEVEL_MAX_DISPLAY,
+  }, roomHoldControllerRef)
+
+  useEffect(() => {
+    if (isSoundOptionsOpen) return
+    volumeHoldControllerRef.current?.cancel()
+    reverbHoldControllerRef.current?.cancel()
+    roomHoldControllerRef.current?.cancel()
+  }, [isSoundOptionsOpen])
+
+  useEffect(() => {
+    if (!isVisualizerMode) return
+    const activeKeys = visualizerKeysDownRef.current
+    const keyCode = (event: KeyboardEvent): string | null => {
+      if (event.code === 'Space' || event.key === ' ') return 'Space'
+      return ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) ? event.key : null
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      const code = keyCode(event)
+      if (!code) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (event.repeat || activeKeys.has(code)) return
+      activeKeys.add(code)
+
+      if (code === 'ArrowLeft') startSeekHold(-1)
+      else if (code === 'ArrowRight') startSeekHold(1)
+      else if (code === 'ArrowUp') volumeHoldControllerRef.current?.start(2)
+      else if (code === 'ArrowDown') volumeHoldControllerRef.current?.start(0)
+    }
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      const code = keyCode(event)
+      if (!code || !activeKeys.has(code)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      activeKeys.delete(code)
+
+      if (code === 'Space') {
+        void handlePlayToggle()
+      } else if (code === 'ArrowLeft' || code === 'ArrowRight') {
+        const direction: SeekDirection = code === 'ArrowLeft' ? -1 : 1
+        const wasScrubbing = isSeekScrubbing.current
+        stopSeekScrub()
+        if (wasScrubbing) return
+
+        const now = performance.now()
+        const lastPress = lastVisualizerSeekPressRef.current
+        if (lastPress?.direction === direction && now - lastPress.atMs <= VISUALIZER_DOUBLE_PRESS_MS) {
+          lastVisualizerSeekPressRef.current = null
+          void jumpSong(direction)
+        } else {
+          lastVisualizerSeekPressRef.current = { direction, atMs: now }
+          void handleSeekActivate(direction)
+        }
+      } else {
+        volumeHoldControllerRef.current?.end()
+      }
+    }
+
+    const onWindowBlur = () => {
+      activeKeys.clear()
+      lastVisualizerSeekPressRef.current = null
+      stopSeekScrub()
+      volumeHoldControllerRef.current?.cancel()
+    }
+
+    window.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('keyup', onKeyUp, true)
+    window.addEventListener('blur', onWindowBlur)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      window.removeEventListener('keyup', onKeyUp, true)
+      window.removeEventListener('blur', onWindowBlur)
+      onWindowBlur()
+    }
+  }, [isVisualizerMode, handlePlayToggle, startSeekHold, stopSeekScrub, jumpSong, handleSeekActivate])
+
   const volumeGlyph = useMemo(() => volumeIcon(volume, isMuted), [volume, isMuted])
   const reverbGlyph = useMemo(() => reverbIcon(isReverbBypassed), [isReverbBypassed])
   const roomGlyph = useMemo(() => roomIcon(reverbRoom, isReverbBypassed), [reverbRoom, isReverbBypassed])
@@ -938,7 +1058,7 @@ export const AudioControls = memo(function AudioControls({
         className="audio-micro-grid"
         style={{ '--audio-grid-columns': AUDIO_GRID_COLUMNS } as React.CSSProperties}
       >
-        {/* Play / stop — spans 2 columns */}
+        {/* Play / pause — spans 2 columns */}
         <button
           type="button"
           className={`audio-ctrl-btn audio-play-btn${isPlaying ? ' is-active' : ''}`}
@@ -1034,8 +1154,7 @@ export const AudioControls = memo(function AudioControls({
             <SoundLevelButton
               value={volume}
               onWheel={handleVolumeWheel}
-              onLevelChange={handleVolumeLevel}
-              onAdjustStart={unmuteForAdjust}
+              holdHandlers={volumeHoldHandlers}
               label="Music volume"
               tooltip="Volume — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
               isDimmed={isMuted}
@@ -1055,8 +1174,7 @@ export const AudioControls = memo(function AudioControls({
             <SoundLevelButton
               value={reverbAmount}
               onWheel={handleReverbWheel}
-              onLevelChange={handleReverbLevel}
-              onAdjustStart={unbypassForAdjust}
+              holdHandlers={reverbHoldHandlers}
               label="Music reverb amount"
               tooltip="Reverb — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
               isDimmed={isReverbBypassed}
@@ -1076,8 +1194,7 @@ export const AudioControls = memo(function AudioControls({
             <SoundLevelButton
               value={reverbRoom}
               onWheel={handleRoomWheel}
-              onLevelChange={handleRoomLevel}
-              onAdjustStart={unbypassForAdjust}
+              holdHandlers={roomHoldHandlers}
               label="Music reverb room size"
               tooltip="Room size — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
               isDimmed={isReverbBypassed}
@@ -1145,18 +1262,14 @@ export const AudioControls = memo(function AudioControls({
 function SoundLevelButton({
   value,
   onWheel,
-  onLevelChange,
-  onAdjustStart,
+  holdHandlers,
   label,
   tooltip,
   isDimmed,
 }: {
   value: number
   onWheel: (event: WheelEvent) => void
-  /** Called with a new 0-99 display level while the button is held. */
-  onLevelChange: (displayLevel: number) => void
-  /** Runs when a hold begins, before the first change (used to un-mute). */
-  onAdjustStart: () => void
+  holdHandlers: HoldToAdjustHandlers
   label: string
   tooltip: string
   isDimmed: boolean
@@ -1165,18 +1278,6 @@ function SoundLevelButton({
   useNonPassiveWheel(ref, onWheel)
 
   const display = toDisplayLevel(value)
-  const displayRef = useRef(display)
-  displayRef.current = display
-
-  // Press and hold to sweep the value on the app's own motion curve; see
-  // shared/holdToAdjust.ts. Left lowers, right raises.
-  const holdHandlers = useHoldToAdjust({
-    getValue: () => displayRef.current,
-    onChange: onLevelChange,
-    onHoldStart: onAdjustStart,
-    min: 0,
-    max: SOUND_LEVEL_MAX_DISPLAY,
-  })
 
   return (
     <div

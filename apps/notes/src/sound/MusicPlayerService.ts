@@ -64,6 +64,8 @@ export class MissingFileError extends Error {
  * code paths at once.
  */
 export const SEEK_TAIL_GUARD_SEC = 0.05;
+export const SEEK_FADE_OUT_SEC = 0.3;
+export const SEEK_FADE_IN_SEC = 0.05;
 
 /**
  * How long after a song starts a rewind press means "the previous song"
@@ -179,6 +181,7 @@ export function resolveSeekPress(
  */
 /** The smallest change of the flow EQ's amount `setFlowEq` applies. */
 const FLOW_EQ_MIN_STEP = 0.002;
+const VOLUME_SMOOTHING_SEC = 0.02;
 
 const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number; q: number; gainDb: number }> = [
   { type: 'lowshelf', frequencyHz: 100, q: 0.7, gainDb: 16 },
@@ -205,6 +208,8 @@ export class MusicPlayerService {
   private currentFilePath: string | null = null;
   private currentDuration = 0;
   private _isPlaying = false;
+  private seekFadeGeneration = 0;
+  private cancelPendingSeek: (() => void) | null = null;
   private playingListeners = new Set<(playing: boolean) => void>();
   /** The visualizer's taps on the processed music (`tapProcessed`), whose gain undoes the volume. */
   private processedTaps = new Set<GainNode>();
@@ -249,6 +254,66 @@ export class MusicPlayerService {
     const duration = this.element.duration;
     const max = Number.isFinite(duration) && duration > 0 ? duration - 0.05 : seconds;
     this.element.currentTime = Math.max(0, Math.min(max, seconds));
+  }
+
+  /** Fade around a same-track seek so the discontinuity is not audible. */
+  async seekWithFade(seconds: number): Promise<void> {
+    const element = this.element
+    const context = this.audioCtx
+    const gain = this.gainNode
+    if (!element || !context || !gain) {
+      this.setCurrentTime(seconds)
+      return
+    }
+
+    this.cancelSeekFade()
+    const generation = this.seekFadeGeneration
+    const now = context.currentTime
+    gain.gain.cancelScheduledValues(now)
+    gain.gain.setValueAtTime(gain.gain.value, now)
+    gain.gain.linearRampToValueAtTime(0, now + SEEK_FADE_OUT_SEC)
+
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, SEEK_FADE_OUT_SEC * 1000)
+    })
+    if (generation !== this.seekFadeGeneration || element !== this.element || gain !== this.gainNode) return
+
+    const duration = element.duration
+    const target = Math.max(0, Math.min(Number.isFinite(duration) && duration > 0 ? duration - SEEK_TAIL_GUARD_SEC : seconds, seconds))
+    if (element.seeking || Math.abs(element.currentTime - target) > 0.001) {
+      await new Promise<void>((resolve, reject) => {
+        const finish = () => {
+          element.removeEventListener('seeked', finish)
+          element.removeEventListener('error', fail)
+          if (this.cancelPendingSeek === finish) this.cancelPendingSeek = null
+          resolve()
+        }
+        const fail = () => {
+          element.removeEventListener('seeked', finish)
+          element.removeEventListener('error', fail)
+          if (this.cancelPendingSeek === finish) this.cancelPendingSeek = null
+          reject(new Error('Music seek failed while fading'))
+        }
+        this.cancelPendingSeek = finish
+        element.addEventListener('seeked', finish, { once: true })
+        element.addEventListener('error', fail, { once: true })
+        this.setCurrentTime(seconds)
+      })
+    } else {
+      this.setCurrentTime(seconds)
+    }
+    if (generation !== this.seekFadeGeneration || element !== this.element || gain !== this.gainNode) return
+
+    const resumedAt = context.currentTime
+    gain.gain.cancelScheduledValues(resumedAt)
+    gain.gain.setValueAtTime(0, resumedAt)
+    gain.gain.linearRampToValueAtTime(this.config.volume, resumedAt + SEEK_FADE_IN_SEC)
+  }
+
+  private cancelSeekFade(): void {
+    this.seekFadeGeneration += 1
+    this.cancelPendingSeek?.()
+    this.cancelPendingSeek = null
   }
 
   // ── Audio graph ────────────────────────────────────────────────────────────
@@ -351,17 +416,14 @@ export class MusicPlayerService {
     const prev = this.config;
     this.config = { ...prev, ...cfg };
 
-    // cancelScheduledValues + setValueAtTime (not a bare `.value =`) so this
-    // always wins over an in-progress beginFadeIn() ramp -- an explicit
-    // config change (e.g. the user dragging the volume slider mid-fade)
-    // should cut the automation off and jump straight to the new value,
-    // rather than have the scheduled ramp silently keep overriding it on
-    // every subsequent audio frame.
-    if (this.gainNode && this.audioCtx) {
+    if (this.gainNode && this.audioCtx && cfg.volume !== undefined && cfg.volume !== prev.volume) {
       const now = this.audioCtx.currentTime;
-      this.gainNode.gain.cancelScheduledValues(now);
-      this.gainNode.gain.setValueAtTime(this.config.volume, now);
-      for (const tap of this.processedTaps) tap.gain.setValueAtTime(this.volumeCompensation(), now);
+      this.gainNode.gain.cancelAndHoldAtTime(now);
+      this.gainNode.gain.setTargetAtTime(this.config.volume, now, VOLUME_SMOOTHING_SEC);
+      for (const tap of this.processedTaps) {
+        tap.gain.cancelAndHoldAtTime(now);
+        tap.gain.setTargetAtTime(this.volumeCompensation(), now, VOLUME_SMOOTHING_SEC);
+      }
     }
     if (this.dryGain && this.wetGain && this.audioCtx) {
       const now = this.audioCtx.currentTime;
@@ -410,6 +472,7 @@ export class MusicPlayerService {
   // ── Playback ───────────────────────────────────────────────────────────────
 
   async play(filePath: string): Promise<void> {
+    this.cancelSeekFade()
     if (this.element && (this.currentFilePath !== filePath || this.element.ended)) {
       this.teardownSource();
     }
@@ -485,6 +548,7 @@ export class MusicPlayerService {
 
   pause(): void {
     if (!this.element) return;
+    this.cancelSeekFade()
     this.setPlaying(false);
     const el = this.element;
     if (this.gainNode && this.audioCtx) {
@@ -500,6 +564,7 @@ export class MusicPlayerService {
 
   stop(): void {
     if (!this.element) return;
+    this.cancelSeekFade()
     this.setPlaying(false);
     const el = this.element;
     if (this.gainNode && this.audioCtx) {
@@ -516,6 +581,7 @@ export class MusicPlayerService {
 
   /** Fade to silence over 100 ms then pause.  Resolves when the fade completes. */
   fadeOut(): Promise<void> {
+    this.cancelSeekFade()
     return new Promise((resolve) => {
       if (!this.element) { resolve(); return; }
       this.setPlaying(false);

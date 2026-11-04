@@ -98,7 +98,7 @@ export interface ShortcutDeclaration {
    * (`speedReading/speedReadingSession.ts`) in the window's capture phase,
    * ahead of every other binding.
    */
-  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring' | 'table-keys' | 'speed-reading'
+  matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring' | 'table-keys' | 'speed-reading' | 'visualizer-audio'
 }
 
 export interface ShortcutSection {
@@ -172,9 +172,14 @@ export const SHORTCUTS = {
   toggleSidebar: { section: 'layout', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
   immersive: { section: 'layout', chords: [{ code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
   visualizer: { section: 'layout', chords: [{ key: 'F3' }], label: 'Visualizer' },
-  visualizerNextLayout: { section: 'layout', chords: [{ code: 'Space' }], label: 'Next layout (visualizer)' },
-  visualizerPreviousLayout: { section: 'layout', chords: [{ code: 'Space', shift: true }], label: 'Previous layout (visualizer)' },
+  visualizerNextLayout: { section: 'layout', chords: [{ key: 'Tab' }], label: 'Next layout (visualizer)' },
+  visualizerPreviousLayout: { section: 'layout', chords: [{ key: 'Tab', shift: true }], label: 'Previous layout (visualizer)' },
   visualizerLightDark: { section: 'layout', chords: [{ key: 'Enter' }], label: 'Light / dark (visualizer)' },
+  visualizerPlayPause: { section: 'layout', chords: [{ code: 'Space' }], label: 'Play / pause music (visualizer)', matchedBy: 'visualizer-audio' },
+  visualizerSeekBack: { section: 'layout', chords: [{ key: 'ArrowLeft' }], label: 'Seek back / previous song (visualizer)', matchedBy: 'visualizer-audio' },
+  visualizerSeekForward: { section: 'layout', chords: [{ key: 'ArrowRight' }], label: 'Seek forward / next song (visualizer)', matchedBy: 'visualizer-audio' },
+  visualizerVolumeDown: { section: 'layout', chords: [{ key: 'ArrowDown' }], label: 'Lower music volume (visualizer)', matchedBy: 'visualizer-audio' },
+  visualizerVolumeUp: { section: 'layout', chords: [{ key: 'ArrowUp' }], label: 'Raise music volume (visualizer)', matchedBy: 'visualizer-audio' },
   switchSlot: { section: 'layout', chords: withMods(ARROWS_LR, { alt: true }), label: 'Previous / next slot' },
   jumpVertical: {
     section: 'gutter',
