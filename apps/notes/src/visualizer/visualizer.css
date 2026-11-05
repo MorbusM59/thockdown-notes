@@ -320,8 +320,8 @@
    filter, the level bars; panelsShown.ts): one inherited number every panel
    element takes as its opacity, faded in over 200ms and out over 500ms. A
    hidden panel takes no presses. Under each plate's hole in the middle strip
-   (middleHoles.ts) an unmasked copy of the middle strip fades the other way,
-   so as a plate fades out its hole fills with the middle's colour. */
+   (middleHoles.ts) a filler in the middle's colour fades the other way, so
+   as a plate fades out its hole fills. */
 @property --visualizer-panels {
   syntax: '<number>';
   inherits: true;
@@ -343,6 +343,10 @@
 }
 .visualizer-strip.is-hole-fill {
   opacity: calc(1 - var(--visualizer-panels));
+}
+.visualizer-strip.is-hole-fill > * {
+  position: absolute;
+  background-color: var(--color-bg-regular);
 }
 .visualizer-scene.is-panels-hidden > .visualizer-song-list-hit,
 .visualizer-scene.is-panels-hidden > .visualizer-bucket-hit,

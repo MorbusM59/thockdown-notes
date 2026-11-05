@@ -8,6 +8,11 @@
  * leaves a hole under each plate, as one CSS mask: a full layer with every
  * hole excluded from it. Owners report their rectangles; the mask is
  * rewritten only when the set actually changes.
+ *
+ * Each hole also gets a filler in the middle's colour, in the unmasked layer
+ * just before the middle (`.visualizer-strip.is-hole-fill`, same placement),
+ * shown as the panels are hidden (panelsShown.ts) so the hole closes as its
+ * plate fades out.
  */
 
 export type HoleRect = { x: number; y: number; width: number; height: number }
@@ -28,6 +33,14 @@ export function setMiddleHoles(middle: HTMLElement, owner: string, holes: HoleRe
   const key = all.map((hole) => `${hole.x},${hole.y},${hole.width},${hole.height}`).join(';')
   if (written.get(middle) === key) return
   written.set(middle, key)
+  const fill = middle.previousElementSibling
+  if (fill instanceof HTMLElement && fill.classList.contains('is-hole-fill')) {
+    fill.replaceChildren(...all.map((hole) => {
+      const filler = document.createElement('div')
+      filler.style.cssText = `left:${hole.x}px;top:${hole.y}px;width:${hole.width}px;height:${hole.height}px`
+      return filler
+    }))
+  }
   if (all.length === 0) {
     for (const name of ['mask-image', 'mask-size', 'mask-position', 'mask-repeat', 'mask-composite']) middle.style.removeProperty(name)
     return
@@ -44,5 +57,5 @@ export function setMiddleHoles(middle: HTMLElement, owner: string, holes: HoleRe
 
 /** The scene's middle strip, from any element inside the scene. */
 export function middleStripOf(element: HTMLElement): HTMLElement | null {
-  return element.closest('.visualizer-scene')?.querySelector<HTMLElement>('.visualizer-strip.is-middle:not(.is-hole-fill)') ?? null
+  return element.closest('.visualizer-scene')?.querySelector<HTMLElement>('.visualizer-strip.is-middle') ?? null
 }

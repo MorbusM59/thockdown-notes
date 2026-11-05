@@ -470,7 +470,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
       {width > 0 && (
         <>
           <div className="visualizer-strip is-top" style={{ height: rowTop(stripRows) }} />
-          <div className="visualizer-strip is-middle is-hole-fill" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
+          <div className="visualizer-strip is-hole-fill" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
           <div className="visualizer-strip is-middle" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
           <div className="visualizer-strip is-bottom" style={{ top: rowTop(spectrumTopRow) }} />
 
