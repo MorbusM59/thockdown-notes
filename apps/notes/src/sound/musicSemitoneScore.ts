@@ -11,8 +11,6 @@ import {
 export const MUSIC_SEMITONE_FFT_SIZE = 8192
 export const MUSIC_SEMITONE_FRAME_RATE = 40
 export const MUSIC_SEMITONE_CONFIRM_SEC = 0.2
-export const MUSIC_SEMITONE_AHEAD_SEC = 0.5
-const HISTORY_SEC = 4
 
 /** A bounded timeline of pitch energy, computed from decoded audio ahead of its heard time. */
 export class MusicSemitoneScore {
@@ -36,7 +34,7 @@ export class MusicSemitoneScore {
   private fed = 0
   private frames = 0
 
-  constructor(readonly sampleRate: number, readonly bands: number) {
+  constructor(readonly sampleRate: number, readonly bands: number, historySec = 4) {
     if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new RangeError('Semitone score sample rate must be positive')
     if (!Number.isInteger(bands) || bands < 0) throw new RangeError('Semitone score band count must be non-negative')
     this.hop = Math.max(1, Math.round(sampleRate / MUSIC_SEMITONE_FRAME_RATE))
@@ -56,7 +54,7 @@ export class MusicSemitoneScore {
     this.spectrumDb = new Float32Array(MUSIC_SEMITONE_FFT_SIZE / 2)
     this.levels = new Float32Array(bands)
     this.attributionWorkspace = createSemitoneAttributionWorkspace(this.spectrumDb.length, bands)
-    const historyFrames = Math.ceil(HISTORY_SEC / this.frameSec)
+    const historyFrames = Math.ceil(historySec / this.frameSec)
     this.history = new Float32Array(historyFrames * bands)
     this.historyStart = new Float64Array(historyFrames).fill(NaN)
     this.plan = createSemitoneAttributionPlan(sampleRate, MUSIC_SEMITONE_FFT_SIZE, bands)

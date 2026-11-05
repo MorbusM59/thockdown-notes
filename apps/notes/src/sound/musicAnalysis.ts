@@ -27,7 +27,6 @@ import { BeatMap, MAP_AHEAD_SEC } from './beatMap'
 import { DEFAULT_PATTERN, writeDrumScore, type DrumChannel, type DrumInstance } from './drumScore'
 import { MusicDecodeStream } from './musicDecodeStream'
 import {
-  MUSIC_SEMITONE_AHEAD_SEC,
   MUSIC_SEMITONE_CONFIRM_SEC,
   MusicSemitoneScore,
 } from './musicSemitoneScore'
@@ -41,6 +40,8 @@ const AHEAD_START_SEC = 10
 const AHEAD_GROWTH = 2
 /** How far past the window's leading edge the decoding is let run, so it never trails the listener. */
 const DECODE_MARGIN_SEC = 1
+/** How long the semitone score keeps a frame: samples reach it up to LEAD_SEC + DECODE_MARGIN_SEC before they are heard. */
+const SEMITONE_HISTORY_SEC = LEAD_SEC + DECODE_MARGIN_SEC + 2
 /** The share of a channel's instances that give a full response. */
 const TOP_SHARE = 0.02
 /**
@@ -186,10 +187,8 @@ export function instanceResponse(strength: number, strengths: readonly number[],
 /** The worker's whole state; `handle` takes each request in arrival order. */
 export class MusicAnalysis {
   private stream: MusicDecodeStream | null = null
-  private semitoneStream: MusicDecodeStream | null = null
   private semitoneScore: MusicSemitoneScore | null = null
   private semitoneBands = 0
-  private semitoneGeneration = 0
   private semitoneAtFrame: number | null | undefined
   private semitoneAfterFrame: number | null | undefined
   private semitoneAtLevels: Float32Array | null = null
@@ -241,7 +240,7 @@ export class MusicAnalysis {
         this.run++
         this.stream?.dispose()
         this.stream = null
-        this.disposeSemitoneStream()
+        this.resetSemitone()
         this.dropMap()
         this.readers.clear()
         return null
@@ -268,7 +267,7 @@ export class MusicAnalysis {
     }
     this.readers.clear()
     for (const reader of request.readers) this.readers.set(reader.id, { channel: reader.channel, heardTo: NaN })
-    this.restartSemitone(request.url, request.listenerTime, request.semitoneBands)
+    this.resetSemitone()
     const stream = this.stream
     if (!stream) return
     stream.halt()
@@ -283,7 +282,7 @@ export class MusicAnalysis {
       stream.run(Math.max(0, at - LEAD_SEC), at + this.aheadSec() + DECODE_MARGIN_SEC, (samples, startTime) => {
         // A chunk decoded for a run a later restart replaced is not this window's.
         if (id !== this.run) return
-        if (!this.delay) return this.peaks.add(samples, startTime, sampleRate)
+        if (!this.delay) return this.hear(samples, startTime, sampleRate)
         this.map?.feed(samples, startTime)
         this.delay.write(samples, startTime)
         this.releaseUpTo(at + LEAD_SEC + DECODE_MARGIN_SEC)
@@ -306,7 +305,7 @@ export class MusicAnalysis {
   /** Hands the decoded samples up to media time `until` to the window's peak. */
   private releaseUpTo(until: number): void {
     const delay = this.delay
-    if (delay) delay.release(until, (samples, startTime) => this.peaks.add(samples, startTime, delay.sampleRate))
+    if (delay) delay.release(until, (samples, startTime) => this.hear(samples, startTime, delay.sampleRate))
   }
 
   /** Writes the score again from `heardTime` on, if the beat map has planned since it was last written. */
@@ -354,7 +353,7 @@ export class MusicAnalysis {
     this.traceOn = request.trace
     if (request.semitoneBands !== this.semitoneBands) {
       this.semitoneBands = request.semitoneBands
-      this.restartSemitone(this.stream?.url ?? null, request.listenerTime, request.semitoneBands)
+      this.resetSemitone()
     }
     const { heardTime } = request
     for (const settings of request.readers) {
@@ -369,7 +368,6 @@ export class MusicAnalysis {
       this.map?.update(heardTime)
       if (this.readers.size > 0) this.writeScore(heardTime)
     }
-    this.semitoneStream?.want(request.listenerTime + MUSIC_SEMITONE_AHEAD_SEC)
     const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
     let semitones: AnalysisAnswer['semitones']
     if (this.semitoneScore && this.semitoneBands > 0) {
@@ -425,40 +423,28 @@ export class MusicAnalysis {
     return answer
   }
 
-  private restartSemitone(url: string | null, at: number, bands: number): void {
-    if (!Number.isInteger(bands) || bands < 0) throw new RangeError('Semitone band count must be non-negative')
-    const generation = ++this.semitoneGeneration
+  /**
+   * Hands samples the listener is about to hear (within LEAD_SEC) to the peak window and the semitone score. Both read
+   * the ONE decode: the score had a second decoder of its own, decoding the same file again.
+   */
+  private hear(samples: Float32Array, startTime: number, sampleRate: number): void {
+    this.peaks.add(samples, startTime, sampleRate)
+    if (this.semitoneBands === 0) return
+    if (!this.semitoneScore) {
+      // A start or a seek releases LEAD_SEC behind the listener first; the score only needs the second before them.
+      if (startTime + samples.length / sampleRate < this.startedAt - 1) return
+      this.semitoneScore = new MusicSemitoneScore(sampleRate, this.semitoneBands, SEMITONE_HISTORY_SEC)
+    }
+    this.semitoneScore.feed(samples, startTime)
+  }
+
+  /** Drops the semitone score; the next samples heard start a new one (a new track, a seek, a new box count). */
+  private resetSemitone(): void {
+    if (!Number.isInteger(this.semitoneBands) || this.semitoneBands < 0) throw new RangeError('Semitone band count must be non-negative')
     this.semitoneScore = null
     this.semitoneAtFrame = undefined
     this.semitoneAfterFrame = undefined
     this.semitoneAtLevels = null
     this.semitoneAfterLevels = null
-    if (bands === 0 || !url) {
-      this.disposeSemitoneStream()
-      return
-    }
-    if (this.semitoneStream?.url !== url) {
-      this.semitoneStream?.dispose()
-      this.semitoneStream = this.createStream(url)
-    }
-    const stream = this.semitoneStream
-    if (!stream) return
-    void stream.sampleRate().then((sampleRate) => {
-      if (generation !== this.semitoneGeneration || stream !== this.semitoneStream || sampleRate === null) return
-      const score = new MusicSemitoneScore(sampleRate, bands)
-      this.semitoneScore = score
-      const from = Math.max(0, at - 1)
-      stream.run(from, at + MUSIC_SEMITONE_AHEAD_SEC, (samples, startTime) => {
-        if (generation !== this.semitoneGeneration || score !== this.semitoneScore) return
-        score.feed(samples, startTime)
-      })
-    })
-  }
-
-  private disposeSemitoneStream(): void {
-    this.semitoneGeneration += 1
-    this.semitoneStream?.dispose()
-    this.semitoneStream = null
-    this.semitoneScore = null
   }
 }
