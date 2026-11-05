@@ -91,7 +91,13 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
 
     /** The pool in pick order from the playing song on (or from its head, when the playing song is not in it). */
     let songs: MusicSongEntry[] = []
-    /** The entry in the top slot. */
+    /**
+     * The entry in the top slot. Negative while the reader is over the list
+     * after the playing song changed under them (a press, or a song ending):
+     * the list is re-cut at the new playing song, but that song stays in the
+     * slot where the reader saw it, so the slots above it show nothing until
+     * the list travels home on leaving.
+     */
     let offset = 0
     let hovered = false
     let travel: number | null = null
@@ -146,7 +152,8 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
 
     /** Scroll so entry `next` is in the top slot, clamped to the list; false when that moves nothing. */
     const setOffset = (next: number): boolean => {
-      const clamped = Math.max(0, Math.min(songs.length - 1, next))
+      // Scrolling never moves further into the empty slots above the head.
+      const clamped = Math.max(Math.min(0, offset), Math.min(songs.length - 1, next))
       if (clamped === offset) return false
       offset = clamped
       draw()
@@ -197,12 +204,19 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const pool = readNowPlaying().pool
       const next = pool ? await window.thockdownAudioPlayer?.getPool({ slots: [...pool.slots], filter: readShownPoolFilter() }) ?? [] : []
       if (ticket !== request) return
-      const heldId = hovered ? songs[offset]?.id : undefined
+      // While the reader is over the list, keep what they are looking at
+      // where it is: the playing song in its slot if it is on screen (a song
+      // they just pressed, or the next one taking over), else the top entry.
+      const playingId = readNowPlaying().song?.id
+      const playingSlot = songs.findIndex((song) => song.id === playingId) - offset
+      const anchor = !hovered ? null
+        : playingSlot >= 0 && playingSlot < slots.length ? { id: playingId, slot: playingSlot }
+        : { id: songs[offset]?.id, slot: 0 }
       songs = fromPlaying(next)
       for (const cells of slots) cells.shown = '\u0000'
-      const held = heldId === undefined ? -1 : songs.findIndex((song) => song.id === heldId)
+      const held = anchor ? songs.findIndex((song) => song.id === anchor.id) : -1
       if (held < 0) stopTravel()
-      offset = Math.max(0, held)
+      offset = held < 0 ? 0 : held - anchor!.slot
       draw()
     }
     void refresh()
