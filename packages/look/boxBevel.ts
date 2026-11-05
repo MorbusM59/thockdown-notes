@@ -13,10 +13,10 @@
  * - the SHADING, black and white overlays drawn over the outline colour
  *   (and the beat pane's) in the corner region only, so the outline is
  *   shaded only where the corners reach it: `shading` is the
- *   alpha at full strength, black to the left of centre and white to the
+ *   alpha at full strength, white to the left of centre and black to the
  *   right; `contrast` fades one side of the box to nothing at +-0.5 and on
  *   to the opposite overlay at +-1; `direction` turns the axis that runs
- *   along, a full turn over 0..1 (0: top to bottom, 0.25: right to left).
+ *   along, in degrees (0: top to bottom, 90: right to left).
  *
  * TILE GEOMETRY. A tile is one box, W by H, placed one pixel AFTER its grid
  * line (`mask-position`: the line's position + 1), so the box's own outline
@@ -27,7 +27,7 @@
  */
 
 export interface BoxBevelSettings {
-  /** -1 (black at full alpha) .. 0 (nothing) .. 1 (white at full alpha). */
+  /** -1 (white at full alpha) .. 0 (nothing) .. 1 (black at full alpha). */
   shading: number
   /** 0 (the outline alone) .. 1 (everything outside the inscribed ellipse). */
   shape: number
@@ -35,7 +35,7 @@ export interface BoxBevelSettings {
   softness: number
   /** -1 .. 1: 0 shades the box evenly; towards +1 the far side fades and then inverts, towards -1 the near side does. */
   contrast: number
-  /** 0 .. 1, one full turn: 0 runs top to bottom, 0.25 right to left, 0.5 bottom to top. */
+  /** Degrees, 0 .. 360: 0 runs top to bottom, 90 right to left, 180 bottom to top. */
   direction: number
 }
 
@@ -54,7 +54,7 @@ export function sanitizeBoxBevel(input: unknown, fallback: BoxBevelSettings = DE
     shape: finite(source.shape, fallback.shape, 0, 1),
     softness: finite(source.softness, fallback.softness, 0, 1),
     contrast: finite(source.contrast, fallback.contrast, -1, 1),
-    direction: finite(source.direction, fallback.direction, 0, 1),
+    direction: finite(source.direction, fallback.direction, 0, 360),
   }
 }
 
@@ -135,14 +135,14 @@ export function boxBevelImages(width: number, height: number, settings: BoxBevel
   const [a, b] = shadingEnds(settings.contrast).map((end) => end * settings.shading)
   // Stops along the axis: the two ends, and the point where the signed
   // strength crosses zero when it changes sign, so each overlay's alpha is
-  // the positive (white) or negative (black) part of one straight line.
+  // the positive (black) or negative (white) part of one straight line.
   const points: Array<[t: number, value: number]> = [[0, a]]
   if (a * b < 0) points.push([a / (a - b), 0])
   points.push([1, b])
   const stops = (sign: 1 | -1) => points
-    .map(([t, value]) => `<stop offset='${n(t)}' stop-color='${sign > 0 ? '#fff' : '#000'}' stop-opacity='${n(Math.max(0, sign * value))}'/>`)
+    .map(([t, value]) => `<stop offset='${n(t)}' stop-color='${sign > 0 ? '#000' : '#fff'}' stop-opacity='${n(Math.max(0, sign * value))}'/>`)
     .join('')
-  const angle = settings.direction * 2 * Math.PI
+  const angle = settings.direction * Math.PI / 180
   const x1 = 0.5 + 0.5 * Math.sin(angle)
   const y1 = 0.5 - 0.5 * Math.cos(angle)
   const axis = `x1='${n(x1)}' y1='${n(y1)}' x2='${n(1 - x1)}' y2='${n(1 - y1)}'`

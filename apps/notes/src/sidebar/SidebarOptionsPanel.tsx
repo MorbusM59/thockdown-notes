@@ -8,12 +8,12 @@ import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
-const BOX_BEVEL_SLIDERS: ReadonlyArray<{ field: keyof BoxBevelSettings; min: number; trackLabel: string; ariaLabel: string }> = [
-  { field: 'shading', min: -1, trackLabel: 'shading', ariaLabel: 'Box bevel shading -- centre leaves the outline unchanged, left overlays black and right overlays white, up to full alpha at the ends' },
-  { field: 'shape', min: 0, trackLabel: 'shape', ariaLabel: 'Box bevel shape -- how far the outline fills into the corners of each box, from the outline alone to everything outside an ellipse the size of the box' },
-  { field: 'softness', min: 0, trackLabel: 'softness', ariaLabel: 'Box bevel softness -- how soft the edge of the filled corners is' },
-  { field: 'contrast', min: -1, trackLabel: 'contrast', ariaLabel: 'Box bevel contrast -- centre shades the box evenly; to the right the far side fades out and then inverts, to the left the near side does' },
-  { field: 'direction', min: 0, trackLabel: 'direction', ariaLabel: 'Box bevel direction -- turns the shading, a full turn across the slider: top to bottom at the left end, right to left at a quarter' },
+const BOX_BEVEL_SLIDERS: ReadonlyArray<{ field: keyof BoxBevelSettings; min: number; max: number; step: number; trackLabel: string; ariaLabel: string }> = [
+  { field: 'shading', min: -1, max: 1, step: 0.01, trackLabel: 'shading', ariaLabel: 'Box bevel shading -- centre leaves the outline unchanged, left overlays white and right overlays black, up to full alpha at the ends' },
+  { field: 'shape', min: 0, max: 1, step: 0.01, trackLabel: 'shape', ariaLabel: 'Box bevel shape -- how far the outline fills into the corners of each box, from the outline alone to everything outside an ellipse the size of the box' },
+  { field: 'softness', min: 0, max: 1, step: 0.01, trackLabel: 'softness', ariaLabel: 'Box bevel softness -- how soft the edge of the filled corners is' },
+  { field: 'contrast', min: -1, max: 1, step: 0.01, trackLabel: 'contrast', ariaLabel: 'Box bevel contrast -- centre shades the box evenly; to the right the far side fades out and then inverts, to the left the near side does' },
+  { field: 'direction', min: 0, max: 360, step: 1, trackLabel: 'direction', ariaLabel: 'Box bevel direction -- turns the shading, in degrees: top to bottom at 0, right to left at 90' },
 ]
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
@@ -1467,14 +1467,14 @@ export function SidebarOptionsPanel({
         </div>
         <OptionsSubsectionLabel>Box Bevel</OptionsSubsectionLabel>
         <div className="utility-setting-slider-stack" aria-label="Box bevel">
-          <OptionsSliderRows rows={[1, 1, 1, 1, 1]}>
-            {BOX_BEVEL_SLIDERS.map(({ field, min, trackLabel, ariaLabel }) => (
+          <OptionsSliderRows rows={[1, 2, 2]}>
+            {BOX_BEVEL_SLIDERS.map(({ field, min, max, step, trackLabel, ariaLabel }) => (
               <CompactScrollbarSlider
                 key={field}
                 id={`box-bevel-${field}`}
                 min={min}
-                max={1}
-                step={0.01}
+                max={max}
+                step={step}
                 value={boxBevel[field]}
                 trackLabel={trackLabel}
                 ariaLabel={ariaLabel}
