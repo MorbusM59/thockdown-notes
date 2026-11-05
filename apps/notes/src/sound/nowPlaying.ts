@@ -23,14 +23,16 @@ export type NowPlaying = {
   pool: { slots: readonly PlaylistSlot[]; counts: PlaylistCountsResult } | null
   /** Play a song of the pool now, rotating the pool's order to it (`shared/musicPool.ts`). */
   playFromPool: (id: number) => void
+  /** Take a bucket in or out of the pool, as its button in the music bar does. */
+  toggleSlot: (slot: PlaylistSlot) => void
 }
 
-let current: NowPlaying = { song: null, jumpSong: () => {}, pool: null, playFromPool: () => {} }
+let current: NowPlaying = { song: null, jumpSong: () => {}, pool: null, playFromPool: () => {}, toggleSlot: () => {} }
 const listeners = new Set<() => void>()
 
 /** Called by the music player whenever the song or its actions change. */
 export function publishNowPlaying(next: NowPlaying): void {
-  if (next.song === current.song && next.jumpSong === current.jumpSong && next.pool === current.pool && next.playFromPool === current.playFromPool) return
+  if (next.song === current.song && next.jumpSong === current.jumpSong && next.pool === current.pool && next.playFromPool === current.playFromPool && next.toggleSlot === current.toggleSlot) return
   current = next
   for (const listener of listeners) listener()
 }

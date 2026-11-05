@@ -217,3 +217,21 @@ export function ringDistance(from: number, to: number, count: number): number {
   const forward = (((to - from) % count) + count) % count
   return forward > count / 2 ? forward - count : forward
 }
+
+/**
+ * The bucket list's rectangle: the song list's mirrored across the scene,
+ * from the middle section's second row to its second-to-last, its right
+ * edge one box in from the scene's and its left edge at least
+ * `SONG_LIST_CUTOUT_GAP_BOXES` empty boxes right of the cutout. Entries on
+ * every other row from the top, right-aligned.
+ */
+export function bucketListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
+  const row = layout.stripRows + 1
+  const lastRow = layout.spectrumTopRow - 2
+  const lastColumn = layout.columns - 2
+  const column = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + SONG_LIST_CUTOUT_GAP_BOXES
+  const rows = lastRow - row + 1
+  const columns = lastColumn - column + 1
+  if (layout.stripRows <= 0 || rows < 1 || columns < 5) return null
+  return { column, row, columns, rows, slots: Math.floor((rows + 1) / 2) }
+}

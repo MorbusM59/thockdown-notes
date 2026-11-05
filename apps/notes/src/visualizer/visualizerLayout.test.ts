@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { columnToFraction, computeVisualizerLayout, creditsLine, playheadColumn, progressPress, ringDistance, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, songListIndex } from './visualizerLayout'
+import { bucketListArea, columnToFraction, computeVisualizerLayout, creditsLine, playheadColumn, progressPress, ringDistance, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, songListIndex } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('caps the strips at ten boxes and at a fifth of the height', () => {
@@ -118,5 +118,17 @@ describe('song list', () => {
     expect(songListIndex(0, 0, 2, 5)).toBe(3)
     expect(ringDistance(1, 9, 10)).toBe(-2)
     expect(ringDistance(9, 1, 10)).toBe(2)
+  })
+})
+
+describe('bucket list', () => {
+  it('mirrors the song list across the scene', () => {
+    const layout = computeVisualizerLayout(1920, 1080, 20, 220)
+    const songs = songListArea(layout)!
+    const buckets = bucketListArea(layout)!
+    expect(buckets.row).toBe(songs.row)
+    expect(buckets.rows).toBe(songs.rows)
+    expect(layout.columns - (buckets.column + buckets.columns)).toBe(songs.column)
+    expect(buckets.column - (layout.cutout.column + layout.cutout.size)).toBe(SONG_LIST_CUTOUT_GAP_BOXES)
   })
 })

@@ -60,13 +60,7 @@
    different colour from the editor's. */
 .visualizer-strip.is-middle {
   background-color: var(--color-bg-regular);
-  /* The song list's plate is cut out of it (SongList.tsx), so the plate sits
-     on the stage like the other strips; size 0 is no hole. */
-  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
-  mask-size: 100% 100%, var(--plate-hole-size, 0 0);
-  mask-position: 0 0, var(--plate-hole-position, 0 0);
-  mask-repeat: no-repeat;
-  mask-composite: exclude;
+  /* Plates are cut out of it (middleHoles.ts). */
 }
 .visualizer-strip.is-bottom {
   bottom: 0;
@@ -289,6 +283,15 @@
   background-color: var(--visualizer-letterbox-color, var(--color-bg-leading));
 }
 .visualizer-scene > .visualizer-song-list-hit {
+  z-index: 6;
+  pointer-events: auto;
+}
+
+/* The bucket list (BucketList.tsx): boxes with the surfaces, a press target per entry. */
+.visualizer-scene > .visualizer-bucket-box {
+  z-index: 1;
+}
+.visualizer-scene > .visualizer-bucket-hit {
   z-index: 6;
   pointer-events: auto;
 }

@@ -703,21 +703,8 @@ export const AudioControls = memo(function AudioControls({
 
   // ---------------------------------------------------------------- playlist buttons
 
-  const handleSlotLeftClick = useCallback(async (slot: PlaylistSlot) => {
-    if (counts[slot] === 0) {
-      // Empty playlist: open file picker.
-      const files = await window.thockdownAudioPlayer?.pickFiles()
-      if (files && files.length > 0) {
-        await window.thockdownAudioPlayer?.addSongs(slot, files)
-        await refreshCounts()
-        // Auto-toggle the slot on after first add.
-        if (!activeSlots.includes(slot)) {
-          onActiveSlotsChange([...activeSlots, slot])
-        }
-      }
-      return
-    }
-    // Toggle the slot in/out of the active pool.
+  /** Take a bucket in or out of the pool; a song from a bucket taken out stops and the next is picked. */
+  const toggleSlot = useCallback(async (slot: PlaylistSlot) => {
     const next = getNextActiveSlotsForToggle(activeSlots, slot)
     const isDeactivating = activeSlots.includes(slot) && !next.includes(slot)
 
@@ -733,7 +720,25 @@ export const AudioControls = memo(function AudioControls({
       setCurrentSong(null)
       await advanceToNextSong(next)
     }
-  }, [activeSlots, counts, currentSong, onActiveSlotsChange, advanceToNextSong, refreshCounts])
+  }, [activeSlots, currentSong, onActiveSlotsChange, advanceToNextSong])
+
+  const handleSlotLeftClick = useCallback(async (slot: PlaylistSlot) => {
+    if (counts[slot] === 0) {
+      // Empty playlist: open file picker.
+      const files = await window.thockdownAudioPlayer?.pickFiles()
+      if (files && files.length > 0) {
+        await window.thockdownAudioPlayer?.addSongs(slot, files)
+        await refreshCounts()
+        // Auto-toggle the slot on after first add.
+        if (!activeSlots.includes(slot)) {
+          onActiveSlotsChange([...activeSlots, slot])
+        }
+      }
+      return
+    }
+    await toggleSlot(slot)
+  }, [counts, activeSlots, onActiveSlotsChange, refreshCounts, toggleSlot])
+
 
   const handleSlotRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     event.preventDefault()
@@ -815,8 +820,8 @@ export const AudioControls = memo(function AudioControls({
   // data it names the window and nothing else, and its previous/next buttons
   // do nothing. It gets the same song and the same three actions as the
   // transport here: play/pause, previous (walk back) and next (a fresh song).
-  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, playFromPool, isPlaying })
-  mediaActionsRef.current = { handlePlayToggle, jumpSong, playFromPool, isPlaying }
+  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, playFromPool, toggleSlot, isPlaying })
+  mediaActionsRef.current = { handlePlayToggle, jumpSong, playFromPool, toggleSlot, isPlaying }
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -846,10 +851,11 @@ export const AudioControls = memo(function AudioControls({
   // published once stays current.
   const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
   const publishedPlayFromPool = useCallback((id: number) => { void mediaActionsRef.current.playFromPool(id) }, [])
+  const publishedToggleSlot = useCallback((slot: PlaylistSlot) => { void mediaActionsRef.current.toggleSlot(slot) }, [])
   const publishedPool = useMemo(() => ({ slots: activeSlots, counts }), [activeSlots, counts])
   useEffect(() => {
-    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool })
-  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool])
+    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, toggleSlot: publishedToggleSlot })
+  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedToggleSlot])
 
   useEffect(() => {
     const session = navigator.mediaSession

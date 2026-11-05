@@ -26,6 +26,7 @@ import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/i
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songTitleText, type MusicSongEntry } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
+import { middleStripOf, setMiddleHoles } from './middleHoles'
 import { ringDistance, songListEntry, songListIndex, type VisualizerLayout } from './visualizerLayout'
 
 export type SongListArea = { column: number; row: number; columns: number; rows: number; slots: number }
@@ -127,26 +128,17 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       cutPlateHole()
     }
 
-    // The plate must sit on the stage's own background, as the top and
-    // bottom strips do: their colours are translucent, so the letterbox
-    // colour laid OVER the middle's comes out a different colour (in a dark
-    // layout, close to the middle's own). So the middle strip leaves a hole
-    // exactly where the plate is, a mask rectangle written only when it moves.
-    const middle = boxesLayer.parentElement?.querySelector<HTMLElement>('.visualizer-strip.is-middle') ?? null
-    let hole = ''
+    // The plate sits on the stage, cut out of the middle strip (middleHoles.ts).
+    const middle = middleStripOf(boxesLayer)
     const cutPlateHole = () => {
       if (!middle) return
       const slot = slots.findIndex((cells) => !cells.plate.hidden)
-      const next = slot < 0 ? '' : `${left}:${top - middle.offsetTop + slot * 2 * boxPx}:${slots[slot].plate.style.width}`
-      if (next === hole) return
-      hole = next
-      if (slot < 0) {
-        middle.style.removeProperty('--plate-hole-size')
-        return
-      }
-      const [x, y, width] = next.split(':')
-      middle.style.setProperty('--plate-hole-size', `${width} ${boxPx}px`)
-      middle.style.setProperty('--plate-hole-position', `${x}px ${y}px`)
+      setMiddleHoles(middle, 'song-list', slot < 0 ? [] : [{
+        x: left,
+        y: top - middle.offsetTop + slot * 2 * boxPx,
+        width: parseFloat(slots[slot].plate.style.width),
+        height: boxPx,
+      }])
     }
 
     const setCenter = (next: number) => {
@@ -252,7 +244,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       hit.removeEventListener('pointerenter', onEnter)
       hit.removeEventListener('pointerleave', onLeave)
       hit.removeEventListener('pointerdown', onPress)
-      middle?.style.removeProperty('--plate-hole-size')
+      if (middle) setMiddleHoles(middle, 'song-list', [])
       boxesLayer.replaceChildren()
       lettersLayer.replaceChildren()
     }
