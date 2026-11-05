@@ -248,6 +248,12 @@ export interface PersistedMenuState {
    */
   reviewFlagsVisibleBySection?: Record<string, boolean>;
   /**
+   * Which solid each slot's empty scene shows, keyed per editor slot
+   * (sectionId): the step the reader clicked to (left click +1, right click
+   * -1), mixed into the scene's seed (SectionEditorArea.tsx). Absent is 0.
+   */
+  emptySceneStepBySection?: Record<string, number>;
+  /**
    * The saved adventure game (src/adventure), or null when there is none.
    * Structurally sanitized on both sides of the bridge -- sanitizeMenu in
    * electron/stateService.ts for the real app, and again in App.tsx's

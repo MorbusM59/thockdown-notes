@@ -1845,6 +1845,12 @@ function App() {
   // user who right-clicked flags off/on separately still gets predictable
   // "both on" / "both off" behavior from a left click.
   const [reviewFlagsVisibleBySection, setReviewFlagsVisibleBySection] = useState<Record<string, boolean>>({})
+  // Which solid each slot's empty scene shows (PersistedMenuState's
+  // emptySceneStepBySection); saved by the ordinary debounced snapshot.
+  const [emptySceneStepBySection, setEmptySceneStepBySection] = useState<Record<string, number>>({})
+  const handleEmptySceneStep = useCallback((sectionId: string, delta: 1 | -1) => {
+    setEmptySceneStepBySection((previous) => ({ ...previous, [sectionId]: (previous[sectionId] ?? 0) + delta }))
+  }, [])
   // The sections actually occupying a slot right now, sorted left-to-right --
   // resolved from window.thockdownSections.listSections() during bootstrap
   // (see the bootstrap effect below), filtered to position !== null. Starts
@@ -3244,6 +3250,7 @@ function App() {
     isDoubleSizeMode?: boolean
     reviewGutterVisibleBySection?: Record<string, boolean>
     reviewFlagsVisibleBySection?: Record<string, boolean>
+    emptySceneStepBySection?: Record<string, number>
     adventure?: GameSave | null
     allowRemoteImages?: boolean
     sidebarShowsImages?: boolean
@@ -3388,6 +3395,7 @@ function App() {
       isDoubleSizeMode: overrides?.isDoubleSizeMode ?? isDoubleSizeMode,
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
       reviewFlagsVisibleBySection: overrides?.reviewFlagsVisibleBySection ?? reviewFlagsVisibleBySection,
+      emptySceneStepBySection: overrides?.emptySceneStepBySection ?? emptySceneStepBySection,
       adventure: overrides && 'adventure' in overrides ? overrides.adventure ?? null : adventureSave,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
@@ -3464,6 +3472,7 @@ function App() {
     isDoubleSizeMode,
     reviewGutterVisibleBySection,
     reviewFlagsVisibleBySection,
+    emptySceneStepBySection,
     viewSpacing,
     viewLetterSpacingEm,
     viewStyle,
@@ -5362,6 +5371,7 @@ ${markdownHtml}
             // anything post-upgrade, the field gets persisted for real and this
             // fallback no longer applies.
             setReviewFlagsVisibleBySection(appState.menu.reviewFlagsVisibleBySection ?? restoredReviewGutterVisibleBySection)
+            setEmptySceneStepBySection(appState.menu.emptySceneStepBySection ?? {})
 
             // Cursor appearance (color/size/speed) now lives in the active
             // UiLayoutLoadout, restored when that loadout is applied below.
@@ -9289,6 +9299,8 @@ ${markdownHtml}
                   caretSizeDeviationPx={caretSizeDeviationPx}
                   showLineNumbers={reviewGutterVisibleBySection[entry.id] ?? false}
                   showReviewFlags={reviewFlagsVisibleBySection[entry.id] ?? false}
+                  emptySceneStep={emptySceneStepBySection[entry.id] ?? 0}
+                  onEmptySceneStep={(delta) => handleEmptySceneStep(entry.id, delta)}
                   isImmersiveMode={isImmersiveMode}
                   isVisualizerMode={isVisualizerMode && entry.id === activeSectionId}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}

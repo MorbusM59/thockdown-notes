@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { TypingRateOrWordCount } from '../flow/TypingRateOrWordCount'
 import { useBeatGridMirror } from '../flow/useBeatGridMirror'
 import { flowStyleTarget } from '../flow/flowStyle'
@@ -145,6 +145,10 @@ export interface SectionEditorAreaProps {
   caretSizeDeviationPx: number
   showLineNumbers: boolean
   showReviewFlags: boolean
+  /** Which solid the empty scene shows: a step mixed into its seed (App.tsx's emptySceneStepBySection). */
+  emptySceneStep: number
+  /** A click on the empty scene's solid: +1 for the next solid (left), -1 for the previous one (right). */
+  onEmptySceneStep: (delta: 1 | -1) => void
   /** Immersive mode (App.tsx isImmersiveMode) -- the edit view draws its scroll track into the grid (CM6Editor). */
   isImmersiveMode: boolean
   /**
@@ -277,6 +281,8 @@ export function SectionEditorArea({
   caretSizeDeviationPx,
   showLineNumbers,
   showReviewFlags,
+  emptySceneStep,
+  onEmptySceneStep,
   isImmersiveMode,
   isVisualizerMode,
   onToggleReviewGutter,
@@ -313,15 +319,16 @@ export function SectionEditorArea({
     sectionContainerRef.current = el
   }, [sectionContainerRef])
 
-  // Bumped on click to reroll the scene below -- an undocumented easter egg,
-  // so it deliberately carries no hover/cursor affordance (see .editor-empty-state
-  // in editor.css). Local state (not persisted) is enough since it only needs
-  // to survive re-renders while this section stays mounted, not reloads.
-  const [sceneRerollNonce, setSceneRerollNonce] = useState(0)
-  const emptyStateSceneSeed = useMemo(
-    () => `${sectionId}:${sceneRerollNonce}`,
-    [sectionId, sceneRerollNonce],
-  )
+  // Stepped on click to change the solid below (left click to the next,
+  // right click back to the previous, the step being mixed into the seed so
+  // the previous solid is exactly the one before) -- an undocumented easter
+  // egg, so it deliberately carries no hover/cursor affordance (see
+  // .editor-empty-state in editor.css). The step is persisted per slot by
+  // App.tsx. `steppedSceneSeed` is the seed the READER stepped to, so the
+  // canvas animates that change and no other (a restored step on start-up
+  // simply appears).
+  const emptyStateSceneSeed = `${sectionId}:${emptySceneStep}`
+  const [steppedSceneSeed, setSteppedSceneSeed] = useState<string | null>(null)
 
   // Gates both the escape-hold panel's own visibility and the shared
   // .editor-empty-state box's visibility below -- see the box's own render
@@ -372,11 +379,24 @@ export function SectionEditorArea({
   // The reroll easter egg is disabled while the quick-actions panel is up --
   // otherwise every click on the grid's own padding/gaps (anything that
   // isn't a button) would reroll the animation out from under the buttons.
-  const rerollScene = useCallback(() => setSceneRerollNonce((n) => n + 1), [])
+  const stepScene = useCallback((delta: 1 | -1) => {
+    setSteppedSceneSeed(`${sectionId}:${emptySceneStep + delta}`)
+    onEmptySceneStep(delta)
+  }, [sectionId, emptySceneStep, onEmptySceneStep])
+  const handleSceneClick = useCallback(() => stepScene(1), [stepScene])
+  const handleSceneContextMenu = useCallback((event: MouseEvent) => {
+    event.preventDefault()
+    stepScene(-1)
+  }, [stepScene])
   const handleEmptyStateClick = useCallback(() => {
     if (isEscapeHoldActive) return
-    rerollScene()
-  }, [isEscapeHoldActive, rerollScene])
+    stepScene(1)
+  }, [isEscapeHoldActive, stepScene])
+  const handleEmptyStateContextMenu = useCallback((event: MouseEvent) => {
+    if (isEscapeHoldActive) return
+    event.preventDefault()
+    stepScene(-1)
+  }, [isEscapeHoldActive, stepScene])
 
   const editorSpellCheckEnabled = resolveSpellCheckSurfaceState({
     globalToggleEnabled: spellCheckEditEnabled,
@@ -540,11 +560,13 @@ export function SectionEditorArea({
             <div
               className={`editor-empty-state${isEmptyStateVisible ? ' is-visible' : ''}`}
               onClick={handleEmptyStateClick}
+              onContextMenu={handleEmptyStateContextMenu}
+              data-secondary-press={isEscapeHoldActive ? 'none' : 'action'}
               role={isEscapeHoldActive ? 'dialog' : undefined}
               aria-label={isEscapeHoldActive ? 'Quick note panel' : undefined}
               aria-live={isEscapeHoldActive ? 'polite' : undefined}
             >
-              <SolidCanvas className="empty-state-solid" seed={emptyStateSceneSeed} active={isEmptyStateVisible} />
+              <SolidCanvas className="empty-state-solid" seed={emptyStateSceneSeed} animateTo={steppedSceneSeed} active={isEmptyStateVisible} />
               <EscapeHoldPanel
                 isOpen={isEscapeHoldActive}
                 isSectionActive={isSectionActive}
@@ -574,7 +596,9 @@ export function SectionEditorArea({
                 fontFamily={editorFontFamily}
                 fontSizePx={editorRuntimeMetrics.fontSizePx}
                 sceneSeed={emptyStateSceneSeed}
-                onCutoutClick={rerollScene}
+                animateSceneTo={steppedSceneSeed}
+                onCutoutClick={handleSceneClick}
+                onCutoutContextMenu={handleSceneContextMenu}
                 gridOutlineRef={beatGridRef}
               />
             ) : null}

@@ -397,6 +397,16 @@ function sanitizeReviewGutterVisibleBySection(input: unknown): Record<string, bo
   return result;
 }
 
+/** Per-slot empty-scene steps: whole numbers only, anything else dropped. */
+function sanitizeEmptySceneStepBySection(input: unknown): Record<string, number> {
+  if (!input || typeof input !== 'object') return {};
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    if (key.length > 0 && Number.isSafeInteger(value)) result[key] = value as number;
+  }
+  return result;
+}
+
 /**
  * The one slot-overlay record (src/shared/slotOverlay.ts). Structural only:
  * whether the section it names still exists, or still shows what the record
@@ -607,6 +617,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     isDoubleSizeMode: Boolean(input?.isDoubleSizeMode),
     reviewGutterVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewGutterVisibleBySection),
     reviewFlagsVisibleBySection: sanitizeReviewGutterVisibleBySection(input?.reviewFlagsVisibleBySection),
+    emptySceneStepBySection: sanitizeEmptySceneStepBySection(input?.emptySceneStepBySection),
   };
 }
 

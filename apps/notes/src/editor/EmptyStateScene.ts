@@ -333,20 +333,29 @@ function stripePattern(context: CanvasRenderingContext2D, scratch: SolidDrawScra
   return scratch.stripes
 }
 
+/** One solid as drawn: which, at what moment of its turn, how large and where. */
+export interface SolidPlacement {
+  scene: SolidScene
+  timeSec: number
+  /** Size about its centre, 1 being the resting size. */
+  scale: number
+  /** Vertical offset from the resting place, in resting sides (positive is down). */
+  offsetY: number
+}
+
 /**
- * Draws the stripe texture over the whole canvas with the solid cut out of it
- * (faces as partial cutouts at their quantized alpha, edges as clean seams),
- * at `timeSec` of its turn. The solid sits in a centred square as wide as the
- * canvas's shorter side (as `mask-size: contain` placed it), grown by `scale`
- * about its centre.
+ * Draws the stripe texture over the whole canvas with each placed solid cut
+ * out of it (faces as partial cutouts at their quantized alpha, edges as
+ * clean seams). A solid at rest sits in a centred square as wide as the
+ * canvas's shorter side (as `mask-size: contain` placed it); a placement
+ * grows it by `scale` about its centre and moves it down by `offsetY` sides.
+ * More than one placement is a change of solid in flight (SolidCanvas.tsx).
  */
 export function drawSolidScene(
   context: CanvasRenderingContext2D,
   scratch: SolidDrawScratch,
-  scene: SolidScene,
-  timeSec: number,
+  placements: readonly SolidPlacement[],
   dpr: number,
-  scale = 1,
 ): void {
   const width = context.canvas.width
   const height = context.canvas.height
@@ -358,8 +367,23 @@ export function drawSolidScene(
     context.fillStyle = stripes
     context.fillRect(0, 0, width, height)
   }
+  const restSide = Math.min(width, height)
+  for (const placement of placements) cutOutSolid(context, scratch, placement, restSide, dpr)
+}
 
-  const side = Math.min(width, height) * scale
+function cutOutSolid(
+  context: CanvasRenderingContext2D,
+  scratch: SolidDrawScratch,
+  { scene, timeSec, scale, offsetY }: SolidPlacement,
+  restSide: number,
+  dpr: number,
+): void {
+  const width = context.canvas.width
+  const height = context.canvas.height
+  const side = restSide * scale
+  const top = (height - side) / 2 + offsetY * restSide
+  // Wholly outside the canvas (a solid falling away or not yet arrived): nothing to cut.
+  if (top >= height || top + side <= 0) return
   // The cutout is drawn at CSS-pixel resolution and scaled up: the quantize
   // pass reads and writes every pixel of it, so at a device pixel ratio of 2
   // full resolution would cost four times as much for edges already softened
@@ -405,7 +429,7 @@ export function drawSolidScene(
   // edges, stepped to QUANTIZE_STEPS values from 0 to 1.
   context.filter = quantizeFilter()
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(alpha, (width - side) / 2, (height - side) / 2, side, side)
+  context.drawImage(alpha, (width - side) / 2, top, side, side)
   context.globalCompositeOperation = 'source-over'
   context.filter = 'none'
 }

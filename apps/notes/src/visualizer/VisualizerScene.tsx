@@ -28,7 +28,7 @@
  * animation frames at all.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { subscribeMusicMix, subscribeMusicSemitoneScore } from '../sound/musicBeat'
 import { MUSIC_SEMITONE_CONFIRM_SEC } from '../sound/musicSemitoneScore'
@@ -79,8 +79,12 @@ export type VisualizerSceneProps = {
   fontSizePx: number
   /** The empty scene's seed (EmptyStateScene.ts): the same solid the slot's empty state shows. */
   sceneSeed: string
+  /** The seed the reader stepped to (SolidCanvas's `animateTo`). */
+  animateSceneTo?: string | null
   /** A press on the cutout rerolls the solid, as a press on the empty state does. */
   onCutoutClick: () => void
+  /** A right click on the cutout: back to the previous solid. */
+  onCutoutContextMenu: (event: ReactMouseEvent) => void
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
   gridOutlineRef: (element: HTMLDivElement | null) => void
 }
@@ -156,7 +160,7 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
   })
 }
 
-export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, onCutoutClick, gridOutlineRef }: VisualizerSceneProps) {
+export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, animateSceneTo, onCutoutClick, onCutoutContextMenu, gridOutlineRef }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const bevel = useBoxBevelImages(boxPx, boxPx)
   const { width, height } = useBoxSize(scene)
@@ -511,9 +515,11 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, onCu
                 '--visualizer-face-radius': `${closure?.faceRadiusPx ?? 0}px`,
               } as CSSProperties}
               onClick={onCutoutClick}
+              onContextMenu={onCutoutContextMenu}
+              data-secondary-press="action"
             >
               <div className="visualizer-cutout-face">
-                <SolidCanvas className="empty-state-solid" seed={sceneSeed} active subscribeThump={subscribeSolidThump} />
+                <SolidCanvas className="empty-state-solid" seed={sceneSeed} animateTo={animateSceneTo} active subscribeThump={subscribeSolidThump} />
               </div>
               <div className="visualizer-cutout-orb" />
             </div>

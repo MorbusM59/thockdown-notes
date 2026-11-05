@@ -268,6 +268,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
   caretSizeDeviationPx,
   showLineNumbers,
   showReviewFlags,
+  emptySceneStep,
+  onEmptySceneStep,
   isImmersiveMode,
   isVisualizerMode,
   onToggleReviewGutter,
@@ -2299,6 +2301,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
         caretSizeDeviationPx={caretSizeDeviationPx}
         showLineNumbers={showLineNumbers}
         showReviewFlags={showReviewFlags}
+        emptySceneStep={emptySceneStep}
+        onEmptySceneStep={onEmptySceneStep}
         isImmersiveMode={isImmersiveMode}
         isVisualizerMode={isVisualizerMode}
         onToggleReviewGutter={onToggleReviewGutter}
