@@ -25,6 +25,7 @@ import { createRowWheel } from '../editor/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songTitleText, type MusicSongEntry } from '../shared/audioPlayer'
+import { dropWideGlyphs } from './cellGlyphs'
 import { ringDistance, songListEntry, songListIndex, type VisualizerLayout } from './visualizerLayout'
 
 export type SongListArea = { column: number; row: number; columns: number; rows: number; slots: number }
@@ -39,7 +40,7 @@ type SlotCells = {
   shown: string
 }
 
-export function SongList({ layout, area }: { layout: VisualizerLayout; area: SongListArea }) {
+export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout; area: SongListArea; glyphFont: string }) {
   const boxesRef = useRef<HTMLDivElement | null>(null)
   const lettersRef = useRef<HTMLDivElement | null>(null)
   const hitRef = useRef<HTMLDivElement | null>(null)
@@ -111,7 +112,7 @@ export function SongList({ layout, area }: { layout: VisualizerLayout; area: Son
           for (const letter of cells.letters) letter.textContent = ''
           continue
         }
-        const { text, closingColumn } = songListEntry(songTitleText(song), area.columns)
+        const { text, closingColumn } = songListEntry(dropWideGlyphs(songTitleText(song), glyphFont), area.columns)
         const chars = Array.from(text)
         cells.open.hidden = false
         cells.close.hidden = false
@@ -231,7 +232,7 @@ export function SongList({ layout, area }: { layout: VisualizerLayout; area: Son
       boxesLayer.replaceChildren()
       lettersLayer.replaceChildren()
     }
-  }, [area.columns, area.rows, area.slots, boxPx])
+  }, [area.columns, area.rows, area.slots, boxPx, glyphFont])
 
   const frame = { left, top, width, height }
   return (

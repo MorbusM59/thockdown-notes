@@ -45,6 +45,7 @@ import {
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
+import { dropWideGlyphs } from './cellGlyphs'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
 import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
@@ -172,9 +173,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
   const songArea = useMemo(() => songListArea(layout), [layout])
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-  const titleText = nowPlaying.song ? fitToRow(songTitleText(nowPlaying.song), columns) : ''
+  const glyphFont = `${fontSizePx}px ${fontFamily}`
+  const titleText = nowPlaying.song ? fitToRow(dropWideGlyphs(songTitleText(nowPlaying.song), glyphFont), columns) : ''
   const title: RowText[] = titleText.length > 0 ? [{ column: 0, text: titleText }] : []
-  const credits = nowPlaying.song ? creditsLine(songArtistText(nowPlaying.song), songAlbumText(nowPlaying.song), columns) : []
+  const credits = nowPlaying.song ? creditsLine(dropWideGlyphs(songArtistText(nowPlaying.song), glyphFont), dropWideGlyphs(songAlbumText(nowPlaying.song), glyphFont), columns) : []
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const chromaCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -499,7 +501,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
           {layout.titleRow !== null && <Letters runs={title} row={layout.titleRow} layout={layout} />}
           {layout.creditsRow !== null && <Letters runs={credits} row={layout.creditsRow} layout={layout} />}
 
-          {songArea && <SongList layout={layout} area={songArea} />}
+          {songArea && <SongList layout={layout} area={songArea} glyphFont={glyphFont} />}
 
           {layout.progressRow !== null && (
             <div
