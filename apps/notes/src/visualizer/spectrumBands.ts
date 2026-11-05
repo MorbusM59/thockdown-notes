@@ -324,19 +324,20 @@ export function createSemitoneAttributionWorkspace(binCount: number, boxCount: n
 }
 
 /**
- * Fits the original FFT power as a non-negative mixture of window-aware note
- * templates. The sparse fit keeps a Blackman lobe's neighbouring bins attached
- * to its source partial rather than splitting them into separate notes first.
+ * Fits the FFT's linear bin power (what the FFT yields, so no dB round trip)
+ * as a non-negative mixture of window-aware note templates. The sparse fit
+ * keeps a Blackman lobe's neighbouring bins attached to its source partial
+ * rather than splitting them into separate notes first. `power` is only read.
  */
 export function writeAttributedSemitoneLevels(
-  spectrumDb: Float32Array,
+  power: Float64Array,
   plan: SemitoneAttributionPlan,
   out: Float32Array,
   workspace: SemitoneAttributionWorkspace,
 ): void {
   const { boxCount, binCount } = plan
   if (
-    spectrumDb.length !== binCount ||
+    power.length !== binCount ||
     out.length !== boxCount ||
     workspace.residual.length !== binCount ||
     workspace.notePowers.length !== boxCount ||
@@ -345,13 +346,11 @@ export function writeAttributedSemitoneLevels(
   ) {
     throw new RangeError('Semitone attribution buffers must match the plan dimensions')
   }
-  if (spectrumDb === out) throw new RangeError('Semitone attribution output must not overwrite the spectrum')
-
   let anyPower = false
   for (let bin = 0; bin < binCount; bin += 1) {
-    const power = dbToPower(spectrumDb[bin])
-    workspace.residual[bin] = power
-    anyPower ||= power > 0
+    const binPower = power[bin] > 0 ? power[bin] : 0
+    workspace.residual[bin] = binPower
+    anyPower ||= binPower > 0
   }
   workspace.notePowers.fill(0)
   workspace.selected.fill(0)
@@ -474,6 +473,11 @@ export class TrackTuningEstimator {
   private totalPeaks = 0
   private framesWithPeaks = 0
   private lockedOffsetCents: number | null = null
+
+  /** Whether the offset has been decided; once it has, `addFrame` only repeats it and needs no spectrum. */
+  get isLocked(): boolean {
+    return this.lockedOffsetCents !== null
+  }
 
   reset(): void {
     this.histogram.fill(0)

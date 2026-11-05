@@ -23,6 +23,8 @@ export class MusicSemitoneScore {
   private readonly samples: Float32Array
   private readonly re: Float64Array
   private readonly im: Float64Array
+  private readonly power: Float64Array
+  /** dB of the same bins, written only while the tuning estimate is still listening. */
   private readonly spectrumDb: Float32Array
   private readonly levels: Float32Array
   private readonly attributionWorkspace: SemitoneAttributionWorkspace
@@ -50,6 +52,7 @@ export class MusicSemitoneScore {
     this.samples = new Float32Array(MUSIC_SEMITONE_FFT_SIZE)
     this.re = new Float64Array(MUSIC_SEMITONE_FFT_SIZE)
     this.im = new Float64Array(MUSIC_SEMITONE_FFT_SIZE)
+    this.power = new Float64Array(MUSIC_SEMITONE_FFT_SIZE / 2)
     this.spectrumDb = new Float32Array(MUSIC_SEMITONE_FFT_SIZE / 2)
     this.levels = new Float32Array(bands)
     this.attributionWorkspace = createSemitoneAttributionWorkspace(this.spectrumDb.length, bands)
@@ -101,16 +104,18 @@ export class MusicSemitoneScore {
       this.im[i] = 0
     }
     this.fft.forward(this.re, this.im)
-    for (let bin = 0; bin < this.spectrumDb.length; bin += 1) {
-      this.spectrumDb[bin] = 20 * Math.log10(Math.hypot(this.re[bin], this.im[bin]) / MUSIC_SEMITONE_FFT_SIZE)
+    const scale = 1 / (MUSIC_SEMITONE_FFT_SIZE * MUSIC_SEMITONE_FFT_SIZE)
+    for (let bin = 0; bin < this.power.length; bin += 1) {
+      this.power[bin] = (this.re[bin] * this.re[bin] + this.im[bin] * this.im[bin]) * scale
     }
-    if (this.frames % Math.max(1, Math.round(0.25 / this.frameSec)) === 0) {
+    if (!this.tuning.isLocked && this.frames % Math.max(1, Math.round(0.25 / this.frameSec)) === 0) {
+      for (let bin = 0; bin < this.power.length; bin += 1) this.spectrumDb[bin] = 10 * Math.log10(this.power[bin])
       const offset = this.tuning.addFrame(this.spectrumDb, this.sampleRate / MUSIC_SEMITONE_FFT_SIZE)
       if (offset !== null) {
         this.plan = createSemitoneAttributionPlan(this.sampleRate, MUSIC_SEMITONE_FFT_SIZE, this.bands, offset)
       }
     }
-    writeAttributedSemitoneLevels(this.spectrumDb, this.plan, this.levels, this.attributionWorkspace)
+    writeAttributedSemitoneLevels(this.power, this.plan, this.levels, this.attributionWorkspace)
 
     const historyFrames = this.historyStart.length
     const slot = this.frames % historyFrames
