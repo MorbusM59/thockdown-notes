@@ -13,8 +13,8 @@
  * - the SHADING, black and white overlays drawn over the outline colour
  *   (and the beat pane's) in the corner region only, so the outline is
  *   shaded only where the corners reach it: `shading` is the
- *   alpha at full strength, white to the left of centre and black to the
- *   right; `contrast` fades one side of the box to nothing at +-0.5 and on
+ *   alpha at full strength, black to the left of centre and white to the
+ *   right (before the scene's invert filter, see `onScreenBoxBevel`); `contrast` fades one side of the box to nothing at +-0.5 and on
  *   to the opposite overlay at +-1; `direction` turns the axis that runs
  *   along, in degrees (0: top to bottom, 90: right to left).
  *
@@ -27,7 +27,7 @@
  */
 
 export interface BoxBevelSettings {
-  /** -1 (white at full alpha) .. 0 (nothing) .. 1 (black at full alpha). */
+  /** -1 (black at full alpha) .. 0 (nothing) .. 1 (white at full alpha), as drawn: a layout that inverts the scene shows it the other way round, which `onScreenBoxBevel` corrects for. */
   shading: number
   /** 0 (the outline alone) .. 1 (everything outside the inscribed ellipse). */
   shape: number
@@ -135,12 +135,12 @@ export function boxBevelImages(width: number, height: number, settings: BoxBevel
   const [a, b] = shadingEnds(settings.contrast).map((end) => end * settings.shading)
   // Stops along the axis: the two ends, and the point where the signed
   // strength crosses zero when it changes sign, so each overlay's alpha is
-  // the positive (black) or negative (white) part of one straight line.
+  // the positive (white) or negative (black) part of one straight line.
   const points: Array<[t: number, value: number]> = [[0, a]]
   if (a * b < 0) points.push([a / (a - b), 0])
   points.push([1, b])
   const stops = (sign: 1 | -1) => points
-    .map(([t, value]) => `<stop offset='${n(t)}' stop-color='${sign > 0 ? '#000' : '#fff'}' stop-opacity='${n(Math.max(0, sign * value))}'/>`)
+    .map(([t, value]) => `<stop offset='${n(t)}' stop-color='${sign > 0 ? '#fff' : '#000'}' stop-opacity='${n(Math.max(0, sign * value))}'/>`)
     .join('')
   const angle = settings.direction * Math.PI / 180
   const x1 = 0.5 + 0.5 * Math.sin(angle)
@@ -152,3 +152,16 @@ export function boxBevelImages(width: number, height: number, settings: BoxBevel
   )
   return { tile, shading }
 }
+
+/**
+ * The setting as it must be DRAWN for it to read as set: a layout whose
+ * scene filter inverts (`filterInvert` past half, every dark layout) shows
+ * white as dark, so its shading is drawn with the sign turned. The slider
+ * then brightens to the right and darkens to the left in every layout.
+ */
+export function onScreenBoxBevel(settings: BoxBevelSettings, filterInvert: number): BoxBevelSettings {
+  return filterInvert >= 0.5 && settings.shading !== 0 ? { ...settings, shading: -settings.shading } : settings
+}
+
+/** The bevel the factory's dark layouts start from (packages/look/presets.ts). */
+export const DARK_PRESET_BOX_BEVEL: BoxBevelSettings = { ...DEFAULT_BOX_BEVEL, shading: 0.08, shape: 0.2 }

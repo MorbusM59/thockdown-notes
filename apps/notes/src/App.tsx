@@ -37,7 +37,7 @@ import {
   sanitizeGlazeSettings,
   type GlazeSettings,
 } from '@thockdown/look/glaze'
-import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
+import { DEFAULT_BOX_BEVEL, onScreenBoxBevel, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 import { publishBoxBevel } from './shared/boxBevelStore'
 import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
@@ -2157,14 +2157,17 @@ function App() {
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
   const [glazeSettings, setGlazeSettings] = useState<GlazeSettings>(() => DEFAULT_GLAZE_SETTINGS)
   const [boxBevel, setBoxBevel] = useState<BoxBevelSettings>(() => DEFAULT_BOX_BEVEL)
-  // The bevel's shape reaches the grids through boxBevelStore (they build their tiles from it and their own cell size); and so does its shading, which depends on the cell size too.
-  useEffect(() => { publishBoxBevel(boxBevel) }, [boxBevel])
   const [glazeLinearSeedInput, setGlazeLinearSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.linearSeed))
   const [isGlazeLinearSeedEditing, setIsGlazeLinearSeedEditing] = useState(false)
   const [glazeRadialSeedInput, setGlazeRadialSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.radialSeed))
   const [isGlazeRadialSeedEditing, setIsGlazeRadialSeedEditing] = useState(false)
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
   const [filterInvert, setFilterInvert] = useState(0)
+  // The bevel reaches the grids through boxBevelStore, which build its images
+  // from it and their own cell size; it is published as DRAWN, its shading
+  // turned in an inverted (dark) layout so the slider reads the same way.
+  const onScreenBevel = useMemo(() => onScreenBoxBevel(boxBevel, filterInvert), [boxBevel, filterInvert])
+  useEffect(() => { publishBoxBevel(onScreenBevel) }, [onScreenBevel])
   // The scene's invert, for a layer that must keep its own polarity under it
   // (the visualizer's glass cover, which counter-inverts itself by it).
   useEffect(() => {
