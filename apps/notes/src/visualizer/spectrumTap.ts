@@ -35,6 +35,14 @@ const LONG_FFT = 8192
 const SHORT_FFT = 2048
 /** Frames of history: about two seconds at 60 Hz, more than any device's lag. */
 const HISTORY = 128
+/**
+ * How often the long frame is re-read, as a share of its own length. Its
+ * window is 170 ms at 48 kHz, so reading it every 16 ms drawn frame re-ran an
+ * 8192-point FFT (Chromium computes it on the calling thread) over audio
+ * nine-tenths the same as last time. A quarter of the window is 75% overlap,
+ * finer than the bass bands it feeds can change.
+ */
+const LONG_READ_SHARE = 0.25
 /** The bands the sway's music response listens to. */
 const BASS_MAX_HZ = 150
 
@@ -53,6 +61,9 @@ export class SpectrumTap {
   private shortPlan: BandLevelPlan | null = null
   private disconnect: (() => void) | null = null
   private readonly history: Frame[]
+  /** The long bands as last read, carried into frames that do not re-read it. */
+  private longLevels: Float32Array
+  private longReadSec = -Infinity
   private newest = -1
   private count = 0
 
@@ -64,6 +75,7 @@ export class SpectrumTap {
     let bass = 0
     while (bass < bands && bandCentreHz(this.edges, bass) < BASS_MAX_HZ) bass += 1
     this.bassBands = bass
+    this.longLevels = new Float32Array(bands).fill(-Infinity)
     this.history = Array.from({ length: HISTORY }, () => ({
       timeSec: -Infinity,
       levels: new Float32Array(bands).fill(-Infinity),
@@ -116,6 +128,7 @@ export class SpectrumTap {
     this.longPlan = null
     this.shortPlan = null
     this.count = 0
+    this.longReadSec = -Infinity
   }
 
   /**
@@ -127,15 +140,21 @@ export class SpectrumTap {
     if (!this.long || !this.short || !this.longBins || !this.shortBins || !this.longPlan || !this.shortPlan || !musicPlayerService.isPlaying) {
       out.fill(-Infinity)
       this.count = 0
+      this.longReadSec = -Infinity
       return
     }
     this.newest = (this.newest + 1) % HISTORY
     this.count = Math.min(HISTORY, this.count + 1)
     const frame = this.history[this.newest]
     frame.timeSec = nowSec
-    this.long.getFloatFrequencyData(this.longBins)
+    const longFrameSec = LONG_FFT / this.long.context.sampleRate
+    if (!(nowSec - this.longReadSec < longFrameSec * LONG_READ_SHARE) || nowSec < this.longReadSec) {
+      this.long.getFloatFrequencyData(this.longBins)
+      writeBandLevelsWithPlan(this.longBins, this.longPlan, this.longLevels)
+      this.longReadSec = nowSec
+    }
+    frame.levels.set(this.longLevels.subarray(0, this.split))
     this.short.getFloatFrequencyData(this.shortBins)
-    writeBandLevelsWithPlan(this.longBins, this.longPlan, frame.levels)
     writeBandLevelsWithPlan(this.shortBins, this.shortPlan, frame.levels)
 
     const lag = heardLagSec()
