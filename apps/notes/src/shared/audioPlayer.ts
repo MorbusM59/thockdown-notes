@@ -228,6 +228,19 @@ export function songTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath'>):
   return songTagText((parts.length > shown.length ? ['...', ...shown] : shown).join(SONG_PATH_SEPARATOR));
 }
 
+/**
+ * A song's name in a list of songs (the visualizer's song list): the title
+ * tag, or with none the file's name alone, without its folders and its
+ * extension, where `songTitleText`'s folders tell one untitled song from
+ * another in a single line.
+ */
+export function songListTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath'>): string {
+  const title = songTagText(song.title);
+  if (title) return title;
+  const file = song.filePath.split(/[\\/]/).filter((part) => part.length > 0).at(-1) ?? '';
+  return songTagText(file.replace(/\.[^.]+$/, ''));
+}
+
 export function songArtistText(song: Pick<MusicSongEntry, 'artist'>): string {
   return songTagText(song.artist) || 'no artist';
 }

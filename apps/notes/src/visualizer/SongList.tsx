@@ -24,7 +24,7 @@ import { useEffect, useRef } from 'react'
 import { createRowWheel } from '../editor/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { songTitleText, type MusicSongEntry } from '../shared/audioPlayer'
+import { songListTitleText, type MusicSongEntry } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
 import { ringDistance, songListEntry, songListIndex, type VisualizerLayout } from './visualizerLayout'
@@ -113,7 +113,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
           for (const letter of cells.letters) letter.textContent = ''
           continue
         }
-        const { text, closingColumn } = songListEntry(dropWideGlyphs(songTitleText(song), glyphFont), area.columns)
+        const { text, closingColumn } = songListEntry(dropWideGlyphs(songListTitleText(song), glyphFont), area.columns)
         const chars = Array.from(text)
         cells.open.hidden = false
         cells.close.hidden = false
@@ -132,13 +132,13 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     const middle = middleStripOf(boxesLayer)
     const cutPlateHole = () => {
       if (!middle) return
-      const slot = slots.findIndex((cells) => !cells.plate.hidden)
-      setMiddleHoles(middle, 'song-list', slot < 0 ? [] : [{
-        x: left,
-        y: top - middle.offsetTop + slot * 2 * boxPx,
-        width: parseFloat(slots[slot].plate.style.width),
-        height: boxPx,
-      }])
+      // Every slot showing the playing song (a short pool repeats round the ring).
+      const holes = []
+      for (let slot = 0; slot < slots.length; slot += 1) {
+        if (slots[slot].plate.hidden) continue
+        holes.push({ x: left, y: top - middle.offsetTop + slot * 2 * boxPx, width: parseFloat(slots[slot].plate.style.width), height: boxPx })
+      }
+      setMiddleHoles(middle, 'song-list', holes)
     }
 
     const setCenter = (next: number) => {
