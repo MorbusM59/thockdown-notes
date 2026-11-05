@@ -35,7 +35,8 @@ import { pulseCurve } from '@thockdown/look/visualizer'
  */
 
 export const SPECTRUM_MIN_HZ = 20
-export const SPECTRUM_MAX_HZ = 20000
+/** Most MP3 encoders low-pass at about 16 kHz, so columns above it would stay dark on ordinary files. */
+export const SPECTRUM_MAX_HZ = 16000
 
 /**
  * The drawn range, as band power in dB (the analyser's dBFS bin values

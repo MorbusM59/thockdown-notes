@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FftPlan } from '@thockdown/soundscape/fft'
 import { pulseCurve } from '@thockdown/look/visualizer'
 import {
+  SPECTRUM_MAX_HZ,
   PEAK_HOLD_SEC,
   SEMITONE_BRIGHTNESS_CEILING_DB,
   SEMITONE_CONTRAST_DB,
@@ -128,7 +129,7 @@ describe('logBandEdges', () => {
   it('spans the range with every band the same width in octaves', () => {
     const edges = logBandEdges(100)
     expect(edges[0]).toBeCloseTo(20, 9)
-    expect(edges[100]).toBeCloseTo(20000, 6)
+    expect(edges[100]).toBeCloseTo(SPECTRUM_MAX_HZ, 6)
     const octaves = Math.log2(edges[1] / edges[0])
     for (let i = 1; i < 100; i += 1) expect(Math.log2(edges[i + 1] / edges[i])).toBeCloseTo(octaves, 9)
   })
