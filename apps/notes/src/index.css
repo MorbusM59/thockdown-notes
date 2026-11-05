@@ -53,6 +53,9 @@
   mask-image: var(--grid-outline-tile);
   mask-repeat: repeat;
   mask-size: var(--editor-cell-width) var(--editor-line-height);
+  /* Both images are bitmaps at one pixel per CSS pixel (boxBevelStore.ts):
+     scaled up whole, so double size shows every pixel as a 2x2 block. */
+  image-rendering: pixelated;
 }
 
 .thockdown-grid-lines {

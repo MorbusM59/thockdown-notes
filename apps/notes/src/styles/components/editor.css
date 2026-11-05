@@ -570,6 +570,7 @@
    any other view the pane is .editor-beat-wash instead. */
 .editor-beat-pane {
   display:        none;
+  image-rendering: pixelated;
   position:       absolute;
   pointer-events: none;
   z-index:        4;
