@@ -41,6 +41,15 @@ export interface BoxBevelSettings {
 
 export const DEFAULT_BOX_BEVEL: BoxBevelSettings = { shading: 0, shape: 0, softness: 0, contrast: 0, direction: 0 }
 
+/**
+ * The black overlay is drawn at half the alpha the slider names. Black is
+ * what reads as DARKENING in a light layout and, under the invert filter, as
+ * BRIGHTENING in a dark one (`onScreenBoxBevel`), which are the two sides
+ * that read twice as strong as the other on screen; halving the one drawn
+ * colour halves both, by construction, wherever the contrast puts it.
+ */
+const BLACK_OVERLAY_GAIN = 0.5
+
 const SOFTNESS_MAX_SHARE = 0.25 // x2 x the corner radius: half of it
 
 function finite(value: unknown, fallback: number, min: number, max: number): number {
@@ -140,7 +149,7 @@ export function boxBevelImages(width: number, height: number, settings: BoxBevel
   if (a * b < 0) points.push([a / (a - b), 0])
   points.push([1, b])
   const stops = (sign: 1 | -1) => points
-    .map(([t, value]) => `<stop offset='${n(t)}' stop-color='${sign > 0 ? '#fff' : '#000'}' stop-opacity='${n(Math.max(0, sign * value))}'/>`)
+    .map(([t, value]) => `<stop offset='${n(t)}' stop-color='${sign > 0 ? '#fff' : '#000'}' stop-opacity='${n(Math.max(0, sign * value) * (sign > 0 ? 1 : BLACK_OVERLAY_GAIN))}'/>`)
     .join('')
   const angle = settings.direction * Math.PI / 180
   const x1 = 0.5 + 0.5 * Math.sin(angle)
