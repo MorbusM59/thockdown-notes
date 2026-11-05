@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressPress, ringDistance, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, songListIndex } from './visualizerLayout'
+import { bucketListArea, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressPress, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('caps the strips at ten boxes and at a fifth of the height', () => {
@@ -112,12 +112,6 @@ describe('song list', () => {
   it('frames a name with accents and gaps, cut to fit', () => {
     expect(songListEntry('Song', 20)).toEqual({ text: 'Song', closingColumn: 7 })
     expect(songListEntry('A long title', 8)).toEqual({ text: 'A lo', closingColumn: 7 })
-  })
-
-  it('walks a ring the short way', () => {
-    expect(songListIndex(0, 0, 2, 5)).toBe(3)
-    expect(ringDistance(1, 9, 10)).toBe(-2)
-    expect(ringDistance(9, 1, 10)).toBe(2)
   })
 })
 

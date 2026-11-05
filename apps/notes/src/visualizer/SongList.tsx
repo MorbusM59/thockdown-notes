@@ -1,16 +1,17 @@
 /**
- * The visualizer's song list: every song in the music pool, in pick order
- * (`shared/musicPool.ts`), drawn as an endless ring in the rectangle
+ * The visualizer's song list: every song in the music pool once, in pick
+ * order (`shared/musicPool.ts`) from the playing song on, so the pool's ring
+ * is cut at the playing song and laid out top to bottom, in the rectangle
  * `songListArea` gives, one entry on every other row. An entry is an accent
  * box, an empty box, the title cut to fit, an empty box, an accent box; the
  * song that is playing sits on the strip's own letterbox colour, the rest on
  * the middle's (so no box is drawn behind them at all).
  *
- * At rest the playing song is in the middle slot. Over the list the wheel
- * turns it a whole entry at a time with the edit view's own dynamics
- * (`editor/rowWheel.ts`: notch, step and spin coast); leaving it travels back
- * to the playing song the short way round, on the reader's smooth-scroll
- * curve (`buildScrollPlanFromCurrentParams`) but still a whole entry at a
+ * At rest the playing song is in the top slot. Over the list the wheel
+ * scrolls it a whole entry at a time with the edit view's own dynamics
+ * (`editor/rowWheel.ts`: notch, step and spin coast), as far as the last
+ * entry in the top slot; leaving it travels back to the top, on the reader's
+ * smooth-scroll curve (`buildScrollPlanFromCurrentParams`) but still a whole entry at a
  * time, so text never leaves the grid. A press on an entry plays it
  * (`NowPlaying.playFromPool`).
  *
@@ -28,7 +29,7 @@ import { songListTitleText, type MusicSongEntry } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { commitPoolFilterDraft, readShownPoolFilter, subscribePoolFilterDraft } from './poolFilterDraft'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
-import { ringDistance, songListEntry, songListIndex, type VisualizerLayout } from './visualizerLayout'
+import { songListEntry, type VisualizerLayout } from './visualizerLayout'
 
 export type SongListArea = { column: number; row: number; columns: number; rows: number; slots: number }
 
@@ -58,7 +59,6 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     const hit = hitRef.current
     if (!boxesLayer || !lettersLayer || !hit) return
     const nameColumns = area.columns - 4
-    const centerSlot = Math.floor((area.slots - 1) / 2)
     const pitchPx = 2 * boxPx
 
     const box = (className: string, parent: HTMLElement, column: number, row: number, span = 1) => {
@@ -89,22 +89,24 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       slots.push({ plate, open, close, letters, shown: '' })
     }
 
+    /** The pool in pick order from the playing song on (or from its head, when the playing song is not in it). */
     let songs: MusicSongEntry[] = []
-    let center = 0
+    /** The entry in the top slot. */
+    let offset = 0
     let hovered = false
     let travel: number | null = null
 
-    const currentIndex = (): number => {
+    const fromPlaying = (pool: MusicSongEntry[]): MusicSongEntry[] => {
       const id = readNowPlaying().song?.id
-      const index = id === undefined ? -1 : songs.findIndex((song) => song.id === id)
-      return index < 0 ? 0 : index
+      const index = id === undefined ? -1 : pool.findIndex((song) => song.id === id)
+      return index <= 0 ? pool : [...pool.slice(index), ...pool.slice(0, index)]
     }
 
     const draw = () => {
       const currentId = readNowPlaying().song?.id
       for (let slot = 0; slot < slots.length; slot += 1) {
         const cells = slots[slot]
-        const song = songs.length > 0 ? songs[songListIndex(center, slot, centerSlot, songs.length)] : null
+        const song = songs[offset + slot] ?? null
         const isCurrent = song !== null && song.id === currentId
         const key = song ? `${song.id}:${isCurrent}` : ''
         if (key === cells.shown) continue
@@ -133,7 +135,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     const middle = middleStripOf(boxesLayer)
     const cutPlateHole = () => {
       if (!middle) return
-      // Every slot showing the playing song (a short pool repeats round the ring).
+      // The slot showing the playing song (the top one, at rest).
       const holes = []
       for (let slot = 0; slot < slots.length; slot += 1) {
         if (slots[slot].plate.hidden) continue
@@ -142,23 +144,24 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       setMiddleHoles(middle, 'song-list', holes)
     }
 
-    const setCenter = (next: number) => {
-      const count = songs.length
-      center = count > 0 ? ((next % count) + count) % count : 0
+    /** Scroll so entry `next` is in the top slot, clamped to the list; false when that moves nothing. */
+    const setOffset = (next: number): boolean => {
+      const clamped = Math.max(0, Math.min(songs.length - 1, next))
+      if (clamped === offset) return false
+      offset = clamped
       draw()
+      return true
     }
 
     const stopTravel = () => {
       if (travel !== null) cancelAnimationFrame(travel)
       travel = null
     }
-    /** Back to the playing song, the short way round, a whole entry at a time on the reader's scroll curve. */
+    /** Back to the top, a whole entry at a time on the reader's scroll curve. */
     const travelHome = () => {
       stopTravel()
-      const count = songs.length
-      if (count === 0) return
-      const start = center
-      const entries = ringDistance(start, currentIndex(), count)
+      const start = offset
+      const entries = -start
       if (entries === 0) return
       const plan = buildScrollPlanFromCurrentParams(entries * pitchPx)
       const startMs = performance.now()
@@ -166,7 +169,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
         const elapsedSec = (nowMs - startMs) / 1000
         const done = elapsedSec >= plan.totalDurationSec
         const moved = done ? entries : Math.round(sampleScrollPlan(plan, elapsedSec) / pitchPx)
-        if (start + moved !== center) setCenter(start + moved)
+        setOffset(start + moved)
         travel = done ? null : requestAnimationFrame(step)
       }
       travel = requestAnimationFrame(step)
@@ -174,18 +177,17 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
 
     const wheel = createRowWheel({
       scrollRows: (rows) => {
-        if (songs.length === 0 || rows === 0) return false
+        if (rows === 0) return false
         stopTravel()
-        setCenter(center + rows)
-        return true
+        return setOffset(offset + rows)
       },
       isBlocked: () => false,
     })
 
     // The pool's order is re-read whenever a write to it can have happened
     // (see NowPlaying.pool), or the filter's fields change. While the reader is turning the list it keeps
-    // the song they are looking at in the middle; otherwise it shows the
-    // playing song there.
+    // the song they are looking at at the top; otherwise it shows the
+    // playing song at the top.
     let request = 0
     let lastSong = readNowPlaying().song
     let lastPool = readNowPlaying().pool
@@ -195,16 +197,13 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const pool = readNowPlaying().pool
       const next = pool ? await window.thockdownAudioPlayer?.getPool({ slots: [...pool.slots], filter: readShownPoolFilter() }) ?? [] : []
       if (ticket !== request) return
-      const heldId = hovered && songs.length > 0 ? songs[center]?.id : undefined
-      songs = next
+      const heldId = hovered ? songs[offset]?.id : undefined
+      songs = fromPlaying(next)
       for (const cells of slots) cells.shown = '\u0000'
       const held = heldId === undefined ? -1 : songs.findIndex((song) => song.id === heldId)
-      if (held >= 0) {
-        setCenter(held)
-      } else {
-        stopTravel()
-        setCenter(currentIndex())
-      }
+      if (held < 0) stopTravel()
+      offset = Math.max(0, held)
+      draw()
     }
     void refresh()
     const unsubscribe = subscribeNowPlaying(() => {
@@ -236,7 +235,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const rect = hit.getBoundingClientRect()
       const row = Math.floor((event.clientY - rect.top) / boxPx)
       if (row % 2 !== 0) return
-      const song = songs[songListIndex(center, row / 2, centerSlot, songs.length)]
+      const song = songs[offset + row / 2]
       if (!song) return
       // A song chosen from the list as filtered is played from that pool.
       commitPoolFilterDraft()

@@ -207,17 +207,6 @@ export function songListEntry(name: string, columns: number): { text: string; cl
   return { text, closingColumn: Array.from(text).length + 3 }
 }
 
-/** The pool index of the entry in slot `slot` when `center` sits in slot `centerSlot`, round a ring of `count`. */
-export function songListIndex(center: number, slot: number, centerSlot: number, count: number): number {
-  return (((center + slot - centerSlot) % count) + count) % count
-}
-
-/** The shortest signed way round a ring of `count` from `from` to `to`. */
-export function ringDistance(from: number, to: number, count: number): number {
-  const forward = (((to - from) % count) + count) % count
-  return forward > count / 2 ? forward - count : forward
-}
-
 /**
  * The bucket list's rectangle: the song list's mirrored across the scene,
  * from the middle section's second row to its second-to-last, its right
