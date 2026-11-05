@@ -262,3 +262,26 @@
   opacity: 0;
   will-change: transform;
 }
+
+/* The song list (SongList.tsx): its boxes among the surfaces, under the grid
+   lines, its letters with the other letters, and a press target over both.
+   Each layer is contained, so writing a slot repaints the list alone. */
+.visualizer-scene > .visualizer-song-list {
+  contain: strict;
+}
+.visualizer-scene > .visualizer-song-list.is-boxes {
+  z-index: 1;
+}
+.visualizer-scene > .visualizer-song-list.is-letters {
+  z-index: 5;
+}
+.visualizer-song-list > * {
+  position: absolute;
+}
+.visualizer-song-plate {
+  background-color: var(--visualizer-letterbox-color, var(--color-bg-leading));
+}
+.visualizer-scene > .visualizer-song-list-hit {
+  z-index: 6;
+  pointer-events: auto;
+}

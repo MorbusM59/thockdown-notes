@@ -7,20 +7,30 @@
  * player service's own (`musicPlayerService.currentTime`, `setCurrentTime`).
  */
 
-import type { MusicSongEntry } from '../shared/audioPlayer'
+import type { MusicSongEntry, PlaylistCountsResult, PlaylistSlot } from '../shared/audioPlayer'
 
 export type NowPlaying = {
   song: MusicSongEntry | null
   /** -1 walks back through what was played; 1 picks the next song, as the transport's own buttons do. */
   jumpSong: (direction: -1 | 1) => void
+  /**
+   * What the pool is drawn from: the active slots, and the slot counts, a new
+   * object whenever songs were added or removed. A reader of the pool's ORDER
+   * (`getPool`) re-reads it when this or `song` changes, which covers every
+   * write to it: a song finishing, being skipped or (un)favourited always
+   * hands over a new `song`.
+   */
+  pool: { slots: readonly PlaylistSlot[]; counts: PlaylistCountsResult } | null
+  /** Play a song of the pool now, rotating the pool's order to it (`shared/musicPool.ts`). */
+  playFromPool: (id: number) => void
 }
 
-let current: NowPlaying = { song: null, jumpSong: () => {} }
+let current: NowPlaying = { song: null, jumpSong: () => {}, pool: null, playFromPool: () => {} }
 const listeners = new Set<() => void>()
 
 /** Called by the music player whenever the song or its actions change. */
 export function publishNowPlaying(next: NowPlaying): void {
-  if (next.song === current.song && next.jumpSong === current.jumpSong) return
+  if (next.song === current.song && next.jumpSong === current.jumpSong && next.pool === current.pool && next.playFromPool === current.playFromPool) return
   current = next
   for (const listener of listeners) listener()
 }

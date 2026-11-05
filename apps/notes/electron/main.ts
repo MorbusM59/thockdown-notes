@@ -1267,6 +1267,12 @@ function registerIpcHandlers() {
     pickNextSong: async (_event, activeSlots: PlaylistSlot[]) => {
       return databaseService!.pickNextMusicSong(activeSlots);
     },
+    getPool: async (_event, activeSlots: PlaylistSlot[]) => {
+      return databaseService!.getMusicPool(activeSlots);
+    },
+    rotatePoolTo: async (_event, activeSlots: PlaylistSlot[], id: number) => {
+      return databaseService!.rotateMusicPoolTo(activeSlots, id);
+    },
     afterPlay: async (_event, id: number) => {
       databaseService!.afterMusicPlay(id);
     },

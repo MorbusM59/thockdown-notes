@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { columnToFraction, computeVisualizerLayout, creditsLine, playheadColumn, progressPress } from './visualizerLayout'
+import { columnToFraction, computeVisualizerLayout, creditsLine, playheadColumn, progressPress, ringDistance, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, songListIndex } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('caps the strips at ten boxes and at a fifth of the height', () => {
@@ -95,5 +95,28 @@ describe('creditsLine', () => {
     expect(creditsLine('', 'Album', 40)).toEqual([{ column: 0, text: 'Album' }])
     expect(creditsLine('Artist', 'Album', 8)).toEqual([{ column: 0, text: 'Artist' }])
     expect(creditsLine('Artist', 'Album', 11)).toEqual([{ column: 0, text: 'Artist' }, { column: 9, text: 'Al' }])
+  })
+})
+
+describe('song list', () => {
+  it('sits between the strips, a column in, ten boxes clear of the cutout', () => {
+    const layout = computeVisualizerLayout(1920, 1080, 20, 220)
+    const area = songListArea(layout)!
+    expect(area.row).toBe(layout.stripRows + 1)
+    expect(area.row + area.rows - 1).toBe(layout.spectrumTopRow - 2)
+    expect(area.column).toBe(1)
+    expect(layout.cutout.column - (area.column + area.columns)).toBe(SONG_LIST_CUTOUT_GAP_BOXES)
+    expect(area.slots).toBe(Math.ceil(area.rows / 2))
+  })
+
+  it('frames a name with accents and gaps, cut to fit', () => {
+    expect(songListEntry('Song', 20)).toEqual({ text: 'Song', closingColumn: 7 })
+    expect(songListEntry('A long title', 8)).toEqual({ text: 'A lo', closingColumn: 7 })
+  })
+
+  it('walks a ring the short way', () => {
+    expect(songListIndex(0, 0, 2, 5)).toBe(3)
+    expect(ringDistance(1, 9, 10)).toBe(-2)
+    expect(ringDistance(9, 1, 10)).toBe(2)
   })
 })

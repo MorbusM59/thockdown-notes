@@ -568,6 +568,31 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [advanceToNextSong, playPreviousSong])
 
+  /**
+   * Play a song chosen from the pool (the visualizer's song list). The pool's
+   * order is rotated to it first (`shared/musicPool.ts`), so the song that was
+   * playing and those skipped over keep their places in the ring; nothing is
+   * counted as played, which is why there is no afterPlay here.
+   */
+  const playFromPool = useCallback(async (id: number) => {
+    if (isCrossingSongRef.current || currentSongRef.current?.id === id) return
+    isCrossingSongRef.current = true
+    try {
+      const song = await window.thockdownAudioPlayer?.rotatePoolTo(activeRef.current, id)
+      if (!song) return
+      try {
+        await playSong(song)
+      } catch (err) {
+        if (!(err instanceof MissingFileError)) throw err
+        await purgeMissingSong(song.id)
+        musicPlayerService.stop()
+        await advanceToNextSong()
+      }
+    } finally {
+      isCrossingSongRef.current = false
+    }
+  }, [playSong, purgeMissingSong, advanceToNextSong])
+
   const startSeekHold = useCallback((direction: SeekDirection) => {
     seekTimerRef.current = setTimeout(() => {
       seekTimerRef.current = null
@@ -790,8 +815,8 @@ export const AudioControls = memo(function AudioControls({
   // data it names the window and nothing else, and its previous/next buttons
   // do nothing. It gets the same song and the same three actions as the
   // transport here: play/pause, previous (walk back) and next (a fresh song).
-  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, isPlaying })
-  mediaActionsRef.current = { handlePlayToggle, jumpSong, isPlaying }
+  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, playFromPool, isPlaying })
+  mediaActionsRef.current = { handlePlayToggle, jumpSong, playFromPool, isPlaying }
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -820,9 +845,11 @@ export const AudioControls = memo(function AudioControls({
   // now-playing strip (sound/nowPlaying.ts). Through the ref, so the action
   // published once stays current.
   const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
+  const publishedPlayFromPool = useCallback((id: number) => { void mediaActionsRef.current.playFromPool(id) }, [])
+  const publishedPool = useMemo(() => ({ slots: activeSlots, counts }), [activeSlots, counts])
   useEffect(() => {
-    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong })
-  }, [currentSong, publishedJumpSong])
+    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool })
+  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool])
 
   useEffect(() => {
     const session = navigator.mediaSession

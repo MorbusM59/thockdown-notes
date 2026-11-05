@@ -172,3 +172,48 @@ export function creditsLine(artist: string, album: string, columns: number): Row
 export function fitToRow(text: string, columns: number): string {
   return Array.from(text).slice(0, Math.max(0, columns)).join('')
 }
+
+/** The empty boxes the song list keeps between its right edge and the cutout. */
+export const SONG_LIST_CUTOUT_GAP_BOXES = 10
+
+/**
+ * The song list's rectangle, in boxes: from the middle section's second row
+ * and second column to its second-to-last row, its right edge at least
+ * `SONG_LIST_CUTOUT_GAP_BOXES` empty boxes left of the cutout. Only every
+ * other row of it holds an entry, from its first row, so `slots` is how many
+ * entries it shows. Null when it has no room for an entry of at least one
+ * character (five boxes: two accents, two gaps, one letter).
+ */
+export function songListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
+  const row = layout.stripRows + 1
+  const lastRow = layout.spectrumTopRow - 2
+  const column = 1
+  const lastColumn = (layout.cutout.size > 0 ? layout.cutout.column : layout.columns) - SONG_LIST_CUTOUT_GAP_BOXES - 1
+  const rows = lastRow - row + 1
+  const columns = lastColumn - column + 1
+  if (layout.stripRows <= 0 || rows < 1 || columns < 5) return null
+  return { column, row, columns, rows, slots: Math.floor((rows + 1) / 2) }
+}
+
+/**
+ * One entry of the song list, `columns` boxes wide at most: an accent box, an
+ * empty box, the name, an empty box, an accent box. The name is cut to fit,
+ * and the closing accent follows the name rather than the rectangle's edge.
+ * Returns the name and the column (from the entry's start) of the closing
+ * accent.
+ */
+export function songListEntry(name: string, columns: number): { text: string; closingColumn: number } {
+  const text = fitToRow(name.trim(), columns - 4)
+  return { text, closingColumn: Array.from(text).length + 3 }
+}
+
+/** The pool index of the entry in slot `slot` when `center` sits in slot `centerSlot`, round a ring of `count`. */
+export function songListIndex(center: number, slot: number, centerSlot: number, count: number): number {
+  return (((center + slot - centerSlot) % count) + count) % count
+}
+
+/** The shortest signed way round a ring of `count` from `from` to `to`. */
+export function ringDistance(from: number, to: number, count: number): number {
+  const forward = (((to - from) % count) + count) % count
+  return forward > count / 2 ? forward - count : forward
+}

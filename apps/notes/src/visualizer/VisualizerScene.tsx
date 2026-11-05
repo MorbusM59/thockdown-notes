@@ -44,6 +44,7 @@ import {
 } from './spectrumBands'
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
+import { SongList } from './SongList'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
 import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
@@ -57,6 +58,7 @@ import {
   fitToRow,
   playheadColumn,
   progressPress,
+  songListArea,
   trackSpan,
   type VisualizerLayout,
 } from './visualizerLayout'
@@ -167,6 +169,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
   const { columns, originXPx, originYPx, stripRows, spectrumTopRow, chromaRow, cutout } = layout
   const cutoutRound = useSyncExternalStore(subscribeGridWaveSettings, readCutoutRound)
+  const songArea = useMemo(() => songListArea(layout), [layout])
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const titleText = nowPlaying.song ? fitToRow(songTitleText(nowPlaying.song), columns) : ''
@@ -495,6 +498,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
 
           {layout.titleRow !== null && <Letters runs={title} row={layout.titleRow} layout={layout} />}
           {layout.creditsRow !== null && <Letters runs={credits} row={layout.creditsRow} layout={layout} />}
+
+          {songArea && <SongList layout={layout} area={songArea} />}
 
           {layout.progressRow !== null && (
             <div

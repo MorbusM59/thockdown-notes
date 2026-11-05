@@ -10,6 +10,8 @@ export const AUDIO_PLAYER_CHANNELS = {
   clearPlaylist:        'audio-player:clear-playlist',
   removeSong:           'audio-player:remove-song',
   pickNextSong:         'audio-player:pick-next-song',
+  getPool:              'audio-player:get-pool',
+  rotatePoolTo:         'audio-player:rotate-pool-to',
   afterPlay:            'audio-player:after-play',
   favoriteSong:         'audio-player:favorite-song',
   unfavoriteSong:       'audio-player:unfavorite-song',
@@ -114,6 +116,14 @@ export type AudioPlayerApi = {
    * @param activeSlots - Which playlist slots currently contribute to the pool.
    */
   pickNextSong(activeSlots: PlaylistSlot[]): Promise<PickNextSongResult>;
+  /** Every song in the pool of `activeSlots`, in pick order (`shared/musicPool.ts`). */
+  getPool(activeSlots: PlaylistSlot[]): Promise<MusicSongEntry[]>;
+  /**
+   * Make `id` the next pick by rotating the pool's order to it, keeping that
+   * order (`shared/musicPool.ts`). Returns the song, or null when it is not
+   * in the pool.
+   */
+  rotatePoolTo(activeSlots: PlaylistSlot[], id: number): Promise<MusicSongEntry | null>;
   /**
    * Called by the renderer after a song finishes playing naturally.
    * Updates priority + favorability counters across the database.

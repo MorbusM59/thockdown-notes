@@ -76,6 +76,7 @@ import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import { readAudioTags } from './audioTags';
+import { rotatePoolTo } from '../src/shared/musicPool';
 import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, MAX_PLAYLIST_SLOT } from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
@@ -3597,25 +3598,48 @@ export class DatabaseService {
     this.removeMusicSong(id);
   }
 
-  pickNextMusicSong(activeSlots: PlaylistSlot[]): MusicSongEntry | null {
-    if (activeSlots.length === 0) return null;
-    const db = this.requireDb();
-
+  /**
+   * The rows of the music pool, in pick order (`shared/musicPool.ts`). The ONE
+   * definition of which songs are in the pool: the next pick, the list the
+   * visualizer draws and a chosen song all read it, so a filter added here
+   * (by title, artist or album) reaches all three at once.
+   */
+  private musicPoolRows(activeSlots: PlaylistSlot[]): Record<string, unknown>[] {
+    if (activeSlots.length === 0) return [];
     const placeholders = activeSlots.map(() => '?').join(',');
-    const minRow = db.prepare(
-      `SELECT MIN(priority) AS minPriority FROM music_songs WHERE playlistSlot IN (${placeholders})`
-    ).get(...activeSlots) as { minPriority: number | null } | undefined;
+    return this.requireDb().prepare(
+      `SELECT * FROM music_songs WHERE playlistSlot IN (${placeholders}) ORDER BY priority ASC, id ASC`
+    ).all(...activeSlots) as Record<string, unknown>[];
+  }
 
-    if (!minRow || minRow.minPriority == null) return null;
+  getMusicPool(activeSlots: PlaylistSlot[]): MusicSongEntry[] {
+    return this.musicPoolRows(activeSlots).map((row) => this.rowToSongEntry(row));
+  }
 
-    const candidates = db.prepare(
-      `SELECT * FROM music_songs WHERE playlistSlot IN (${placeholders}) AND priority = ?`
-    ).all(...activeSlots, minRow.minPriority) as Record<string, unknown>[];
+  pickNextMusicSong(activeSlots: PlaylistSlot[]): MusicSongEntry | null {
+    const pool = this.musicPoolRows(activeSlots);
+    if (pool.length === 0) return null;
+    // A random song among those sharing the lowest priority.
+    const lowest = pool[0]['priority'];
+    let count = 1;
+    while (count < pool.length && pool[count]['priority'] === lowest) count += 1;
+    return this.rowToSongEntry(pool[Math.floor(Math.random() * count)]);
+  }
 
-    if (candidates.length === 0) return null;
-
-    const picked = candidates[Math.floor(Math.random() * candidates.length)];
-    return this.rowToSongEntry(picked);
+  /** Rotate the pool so `id` is the unique next pick, keeping its order (`shared/musicPool.ts`). */
+  rotateMusicPoolTo(activeSlots: PlaylistSlot[], id: number): MusicSongEntry | null {
+    const db = this.requireDb();
+    let chosen: MusicSongEntry | null = null;
+    db.transaction(() => {
+      const rows = this.musicPoolRows(activeSlots);
+      const changes = rotatePoolTo(rows.map((row) => ({ id: row['id'] as number, priority: row['priority'] as number })), id);
+      if (!changes) return;
+      const update = db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?');
+      for (const [songId, priority] of changes) update.run(priority, songId);
+      const row = db.prepare('SELECT * FROM music_songs WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+      chosen = row ? this.rowToSongEntry(row) : null;
+    })();
+    return chosen;
   }
 
   afterMusicPlay(id: number): void {
