@@ -289,10 +289,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
           context.clearRect(0, 0, columns * boxPx, stripRows * boxPx)
           context.fillStyle = accentColor
           // Row k from the bottom (0-based) of a strip n rows tall is drawn
-          // at 1 - k/(2n), so a bar fades towards the top; the peak, the box
+          // at 1 - k/(n+1), so a bar fades towards the top; the peak, the box
           // that lingers, is drawn whole. One fill per row, at that row's alpha.
           for (let row = 0; row < stripRows; row += 1) {
-            context.globalAlpha = 1 - row / (2 * stripRows)
+            context.globalAlpha = 0.5 - row / (2 * stripRows)
             const y = (stripRows - 1 - row) * boxPx
             for (let band = 0; band < columns; band += 1) {
               const top = Math.max(drawnLit[band], drawnPeak[band])
