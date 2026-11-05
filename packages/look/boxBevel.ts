@@ -5,13 +5,14 @@
  * Two images, both built once per change of setting (never per frame) and
  * repeated one per box by the browser:
  *
- * - the OUTLINE TILE (`boxOutlineTile`), a mask: alpha 1 on the outline and,
- *   as `shape` rises, on the box's corners. The box less a rounded rectangle
- *   that runs from the box's inside (`shape` 0: the outline alone, exactly as
- *   before) to the ellipse inscribed in it (`shape` 1: the corners filled),
- *   its edge blurred by `softness`. The grid line itself is never in it.
- * - the SHADING (`boxShadingImage`), black and white overlays drawn over the
- *   outline colour (and the beat pane's) inside that mask: `shading` is the
+ * - the OUTLINE TILE, a mask: alpha 1 on the outline and on the CORNER
+ *   REGION, the whole box less a rounded rectangle of the box's size whose
+ *   corners run from square (`shape` 0: no region, the outline alone,
+ *   exactly as before) to the inscribed ellipse (`shape` 1), its curve
+ *   blurred by `softness`. The grid line itself is never in it.
+ * - the SHADING, black and white overlays drawn over the outline colour
+ *   (and the beat pane's) in the corner region only, so the outline is
+ *   shaded only where the corners reach it: `shading` is the
  *   alpha at full strength, black to the left of centre and white to the
  *   right; `contrast` fades one side of the box to nothing at +-0.5 and on
  *   to the opposite overlay at +-1; `direction` turns the axis that runs
@@ -30,7 +31,7 @@ export interface BoxBevelSettings {
   shading: number
   /** 0 (the outline alone) .. 1 (everything outside the inscribed ellipse). */
   shape: number
-  /** 0 (a hard edge) .. 1 (blurred by a quarter of the box's shorter side). */
+  /** 0 (a hard edge) .. 1 (the corners' curve blurred by half its radius). */
   softness: number
   /** -1 .. 1: 0 shades the box evenly; towards +1 the far side fades and then inverts, towards -1 the near side does. */
   contrast: number
@@ -40,7 +41,7 @@ export interface BoxBevelSettings {
 
 export const DEFAULT_BOX_BEVEL: BoxBevelSettings = { shading: 0, shape: 0, softness: 0, contrast: 0, direction: 0 }
 
-const SOFTNESS_MAX_SHARE = 0.25
+const SOFTNESS_MAX_SHARE = 0.25 // x2 x the corner radius: half of it
 
 function finite(value: unknown, fallback: number, min: number, max: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
@@ -67,36 +68,35 @@ function n(value: number): string {
 }
 
 /**
- * The outline tile for a box of `width` by `height` CSS px (one grid cell,
- * line included). See the module comment for its geometry.
+ * The CORNER REGION's luminance mask, `#m` (white where the bevel applies),
+ * or '' when it is empty: the whole box, outline included, less a rounded
+ * rectangle of the same size whose corner radii run from 0 (`shape` 0: the
+ * box itself, so nothing) to half the box (`shape` 1: the inscribed
+ * ellipse). The centre of every edge is inside the rounded rectangle at any
+ * shape, so it is never affected. Softness blurs the curved corners only,
+ * by up to half the corner radius: the rounded rectangle is unioned with two
+ * bands running past the box by the blur's reach, so blurring cannot pull
+ * the straight parts in from the edges, and at shape 0 there is no blur.
  */
-export function boxOutlineTile(width: number, height: number, shape: number, softness: number): string {
-  const w = Math.max(4, width)
-  const h = Math.max(4, height)
-  const boxW = w - 1
-  const boxH = h - 1
-  const innerW = w - 3
-  const innerH = h - 3
-  const outline =
-    `<rect x='0' y='0' width='1' height='${n(boxH)}'/>` +
-    `<rect x='${n(w - 2)}' y='0' width='1' height='${n(boxH)}'/>` +
-    `<rect x='1' y='0' width='${n(innerW)}' height='1'/>` +
-    `<rect x='1' y='${n(h - 2)}' width='${n(innerW)}' height='1'/>`
-  const blur = softness * SOFTNESS_MAX_SHARE * Math.min(innerW, innerH)
-  let corners = ''
-  if (shape > 0 || blur > 0) {
-    // The box less the rounded inside, the inside blurred by `softness`:
-    // a luminance mask, white where the corners are filled.
-    const filter = blur > 0
-      ? `<filter id='b' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='${n(blur)}'/></filter>`
-      : ''
-    corners =
-      `<defs>${filter}<mask id='m' maskUnits='userSpaceOnUse' x='0' y='0' width='${n(boxW)}' height='${n(boxH)}'>` +
-      `<rect width='${n(boxW)}' height='${n(boxH)}' fill='#fff'/>` +
-      `<rect x='1' y='1' width='${n(innerW)}' height='${n(innerH)}' rx='${n(shape * innerW / 2)}' ry='${n(shape * innerH / 2)}' fill='#000'${blur > 0 ? " filter='url(#b)'" : ''}/>` +
-      `</mask></defs><rect width='${n(boxW)}' height='${n(boxH)}' mask='url(#m)'/>`
-  }
-  return svgUrl(`<svg xmlns='http://www.w3.org/2000/svg' width='${n(w)}' height='${n(h)}'>${corners}${outline}</svg>`)
+function cornerMask(boxW: number, boxH: number, shape: number, softness: number): string {
+  if (shape <= 0) return ''
+  const rx = shape * boxW / 2
+  const ry = shape * boxH / 2
+  const blur = softness * SOFTNESS_MAX_SHARE * 2 * Math.min(rx, ry)
+  const reach = 3 * blur + 1
+  const filter = blur > 0
+    ? `<filter id='b' filterUnits='userSpaceOnUse' x='${n(-2 * reach)}' y='${n(-2 * reach)}' width='${n(boxW + 4 * reach)}' height='${n(boxH + 4 * reach)}'><feGaussianBlur stdDeviation='${n(blur)}'/></filter>`
+    : ''
+  return (
+    filter +
+    `<mask id='m' maskUnits='userSpaceOnUse' x='0' y='0' width='${n(boxW)}' height='${n(boxH)}'>` +
+    `<rect width='${n(boxW)}' height='${n(boxH)}' fill='#fff'/>` +
+    `<g fill='#000'${blur > 0 ? " filter='url(#b)'" : ''}>` +
+    `<rect width='${n(boxW)}' height='${n(boxH)}' rx='${n(rx)}' ry='${n(ry)}'/>` +
+    `<rect x='${n(rx)}' y='${n(-reach)}' width='${n(Math.max(0, boxW - 2 * rx))}' height='${n(boxH + 2 * reach)}'/>` +
+    `<rect x='${n(-reach)}' y='${n(ry)}' width='${n(boxW + 2 * reach)}' height='${n(Math.max(0, boxH - 2 * ry))}'/>` +
+    `</g></mask>`
+  )
 }
 
 /** The shading's strength at the two ends of its axis, before `shading` scales it. */
@@ -104,12 +104,34 @@ export function shadingEnds(contrast: number): readonly [start: number, end: num
   return contrast >= 0 ? [1, 1 - 2 * contrast] : [1 + 2 * contrast, 1]
 }
 
+export interface BoxBevelImages {
+  /** The mask: the outline, plus the corner region. */
+  tile: string
+  /** The shading overlay, inside the corner region only (`none` when there is none). */
+  shading: string
+}
+
 /**
- * The shading overlay as a background image (`none` when there is none),
- * sized in percentages so one image serves every box size.
+ * The bevel's two images for a box of `width` by `height` CSS px (one grid
+ * cell, line included). See the module comment for the tile's geometry.
  */
-export function boxShadingImage(settings: BoxBevelSettings): string {
-  if (settings.shading === 0) return 'none'
+export function boxBevelImages(width: number, height: number, settings: BoxBevelSettings): BoxBevelImages {
+  const w = Math.max(4, width)
+  const h = Math.max(4, height)
+  const boxW = w - 1
+  const boxH = h - 1
+  const innerW = w - 3
+  const outline =
+    `<rect x='0' y='0' width='1' height='${n(boxH)}'/>` +
+    `<rect x='${n(w - 2)}' y='0' width='1' height='${n(boxH)}'/>` +
+    `<rect x='1' y='0' width='${n(innerW)}' height='1'/>` +
+    `<rect x='1' y='${n(h - 2)}' width='${n(innerW)}' height='1'/>`
+  const mask = cornerMask(boxW, boxH, settings.shape, settings.softness)
+  const region = `<rect width='${n(boxW)}' height='${n(boxH)}' mask='url(#m)'`
+  const svg = (body: string) => svgUrl(`<svg xmlns='http://www.w3.org/2000/svg' width='${n(w)}' height='${n(h)}'>${body}</svg>`)
+  const tile = svg(mask ? `<defs>${mask}</defs>${region}/>${outline}` : outline)
+  if (!mask || settings.shading === 0) return { tile, shading: 'none' }
+
   const [a, b] = shadingEnds(settings.contrast).map((end) => end * settings.shading)
   // Stops along the axis: the two ends, and the point where the signed
   // strength crosses zero when it changes sign, so each overlay's alpha is
@@ -124,9 +146,9 @@ export function boxShadingImage(settings: BoxBevelSettings): string {
   const x1 = 0.5 + 0.5 * Math.sin(angle)
   const y1 = 0.5 - 0.5 * Math.cos(angle)
   const axis = `x1='${n(x1)}' y1='${n(y1)}' x2='${n(1 - x1)}' y2='${n(1 - y1)}'`
-  return svgUrl(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'>` +
-    `<defs><linearGradient id='k' ${axis}>${stops(-1)}</linearGradient><linearGradient id='w' ${axis}>${stops(1)}</linearGradient></defs>` +
-    `<rect width='100%' height='100%' fill='url(#k)'/><rect width='100%' height='100%' fill='url(#w)'/></svg>`,
+  const shading = svg(
+    `<defs>${mask}<linearGradient id='k' ${axis}>${stops(-1)}</linearGradient><linearGradient id='w' ${axis}>${stops(1)}</linearGradient></defs>` +
+    `${region} fill='url(#k)'/>${region} fill='url(#w)'/>`,
   )
+  return { tile, shading }
 }

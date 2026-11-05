@@ -47,7 +47,7 @@ import { GridWave } from './GridWave'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
 import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
-import { useBoxOutlineTile } from '../shared/boxBevelStore'
+import { useBoxBevelImages } from '../shared/boxBevelStore'
 import { cutoutClosure, gridOutlineMask, type CutoutRing } from './cutoutRing'
 import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
@@ -158,7 +158,7 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
 
 export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, onCutoutClick, gridOutlineRef }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
-  const outlineTile = useBoxOutlineTile(boxPx, boxPx)
+  const bevel = useBoxBevelImages(boxPx, boxPx)
   const { width, height } = useBoxSize(scene)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
   const { columns, originXPx, originYPx, stripRows, spectrumTopRow, chromaRow, cutout } = layout
@@ -413,7 +413,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, onCu
   const closure = cutout.size > 0 ? cutoutClosure(cutoutRect, cutoutRound) : null
   const outlineRing = closure?.outlineRing ?? null
   const outlineGridStyle: CSSProperties = {
-    '--grid-outline-tile': outlineTile,
+    '--grid-outline-tile': bevel.tile,
+    '--box-shading': bevel.shading,
     backgroundPosition: `${originXPx + 1}px ${originYPx + 1}px`,
     ...gridOutlineMask(`${box}px ${box}px`, `${originXPx + 1}px ${originYPx + 1}px`, closure?.holeShape ?? null),
     ...(outlineRing ? {

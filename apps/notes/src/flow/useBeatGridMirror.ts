@@ -23,7 +23,7 @@
 import { useEffect, useState } from 'react'
 
 /** The inline properties `sync` writes, removed again when the grid goes so the flat pane fills the shell. */
-const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--beat-pane-tile-size', '--beat-pane-tile-position']
+const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--beat-pane-tile-size', '--beat-pane-tile-position', '--box-shading']
 
 /**
  * The grid's mask, read from its COMPUTED style (the outline tile at the
@@ -79,6 +79,7 @@ export function useBeatGridMirror(isGridView: boolean): {
       // The bevel's shading is placed by the grid's background tile.
       mirror.style.setProperty('--beat-pane-tile-size', style.backgroundSize)
       mirror.style.setProperty('--beat-pane-tile-position', style.backgroundPosition)
+      mirror.style.setProperty('--box-shading', style.getPropertyValue('--box-shading') || 'none')
       for (const [source, target] of MASK_PROPERTIES) {
         mirror.style.setProperty(target, style.getPropertyValue(source))
       }

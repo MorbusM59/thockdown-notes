@@ -37,7 +37,7 @@ import {
   sanitizeGlazeSettings,
   type GlazeSettings,
 } from '@thockdown/look/glaze'
-import { DEFAULT_BOX_BEVEL, boxShadingImage, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
+import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 import { publishBoxBevel } from './shared/boxBevelStore'
 import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
@@ -2157,9 +2157,8 @@ function App() {
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
   const [glazeSettings, setGlazeSettings] = useState<GlazeSettings>(() => DEFAULT_GLAZE_SETTINGS)
   const [boxBevel, setBoxBevel] = useState<BoxBevelSettings>(() => DEFAULT_BOX_BEVEL)
-  // The bevel's shape reaches the grids through boxBevelStore (they build their tiles from it and their own cell size); its shading is one CSS image on the shell.
+  // The bevel's shape reaches the grids through boxBevelStore (they build their tiles from it and their own cell size); and so does its shading, which depends on the cell size too.
   useEffect(() => { publishBoxBevel(boxBevel) }, [boxBevel])
-  const boxShadingCss = useMemo(() => boxShadingImage(boxBevel), [boxBevel])
   const [glazeLinearSeedInput, setGlazeLinearSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.linearSeed))
   const [isGlazeLinearSeedEditing, setIsGlazeLinearSeedEditing] = useState(false)
   const [glazeRadialSeedInput, setGlazeRadialSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.radialSeed))
@@ -3960,7 +3959,6 @@ function App() {
       '--caret-halo-blur': `${caretHaloBlurPx}px`,
       '--caret-halo-color': caretHaloColor,
       '--caret-animation-duration': `${caretAnimationDurationMs}ms`,
-      '--box-shading': boxShadingCss,
       '--texture-app-grid': appGridTextureCss,
       '--texture-sidebar-content': sidebarTextureCss,
       '--texture-editor-edit': editorEditTextTextureCss,
@@ -3985,7 +3983,6 @@ function App() {
     caretHaloBlurPx,
     caretHaloColor,
     caretAnimationDurationMs,
-    boxShadingCss,
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,

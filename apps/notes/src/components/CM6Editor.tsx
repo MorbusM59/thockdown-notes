@@ -1,5 +1,5 @@
 import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeometry';
-import { useBoxOutlineTile } from '../shared/boxBevelStore';
+import { useBoxBevelImages } from '../shared/boxBevelStore';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Annotation, Compartment, EditorState, EditorSelection, MapMode, Prec, RangeSetBuilder, Transaction, type ChangeSet, type TransactionSpec } from '@codemirror/state';
@@ -1141,7 +1141,7 @@ export function CM6Editor({
   // would be a temporal-dead-zone error at module evaluation -- the same trap
   // App.tsx's persistMenuStateNowRef documents.
   const scheduleCaretUpdateRef = useRef<(() => void) | null>(null);
-  const boxOutlineTileImage = useBoxOutlineTile(cellWidthPx, lineHeightPx);
+  const boxBevel = useBoxBevelImages(cellWidthPx, lineHeightPx);
   const cellWidthPxRef = useRef(cellWidthPx);
   // Mirror showReviewFlags and isImmersive for the resize-observer callback
   // below, which needs the CURRENT values inside a mount-once closure -- same
@@ -6585,7 +6585,8 @@ export function CM6Editor({
             style={{
               inset: '0 0 -1px 0',
               zIndex: 6,
-              '--grid-outline-tile': boxOutlineTileImage,
+              '--grid-outline-tile': boxBevel.tile,
+              '--box-shading': boxBevel.shading,
               maskPosition: `${halfCellWidthPx + 1}px ${halfLineHeightPx + 1}px`,
               backgroundPosition: `${halfCellWidthPx + 1}px ${halfLineHeightPx + 1}px`,
             } as React.CSSProperties}

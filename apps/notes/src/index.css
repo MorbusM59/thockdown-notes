@@ -36,8 +36,8 @@
 /* 
   The Magic Monospace Grid
 */
-/* The box outline: its colour, shaded by the box bevel (--box-shading, set
-   by App), through the outline tile (--grid-outline-tile, built for this
+/* The box outline: its colour, shaded by the box bevel (--box-shading),
+   through the outline tile (--grid-outline-tile), both built for this
    element's cell size by shared/boxBevelStore.ts; see
    packages/look/boxBevel.ts for its geometry). Every element that shows it
    (the editor's grid, the visualizer's, the beat pane's copy) places the
