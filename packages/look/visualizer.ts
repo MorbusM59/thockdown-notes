@@ -360,43 +360,44 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
  * inverted layout.
  */
 export function defaultVisualizer(inverted: boolean): VisualizerSettings {
-  // Each side is the author's own tuning (dark: the author's dark layout exported 2026-11-01;
-  // light: the author's light layout exported 2026-11-01), not one side inverted into the other.
-  if (!inverted) return {
-    trackers: DEFAULT_VISUALIZER_TRACKERS,
-    caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.988171738655529 },
-    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.451)', fallSec: 0.48243336686426647, spreadPx: 10, blurPx: 200 },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(255, 255, 255, 1)', effect: 1 },
-    immersive: LIGHT_VISUALIZER_IMMERSIVE,
-  }
-  // The dark export is a diff against the LIGHT defaults (the .tdl writer
-  // diffs against NEUTRAL_BASE, whose visualizer is defaultVisualizer(false)),
-  // so every field it leaves out takes the light value.
+  // Every setting but the colours is shared by light and dark: the author's
+  // dark layout exported 2026-11-03, read through sanitizeVisualizer (its
+  // legacy waveSec 2 is the 4 beats it migrates to). The colours are each
+  // side's own (light: the author's light layout of 2026-11-01).
+  const colors = inverted ? DARK_VISUALIZER_COLORS : LIGHT_VISUALIZER_COLORS
   return {
     trackers: DEFAULT_VISUALIZER_TRACKERS,
     caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.515 },
-    edge: { ...DEFAULT_VISUALIZER_EDGE, color: 'rgba(0, 0, 0, 0.784)', fallSec: 0.5, spreadPx: 10, blurPx: 200 },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: 'rgba(0, 0, 0, 0.275)', effect: 0.5 },
-    immersive: DARK_VISUALIZER_IMMERSIVE,
+    edge: { ...DEFAULT_VISUALIZER_EDGE, color: colors.edge, fallSec: 0.5, spreadPx: 10, blurPx: 200 },
+    pane: { ...DEFAULT_VISUALIZER_PANE, color: colors.pane, effect: 0.68, shape: -0.12, fallSec: 0.3324631894533917 },
+    immersive: { ...SHARED_VISUALIZER_IMMERSIVE, ...colors.immersive },
   }
 }
 
-const LIGHT_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
+const SHARED_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
   ...DEFAULT_VISUALIZER_IMMERSIVE,
-  glazeStrength: 0.075, glazeSpread: 0.5, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 12,
-  waveColor: 'rgba(255, 255, 255, 0.314)', waveBoxes: 72, waveTurn: 4, waveShape: -0.5, waveFallSec: 0.49958086198073737,
-  waveMix: { thump: 0, pierce: 0, tick: 1 },
+  glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 10,
+  waveBoxes: 72, waveBeats: 4, waveTurn: 4, waveShape: -0.5, waveFallSec: 1.9949745588310253,
+  waveMix: { thump: 0, pierce: 1, tick: 0 },
   glazeMix: { thump: 0, pierce: 1, tick: 0 },
-  pulseColor: 'rgba(255, 255, 255, 0.392)', pulseSpeed: 32, pulseHalfLifeSec: 0.5, pulseFadeSec: 1.5, pulseSoftness: 0.49, pulseBoost: 0,
-  cutoutRound: 1, accentColor: 'rgba(0, 0, 0, 0.235)', letterboxColor: 'rgba(255, 255, 255, 1)',
+  pulseSpeed: 35, pulseHalfLifeSec: 0.7, pulseFadeSec: 1.2, pulseSoftness: 0.5, pulseBoost: 0.5,
+  cutoutRound: 1,
 }
 
-const DARK_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
-  ...LIGHT_VISUALIZER_IMMERSIVE,
-  glazeStrength: 0.1, glazeSpread: 0, swayDrift: 10,
-  waveColor: 'rgba(255, 255, 255, 1)', waveFallSec: 1.9949745588310244,
-  pulseColor: 'rgba(0, 0, 0, 0.137)', pulseSpeed: 35, pulseHalfLifeSec: 0.7, pulseFadeSec: 1.4, pulseSoftness: 0, pulseBoost: 1,
-  accentColor: '', letterboxColor: '',
+type VisualizerColors = {
+  edge: string
+  pane: string
+  immersive: Pick<VisualizerImmersive, 'waveColor' | 'pulseColor' | 'accentColor' | 'letterboxColor'>
+}
+
+const LIGHT_VISUALIZER_COLORS: VisualizerColors = {
+  edge: 'rgba(0, 0, 0, 0.451)', pane: 'rgba(255, 255, 255, 1)',
+  immersive: { waveColor: 'rgba(255, 255, 255, 0.314)', pulseColor: 'rgba(255, 255, 255, 0.392)', accentColor: 'rgba(0, 0, 0, 0.235)', letterboxColor: 'rgba(255, 255, 255, 1)' },
+}
+
+const DARK_VISUALIZER_COLORS: VisualizerColors = {
+  edge: 'rgba(0, 0, 0, 0.784)', pane: 'rgba(0, 0, 0, 0.275)',
+  immersive: { waveColor: 'rgba(255, 255, 255, 1)', pulseColor: 'rgba(0, 0, 0, 0.137)', accentColor: '', letterboxColor: '' },
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
