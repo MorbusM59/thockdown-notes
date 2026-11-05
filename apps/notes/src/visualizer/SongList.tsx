@@ -124,6 +124,29 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
           cells.letters[index].textContent = char === ' ' ? '' : char
         }
       }
+      cutPlateHole()
+    }
+
+    // The plate must sit on the stage's own background, as the top and
+    // bottom strips do: their colours are translucent, so the letterbox
+    // colour laid OVER the middle's comes out a different colour (in a dark
+    // layout, close to the middle's own). So the middle strip leaves a hole
+    // exactly where the plate is, a mask rectangle written only when it moves.
+    const middle = boxesLayer.parentElement?.querySelector<HTMLElement>('.visualizer-strip.is-middle') ?? null
+    let hole = ''
+    const cutPlateHole = () => {
+      if (!middle) return
+      const slot = slots.findIndex((cells) => !cells.plate.hidden)
+      const next = slot < 0 ? '' : `${left}:${top - middle.offsetTop + slot * 2 * boxPx}:${slots[slot].plate.style.width}`
+      if (next === hole) return
+      hole = next
+      if (slot < 0) {
+        middle.style.removeProperty('--plate-hole-size')
+        return
+      }
+      const [x, y, width] = next.split(':')
+      middle.style.setProperty('--plate-hole-size', `${width} ${boxPx}px`)
+      middle.style.setProperty('--plate-hole-position', `${x}px ${y}px`)
     }
 
     const setCenter = (next: number) => {
@@ -229,10 +252,11 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       hit.removeEventListener('pointerenter', onEnter)
       hit.removeEventListener('pointerleave', onLeave)
       hit.removeEventListener('pointerdown', onPress)
+      middle?.style.removeProperty('--plate-hole-size')
       boxesLayer.replaceChildren()
       lettersLayer.replaceChildren()
     }
-  }, [area.columns, area.rows, area.slots, boxPx, glyphFont])
+  }, [area.columns, area.rows, area.slots, boxPx, glyphFont, left, top])
 
   const frame = { left, top, width, height }
   return (
