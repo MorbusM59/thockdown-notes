@@ -1,4 +1,5 @@
 ﻿import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
+import type { MusicEqPreset } from '../shared/musicEqPresets';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
 
 /**
@@ -191,6 +192,29 @@ const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number
 ];
 const FLOW_EQ_SMOOTHING_SEC = 0.05;
 
+/**
+ * The EQ presets (`musicEqPreset.ts`), applied all the time, after the flow
+ * EQ: five filters of fixed types, each preset giving every one its
+ * frequency, Q and gain. Classical is a gentle loudness contour for quiet
+ * listening (a little bass and air, nothing cut); voice is the usual speech
+ * curve (rumble cut, a dip in the boxy low mids, a presence lift, a softened
+ * top); amp50 and amp100 are the flow EQ's curve at half and full strength.
+ */
+type PresetBand = { frequencyHz: number; q: number; gainDb: number };
+const PRESET_EQ_TYPES: readonly BiquadFilterType[] = ['highpass', 'lowshelf', 'peaking', 'peaking', 'highshelf'];
+const OFF_HIGHPASS: PresetBand = { frequencyHz: 10, q: 0.7, gainDb: 0 };
+const ampCurve = (strength: number): PresetBand[] => [
+  OFF_HIGHPASS,
+  ...FLOW_EQ_BANDS.map((band) => ({ frequencyHz: band.frequencyHz, q: band.q, gainDb: band.gainDb * strength })),
+];
+const PRESET_EQ_BANDS: Record<MusicEqPreset, PresetBand[]> = {
+  classical: [OFF_HIGHPASS, { frequencyHz: 100, q: 0.7, gainDb: 3 }, { frequencyHz: 500, q: 0.9, gainDb: 0 }, { frequencyHz: 3000, q: 1, gainDb: 0 }, { frequencyHz: 10000, q: 0.7, gainDb: 1.5 }],
+  voice: [{ frequencyHz: 90, q: 0.7, gainDb: 0 }, { frequencyHz: 100, q: 0.7, gainDb: 0 }, { frequencyHz: 300, q: 1, gainDb: -3 }, { frequencyHz: 3000, q: 1, gainDb: 3 }, { frequencyHz: 9000, q: 0.7, gainDb: -3 }],
+  flat: ampCurve(0),
+  amp50: ampCurve(0.5),
+  amp100: ampCurve(1),
+};
+
 type PlaybackEndHandler = () => void;
 
 export class MusicPlayerService {
@@ -203,6 +227,8 @@ export class MusicPlayerService {
   private convolver: ConvolverNode | null = null;
   private eqBands: BiquadFilterNode[] = [];
   private eqAmount = 0;
+  private presetBands: BiquadFilterNode[] = [];
+  private preset: MusicEqPreset = 'flat';
   private config: MusicPlayerConfig = { volume: 0.8, reverbAmount: 0, reverbRoom: 0.3 };
   private onEndedHandler: PlaybackEndHandler | null = null;
   private currentFilePath: string | null = null;
@@ -348,7 +374,19 @@ export class MusicPlayerService {
       });
       for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
 
-      this.eqBands[this.eqBands.length - 1].connect(this.gainNode);
+      // Then the preset EQ, all the time: … → each preset filter → gainNode.
+      this.presetBands = PRESET_EQ_TYPES.map((type, i) => {
+        const filter = context.createBiquadFilter();
+        const band = PRESET_EQ_BANDS[this.preset][i];
+        filter.type = type;
+        filter.frequency.value = band.frequencyHz;
+        filter.Q.value = band.q;
+        filter.gain.value = band.gainDb;
+        return filter;
+      });
+      this.eqBands[this.eqBands.length - 1].connect(this.presetBands[0]);
+      for (let i = 1; i < this.presetBands.length; i++) this.presetBands[i - 1].connect(this.presetBands[i]);
+      this.presetBands[this.presetBands.length - 1].connect(this.gainNode);
 
       // gainNode → dryGain → limiter, and gainNode → convolver → wetGain → limiter
       this.gainNode.connect(this.dryGain);
@@ -407,6 +445,19 @@ export class MusicPlayerService {
     if (!context) return;
     this.eqBands.forEach((filter, i) => {
       filter.gain.setTargetAtTime(FLOW_EQ_BANDS[i].gainDb * amount, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
+    });
+  }
+
+  /** The EQ preset applied all the time (`musicEqPreset.ts`), moved to over the flow EQ's time constant. */
+  setPresetEq(preset: MusicEqPreset): void {
+    this.preset = preset;
+    const context = this.audioCtx;
+    if (!context) return;
+    this.presetBands.forEach((filter, i) => {
+      const band = PRESET_EQ_BANDS[preset][i];
+      filter.frequency.setTargetAtTime(band.frequencyHz, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
+      filter.Q.setTargetAtTime(band.q, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
+      filter.gain.setTargetAtTime(band.gainDb, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
     });
   }
 

@@ -383,11 +383,6 @@ export function SectionEditorArea({
     setSteppedSceneSeed(`${sectionId}:${emptySceneStep + delta}`)
     onEmptySceneStep(delta)
   }, [sectionId, emptySceneStep, onEmptySceneStep])
-  const handleSceneClick = useCallback(() => stepScene(1), [stepScene])
-  const handleSceneContextMenu = useCallback((event: MouseEvent) => {
-    event.preventDefault()
-    stepScene(-1)
-  }, [stepScene])
   const handleEmptyStateClick = useCallback(() => {
     if (isEscapeHoldActive) return
     stepScene(1)
@@ -596,9 +591,6 @@ export function SectionEditorArea({
                 fontFamily={editorFontFamily}
                 fontSizePx={editorRuntimeMetrics.fontSizePx}
                 sceneSeed={emptyStateSceneSeed}
-                animateSceneTo={steppedSceneSeed}
-                onCutoutClick={handleSceneClick}
-                onCutoutContextMenu={handleSceneContextMenu}
                 gridOutlineRef={beatGridRef}
               />
             ) : null}

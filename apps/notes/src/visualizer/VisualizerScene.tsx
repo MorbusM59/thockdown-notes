@@ -46,6 +46,9 @@ import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
 import { readPanelsShown, subscribePanelsShown } from './panelsShown'
+import { readMusicEqPreset, stepMusicEqPreset, subscribeMusicEqPreset } from '../sound/musicEqPreset'
+import { MUSIC_EQ_PRESETS } from '../shared/musicEqPresets'
+import { solidSeed } from '../editor/EmptyStateScene'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
 import { LevelBars } from './LevelBars'
@@ -87,14 +90,8 @@ export type VisualizerSceneProps = {
   boxPx: number
   fontFamily: string
   fontSizePx: number
-  /** The empty scene's seed (EmptyStateScene.ts): the same solid the slot's empty state shows. */
+  /** The empty scene's seed (EmptyStateScene.ts), whose tumble the cutout's solid takes; the solid itself names the music's EQ preset. */
   sceneSeed: string
-  /** The seed the reader stepped to (SolidCanvas's `animateTo`). */
-  animateSceneTo?: string | null
-  /** A press on the cutout rerolls the solid, as a press on the empty state does. */
-  onCutoutClick: () => void
-  /** A right click on the cutout: back to the previous solid. */
-  onCutoutContextMenu: (event: ReactMouseEvent) => void
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
   gridOutlineRef: (element: HTMLDivElement | null) => void
 }
@@ -170,7 +167,7 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
   })
 }
 
-export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, animateSceneTo, onCutoutClick, onCutoutContextMenu, gridOutlineRef }: VisualizerSceneProps) {
+export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, gridOutlineRef }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const bevel = useBoxBevelImages(boxPx, boxPx)
   const { width, height } = useBoxSize(scene)
@@ -465,6 +462,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
   } as CSSProperties
 
   const panelsShown = useSyncExternalStore(subscribePanelsShown, readPanelsShown)
+  // The solid in the cutout is the music's EQ preset: a left press steps to
+  // the solid with more faces, a right press back (musicEqPreset.ts).
+  const eqPreset = useSyncExternalStore(subscribeMusicEqPreset, readMusicEqPreset)
+  const solid = solidSeed(sceneSeed, MUSIC_EQ_PRESETS.indexOf(eqPreset))
   return (
     <div ref={setScene} className={panelsShown ? 'visualizer-scene' : 'visualizer-scene is-panels-hidden'} tabIndex={-1} data-visualizer-scene="" style={style}>
       {width > 0 && (
@@ -545,12 +546,15 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
                 height: cutoutRect.size,
                 '--visualizer-face-radius': `${closure?.faceRadiusPx ?? 0}px`,
               } as CSSProperties}
-              onClick={onCutoutClick}
-              onContextMenu={onCutoutContextMenu}
+              onClick={() => stepMusicEqPreset(1)}
+              onContextMenu={(event: ReactMouseEvent) => {
+                event.preventDefault()
+                stepMusicEqPreset(-1)
+              }}
               data-secondary-press="action"
             >
               <div className="visualizer-cutout-face">
-                <SolidCanvas className="empty-state-solid" seed={sceneSeed} animateTo={animateSceneTo} active subscribeThump={subscribeSolidThump} />
+                <SolidCanvas className="empty-state-solid" seed={solid} animateTo={solid} active subscribeThump={subscribeSolidThump} />
               </div>
               <div className="visualizer-cutout-orb" />
             </div>

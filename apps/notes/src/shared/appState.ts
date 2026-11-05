@@ -1,3 +1,4 @@
+import type { MusicEqPreset } from './musicEqPresets';
 import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
@@ -198,6 +199,8 @@ export interface PersistedMenuState {
   musicActiveSlots?: number[];
   /** The pool's filter (`audioPlayer.ts`'s `MusicPoolFilter`), set in the visualizer. */
   musicPoolFilter?: { artist: string; album: string; title: string };
+  /** The music's EQ preset (`sound/musicEqPreset.ts`), the visualizer's solid. */
+  musicEqPreset?: MusicEqPreset;
   /** Last-played song's DB id, its playback position, and whether it was playing — restored on next launch. */
   musicLastSongId?: number;
   musicLastPositionSec?: number;

@@ -263,8 +263,9 @@ export interface SolidScene {
  * are taken in the order the earlier SVG generator took them, so a seed
  * still picks the solid it always did.
  */
-function buildSolidScene(rand: () => number): SolidScene {
-  const solid = SOLIDS[Math.floor(rand() * SOLIDS.length)]
+function buildSolidScene(rand: () => number, forced: SolidDef | null): SolidScene {
+  const drawn = SOLIDS[Math.floor(rand() * SOLIDS.length)]
+  const solid = forced ?? drawn
   const vertices = normalizeVertices(solid.vertices)
   const axis = randomUnitAxis(rand)
   const dir = rand() < 0.5 ? 1 : -1
@@ -279,11 +280,24 @@ function buildSolidScene(rand: () => number): SolidScene {
 
 const sceneCache = new Map<string, SolidScene>()
 
-/** The solid seeded off `seed` (a section id, optionally with a reroll nonce -- see SectionEditorArea.tsx), cached per seed. */
+/** The solids from fewest faces to most, as the visualizer steps through them (`solidSeed`). */
+const SOLIDS_BY_FACES: readonly SolidDef[] = [TETRAHEDRON, CUBE, OCTAHEDRON, SOLIDS[4], ICOSAHEDRON]
+
+/**
+ * A seed that shows the `index`-th solid by face count (0 the tetrahedron,
+ * 4 the icosahedron), its tumble still drawn from `base`: the visualizer's
+ * solid names the music's EQ preset rather than being drawn at random.
+ */
+export function solidSeed(base: string, index: number): string {
+  return `${base}#solid=${index}`
+}
+
+/** The solid seeded off `seed` (a section id, optionally with a reroll nonce -- see SectionEditorArea.tsx; or a `solidSeed`), cached per seed. */
 export function emptyStateSolid(seed: string): SolidScene {
   let scene = sceneCache.get(seed)
   if (!scene) {
-    scene = buildSolidScene(mulberry32(hashStringToSeed(seed)))
+    const forced = /#solid=(\d)$/.exec(seed)
+    scene = buildSolidScene(mulberry32(hashStringToSeed(seed)), forced ? SOLIDS_BY_FACES[Number(forced[1])] ?? null : null)
     sceneCache.set(seed, scene)
   }
   return scene

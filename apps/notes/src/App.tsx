@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
 import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
@@ -12,6 +12,8 @@ import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type MusicPoolFilter } from './shared/audioPlayer'
 import { togglePanelsShown } from './visualizer/panelsShown'
+import { readMusicEqPreset, setMusicEqPreset, subscribeMusicEqPreset } from './sound/musicEqPreset'
+import { sanitizeMusicEqPreset } from './shared/musicEqPresets'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
@@ -2225,6 +2227,7 @@ function App() {
   }, [soundscapePreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
+  const musicEqPreset = useSyncExternalStore(subscribeMusicEqPreset, readMusicEqPreset)
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
   const [musicRestoreSongId, setMusicRestoreSongId] = useState<number | null>(null)
@@ -3324,6 +3327,7 @@ function App() {
       soundscapes: soundscapePreferences,
       musicActiveSlots,
       musicPoolFilter,
+      musicEqPreset,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
       // Live while a track plays, so a save at any moment (quit included)
       // has the position as it is; otherwise where the pause or the track
@@ -3452,6 +3456,7 @@ function App() {
     soundscapePreferences,
     musicActiveSlots,
     musicPoolFilter,
+    musicEqPreset,
     darkMode,
     uiMode,
     filterInvert,
@@ -5293,6 +5298,7 @@ ${markdownHtml}
               )
             }
             if (appState.menu.musicPoolFilter) setMusicPoolFilter(sanitizePoolFilter(appState.menu.musicPoolFilter))
+            if (appState.menu.musicEqPreset) setMusicEqPreset(sanitizeMusicEqPreset(appState.menu.musicEqPreset))
             if (typeof appState.menu.musicLastSongId === 'number') {
               const positionSec = appState.menu.musicLastPositionSec ?? 0
               const wasPlaying = appState.menu.musicWasPlaying ?? false

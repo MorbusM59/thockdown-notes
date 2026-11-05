@@ -13,6 +13,7 @@ import type {
 import { sanitizeGameSave } from '../src/adventure/save';
 import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
 import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
+import { sanitizeMusicEqPreset } from '../src/shared/musicEqPresets';
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings } from '../src/shared/flowSettings';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
@@ -581,6 +582,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicSoundOptionsOpen: sanitizeOptionalBoolean(input?.musicSoundOptionsOpen),
     musicActiveSlots: sanitizeMusicActiveSlots(input?.musicActiveSlots),
     musicPoolFilter: input?.musicPoolFilter === undefined ? undefined : sanitizePoolFilter(input.musicPoolFilter),
+    musicEqPreset: input?.musicEqPreset === undefined ? undefined : sanitizeMusicEqPreset(input.musicEqPreset),
     musicLastSongId: sanitizeOptionalNumber(input?.musicLastSongId),
     musicLastPositionSec: sanitizeOptionalNumber(input?.musicLastPositionSec),
     musicWasPlaying: sanitizeOptionalBoolean(input?.musicWasPlaying),
