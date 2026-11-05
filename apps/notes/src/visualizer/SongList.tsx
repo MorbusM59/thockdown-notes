@@ -7,13 +7,16 @@
  * song that is playing sits on the strip's own letterbox colour, the rest on
  * the middle's (so no box is drawn behind them at all).
  *
- * At rest the playing song is in the top slot. Over the list the wheel
- * scrolls it a whole entry at a time with the edit view's own dynamics
- * (`editor/rowWheel.ts`: notch, step and spin coast), as far as the last
- * entry in the top slot; leaving it travels back to the top, on the reader's
- * smooth-scroll curve (`buildScrollPlanFromCurrentParams`) but still a whole entry at a
- * time, so text never leaves the grid. A press on an entry plays it
- * (`NowPlaying.playFromPool`).
+ * The slots are a window on the pool's RING: an entry scrolled off the top
+ * comes back in at the bottom, and no entry is shown twice. At rest the
+ * playing song is in the top slot. Over the list the wheel turns it a whole
+ * entry at a time with the edit view's own dynamics (`editor/rowWheel.ts`:
+ * notch, step and spin coast). A press on an entry plays it
+ * (`NowPlaying.playFromPool`), and while the pointer stays over the list
+ * nothing moves: the pressed entry only takes the letterbox plate. Leaving
+ * the list turns it to the playing song by the shorter way round the ring,
+ * on the reader's smooth-scroll curve (`buildScrollPlanFromCurrentParams`)
+ * but still a whole entry at a time, so text never leaves the grid.
  *
  * NO PER-FRAME RENDERING: the cells are built once per layout and written
  * imperatively, and only when the entry a slot shows actually changes; the
@@ -91,17 +94,12 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
 
     /** The pool in pick order from the playing song on (or from its head, when the playing song is not in it). */
     let songs: MusicSongEntry[] = []
-    /**
-     * The entry in the top slot. Negative while the reader is over the list
-     * after the playing song changed under them (a press, or a song ending):
-     * the list is re-cut at the new playing song, but that song stays in the
-     * slot where the reader saw it, so the slots above it show nothing until
-     * the list travels home on leaving.
-     */
+    /** The ring position in the top slot: slot `n` shows `songs[(offset + n) mod count]`. */
     let offset = 0
     let hovered = false
     let travel: number | null = null
 
+    const ringIndex = (index: number) => ((index % songs.length) + songs.length) % songs.length
     const fromPlaying = (pool: MusicSongEntry[]): MusicSongEntry[] => {
       const id = readNowPlaying().song?.id
       const index = id === undefined ? -1 : pool.findIndex((song) => song.id === id)
@@ -112,7 +110,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const currentId = readNowPlaying().song?.id
       for (let slot = 0; slot < slots.length; slot += 1) {
         const cells = slots[slot]
-        const song = songs[offset + slot] ?? null
+        const song = slot < songs.length ? songs[ringIndex(offset + slot)] : null
         const isCurrent = song !== null && song.id === currentId
         const key = song ? `${song.id}:${isCurrent}` : ''
         if (key === cells.shown) continue
@@ -150,12 +148,12 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       setMiddleHoles(middle, 'song-list', holes)
     }
 
-    /** Scroll so entry `next` is in the top slot, clamped to the list; false when that moves nothing. */
+    /** Turn the ring so position `next` is in the top slot; false when that moves nothing. */
     const setOffset = (next: number): boolean => {
-      // Scrolling never moves further into the empty slots above the head.
-      const clamped = Math.max(Math.min(0, offset), Math.min(songs.length - 1, next))
-      if (clamped === offset) return false
-      offset = clamped
+      if (songs.length === 0) return false
+      const wrapped = ringIndex(next)
+      if (wrapped === offset) return false
+      offset = wrapped
       draw()
       return true
     }
@@ -164,19 +162,29 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       if (travel !== null) cancelAnimationFrame(travel)
       travel = null
     }
-    /** Back to the top, a whole entry at a time on the reader's scroll curve. */
+    /** Re-cut the ring at the playing song, which is in the top slot: nothing on screen changes. */
+    const recut = () => {
+      songs = fromPlaying([...songs.slice(offset), ...songs.slice(0, offset)])
+      offset = 0
+    }
+    /** Turn to the playing song the shorter way round, a whole entry at a time on the reader's scroll curve. */
     const travelHome = () => {
       stopTravel()
+      const count = songs.length
+      const playingId = readNowPlaying().song?.id
+      const target = Math.max(0, songs.findIndex((song) => song.id === playingId))
+      const forward = count === 0 ? 0 : ringIndex(target - offset)
+      if (forward === 0) { if (count > 0) recut(); return }
       const start = offset
-      const entries = -start
-      if (entries === 0) return
+      const entries = forward <= count / 2 ? forward : forward - count
       const plan = buildScrollPlanFromCurrentParams(entries * pitchPx)
       const startMs = performance.now()
       const step = (nowMs: number) => {
         const elapsedSec = (nowMs - startMs) / 1000
         const done = elapsedSec >= plan.totalDurationSec
-        const moved = done ? entries : Math.round(sampleScrollPlan(plan, elapsedSec) / pitchPx)
+        const moved = done ? entries : Math.sign(entries) * Math.round(Math.abs(sampleScrollPlan(plan, elapsedSec)) / pitchPx)
         setOffset(start + moved)
+        if (done) recut()
         travel = done ? null : requestAnimationFrame(step)
       }
       travel = requestAnimationFrame(step)
@@ -204,19 +212,22 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const pool = readNowPlaying().pool
       const next = pool ? await window.thockdownAudioPlayer?.getPool({ slots: [...pool.slots], filter: readShownPoolFilter() }) ?? [] : []
       if (ticket !== request) return
-      // While the reader is over the list, keep what they are looking at
-      // where it is: the playing song in its slot if it is on screen (a song
-      // they just pressed, or the next one taking over), else the top entry.
-      const playingId = readNowPlaying().song?.id
-      const playingSlot = songs.findIndex((song) => song.id === playingId) - offset
-      const anchor = !hovered ? null
-        : playingSlot >= 0 && playingSlot < slots.length ? { id: playingId, slot: playingSlot }
-        : { id: songs[offset]?.id, slot: 0 }
-      songs = fromPlaying(next)
+      // While the reader is over the list (or it is travelling home), the
+      // ring keeps its cut and position, so nothing on screen moves: a song
+      // they just pressed, or the next one taking over, only takes the
+      // plate. Otherwise the ring is cut at the playing song, at the top.
+      const head = songs[0]?.id
+      const at = hovered || travel !== null ? next.findIndex((song) => song.id === head) : -1
+      if (at < 0) {
+        stopTravel()
+        songs = fromPlaying(next)
+        offset = 0
+      } else {
+        songs = [...next.slice(at), ...next.slice(0, at)]
+        offset = songs.length === 0 ? 0 : ringIndex(offset)
+        if (!hovered) travelHome()
+      }
       for (const cells of slots) cells.shown = '\u0000'
-      const held = anchor ? songs.findIndex((song) => song.id === anchor.id) : -1
-      if (held < 0) stopTravel()
-      offset = held < 0 ? 0 : held - anchor!.slot
       draw()
     }
     void refresh()
@@ -249,7 +260,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const rect = hit.getBoundingClientRect()
       const row = Math.floor((event.clientY - rect.top) / boxPx)
       if (row % 2 !== 0) return
-      const song = songs[offset + row / 2]
+      const song = row / 2 < songs.length ? songs[ringIndex(offset + row / 2)] : null
       if (!song) return
       // A song chosen from the list as filtered is played from that pool.
       commitPoolFilterDraft()
