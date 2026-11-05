@@ -33,11 +33,48 @@ export interface CutoutRing {
   mask: string
 }
 
+/** One mask layer, as the three values a mask list takes per layer. */
+export interface MaskLayer {
+  image: string
+  size: string
+  position: string
+}
+
+/** A grid layer's mask: everything except the hole's shape. */
+function holeMask(shape: MaskLayer): CSSProperties {
+  return {
+    maskImage: `linear-gradient(#000, #000), ${shape.image}`,
+    maskSize: `100% 100%, ${shape.size}`,
+    maskPosition: `0 0, ${shape.position}`,
+    maskRepeat: 'no-repeat',
+    maskComposite: 'exclude',
+  }
+}
+
+/**
+ * The box-outline layer's mask with a hole in it: the outline tile
+ * (`--grid-outline-tile`, index.css), one box a tile at `tilePosition`, less
+ * the hole's shape. `subtract` keeps the upper layer (the tile) where the
+ * lower (the hole) is absent.
+ */
+export function gridOutlineMask(tileSize: string, tilePosition: string, shape: MaskLayer | null): CSSProperties {
+  if (!shape) return { maskSize: tileSize, maskPosition: tilePosition }
+  return {
+    maskImage: `var(--grid-outline-tile), ${shape.image}`,
+    maskSize: `${tileSize}, ${shape.size}`,
+    maskPosition: `${tilePosition}, ${shape.position}`,
+    maskRepeat: 'repeat, no-repeat',
+    maskComposite: 'subtract',
+  }
+}
+
 export interface CutoutClosure {
   /** The face's corner radius, px. */
   faceRadiusPx: number
   /** Mask for a grid layer: everything except the hole (the face's square at 0, the outline ring's outer shape above it). */
   hole: CSSProperties
+  /** The hole's shape alone, one mask layer: for a layer that composes it with a mask of its own (the outline tile, `gridOutlineMask`). */
+  holeShape: MaskLayer
   /** The rings, or null at roundness 0. */
   outlineRing: CutoutRing | null
   gridRing: CutoutRing | null
@@ -77,29 +114,25 @@ function ring(face: CutoutRect, faceRadius: number, width: number): CutoutRing {
 export function cutoutClosure(face: CutoutRect, round: number): CutoutClosure {
   const faceRadiusPx = Math.max(0, Math.min(1, round)) * face.size / 2
   if (faceRadiusPx === 0) {
+    const holeShape = { image: 'linear-gradient(#000, #000)', size: `${face.size}px ${face.size}px`, position: `${face.left}px ${face.top}px` }
     return {
       faceRadiusPx: 0,
-      hole: {
-        maskImage: 'linear-gradient(#000, #000), linear-gradient(#000, #000)',
-        maskSize: `100% 100%, ${face.size}px ${face.size}px`,
-        maskPosition: `0 0, ${face.left}px ${face.top}px`,
-        maskRepeat: 'no-repeat',
-        maskComposite: 'exclude',
-      },
+      hole: holeMask(holeShape),
+      holeShape,
       outlineRing: null,
       gridRing: null,
     }
   }
   const outer = face.size + 2 * OUTLINE_RING_PX
+  const holeShape = {
+    image: roundedSquareMask(outer, faceRadiusPx + OUTLINE_RING_PX),
+    size: `${outer}px ${outer}px`,
+    position: `${face.left - OUTLINE_RING_PX}px ${face.top - OUTLINE_RING_PX}px`,
+  }
   return {
     faceRadiusPx,
-    hole: {
-      maskImage: `linear-gradient(#000, #000), ${roundedSquareMask(outer, faceRadiusPx + OUTLINE_RING_PX)}`,
-      maskSize: `100% 100%, ${outer}px ${outer}px`,
-      maskPosition: `0 0, ${face.left - OUTLINE_RING_PX}px ${face.top - OUTLINE_RING_PX}px`,
-      maskRepeat: 'no-repeat',
-      maskComposite: 'exclude',
-    },
+    hole: holeMask(holeShape),
+    holeShape,
     outlineRing: ring(face, faceRadiusPx, OUTLINE_RING_PX),
     gridRing: ring(face, faceRadiusPx, GRID_RING_PX),
   }

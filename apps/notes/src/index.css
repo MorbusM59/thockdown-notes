@@ -36,25 +36,33 @@
 /* 
   The Magic Monospace Grid
 */
+:root {
+  /* The box outline, exactly: one tile per box, mask alpha 1 on the outline
+     and 0 elsewhere. The tile is placed one pixel before the grid line
+     (mask-position -1px), so the line is the tile's column 1 and row 1 and
+     the outline is the pixel either side of it: columns 0 and 2, rows 0 and
+     2, the line itself left out (the grid-line layer draws it). Every pixel
+     is covered by exactly one rect, so a translucent outline colour is
+     applied once everywhere; two crossed gradients painted the corners
+     twice. User units are CSS pixels (no viewBox), and a rect running past
+     the tile is clipped by it, which is how a strip reaches the far edge
+     without knowing the tile's size. Rasterized once per tile size. */
+  --grid-outline-tile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' shape-rendering='crispEdges'%3E%3Crect x='0' y='0' width='1' height='1'/%3E%3Crect x='0' y='2' width='1' height='100%25'/%3E%3Crect x='2' y='0' width='1' height='1'/%3E%3Crect x='2' y='2' width='1' height='100%25'/%3E%3Crect x='3' y='0' width='100%25' height='1'/%3E%3Crect x='3' y='2' width='100%25' height='1'/%3E%3C/svg%3E");
+}
+
+/* The box outline: its colour through the outline tile. Every element that
+   shows it (the editor's grid, the visualizer's, the beat pane's copy) sets
+   mask-position to its own phase, one pixel before its grid line. */
 .thockdown-grid-outline-lines {
-  background-image:
-    repeating-linear-gradient(to right, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, var(--color-grid-outline) 0, var(--color-grid-outline) 3px, transparent 3px, transparent var(--editor-line-height));
-  /* One tile = exactly one grid cell, NOT 100% 100% (the whole container).
-     Confirmed live: with a 100%-100% tile, background-repeat's wraparound
-     copy of that tile becomes visible the moment background-position is
-     nonzero (the "infinity grid" half-cell shift), showing a sliver of the
-     SAME gradient evaluated near the far edge of a container-sized tile --
-     content that depends on (containerSize mod cellSize), an arbitrary,
-     window-size-dependent residue. Swept container height in 1px steps and
-     found exactly this: a spurious extra horizontal line appears inside
-     the new top margin, sweeps across it, and disappears, once per
-     lineHeightPx of resize -- reproduced and screenshotted before this fix,
-     confirmed gone after it. Sizing the tile to exactly one cycle makes
-     every tile an identical, seamless copy of the same pattern, so no
-     wraparound copy can ever show different content than the primary tile. */
-  background-size: var(--editor-cell-width) var(--editor-line-height);
-  background-position: -1px -1px;
+  background-color: var(--color-grid-outline);
+  mask-image: var(--grid-outline-tile);
+  mask-repeat: repeat;
+  /* One tile = exactly one grid cell, NOT 100% 100% (the whole container):
+     a container-sized tile's wraparound copy shows a window-size-dependent
+     residue the moment the position is nonzero (found live as a spurious
+     line sweeping the top margin on resize). */
+  mask-size: var(--editor-cell-width) var(--editor-line-height);
+  mask-position: -1px -1px;
 }
 
 .thockdown-grid-lines {

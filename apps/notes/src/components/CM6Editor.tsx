@@ -6580,7 +6580,7 @@ export function CM6Editor({
           <div
             ref={gridOutlineRef}
             className="absolute pointer-events-none thockdown-grid-outline-lines"
-            style={{ inset: '0 0 -1px 0', zIndex: 6, backgroundPosition: `${halfCellWidthPx - 1}px ${halfLineHeightPx - 1}px` }}
+            style={{ inset: '0 0 -1px 0', zIndex: 6, maskPosition: `${halfCellWidthPx - 1}px ${halfLineHeightPx - 1}px` }}
           />
           <div
             className="absolute pointer-events-none thockdown-grid-lines"

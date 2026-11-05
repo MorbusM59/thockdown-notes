@@ -574,9 +574,9 @@
   pointer-events: none;
   z-index:        4;
   opacity:        var(--beat-pane, 0);
-  background-image:
-    repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
+  background-color: var(--beat-pane-color);
+  /* The grid's own mask, copied whole (the outline tile at the grid's
+     phase, less any hole), so the highlight covers exactly the outline. */
   mask-image:     var(--grid-mask-image, none);
   mask-size:      var(--grid-mask-size, auto);
   mask-position:  var(--grid-mask-position, 0 0);
@@ -591,21 +591,17 @@
    composites a shade apart from the pane's own, so a grid without a ring
    keeps the pattern on the pane. */
 .editor-beat-pane[data-grid-ring] {
-  background-image: none;
+  background-color: transparent;
   mask-image:       none;
 }
 .editor-beat-pane[data-grid-ring]::before {
   content:  '';
   position: absolute;
   inset:    0;
-  background-image:
-    repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
-  /* The tile as custom properties, not `inherit`: an explicit inherit makes
+  background-color: var(--beat-pane-color);
+  /* The mask as custom properties, not `inherit`: an explicit inherit makes
      this pseudo-element recompute its style (and repaint its mask) whenever
      the pane's style changes, which is once a frame. */
-  background-size:     var(--beat-pane-tile-size);
-  background-position: var(--beat-pane-tile-position);
   mask-image:     var(--grid-mask-image, none);
   mask-size:      var(--grid-mask-size, auto);
   mask-position:  var(--grid-mask-position, 0 0);

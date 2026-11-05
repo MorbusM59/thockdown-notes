@@ -47,7 +47,7 @@ import { GridWave } from './GridWave'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
 import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
-import { cutoutClosure, type CutoutRing } from './cutoutRing'
+import { cutoutClosure, gridOutlineMask, type CutoutRing } from './cutoutRing'
 import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
   computeVisualizerLayout,
@@ -410,15 +410,15 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, onCu
   // the scene) leaves the cutout alone and draws the same ring.
   const closure = cutout.size > 0 ? cutoutClosure(cutoutRect, cutoutRound) : null
   const outlineRing = closure?.outlineRing ?? null
-  const outlineGridStyle: CSSProperties = closure ? {
-    ...closure.hole,
+  const outlineGridStyle: CSSProperties = {
+    ...gridOutlineMask(`${box}px ${box}px`, `${originXPx - 1}px ${originYPx - 1}px`, closure?.holeShape ?? null),
     ...(outlineRing ? {
       '--grid-ring-mask': outlineRing.mask,
       '--grid-ring-left': `${outlineRing.left}px`,
       '--grid-ring-top': `${outlineRing.top}px`,
       '--grid-ring-size': `${outlineRing.size}px`,
     } : {}),
-  } as CSSProperties : {}
+  } as CSSProperties
   // The grid-line layer needs the hole only when the rings replace the
   // straight lines; at roundness 0 the cutout covers it, as it always did.
   const gridLinesHole: CSSProperties = closure?.gridRing ? closure.hole : {}
@@ -478,7 +478,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, onCu
           <div
             ref={gridOutlineRef}
             className="visualizer-grid thockdown-grid-outline-lines"
-            style={{ backgroundPosition: `${originXPx - 1}px ${originYPx - 1}px`, ...outlineGridStyle }}
+            style={outlineGridStyle}
           />
           <div className="visualizer-grid thockdown-grid-lines" style={{ backgroundPosition: `${originXPx}px ${originYPx}px`, zIndex: 4, ...gridLinesHole }} />
           {outlineRing && <CutoutRingLayer ring={outlineRing} className="is-outline" />}

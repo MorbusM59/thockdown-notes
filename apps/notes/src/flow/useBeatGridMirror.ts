@@ -16,29 +16,36 @@
  * index.css describes). So the block draws a COPY at shell level, on a
  * layer of its own outside the pane, and this keeps the copy's box, tile size
  * and phase equal to the real grid's: re-read when either box resizes or the
- * grid's inline style (its half-cell phase, or a mask cutting a hole in it)
+ * grid's inline style (its half-cell phase, or a hole cut in its mask)
  * changes, never per frame.
  */
 
 import { useEffect, useState } from 'react'
 
 /** The inline properties `sync` writes, removed again when the grid goes so the flat pane fills the shell. */
-const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--editor-cell-width', '--editor-line-height', 'background-size', 'background-position', '--beat-pane-tile-size', '--beat-pane-tile-position']
+const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height']
 
 /**
- * A hole in the grid and the ring it closes round the hole with (the
- * visualizer's cutout, `visualizer/cutoutRing.ts`), copied from the grid's
- * inline style. The hole's mask is written to the copy as `--grid-mask-*`,
- * and the copy is marked `data-grid-ring` while there is a ring, which
- * lies inside the hole, so the copy's CSS takes the hole out of its pattern
- * alone and draws the ring beside it.
+ * The grid's mask, read from its COMPUTED style (the outline tile at the
+ * grid's cell size and phase, less any hole the visualizer's cutout makes in
+ * it, `visualizer/cutoutRing.ts`) and written to the copy as `--grid-mask-*`,
+ * so the copy is lit on exactly the pixels the outline covers.
  */
-const HOLE_PROPERTIES: ReadonlyArray<readonly [source: string, target: string]> = [
+const MASK_PROPERTIES: ReadonlyArray<readonly [source: string, target: string]> = [
   ['mask-image', '--grid-mask-image'],
   ['mask-size', '--grid-mask-size'],
   ['mask-position', '--grid-mask-position'],
   ['mask-repeat', '--grid-mask-repeat'],
   ['mask-composite', '--grid-mask-composite'],
+]
+
+/**
+ * The ring the grid closes round its hole with, copied from the grid's
+ * inline style. The copy is marked `data-grid-ring` while there is one,
+ * which lies inside the hole, so the copy's CSS takes the hole out of its
+ * pattern alone and draws the ring beside it.
+ */
+const RING_PROPERTIES: ReadonlyArray<readonly [source: string, target: string]> = [
   ['--grid-ring-mask', '--grid-ring-mask'],
   ['--grid-ring-left', '--grid-ring-left'],
   ['--grid-ring-top', '--grid-ring-top'],
@@ -69,20 +76,11 @@ export function useBeatGridMirror(isGridView: boolean): {
       mirror.style.top = `${g.top - h.top - host.clientTop}px`
       mirror.style.width = `${g.width}px`
       mirror.style.height = `${g.height}px`
-      // The tile IS one cell: its two lengths are the cell's, which the
-      // pattern's stops read and which are only defined inside the editor.
-      // (Computed as a list, one entry per gradient; both are the same cell.)
-      const [cellWidth, lineHeight] = style.backgroundSize.split(',')[0].trim().split(' ')
-      mirror.style.setProperty('--editor-cell-width', cellWidth)
-      mirror.style.setProperty('--editor-line-height', lineHeight ?? cellWidth)
-      mirror.style.backgroundSize = style.backgroundSize
-      mirror.style.backgroundPosition = style.backgroundPosition
-      // The ring's pattern (::before) reads the tile through these rather than inheriting it (editor.css).
-      mirror.style.setProperty('--beat-pane-tile-size', style.backgroundSize)
-      mirror.style.setProperty('--beat-pane-tile-position', style.backgroundPosition)
-      // A hole in the grid, and its ring, are in the copy too; a grid
-      // without one leaves the copy whole.
-      for (const [source, target] of HOLE_PROPERTIES) {
+      for (const [source, target] of MASK_PROPERTIES) {
+        mirror.style.setProperty(target, style.getPropertyValue(source))
+      }
+      // A ring is in the copy too; a grid without one leaves it out.
+      for (const [source, target] of RING_PROPERTIES) {
         const value = grid.style.getPropertyValue(source)
         if (value) mirror.style.setProperty(target, value)
         else mirror.style.removeProperty(target)
@@ -102,7 +100,8 @@ export function useBeatGridMirror(isGridView: boolean): {
       // Removed property by property: the element's style also carries
       // --beat-pane, written per frame by flowStyle.ts.
       for (const property of MIRRORED_PROPERTIES) mirror.style.removeProperty(property)
-      for (const [, target] of HOLE_PROPERTIES) mirror.style.removeProperty(target)
+      for (const [, target] of MASK_PROPERTIES) mirror.style.removeProperty(target)
+      for (const [, target] of RING_PROPERTIES) mirror.style.removeProperty(target)
       mirror.removeAttribute('data-grid-ring')
     }
   }, [hasGrid, grid, mirror])
