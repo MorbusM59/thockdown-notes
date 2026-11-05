@@ -23,7 +23,7 @@
 import { useEffect, useState } from 'react'
 
 /** The inline properties `sync` writes, removed again when the grid goes so the flat pane fills the shell. */
-const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--editor-cell-width', '--editor-line-height', 'background-size', 'background-position']
+const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--editor-cell-width', '--editor-line-height', 'background-size', 'background-position', '--beat-pane-tile-size', '--beat-pane-tile-position']
 
 /**
  * A hole in the grid and the ring it closes round the hole with (the
@@ -77,6 +77,9 @@ export function useBeatGridMirror(isGridView: boolean): {
       mirror.style.setProperty('--editor-line-height', lineHeight ?? cellWidth)
       mirror.style.backgroundSize = style.backgroundSize
       mirror.style.backgroundPosition = style.backgroundPosition
+      // The ring's pattern (::before) reads the tile through these rather than inheriting it (editor.css).
+      mirror.style.setProperty('--beat-pane-tile-size', style.backgroundSize)
+      mirror.style.setProperty('--beat-pane-tile-position', style.backgroundPosition)
       // A hole in the grid, and its ring, are in the copy too; a grid
       // without one leaves the copy whole.
       for (const [source, target] of HOLE_PROPERTIES) {

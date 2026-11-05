@@ -533,6 +533,23 @@
    layout's too (--beat-edge-spread, --beat-edge-blur), written only when its
    slider moves, and a mode may scale it (--beat-edge-blur-scale,
    --beat-edge-spread-extra; the visualizer does, visualizer.css), so a beat never changes anything but the opacity. */
+/* The two per-frame values are registered as NOT inherited. Each is set on
+   the one element that reads it, and an inherited custom property changing
+   there makes every descendant recompute its style once a frame, the pane's
+   masked pattern (::before) included, whose mask then repaints the page
+   (measured: one page repaint a frame while the pane followed the music,
+   none with these registered). */
+@property --beat-edge {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+@property --beat-pane {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
 .editor-beat-edge {
   display:        none;
   position:       absolute;
@@ -584,8 +601,11 @@
   background-image:
     repeating-linear-gradient(to right, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-cell-width)),
     repeating-linear-gradient(to bottom, var(--beat-pane-color) 0, var(--beat-pane-color) 3px, transparent 3px, transparent var(--editor-line-height));
-  background-size:     inherit;
-  background-position: inherit;
+  /* The tile as custom properties, not `inherit`: an explicit inherit makes
+     this pseudo-element recompute its style (and repaint its mask) whenever
+     the pane's style changes, which is once a frame. */
+  background-size:     var(--beat-pane-tile-size);
+  background-position: var(--beat-pane-tile-position);
   mask-image:     var(--grid-mask-image, none);
   mask-size:      var(--grid-mask-size, auto);
   mask-position:  var(--grid-mask-position, 0 0);
