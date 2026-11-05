@@ -37,6 +37,7 @@ import {
   DEFAULT_CUSTOM_DARK,
 } from '@thockdown/look/presets';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
+import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel } from '@thockdown/look/boxBevel';
 import { defaultVisualizer, sanitizeVisualizer } from '@thockdown/look/visualizer';
 import {
   DEFAULT_CUSTOM_CURSOR_SETTINGS,
@@ -138,6 +139,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   typingSoundEnabled: false,
   typingSoundSet: 'A',
   glaze: DEFAULT_GLAZE_SETTINGS,
+  boxBevel: DEFAULT_BOX_BEVEL,
   darkMode: 'none',
   filterInvert: 0,
   filterSepia: 0,
@@ -512,6 +514,7 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
       ? source.typingSoundSet
       : DEFAULT_UI_LAYOUT_LOADOUT.typingSoundSet,
     glaze: sanitizeGlazeSettings(source.glaze, DEFAULT_UI_LAYOUT_LOADOUT.glaze),
+    boxBevel: sanitizeBoxBevel(source.boxBevel, DEFAULT_UI_LAYOUT_LOADOUT.boxBevel),
     darkMode,
     filterInvert: Math.max(0, Math.min(1, source.filterInvert ?? 0)),
     filterSepia: Math.max(0, Math.min(1, source.filterSepia ?? 0)),
@@ -629,7 +632,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
 // Keys whose values are nested objects; they're emitted as inline JSON when
 // they differ from NEUTRAL_BASE (DEFAULT_CUSTOM_LIGHT).
 const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
-  'glaze', 'highlightColors', 'editorTextColors', 'textureMaterials', 'visualizer',
+  'glaze', 'boxBevel', 'highlightColors', 'editorTextColors', 'textureMaterials', 'visualizer',
 ];
 
 /** Build the override fragment of one .tdl line against NEUTRAL_BASE. */

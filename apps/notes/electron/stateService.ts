@@ -18,6 +18,7 @@ import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSe
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
+import { sanitizeBoxBevel } from '@thockdown/look/boxBevel';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';
 import { sanitizeSoundscapePreferences } from '@thockdown/soundscape/soundscape';
 import { DEFAULT_UI_FONT_KEY, DEFAULT_UI_FONT_SCALE, UI_FONT_OPTIONS, UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX, roundUiFontScale, type UiFontKey } from '../src/shared/UiTypography';
@@ -543,6 +544,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
       : undefined,
     textureEnabled: Boolean(input?.textureEnabled),
     glaze: sanitizeGlazeSettings(input?.glaze, DEFAULT_APP_STATE.menu!.glaze ?? DEFAULT_GLAZE_SETTINGS),
+    boxBevel: sanitizeBoxBevel(input?.boxBevel),
     uiMode: sanitizeUiMode(input?.uiMode),
     textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
     textureMaterials: sanitizeTextureMaterials(input?.textureMaterials),

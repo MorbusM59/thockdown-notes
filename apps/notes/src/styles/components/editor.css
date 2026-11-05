@@ -575,6 +575,10 @@
   z-index:        4;
   opacity:        var(--beat-pane, 0);
   background-color: var(--beat-pane-color);
+  /* The box bevel's shading, over the pane colour, at the grid's tile. */
+  background-image:    var(--box-shading, none);
+  background-size:     var(--beat-pane-tile-size, auto);
+  background-position: var(--beat-pane-tile-position, 0 0);
   /* The grid's own mask, copied whole (the outline tile at the grid's
      phase, less any hole), so the highlight covers exactly the outline. */
   mask-image:     var(--grid-mask-image, none);
@@ -592,6 +596,7 @@
    keeps the pattern on the pane. */
 .editor-beat-pane[data-grid-ring] {
   background-color: transparent;
+  background-image: none;
   mask-image:       none;
 }
 .editor-beat-pane[data-grid-ring]::before {
@@ -599,7 +604,10 @@
   position: absolute;
   inset:    0;
   background-color: var(--beat-pane-color);
-  /* The mask as custom properties, not `inherit`: an explicit inherit makes
+  background-image:    var(--box-shading, none);
+  background-size:     var(--beat-pane-tile-size, auto);
+  background-position: var(--beat-pane-tile-position, 0 0);
+  /* The tile and mask as custom properties, not `inherit`: an explicit inherit makes
      this pseudo-element recompute its style (and repaint its mask) whenever
      the pane's style changes, which is once a frame. */
   mask-image:     var(--grid-mask-image, none);

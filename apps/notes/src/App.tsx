@@ -37,6 +37,8 @@ import {
   sanitizeGlazeSettings,
   type GlazeSettings,
 } from '@thockdown/look/glaze'
+import { DEFAULT_BOX_BEVEL, boxShadingImage, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
+import { publishBoxBevel } from './shared/boxBevelStore'
 import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
   idKind,
@@ -781,6 +783,7 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       ? source.typingSoundSet
       : DEFAULT_TYPING_SOUND_SET,
     glaze: sanitizeGlazeSettings(source.glaze, DEFAULT_GLAZE_SETTINGS),
+    boxBevel: sanitizeBoxBevel(source.boxBevel),
     darkMode,
     filterInvert: clamp(toFiniteNumber(source.filterInvert, 0), 0, 1),
     filterSepia: clamp(toFiniteNumber(source.filterSepia, 0), 0, 1),
@@ -2153,6 +2156,10 @@ function App() {
   const [textureEnabled] = useState(true)
   const [textureMaterials, setTextureMaterials] = useState<TextureMaterialsBySurface>(() => cloneTextureMaterials(DEFAULT_TEXTURE_MATERIALS))
   const [glazeSettings, setGlazeSettings] = useState<GlazeSettings>(() => DEFAULT_GLAZE_SETTINGS)
+  const [boxBevel, setBoxBevel] = useState<BoxBevelSettings>(() => DEFAULT_BOX_BEVEL)
+  // The bevel's shape reaches the grids through boxBevelStore (they build their tiles from it and their own cell size); its shading is one CSS image on the shell.
+  useEffect(() => { publishBoxBevel(boxBevel) }, [boxBevel])
+  const boxShadingCss = useMemo(() => boxShadingImage(boxBevel), [boxBevel])
   const [glazeLinearSeedInput, setGlazeLinearSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.linearSeed))
   const [isGlazeLinearSeedEditing, setIsGlazeLinearSeedEditing] = useState(false)
   const [glazeRadialSeedInput, setGlazeRadialSeedInput] = useState(() => String(DEFAULT_GLAZE_SETTINGS.radialSeed))
@@ -2505,6 +2512,7 @@ function App() {
       typingSoundEnabled,
       typingSoundSet,
       glaze: glazeSettings,
+      boxBevel,
       darkMode,
       filterInvert,
       filterSepia,
@@ -2587,6 +2595,7 @@ function App() {
     borderAlphaPercent,
     boxShadowAlphaPercent,
     glazeSettings,
+    boxBevel,
     darkMode,
     filterInvert,
     filterSepia,
@@ -2685,6 +2694,7 @@ function App() {
     setTypingSoundEnabled(loadout.typingSoundEnabled)
     setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))
+    setBoxBevel(sanitizeBoxBevel(loadout.boxBevel))
     // Apply darkMode preset to sliders; individual filter values from the
     // loadout then override preset values if they were customised further.
     applyDarkModePreset(loadout.darkMode ?? 'none')
@@ -3278,6 +3288,7 @@ function App() {
       wheelStepRows,
       wheelStepLines,
       glaze: glazeSettings,
+      boxBevel,
       darkMode,
       uiMode,
       filterInvert,
@@ -3418,6 +3429,7 @@ function App() {
     audioTrebleVolume,
     textureEnabled,
     glazeSettings,
+    boxBevel,
     musicVolume,
     musicReverbAmount,
     musicReverbRoom,
@@ -3948,6 +3960,7 @@ function App() {
       '--caret-halo-blur': `${caretHaloBlurPx}px`,
       '--caret-halo-color': caretHaloColor,
       '--caret-animation-duration': `${caretAnimationDurationMs}ms`,
+      '--box-shading': boxShadingCss,
       '--texture-app-grid': appGridTextureCss,
       '--texture-sidebar-content': sidebarTextureCss,
       '--texture-editor-edit': editorEditTextTextureCss,
@@ -3972,6 +3985,7 @@ function App() {
     caretHaloBlurPx,
     caretHaloColor,
     caretAnimationDurationMs,
+    boxShadingCss,
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,
@@ -5228,6 +5242,7 @@ ${markdownHtml}
               WHEEL_STEP_LINES_MAX,
             ))
             setGlazeSettings(sanitizeGlazeSettings(appState.menu.glaze, DEFAULT_GLAZE_SETTINGS))
+            setBoxBevel(sanitizeBoxBevel(appState.menu.boxBevel))
             setUiMode(appState.menu.uiMode === 'dark' ? 'dark' : 'light')
             applyDarkModePreset(appState.menu.darkMode ?? 'none')
             setFilterInvert(appState.menu.filterInvert ?? 0)
@@ -8663,6 +8678,8 @@ ${markdownHtml}
                         textureMaterials={textureMaterials}
                         glazeSettings={glazeSettings}
                         setGlazeSettings={setGlazeSettings}
+                        boxBevel={boxBevel}
+                        setBoxBevel={setBoxBevel}
                         isGlazeLinearSeedEditing={isGlazeLinearSeedEditing}
                         glazeLinearSeedInputRef={glazeLinearSeedInputRef}
                         glazeLinearSeedInput={glazeLinearSeedInput}

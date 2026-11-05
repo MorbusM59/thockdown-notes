@@ -11,6 +11,7 @@
 
 import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from './textureTypes';
 import { DEFAULT_GLAZE_SETTINGS } from './glaze';
+import { DEFAULT_BOX_BEVEL } from './boxBevel';
 import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
 import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import type { UiLayoutLoadout } from './loadouts';
@@ -167,6 +168,7 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   typingSoundEnabled: false,
   typingSoundSet: 'A',
   glaze: DEFAULT_GLAZE_SETTINGS,
+  boxBevel: DEFAULT_BOX_BEVEL,
   darkMode: 'none',
   filterInvert: 0,
   filterSepia: 0,

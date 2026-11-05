@@ -1,5 +1,6 @@
 import type { TextureMaterialsBySurface } from './textureTypes';
 import type { GlazeSettings } from './glaze';
+import type { BoxBevelSettings } from './boxBevel';
 import type { CaretAnimationPresetKey } from './caretSettings';
 import type { VisualizerSettings } from './visualizer';
 
@@ -36,6 +37,8 @@ export type UiLayoutLoadout = {
   // layout switches independent of whichever layout is active. See
   // appState.ts's renderScrollDynamic and friends.
   glaze: GlazeSettings;
+  /** The box bevel (Options > Colors > Box bevel). */
+  boxBevel: BoxBevelSettings;
   darkMode: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
   filterInvert: number;
   filterSepia: number;

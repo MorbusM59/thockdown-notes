@@ -7,6 +7,7 @@ import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
 import type { TextureMaterialsBySurface, TextureSurfaceKey } from '@thockdown/look/textureTypes';
 import type { GlazeSettings } from '@thockdown/look/glaze';
+import type { BoxBevelSettings } from '@thockdown/look/boxBevel';
 import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape';
 
 export const APP_STATE_CHANNELS = {
@@ -93,6 +94,7 @@ export interface PersistedMenuState {
   borderAlphaPercent?: number;
   boxShadowAlphaPercent?: number;
   glaze?: GlazeSettings;
+  boxBevel?: BoxBevelSettings;
   darkMode?: 'none' | 'mono' | 'red' | 'dusk' | 'neon' | 'matrix';
   uiMode?: 'light' | 'dark';
   filterInvert?: number;
