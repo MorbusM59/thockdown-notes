@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressPress, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry } from './visualizerLayout'
+import { bucketListArea, LEVEL_BARS_GAP_BOXES, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressPress, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('caps the strips at ten boxes and at a fifth of the height', () => {
@@ -145,5 +145,28 @@ describe('pool filter', () => {
     expect(fieldWindow('abc', 3, 10)).toEqual({ chars: ['a', 'b', 'c'], caretColumn: 3 })
     expect(fieldWindow('abcdef', 6, 4)).toEqual({ chars: ['d', 'e', 'f'], caretColumn: 3 })
     expect(fieldWindow('abcdef', 1, 4)).toEqual({ chars: ['a', 'b', 'c', 'd'], caretColumn: 1 })
+  })
+})
+
+describe('level bars', () => {
+  it('centre under the cutout on the lowest line, reverb and room a row above with the gap between', () => {
+    const layout = computeVisualizerLayout(1920, 1080, 20, 220)
+    const songs = songListArea(layout)!
+    const bars = levelBarsArea(layout)!
+    expect(bars.volume.row).toBe(songs.row + 2 * (songs.slots - 1))
+    expect(layout.cutout.column - bars.volume.column).toBe(8)
+    expect(bars.volume.column + bars.volume.columns - (layout.cutout.column + layout.cutout.size)).toBe(8)
+    expect(bars.reverb.row).toBe(bars.volume.row - 2)
+    expect(bars.reverb.column).toBe(bars.volume.column)
+    expect(bars.room.column + bars.room.columns).toBe(bars.volume.column + bars.volume.columns)
+    expect(bars.room.column - (bars.reverb.column + bars.reverb.columns)).toBeGreaterThanOrEqual(LEVEL_BARS_GAP_BOXES)
+  })
+
+  it('keeps both ends lit and inverts a press', () => {
+    expect(levelGapColumn(12, 0)).toBe(1)
+    expect(levelGapColumn(12, 1)).toBe(10)
+    for (let column = 1; column <= 10; column += 1) expect(levelGapColumn(12, levelAtColumn(12, column))).toBe(column)
+    expect(levelAtColumn(12, 0)).toBe(0)
+    expect(levelAtColumn(12, 11)).toBe(1)
   })
 })

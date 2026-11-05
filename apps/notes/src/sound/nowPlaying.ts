@@ -26,16 +26,22 @@ export type NowPlaying = {
   playFromPool: (id: number) => void
   /** Take a bucket in or out of the pool, as its button in the music bar does. */
   toggleSlot: (slot: PlaylistSlot) => void
+  /** The music's volume, reverb amount and reverb room, each a fraction 0..1 (what is resumed while muted or bypassed). */
+  levels: SoundLevels
+  /** Set one of them, as the music bar's own controls do: adjusting a muted volume or a bypassed reverb turns it back on. */
+  setLevel: (level: keyof SoundLevels, fraction: number) => void
   /** Commit a filter: the next pick, and a song chosen from the pool, read it. The song playing plays on. */
   setPoolFilter: (filter: MusicPoolFilter) => void
 }
 
-let current: NowPlaying = { song: null, jumpSong: () => {}, pool: null, playFromPool: () => {}, toggleSlot: () => {}, setPoolFilter: () => {} }
+export type SoundLevels = { volume: number; reverb: number; room: number }
+
+let current: NowPlaying = { song: null, jumpSong: () => {}, pool: null, playFromPool: () => {}, toggleSlot: () => {}, setPoolFilter: () => {}, levels: { volume: 0, reverb: 0, room: 0 }, setLevel: () => {} }
 const listeners = new Set<() => void>()
 
 /** Called by the music player whenever the song or its actions change. */
 export function publishNowPlaying(next: NowPlaying): void {
-  if (next.song === current.song && next.jumpSong === current.jumpSong && next.pool === current.pool && next.playFromPool === current.playFromPool && next.toggleSlot === current.toggleSlot && next.setPoolFilter === current.setPoolFilter) return
+  if (next.song === current.song && next.jumpSong === current.jumpSong && next.pool === current.pool && next.playFromPool === current.playFromPool && next.toggleSlot === current.toggleSlot && next.setPoolFilter === current.setPoolFilter && next.levels === current.levels && next.setLevel === current.setLevel) return
   current = next
   for (const listener of listeners) listener()
 }

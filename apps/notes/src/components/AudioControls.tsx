@@ -34,7 +34,7 @@ import {
 } from '../shared/useHoldToAdjust'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
-import { publishNowPlaying } from '../sound/nowPlaying'
+import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
@@ -830,8 +830,23 @@ export const AudioControls = memo(function AudioControls({
   // data it names the window and nothing else, and its previous/next buttons
   // do nothing. It gets the same song and the same three actions as the
   // transport here: play/pause, previous (walk back) and next (a fresh song).
-  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, playFromPool, toggleSlot, isPlaying })
-  mediaActionsRef.current = { handlePlayToggle, jumpSong, playFromPool, toggleSlot, isPlaying }
+  // The visualizer's level bars set a level outright, under the same
+  // "adjusting turns it back on" rule as the wheel and the hold (written out
+  // here rather than through unmuteForAdjust, which is declared below).
+  const setLevel = useCallback((level: keyof SoundLevels, fraction: number) => {
+    const value = Math.max(0, Math.min(1, fraction))
+    if (level === 'volume') {
+      if (isMuted) onMutedChange(false)
+      onVolumeChange(value)
+    } else {
+      if (isReverbBypassed) onReverbBypassedChange(false)
+      if (level === 'reverb') onReverbAmountChange(value)
+      else onReverbRoomChange(value)
+    }
+  }, [isMuted, onMutedChange, isReverbBypassed, onReverbBypassedChange, onVolumeChange, onReverbAmountChange, onReverbRoomChange])
+
+  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, playFromPool, toggleSlot, setLevel, isPlaying })
+  mediaActionsRef.current = { handlePlayToggle, jumpSong, playFromPool, toggleSlot, setLevel, isPlaying }
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -869,9 +884,11 @@ export const AudioControls = memo(function AudioControls({
     onPoolFilterChange(filter)
   }, [onPoolFilterChange])
   const publishedPool = useMemo(() => ({ slots: activeSlots, counts, filter: poolFilter }), [activeSlots, counts, poolFilter])
+  const publishedLevels = useMemo(() => ({ volume, reverb: reverbAmount, room: reverbRoom }), [volume, reverbAmount, reverbRoom])
+  const publishedSetLevel = useCallback((level: keyof SoundLevels, fraction: number) => { mediaActionsRef.current.setLevel(level, fraction) }, [])
   useEffect(() => {
-    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, toggleSlot: publishedToggleSlot, setPoolFilter })
-  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedToggleSlot, setPoolFilter])
+    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, toggleSlot: publishedToggleSlot, setPoolFilter, levels: publishedLevels, setLevel: publishedSetLevel })
+  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedToggleSlot, setPoolFilter, publishedLevels, publishedSetLevel])
 
   useEffect(() => {
     const session = navigator.mediaSession

@@ -280,3 +280,50 @@ export function fieldWindow(text: string, caret: number, columns: number): { cha
   const start = Math.max(0, at - columns + 1)
   return { chars: all.slice(start, start + columns), caretColumn: at - start }
 }
+
+/** How far the volume bar reaches past the cutout on each side. */
+export const LEVEL_BARS_OVERHANG_BOXES = 8
+/** The empty boxes between the reverb bar and the room bar. */
+export const LEVEL_BARS_GAP_BOXES = 10
+
+export type LevelBar = { column: number; row: number; columns: number }
+export type LevelBarsArea = { volume: LevelBar; reverb: LevelBar; room: LevelBar }
+
+/**
+ * The sound level bars, centred under the cutout. The volume bar is on the
+ * song list's (and the pool filter's) lowest line and reaches
+ * `LEVEL_BARS_OVERHANG_BOXES` past the cutout on each side; reverb and room
+ * are the row two above it, reverb flush with its left end, room with its
+ * right, `LEVEL_BARS_GAP_BOXES` apart. Null without a cutout, or without room
+ * for bars of three boxes or a top row inside the middle section.
+ */
+export function levelBarsArea(layout: VisualizerLayout): LevelBarsArea | null {
+  const songs = songListArea(layout)
+  if (!songs || layout.cutout.size <= 0) return null
+  const row = songs.row + 2 * (songs.slots - 1)
+  const column = layout.cutout.column - LEVEL_BARS_OVERHANG_BOXES
+  const columns = layout.cutout.size + 2 * LEVEL_BARS_OVERHANG_BOXES
+  const side = Math.floor((columns - LEVEL_BARS_GAP_BOXES) / 2)
+  if (row - 2 < songs.row || column < 0 || side < 3) return null
+  return {
+    volume: { column, row, columns },
+    reverb: { column, row: row - 2, columns: side },
+    room: { column: column + columns - side, row: row - 2, columns: side },
+  }
+}
+
+/**
+ * Where a level bar of `columns` boxes leaves its one empty box for `fraction`
+ * (0..1): somewhere between its two end boxes, which are always lit, so the
+ * level's whole range is the `columns - 2` boxes between them.
+ */
+export function levelGapColumn(columns: number, fraction: number): number {
+  const span = columns - 2
+  return 1 + Math.round(Math.max(0, Math.min(1, fraction)) * (span - 1))
+}
+
+/** The level a press on box `column` of a level bar sets: the inverse of `levelGapColumn`, an end box pressing the end of the range. */
+export function levelAtColumn(columns: number, column: number): number {
+  const span = columns - 2
+  return span <= 1 ? 0 : Math.max(0, Math.min(1, (column - 1) / (span - 1)))
+}

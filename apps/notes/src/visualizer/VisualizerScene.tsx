@@ -47,6 +47,7 @@ import { GridWave } from './GridWave'
 import { SongList } from './SongList'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
+import { LevelBars } from './LevelBars'
 import { dropWideGlyphs } from './cellGlyphs'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
@@ -64,6 +65,7 @@ import {
   songListArea,
   bucketListArea,
   poolFilterArea,
+  levelBarsArea,
   trackSpan,
   type VisualizerLayout,
 } from './visualizerLayout'
@@ -177,6 +179,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
   const songArea = useMemo(() => songListArea(layout), [layout])
   const bucketArea = useMemo(() => bucketListArea(layout), [layout])
   const filterArea = useMemo(() => poolFilterArea(layout), [layout])
+  const levelArea = useMemo(() => levelBarsArea(layout), [layout])
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const glyphFont = `${fontSizePx}px ${fontFamily}`
@@ -519,6 +522,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
           {songArea && <SongList layout={layout} area={songArea} glyphFont={glyphFont} />}
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
           {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
+          {levelArea && <LevelBars layout={layout} area={levelArea} />}
 
           {layout.progressRow !== null && (
             <div
