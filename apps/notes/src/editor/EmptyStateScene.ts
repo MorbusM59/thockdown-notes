@@ -209,11 +209,24 @@ function project(p: Vec3, scale: number, focal: number, cx: number, cy: number):
 
 /** The solid's look: alpha quantized to this many discrete steps (a posterized, LCD-like step). */
 const QUANTIZE_STEPS = 10
-/** Each 8-bit alpha's quantized value, so the per-pixel pass is one lookup. */
-const QUANTIZED_ALPHA = Uint8Array.from({ length: 256 }, (_, alpha) => {
-  const level = Math.min(QUANTIZE_STEPS - 1, Math.floor((alpha / 255) * QUANTIZE_STEPS))
-  return Math.round((level * 255) / (QUANTIZE_STEPS - 1))
-})
+const QUANTIZE_FILTER_ID = 'thockdown-solid-quantize'
+
+/**
+ * The quantize as an SVG filter the canvas draws through (`context.filter`),
+ * so it runs where the canvas is rasterized: a per-pixel pass in script read
+ * the drawing back from the GPU every frame and was the largest script cost
+ * in the visualizer at 4x throttle. Added to the document once.
+ */
+function quantizeFilter(): string {
+  if (!document.getElementById(QUANTIZE_FILTER_ID)) {
+    const table = Array.from({ length: QUANTIZE_STEPS }, (_, i) => (i / (QUANTIZE_STEPS - 1)).toFixed(4)).join(' ')
+    const holder = document.createElement('div')
+    holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true"><filter id="${QUANTIZE_FILTER_ID}" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncA type="discrete" tableValues="${table}" /></feComponentTransfer></filter></svg>`
+    const svg = holder.firstElementChild
+    if (svg) document.body.appendChild(svg)
+  }
+  return `url(#${QUANTIZE_FILTER_ID})`
+}
 
 /**
  * One seeded solid: everything that decides how it looks and turns, fixed per
@@ -282,15 +295,15 @@ const STRIPE_INK = 'rgba(0, 0, 0, 0.15)'
 
 /** Reusable buffers for `drawSolidScene`, so a frame allocates nothing. */
 export interface SolidDrawScratch {
-  alpha: HTMLCanvasElement | OffscreenCanvas
-  alphaContext: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+  alpha: HTMLCanvasElement
+  alphaContext: CanvasRenderingContext2D
   stripes: CanvasPattern | null
   stripesDpr: number
 }
 
 export function createSolidDrawScratch(): SolidDrawScratch {
-  const alpha = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas')
-  const alphaContext = alpha.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+  const alpha = document.createElement('canvas')
+  const alphaContext = alpha.getContext('2d') as CanvasRenderingContext2D
   return { alpha, alphaContext, stripes: null, stripesDpr: 0 }
 }
 
@@ -388,14 +401,11 @@ export function drawSolidScene(
   }
   a.stroke()
 
-  // Quantize the composited alpha (an feFuncA type="discrete" table of
-  // QUANTIZE_STEPS values from 0 to 1, as the SVG's filter did).
-  const image = a.getImageData(0, 0, size, size)
-  const data = image.data
-  for (let i = 3; i < data.length; i += 4) data[i] = QUANTIZED_ALPHA[data[i]]
-  a.putImageData(image, 0, 0)
-
+  // Cut out through the quantize: the COMPOSITED alpha of the faces and
+  // edges, stepped to QUANTIZE_STEPS values from 0 to 1.
+  context.filter = quantizeFilter()
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(alpha as CanvasImageSource, (width - side) / 2, (height - side) / 2, side, side)
+  context.drawImage(alpha, (width - side) / 2, (height - side) / 2, side, side)
   context.globalCompositeOperation = 'source-over'
+  context.filter = 'none'
 }
