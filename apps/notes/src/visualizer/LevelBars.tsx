@@ -47,7 +47,7 @@ export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: Le
       {labelsOf(area, layout.stripRows + 1).flatMap((label) => Array.from(label.text).map((char, index) => (
         <div
           key={`${label.text}${index}`}
-          className="visualizer-letter"
+          className="visualizer-letter is-panel"
           style={{ left: originXPx + (label.column + index) * boxPx, top: originYPx + label.row * boxPx, width: boxPx, height: boxPx, lineHeight: `${boxPx}px` }}
         >
           {char}

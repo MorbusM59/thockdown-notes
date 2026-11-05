@@ -44,5 +44,5 @@ export function setMiddleHoles(middle: HTMLElement, owner: string, holes: HoleRe
 
 /** The scene's middle strip, from any element inside the scene. */
 export function middleStripOf(element: HTMLElement): HTMLElement | null {
-  return element.closest('.visualizer-scene')?.querySelector<HTMLElement>('.visualizer-strip.is-middle') ?? null
+  return element.closest('.visualizer-scene')?.querySelector<HTMLElement>('.visualizer-strip.is-middle:not(.is-hole-fill)') ?? null
 }

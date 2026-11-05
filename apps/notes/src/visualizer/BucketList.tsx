@@ -66,7 +66,7 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
         </Fragment>
       ))}
       {entries.map((entry) => Array.from(entry.text).map((char, index) => (char === ' ' ? null : (
-        <div key={`l${entry.slot}-${index}`} className="visualizer-letter" style={{ ...cell(entry.left + (index + 2) * boxPx, entry.top), lineHeight: `${boxPx}px` }}>
+        <div key={`l${entry.slot}-${index}`} className="visualizer-letter is-panel" style={{ ...cell(entry.left + (index + 2) * boxPx, entry.top), lineHeight: `${boxPx}px` }}>
           {char}
         </div>
       ))))}

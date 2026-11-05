@@ -300,7 +300,7 @@
    the caret as a bar on its box's left edge, and a transparent input over
    each field that takes the typing. */
 .visualizer-letter.is-placeholder {
-  opacity: 0.5;
+  opacity: calc(0.5 * var(--visualizer-panels));
 }
 .visualizer-scene > .visualizer-filter-caret {
   z-index: 5;
@@ -314,4 +314,38 @@
   border: 0;
   margin: 0;
   cursor: text;
+}
+
+/* Tab shows and hides the panels (the song list, the bucket list, the pool
+   filter, the level bars; panelsShown.ts): one inherited number every panel
+   element takes as its opacity, faded in over 200ms and out over 500ms. A
+   hidden panel takes no presses. Under each plate's hole in the middle strip
+   (middleHoles.ts) an unmasked copy of the middle strip fades the other way,
+   so as a plate fades out its hole fills with the middle's colour. */
+@property --visualizer-panels {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+.visualizer-scene {
+  --visualizer-panels: 1;
+  transition: --visualizer-panels 200ms linear;
+}
+.visualizer-scene.is-panels-hidden {
+  --visualizer-panels: 0;
+  transition-duration: 500ms;
+}
+.visualizer-scene > .visualizer-song-list,
+.visualizer-scene > .visualizer-bucket-box,
+.visualizer-scene > .visualizer-filter-caret,
+.visualizer-letter.is-panel:not(.is-placeholder) {
+  opacity: var(--visualizer-panels);
+}
+.visualizer-strip.is-hole-fill {
+  opacity: calc(1 - var(--visualizer-panels));
+}
+.visualizer-scene.is-panels-hidden > .visualizer-song-list-hit,
+.visualizer-scene.is-panels-hidden > .visualizer-bucket-hit,
+.visualizer-scene.is-panels-hidden > .visualizer-filter-input {
+  pointer-events: none;
 }

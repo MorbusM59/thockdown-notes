@@ -106,7 +106,7 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
             {shown.chars.map((char, index) => (char === ' ' ? null : (
               <div
                 key={`l${key}-${index}`}
-                className={value === '' ? 'visualizer-letter is-placeholder' : 'visualizer-letter'}
+                className={value === '' ? 'visualizer-letter is-panel is-placeholder' : 'visualizer-letter is-panel'}
                 style={{ ...cell(field.column + index, field.row), lineHeight: `${boxPx}px` }}
               >
                 {char}

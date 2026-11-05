@@ -11,6 +11,7 @@ import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type MusicPoolFilter } from './shared/audioPlayer'
+import { togglePanelsShown } from './visualizer/panelsShown'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
@@ -7532,11 +7533,17 @@ ${markdownHtml}
       }
 
       // In the visualizer the scene holds the keyboard and the note under it
-      // is hidden, so Tab/Shift+Tab step through the layout presets and Enter
-      // switches between light and dark. Space and the arrow keys belong to
-      // the music controls. Repeats are ignored so a held layout key moves
-      // only once.
-      if (isVisualizerMode) {
+      // is hidden, so Backspace/Delete step through the layout presets, Enter
+      // switches between light and dark and Tab shows or hides the panels.
+      // Space and the arrow keys belong to the music controls. Repeats are
+      // ignored so a held key acts only once. A pool filter field keeps its
+      // own keys.
+      if (isVisualizerMode && !isTextEntryElement(event.target instanceof Element ? event.target : null)) {
+        if (matchShortcut(event, 'visualizerPanels')) {
+          event.preventDefault()
+          if (!event.repeat) togglePanelsShown()
+          return
+        }
         const layoutChord = matchShortcut(event, 'visualizerNextLayout')
           ? 1
           : matchShortcut(event, 'visualizerPreviousLayout') ? -1 : 0

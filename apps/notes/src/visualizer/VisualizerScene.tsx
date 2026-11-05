@@ -45,6 +45,7 @@ import {
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
+import { readPanelsShown, subscribePanelsShown } from './panelsShown'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
 import { LevelBars } from './LevelBars'
@@ -463,11 +464,13 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
     '--visualizer-font-size': `${fontSizePx}px`,
   } as CSSProperties
 
+  const panelsShown = useSyncExternalStore(subscribePanelsShown, readPanelsShown)
   return (
-    <div ref={setScene} className="visualizer-scene" tabIndex={-1} data-visualizer-scene="" style={style}>
+    <div ref={setScene} className={panelsShown ? 'visualizer-scene' : 'visualizer-scene is-panels-hidden'} tabIndex={-1} data-visualizer-scene="" style={style}>
       {width > 0 && (
         <>
           <div className="visualizer-strip is-top" style={{ height: rowTop(stripRows) }} />
+          <div className="visualizer-strip is-middle is-hole-fill" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
           <div className="visualizer-strip is-middle" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
           <div className="visualizer-strip is-bottom" style={{ top: rowTop(spectrumTopRow) }} />
 
