@@ -14,8 +14,8 @@
  *   (and the beat pane's) in the corner region only, so the outline is
  *   shaded only where the corners reach it: `shading` is the
  *   alpha at full strength, black to the left of centre and white to the
- *   right (before the scene's invert filter, see `onScreenBoxBevel`); `contrast` fades one side of the box to nothing at +-0.5 and on
- *   to the opposite overlay at +-1; `direction` turns the axis that runs
+ *   right (before the scene's invert filter, see `onScreenBoxBevel`); `contrast` fades the far side of the box to nothing at 0.5 and on
+ *   to the opposite overlay at 1; `direction` turns the axis that runs
  *   along, in degrees (0: top to bottom, 90: right to left).
  *
  * TILE GEOMETRY. A tile is one box, W by H, placed one pixel AFTER its grid
@@ -33,7 +33,7 @@ export interface BoxBevelSettings {
   shape: number
   /** 0 (a hard edge) .. 1 (the corners' curve blurred by half its radius). */
   softness: number
-  /** -1 .. 1: 0 shades the box evenly; towards +1 the far side fades and then inverts, towards -1 the near side does. */
+  /** 0 .. 1: 0 shades the box evenly; towards 1 the far side fades and then inverts (the near side is the far side at `direction` + 180). */
   contrast: number
   /** Degrees, 0 .. 360: 0 runs top to bottom, 90 right to left, 180 bottom to top. */
   direction: number
@@ -62,7 +62,7 @@ export function sanitizeBoxBevel(input: unknown, fallback: BoxBevelSettings = DE
     shading: finite(source.shading, fallback.shading, -1, 1),
     shape: finite(source.shape, fallback.shape, 0, 1),
     softness: finite(source.softness, fallback.softness, 0, 1),
-    contrast: finite(source.contrast, fallback.contrast, -1, 1),
+    contrast: finite(source.contrast, fallback.contrast, 0, 1),
     direction: finite(source.direction, fallback.direction, 0, 360),
   }
 }
@@ -110,7 +110,7 @@ function cornerMask(boxW: number, boxH: number, shape: number, softness: number)
 
 /** The shading's strength at the two ends of its axis, before `shading` scales it. */
 export function shadingEnds(contrast: number): readonly [start: number, end: number] {
-  return contrast >= 0 ? [1, 1 - 2 * contrast] : [1 + 2 * contrast, 1]
+  return [1, 1 - 2 * contrast]
 }
 
 export interface BoxBevelImages {

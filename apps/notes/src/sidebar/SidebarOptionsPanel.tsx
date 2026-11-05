@@ -12,7 +12,7 @@ const BOX_BEVEL_SLIDERS: ReadonlyArray<{ field: keyof BoxBevelSettings; min: num
   { field: 'shading', min: -1, max: 1, step: 0.01, trackLabel: 'shading', ariaLabel: 'Box bevel shading -- centre leaves the outline unchanged, left darkens and right brightens, up to a full black or white overlay at the ends, up to full alpha at the ends' },
   { field: 'shape', min: 0, max: 1, step: 0.01, trackLabel: 'shape', ariaLabel: 'Box bevel shape -- how far the outline fills into the corners of each box, from the outline alone to everything outside an ellipse the size of the box' },
   { field: 'softness', min: 0, max: 1, step: 0.01, trackLabel: 'softness', ariaLabel: 'Box bevel softness -- how soft the edge of the filled corners is' },
-  { field: 'contrast', min: -1, max: 1, step: 0.01, trackLabel: 'contrast', ariaLabel: 'Box bevel contrast -- centre shades the box evenly; to the right the far side fades out and then inverts, to the left the near side does' },
+  { field: 'contrast', min: 0, max: 1, step: 0.01, trackLabel: 'contrast', ariaLabel: 'Box bevel contrast -- 0 shades the box evenly; to the right the far side fades out, and past the middle turns to the opposite shading' },
   { field: 'direction', min: 0, max: 360, step: 1, trackLabel: 'direction', ariaLabel: 'Box bevel direction -- turns the shading, in degrees: top to bottom at 0, right to left at 90' },
 ]
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
