@@ -18,7 +18,6 @@ const BOX_BEVEL_SLIDERS: ReadonlyArray<{ field: keyof BoxBevelSettings; min: num
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
   DEFAULT_FLOW_SETTINGS,
-  FLOW_AMP_MAX,
   FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN,
   type FlowSettings,
 } from '../shared/flowSettings'
@@ -2809,8 +2808,8 @@ export function SidebarOptionsPanel({
         heading="Flow"
       >
           <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail, amp). How the meter itself moves is fixed (shared/flowSettings.ts). */}
-            <OptionsSliderRows rows={[2, 2, 2]}>
+            {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail). How the meter itself moves is fixed (shared/flowSettings.ts). */}
+            <OptionsSliderRows rows={[2, 2, 1]}>
               <CompactScrollbarSlider
                 id="flow-fade-time"
                 min={FLOW_FADE_MAX_TIME_MIN}
@@ -2872,18 +2871,6 @@ export function SidebarOptionsPanel({
                 ariaLabel="Strength of the flow's trail"
                 defaultValue={DEFAULT_FLOW_SETTINGS.trail}
                 onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trail: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-amp"
-                min={0}
-                max={FLOW_AMP_MAX}
-                step={0.01}
-                value={flowSettings.amp}
-                trackLabel="amp"
-                tooltipLabel="Amp boost: how strongly playing music's EQ answers flow, all of it at full flow"
-                ariaLabel="Strength of the music's flow EQ"
-                defaultValue={DEFAULT_FLOW_SETTINGS.amp}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, amp: value }))}
               />
             </OptionsSliderRows>
           </div>

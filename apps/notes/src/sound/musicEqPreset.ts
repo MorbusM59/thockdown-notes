@@ -1,15 +1,14 @@
 /**
  * The music's EQ preset, one of five, shown in the visualizer as the
  * Platonic solid in the cutout (a left press steps up the list, a right
- * press down, `VisualizerScene.tsx`). Unlike the flow EQ, which follows the
- * typing flow meter, a preset is applied all the time
- * (`MusicPlayerService.setPresetEq`); the flow EQ still acts on top of it.
- * Persisted as `musicEqPreset`.
+ * press down, `VisualizerScene.tsx`): a strength of the one EQ curve, from
+ * -50% (less bass and air) to +75%, applied all the time
+ * (`MusicPlayerService.setEqStrength`). Persisted as `musicEqPreset`.
  */
 
 import { musicPlayerService } from './MusicPlayerService'
 
-import { DEFAULT_MUSIC_EQ_PRESET, MUSIC_EQ_PRESETS, type MusicEqPreset } from '../shared/musicEqPresets'
+import { DEFAULT_MUSIC_EQ_PRESET, MUSIC_EQ_PRESETS, MUSIC_EQ_STRENGTH, type MusicEqPreset } from '../shared/musicEqPresets'
 
 let preset: MusicEqPreset = DEFAULT_MUSIC_EQ_PRESET
 const listeners = new Set<() => void>()
@@ -21,7 +20,7 @@ export function readMusicEqPreset(): MusicEqPreset {
 export function setMusicEqPreset(next: MusicEqPreset): void {
   if (next === preset) return
   preset = next
-  musicPlayerService.setPresetEq(next)
+  musicPlayerService.setEqStrength(MUSIC_EQ_STRENGTH[next])
   for (const listener of listeners) listener()
 }
 

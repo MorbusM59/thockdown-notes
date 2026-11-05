@@ -257,7 +257,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Corrections and arrow keys never cost flow; only stopping does.
 - While you type, the word count shows your current speed instead, in letters per second: a number for your own reference, not for comparing with others. It switches back when you pause.
 - In flow, each character you type lights the grid lines above and below it, paler at low flow and in its full colour at full flow, and the caret's cell is framed in the same lines as its source; it fades over the time and shape set in the flow options, and its colour and its alpha are under Colors, in Editor Boxes.
-- **look**, **reverb** and **trail** set how strongly each answers, and **amp** how strongly playing music's EQ does.
+- **look**, **reverb** and **trail** set how strongly each answers.
 - While you type, the caret stops blinking and holds steady; when you stop, it eases back into its blink.
 
 ### [Visualizer](#visualizer)

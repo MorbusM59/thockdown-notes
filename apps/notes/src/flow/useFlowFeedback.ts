@@ -11,7 +11,6 @@ import type { FlowSettings } from '../shared/flowSettings'
 import { flowMeter } from './flowMeter'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
-import { musicPlayerService } from '../sound/MusicPlayerService'
 import { TRAIL_ALPHA_AT_FULL_FLOW } from './flowTrail'
 import { setFlowStyle } from './flowStyle'
 
@@ -31,7 +30,7 @@ function setCaretHold(hold: number): void {
 }
 
 export function useFlowFeedback(enabled: boolean, settings: FlowSettings): void {
-  const { gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration, fadeMaxTime, fadeShape, lineRamp, trail, reverb, amp } = settings
+  const { gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration, fadeMaxTime, fadeShape, lineRamp, trail, reverb } = settings
 
   useEffect(() => {
     flowMeter.configure({ enabled, gainPercent, decayPercent, idleGraceMs, idleShape, idleDuration })
@@ -51,9 +50,6 @@ export function useFlowFeedback(enabled: boolean, settings: FlowSettings): void 
       // Set on the elements that read them (flowStyle.ts), never on <html>.
       setFlowStyle('--flow-trail-source', (Math.min(1, level) * trail * TRAIL_ALPHA_AT_FULL_FLOW).toFixed(4))
       setFlowStyle('--flow-trail-source-saturation', Math.min(1, level).toFixed(4))
-      // The music's flow EQ (`MusicPlayerService.setFlowEq`) in proportion to
-      // the level, the whole curve at full flow, scaled by the amp slider.
-      musicPlayerService.setFlowEq(amp * level)
       typingSoundManager.setFlowReverb(level * reverb)
       soundscapeEngine.setWeatherFloor(level * WEATHER_FLOOR_AT_FULL_FLOW)
     })
@@ -61,9 +57,8 @@ export function useFlowFeedback(enabled: boolean, settings: FlowSettings): void 
       unsubscribe()
       setFlowStyle('--flow-trail-source', null)
       setFlowStyle('--flow-trail-source-saturation', null)
-      musicPlayerService.setFlowEq(0)
       typingSoundManager.setFlowReverb(0)
       soundscapeEngine.setWeatherFloor(0)
     }
-  }, [trail, reverb, amp])
+  }, [trail, reverb])
 }

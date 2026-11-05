@@ -1,5 +1,4 @@
 ﻿import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
-import type { MusicEqPreset } from '../shared/musicEqPresets';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
 
 /**
@@ -176,44 +175,19 @@ export function resolveSeekPress(
 }
 
 /**
- * The flow EQ: a "punchy rock" curve (a bass shelf, a scooped low-mid, a
- * presence lift and an air shelf) applied to the music in proportion to the
- * typing flow meter. Gains are the curve at full effect.
+ * The music's EQ (`musicEqPreset.ts`, the visualizer's solid): one "punchy
+ * rock" curve (a bass shelf, a scooped low-mid, a presence lift and an air
+ * shelf), applied all the time at the preset's strength, a share of the
+ * gains below. A negative strength turns the curve over: less bass and air.
  */
-/** The smallest change of the flow EQ's amount `setFlowEq` applies. */
-const FLOW_EQ_MIN_STEP = 0.002;
-const VOLUME_SMOOTHING_SEC = 0.02;
-
-const FLOW_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number; q: number; gainDb: number }> = [
+const AMP_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number; q: number; gainDb: number }> = [
   { type: 'lowshelf', frequencyHz: 100, q: 0.7, gainDb: 16 },
   { type: 'peaking', frequencyHz: 500, q: 0.9, gainDb: -8 },
   { type: 'peaking', frequencyHz: 3000, q: 1, gainDb: 8 },
   { type: 'highshelf', frequencyHz: 10000, q: 0.7, gainDb: 16 },
 ];
-const FLOW_EQ_SMOOTHING_SEC = 0.05;
-
-/**
- * The EQ presets (`musicEqPreset.ts`), applied all the time, after the flow
- * EQ: five filters of fixed types, each preset giving every one its
- * frequency, Q and gain. Classical is a gentle loudness contour for quiet
- * listening (a little bass and air, nothing cut); voice is the usual speech
- * curve (rumble cut, a dip in the boxy low mids, a presence lift, a softened
- * top); amp50 and amp100 are the flow EQ's curve at half and full strength.
- */
-type PresetBand = { frequencyHz: number; q: number; gainDb: number };
-const PRESET_EQ_TYPES: readonly BiquadFilterType[] = ['highpass', 'lowshelf', 'peaking', 'peaking', 'highshelf'];
-const OFF_HIGHPASS: PresetBand = { frequencyHz: 10, q: 0.7, gainDb: 0 };
-const ampCurve = (strength: number): PresetBand[] => [
-  OFF_HIGHPASS,
-  ...FLOW_EQ_BANDS.map((band) => ({ frequencyHz: band.frequencyHz, q: band.q, gainDb: band.gainDb * strength })),
-];
-const PRESET_EQ_BANDS: Record<MusicEqPreset, PresetBand[]> = {
-  classical: [OFF_HIGHPASS, { frequencyHz: 100, q: 0.7, gainDb: 3 }, { frequencyHz: 500, q: 0.9, gainDb: 0 }, { frequencyHz: 3000, q: 1, gainDb: 0 }, { frequencyHz: 10000, q: 0.7, gainDb: 1.5 }],
-  voice: [{ frequencyHz: 90, q: 0.7, gainDb: 0 }, { frequencyHz: 100, q: 0.7, gainDb: 0 }, { frequencyHz: 300, q: 1, gainDb: -3 }, { frequencyHz: 3000, q: 1, gainDb: 3 }, { frequencyHz: 9000, q: 0.7, gainDb: -3 }],
-  flat: ampCurve(0),
-  amp50: ampCurve(0.5),
-  amp100: ampCurve(1),
-};
+const EQ_SMOOTHING_SEC = 0.05;
+const VOLUME_SMOOTHING_SEC = 0.02;
 
 type PlaybackEndHandler = () => void;
 
@@ -226,9 +200,7 @@ export class MusicPlayerService {
   private wetGain: GainNode | null = null;
   private convolver: ConvolverNode | null = null;
   private eqBands: BiquadFilterNode[] = [];
-  private eqAmount = 0;
-  private presetBands: BiquadFilterNode[] = [];
-  private preset: MusicEqPreset = 'flat';
+  private eqStrength = 0;
   private config: MusicPlayerConfig = { volume: 0.8, reverbAmount: 0, reverbRoom: 0.3 };
   private onEndedHandler: PlaybackEndHandler | null = null;
   private currentFilePath: string | null = null;
@@ -362,31 +334,18 @@ export class MusicPlayerService {
       this.convolver = context.createConvolver();
       this.convolver.buffer = buildSyntheticRoomImpulseResponse(context, this.config.reverbRoom);
 
-      // The flow EQ sits between the source and the volume: element →
-      // each FLOW_EQ_BANDS filter in turn → gainNode.
-      this.eqBands = FLOW_EQ_BANDS.map((band) => {
+      // The EQ sits between the source and the volume: element → each
+      // AMP_EQ_BANDS filter in turn → gainNode.
+      this.eqBands = AMP_EQ_BANDS.map((band) => {
         const filter = context.createBiquadFilter();
         filter.type = band.type;
         filter.frequency.value = band.frequencyHz;
         filter.Q.value = band.q;
-        filter.gain.value = band.gainDb * this.eqAmount;
+        filter.gain.value = band.gainDb * this.eqStrength;
         return filter;
       });
       for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
-
-      // Then the preset EQ, all the time: … → each preset filter → gainNode.
-      this.presetBands = PRESET_EQ_TYPES.map((type, i) => {
-        const filter = context.createBiquadFilter();
-        const band = PRESET_EQ_BANDS[this.preset][i];
-        filter.type = type;
-        filter.frequency.value = band.frequencyHz;
-        filter.Q.value = band.q;
-        filter.gain.value = band.gainDb;
-        return filter;
-      });
-      this.eqBands[this.eqBands.length - 1].connect(this.presetBands[0]);
-      for (let i = 1; i < this.presetBands.length; i++) this.presetBands[i - 1].connect(this.presetBands[i]);
-      this.presetBands[this.presetBands.length - 1].connect(this.gainNode);
+      this.eqBands[this.eqBands.length - 1].connect(this.gainNode);
 
       // gainNode → dryGain → limiter, and gainNode → convolver → wetGain → limiter
       this.gainNode.connect(this.dryGain);
@@ -399,7 +358,7 @@ export class MusicPlayerService {
   }
 
   /**
-   * The music as it is HEARD, processing included (the flow EQ, the reverb
+   * The music as it is HEARD, processing included (the EQ, the reverb
    * and its mix), for the visualizer mode's spectrum
    * (`visualizer/spectrumTap.ts`), with the volume divided back out so the
    * reader's volume slider does not shrink what is drawn. Taken before the
@@ -430,34 +389,13 @@ export class MusicPlayerService {
     return this.config.volume > 1e-3 ? 1 / this.config.volume : 0;
   }
 
-  /**
-   * How much of the flow EQ is applied, 0..1: each band's gain is its
-   * `gainDb` times this. Moved with a short time constant so the meter's
-   * per-frame updates do not step the filters audibly.
-   */
-  setFlowEq(amount: number): void {
-    // Called every frame the flow meter moves. Each call adds an automation
-    // event per band, so a change too small to hear (under 0.04 dB at
-    // the curve's largest band) is skipped; reaching zero always applies.
-    if (Math.abs(amount - this.eqAmount) < FLOW_EQ_MIN_STEP && (amount > 0 || this.eqAmount === 0)) return;
-    this.eqAmount = amount;
+  /** The EQ's strength (`musicEqPreset.ts`): each band's gain is its `gainDb` times this, moved to over a short time constant. */
+  setEqStrength(strength: number): void {
+    this.eqStrength = strength;
     const context = this.audioCtx;
     if (!context) return;
     this.eqBands.forEach((filter, i) => {
-      filter.gain.setTargetAtTime(FLOW_EQ_BANDS[i].gainDb * amount, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
-    });
-  }
-
-  /** The EQ preset applied all the time (`musicEqPreset.ts`), moved to over the flow EQ's time constant. */
-  setPresetEq(preset: MusicEqPreset): void {
-    this.preset = preset;
-    const context = this.audioCtx;
-    if (!context) return;
-    this.presetBands.forEach((filter, i) => {
-      const band = PRESET_EQ_BANDS[preset][i];
-      filter.frequency.setTargetAtTime(band.frequencyHz, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
-      filter.Q.setTargetAtTime(band.q, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
-      filter.gain.setTargetAtTime(band.gainDb, context.currentTime, FLOW_EQ_SMOOTHING_SEC);
+      filter.gain.setTargetAtTime(AMP_EQ_BANDS[i].gainDb * strength, context.currentTime, EQ_SMOOTHING_SEC);
     });
   }
 
