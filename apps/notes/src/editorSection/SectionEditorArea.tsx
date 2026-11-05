@@ -295,7 +295,7 @@ export function SectionEditorArea({
   const isSealedNote = isSealedNoteId(menuIdentityNoteId) || isSealedNoteId(activeNoteId)
 
   // The visualizer's edge reads --beat-edge, set on it alone (flow/flowStyle.ts).
-  const [beatEdgeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  const [beatEdgeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-edge']))
   // The visualizer's pane, two elements reading --beat-pane: in the edit view
   // the box outlines' copy, on a layer of its own beside the edge's
   // (flow/useBeatGridMirror.ts); in any view without a grid a flat wash
@@ -303,8 +303,8 @@ export function SectionEditorArea({
   // The visualizer's scene has a grid of its own, over the editor's, and the
   // pane copies that one instead (the editor's is not drawn meanwhile).
   const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode || isVisualizerMode)
-  const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
-  const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }))
+  const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-pane']))
+  const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-pane']))
   const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
     beatPaneRef(el)
     beatMirrorRef(el)

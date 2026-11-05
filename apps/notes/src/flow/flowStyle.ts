@@ -13,21 +13,27 @@
  * beat edge, and the beat pane's grid copy and wash), so
  * each registers itself (`flowStyleTarget`) and receives the current values
  * on registration and every change after it.
+ *
+ * Each target names the variables it READS and receives only those. Every
+ * variable on every target was the first version, and it made each target
+ * restyle on every other target's change: the beat pane's copy of the grid
+ * took the caret's --beat-caret once a frame, an inherited custom property,
+ * so its masked ring pattern recomputed and repainted the page every frame.
  */
 
 const values = new Map<string, string>()
-const targets = new Set<HTMLElement>()
+const targets = new Map<HTMLElement, ReadonlySet<string>>()
 
 /** Sets a flow variable on every registered element; null removes it. */
 export function setFlowStyle(name: string, value: string | null): void {
   if (value === null) {
     if (!values.delete(name)) return
-    for (const el of targets) el.style.removeProperty(name)
+    for (const [el, reads] of targets) if (reads.has(name)) el.style.removeProperty(name)
     return
   }
   if (values.get(name) === value) return
   values.set(name, value)
-  for (const el of targets) el.style.setProperty(name, value)
+  for (const [el, reads] of targets) if (reads.has(name)) el.style.setProperty(name, value)
 }
 
 /** The variable's current value, or null when it is not set. */
@@ -35,10 +41,11 @@ export function readFlowStyle(name: string): string | null {
   return values.get(name) ?? null
 }
 
-/** Registers an element to receive the flow variables; returns the unregister. */
-export function registerFlowStyleTarget(el: HTMLElement): () => void {
-  targets.add(el)
-  for (const [name, value] of values) el.style.setProperty(name, value)
+/** Registers an element to receive the flow variables it `reads`; returns the unregister. */
+export function registerFlowStyleTarget(el: HTMLElement, reads: readonly string[]): () => void {
+  const names = new Set(reads)
+  targets.set(el, names)
+  for (const [name, value] of values) if (names.has(name)) el.style.setProperty(name, value)
   return () => {
     targets.delete(el)
   }
@@ -49,11 +56,11 @@ export function registerFlowStyleTarget(el: HTMLElement): () => void {
  * while it is mounted. Create it once per component (it holds the
  * unregister of the element it last saw).
  */
-export function flowStyleTarget<T extends HTMLElement>(ref: { current: T | null }): (el: T | null) => void {
+export function flowStyleTarget<T extends HTMLElement>(ref: { current: T | null }, reads: readonly string[]): (el: T | null) => void {
   let unregister: (() => void) | null = null
   return (el) => {
     unregister?.()
-    unregister = el ? registerFlowStyleTarget(el) : null
+    unregister = el ? registerFlowStyleTarget(el, reads) : null
     ref.current = el
   }
 }

@@ -1160,7 +1160,7 @@ export function CM6Editor({
   // element like the caret's own transform.
   const [flowSourceStyle, setFlowSourceStyle] = useState<React.CSSProperties | null>(null);
   const flowSourceElRef = useRef<HTMLDivElement | null>(null);
-  const [flowSourceElFlowRef] = useState(() => flowStyleTarget(flowSourceElRef));
+  const [flowSourceElFlowRef] = useState(() => flowStyleTarget(flowSourceElRef, ['--flow-trail-source', '--flow-trail-source-saturation']));
   const caretAnimationFrameRef = useRef<number | null>(null);
   // scrollerRect/layerRect don't change on a plain text keystroke -- only
   // the selection Range rect does. Cached across updateCaret calls and only
@@ -1173,7 +1173,7 @@ export function CM6Editor({
   // frame that computed it. See applyCaretStyle below for why that matters.
   const caretElRef = useRef<HTMLDivElement | null>(null);
   // The caret reads --flow-caret-effect, set on it rather than on <html> (flow/flowStyle.ts).
-  const [caretElFlowRef] = useState(() => flowStyleTarget(caretElRef));
+  const [caretElFlowRef] = useState(() => flowStyleTarget(caretElRef, ['--flow-caret-effect', '--beat-caret']));
   /**
    * The typing flow trail (flowMeter.trailBox): a clip box over the scroller
    * and, inside it, a layer moved by -scrollTop, so a box placed in SCROLL
