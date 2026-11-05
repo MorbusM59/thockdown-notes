@@ -1026,41 +1026,20 @@ html[data-beat-pane] .editor-section-column.is-active .editor-beat-wash.is-shown
   z-index:        2147483647;
 }
 
-/* The generated rotating Platonic solid (see src/editor/EmptyStateScene.ts)
-   is a mask shape, not an image: this layer still paints the same faint
-   needle-stripe texture the card always had, just clipped to the solid's
-   silhouette instead of covering the whole card. `--empty-state-scene-mask`
-   is set inline per section (stable per section id, so the animation's
-   shape/axis/speed don't reshuffle on every re-render). Negative z-index
-   keeps it behind the quick-actions grid, a z-index:auto in-flow child of
-   the same (position:absolute, so stacking-context-establishing)
-   .editor-empty-state box.
-
-   Mask is inverted: a second, fully-opaque layer (the solid gradient) is
-   XORed against the shape layer, flipping which side is "ink" -- so the
-   texture fills the whole circle and the tumbling solid reads as a clean
-   cutout tracing through it (edges as crisp fully-transparent seams, faces
-   as softer partial cutouts per their own random opacity), instead of the
-   shape itself being the only textured part. */
-.editor-empty-state::before,
-.visualizer-cutout-face::before {
-  content:        '';
+/* The rotating Platonic solid (src/editor/EmptyStateScene.ts), cut out of
+   the card's faint needle-stripe texture, drawn into a canvas by
+   SolidCanvas.tsx (in the empty state and in the visualizer's cutout face).
+   Negative z-index keeps it behind the quick-actions grid, a z-index:auto
+   in-flow child of the same (position:absolute, so
+   stacking-context-establishing) .editor-empty-state box. */
+.empty-state-solid {
   position:       absolute;
   inset:          0;
+  width:          100%;
+  height:         100%;
   z-index:        -1;
   pointer-events: none;
-  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.15) 0, rgba(0, 0, 0, 0.15) 2px, transparent 3px, transparent 4px);
-  -webkit-mask-image:     linear-gradient(#000, #000), var(--empty-state-scene-mask);
-  -webkit-mask-repeat:    no-repeat;
-  -webkit-mask-position:  center;
-  -webkit-mask-size:      contain;
-  -webkit-mask-composite: xor;
-  mask-image:    linear-gradient(#000, #000), var(--empty-state-scene-mask);
-  mask-repeat:   no-repeat;
-  mask-position: center;
-  mask-size:     contain;
-  mask-composite: exclude;
-  border-radius: calc(var(--border-radius-regular) *6);
+  border-radius:  calc(var(--border-radius-regular) *6);
 }
 
 /* Preview mode edge fades: see .render-container's mask-image in

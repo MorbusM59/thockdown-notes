@@ -1,15 +1,12 @@
-// Generates a slowly tumbling monochrome Platonic solid as an SVG, used
-// purely as a CSS mask shape -- the visible "ink" is always whatever
-// background sits behind it (the empty-state card's diagonal stripe
-// texture), this file only decides where that texture is allowed to show
-// through. The rotation itself is baked in at generation time as a SMIL
-// <animate> per edge/face, cycling through pre-computed true-3D-projected
-// frames -- there is no JS render loop driving it, it's a self-contained
-// animated image resource exactly like an animated GIF used as a
-// background-image. Seeded off a stable string (the section id, optionally
-// combined with a reroll nonce -- see SectionEditorArea.tsx) so a given
-// empty slot keeps the same solid/axis/speed across renders instead of
-// reshuffling on every repaint.
+// A slowly tumbling monochrome Platonic solid, cut out of the empty-state
+// card's faint needle-stripe texture (and out of the visualizer's cutout
+// face): the stripes fill the circle and the solid reads as a clean cutout
+// tracing through it, edges as crisp transparent seams and faces as softer
+// partial cutouts at their own alpha. Drawn into a canvas by SolidCanvas.tsx.
+// It was an animated SVG used as a CSS mask, which Chromium re-rasterizes on
+// the main thread every frame and which made every frame repaint the whole
+// page; a canvas redraw needs no page paint. Seeded off a stable string so a
+// given slot keeps the same solid, axis and speed across renders.
 
 function mulberry32(seed: number): () => number {
   let state = seed | 0
@@ -210,88 +207,189 @@ function project(p: Vec3, scale: number, focal: number, cx: number, cy: number):
   return [cx + x * scale * perspective, cy + y * scale * perspective]
 }
 
-const FRAME_COUNT = 36
-
-// 10 discrete alpha steps between fully transparent and fully opaque -- see
-// buildRotatingSolid's <filter>.
+/** The solid's look: alpha quantized to this many discrete steps (a posterized, LCD-like step). */
 const QUANTIZE_STEPS = 10
-const QUANTIZE_TABLE_VALUES = Array.from({ length: QUANTIZE_STEPS }, (_, i) => (i / (QUANTIZE_STEPS - 1)).toFixed(4)).join(' ')
+
+/**
+ * One seeded solid: everything that decides how it looks and turns, fixed per
+ * seed. `drawSolidScene` renders it at any moment.
+ */
+export interface SolidScene {
+  vertices: Vec3[]
+  faces: number[][]
+  edges: Array<[number, number]>
+  axis: Vec3
+  /** Turn direction, +1 or -1. */
+  dir: number
+  startPhase: number
+  /** Seconds per full turn. */
+  durationSec: number
+  /** Circumradius and focal length in viewBox units. */
+  halfSize: number
+  focal: number
+  /** Edge width in viewBox units. */
+  strokeWidth: number
+  /** Each face's own alpha, 0.1 to 0.5. */
+  faceAlphas: number[]
+}
 
 /**
  * Picks one of the 5 Platonic solids and tumbles it around a fully random
  * 3D axis. Faces are filled at their own random 10-50% opacity -- since
- * they're all the same hue (black), overlapping translucent faces combine
- * via ordinary alpha compositing regardless of draw order (compositing two
- * same-color layers is commutative), so no per-frame depth sorting is
- * needed even though the visible stacking is correct as the solid turns.
- * Edges stay fully opaque so they read as crisp seams between facets.
- * Everything is wrapped in an <feComponentTransfer> filter that quantizes
- * the final alpha to 10 discrete shades (a posterized, LCD-like step
- * instead of smooth blending) -- applied to the *composited* result, so it
- * clips the stacked-face alpha too, not just each face in isolation.
+ * they're all the same hue, overlapping translucent faces combine via
+ * ordinary alpha compositing regardless of draw order (compositing two
+ * same-colour layers is commutative), so no depth sorting is needed. Edges
+ * stay fully opaque so they read as crisp seams between facets. The draw
+ * quantizes the COMPOSITED alpha to QUANTIZE_STEPS shades, so it clips the
+ * stacked-face alpha too, not just each face in isolation. The random draws
+ * are taken in the order the earlier SVG generator took them, so a seed
+ * still picks the solid it always did.
  */
-function buildRotatingSolid(rand: () => number): string {
+function buildSolidScene(rand: () => number): SolidScene {
   const solid = SOLIDS[Math.floor(rand() * SOLIDS.length)]
   const vertices = normalizeVertices(solid.vertices)
-  const edges = edgesFromFaces(solid.faces)
-
   const axis = randomUnitAxis(rand)
   const dir = rand() < 0.5 ? 1 : -1
   const startPhase = rand() * Math.PI * 2
   const durationSec = 14 + rand() * 8
   const halfSize = VIEWBOX * (0.34 + rand() * 0.09)
   const focal = halfSize * (2.6 + rand())
-  const cx = VIEWBOX / 2
-  const cy = VIEWBOX / 2
-  const strokeWidth = (1.6 + rand() * 0.6).toFixed(2)
-  const faceOpacities = solid.faces.map(() => (0.1 + rand() * 0.4).toFixed(2))
+  const strokeWidth = 1.6 + rand() * 0.6
+  const faceAlphas = solid.faces.map(() => 0.1 + rand() * 0.4)
+  return { vertices, faces: solid.faces, edges: edgesFromFaces(solid.faces), axis, dir, startPhase, durationSec, halfSize, focal, strokeWidth, faceAlphas }
+}
 
-  const faceFrames: string[][] = solid.faces.map(() => [])
-  const edgeFrames: string[][] = edges.map(() => [])
+const sceneCache = new Map<string, SolidScene>()
 
-  for (let frame = 0; frame <= FRAME_COUNT; frame += 1) {
-    // frame === FRAME_COUNT repeats angle 0's projection exactly, so the
-    // SMIL loop has no visible seam when it wraps back to the first value.
-    const angle = startPhase + (dir * Math.PI * 2 * frame) / FRAME_COUNT
-    const projected = vertices.map((vertex) => project(rotateAroundAxis(vertex, axis, angle), halfSize, focal, cx, cy))
+/** The solid seeded off `seed` (a section id, optionally with a reroll nonce -- see SectionEditorArea.tsx), cached per seed. */
+export function emptyStateSolid(seed: string): SolidScene {
+  let scene = sceneCache.get(seed)
+  if (!scene) {
+    scene = buildSolidScene(mulberry32(hashStringToSeed(seed)))
+    sceneCache.set(seed, scene)
+  }
+  return scene
+}
 
-    solid.faces.forEach((face, faceIndex) => {
-      const points = face.map((vertexIndex) => projected[vertexIndex].map((n) => n.toFixed(1)).join(',')).join(' ')
-      faceFrames[faceIndex].push(points)
-    })
-    edges.forEach(([a, b], edgeIndex) => {
-      const [x1, y1] = projected[a]
-      const [x2, y2] = projected[b]
-      edgeFrames[edgeIndex].push(`M ${x1.toFixed(1)},${y1.toFixed(1)} L ${x2.toFixed(1)},${y2.toFixed(1)}`)
-    })
+/** The 45deg needle stripes the solid is cut out of: 2px of 15% black in every 4px, as the CSS texture it replaces. */
+const STRIPE_PERIOD_PX = 4
+const STRIPE_INK = 'rgba(0, 0, 0, 0.15)'
+
+/** Reusable buffers for `drawSolidScene`, so a frame allocates nothing. */
+export interface SolidDrawScratch {
+  alpha: HTMLCanvasElement | OffscreenCanvas
+  alphaContext: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+  stripes: CanvasPattern | null
+  stripesDpr: number
+}
+
+export function createSolidDrawScratch(): SolidDrawScratch {
+  const alpha = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1, 1) : document.createElement('canvas')
+  const alphaContext = alpha.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+  return { alpha, alphaContext, stripes: null, stripesDpr: 0 }
+}
+
+function stripePattern(context: CanvasRenderingContext2D, scratch: SolidDrawScratch, dpr: number): CanvasPattern | null {
+  if (scratch.stripes && scratch.stripesDpr === dpr) return scratch.stripes
+  // One tile of the diagonal pattern: a 45deg band repeats every PERIOD px both across and down.
+  const tilePx = Math.max(1, Math.round(STRIPE_PERIOD_PX * Math.SQRT2 * dpr))
+  const tile = document.createElement('canvas')
+  tile.width = tilePx
+  tile.height = tilePx
+  const t = tile.getContext('2d')
+  if (!t) return null
+  t.fillStyle = STRIPE_INK
+  const band = (2 * Math.SQRT2 * dpr)
+  for (let offset = -tilePx; offset <= tilePx; offset += tilePx) {
+    t.beginPath()
+    // A 45deg gradient runs toward the top right, so its stripes run from top left to bottom right.
+    t.moveTo(offset, 0)
+    t.lineTo(offset + band, 0)
+    t.lineTo(offset + band + tilePx, tilePx)
+    t.lineTo(offset + tilePx, tilePx)
+    t.closePath()
+    t.fill()
+  }
+  scratch.stripes = context.createPattern(tile, 'repeat')
+  scratch.stripesDpr = dpr
+  return scratch.stripes
+}
+
+/**
+ * Draws the stripe texture over the whole canvas with the solid cut out of it
+ * (faces as partial cutouts at their quantized alpha, edges as clean seams),
+ * at `timeSec` of its turn. The solid sits in a centred square as wide as the
+ * canvas's shorter side (as `mask-size: contain` placed it), grown by `scale`
+ * about its centre.
+ */
+export function drawSolidScene(
+  context: CanvasRenderingContext2D,
+  scratch: SolidDrawScratch,
+  scene: SolidScene,
+  timeSec: number,
+  dpr: number,
+  scale = 1,
+): void {
+  const width = context.canvas.width
+  const height = context.canvas.height
+  context.setTransform(1, 0, 0, 1, 0, 0)
+  context.globalCompositeOperation = 'source-over'
+  context.clearRect(0, 0, width, height)
+  const stripes = stripePattern(context, scratch, dpr)
+  if (stripes) {
+    context.fillStyle = stripes
+    context.fillRect(0, 0, width, height)
   }
 
-  const facesMarkup = faceFrames
-    .map((values, faceIndex) => `<polygon fill="black" fill-opacity="${faceOpacities[faceIndex]}" points="${values[0]}"><animate attributeName="points" dur="${durationSec.toFixed(2)}s" repeatCount="indefinite" calcMode="linear" values="${values.join(';')}" /></polygon>`)
-    .join('')
-  const edgesMarkup = edgeFrames
-    .map((values) => `<path fill="none" stroke="black" stroke-width="${strokeWidth}" stroke-linecap="round" d="${values[0]}"><animate attributeName="d" dur="${durationSec.toFixed(2)}s" repeatCount="indefinite" calcMode="linear" values="${values.join(';')}" /></path>`)
-    .join('')
+  const side = Math.min(width, height) * scale
+  const size = Math.ceil(side)
+  if (size <= 0) return
+  const { alpha, alphaContext: a } = scratch
+  if (alpha.width !== size || alpha.height !== size) {
+    alpha.width = size
+    alpha.height = size
+  }
+  a.setTransform(1, 0, 0, 1, 0, 0)
+  a.clearRect(0, 0, size, size)
+  const unit = side / VIEWBOX
+  a.setTransform(unit, 0, 0, unit, 0, 0)
+  const angle = scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec
+  const centre = VIEWBOX / 2
+  const projected = scene.vertices.map((vertex) => project(rotateAroundAxis(vertex, scene.axis, angle), scene.halfSize, scene.focal, centre, centre))
+  a.fillStyle = '#000'
+  scene.faces.forEach((face, faceIndex) => {
+    a.globalAlpha = scene.faceAlphas[faceIndex]
+    a.beginPath()
+    face.forEach((vertexIndex, i) => {
+      const [x, y] = projected[vertexIndex]
+      if (i === 0) a.moveTo(x, y)
+      else a.lineTo(x, y)
+    })
+    a.closePath()
+    a.fill()
+  })
+  a.globalAlpha = 1
+  a.strokeStyle = '#000'
+  a.lineWidth = scene.strokeWidth
+  a.lineCap = 'round'
+  a.beginPath()
+  for (const [from, to] of scene.edges) {
+    a.moveTo(projected[from][0], projected[from][1])
+    a.lineTo(projected[to][0], projected[to][1])
+  }
+  a.stroke()
 
-  return `<defs><filter id="quantize" x="-20%" y="-20%" width="140%" height="140%"><feComponentTransfer><feFuncA type="discrete" tableValues="${QUANTIZE_TABLE_VALUES}" /></feComponentTransfer></filter></defs><g filter="url(#quantize)">${facesMarkup}${edgesMarkup}</g>`
-}
+  // Quantize the composited alpha (an feFuncA type="discrete" table of
+  // QUANTIZE_STEPS values from 0 to 1, as the SVG's filter did).
+  const image = a.getImageData(0, 0, size, size)
+  const data = image.data
+  for (let i = 3; i < data.length; i += 4) {
+    const level = Math.min(QUANTIZE_STEPS - 1, Math.floor((data[i] / 255) * QUANTIZE_STEPS))
+    data[i] = Math.round((level * 255) / (QUANTIZE_STEPS - 1))
+  }
+  a.putImageData(image, 0, 0)
 
-function generateSceneSvg(seed: string): string {
-  const rand = mulberry32(hashStringToSeed(seed))
-  const solid = buildRotatingSolid(rand)
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEWBOX} ${VIEWBOX}">${solid}</svg>`
-}
-
-const maskUrlCache = new Map<string, string>()
-
-/** CSS `mask-image`-ready `url(...)` for a scene seeded off `seed` -- cached so repeated lookups for the same seed (e.g. re-renders) don't regenerate or re-encode the SVG. */
-export function getEmptyStateSceneMaskUrl(seed: string): string {
-  const cached = maskUrlCache.get(seed)
-  if (cached) return cached
-
-  const svg = generateSceneSvg(seed)
-  const encoded = encodeURIComponent(svg).replace(/'/g, '%27').replace(/"/g, '%22')
-  const url = `url("data:image/svg+xml,${encoded}")`
-  maskUrlCache.set(seed, url)
-  return url
+  context.globalCompositeOperation = 'destination-out'
+  context.drawImage(alpha as CanvasImageSource, (width - side) / 2, (height - side) / 2)
+  context.globalCompositeOperation = 'source-over'
 }

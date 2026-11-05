@@ -6,7 +6,7 @@ import type { ClipboardEvent, CSSProperties, DragEvent, MouseEvent, MutableRefOb
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
-import { getEmptyStateSceneMaskUrl } from '../editor/EmptyStateScene'
+import { SolidCanvas } from '../editor/SolidCanvas'
 import { VISUALIZER_GLYPH_SIDE_GAP_PX, VisualizerScene } from '../visualizer/VisualizerScene'
 import type { EditorAdapter, EditorBindings, EditorSelectionState } from '../editor/EditorContract'
 import { cellWidthForGlyph, type EditorRuntimeMetrics } from '../editor/EditorTypography'
@@ -318,8 +318,8 @@ export function SectionEditorArea({
   // in editor.css). Local state (not persisted) is enough since it only needs
   // to survive re-renders while this section stays mounted, not reloads.
   const [sceneRerollNonce, setSceneRerollNonce] = useState(0)
-  const emptyStateSceneMaskUrl = useMemo(
-    () => getEmptyStateSceneMaskUrl(`${sectionId}:${sceneRerollNonce}`),
+  const emptyStateSceneSeed = useMemo(
+    () => `${sectionId}:${sceneRerollNonce}`,
     [sectionId, sceneRerollNonce],
   )
 
@@ -539,12 +539,12 @@ export function SectionEditorArea({
             <div className={`editor-empty-state-plate${isEmptyStateVisible ? ' is-visible' : ''}`}/>
             <div
               className={`editor-empty-state${isEmptyStateVisible ? ' is-visible' : ''}`}
-              style={{ '--empty-state-scene-mask': emptyStateSceneMaskUrl } as CSSProperties}
               onClick={handleEmptyStateClick}
               role={isEscapeHoldActive ? 'dialog' : undefined}
               aria-label={isEscapeHoldActive ? 'Quick note panel' : undefined}
               aria-live={isEscapeHoldActive ? 'polite' : undefined}
             >
+              <SolidCanvas className="empty-state-solid" seed={emptyStateSceneSeed} active={isEmptyStateVisible} />
               <EscapeHoldPanel
                 isOpen={isEscapeHoldActive}
                 isSectionActive={isSectionActive}
@@ -573,7 +573,7 @@ export function SectionEditorArea({
                 boxPx={cellWidthForGlyph(editorRuntimeMetrics.glyphWidthPx, VISUALIZER_GLYPH_SIDE_GAP_PX)}
                 fontFamily={editorFontFamily}
                 fontSizePx={editorRuntimeMetrics.fontSizePx}
-                sceneMaskUrl={emptyStateSceneMaskUrl}
+                sceneSeed={emptyStateSceneSeed}
                 onCutoutClick={rerollScene}
                 gridOutlineRef={beatGridRef}
               />

@@ -45,9 +45,9 @@ import {
 import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
+import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
 import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
 import { cutoutClosure, type CutoutRing } from './cutoutRing'
-import { pulseCurve } from '@thockdown/look/visualizer'
 import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
   computeVisualizerLayout,
@@ -76,8 +76,8 @@ export type VisualizerSceneProps = {
   boxPx: number
   fontFamily: string
   fontSizePx: number
-  /** The empty scene's mask (EmptyStateScene.ts), the same image the slot's empty state shows. */
-  sceneMaskUrl: string
+  /** The empty scene's seed (EmptyStateScene.ts): the same solid the slot's empty state shows. */
+  sceneSeed: string
   /** A press on the cutout rerolls the solid, as a press on the empty state does. */
   onCutoutClick: () => void
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
@@ -139,10 +139,23 @@ function Letters({ runs, row, layout }: { runs: RowText[]; row: number; layout: 
 
 /** How much the centre solid grows on a hit: from 100% to 110%. */
 const THUMP_SCALE = 0.1
-/** Keyframes sampled along the thump's fall; linear between them. */
-const THUMP_KEYFRAMES = 16
+/**
+ * The solid's thump: on each hit the centre pulse sets off on (the edge's
+ * band, `pulseHits.ts`), the solid grows by THUMP_SCALE and falls back on
+ * the edge's own fall, so the solid's beat and the ring leaving it are one
+ * event. Only the solid grows, inside its canvas (`SolidCanvas.tsx`); the
+ * stripes keep their scale.
+ */
+function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+  return subscribePulseHits((strength) => {
+    if (reducedMotion.matches) return
+    const { edgeShape, edgeFallSec, pulseBoost } = readGridWaveSettings()
+    listener({ growth: pulseAmount(strength, pulseBoost) * THUMP_SCALE, fallSec: edgeFallSec, shape: edgeShape })
+  })
+}
 
-export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, onCutoutClick, gridOutlineRef }: VisualizerSceneProps) {
+export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, onCutoutClick, gridOutlineRef }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
@@ -156,44 +169,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const chromaCanvasRef = useRef<HTMLCanvasElement | null>(null)
-  const cutoutRef = useRef<HTMLDivElement | null>(null)
   const [gapColumn, setGapColumn] = useState<number | null>(null)
 
   // The frame loop. Rebuilt when the layout changes, since the number of
   // bands is the number of columns and the canvas is sized to the strip.
-  // The solid's thump: on each hit the centre pulse sets off on (the edge's
-  // band, `pulseHits.ts`), the solid grows by THUMP_SCALE and falls back on
-  // the edge's own fall, so the solid's beat and the ring leaving it are one
-  // event. Only the SOLID grows: the cutout face's ::before paints the stripe
-  // texture through a mask whose second layer is the solid, so the animation
-  // sizes that mask layer alone (the first, the full square it is XORed
-  // with, stays at 100%) and the stripes keep their scale. The solid's mask
-  // is an animated image that repaints the layer every frame anyway, so a
-  // mask size costs nothing a transform would have saved.
-  const hasCutout = cutout.size > 0
-  useEffect(() => {
-    const element = cutoutRef.current
-    if (!element) return
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
-    let running: Animation | null = null
-    const unsubscribe = subscribePulseHits((strength) => {
-      if (reducedMotion.matches) return
-      const { edgeShape, edgeFallSec, pulseBoost } = readGridWaveSettings()
-      const amount = pulseAmount(strength, pulseBoost)
-      const keyframes: Keyframe[] = []
-      for (let i = 0; i <= THUMP_KEYFRAMES; i++) {
-        const scale = 1 + amount * THUMP_SCALE * pulseCurve(i / THUMP_KEYFRAMES, edgeShape)
-        const size = `100% 100%, ${(100 * scale).toFixed(2)}% auto`
-        keyframes.push({ maskSize: size, webkitMaskSize: size } as Keyframe)
-      }
-      running?.cancel()
-      running = element.animate(keyframes, { duration: edgeFallSec * 1000, easing: 'linear', pseudoElement: '::before' })
-    })
-    return () => {
-      unsubscribe()
-      running?.cancel()
-    }
-  }, [hasCutout])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -524,12 +503,13 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneMaskUrl, o
                 top: cutoutRect.top,
                 width: cutoutRect.size,
                 height: cutoutRect.size,
-                '--empty-state-scene-mask': sceneMaskUrl,
                 '--visualizer-face-radius': `${closure?.faceRadiusPx ?? 0}px`,
               } as CSSProperties}
               onClick={onCutoutClick}
             >
-              <div ref={cutoutRef} className="visualizer-cutout-face" />
+              <div className="visualizer-cutout-face">
+                <SolidCanvas className="empty-state-solid" seed={sceneSeed} active subscribeThump={subscribeSolidThump} />
+              </div>
               <div className="visualizer-cutout-orb" />
             </div>
           )}

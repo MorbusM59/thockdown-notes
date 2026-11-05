@@ -96,7 +96,7 @@
 }
 
 /* The empty scene's solid, in a square of whole boxes: the empty state's
-   plate and its masked stripes (editor.css, .editor-empty-state::before). */
+   plate and its stripes (editor.css, .empty-state-solid). */
 .visualizer-scene > .visualizer-cutout {
   z-index: 7;
   pointer-events: auto;
@@ -146,7 +146,7 @@
   box-shadow: var(--box-shadow-inverted-filtered);
 }
 
-.visualizer-cutout-face::before {
+.visualizer-cutout-face > .empty-state-solid {
   border-radius: inherit;
 }
 
