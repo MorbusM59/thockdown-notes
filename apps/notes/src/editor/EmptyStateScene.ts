@@ -209,6 +209,11 @@ function project(p: Vec3, scale: number, focal: number, cx: number, cy: number):
 
 /** The solid's look: alpha quantized to this many discrete steps (a posterized, LCD-like step). */
 const QUANTIZE_STEPS = 10
+/** Each 8-bit alpha's quantized value, so the per-pixel pass is one lookup. */
+const QUANTIZED_ALPHA = Uint8Array.from({ length: 256 }, (_, alpha) => {
+  const level = Math.min(QUANTIZE_STEPS - 1, Math.floor((alpha / 255) * QUANTIZE_STEPS))
+  return Math.round((level * 255) / (QUANTIZE_STEPS - 1))
+})
 
 /**
  * One seeded solid: everything that decides how it looks and turns, fixed per
@@ -342,7 +347,11 @@ export function drawSolidScene(
   }
 
   const side = Math.min(width, height) * scale
-  const size = Math.ceil(side)
+  // The cutout is drawn at CSS-pixel resolution and scaled up: the quantize
+  // pass reads and writes every pixel of it, so at a device pixel ratio of 2
+  // full resolution would cost four times as much for edges already softened
+  // by the quantize.
+  const size = Math.ceil(side / Math.max(1, dpr))
   if (size <= 0) return
   const { alpha, alphaContext: a } = scratch
   if (alpha.width !== size || alpha.height !== size) {
@@ -351,7 +360,7 @@ export function drawSolidScene(
   }
   a.setTransform(1, 0, 0, 1, 0, 0)
   a.clearRect(0, 0, size, size)
-  const unit = side / VIEWBOX
+  const unit = size / VIEWBOX
   a.setTransform(unit, 0, 0, unit, 0, 0)
   const angle = scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec
   const centre = VIEWBOX / 2
@@ -383,13 +392,10 @@ export function drawSolidScene(
   // QUANTIZE_STEPS values from 0 to 1, as the SVG's filter did).
   const image = a.getImageData(0, 0, size, size)
   const data = image.data
-  for (let i = 3; i < data.length; i += 4) {
-    const level = Math.min(QUANTIZE_STEPS - 1, Math.floor((data[i] / 255) * QUANTIZE_STEPS))
-    data[i] = Math.round((level * 255) / (QUANTIZE_STEPS - 1))
-  }
+  for (let i = 3; i < data.length; i += 4) data[i] = QUANTIZED_ALPHA[data[i]]
   a.putImageData(image, 0, 0)
 
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(alpha as CanvasImageSource, (width - side) / 2, (height - side) / 2)
+  context.drawImage(alpha as CanvasImageSource, (width - side) / 2, (height - side) / 2, side, side)
   context.globalCompositeOperation = 'source-over'
 }
