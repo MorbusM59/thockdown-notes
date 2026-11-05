@@ -353,3 +353,9 @@
 .visualizer-scene.is-panels-hidden > .visualizer-filter-input {
   pointer-events: none;
 }
+
+/* The grid wave is portalled above everything, so it stands down while the
+   F1 quick reference is held (App.tsx sets the class). */
+.is-shortcut-reference-open .visualizer-grid-wave {
+  visibility: hidden;
+}

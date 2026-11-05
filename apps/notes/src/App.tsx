@@ -4649,6 +4649,11 @@ ${markdownHtml}
     if (adventureSectionId === activeSectionId) return
     void openGuideViewHere()
   })
+  // The visualizer's grid wave is portalled above everything, the quick
+  // reference included, so it stands down while the reference is held.
+  useEffect(() => {
+    document.documentElement.classList.toggle('is-shortcut-reference-open', isShortcutReferenceOpen)
+  }, [isShortcutReferenceOpen])
 
   const handleHelpModeOpen = useCallback(async () => {
     if (guideSectionId === activeSectionId) return
