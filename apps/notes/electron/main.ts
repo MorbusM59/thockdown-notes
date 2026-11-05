@@ -21,7 +21,7 @@ import { TEXTURE_CHANNELS, type TextureCacheApi } from '../src/shared/textures'
 import { AUDIO_BOUNCE_CHANNELS, type AudioBounceCacheApi } from '../src/shared/audioBounceCache'
 import { LOADOUT_CHANNELS, type UiLoadoutApi } from '@thockdown/look/loadouts'
 import { AUDIO_PLAYER_CHANNELS, type AudioPlayerApi, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
-import type { PlaylistSlot } from '../src/shared/audioPlayer'
+import type { MusicPoolQuery, PlaylistSlot } from '../src/shared/audioPlayer'
 import { NOTE_TABS_CHANNELS, type NoteTabsApi } from '../src/shared/tabs'
 import { eventEmitter, registerInvokeHandlers, registerSendHandlers } from '../src/shared/ipcContract'
 import { WINDOW_CONTROL_INVOKE_CHANNELS, WINDOW_CONTROL_SEND_CHANNELS, WINDOW_EVENT_CHANNELS, type WindowControlsApi, type WindowEvents } from '../src/shared/windowControls'
@@ -1264,14 +1264,14 @@ function registerIpcHandlers() {
     removeSong: async (_event, id: number) => {
       databaseService!.removeMusicSong(id);
     },
-    pickNextSong: async (_event, activeSlots: PlaylistSlot[]) => {
-      return databaseService!.pickNextMusicSong(activeSlots);
+    pickNextSong: async (_event, query: MusicPoolQuery) => {
+      return databaseService!.pickNextMusicSong(query);
     },
-    getPool: async (_event, activeSlots: PlaylistSlot[]) => {
-      return databaseService!.getMusicPool(activeSlots);
+    getPool: async (_event, query: MusicPoolQuery) => {
+      return databaseService!.getMusicPool(query);
     },
-    rotatePoolTo: async (_event, activeSlots: PlaylistSlot[], id: number) => {
-      return databaseService!.rotateMusicPoolTo(activeSlots, id);
+    rotatePoolTo: async (_event, query: MusicPoolQuery, id: number) => {
+      return databaseService!.rotateMusicPoolTo(query, id);
     },
     afterPlay: async (_event, id: number) => {
       databaseService!.afterMusicPlay(id);

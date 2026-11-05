@@ -10,7 +10,7 @@ import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
-import { isPlaylistButtonSlot } from './shared/audioPlayer'
+import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type MusicPoolFilter } from './shared/audioPlayer'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
@@ -2223,6 +2223,7 @@ function App() {
     soundscapeEngine.apply(soundscapePreferences)
   }, [soundscapePreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
+  const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
   const [musicRestoreSongId, setMusicRestoreSongId] = useState<number | null>(null)
@@ -3321,6 +3322,7 @@ function App() {
       musicSoundOptionsOpen,
       soundscapes: soundscapePreferences,
       musicActiveSlots,
+      musicPoolFilter,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
       // Live while a track plays, so a save at any moment (quit included)
       // has the position as it is; otherwise where the pause or the track
@@ -3448,6 +3450,7 @@ function App() {
     musicSoundOptionsOpen,
     soundscapePreferences,
     musicActiveSlots,
+    musicPoolFilter,
     darkMode,
     uiMode,
     filterInvert,
@@ -5288,6 +5291,7 @@ ${markdownHtml}
                 (appState.menu.musicActiveSlots as number[]).filter(isPlaylistButtonSlot)
               )
             }
+            if (appState.menu.musicPoolFilter) setMusicPoolFilter(sanitizePoolFilter(appState.menu.musicPoolFilter))
             if (typeof appState.menu.musicLastSongId === 'number') {
               const positionSec = appState.menu.musicLastPositionSec ?? 0
               const wasPlaying = appState.menu.musicWasPlaying ?? false
@@ -9052,6 +9056,8 @@ ${markdownHtml}
                 onReverbBypassedChange={setMusicReverbBypassed}
                 activeSlots={musicActiveSlots}
                 onActiveSlotsChange={setMusicActiveSlots}
+                poolFilter={musicPoolFilter}
+                onPoolFilterChange={setMusicPoolFilter}
                 soundscapePreferences={soundscapePreferences}
                 onSoundscapePreferencesChange={setSoundscapePreferences}
                 initialSongId={musicRestoreSongId}

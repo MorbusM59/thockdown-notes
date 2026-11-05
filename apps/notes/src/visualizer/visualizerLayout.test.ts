@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, columnToFraction, computeVisualizerLayout, creditsLine, playheadColumn, progressPress, ringDistance, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, songListIndex } from './visualizerLayout'
+import { bucketListArea, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressPress, ringDistance, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, songListIndex } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('caps the strips at ten boxes and at a fifth of the height', () => {
@@ -127,8 +127,29 @@ describe('bucket list', () => {
     const songs = songListArea(layout)!
     const buckets = bucketListArea(layout)!
     expect(buckets.row).toBe(songs.row)
-    expect(buckets.rows).toBe(songs.rows)
+    expect(buckets.row + buckets.rows - 1).toBe(poolFilterArea(layout)!.row - 2)
     expect(layout.columns - (buckets.column + buckets.columns)).toBe(songs.column)
     expect(buckets.column - (layout.cutout.column + layout.cutout.size)).toBe(SONG_LIST_CUTOUT_GAP_BOXES)
+  })
+})
+
+describe('pool filter', () => {
+  it('shares the song list\'s lowest line, bottom right, at most 23 wide', () => {
+    for (const [width, height] of [[1920, 1080], [1920, 1100], [1280, 800], [3840, 2160]]) {
+      const layout = computeVisualizerLayout(width, height, 20, 220)
+      const songs = songListArea(layout)!
+      const area = poolFilterArea(layout)!
+      expect(area.row + 2).toBe(songs.row + 2 * (songs.slots - 1))
+      expect(area.column + area.columns).toBe(layout.columns - 1)
+      expect(area.columns).toBe(2 * area.fieldColumns + 3)
+      expect(area.columns).toBeLessThanOrEqual(POOL_FILTER_MAX_COLUMNS)
+      expect(area.column - (layout.cutout.column + layout.cutout.size)).toBeGreaterThanOrEqual(SONG_LIST_CUTOUT_GAP_BOXES)
+    }
+  })
+
+  it('keeps the caret in the field', () => {
+    expect(fieldWindow('abc', 3, 10)).toEqual({ chars: ['a', 'b', 'c'], caretColumn: 3 })
+    expect(fieldWindow('abcdef', 6, 4)).toEqual({ chars: ['d', 'e', 'f'], caretColumn: 3 })
+    expect(fieldWindow('abcdef', 1, 4)).toEqual({ chars: ['a', 'b', 'c', 'd'], caretColumn: 1 })
   })
 })

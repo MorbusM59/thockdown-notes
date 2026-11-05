@@ -112,19 +112,16 @@ export type AudioPlayerApi = {
   clearPlaylist(slot: PlaylistSlot): Promise<void>;
   /** Remove a single song by its DB id. */
   removeSong(id: number): Promise<void>;
-  /**
-   * Pick the next song to play.
-   * @param activeSlots - Which playlist slots currently contribute to the pool.
-   */
-  pickNextSong(activeSlots: PlaylistSlot[]): Promise<PickNextSongResult>;
-  /** Every song in the pool of `activeSlots`, in pick order (`shared/musicPool.ts`). */
-  getPool(activeSlots: PlaylistSlot[]): Promise<MusicSongEntry[]>;
+  /** Pick the next song to play from the pool `query` describes. */
+  pickNextSong(query: MusicPoolQuery): Promise<PickNextSongResult>;
+  /** Every song in the pool `query` describes, in pick order (`shared/musicPool.ts`). */
+  getPool(query: MusicPoolQuery): Promise<MusicSongEntry[]>;
   /**
    * Make `id` the next pick by rotating the pool's order to it, keeping that
    * order (`shared/musicPool.ts`). Returns the song, or null when it is not
    * in the pool.
    */
-  rotatePoolTo(activeSlots: PlaylistSlot[], id: number): Promise<MusicSongEntry | null>;
+  rotatePoolTo(query: MusicPoolQuery, id: number): Promise<MusicSongEntry | null>;
   /**
    * Called by the renderer after a song finishes playing naturally.
    * Updates priority + favorability counters across the database.
@@ -239,6 +236,44 @@ export function songListTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath
   if (title) return title;
   const file = song.filePath.split(/[\\/]/).filter((part) => part.length > 0).at(-1) ?? '';
   return songTagText(file.replace(/\.[^.]+$/, ''));
+}
+
+/**
+ * The pool's filter (the visualizer's three fields): a song is in the pool
+ * only if each non-blank field is found, ignoring case, in its artist tag,
+ * its album tag and its title as the song list shows it (the title tag, or
+ * the file name), the way the note list's search matches a note.
+ */
+export type MusicPoolFilter = { artist: string; album: string; title: string };
+
+export const EMPTY_POOL_FILTER: MusicPoolFilter = { artist: '', album: '', title: '' };
+
+/** Which songs are in the pool: those in `slots` that pass `filter`. */
+export type MusicPoolQuery = { slots: PlaylistSlot[]; filter: MusicPoolFilter };
+
+export function isPoolFilterEmpty(filter: MusicPoolFilter): boolean {
+  return !filter.artist.trim() && !filter.album.trim() && !filter.title.trim();
+}
+
+export function samePoolFilter(a: MusicPoolFilter, b: MusicPoolFilter): boolean {
+  return a.artist === b.artist && a.album === b.album && a.title === b.title;
+}
+
+/** A filter read from storage or IPC: every field a string, anything else empty. */
+export function sanitizePoolFilter(input: unknown): MusicPoolFilter {
+  const record = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  const field = (value: unknown) => (typeof value === 'string' ? value : '');
+  return { artist: field(record.artist), album: field(record.album), title: field(record.title) };
+}
+
+export function matchesPoolFilter(song: Pick<MusicSongEntry, 'title' | 'artist' | 'album' | 'filePath'>, filter: MusicPoolFilter): boolean {
+  const has = (text: string, query: string) => {
+    const needle = query.trim().toLowerCase();
+    return !needle || text.toLowerCase().includes(needle);
+  };
+  return has(songTagText(song.artist), filter.artist)
+    && has(songTagText(song.album), filter.album)
+    && has(songListTitleText(song), filter.title);
 }
 
 export function songArtistText(song: Pick<MusicSongEntry, 'artist'>): string {

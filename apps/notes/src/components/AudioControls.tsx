@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
-import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
-import { songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
+import type { MusicPoolFilter, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
+import { samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -39,6 +39,7 @@ import { publishNowPlaying } from '../sound/nowPlaying'
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
+import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 
 // Purging a song from the library and clearing a playlist slot are both
 // "I know this is not undoable" -- the app's COMMIT threshold
@@ -92,6 +93,9 @@ export interface AudioControlsProps {
   /** Which playlist slots are currently toggled active. */
   activeSlots: PlaylistSlot[]
   onActiveSlotsChange: (slots: PlaylistSlot[]) => void
+  /** The pool's filter (the visualizer's fields): which songs of the active slots are picked. */
+  poolFilter: MusicPoolFilter
+  onPoolFilterChange: (filter: MusicPoolFilter) => void
   /**
    * Procedural ambience preferences. The player shows only the on/off switch
    * and the master volume (a wheel over that switch); everything else is in
@@ -135,6 +139,8 @@ export const AudioControls = memo(function AudioControls({
   onReverbBypassedChange,
   activeSlots,
   onActiveSlotsChange,
+  poolFilter,
+  onPoolFilterChange,
   soundscapePreferences,
   onSoundscapePreferencesChange,
   isSoundOptionsOpen,
@@ -171,6 +177,10 @@ export const AudioControls = memo(function AudioControls({
   const swallowScrubClickRef = useRef(false)
   const activeRef = useRef(activeSlots)
   activeRef.current = activeSlots
+  // Written at once by setPoolFilter too, so a song chosen in the same
+  // gesture that committed a filter is looked up in that filter's pool.
+  const filterRef = useRef(poolFilter)
+  filterRef.current = poolFilter
 
   const currentSongRef = useRef<MusicSongEntry | null>(null)
 
@@ -290,7 +300,7 @@ export const AudioControls = memo(function AudioControls({
     // Safety limit: avoid an infinite loop if every song in the pool is missing.
     const MAX_ATTEMPTS = 50
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const next = await window.thockdownAudioPlayer?.pickNextSong(slots)
+      const next = await window.thockdownAudioPlayer?.pickNextSong({ slots, filter: filterRef.current })
       if (!next) {
         setIsPlaying(false)
         setCurrentSong(null)
@@ -578,7 +588,7 @@ export const AudioControls = memo(function AudioControls({
     if (isCrossingSongRef.current || currentSongRef.current?.id === id) return
     isCrossingSongRef.current = true
     try {
-      const song = await window.thockdownAudioPlayer?.rotatePoolTo(activeRef.current, id)
+      const song = await window.thockdownAudioPlayer?.rotatePoolTo({ slots: activeRef.current, filter: filterRef.current }, id)
       if (!song) return
       try {
         await playSong(song)
@@ -852,10 +862,16 @@ export const AudioControls = memo(function AudioControls({
   const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
   const publishedPlayFromPool = useCallback((id: number) => { void mediaActionsRef.current.playFromPool(id) }, [])
   const publishedToggleSlot = useCallback((slot: PlaylistSlot) => { void mediaActionsRef.current.toggleSlot(slot) }, [])
-  const publishedPool = useMemo(() => ({ slots: activeSlots, counts }), [activeSlots, counts])
+  // A new filter applies from the next pick: the song playing plays on.
+  const setPoolFilter = useCallback((filter: MusicPoolFilter) => {
+    if (samePoolFilter(filter, filterRef.current)) return
+    filterRef.current = filter
+    onPoolFilterChange(filter)
+  }, [onPoolFilterChange])
+  const publishedPool = useMemo(() => ({ slots: activeSlots, counts, filter: poolFilter }), [activeSlots, counts, poolFilter])
   useEffect(() => {
-    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, toggleSlot: publishedToggleSlot })
-  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedToggleSlot])
+    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, toggleSlot: publishedToggleSlot, setPoolFilter })
+  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedToggleSlot, setPoolFilter])
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -1018,6 +1034,8 @@ export const AudioControls = memo(function AudioControls({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return
+      // Typing in one of the visualizer's fields (the pool filter) is text.
+      if (event.target instanceof Element && isTextEntryElement(event.target)) return
       const code = keyCode(event)
       if (!code) return
       event.preventDefault()

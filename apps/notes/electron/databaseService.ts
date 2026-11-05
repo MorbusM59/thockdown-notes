@@ -71,13 +71,13 @@ import {
   CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
 } from '@thockdown/look/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes';
-import type { MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
+import type { MusicPoolQuery, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
 import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult, type ImageRenameResult, type StoredImageSummary, renameImageReferences } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import { readAudioTags } from './audioTags';
 import { rotatePoolTo } from '../src/shared/musicPool';
-import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, MAX_PLAYLIST_SLOT } from '../src/shared/audioPlayer';
+import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, isPoolFilterEmpty, matchesPoolFilter, MAX_PLAYLIST_SLOT, sanitizePoolFilter } from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
 let BetterSqlite3: typeof import('better-sqlite3');
@@ -3604,35 +3604,45 @@ export class DatabaseService {
    * visualizer draws and a chosen song all read it, so a filter added here
    * (by title, artist or album) reaches all three at once.
    */
-  private musicPoolRows(activeSlots: PlaylistSlot[]): Record<string, unknown>[] {
-    if (activeSlots.length === 0) return [];
-    const placeholders = activeSlots.map(() => '?').join(',');
-    return this.requireDb().prepare(
+  /**
+   * THE POOL, in pick order, as rows with their entries: the songs of the
+   * active slots that pass the filter (`matchesPoolFilter`). The filter reads
+   * the entries' tags (read on first use), so it is applied here rather than
+   * in SQL; with no filter nothing is tested.
+   */
+  private musicPool(query: MusicPoolQuery): Array<{ row: Record<string, unknown>; song: MusicSongEntry }> {
+    const slots = query.slots.filter(isPlaylistSlot);
+    if (slots.length === 0) return [];
+    const filter = sanitizePoolFilter(query.filter);
+    const placeholders = slots.map(() => '?').join(',');
+    const rows = this.requireDb().prepare(
       `SELECT * FROM music_songs WHERE playlistSlot IN (${placeholders}) ORDER BY priority ASC, id ASC`
-    ).all(...activeSlots) as Record<string, unknown>[];
+    ).all(...slots) as Record<string, unknown>[];
+    const pool = rows.map((row) => ({ row, song: this.rowToSongEntry(row) }));
+    return isPoolFilterEmpty(filter) ? pool : pool.filter(({ song }) => matchesPoolFilter(song, filter));
   }
 
-  getMusicPool(activeSlots: PlaylistSlot[]): MusicSongEntry[] {
-    return this.musicPoolRows(activeSlots).map((row) => this.rowToSongEntry(row));
+  getMusicPool(query: MusicPoolQuery): MusicSongEntry[] {
+    return this.musicPool(query).map(({ song }) => song);
   }
 
-  pickNextMusicSong(activeSlots: PlaylistSlot[]): MusicSongEntry | null {
-    const pool = this.musicPoolRows(activeSlots);
+  pickNextMusicSong(query: MusicPoolQuery): MusicSongEntry | null {
+    const pool = this.musicPool(query);
     if (pool.length === 0) return null;
     // A random song among those sharing the lowest priority.
-    const lowest = pool[0]['priority'];
+    const lowest = pool[0].row['priority'];
     let count = 1;
-    while (count < pool.length && pool[count]['priority'] === lowest) count += 1;
-    return this.rowToSongEntry(pool[Math.floor(Math.random() * count)]);
+    while (count < pool.length && pool[count].row['priority'] === lowest) count += 1;
+    return pool[Math.floor(Math.random() * count)].song;
   }
 
   /** Rotate the pool so `id` is the unique next pick, keeping its order (`shared/musicPool.ts`). */
-  rotateMusicPoolTo(activeSlots: PlaylistSlot[], id: number): MusicSongEntry | null {
+  rotateMusicPoolTo(query: MusicPoolQuery, id: number): MusicSongEntry | null {
     const db = this.requireDb();
     let chosen: MusicSongEntry | null = null;
     db.transaction(() => {
-      const rows = this.musicPoolRows(activeSlots);
-      const changes = rotatePoolTo(rows.map((row) => ({ id: row['id'] as number, priority: row['priority'] as number })), id);
+      const pool = this.musicPool(query);
+      const changes = rotatePoolTo(pool.map(({ row }) => ({ id: row['id'] as number, priority: row['priority'] as number })), id);
       if (!changes) return;
       const update = db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?');
       for (const [songId, priority] of changes) update.run(priority, songId);

@@ -26,6 +26,7 @@ import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/i
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songListTitleText, type MusicSongEntry } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
+import { commitPoolFilterDraft, readShownPoolFilter, subscribePoolFilterDraft } from './poolFilterDraft'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
 import { ringDistance, songListEntry, songListIndex, type VisualizerLayout } from './visualizerLayout'
 
@@ -182,16 +183,17 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     })
 
     // The pool's order is re-read whenever a write to it can have happened
-    // (see NowPlaying.pool). While the reader is turning the list it keeps
+    // (see NowPlaying.pool), or the filter's fields change. While the reader is turning the list it keeps
     // the song they are looking at in the middle; otherwise it shows the
     // playing song there.
     let request = 0
     let lastSong = readNowPlaying().song
     let lastPool = readNowPlaying().pool
+    let lastFilter = readShownPoolFilter()
     const refresh = async () => {
       const ticket = ++request
       const pool = readNowPlaying().pool
-      const next = pool ? await window.thockdownAudioPlayer?.getPool([...pool.slots]) ?? [] : []
+      const next = pool ? await window.thockdownAudioPlayer?.getPool({ slots: [...pool.slots], filter: readShownPoolFilter() }) ?? [] : []
       if (ticket !== request) return
       const heldId = hovered && songs.length > 0 ? songs[center]?.id : undefined
       songs = next
@@ -212,6 +214,13 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       lastPool = pool
       void refresh()
     })
+    // The filter's fields, as typed: the list follows them before playback does.
+    const unsubscribeFilter = subscribePoolFilterDraft(() => {
+      const filter = readShownPoolFilter()
+      if (filter === lastFilter) return
+      lastFilter = filter
+      void refresh()
+    })
 
     const onEnter = () => {
       hovered = true
@@ -228,7 +237,10 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const row = Math.floor((event.clientY - rect.top) / boxPx)
       if (row % 2 !== 0) return
       const song = songs[songListIndex(center, row / 2, centerSlot, songs.length)]
-      if (song) readNowPlaying().playFromPool(song.id)
+      if (!song) return
+      // A song chosen from the list as filtered is played from that pool.
+      commitPoolFilterDraft()
+      readNowPlaying().playFromPool(song.id)
     }
     hit.addEventListener('wheel', wheel.handleWheel, { passive: false })
     hit.addEventListener('pointerenter', onEnter)
@@ -238,6 +250,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     return () => {
       request += 1
       unsubscribe()
+      unsubscribeFilter()
       stopTravel()
       wheel.stop('unmount')
       hit.removeEventListener('wheel', wheel.handleWheel)

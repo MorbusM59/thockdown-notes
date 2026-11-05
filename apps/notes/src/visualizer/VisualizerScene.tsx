@@ -46,6 +46,7 @@ import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
 import { BucketList } from './BucketList'
+import { PoolFilter } from './PoolFilter'
 import { dropWideGlyphs } from './cellGlyphs'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
@@ -62,6 +63,7 @@ import {
   progressPress,
   songListArea,
   bucketListArea,
+  poolFilterArea,
   trackSpan,
   type VisualizerLayout,
 } from './visualizerLayout'
@@ -174,6 +176,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
   const cutoutRound = useSyncExternalStore(subscribeGridWaveSettings, readCutoutRound)
   const songArea = useMemo(() => songListArea(layout), [layout])
   const bucketArea = useMemo(() => bucketListArea(layout), [layout])
+  const filterArea = useMemo(() => poolFilterArea(layout), [layout])
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const glyphFont = `${fontSizePx}px ${fontFamily}`
@@ -515,6 +518,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, anim
 
           {songArea && <SongList layout={layout} area={songArea} glyphFont={glyphFont} />}
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
+          {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
 
           {layout.progressRow !== null && (
             <div

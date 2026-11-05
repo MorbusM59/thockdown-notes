@@ -227,11 +227,67 @@ export function ringDistance(from: number, to: number, count: number): number {
  */
 export function bucketListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
   const row = layout.stripRows + 1
-  const lastRow = layout.spectrumTopRow - 2
+  // Above the pool filter, a free row between them, when there is one.
+  const filter = poolFilterArea(layout)
+  const lastRow = filter ? filter.row - 2 : layout.spectrumTopRow - 2
   const lastColumn = layout.columns - 2
   const column = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + SONG_LIST_CUTOUT_GAP_BOXES
   const rows = lastRow - row + 1
   const columns = lastColumn - column + 1
   if (layout.stripRows <= 0 || rows < 1 || columns < 5) return null
   return { column, row, columns, rows, slots: Math.floor((rows + 1) / 2) }
+}
+
+/** The pool filter's widest: two fields of ten on the top row, one of twenty-one below, each framed by accent boxes. */
+export const POOL_FILTER_MAX_COLUMNS = 23
+
+export type PoolFilterArea = {
+  /** The top row's first column, and the top row; the title row is two below it. */
+  column: number
+  row: number
+  /** Both rows' width: `2 * fieldColumns + 3`. */
+  columns: number
+  /** The artist and album fields' width; the title field's is `2 * fieldColumns + 1`. */
+  fieldColumns: number
+}
+
+/**
+ * The pool filter's two rows, bottom-right of the middle section: the right
+ * edge one box in from the scene's (the bucket list's), the left at least
+ * `SONG_LIST_CUTOUT_GAP_BOXES` empty boxes right of the cutout, and the
+ * bottom row on the song list's last entry row, so the two blocks share a
+ * lowest line (one row above the middle's last, or two when the song list's
+ * every-other-row pattern ends there). The top row is two above it.
+ *
+ * The rows are `2 * fieldColumns + 3` wide (accent, field, accent, field,
+ * accent above; accent, field, accent below), so where there is less room
+ * than `POOL_FILTER_MAX_COLUMNS` the two top fields lose a box each and the
+ * title field two. Null when there is no room for fields of one box.
+ */
+export function poolFilterArea(layout: VisualizerLayout): PoolFilterArea | null {
+  const songs = songListArea(layout)
+  const firstRow = layout.stripRows + 1
+  const bottomRow = songs ? songs.row + 2 * (songs.slots - 1) : layout.spectrumTopRow - 2
+  const row = bottomRow - 2
+  if (layout.stripRows <= 0 || row < firstRow) return null
+  const lastColumn = layout.columns - 2
+  const leftLimit = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + SONG_LIST_CUTOUT_GAP_BOXES
+  const room = Math.min(POOL_FILTER_MAX_COLUMNS, lastColumn - leftLimit + 1)
+  const fieldColumns = Math.floor((room - 3) / 2)
+  if (fieldColumns < 1) return null
+  const columns = 2 * fieldColumns + 3
+  return { column: lastColumn - columns + 1, row, columns, fieldColumns }
+}
+
+/**
+ * What a field of `columns` boxes shows of `text` with the caret at `caret`
+ * (a code point index): the visible characters and the caret's column. The
+ * text scrolls only as far as needed to keep the caret, which may sit just
+ * past the last character, in the field.
+ */
+export function fieldWindow(text: string, caret: number, columns: number): { chars: string[]; caretColumn: number } {
+  const all = Array.from(text)
+  const at = Math.max(0, Math.min(all.length, caret))
+  const start = Math.max(0, at - columns + 1)
+  return { chars: all.slice(start, start + columns), caretColumn: at - start }
 }

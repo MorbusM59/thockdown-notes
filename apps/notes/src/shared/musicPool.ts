@@ -3,9 +3,10 @@
  * as pure rules shared by the database (which applies them) and the tests.
  *
  * THE POOL is every song in the active playlist slots
- * (`databaseService.ts`'s `musicPoolRows`, the one place that says which rows
- * are in it -- a future filter by title, artist or album narrows it there, so
- * the list, the next pick and a chosen song all read the same pool).
+ * that pass its filter (`databaseService.ts`'s `musicPool`, the one place
+ * that says which rows are in it, so the list, the next pick and a chosen
+ * song all read the same pool; the filter is `audioPlayer.ts`'s
+ * `matchesPoolFilter`).
  *
  * ITS ORDER is the pick order: lowest priority first (the next pick takes the
  * lowest), ties by id. Ties are real -- the rotation clamps priorities at 1 --

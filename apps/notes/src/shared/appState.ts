@@ -196,6 +196,8 @@ export interface PersistedMenuState {
   /** Bottom row of the player showing the sound options instead of the playlist buckets. */
   musicSoundOptionsOpen?: boolean;
   musicActiveSlots?: number[];
+  /** The pool's filter (`audioPlayer.ts`'s `MusicPoolFilter`), set in the visualizer. */
+  musicPoolFilter?: { artist: string; album: string; title: string };
   /** Last-played song's DB id, its playback position, and whether it was playing — restored on next launch. */
   musicLastSongId?: number;
   musicLastPositionSec?: number;
