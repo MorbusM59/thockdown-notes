@@ -292,7 +292,9 @@
   z-index: 1;
 }
 .visualizer-scene > .visualizer-bucket-hit {
-  z-index: 6;
+  /* Above the cutout (7): its square reaches over the level bars' ends where
+     the round face leaves them visible, and they must take a press there. */
+  z-index: 8;
   pointer-events: auto;
 }
 
