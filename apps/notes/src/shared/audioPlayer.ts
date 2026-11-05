@@ -1,4 +1,5 @@
 import type { InvokeChannels } from './ipcContract';
+import { sanitizeDocumentText } from './textSanitization';
 // Shared types and IPC channel names for the music player feature.
 
 export const AUDIO_PLAYER_CHANNELS = {
@@ -208,17 +209,29 @@ export const PLAYLIST_SLOT_THEMES: Record<PlaylistButtonSlot, string> = {
  */
 export const SONG_PATH_SEPARATOR = ' | ';
 
+/**
+ * A tag as it is shown: the editor's own text rule (`sanitizeDocumentText`:
+ * line separators, tabs, HTML tags and the single-cell rule), with what is
+ * left of any line break as a space, since every place a tag is shown is one
+ * row. Applied here, at the one way a tag reaches the screen, so the stored
+ * tag stays what the file said.
+ */
+function songTagText(tag: string): string {
+  return sanitizeDocumentText(tag).replace(/\n+/g, ' ').trim();
+}
+
 export function songTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath'>): string {
-  if (song.title) return song.title;
+  const title = songTagText(song.title);
+  if (title) return title;
   const parts = song.filePath.split(/[\\/]/).filter((part) => part.length > 0);
   const shown = parts.slice(-3);
-  return (parts.length > shown.length ? ['...', ...shown] : shown).join(SONG_PATH_SEPARATOR);
+  return songTagText((parts.length > shown.length ? ['...', ...shown] : shown).join(SONG_PATH_SEPARATOR));
 }
 
 export function songArtistText(song: Pick<MusicSongEntry, 'artist'>): string {
-  return song.artist || 'no artist';
+  return songTagText(song.artist) || 'no artist';
 }
 
 export function songAlbumText(song: Pick<MusicSongEntry, 'album'>): string {
-  return song.album || 'no album';
+  return songTagText(song.album) || 'no album';
 }
