@@ -57,7 +57,8 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
 import { applyNonOverlappingChanges, createNoteDocumentStore } from './editorSection/noteDocumentStore'
-import { musicPlayerService } from './sound/MusicPlayerService'
+import { DEFAULT_MUSIC_PLAYER_CONFIG, musicPlayerService } from './sound/MusicPlayerService'
+import { sanitizeStereoWidth } from '@thockdown/audio/stereoWidth'
 import { registerQuitParticipant, settleForQuit } from './shared/quitParticipants'
 import { installExternalFileSync } from './editorSection/externalFileSync'
 import { getNoteListMetaKind } from './shared/noteListMeta'
@@ -2243,7 +2244,9 @@ function App() {
   const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C' | 'D'>(DEFAULT_TYPING_SOUND_SET)
   const [musicVolume, setMusicVolume] = useState(0.8)
   const [musicReverbAmount, setMusicReverbAmount] = useState(0)
-  const [musicReverbRoom, setMusicReverbRoom] = useState(0.3)
+  const [musicReverbRoom, setMusicReverbRoom] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.reverbRoom)
+  const [musicReverbFoliage, setMusicReverbFoliage] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage)
+  const [musicStereoWidth, setMusicStereoWidth] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.stereoWidth)
   // Mute / bypass are flags over the levels above, never a zeroed level plus a
   // remembered copy -- see PersistedMenuState's note on why.
   const [musicMuted, setMusicMuted] = useState(false)
@@ -3439,6 +3442,8 @@ function App() {
       musicVolume,
       musicReverbAmount,
       musicReverbRoom,
+      musicReverbFoliage,
+      musicStereoWidth,
       musicMuted,
       musicReverbBypassed,
       musicSoundOptionsOpen,
@@ -3574,6 +3579,8 @@ function App() {
     musicVolume,
     musicReverbAmount,
     musicReverbRoom,
+    musicReverbFoliage,
+    musicStereoWidth,
     musicMuted,
     musicReverbBypassed,
     musicSoundOptionsOpen,
@@ -5427,6 +5434,8 @@ ${markdownHtml}
             if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
             if (typeof appState.menu.musicReverbAmount === 'number') setMusicReverbAmount(appState.menu.musicReverbAmount)
             if (typeof appState.menu.musicReverbRoom === 'number') setMusicReverbRoom(appState.menu.musicReverbRoom)
+            if (typeof appState.menu.musicReverbFoliage === 'number') setMusicReverbFoliage(clamp(appState.menu.musicReverbFoliage, 0, 1))
+            setMusicStereoWidth(sanitizeStereoWidth(appState.menu.musicStereoWidth))
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
             setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
@@ -6538,6 +6547,12 @@ ${markdownHtml}
   useEffect(() => {
     typingSoundManager.setReverbSpace(audioReverbSpace)
   }, [audioReverbSpace])
+
+  // The music's room foliage and stereo width: Options > Music. Volume, reverb
+  // and room size are the music bar's (AudioControls), which writes them.
+  useEffect(() => {
+    musicPlayerService.setConfig({ reverbFoliage: musicReverbFoliage, stereoWidth: musicStereoWidth })
+  }, [musicReverbFoliage, musicStereoWidth])
 
   useEffect(() => {
     typingSoundManager.setPitchJitterAmount(pitchJitterAmount)
@@ -8953,6 +8968,10 @@ ${markdownHtml}
                         setAudioReverbStrength={setAudioReverbStrength}
                         audioReverbSpace={audioReverbSpace}
                         setAudioReverbSpace={setAudioReverbSpace}
+                        musicReverbFoliage={musicReverbFoliage}
+                        setMusicReverbFoliage={setMusicReverbFoliage}
+                        musicStereoWidth={musicStereoWidth}
+                        setMusicStereoWidth={setMusicStereoWidth}
                         pitchJitterAmount={pitchJitterAmount}
                         setPitchJitterAmount={setPitchJitterAmount}
                         audioSpatial={audioSpatial}

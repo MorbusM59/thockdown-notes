@@ -8,7 +8,7 @@
  * This is the same sound as the Android renderer (soundscapeRenderAhead.ts
  * and soundscapeMix.ts), from the same shared parts: the generator itself,
  * the mix gain and the space's return (SOUNDSCAPE_MIX_GAIN,
- * SOUNDSCAPE_SPACE_RETURN), the impulse response (soundscapeSpace.ts) and
+ * SOUNDSCAPE_SPACE_RETURN), the impulse response (@thockdown/audio/room.ts) and
  * the compressor's settings (BUS_COMPRESSOR). soundscapeMix.ts's convolution
  * and compressor were measured equal to the ConvolverNode and
  * DynamicsCompressorNode used here (apps/soundscapes/README.md). Android renders ahead
@@ -18,34 +18,28 @@
  * One VOICE per soundscape heard:
  *
  *   generator out 0 (direct) ----------------------------------> voice gain
- *   generator out 1 (send) -> return gain -> convolver A -> gain A -> voice gain
- *                                         -> convolver B -> gain B ->
+ *   generator out 1 (send) -> return gain -> room (@thockdown/audio/liveRoom.ts) -> voice gain
  *   every voice gain -> mix gain -> bus compressor -> brilliance -> volume -> shared limiter
  *
- * BRILLIANCE (soundscapeBrilliance.ts) is the mix's, not a voice's: three
+ * BRILLIANCE (@thockdown/audio/brilliance.ts) is the mix's, not a voice's: three
  * BiquadFilterNodes and a makeup gain, gliding to a new setting; across a
  * change of soundscape they glide over the crossfade.
  *
  * A settings change goes to the current voice: the generator takes it at
- * its next block, the return glides, and a changed ROOM is built on the
- * main thread once the slider has rested (SPACE_REBUILD_DELAY_MS) into the
- * convolver not heard, and crossfaded in over SPACE_CROSSFADE_SEC -- a
- * playing convolver's buffer cannot be swapped without a click. A change of
+ * its next block, the return glides, and a changed ROOM is the voice's
+ * LiveRoom's to build and crossfade in (liveRoom.ts says when). A change of
  * SOUNDSCAPE (`transitionSec` > 0) builds a new voice and crossfades the two
  * voice gains, equal-power, over that time; the old voice is then stopped.
  */
 import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from './soundscapeNoiseLoops';
-import type { SoundscapeSpaceSettings } from './soundscape';
-import { buildSoundscapeImpulseResponse, soundscapeRoomKey } from './soundscapeSpace';
+import { LiveRoom } from '@thockdown/audio/liveRoom';
 import type { SoundscapePlayback, SoundscapePlaybackHandlers } from './SoundscapeEngine';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
-import { brillianceCurve, BRILLIANCE_BANDS } from './soundscapeBrilliance';
-import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, SOUNDSCAPE_SPACE_RETURN, SPACE_CROSSFADE_SEC } from './soundscapeMix';
+import { brillianceCurve, BRILLIANCE_BANDS } from '@thockdown/audio/brilliance';
+import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, SOUNDSCAPE_SPACE_RETURN } from './soundscapeMix';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
 import generatorUrl from './soundscape-generator?url';
 
-/** How long a room slider must rest before its room is built (a drag would otherwise build dozens). */
-const SPACE_REBUILD_DELAY_MS = 120;
 /** The glide on the tone when brilliance changes. */
 const BRILLIANCE_GLIDE_SEC = 0.05;
 /** The glide on the space's return when its amount changes. */
@@ -82,10 +76,7 @@ class Voice {
   readonly gain: GainNode;
   private readonly generator: AudioWorkletNode;
   private readonly returnGain: GainNode;
-  private readonly rooms: Array<{ convolver: ConvolverNode; gain: GainNode }>;
-  private liveRoom = 0;
-  private roomKey: string | null = null;
-  private roomTimer: number | null = null;
+  private readonly room: LiveRoom;
   private returnTarget = -1;
 
   constructor(private readonly context: AudioContext, destination: AudioNode, onFailure: (message: string) => void) {
@@ -107,19 +98,9 @@ class Voice {
     this.returnGain = context.createGain();
     this.returnGain.gain.value = 0;
     this.generator.connect(this.returnGain, 1);
-    this.rooms = [0, 1].map(() => {
-      const convolver = context.createConvolver();
-      // The impulse response is calibrated by buildSoundscapeImpulseResponse;
-      // the browser's normalisation would rescale away what foliage
-      // takes away. Must be set before a buffer is assigned.
-      convolver.normalize = false;
-      const gain = context.createGain();
-      gain.gain.value = 0;
-      this.returnGain.connect(convolver);
-      convolver.connect(gain);
-      gain.connect(this.gain);
-      return { convolver, gain };
-    });
+    this.room = new LiveRoom(context);
+    this.returnGain.connect(this.room.input);
+    this.room.output.connect(this.gain);
   }
 
   setWeatherFloor(floor: number): void {
@@ -136,41 +117,7 @@ class Voice {
       else this.returnGain.gain.setTargetAtTime(returnTarget, now, RETURN_TIME_CONSTANT_SEC);
       this.returnTarget = returnTarget;
     }
-    const key = soundscapeRoomKey(space);
-    if (key === this.roomKey) return;
-    if (this.roomTimer !== null) window.clearTimeout(this.roomTimer);
-    this.roomTimer = null;
-    // The first room at once: nothing is heard until it is there.
-    if (this.roomKey === null) this.installRoom(space, key);
-    else this.roomTimer = window.setTimeout(() => {
-      this.roomTimer = null;
-      this.installRoom(space, key);
-    }, SPACE_REBUILD_DELAY_MS);
-  }
-
-  /** Build the room into the convolver not heard and crossfade to it (at once, for the first). */
-  private installRoom(space: SoundscapeSpaceSettings, key: string): void {
-    const context = this.context;
-    const [left, right] = buildSoundscapeImpulseResponse(space, context.sampleRate);
-    const buffer = context.createBuffer(2, left.length, context.sampleRate);
-    buffer.copyToChannel(left, 0);
-    buffer.copyToChannel(right, 1);
-    const first = this.roomKey === null;
-    const incoming = first ? this.liveRoom : 1 - this.liveRoom;
-    const now = context.currentTime;
-    this.rooms[incoming].convolver.buffer = buffer;
-    for (const [index, room] of this.rooms.entries()) {
-      const target = index === incoming ? 1 : 0;
-      room.gain.gain.cancelScheduledValues(now);
-      if (first) {
-        room.gain.gain.setValueAtTime(target, now);
-      } else {
-        room.gain.gain.setValueAtTime(room.gain.gain.value, now);
-        room.gain.gain.linearRampToValueAtTime(target, now + SPACE_CROSSFADE_SEC);
-      }
-    }
-    this.liveRoom = incoming;
-    this.roomKey = key;
+    this.room.setRoom(space);
   }
 
   /** Fade this voice's gain in or out, equal-power, over `seconds` from now. */
@@ -182,15 +129,10 @@ class Voice {
 
   /** Stop the generator and take the voice down. `stop` is what lets the audio thread drop the processor. */
   close(): void {
-    if (this.roomTimer !== null) window.clearTimeout(this.roomTimer);
-    this.roomTimer = null;
     this.generator.port.postMessage({ type: 'stop' });
     this.generator.disconnect();
     this.returnGain.disconnect();
-    for (const room of this.rooms) {
-      room.convolver.disconnect();
-      room.gain.disconnect();
-    }
+    this.room.dispose();
     this.gain.disconnect();
   }
 }

@@ -596,6 +596,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicVolume: sanitizeOptionalNumber(input?.musicVolume),
     musicReverbAmount: sanitizeOptionalNumber(input?.musicReverbAmount),
     musicReverbRoom: sanitizeOptionalNumber(input?.musicReverbRoom),
+    musicReverbFoliage: sanitizeOptionalNumber(input?.musicReverbFoliage),
+    musicStereoWidth: sanitizeOptionalNumber(input?.musicStereoWidth),
     musicMuted: sanitizeOptionalBoolean(input?.musicMuted),
     musicReverbBypassed: sanitizeOptionalBoolean(input?.musicReverbBypassed),
     musicSoundOptionsOpen: sanitizeOptionalBoolean(input?.musicSoundOptionsOpen),

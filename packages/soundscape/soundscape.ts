@@ -23,6 +23,7 @@
 
 import { CHIME_SCALE_MAX_ID } from './soundscapeChimeScales';
 import { clamp } from '@thockdown/interaction/clamp';
+import { logLerp } from '@thockdown/audio/curves';
 
 /**
  * What chimes can be made of, and where each sits on the material slider;
@@ -336,8 +337,8 @@ export type SoundscapeChannelOfKind<K extends SoundscapeChannelKind> = Extract<S
  * reflections and a bright tail; soft, dense, obstructing ones scatter it
  * into a dark diffuse wash and dull distant sounds). A closed room, a room
  * lined with foam, a mountain valley and a fir forest are the four corners
- * (soundscapeSpace.ts). BRILLIANCE is not the place but how sharply it is
- * heard, a tone on the whole mix (sound/soundscapeBrilliance.ts), and
+ * (@thockdown/audio/room.ts). BRILLIANCE is not the place but how sharply it is
+ * heard, a tone on the whole mix (@thockdown/audio/brilliance.ts), and
  * AMOUNT how much of the space is heard at all.
  */
 export interface SoundscapeSpaceSettings {
@@ -460,10 +461,6 @@ export function soundscapePartGain(position: number): number {
   return position > 0 ? 10 ** (soundscapePartDb(position) / 20) : 0;
 }
 
-/** Geometric interpolation: equal steps of `t` are equal ratios. */
-export function logLerp(from: number, to: number, t: number): number {
-  return from * ((to / from) ** t);
-}
 
 /** A rain layer's intensity as drops heard one by one per second. */
 export function rainDropsPerSecond(intensity: number): number {

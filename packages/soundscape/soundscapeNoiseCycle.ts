@@ -3,6 +3,7 @@
  * as a table the generator plays on repeat. Depends only on smoothCurve.ts.
  */
 import { buildBellEnvelope, warpForSkew } from '@thockdown/interaction/smoothCurve';
+import { logLerp } from '@thockdown/audio/curves';
 
 /**
  * The bell's own steepness range (smoothCurve.ts's buildBellEnvelope): the
@@ -25,11 +26,6 @@ function sineCycle(sampleCount: number, shape: number): Float32Array {
 
 function bellCycle(bellRamp: number, shape: number, sampleCount: number): Float32Array {
   return buildBellEnvelope(bellRamp, shape, sampleCount).map((value) => (2 * value) - 1);
-}
-
-/** Geometric interpolation, so equal slider travel is an equal RATIO of steepness. */
-function logLerp(from: number, to: number, t: number): number {
-  return from * ((to / from) ** t);
 }
 
 /**

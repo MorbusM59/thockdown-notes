@@ -1,27 +1,41 @@
-﻿import { buildSyntheticRoomImpulseResponse } from './impulseResponse';
+import { LiveRoom } from '@thockdown/audio/liveRoom';
+import { StereoWidth } from '@thockdown/audio/stereoWidth';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
 
 /**
  * MusicPlayerService — Web Audio API based music playback.
  *
  * Signal chain:
- *   HTMLAudioElement → MediaElementSourceNode → GainNode ─┬→ dryGain ────────────────┬→ limiter → destination
- *                                                          └→ ConvolverNode → wetGain ┘
+ *   HTMLAudioElement → MediaElementSourceNode → EQ → GainNode ─┬→ dryGain ─────────┬→ StereoWidth → limiter → destination
+ *                                                               └→ LiveRoom → wetGain ┘
  *
  * The limiter is the app's shared output stage (audioOutputBus.ts), which the
  * soundscape engine joins as well, so music and ambience are limited
  * together rather than each clipping on its own.
  *
- * The ConvolverNode provides a simple room-reverb effect using a synthetic
- * impulse response.  When reverbAmount is 0 the wet signal is silent and
- * the dry path through the GainNode dominates, so there is no audible change.
+ * The reverb is the family's one ROOM (@thockdown/audio/room.ts, played by
+ * liveRoom.ts): the room slider is its SIZE and `reverbFoliage` its FOLIAGE,
+ * the same two numbers the soundscape's space is made of. WIDTH
+ * (@thockdown/audio/stereoWidth.ts) acts on what is heard, dry and wet
+ * together, so above 1 it widens the room as well as the recording and at 0
+ * it is a true mono fold-down. At width 1 it is the identity.
  */
 
 export interface MusicPlayerConfig {
   volume: number;       // 0–1  master volume
   reverbAmount: number; // 0–1  reverb wet mix
-  reverbRoom: number;   // 0–1  reverb room size (impulse length)
+  reverbRoom: number;   // 0–1  the room's SIZE (room.ts)
+  reverbFoliage: number; // 0–1  the room's FOLIAGE (room.ts): bare and bright to dense and dark
+  stereoWidth: number;  // STEREO_WIDTH_MIN–MAX, 1 neutral (stereoWidth.ts)
 }
+
+export const DEFAULT_MUSIC_PLAYER_CONFIG: Readonly<MusicPlayerConfig> = {
+  volume: 0.8,
+  reverbAmount: 0,
+  reverbRoom: 0.3,
+  reverbFoliage: 0,
+  stereoWidth: 1,
+};
 
 /**
  * Convert a native filesystem path to a thockdown-music:// URL.
@@ -198,10 +212,11 @@ export class MusicPlayerService {
   private gainNode: GainNode | null = null;
   private dryGain: GainNode | null = null;
   private wetGain: GainNode | null = null;
-  private convolver: ConvolverNode | null = null;
+  private room: LiveRoom | null = null;
+  private width: StereoWidth | null = null;
   private eqBands: BiquadFilterNode[] = [];
   private eqStrength = 0;
-  private config: MusicPlayerConfig = { volume: 0.8, reverbAmount: 0, reverbRoom: 0.3 };
+  private config: MusicPlayerConfig = { ...DEFAULT_MUSIC_PLAYER_CONFIG };
   private onEndedHandler: PlaybackEndHandler | null = null;
   private currentFilePath: string | null = null;
   private currentDuration = 0;
@@ -331,8 +346,9 @@ export class MusicPlayerService {
       this.wetGain = context.createGain();
       this.wetGain.gain.value = this.config.reverbAmount;
 
-      this.convolver = context.createConvolver();
-      this.convolver.buffer = buildSyntheticRoomImpulseResponse(context, this.config.reverbRoom);
+      this.room = new LiveRoom(context);
+      this.room.setRoom(this.roomShape());
+      this.width = new StereoWidth(context, this.config.stereoWidth);
 
       // The EQ sits between the source and the volume: element → each
       // AMP_EQ_BANDS filter in turn → gainNode.
@@ -347,19 +363,20 @@ export class MusicPlayerService {
       for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
       this.eqBands[this.eqBands.length - 1].connect(this.gainNode);
 
-      // gainNode → dryGain → limiter, and gainNode → convolver → wetGain → limiter
+      // gainNode → dryGain, and gainNode → room → wetGain; both → width → limiter
       this.gainNode.connect(this.dryGain);
-      connectToOutput(this.dryGain);
-      this.gainNode.connect(this.convolver);
-      this.convolver.connect(this.wetGain);
-      connectToOutput(this.wetGain);
+      this.dryGain.connect(this.width.input);
+      this.gainNode.connect(this.room.input);
+      this.room.output.connect(this.wetGain);
+      this.wetGain.connect(this.width.input);
+      connectToOutput(this.width.output);
     }
     return context;
   }
 
   /**
    * The music as it is HEARD, processing included (the EQ, the reverb
-   * and its mix), for the visualizer mode's spectrum
+   * and its mix, the width), for the visualizer mode's spectrum
    * (`visualizer/spectrumTap.ts`), with the volume divided back out so the
    * reader's volume slider does not shrink what is drawn. Taken before the
    * shared limiter, which the soundscape and the key sounds pass through too.
@@ -368,18 +385,15 @@ export class MusicPlayerService {
    */
   tapProcessed(target: AudioNode): () => void {
     const context = this.ensureAudioContext();
-    const dry = this.dryGain!;
-    const wet = this.wetGain!;
+    const heard = this.width!.output;
     const tap = context.createGain();
     tap.gain.value = this.volumeCompensation();
-    dry.connect(tap);
-    wet.connect(tap);
+    heard.connect(tap);
     tap.connect(target);
     this.processedTaps.add(tap);
     return () => {
       this.processedTaps.delete(tap);
-      dry.disconnect(tap);
-      wet.disconnect(tap);
+      heard.disconnect(tap);
       tap.disconnect();
     };
   }
@@ -421,10 +435,13 @@ export class MusicPlayerService {
       this.wetGain.gain.cancelScheduledValues(now);
       this.wetGain.gain.setValueAtTime(this.config.reverbAmount, now);
     }
-    // Rebuild impulse response only when roomSize changes (relatively expensive).
-    if (this.convolver && this.audioCtx && cfg.reverbRoom !== undefined && cfg.reverbRoom !== prev.reverbRoom) {
-      this.convolver.buffer = buildSyntheticRoomImpulseResponse(this.audioCtx, this.config.reverbRoom);
-    }
+    // The room rebuilds itself only when its shape changed, once the control rests (liveRoom.ts).
+    this.room?.setRoom(this.roomShape());
+    if (cfg.stereoWidth !== undefined && cfg.stereoWidth !== prev.stereoWidth) this.width?.setWidth(this.config.stereoWidth);
+  }
+
+  private roomShape(): { size: number; foliage: number } {
+    return { size: this.config.reverbRoom, foliage: this.config.reverbFoliage };
   }
 
   /**

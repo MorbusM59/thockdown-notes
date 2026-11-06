@@ -1,7 +1,7 @@
 /**
  * The soundscape's mix on Android, after the generator: the space (a
  * convolution of the generator's send with the soundscape's impulse
- * response), the mix gain, brilliance (soundscapeBrilliance.ts) and the bus
+ * response), the mix gain, brilliance (@thockdown/audio/brilliance.ts) and the bus
  * compressor -- in JavaScript, because Android renders ahead in a sandbox
  * with no Web Audio (soundscapeRenderAhead.ts). The desktop builds the same
  * chain from the browser's own nodes (soundscapeLivePlayback.ts), from the
@@ -15,11 +15,11 @@
  * already rendered ahead.
  */
 import type { SoundscapeSpaceSettings } from './soundscape';
-import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from './soundscapeBrilliance';
-import { buildSoundscapeImpulseResponse, soundscapeRoomKey, spacePreDelaySec, SPACE_MAX_LENGTH_SEC } from './soundscapeSpace';
+import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from '@thockdown/audio/brilliance';
+import { buildRoomImpulseResponse, roomKey, roomPreDelaySec, ROOM_CROSSFADE_SEC, ROOM_MAX_LENGTH_SEC } from '@thockdown/audio/room';
 import { DynamicsCompressor, type CompressorSettings, type CompressorSnapshot } from './dynamicsCompressor';
 import { BLOCK, PartitionedConvolver, type ConvolverSnapshot } from './partitionedConvolver';
-import type { StereoBiquadSnapshot } from './soundscapeBrilliance';
+import type { StereoBiquadSnapshot } from '@thockdown/audio/brilliance';
 
 /** The block the mix processes: the convolver's. */
 export const MIX_BLOCK = BLOCK;
@@ -39,8 +39,6 @@ export const MIX_BLOCK = BLOCK;
 export const SOUNDSCAPE_MIX_GAIN = 0.5;
 /** The space's return at `amount` 1. */
 export const SOUNDSCAPE_SPACE_RETURN = 1.2;
-/** How long a new space takes to fade in over the old. */
-export const SPACE_CROSSFADE_SEC = 0.35;
 
 /**
  * Gentle, for a soundscape whose own volume leaves it loud enough to reach
@@ -82,14 +80,14 @@ export class SoundscapeMix {
   private pendingRoom: SoundscapeSpaceSettings | null = null;
   private returnGain = 0;
   private returnTarget = 0;
-  /** Brilliance (soundscapeBrilliance.ts): a filter per band on the mix, then the makeup that keeps its loudness. */
+  /** Brilliance (@thockdown/audio/brilliance.ts): a filter per band on the mix, then the makeup that keeps its loudness. */
   private readonly toneFilters = BRILLIANCE_BANDS.map(() => new StereoBiquad());
   private brilliance: number | null = null;
   private makeup = 1;
   private makeupTarget = 1;
 
   constructor(private readonly sampleRate: number) {
-    const maxImpulse = Math.ceil((SPACE_MAX_LENGTH_SEC + spacePreDelaySec(1)) * sampleRate) + 1;
+    const maxImpulse = Math.ceil((ROOM_MAX_LENGTH_SEC + roomPreDelaySec(1)) * sampleRate) + 1;
     this.convolvers = [new PartitionedConvolver(maxImpulse), new PartitionedConvolver(maxImpulse)];
     this.compressor = new DynamicsCompressor(BUS_COMPRESSOR, sampleRate);
   }
@@ -111,7 +109,7 @@ export class SoundscapeMix {
       this.makeupTarget = curve.makeup;
       this.brilliance = space.brilliance;
     }
-    const key = soundscapeRoomKey(space);
+    const key = roomKey(space);
     this.pendingRoom = key === this.spaceKey ? null : { ...space };
   }
 
@@ -150,15 +148,15 @@ export class SoundscapeMix {
     return this.pendingRoom !== null;
   }
 
-  /** Build the pending room and crossfade it in over SPACE_CROSSFADE_SEC (at once, for the first). */
+  /** Build the pending room and crossfade it in over ROOM_CROSSFADE_SEC (at once, for the first). */
   buildRoom(): void {
     const space = this.pendingRoom;
     if (space === null) return;
     this.pendingRoom = null;
     const first = this.spaceKey === null;
-    this.spaceKey = soundscapeRoomKey(space);
-    const [left, right] = buildSoundscapeImpulseResponse(space, this.sampleRate);
-    const fade = first ? 0 : Math.round(SPACE_CROSSFADE_SEC * this.sampleRate);
+    this.spaceKey = roomKey(space);
+    const [left, right] = buildRoomImpulseResponse(space, this.sampleRate);
+    const fade = first ? 0 : Math.round(ROOM_CROSSFADE_SEC * this.sampleRate);
     this.convolvers[0].setImpulse(left, fade);
     this.convolvers[1].setImpulse(right, fade);
     if (first) this.returnGain = this.returnTarget;

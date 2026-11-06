@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from './soundscapeBrilliance';
+import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from './brilliance';
 
 const RATE = 48000;
 

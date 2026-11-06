@@ -49,7 +49,7 @@ export interface SoundscapeSpace {
  * the direct sound and raises the share sent to the space's reverb, which is
  * what makes far layers diffuse rather than merely quiet.
  *
- * How fast distance darkens is the space's FOLIAGE (soundscapeSpace.ts): in
+ * How fast distance darkens is the space's FOLIAGE (@thockdown/audio/room.ts): in
  * open, bare surroundings a far sound stays clear (the low-pass reaches
  * DISTANCE_CUTOFF_FAR_OPEN_HZ at the far end), among dense, soft obstacles
  * it dulls fast (DISTANCE_CUTOFF_FAR_DENSE_HZ), and even a near sound is

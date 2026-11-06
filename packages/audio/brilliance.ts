@@ -1,16 +1,16 @@
 /**
- * BRILLIANCE: how sharply the whole soundscape is heard, as one tone curve
+ * BRILLIANCE: how sharply a whole mix is heard (the soundscape's today), as one tone curve
  * on the finished mix, AFTER the compressor. Before it, the bass lift drove
  * the compressor on a soundscape whose energy is nearly all low (most of
  * them), and the gain it took back took the sparkle with it: crisp measured
  * duller than neutral. It is not part of
- * the place (size and foliage are, soundscapeSpace.ts): a dense forest
+ * the place (size and foliage are, room.ts): a dense forest
  * heard with high brilliance keeps its crisp near rain.
  *
  * The slider runs from SOFT AND WARM (0) through NEUTRAL (0.5, flat) to
  * CRISP AND CHISELLED (1), as four bands (BRILLIANCE_BANDS), the same on
- * both platforms -- the desktop's BiquadFilterNodes (soundscapeLivePlayback.ts)
- * and Android's StereoBiquad below (soundscapeMix.ts), whose coefficients are
+ * both platforms -- the desktop's BiquadFilterNodes (@thockdown/soundscape/soundscapeLivePlayback.ts)
+ * and Android's StereoBiquad below (@thockdown/soundscape/soundscapeMix.ts), whose coefficients are
  * Chromium's own (Biquad.cpp: a shelf's slope is fixed at S = 1, a peak's Q
  * is linear). Both build their filters from that one list.
  * A MAKEUP gain then holds the loudness as heard (brillianceCurve), so the

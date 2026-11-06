@@ -1,23 +1,25 @@
 /**
- * The space the soundscape layers play in, as a stereo impulse response: the
- * desktop's ConvolverNode (sound/soundscapeLivePlayback.ts) and Android's
- * partitioned convolution (sound/soundscapeMix.ts) both use it. Pure; built
- * whenever the room changes.
+ * A ROOM as a stereo impulse response: the one place sound is given a space
+ * anywhere in the Thockdown family. The soundscape's ConvolverNodes
+ * (@thockdown/soundscape/soundscapeLivePlayback.ts) and Android's partitioned
+ * convolution (@thockdown/soundscape/soundscapeMix.ts) use it, and so does
+ * the desktop music player's reverb (apps/notes/src/sound/MusicPlayerService.ts).
+ * Pure; built whenever the room changes, never per sample or per frame.
  *
- * TWO SLIDERS MAKE THE PLACE (SoundscapeSpaceSettings): SIZE sets the clock
- * and FOLIAGE decides what survives the journey. Their four corners are four
- * real places, and every point between them should be one too:
+ * TWO NUMBERS MAKE THE PLACE (RoomShape): SIZE sets the clock and FOLIAGE
+ * decides what survives the journey. Their four corners are four real
+ * places, and every point between them should be one too:
  * - small, bare: a closed room -- a short bright tail, tight reflections;
  * - small, dense: a room lined with foam -- nearly dry, dark, very short;
  * - large, bare: a mountain valley -- a long gap, then a few distinct,
  *   bright echoes standing out of a sparse tail;
  * - large, dense: a fir forest -- open and wide, but every return scattered
- *   into a soft, dark wash, and distant sounds dull fast.
+ *   into a soft, dark wash.
  *
  * What each does to the response:
  * - SIZE: the PRE-DELAY before the tail, the spacing of the REFLECTIONS
  *   (from REFLECTION_GAP_MIN_SEC, a room's walls, to REFLECTION_GAP_MAX_SEC, a
- *   valley's far side), and the tail's DECAY (to -60 dB at spaceDecaySec).
+ *   valley's far side), and the tail's DECAY (to -60 dB at roomDecaySec).
  * - FOLIAGE, all at once, so it cannot be subtle:
  *   - the tail's highs die up to 1 + FOLIAGE_HIGH_DECAY_EXTRA times faster than
  *     its lows, from the first sample, and the whole tail is shortened by up
@@ -32,24 +34,37 @@
  *     its level comes down, by up to FOLIAGE_REFLECTION_LOSS;
  *   - the diffuse tail grows from TAIL_SPARSE_GAIN (a bare large space is
  *     sparse: little between its echoes) to full as surfaces scatter.
- *   The other half of foliage is not here but in each channel's distance
- *   (soundscapeDsp.ts's resolveSoundscapeSpace): denser foliage dulls
- *   distant sounds faster, and obstructs even near ones slightly.
- * - The two sides are DECORRELATED, so the tail surrounds rather than sits
- *   in the middle, and the reflections lean to alternate sides.
+ *   A consumer may add a half of foliage that is not a property of the room:
+ *   the soundscape also dulls DISTANT sources by it
+ *   (@thockdown/soundscape/soundscapeDsp.ts's resolveSoundscapeSpace).
+ * - The two sides are DECORRELATED (independent noise per channel), so the
+ *   tail surrounds rather than sits in the middle, and the reflections lean
+ *   to alternate sides. This is what makes a room WIDE; a width stage on the
+ *   wet signal (stereoWidth.ts) can widen it further but not create it.
  *
- * LEVEL. The convolution does not normalise (a browser's normalisation
- * rescales every response to one power, which would turn foliage's losses
- * back up). The response is calibrated once, from the tail it would have
- * with NO foliage, to the power Chromium's normalisation gave such a tail
- * (SPACE_CALIBRATION), so foliage takes energy away rather than being
- * rebalanced.
+ * LEVEL. The response must be convolved WITHOUT normalisation (a browser's
+ * normalisation rescales every response to one power, which would turn
+ * foliage's losses back up: a ConvolverNode needs `normalize = false` set
+ * BEFORE its buffer). The response is calibrated once, from the tail it would
+ * have with NO foliage, to the power Chromium's normalisation gave such a
+ * tail (ROOM_CALIBRATION), so foliage takes energy away rather than being
+ * rebalanced, and a normalising consumer moving to it keeps its loudness.
  */
-import { logLerp, type SoundscapeSpaceSettings } from './soundscape';
+import { logLerp } from './curves';
 
-export const SPACE_DECAY_MIN_SEC = 0.35;
-export const SPACE_DECAY_MAX_SEC = 7;
-export const SPACE_MAX_LENGTH_SEC = 8;
+/** What a room is: both 0..1. */
+export interface RoomShape {
+  /** 0 a small room to 1 a wide valley: the pre-delay, the reflections' spacing, the tail's length. */
+  size: number;
+  /** 0 hard, open surfaces to 1 dense, soft, scattering ones. */
+  foliage: number;
+}
+
+export const ROOM_DECAY_MIN_SEC = 0.35;
+export const ROOM_DECAY_MAX_SEC = 7;
+export const ROOM_MAX_LENGTH_SEC = 8;
+/** How long a new room takes to fade in over the old, wherever it is played (liveRoom.ts, and Android's soundscapeMix.ts). */
+export const ROOM_CROSSFADE_SEC = 0.35;
 const HIGH_BAND_CROSSOVER_HZ = 1500;
 const FOLIAGE_HIGH_DECAY_EXTRA = 9;
 const FOLIAGE_DECAY_SHORTENING = 0.5;
@@ -69,15 +84,15 @@ const REFLECTION_GAIN = 0.5;
  * leaves it (Reverb::CalculateNormalizationScale: GainCalibration 0.00125,
  * scaled by 44.1 kHz over the context's rate).
  */
-const SPACE_CALIBRATION = 0.00125 * 44100;
+const ROOM_CALIBRATION = 0.00125 * 44100;
 
 /** The decay time (to -60 dB) a space's size gives. */
-export function spaceDecaySec(size: number): number {
-  return logLerp(SPACE_DECAY_MIN_SEC, SPACE_DECAY_MAX_SEC, Math.max(0, Math.min(1, size)));
+export function roomDecaySec(size: number): number {
+  return logLerp(ROOM_DECAY_MIN_SEC, ROOM_DECAY_MAX_SEC, Math.max(0, Math.min(1, size)));
 }
 
 /** The gap before the first reflection, in seconds. */
-export function spacePreDelaySec(size: number): number {
+export function roomPreDelaySec(size: number): number {
   return 0.003 + (0.045 * Math.max(0, Math.min(1, size)));
 }
 
@@ -89,28 +104,28 @@ function makeRandom(seed: number): () => number {
   };
 }
 
-/** What decides the impulse response: two spaces with one key share one room (amount and brilliance are applied outside it). */
-export function soundscapeRoomKey(space: Pick<SoundscapeSpaceSettings, 'size' | 'foliage'>): string {
+/** What decides the impulse response: two shapes with one key build the same room, so a consumer rebuilds only when the key changes. */
+export function roomKey(space: RoomShape): string {
   return [space.size, space.foliage].map((value) => value.toFixed(3)).join(':');
 }
 
 /** The gap between a space's reflections, in seconds. */
-export function spaceReflectionGapSec(size: number): number {
+export function roomReflectionGapSec(size: number): number {
   return logLerp(REFLECTION_GAP_MIN_SEC, REFLECTION_GAP_MAX_SEC, Math.max(0, Math.min(1, size)));
 }
 
-export function buildSoundscapeImpulseResponse(
-  space: Pick<SoundscapeSpaceSettings, 'size' | 'foliage'>,
+export function buildRoomImpulseResponse(
+  space: RoomShape,
   sampleRate: number,
   seed = 7,
 ): [Float32Array<ArrayBuffer>, Float32Array<ArrayBuffer>] {
   const size = Math.max(0, Math.min(1, space.size));
   const foliage = Math.max(0, Math.min(1, space.foliage));
-  const openDecaySec = spaceDecaySec(size);
+  const openDecaySec = roomDecaySec(size);
   const decaySec = openDecaySec * (1 - (FOLIAGE_DECAY_SHORTENING * foliage));
   const highDecaySec = decaySec / (1 + (FOLIAGE_HIGH_DECAY_EXTRA * foliage));
-  const preDelay = Math.round(spacePreDelaySec(size) * sampleRate);
-  const tailLength = Math.ceil(Math.min(SPACE_MAX_LENGTH_SEC, openDecaySec * 1.1) * sampleRate);
+  const preDelay = Math.round(roomPreDelaySec(size) * sampleRate);
+  const tailLength = Math.ceil(Math.min(ROOM_MAX_LENGTH_SEC, openDecaySec * 1.1) * sampleRate);
   const length = preDelay + tailLength;
   const buildUp = Math.max(1, Math.round((0.012 + (0.05 * size)) * sampleRate));
   // Per-sample factors reaching -60 dB (x 1/1000) at each decay time.
@@ -144,7 +159,7 @@ export function buildSoundscapeImpulseResponse(
     }
   }
   // See LEVEL above: calibrated from the tail with no foliage.
-  const targetRms = SPACE_CALIBRATION / sampleRate;
+  const targetRms = ROOM_CALIBRATION / sampleRate;
   const scale = openEnergy > 0 ? targetRms * Math.sqrt((2 * length) / openEnergy) : 0;
   for (const data of channels) {
     for (let index = preDelay; index < length; index += 1) data[index] *= scale;
@@ -153,7 +168,7 @@ export function buildSoundscapeImpulseResponse(
   // Reflections: alternate sides, each quieter by its order and by the air
   // it crossed (the tail's own decay), smeared by foliage into a burst that
   // keeps its energy. Their level is a gain on what is sent to the space.
-  const gap = spaceReflectionGapSec(size) * sampleRate;
+  const gap = roomReflectionGapSec(size) * sampleRate;
   const smear = Math.max(REFLECTION_MIN_SMEAR_SEC * sampleRate, FOLIAGE_SMEAR_SHARE * foliage * gap);
   const burstLength = Math.max(3, Math.round(smear));
   const burst = new Float32Array(burstLength);
