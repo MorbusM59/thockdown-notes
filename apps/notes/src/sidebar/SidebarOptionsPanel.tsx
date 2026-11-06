@@ -2536,7 +2536,7 @@ export function SidebarOptionsPanel({
           {/* Volume, reverb and room are the music bar's levels: set through the
               same rule its controls use (adjusting a muted volume or a bypassed
               reverb turns it back on), so the two places cannot disagree. */}
-          <OptionsSliderRows rows={[4, 3]}>
+          <OptionsSliderRows rows={[1, 3, 3]}>
             <CompactScrollbarSlider
               id="music-volume"
               min={0}
@@ -2598,8 +2598,8 @@ export function SidebarOptionsPanel({
               max={1}
               step={0.01}
               value={musicReverbRoom}
-              trackLabel="room"
-              ariaLabel="Music room size: a small room to a wide valley"
+              trackLabel="size"
+              ariaLabel="Music reverb size: a small room to a wide valley"
               defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbRoom}
               onCommit={(value) => readNowPlaying().setLevel('room', value)}
             />
@@ -2609,8 +2609,8 @@ export function SidebarOptionsPanel({
               max={1}
               step={0.01}
               value={musicReverbFoliage}
-              trackLabel="foliage"
-              ariaLabel="Music room foliage: bare and bright to dense and dark"
+              trackLabel="room"
+              ariaLabel="Music room: bare and bright to dense and dark"
               defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage}
               onCommit={(value) => setMusicReverbFoliage(clamp(value, 0, 1))}
             />

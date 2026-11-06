@@ -1251,7 +1251,7 @@ export const AudioControls = memo(function AudioControls({
             <button
               type="button"
               className={`audio-ctrl-btn audio-sound-btn${isReverbBypassed ? ' is-active' : ''}`}
-              data-tooltip={isReverbBypassed ? 'Reverb off — click to restore' : `Room size ${toDisplayLevel(reverbRoom)} — click to turn reverb off`}
+              data-tooltip={isReverbBypassed ? 'Reverb off — click to restore' : `Reverb size ${toDisplayLevel(reverbRoom)} — click to turn reverb off`}
               aria-label={isReverbBypassed ? 'Enable reverb' : 'Disable reverb'}
               aria-pressed={isReverbBypassed}
               onClick={handleReverbBypassToggle}
@@ -1263,8 +1263,8 @@ export const AudioControls = memo(function AudioControls({
               value={reverbRoom}
               onWheel={handleRoomWheel}
               holdHandlers={roomHoldHandlers}
-              label="Music reverb room size"
-              tooltip="Room size — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
+              label="Music reverb size"
+              tooltip="Reverb size — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
               isDimmed={isReverbBypassed}
             />
           </>

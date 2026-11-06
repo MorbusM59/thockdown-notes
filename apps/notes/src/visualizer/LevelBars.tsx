@@ -18,7 +18,7 @@ const BARS: ReadonlyArray<keyof SoundLevels> = ['volume', 'reverb', 'room']
  * Each bar's name, one letter per box like the song list's: "volume" ("vol"
  * on an odd-width bar, so it can sit exactly in the middle) centred
  * over the volume bar on the row of the reverb and room bars (in the gap
- * between them), "reverb" and "room" two rows above their bars, flush with
+ * between them), "reverb" and "size" two rows above their bars, flush with
  * the bar's outer end. A name that would leave the middle section is not drawn.
  */
 function labelsOf(area: LevelBarsArea, firstRow: number): Array<{ text: string; column: number; row: number }> {
@@ -28,7 +28,7 @@ function labelsOf(area: LevelBarsArea, firstRow: number): Array<{ text: string; 
   const labels = [{ text: name, column: volume.column + (volume.columns - name.length) / 2, row: reverb.row }]
   if (reverb.row - 2 >= firstRow) {
     labels.push({ text: 'reverb', column: reverb.column, row: reverb.row - 2 })
-    labels.push({ text: 'room', column: room.column + room.columns - 4, row: room.row - 2 })
+    labels.push({ text: 'size', column: room.column + room.columns - 4, row: room.row - 2 })
   }
   return labels
 }
