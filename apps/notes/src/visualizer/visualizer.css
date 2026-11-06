@@ -312,9 +312,11 @@
 .visualizer-letter.is-placeholder {
   opacity: calc(0.5 * var(--visualizer-panels));
 }
+/* No caret line: the box the next letter lands in is lit at half the accent
+   colour's own alpha, drawn among the lit boxes so a letter stays on top. */
 .visualizer-scene > .visualizer-filter-caret {
-  z-index: 5;
-  box-shadow: inset 2px 0 0 var(--visualizer-accent-color, var(--color-caret));
+  z-index: 1;
+  background-color: color-mix(in srgb, var(--visualizer-accent-color, var(--color-caret)) 50%, transparent);
 }
 .visualizer-scene > .visualizer-filter-input {
   z-index: 6;
