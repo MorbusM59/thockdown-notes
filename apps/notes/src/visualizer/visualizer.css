@@ -75,6 +75,11 @@
   background-color: var(--visualizer-accent-color, var(--color-caret));
 }
 
+.visualizer-scene > .visualizer-texture {
+  inset: 0;
+  z-index: 2;
+}
+
 .visualizer-scene > .visualizer-grid {
   inset: 0 0 -1px 0;
 }
