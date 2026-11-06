@@ -3108,21 +3108,32 @@ function App() {
   /**
    * Steps the current mode's layout to the next (+1) or previous (-1) preset,
    * wrapping, in the order the options panel lists them: the factory presets,
-   * then the saved custom slots. From an entry outside that list (unsaved
-   * changes, or the default custom layout) the step starts from before the
+   * then the saved custom slots, then the unsaved changes if there are any.
+   * From an entry outside that list (the default custom layout) the step starts from before the
    * first preset, so +1 lands on the first and -1 on the last. Selecting goes
    * through `selectLoadoutPreset`, the same path as pressing the preset's
    * button, so the choice is persisted the same way.
    */
   const stepLayoutPreset = useCallback((direction: 1 | -1) => {
-    const cycle = [...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode]
+    // The row holding unsaved changes joins the cycle last, so stepping away
+    // from it and back returns to it; setActive never rewrites that row, so
+    // stepping writes nothing. While nothing is unsaved it is an inert copy
+    // of another entry and is left out.
+    const pending = entriesForCurrentMode.find((entry) => idKind(entry.id) === 'pending')
+    const hasPendingChanges = pending !== undefined
+      && !entriesForCurrentMode.some((entry) => entry.id !== pending.id && entry.signature === pending.signature)
+    const cycle = [
+      ...factoryPresetEntriesForCurrentMode,
+      ...customSlotEntriesForCurrentMode,
+      ...(hasPendingChanges ? [pending] : []),
+    ]
     if (cycle.length === 0) return
     const current = cycle.findIndex((entry) => entry.id === activeEntryForCurrentMode?.id)
     const next = current < 0
       ? (direction > 0 ? 0 : cycle.length - 1)
       : (current + direction + cycle.length) % cycle.length
     void selectLoadoutPreset(cycle[next].id)
-  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
+  }, [entriesForCurrentMode, factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
   // --- Separate layouts for the app and the visualizer -------------------
   // The regular app and the visualizer each remember the layout they last
   // showed (a light/dark mode and the entry active in it). Only one is in
