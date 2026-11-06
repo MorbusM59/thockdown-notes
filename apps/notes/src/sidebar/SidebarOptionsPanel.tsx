@@ -7,6 +7,8 @@ import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { FontSection } from './FontSection'
 import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
+import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
+import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
@@ -516,6 +518,10 @@ export interface SidebarOptionsPanelProps {
   setAudioReverbStrength: (value: number) => void
   audioReverbSpace: number
   setAudioReverbSpace: (value: number) => void
+  musicReverbFoliage: number
+  setMusicReverbFoliage: (value: number) => void
+  musicStereoWidth: number
+  setMusicStereoWidth: (value: number) => void
   pitchJitterAmount: number
   setPitchJitterAmount: (value: number) => void
   audioSpatial: number
@@ -762,6 +768,10 @@ export function SidebarOptionsPanel({
   setAudioReverbStrength,
   audioReverbSpace,
   setAudioReverbSpace,
+  musicReverbFoliage,
+  setMusicReverbFoliage,
+  musicStereoWidth,
+  setMusicStereoWidth,
   pitchJitterAmount,
   setPitchJitterAmount,
   audioSpatial,
@@ -2497,6 +2507,42 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
       ) : null}
+
+      {/* The music's sound beyond the music bar's volume, reverb and room:
+          app-wide like the rest of the music's settings, not the layout's. */}
+      <AccordionSection
+        className="sidebar-options-section-music"
+        ariaLabel="Music"
+        heading="Music"
+        iconClass="fa-music"
+      >
+        <div className="utility-setting-slider-stack" aria-label="Music controls">
+          <OptionsSliderRows>
+            <CompactScrollbarSlider
+              id="music-reverb-foliage"
+              min={0}
+              max={1}
+              step={0.01}
+              value={musicReverbFoliage}
+              trackLabel="foliage"
+              ariaLabel="Music room foliage: bare and bright to dense and dark"
+              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage}
+              onCommit={(value) => setMusicReverbFoliage(clamp(value, 0, 1))}
+            />
+            <CompactScrollbarSlider
+              id="music-stereo-width"
+              min={STEREO_WIDTH_MIN}
+              max={STEREO_WIDTH_MAX}
+              step={0.01}
+              value={musicStereoWidth}
+              trackLabel="width"
+              ariaLabel="Music stereo width: mono at the left, as recorded at the default, wider to the right"
+              defaultValue={STEREO_WIDTH_NEUTRAL}
+              onCommit={(value) => setMusicStereoWidth(sanitizeStereoWidth(value))}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
 
       {features.visualizer ? (
       <AccordionSection

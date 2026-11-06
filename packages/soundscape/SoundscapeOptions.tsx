@@ -48,7 +48,7 @@ import {
   type SoundscapePreset,
   type SoundscapeSettings,
 } from './soundscape'
-import { spaceDecaySec } from './soundscapeSpace'
+import { roomDecaySec } from '@thockdown/audio/room'
 import { CHIME_SCALES, chimeScaleOf } from './soundscapeChimeScales'
 import { armHold, HOLD_COMMIT_MS, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { newSoundscapeId, neutralSoundscape } from './soundscapeFile'
@@ -375,7 +375,7 @@ const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
   rows: [1, 2, 2, 2],
   controls: [
     unit('volume', 'volume', 'How loud this whole soundscape is. Lower it if the loudest moments make the rest of it duck', formatVolume),
-    unit('size', 'size', 'A small room to a wide valley: how far sound travels before it comes back, how far apart its echoes are, how long it rings', (value) => `${formatSeconds(spaceDecaySec(value))} decay`),
+    unit('size', 'size', 'A small room to a wide valley: how far sound travels before it comes back, how far apart its echoes are, how long it rings', (value) => `${formatSeconds(roomDecaySec(value))} decay`),
     unit('foliage', 'foliage', 'Bare, hard surfaces to dense, soft ones: clear echoes and a bright ring, or every echo scattered into a dark, soft wash, and distant sounds muffled', (value) => formatAmount(value, 'Bare', 'Dense')),
     unit('brilliance', 'brilliance', 'How sharply it is all heard: soft and warm, neutral in the middle, or crisp, sparkling and full-bodied', formatBrilliance),
     unit('amount', 'amount', 'How much of the space is heard', (value) => formatAmount(value, 'Dry', 'Full')),

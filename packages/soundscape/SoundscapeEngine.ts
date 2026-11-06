@@ -4,7 +4,7 @@
  * change of soundscape, to be crossfaded), and sets its volume. The sound
  * itself is shared by every playback: the generator
  * (packages/soundscape/soundscape-generator.js) and the mix's settings
- * (soundscapeMix.ts, soundscapeSpace.ts). Where and how it is played is the
+ * (soundscapeMix.ts, @thockdown/audio/room.ts). Where and how it is played is the
  * playback's business:
  * - on desktop, LIVE (soundscapeLivePlayback.ts, the default): the generator
  *   as an AudioWorklet and the browser's own nodes for the mix, so a slider
