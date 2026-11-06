@@ -11,7 +11,7 @@ import type { VisualizerLayout } from './visualizerLayout'
 export function TabHint({ layout }: { layout: VisualizerLayout }) {
   const { boxPx, originXPx, originYPx, cutout } = layout
   if (cutout.size <= 0) return null
-  const text = Array.from(cutout.size % 2 === 1 ? '[Tab]' : 'Hit [Tab]!')
+  const text = Array.from(cutout.size % 2 === 1 ? 'Tab' : 'Hit Tab!')
   const column = cutout.column + (cutout.size - text.length) / 2
   const row = cutout.row + cutout.size + 1
   return (
