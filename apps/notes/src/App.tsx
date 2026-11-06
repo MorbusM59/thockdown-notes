@@ -3144,15 +3144,26 @@ function App() {
     if (choice.uiMode === liveLayoutChoice?.uiMode && choice.loadoutId === liveLayoutChoice.loadoutId) return
     if (choice.uiMode !== uiMode) setUiMode(choice.uiMode)
     const sign = modeSign(choice.uiMode)
-    if (uiLoadoutEntries.some((entry) => entry.id === choice.loadoutId)) {
-      void selectLoadoutPreset(choice.loadoutId)
+    const remembered = uiLoadoutEntries.find((entry) => entry.id === choice.loadoutId)
+    if (remembered) {
+      // The look is applied in this same update as the mode, from the entry
+      // already in hand, and the database is only told which entry is now
+      // active: applying on the reply instead would let a reply that arrives
+      // after a quick second F3 put this layout back over the other one.
+      applyEntryToLiveState(remembered)
+      void window.thockdownLoadouts?.setActive(remembered.id)
+        .then((result) => {
+          setUiLoadoutEntries(result.entries)
+          setLastCustomIdByMode(result.lastCustomIdByMode)
+        })
+        .catch((error) => console.error('Failed to select UI loadout preset', error))
       return
     }
     // The remembered entry is gone (a deleted custom slot): keep the mode
     // and show whatever that mode has active, as switching modes does.
     const active = uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
     if (active && choice.uiMode !== uiMode) applyEntryToLiveState(active)
-  }, [liveLayoutChoice, uiMode, uiLoadoutEntries, selectLoadoutPreset, applyEntryToLiveState])
+  }, [liveLayoutChoice, uiMode, uiLoadoutEntries, applyEntryToLiveState])
   const wasVisualizerModeRef = useRef(false)
   useEffect(() => {
     if (wasVisualizerModeRef.current === isVisualizerMode) return
