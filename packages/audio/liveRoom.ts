@@ -66,7 +66,7 @@ export class LiveRoom {
       this.install(shape, key);
       return;
     }
-    const target = { size: shape.size, foliage: shape.foliage };
+    const target = { ...shape };
     this.pendingTimer = setTimeout(() => {
       this.pendingTimer = null;
       this.install(target, key);

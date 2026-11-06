@@ -18,8 +18,8 @@
  *
  * What each does to the response:
  * - SIZE: the PRE-DELAY before the tail, the spacing of the REFLECTIONS
- *   (from REFLECTION_GAP_MIN_SEC, a room's walls, to REFLECTION_GAP_MAX_SEC, a
- *   valley's far side), and the tail's DECAY (to -60 dB at roomDecaySec).
+ *   (from REFLECTION_GAP_MIN_SEC, a room's walls, to ROOM_ECHO_GAP_MAX_SEC, a
+ *   large space's far side), and the tail's DECAY (to -60 dB at roomDecaySec).
  * - FOLIAGE, all at once, so it cannot be subtle:
  *   - the tail's highs die up to 1 + FOLIAGE_HIGH_DECAY_EXTRA times faster than
  *     its lows, from the first sample, and the whole tail is shortened by up
@@ -58,6 +58,8 @@ export interface RoomShape {
   size: number;
   /** 0 hard, open surfaces to 1 dense, soft, scattering ones. */
   foliage: number;
+  /** The reflections' widest gap, at size 1 (ROOM_ECHO_GAP_MAX_SEC when absent): a consumer that wants no audible repeats passes ROOM_ECHO_GAP_FUSED_SEC. */
+  echoGapMaxSec?: number;
 }
 
 export const ROOM_DECAY_MIN_SEC = 0.35;
@@ -92,7 +94,15 @@ const FOLIAGE_REFLECTION_LOSS = 0.6;
 const TAIL_SPARSE_GAIN = 0.45;
 const REFLECTION_COUNT = 7;
 const REFLECTION_GAP_MIN_SEC = 0.03;
-const REFLECTION_GAP_MAX_SEC = 0.9;
+/**
+ * The widest gap between reflections, at size 1, unless a consumer asks for
+ * less (RoomShape.echoGapMaxSec). Past about 80 ms the ear stops fusing
+ * reflections into the room and hears them as repeats; 0.3 s keeps a large
+ * space's answer audible without it reading as a delay effect (0.9 s did).
+ */
+export const ROOM_ECHO_GAP_MAX_SEC = 0.3;
+/** A gap the ear fuses into the room at every size: no repeats, only a longer, smoother space (the music's). */
+export const ROOM_ECHO_GAP_FUSED_SEC = 0.06;
 /** A reflection is never a bare click: even a hard wall spreads it a little, which keeps a small room's close reflections from ringing as a comb. */
 const REFLECTION_MIN_SMEAR_SEC = 0.002;
 const REFLECTION_GAIN = 0.5;
@@ -123,12 +133,13 @@ function makeRandom(seed: number): () => number {
 
 /** What decides the impulse response: two shapes with one key build the same room, so a consumer rebuilds only when the key changes. */
 export function roomKey(space: RoomShape): string {
-  return [space.size, space.foliage].map((value) => value.toFixed(3)).join(':');
+  return [space.size, space.foliage, space.echoGapMaxSec ?? ROOM_ECHO_GAP_MAX_SEC].map((value) => value.toFixed(3)).join(':');
 }
 
 /** The gap between a space's reflections, in seconds. */
-export function roomReflectionGapSec(size: number): number {
-  return logLerp(REFLECTION_GAP_MIN_SEC, REFLECTION_GAP_MAX_SEC, Math.max(0, Math.min(1, size)));
+export function roomReflectionGapSec(size: number, echoGapMaxSec = ROOM_ECHO_GAP_MAX_SEC): number {
+  const widest = Math.max(REFLECTION_GAP_MIN_SEC, echoGapMaxSec);
+  return logLerp(REFLECTION_GAP_MIN_SEC, widest, Math.max(0, Math.min(1, size)));
 }
 
 export function buildRoomImpulseResponse(
@@ -185,7 +196,7 @@ export function buildRoomImpulseResponse(
   // Reflections: alternate sides, each quieter by its order and by the air
   // it crossed (the tail's own decay), smeared by foliage into a burst that
   // keeps its energy. Their level is a gain on what is sent to the space.
-  const gap = roomReflectionGapSec(size) * sampleRate;
+  const gap = roomReflectionGapSec(size, space.echoGapMaxSec) * sampleRate;
   const smear = Math.max(REFLECTION_MIN_SMEAR_SEC * sampleRate, FOLIAGE_SMEAR_SHARE * foliage * gap);
   const burstLength = Math.max(3, Math.round(smear));
   const burst = new Float32Array(burstLength);

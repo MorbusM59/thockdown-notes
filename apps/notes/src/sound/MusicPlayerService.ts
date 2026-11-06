@@ -1,5 +1,5 @@
 import { LiveRoom } from '@thockdown/audio/liveRoom';
-import { foliageNearCutoffHz } from '@thockdown/audio/room';
+import { foliageNearCutoffHz, ROOM_ECHO_GAP_FUSED_SEC, type RoomShape } from '@thockdown/audio/room';
 import { StereoWidth } from '@thockdown/audio/stereoWidth';
 import { BRILLIANCE_NEUTRAL, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
@@ -461,8 +461,9 @@ export class MusicPlayerService {
     }
   }
 
-  private roomShape(): { size: number; foliage: number } {
-    return { size: this.config.reverbRoom, foliage: this.config.reverbFoliage };
+  /** The music's room never repeats: its reflections stay close enough to fuse, so a large size is a long, smooth space rather than a slapback. */
+  private roomShape(): RoomShape {
+    return { size: this.config.reverbRoom, foliage: this.config.reverbFoliage, echoGapMaxSec: ROOM_ECHO_GAP_FUSED_SEC };
   }
 
   /**
