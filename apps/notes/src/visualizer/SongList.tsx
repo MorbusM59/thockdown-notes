@@ -32,7 +32,7 @@ import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/i
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songListTitleText, type MusicSongEntry } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
-import { commitPoolFilterDraft, readShownPoolFilter, subscribePoolFilterDraft } from './poolFilterDraft'
+import { claimPlayback, commitPoolFilterDraft, readShownPoolFilter, subscribePoolFilterDraft } from './poolFilterDraft'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
 import { songListEntry, type VisualizerLayout } from './visualizerLayout'
 
@@ -273,6 +273,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       if (!song) return
       // A song chosen from the list as filtered is played from that pool.
       commitPoolFilterDraft()
+      claimPlayback()
       readNowPlaying().playFromPool(song.id)
     }
     hit.addEventListener('wheel', wheel.handleWheel, { passive: false })

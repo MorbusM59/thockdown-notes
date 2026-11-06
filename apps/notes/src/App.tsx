@@ -12,7 +12,8 @@ import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type MusicPoolFilter } from './shared/audioPlayer'
-import { togglePanelsShown } from './visualizer/panelsShown'
+import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
+import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { publishThemeControls } from './visualizer/themeControls'
 import { readMusicEqPreset, setMusicEqPreset, subscribeMusicEqPreset } from './sound/musicEqPreset'
 import { sanitizeMusicEqPreset } from './shared/musicEqPresets'
@@ -7663,33 +7664,56 @@ ${markdownHtml}
       if (event.key === 'Escape' && !event.repeat) {
         escapeConsumedByFieldRef.current = false
       }
+      // In the visualizer every Escape is spent there (a pool filter field
+      // claims its own before this listener sees it), so its release never
+      // also switches the hidden note's view.
+      if (isVisualizerMode && event.key === 'Escape') escapeConsumedByFieldRef.current = true
       if (event.defaultPrevented) return
 
-      // The visualizer, from anywhere: F3 in and out, and Escape out as well
-      // -- the press is spent on leaving, so its release does not also switch
-      // the hidden note's view. A held key toggles once, not per repeat.
-      if (matchShortcut(event, 'visualizer') || (isVisualizerMode && event.key === 'Escape')) {
+      // F3 enters and leaves the visualizer from anywhere, a filter field
+      // included. A held key toggles once, not per repeat.
+      if (matchShortcut(event, 'visualizer')) {
         event.preventDefault()
-        if (event.key === 'Escape') escapeConsumedByFieldRef.current = true
         if (!event.repeat) toggleVisualizerMode()
         return
       }
 
+      // Escape in the visualizer never leaves it (F3 does): in a filter
+      // field it empties and leaves the field (its own handler,
+      // PoolFilter.tsx), anywhere else it shows or hides the panels.
+      if (isVisualizerMode && event.key === 'Escape') {
+        event.preventDefault()
+        if (!event.repeat) setPanelsShown(!readPanelsShown())
+        return
+      }
+
       // In the visualizer the scene holds the keyboard and the note under it
-      // is hidden, so Backspace/Delete step through the layout presets, Enter
-      // switches between light and dark and Tab shows or hides the panels.
-      // Space and the arrow keys belong to the music controls. Repeats are
-      // ignored so a held key acts only once. A pool filter field keeps its
-      // own keys.
+      // is hidden. Tab and Shift+Tab step through the layout presets while
+      // the panels are hidden, and through the filter fields while they are
+      // shown, starting at the title; Enter switches between light and dark.
+      // A letter that is no shortcut is filter text and goes to the title
+      // field; when it is what brings the panels up, it starts a new filter
+      // (every field emptied first). Space and the arrow keys belong to the music
+      // controls. Repeats are ignored where a held key should act once. A
+      // pool filter field keeps its own keys.
       if (isVisualizerMode && !isTextEntryElement(event.target instanceof Element ? event.target : null)) {
-        if (matchShortcut(event, 'visualizerPanels')) {
+        const filterFields = readPoolFilterFields()
+        const isFilterText = event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey && !event.altKey
+        if (isFilterText && filterFields) {
           event.preventDefault()
-          if (!event.repeat) togglePanelsShown()
+          const fresh = !readPanelsShown()
+          setPanelsShown(true)
+          filterFields.type('title', event.key, fresh)
           return
         }
         const layoutChord = matchShortcut(event, 'visualizerNextLayout')
           ? 1
           : matchShortcut(event, 'visualizerPreviousLayout') ? -1 : 0
+        if (layoutChord !== 0 && readPanelsShown() && filterFields) {
+          event.preventDefault()
+          filterFields.focus('title')
+          return
+        }
         if (layoutChord !== 0 || matchShortcut(event, 'visualizerLightDark')) {
           event.preventDefault()
           if (!event.repeat) {

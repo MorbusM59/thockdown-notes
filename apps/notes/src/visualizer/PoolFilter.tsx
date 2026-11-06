@@ -12,15 +12,18 @@
  * transparent, so selection, clipboard and IME are the browser's; the boxes
  * draw its value and caret. The song list follows every keystroke
  * (`poolFilterDraft.ts`); playback takes the filter when the reader LEAVES a
- * field: Enter, Tab (which steps to the next field by name), a press anywhere
- * outside the fields, or leaving the visualizer.
+ * field: Enter, Tab (which steps to the next field by name), Escape (which
+ * empties the field first), a press anywhere outside the fields, or leaving
+ * the visualizer. Typed text that reaches the scene with no field holding
+ * the keyboard goes to the title field (App.tsx, through
+ * `registerPoolFilterFields`).
  */
 
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { MusicPoolFilter } from '../shared/audioPlayer'
+import { EMPTY_POOL_FILTER, type MusicPoolFilter } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
-import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, subscribePoolFilterDraft } from './poolFilterDraft'
+import { commitPoolFilterDraft, readShownPoolFilter, registerPoolFilterFields, setPoolFilterDraft, subscribePoolFilterDraft } from './poolFilterDraft'
 import { subscribeNowPlaying } from '../sound/nowPlaying'
 import { fieldWindow, type PoolFilterArea, type VisualizerLayout } from './visualizerLayout'
 
@@ -84,6 +87,26 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
     }
   }, [])
 
+  useEffect(() => registerPoolFilterFields({
+    focused: () => FIELD_ORDER.find((key) => inputs.current[key] === document.activeElement) ?? null,
+    focus: (key) => {
+      const input = inputs.current[key]
+      if (!input) return
+      input.focus()
+      input.setSelectionRange(input.value.length, input.value.length)
+      setCaret(Array.from(input.value).length)
+    },
+    type: (key, text, fresh) => {
+      const base = fresh ? EMPTY_POOL_FILTER : readShownPoolFilter()
+      const next = base[key] + text
+      setPoolFilterDraft({ ...base, [key]: next })
+      // Focused before React writes the new value, which puts the caret at
+      // the end of it.
+      inputs.current[key]?.focus()
+      setCaret(Array.from(next).length)
+    },
+  }), [])
+
   const readCaret = (input: HTMLInputElement) => {
     // A code point index, as the boxes count.
     setCaret(Array.from(input.value.slice(0, input.selectionStart ?? input.value.length)).length)
@@ -131,6 +154,11 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault()
+                  event.currentTarget.blur()
+                } else if (event.key === 'Escape') {
+                  // Leaves the field emptied; the blur commits it.
+                  event.preventDefault()
+                  setPoolFilterDraft({ ...readShownPoolFilter(), [key]: '' })
                   event.currentTarget.blur()
                 } else if (event.key === 'Tab') {
                   event.preventDefault()

@@ -2,8 +2,7 @@
  * The visualizer hides the mouse cursor once it has been still for
  * `IDLE_MS`: `is-cursor-idle` goes on the root, and visualizer.css fades the
  * custom cursor out and then hides it and the native one. Any pointer
- * movement brings it back. Also gates the Tab hint (`TabHint.tsx`), which
- * fades with the cursor.
+ * movement brings it back.
  */
 
 import { useEffect } from 'react'

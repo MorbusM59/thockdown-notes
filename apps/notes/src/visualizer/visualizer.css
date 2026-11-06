@@ -328,7 +328,7 @@
   cursor: text;
 }
 
-/* Tab shows and hides the panels (the song list, the bucket list, the pool
+/* Typing shows and Escape toggles the panels (the song list, the bucket list, the pool
    filter, the level bars; panelsShown.ts): one inherited number every panel
    element takes as its opacity, faded in over 200ms and out over 500ms. A
    hidden panel takes no presses. Under each plate's hole in the middle strip
@@ -374,8 +374,7 @@
 
 /* The mouse cursor, once still for five seconds (CursorIdle.tsx): the
    custom cursor fades out over 500ms, then it and the native cursor are
-   hidden. The Tab hint (TabHint.tsx) shows only while the panels are hidden
-   and the cursor is not, fading with it. */
+   hidden. */
 :root.is-cursor-idle .mouse-cursor-overlay-canvas {
   opacity: 0;
   visibility: hidden;
@@ -384,16 +383,4 @@
 :root.is-cursor-idle .visualizer-scene,
 :root.is-cursor-idle .visualizer-scene * {
   cursor: none !important;
-}
-.visualizer-scene .visualizer-tab-hint {
-  opacity: 0;
-  transition: opacity 500ms linear;
-}
-.visualizer-scene.is-panels-hidden .visualizer-tab-hint {
-  opacity: 1;
-  transition-duration: 200ms;
-}
-:root.is-cursor-idle .visualizer-scene.is-panels-hidden .visualizer-tab-hint {
-  opacity: 0;
-  transition-duration: 500ms;
 }
