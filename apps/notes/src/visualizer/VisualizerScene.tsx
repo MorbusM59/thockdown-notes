@@ -515,8 +515,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           )}
 
           {/* The edit view's own texture, the one thing the scene shares with
-              the editor besides its grid: a still masked layer over the
-              surfaces and under the grid lines, never repainted per frame. */}
+              the editor besides its grid: a still masked layer under the
+              surfaces, as in the editor, never repainted per frame. */}
           <div className="markdown-editor-texture visualizer-texture" />
           <div
             ref={gridOutlineRef}

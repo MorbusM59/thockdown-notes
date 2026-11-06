@@ -75,9 +75,12 @@
   background-color: var(--visualizer-accent-color, var(--color-caret));
 }
 
+/* Under the surfaces, as in the editor: there the texture is drawn on the
+   stage's parchment base and CM6's translucent zone backgrounds lie over it,
+   which is what keeps it soft. Over the strips it came out at full contrast. */
 .visualizer-scene > .visualizer-texture {
   inset: 0;
-  z-index: 2;
+  z-index: 0;
 }
 
 .visualizer-scene > .visualizer-grid {
