@@ -14,6 +14,25 @@ import { levelAtColumn, levelGapColumn, type LevelBar, type LevelBarsArea, type 
 
 const BARS: ReadonlyArray<keyof SoundLevels> = ['volume', 'reverb', 'room']
 
+/**
+ * Each bar's name, one letter per box like the song list's: "volume" ("vol"
+ * on an odd-width bar, so it can sit exactly in the middle) centred
+ * over the volume bar on the row of the reverb and room bars (in the gap
+ * between them), "reverb" and "room" two rows above their bars, flush with
+ * the bar's outer end. A name that would leave the middle section is not drawn.
+ */
+function labelsOf(area: LevelBarsArea, firstRow: number): Array<{ text: string; column: number; row: number }> {
+  const { volume, reverb, room } = area
+  // Exactly centred: an even bar (the cutout's parity) takes "volume", an odd one "vol".
+  const name = volume.columns % 2 === 0 ? 'volume' : 'vol'
+  const labels = [{ text: name, column: volume.column + (volume.columns - name.length) / 2, row: reverb.row }]
+  if (reverb.row - 2 >= firstRow) {
+    labels.push({ text: 'reverb', column: reverb.column, row: reverb.row - 2 })
+    labels.push({ text: 'room', column: room.column + room.columns - 4, row: room.row - 2 })
+  }
+  return labels
+}
+
 export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: LevelBarsArea }) {
   const levels = useSyncExternalStore(subscribeNowPlaying, () => readNowPlaying().levels)
   const { boxPx, originXPx, originYPx } = layout
@@ -25,6 +44,15 @@ export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: Le
   })
   return (
     <>
+      {labelsOf(area, layout.stripRows + 1).flatMap((label) => Array.from(label.text).map((char, index) => (
+        <div
+          key={`${label.text}${index}`}
+          className="visualizer-letter is-panel"
+          style={{ left: originXPx + (label.column + index) * boxPx, top: originYPx + label.row * boxPx, width: boxPx, height: boxPx, lineHeight: `${boxPx}px` }}
+        >
+          {char}
+        </div>
+      )))}
       {BARS.map((key) => {
         const bar = area[key]
         const gap = levelGapColumn(bar.columns, levels[key])
