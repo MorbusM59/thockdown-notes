@@ -552,7 +552,7 @@ export const SOUNDSCAPE_CHANNEL_DEFAULTS: KindDefaults = {
   },
 };
 
-export const DEFAULT_SOUNDSCAPE_SPACE: Readonly<SoundscapeSpaceSettings> = { size: 0.45, foliage: 0.5, brilliance: 0.5, amount: 0.7 };
+export const DEFAULT_SOUNDSCAPE_SPACE: Readonly<SoundscapeSpaceSettings> = { size: 0.45, foliage: 0.5, brilliance: 0.5, amount: 0.49 };
 export const DEFAULT_SOUNDSCAPE_WEATHER: Readonly<SoundscapeWeatherSettings> = { gustiness: 0.4, paceSec: 12 };
 
 /** A roster channel at its defaults (enabled unless said otherwise). */
@@ -633,7 +633,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'rain-2': { distance: 0.5, drips: 0.72, dropLevel: 0.74, intensity: 0.45, pan: 0.3, resonance: 0.83, splashLevel: 0.51, volume: 0.69, washDensity: 0.95, washLevel: 0.84, washTone: 0.23, wetness: 0.51 },
       'rain-3': { distance: 0.9, drips: 0.38, dropLevel: 0.681, intensity: 0.85, resonance: 0.82, splashLevel: 0.49, surface: 0.44, volume: 0.97, washDensity: 0.69, washLevel: 0.89, washTone: 0.46, wetness: 0.7 },
       'thunder-1': { character: 0.87, contrast: 0.47, distance: 0.6, lengthSec: 30, pan: -0.28, randomness: 0.11, share: 0.67, spread: 1, volume: 1 },
-    }, { amount: 0.42, foliage: 0.82, size: 0.76 }, { gustiness: 0.88, paceSec: 4.681 }, volumeDb(-10)),
+    }, { amount: 0.294, foliage: 0.82, size: 0.76 }, { gustiness: 0.88, paceSec: 4.681 }, volumeDb(-10)),
   },
   {
     id: 'wild-sea',
@@ -649,7 +649,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'thunder-1': { distance: 0.21, enabled: false, pan: -0.36, share: 0.71, spread: 0.85, weather: 0.65 },
       'thunder-2': { character: 0.85, contrast: 0.38, lengthSec: 26, randomness: 0.78, share: 0.32, spread: 0.77, weather: 0.94 },
       'thunder-3': { distance: 0.99, enabled: false, pan: 0.45, share: 1, spread: 0.93 },
-    }, { amount: 0.42, foliage: 0.79, size: 0.76 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-15)),
+    }, { amount: 0.294, foliage: 0.79, size: 0.76 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-15)),
   },
   {
     id: 'winds',
@@ -686,7 +686,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'noise-2': { brightnessHz: 153.23, colour: 0.22, depth: 0.42, focus: 0.84, skew: 0.28, sway: 0.19, variation: 0.98, volume: 0.64 },
       'noise-3': { brightnessHz: 223.87, colour: 0.04, distance: 0.1, focus: 0.76, volume: 0.48 },
       'water-1': { bubbleLevel: 0.7, bubbles: 0.45, distance: 0.57, pan: -0.37, ring: 0.39, rise: 0.27, rushLevel: 0.98, rushTone: 0.62, size: 0.85, sizeSpread: 0.82, turbulence: 0.46, volume: 0.59, width: 0.56 },
-    }, { amount: 0.7, size: 0.06 }, { paceSec: 11.927 }),
+    }, { amount: 0.49, size: 0.06 }, { paceSec: 11.927 }),
   },
   {
     id: 'storm',
@@ -724,7 +724,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'thunder-2': { character: 0.29, contrast: -0.2, distance: 1, lengthSec: 25, randomness: 1, share: 0.865, spread: 1, volume: 0.84, weather: 1 },
       'thunder-3': { character: 1, contrast: 1, lengthSec: 23, pan: 0.2, randomness: 1, share: 0.95, spread: 1, volume: 1, weather: 0.79 },
       'water-2': { bubbleLevel: 0.45, bubbles: 0.22, distance: 0.78, pan: -0.26, ring: 0.21, rise: 0, rushLevel: 0.54, rushTone: 0.29, size: 0.53, sizeSpread: 0.79, turbulence: 0.21, volume: 1, width: 0.2 },
-    }, { amount: 1, brilliance: 0.07, foliage: 0.17, size: 1 }, { gustiness: 1, paceSec: 4.681 }, 0.87),
+    }, { amount: 0.7, brilliance: 0.07, foliage: 0.17, size: 1 }, { gustiness: 1, paceSec: 4.681 }, 0.87),
   },
   {
     id: 'cloudburst',
@@ -736,7 +736,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
       'rain-2': { distance: 0.51, dripTone: 0.43, dropTone: 0.2, intensity: 1, splashLevel: 0.48, splashTone: 0, volume: 0.96, washDensity: 1, washLevel: 1, washTone: 0.31, weather: 0.68 },
       'rain-3': { distance: 0.21, dripLevel: 0.31, dripTone: 0.32, drips: 0.59, dropTone: 0.18, intensity: 1, resonance: 0.3, splashLevel: 0.56, splashTone: 0, surface: 0.27, volume: 0.92, washDensity: 0.34, washLevel: 1, washTone: 0.23, weather: 0.94, wetness: 0.78 },
       'thunder-3': { character: 0.78, contrast: 0.08, distance: 0.19, lengthSec: 24, randomness: 0.19, share: 0.75, spread: 1, volume: 1, weather: 1 },
-    }, { amount: 1, brilliance: 0.8, foliage: 0.09, size: 1 }, { gustiness: 1, paceSec: 29.877 }, 0.75),
+    }, { amount: 0.7, brilliance: 0.8, foliage: 0.09, size: 1 }, { gustiness: 1, paceSec: 29.877 }, 0.75),
   },
 ];
 
