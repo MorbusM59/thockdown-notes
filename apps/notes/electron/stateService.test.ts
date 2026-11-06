@@ -50,6 +50,19 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.isDoubleSizeMode).toBe(true)
   })
 
+  it('persists the visualizer font across a restart, and leaves it absent in a save without one', async () => {
+    const menu = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.visualizerFont).toBeUndefined()
+
+    await new StateService(dataRoot).saveAppState({
+      selectedNoteId: null,
+      menu: { ...menu, visualizerFont: { style: 'vt323', sizePx: 20.5, boxSize: 1.4 } },
+    })
+    const loaded = await new StateService(dataRoot).loadAppState()
+    expect(loaded.menu?.visualizerFont).toEqual({ style: 'vt323', sizePx: 20.5, boxSize: 1.4 })
+  })
+
   it('round-trips soundscape layer settings and named custom presets through real sanitization', async () => {
     // A factory soundscape with at least one field of every kind moved, the
     // space and the weather moved, and a channel soloed.

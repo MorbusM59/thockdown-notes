@@ -1,6 +1,7 @@
 import type { MusicEqPreset } from './musicEqPresets';
 import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
+import type { VisualizerFont } from './visualizerFont';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
 import type { InvokeChannels } from './ipcContract';
@@ -71,6 +72,8 @@ export interface PersistedMenuState {
   editorFontSize?: number;
   editorSpacing?: number;
   editorGlyphPaddingPx?: number;
+  /** Options > Visualizer Font; absent in a save from before it existed, and then seeded from the editor's font. */
+  visualizerFont?: VisualizerFont;
   uiFontStyle?:
     | 'system'
     | 'ibmplexsans'

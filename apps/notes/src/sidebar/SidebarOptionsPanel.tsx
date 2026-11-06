@@ -4,6 +4,8 @@ import { useMemo, useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
+import { FontSection } from './FontSection'
+import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
@@ -409,6 +411,8 @@ export interface SidebarOptionsPanelProps {
   editorSpacing: number
   setEditorSpacing: (multiplier: number) => void
   scheduleFocusEditorInEditMode: () => void
+  visualizerFont: VisualizerFont
+  setVisualizerFont: (font: VisualizerFont) => void
   uiFontStyle: UiFontKey
   setUiFontStyle: (key: UiFontKey) => void
   uiFontScale: number
@@ -659,6 +663,8 @@ export function SidebarOptionsPanel({
   editorSpacing,
   setEditorSpacing,
   scheduleFocusEditorInEditMode,
+  visualizerFont,
+  setVisualizerFont,
   uiFontStyle,
   setUiFontStyle,
   uiFontScale,
@@ -1170,198 +1176,178 @@ export function SidebarOptionsPanel({
         <FeatureToggleBar features={features} setFeatures={setFeatures} />
       </div>
       <AccordionGroup filter={searchQuery}>
-      <AccordionSection
+      <FontSection
         className="sidebar-options-section-editor-font"
-        ariaLabel="Editor Font"
         heading="Editor Font"
-      >
-          <div className="typography-grid" role="group" aria-label="Editor typography">
-            {EDITOR_STYLE_OPTIONS.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={`btn-icon typography-font-btn${editorStyle === option.key ? ' is-active' : ''}`}
-                data-tooltip={option.label}
-                aria-label={option.label}
-                aria-pressed={editorStyle === option.key}
-                onClick={() => {
-                  setEditorStyle(option.key)
-                  scheduleFocusEditorInEditMode()
-                }}
-              >
-                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
-              </button>
-            ))}
-          </div>
-          <div className="typography-sliders">
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="typography-font-size"
-                min={EDITOR_FONT_SIZE_MIN_PX}
-                max={EDITOR_FONT_SIZE_MAX_PX}
-                step={EDITOR_FONT_SIZE_STEP_PX}
-                value={editorFontSize}
-                trackLabel="size"
-                ariaLabel="Editor font size"
-                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
-                onCommit={(value) => {
-                  setEditorFontSize(
-                    clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
-                  )
-                  scheduleFocusEditorInEditMode()
-                }}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="editor-glyph-padding"
-                min={EDITOR_GLYPH_PADDING_MIN_PX}
-                max={EDITOR_GLYPH_PADDING_MAX_PX}
-                step={EDITOR_GLYPH_PADDING_STEP_PX}
-                value={editorGlyphPaddingPx}
-                trackLabel="x-box"
-                ariaLabel="Editor glyph box horizontal padding in pixels"
-                defaultValue={DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX}
-                onCommit={(value) => {
-                  setEditorGlyphPaddingPx(
-                    clamp(
-                      roundEditorGlyphPaddingPx(value),
-                      EDITOR_GLYPH_PADDING_MIN_PX,
-                      EDITOR_GLYPH_PADDING_MAX_PX,
-                    ),
-                  )
-                  scheduleFocusEditorInEditMode()
-                }}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="typography-spacing"
-                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
-                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
-                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
-                value={editorSpacing}
-                trackLabel="y-box"
-                ariaLabel="Editor spacing"
-                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
-                onCommit={(value) => {
-                  setEditorSpacing(
-                    clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
-                  )
-                  scheduleFocusEditorInEditMode()
-                }}
-              />
-            </div>
-          </div>
-      </AccordionSection>
+        pickerLabel="Editor typography"
+        options={EDITOR_STYLE_OPTIONS}
+        activeKey={editorStyle}
+        onSelect={(key) => {
+          setEditorStyle(key)
+          scheduleFocusEditorInEditMode()
+        }}
+        sliders={[
+          {
+            id: 'typography-font-size',
+            min: EDITOR_FONT_SIZE_MIN_PX,
+            max: EDITOR_FONT_SIZE_MAX_PX,
+            step: EDITOR_FONT_SIZE_STEP_PX,
+            value: editorFontSize,
+            trackLabel: 'size',
+            ariaLabel: 'Editor font size',
+            defaultValue: DEFAULT_EDITOR_FONT_SIZE_PX,
+            onCommit: (value) => {
+              setEditorFontSize(clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX))
+              scheduleFocusEditorInEditMode()
+            },
+          },
+          {
+            id: 'editor-glyph-padding',
+            min: EDITOR_GLYPH_PADDING_MIN_PX,
+            max: EDITOR_GLYPH_PADDING_MAX_PX,
+            step: EDITOR_GLYPH_PADDING_STEP_PX,
+            value: editorGlyphPaddingPx,
+            trackLabel: 'x-box',
+            ariaLabel: 'Editor glyph box horizontal padding in pixels',
+            defaultValue: DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
+            onCommit: (value) => {
+              setEditorGlyphPaddingPx(
+                clamp(roundEditorGlyphPaddingPx(value), EDITOR_GLYPH_PADDING_MIN_PX, EDITOR_GLYPH_PADDING_MAX_PX),
+              )
+              scheduleFocusEditorInEditMode()
+            },
+          },
+          {
+            id: 'typography-spacing',
+            min: EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
+            max: EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
+            step: EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
+            value: editorSpacing,
+            trackLabel: 'y-box',
+            ariaLabel: 'Editor spacing',
+            defaultValue: DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
+            onCommit: (value) => {
+              setEditorSpacing(
+                clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+              )
+              scheduleFocusEditorInEditMode()
+            },
+          },
+        ]}
+      />
 
-      <AccordionSection
+      <FontSection
         className="sidebar-options-section-reader-font"
-        ariaLabel="Reader Font"
         heading="Reader Font"
-      >
-          <div className="typography-grid" role="group" aria-label="Render typography">
-            {VIEW_STYLE_OPTIONS.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={`btn-icon typography-font-btn${viewStyle === option.key ? ' is-active' : ''}`}
-                data-tooltip={option.label}
-                aria-label={option.label}
-                aria-pressed={viewStyle === option.key}
-                onClick={() => setViewStyle(option.key)}
-              >
-                <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
-              </button>
-            ))}
-          </div>
-          <div className="typography-sliders">
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="reader-font-size"
-                min={EDITOR_FONT_SIZE_MIN_PX}
-                max={EDITOR_FONT_SIZE_MAX_PX}
-                step={EDITOR_FONT_SIZE_STEP_PX}
-                value={viewFontSize}
-                trackLabel="size"
-                ariaLabel="Render font size"
-                defaultValue={DEFAULT_EDITOR_FONT_SIZE_PX}
-                onCommit={(value) => setViewFontSize(
-                  clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
-                )}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="view-letter-spacing"
-                min={VIEW_LETTER_SPACING_MIN_EM}
-                max={VIEW_LETTER_SPACING_MAX_EM}
-                step={VIEW_LETTER_SPACING_STEP_EM}
-                value={viewLetterSpacingEm}
-                trackLabel="spacing"
-                ariaLabel="Render letter spacing in em"
-                defaultValue={DEFAULT_VIEW_LETTER_SPACING_EM}
-                onCommit={(value) => setViewLetterSpacingEm(
-                  clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM),
-                )}
-              />
-            </div>
-            <div className="typography-slider">
-              <CompactScrollbarSlider
-                id="reader-line-height"
-                min={EDITOR_LINE_HEIGHT_MULTIPLIER_MIN}
-                max={EDITOR_LINE_HEIGHT_MULTIPLIER_MAX}
-                step={EDITOR_LINE_HEIGHT_MULTIPLIER_STEP}
-                value={viewSpacing}
-                trackLabel="height"
-                ariaLabel="Render line height"
-                defaultValue={DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER}
-                onCommit={(value) => setViewSpacing(
-                  clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
-                )}
-              />
-            </div>
-          </div>
-      </AccordionSection>
+        pickerLabel="Render typography"
+        options={VIEW_STYLE_OPTIONS}
+        activeKey={viewStyle}
+        onSelect={setViewStyle}
+        sliders={[
+          {
+            id: 'reader-font-size',
+            min: EDITOR_FONT_SIZE_MIN_PX,
+            max: EDITOR_FONT_SIZE_MAX_PX,
+            step: EDITOR_FONT_SIZE_STEP_PX,
+            value: viewFontSize,
+            trackLabel: 'size',
+            ariaLabel: 'Render font size',
+            defaultValue: DEFAULT_EDITOR_FONT_SIZE_PX,
+            onCommit: (value) => setViewFontSize(
+              clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+            ),
+          },
+          {
+            id: 'view-letter-spacing',
+            min: VIEW_LETTER_SPACING_MIN_EM,
+            max: VIEW_LETTER_SPACING_MAX_EM,
+            step: VIEW_LETTER_SPACING_STEP_EM,
+            value: viewLetterSpacingEm,
+            trackLabel: 'spacing',
+            ariaLabel: 'Render letter spacing in em',
+            defaultValue: DEFAULT_VIEW_LETTER_SPACING_EM,
+            onCommit: (value) => setViewLetterSpacingEm(
+              clamp(roundViewLetterSpacingEm(value), VIEW_LETTER_SPACING_MIN_EM, VIEW_LETTER_SPACING_MAX_EM),
+            ),
+          },
+          {
+            id: 'reader-line-height',
+            min: EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
+            max: EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
+            step: EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
+            value: viewSpacing,
+            trackLabel: 'height',
+            ariaLabel: 'Render line height',
+            defaultValue: DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
+            onCommit: (value) => setViewSpacing(
+              clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+            ),
+          },
+        ]}
+      />
 
-      <AccordionSection
+      <FontSection
         className="sidebar-options-section-ui-font"
-        ariaLabel="UI Font"
         heading="UI Font"
-      >
-        <div className="typography-grid" role="group" aria-label="UI font family">
-          {UI_FONT_OPTIONS.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              className={`btn-icon typography-font-btn${uiFontStyle === option.key ? ' is-active' : ''}`}
-              data-tooltip={option.label}
-              aria-label={option.label}
-              aria-pressed={uiFontStyle === option.key}
-              onClick={() => setUiFontStyle(option.key)}
-            >
-              <span className="typography-font-glyph" style={{ fontFamily: option.family }} aria-hidden="true">Aa</span>
-            </button>
-          ))}
-        </div>
-        <div className="typography-sliders">
-          <div className="typography-slider">
-            <CompactScrollbarSlider
-              id="ui-font-scale"
-              min={UI_FONT_SCALE_MIN}
-              max={UI_FONT_SCALE_MAX}
-              step={UI_FONT_SCALE_STEP}
-              value={uiFontScale}
-              trackLabel="size"
-              ariaLabel="UI font size"
-              defaultValue={DEFAULT_UI_FONT_SCALE}
-              onCommit={(value) => setUiFontScale(
-                clamp(roundUiFontScale(value), UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX),
-              )}
-            />
-          </div>
-        </div>
-      </AccordionSection>
+        pickerLabel="UI font family"
+        options={UI_FONT_OPTIONS}
+        activeKey={uiFontStyle}
+        onSelect={setUiFontStyle}
+        sliders={[
+          {
+            id: 'ui-font-scale',
+            min: UI_FONT_SCALE_MIN,
+            max: UI_FONT_SCALE_MAX,
+            step: UI_FONT_SCALE_STEP,
+            value: uiFontScale,
+            trackLabel: 'size',
+            ariaLabel: 'UI font size',
+            defaultValue: DEFAULT_UI_FONT_SCALE,
+            onCommit: (value) => setUiFontScale(
+              clamp(roundUiFontScale(value), UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX),
+            ),
+          },
+        ]}
+      />
+
+      <FontSection
+        className="sidebar-options-section-visualizer-font"
+        heading="Visualizer Font"
+        pickerLabel="Visualizer typography"
+        options={EDITOR_STYLE_OPTIONS}
+        activeKey={visualizerFont.style}
+        onSelect={(style) => setVisualizerFont({ ...visualizerFont, style })}
+        sliders={[
+          {
+            id: 'visualizer-font-size',
+            min: EDITOR_FONT_SIZE_MIN_PX,
+            max: EDITOR_FONT_SIZE_MAX_PX,
+            step: EDITOR_FONT_SIZE_STEP_PX,
+            value: visualizerFont.sizePx,
+            trackLabel: 'size',
+            ariaLabel: 'Visualizer font size',
+            defaultValue: DEFAULT_EDITOR_FONT_SIZE_PX,
+            onCommit: (value) => setVisualizerFont({
+              ...visualizerFont,
+              sizePx: clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+            }),
+          },
+          {
+            id: 'visualizer-box-size',
+            min: EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
+            max: EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
+            step: EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
+            value: visualizerFont.boxSize,
+            trackLabel: 'box size',
+            ariaLabel: 'Visualizer box size',
+            defaultValue: DEFAULT_VISUALIZER_BOX_SIZE,
+            onCommit: (value) => setVisualizerFont({
+              ...visualizerFont,
+              boxSize: clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+            }),
+          },
+        ]}
+      />
 
       <AccordionSection
         className="sidebar-options-section-layouts"

@@ -1,3 +1,4 @@
+import { DEFAULT_VISUALIZER_BOX_SIZE, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
@@ -1506,6 +1507,11 @@ function App() {
   const [viewLetterSpacingEm, setViewLetterSpacingEm] = useState<number>(DEFAULT_VIEW_LETTER_SPACING_EM)
   const [editorStyle, setEditorStyle] = useState<EditorStyleKey>(DEFAULT_EDITOR_STYLE)
   const [editorSpacing, setEditorSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
+  const [visualizerFont, setVisualizerFont] = useState<VisualizerFont>(() => ({
+    style: DEFAULT_EDITOR_STYLE,
+    sizePx: DEFAULT_EDITOR_FONT_SIZE_PX,
+    boxSize: DEFAULT_VISUALIZER_BOX_SIZE,
+  }))
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [uiFontStyle, setUiFontStyle] = useState<UiFontKey>(DEFAULT_UI_FONT_KEY)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
@@ -3367,6 +3373,7 @@ function App() {
       editorFontSize: fontSizesByMode.regular.editorFontSize,
       editorSpacing,
       editorGlyphPaddingPx,
+      visualizerFont,
       uiFontStyle,
       uiFontScale: fontSizesByMode.regular.uiFontScale,
       // Double size mode's own font sizes -- see fontSizesByMode.
@@ -3520,6 +3527,7 @@ function App() {
     boxShadowAlphaPercent,
     editorSpacing,
     editorStyle,
+    visualizerFont,
     exportFolder,
     getActiveSection,
     renderScrollDynamic,
@@ -5271,6 +5279,13 @@ ${markdownHtml}
             setViewLetterSpacingEm(resolvePersistedViewLetterSpacingEm(appState.menu.viewLetterSpacingEm, DEFAULT_VIEW_LETTER_SPACING_EM))
             setEditorStyle(appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE)
             setEditorSpacing(resolvePersistedLineHeightMultiplier(appState.menu.editorSpacing, DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER))
+            // A save from before the visualizer had its own font seeds it from the
+            // editor's, which is what the scene followed until then.
+            setVisualizerFont(sanitizeVisualizerFont(appState.menu.visualizerFont, {
+              style: appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE,
+              sizePx: resolvePersistedFontSizePx(appState.menu.editorFontSize, DEFAULT_EDITOR_FONT_SIZE_PX),
+              boxSize: DEFAULT_VISUALIZER_BOX_SIZE,
+            }))
             setEditorGlyphPaddingPx(
               clamp(
                 roundEditorGlyphPaddingPx(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
@@ -8777,6 +8792,8 @@ ${markdownHtml}
                         editorSpacing={editorSpacing}
                         setEditorSpacing={setEditorSpacing}
                         scheduleFocusEditorInEditMode={() => getActiveSection()?.scheduleFocusEditorInEditMode()}
+                        visualizerFont={visualizerFont}
+                        setVisualizerFont={setVisualizerFont}
                         uiFontStyle={uiFontStyle}
                         setUiFontStyle={setUiFontStyle}
                         uiFontScale={uiFontScale}
@@ -9405,6 +9422,7 @@ ${markdownHtml}
                   viewSpacing={viewSpacing}
                   viewLetterSpacingEm={viewLetterSpacingEm}
                   editorFontFamily={editorFontFamily}
+                  visualizerFont={visualizerFont}
                   editorFontLoadVersion={editorFontLoadVersion}
                   spellCheckEditEnabled={spellCheckEnabled}
                   spellCheckRenderEnabled={spellCheckEnabled}

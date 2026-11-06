@@ -7,9 +7,10 @@ import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
 import { SolidCanvas } from '../editor/SolidCanvas'
-import { VISUALIZER_GLYPH_SIDE_GAP_PX, VisualizerScene } from '../visualizer/VisualizerScene'
+import { visualizerBoxPx, type VisualizerFont } from '../shared/visualizerFont'
+import { VisualizerScene } from '../visualizer/VisualizerScene'
 import type { EditorAdapter, EditorBindings, EditorSelectionState } from '../editor/EditorContract'
-import { cellWidthForGlyph, type EditorRuntimeMetrics } from '../editor/EditorTypography'
+import { resolveEditorFontFamily, type EditorRuntimeMetrics } from '../editor/EditorTypography'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -48,6 +49,7 @@ export interface SectionEditorAreaProps {
   scrollbarHostEl: HTMLDivElement | null
   setScrollbarHostEl: (element: HTMLDivElement | null) => void
   editorFontFamily: string
+  visualizerFont: VisualizerFont
   editorRuntimeMetrics: EditorRuntimeMetrics
   editorFontLoadVersion: number
   isPreviewingSnapshot: boolean
@@ -202,6 +204,7 @@ export function SectionEditorArea({
   scrollbarHostEl,
   setScrollbarHostEl,
   editorFontFamily,
+  visualizerFont,
   editorRuntimeMetrics,
   editorFontLoadVersion,
   isPreviewingSnapshot,
@@ -587,9 +590,9 @@ export function SectionEditorArea({
             </div>
             {isVisualizerMode ? (
               <VisualizerScene
-                boxPx={cellWidthForGlyph(editorRuntimeMetrics.glyphWidthPx, VISUALIZER_GLYPH_SIDE_GAP_PX)}
-                fontFamily={editorFontFamily}
-                fontSizePx={editorRuntimeMetrics.fontSizePx}
+                boxPx={visualizerBoxPx(visualizerFont)}
+                fontFamily={resolveEditorFontFamily(visualizerFont.style)}
+                fontSizePx={visualizerFont.sizePx}
                 sceneSeed={emptyStateSceneSeed}
                 gridOutlineRef={beatGridRef}
               />

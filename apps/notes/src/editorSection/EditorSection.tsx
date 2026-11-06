@@ -1,3 +1,4 @@
+import type { VisualizerFont } from '../shared/visualizerFont'
 import { useImagePreviewGestures } from './useImagePreviewGestures'
 import { useSpeedReading } from '../speedReading/useSpeedReading'
 import { isSealedNoteId } from '../shared/helpGuide'
@@ -159,6 +160,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   documentFindCaseSensitiveRef: MutableRefObject<boolean>
 
   editorRuntimeMetrics: EditorRuntimeMetrics
+  visualizerFont: VisualizerFont
   noteSizeThresholdBlocks: number
   forceCharacterScrollbarThumb: boolean
   viewStyle: ViewStyleKey
@@ -254,6 +256,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   restoredDocumentFindCaseSensitive,
   documentFindCaseSensitiveRef,
   editorRuntimeMetrics,
+  visualizerFont,
   noteSizeThresholdBlocks,
   forceCharacterScrollbarThumb,
   viewStyle,
@@ -2268,6 +2271,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         scrollbarHostEl={scrollbarHostEl}
         setScrollbarHostEl={setScrollbarHostEl}
         editorFontFamily={editorFontFamily}
+        visualizerFont={visualizerFont}
         editorRuntimeMetrics={editorRuntimeMetrics}
         editorFontLoadVersion={editorFontLoadVersion}
         isPreviewingSnapshot={isPreviewingSnapshot}

@@ -17,6 +17,7 @@ import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetter
 import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeMusicEqPreset } from '../src/shared/musicEqPresets';
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings } from '../src/shared/flowSettings';
+import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
@@ -612,6 +613,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     // Reads the record, or for an older save the separate fields it replaced.
     features: sanitizeFeatureToggles(input),
     flow: sanitizeFlowSettings(input?.flow),
+    visualizerFont: sanitizeVisualizerFont(input?.visualizerFont),
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
     chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
