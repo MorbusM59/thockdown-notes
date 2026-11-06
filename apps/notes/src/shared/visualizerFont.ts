@@ -23,11 +23,9 @@ export type VisualizerFont = {
   boxSize: number
 }
 
-/**
- * 1.05 at the default 16px gives a 17px box, which is what the scene drew
- * before it had a font of its own: the editor's default font (Share Tech
- * Mono, 0.54em wide) at an x-box of 4px each side, round(8.64 + 8).
- */
+export const DEFAULT_VISUALIZER_STYLE: EditorStyleKey = 'kodemono'
+/** The default size in each size mode (double size mode then doubles the page, so 12 there draws at 24). */
+export const DEFAULT_VISUALIZER_FONT_SIZE_PX = { regular: 18, double: 12 } as const
 export const DEFAULT_VISUALIZER_BOX_SIZE = 1.05
 
 /** The scene's box in pixels, whole like the editor's line height so the grid tiles pixel-exact. */
@@ -35,17 +33,17 @@ export function visualizerBoxPx(font: VisualizerFont): number {
   return Math.max(1, Math.round(font.sizePx * font.boxSize))
 }
 
-/**
- * A save without the setting yields `undefined` rather than a default, so the
- * renderer can seed it from the editor's font, which is what the visualizer
- * followed until it had its own. A damaged field takes `fallback`'s value.
- */
-export function sanitizeVisualizerFont(input: unknown, fallback: VisualizerFont): VisualizerFont
-export function sanitizeVisualizerFont(input: unknown, fallback?: VisualizerFont): VisualizerFont | undefined
-export function sanitizeVisualizerFont(input: unknown, fallback?: VisualizerFont): VisualizerFont | undefined {
-  if (typeof input !== 'object' || input === null) return fallback
+export const DEFAULT_VISUALIZER_FONT: VisualizerFont = {
+  style: DEFAULT_VISUALIZER_STYLE,
+  sizePx: DEFAULT_VISUALIZER_FONT_SIZE_PX.regular,
+  boxSize: DEFAULT_VISUALIZER_BOX_SIZE,
+}
+
+/** A missing setting stays missing (the renderer applies the defaults); a damaged field takes its default. */
+export function sanitizeVisualizerFont(input: unknown): VisualizerFont | undefined {
+  if (typeof input !== 'object' || input === null) return undefined
   const raw = input as Record<string, unknown>
-  const base: VisualizerFont = fallback ?? { style: 'sharetech', sizePx: 16, boxSize: DEFAULT_VISUALIZER_BOX_SIZE }
+  const base = DEFAULT_VISUALIZER_FONT
   const style = EDITOR_STYLE_OPTIONS.some((option) => option.key === raw.style)
     ? raw.style as EditorStyleKey
     : base.style

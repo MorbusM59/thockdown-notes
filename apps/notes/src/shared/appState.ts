@@ -72,7 +72,7 @@ export interface PersistedMenuState {
   editorFontSize?: number;
   editorSpacing?: number;
   editorGlyphPaddingPx?: number;
-  /** Options > Visualizer Font; absent in a save from before it existed, and then seeded from the editor's font. */
+  /** Options > Visualizer Font; absent in a save from before it existed, and then the defaults (shared/visualizerFont.ts). */
   visualizerFont?: VisualizerFont;
   uiFontStyle?:
     | 'system'

@@ -413,6 +413,8 @@ export interface SidebarOptionsPanelProps {
   scheduleFocusEditorInEditMode: () => void
   visualizerFont: VisualizerFont
   setVisualizerFont: (font: VisualizerFont) => void
+  /** The size slider's reset value, which differs between size modes. */
+  visualizerFontSizeDefault: number
   uiFontStyle: UiFontKey
   setUiFontStyle: (key: UiFontKey) => void
   uiFontScale: number
@@ -665,6 +667,7 @@ export function SidebarOptionsPanel({
   scheduleFocusEditorInEditMode,
   visualizerFont,
   setVisualizerFont,
+  visualizerFontSizeDefault,
   uiFontStyle,
   setUiFontStyle,
   uiFontScale,
@@ -1326,7 +1329,7 @@ export function SidebarOptionsPanel({
             value: visualizerFont.sizePx,
             trackLabel: 'size',
             ariaLabel: 'Visualizer font size',
-            defaultValue: DEFAULT_EDITOR_FONT_SIZE_PX,
+            defaultValue: visualizerFontSizeDefault,
             onCommit: (value) => setVisualizerFont({
               ...visualizerFont,
               sizePx: clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
