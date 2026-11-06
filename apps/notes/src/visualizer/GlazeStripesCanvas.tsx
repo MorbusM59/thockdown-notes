@@ -171,12 +171,21 @@ export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {
       const dpr = window.devicePixelRatio || 1
       const cssW = canvas.clientWidth
       const cssH = canvas.clientHeight
-      canvas.width = Math.max(1, Math.round(cssW * dpr))
-      canvas.height = Math.max(1, Math.round(cssH * dpr))
+      // Assigning a canvas's size clears it, even to the size it already has,
+      // and a page zoom change leaves the device size as it was (CSS halves,
+      // the pixel ratio doubles), so only a real change reassigns it.
+      const width = Math.max(1, Math.round(cssW * dpr))
+      const height = Math.max(1, Math.round(cssH * dpr))
+      if (canvas.width !== width) canvas.width = width
+      if (canvas.height !== height) canvas.height = height
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.uniform2f(u('sizeCss'), cssW, cssH)
       gl.uniform1f(u('dpr'), dpr)
-      request()
+      // Drawn now rather than on the next frame: a ResizeObserver runs before
+      // the frame paints, so the stripes at the new size land in the same
+      // frame as the layout that resized them.
+      if (frame) cancelAnimationFrame(frame)
+      draw()
     }
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)

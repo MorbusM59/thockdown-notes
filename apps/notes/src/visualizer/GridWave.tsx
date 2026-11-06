@@ -40,7 +40,7 @@
 
 import { cutoutClosure } from './cutoutRing'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { FALL_MIN_SEC, WAVE_FALLBACK_BEAT_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, roundedSquareOffsetGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
 import { canUseShaderPulse } from './glazeShaderSupport'
 import { PulseRingsCanvas, type PulseRingsHandle } from './PulseRingsCanvas'
@@ -102,12 +102,17 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
         : { left: rect.left, top: rect.top, width: rect.width, height: rect.height })
     }
     measure()
-    const observer = new ResizeObserver(measure)
+    // A resize (the page zoom of double size mode among them) is reported
+    // before the frame paints; an ordinary update from here would be applied
+    // after it, painting one frame of the wave at the old box. flushSync
+    // commits it inside the callback, so the wave moves with the scene.
+    const remeasure = () => flushSync(measure)
+    const observer = new ResizeObserver(remeasure)
     observer.observe(anchor)
-    window.addEventListener('resize', measure)
+    window.addEventListener('resize', remeasure)
     return () => {
       observer.disconnect()
-      window.removeEventListener('resize', measure)
+      window.removeEventListener('resize', remeasure)
     }
   }, [])
 

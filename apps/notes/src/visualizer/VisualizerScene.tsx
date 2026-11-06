@@ -28,6 +28,7 @@
  * animation frames at all.
  */
 
+import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { subscribeMusicMix, subscribeMusicSemitoneScore } from '../sound/musicBeat'
@@ -108,7 +109,12 @@ function useBoxSize(element: HTMLElement | null): { width: number; height: numbe
   const [size, setSize] = useState({ width: 0, height: 0 })
   useEffect(() => {
     if (!element) return
-    const observer = new ResizeObserver(() => setSize({ width: element.clientWidth, height: element.clientHeight }))
+    // flushSync: the observer reports before the frame paints, and an
+    // ordinary update from here is applied after it, so a resize (the page
+    // zoom of double size mode above all) painted one frame of the old
+    // layout at the new size. Committed here, the new layout is that frame.
+    // An unchanged size bails out of the render as usual.
+    const observer = new ResizeObserver(() => flushSync(() => setSize({ width: element.clientWidth, height: element.clientHeight })))
     observer.observe(element)
     return () => observer.disconnect()
   }, [element])
