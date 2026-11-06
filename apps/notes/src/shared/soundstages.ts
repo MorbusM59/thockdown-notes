@@ -78,7 +78,7 @@ export interface FactorySoundstage {
 
 /** In the solids' order: index 0 is the tetrahedron, 4 the icosahedron. */
 export const FACTORY_SOUNDSTAGES: readonly FactorySoundstage[] = [
-  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { amp: 0.2, brilliance: 0.2, width: 0.8, reverb: 0.9, size: 0.2, room: 0.2 } },
+  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { amp: 0.8, brilliance: 0.2, width: 1, reverb: 1, size: 0.1, room: 1 } },
   { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-scale-balanced', settings: NEUTRAL_SOUNDSTAGE },
   { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { amp: 0.2, brilliance: 0.8, width: 1.5, reverb: 0.2, size: 0.8, room: 0 } },
   { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { amp: 0.5, brilliance: 0.5, width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
