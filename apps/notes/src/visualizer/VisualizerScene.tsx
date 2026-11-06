@@ -79,6 +79,9 @@ import {
 
 /** The empty state's diameter (`--circle-diameter`, editor.css), which the cutout matches. */
 const EMPTY_SCENE_DIAMETER_PX = 220
+/** Empty boxes between the screen edge and the top strip's rows, on each side. */
+const TOP_ROW_INSET_BOXES = 1
+
 /**
  * The scene's boxes are as wide as the editor's would be with this much
  * x-box padding, whatever the reader's own x-box setting, and as tall as
@@ -184,9 +187,13 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const glyphFont = `${fontSizePx}px ${fontFamily}`
-  const titleText = nowPlaying.song ? fitToRow(dropWideGlyphs(songTitleText(nowPlaying.song), glyphFont), columns) : ''
-  const title: RowText[] = titleText.length > 0 ? [{ column: 0, text: titleText }] : []
-  const credits = nowPlaying.song ? creditsLine(dropWideGlyphs(songArtistText(nowPlaying.song), glyphFont), dropWideGlyphs(songAlbumText(nowPlaying.song), glyphFont), columns) : []
+  // The top strip's rows (credits, progress track, title) keep one empty box
+  // from each screen edge: they span the columns between, from column 1.
+  const rowColumns = Math.max(0, columns - 2 * TOP_ROW_INSET_BOXES)
+  const titleText = nowPlaying.song ? fitToRow(dropWideGlyphs(songTitleText(nowPlaying.song), glyphFont), rowColumns) : ''
+  const title: RowText[] = titleText.length > 0 ? [{ column: TOP_ROW_INSET_BOXES, text: titleText }] : []
+  const credits = (nowPlaying.song ? creditsLine(dropWideGlyphs(songArtistText(nowPlaying.song), glyphFont), dropWideGlyphs(songAlbumText(nowPlaying.song), glyphFont), rowColumns) : [])
+    .map((run) => ({ ...run, column: run.column + TOP_ROW_INSET_BOXES }))
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const chromaCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -276,7 +283,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
     // playhead has crossed into another box, which is seconds apart.
     const moveGap = () => {
       const duration = musicPlayerService.currentDurationSec
-      setGapColumn(readNowPlaying().song ? playheadColumn(columns, musicPlayerService.currentTime, duration) : null)
+      setGapColumn(readNowPlaying().song ? playheadColumn(rowColumns, musicPlayerService.currentTime, duration) : null)
     }
 
     const draw = () => {
@@ -412,17 +419,17 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
       transientBand?.unsubscribe()
       reducedMotion.removeEventListener('change', wake)
     }
-  }, [scene, columns, stripRows, boxPx, chromaRow])
+  }, [scene, columns, rowColumns, stripRows, boxPx, chromaRow])
 
   const handleProgressPress = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
     const column = Math.floor((event.clientX - rect.left) / boxPx)
-    const press = progressPress(columns, column)
+    const press = progressPress(rowColumns, column)
     if (press.kind === 'previous') readNowPlaying().jumpSong(-1)
     else if (press.kind === 'next') readNowPlaying().jumpSong(1)
     else if (press.kind === 'seek') void musicPlayerService.setCurrentTimeFraction(press.fraction)
-  }, [boxPx, columns])
+  }, [boxPx, rowColumns])
 
   const box = boxPx
   // The cutout covers the inside of its boxes: a box's first pixel row and
@@ -455,7 +462,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
   // The grid-line layer needs the hole only when the rings replace the
   // straight lines; at roundness 0 the cutout covers it, as it always did.
   const gridLinesHole: CSSProperties = closure?.gridRing ? closure.hole : {}
-  const track = trackSpan(columns)
+  const track = trackSpan(rowColumns)
+  const rowLeftPx = originXPx + TOP_ROW_INSET_BOXES * box
   const rowTop = (row: number) => originYPx + row * box
   const style = {
     '--editor-cell-width': `${box}px`,
@@ -478,17 +486,17 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           <div className="visualizer-strip is-middle" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
           <div className="visualizer-strip is-bottom" style={{ top: rowTop(spectrumTopRow) }} />
 
-          {layout.progressRow !== null && columns >= 2 && (
+          {layout.progressRow !== null && rowColumns >= 2 && (
             <>
-              <div className="visualizer-lit" style={{ left: originXPx, top: rowTop(layout.progressRow), width: box, height: box }} />
+              <div className="visualizer-lit" style={{ left: rowLeftPx, top: rowTop(layout.progressRow), width: box, height: box }} />
               {/* The track is drawn as the lit runs either side of the
                   playhead's box, so that box is truly missing: painting the
                   strip's colour over a lit track let the caret colour show
                   through wherever the strip's colour is translucent. */}
               {trackRuns(track, gapColumn).map((run) => (
-                <div key={run.first} className="visualizer-lit" style={{ left: originXPx + run.first * box, top: rowTop(layout.progressRow!), width: run.count * box, height: box }} />
+                <div key={run.first} className="visualizer-lit" style={{ left: rowLeftPx + run.first * box, top: rowTop(layout.progressRow!), width: run.count * box, height: box }} />
               ))}
-              <div className="visualizer-lit" style={{ left: originXPx + (columns - 1) * box, top: rowTop(layout.progressRow), width: box, height: box }} />
+              <div className="visualizer-lit" style={{ left: rowLeftPx + (rowColumns - 1) * box, top: rowTop(layout.progressRow), width: box, height: box }} />
             </>
           )}
           {layout.titleRow !== null && <LetterBoxes runs={title} row={layout.titleRow} layout={layout} />}
@@ -541,7 +549,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           {layout.progressRow !== null && (
             <div
               className="visualizer-progress-hit"
-              style={{ left: originXPx, top: rowTop(layout.progressRow), width: columns * box, height: box }}
+              style={{ left: rowLeftPx, top: rowTop(layout.progressRow), width: rowColumns * box, height: box }}
               onPointerDown={handleProgressPress}
             />
           )}
