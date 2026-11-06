@@ -26,7 +26,7 @@ export type VisualizerFont = {
 export const DEFAULT_VISUALIZER_STYLE: EditorStyleKey = 'kodemono'
 /** The default size in each size mode (double size mode then doubles the page, so 12 there draws at 24). */
 export const DEFAULT_VISUALIZER_FONT_SIZE_PX = { regular: 18, double: 12 } as const
-export const DEFAULT_VISUALIZER_BOX_SIZE = 1.05
+export const DEFAULT_VISUALIZER_BOX_SIZE = 1.2
 
 /** The scene's box in pixels, whole like the editor's line height so the grid tiles pixel-exact. */
 export function visualizerBoxPx(font: VisualizerFont): number {
