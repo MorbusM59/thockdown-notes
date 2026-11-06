@@ -10,7 +10,8 @@
  * glyph in the font that will draw it: wider than the font's own digit by
  * more than a rounding margin, and it is dropped.
  *
- * Measured once per font and character (a canvas `measureText`, no layout).
+ * Measured once per font and character once the font has loaded (a canvas
+ * `measureText`, no layout).
  */
 
 const MARGIN = 1.05
@@ -18,10 +19,13 @@ const cache = new Map<string, Map<string, boolean>>()
 let context: OffscreenCanvasRenderingContext2D | null = null
 
 function fitsFor(font: string): (char: string) => boolean {
-  let known = cache.get(font)
+  // Until the font has loaded, measureText measures its fallback: answer
+  // from that, but keep nothing, so the next call measures the real font.
+  const loaded = typeof document === 'undefined' || document.fonts.check(font)
+  let known = loaded ? cache.get(font) : undefined
   if (!known) {
     known = new Map()
-    cache.set(font, known)
+    if (loaded) cache.set(font, known)
   }
   const fonts = known
   context ??= new OffscreenCanvas(1, 1).getContext('2d')

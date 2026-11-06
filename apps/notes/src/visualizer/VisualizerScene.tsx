@@ -304,13 +304,20 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           context.fillStyle = accentColor
           // Row k from the bottom (0-based) of a strip n rows tall is drawn
           // at 1 - k/(n+1), so a bar fades towards the top; the peak, the box
-          // that lingers, is drawn whole. One fill per row, at that row's alpha.
+          // that lingers, is drawn whole. Each row at that row's alpha.
           for (let row = 0; row < stripRows; row += 1) {
             context.globalAlpha = 0.5 - row / (2 * stripRows)
             const y = (stripRows - 1 - row) * boxPx
-            for (let band = 0; band < columns; band += 1) {
-              const top = Math.max(drawnLit[band], drawnPeak[band])
-              if (row < drawnLit[band] && row !== top - 1) context.fillRect(band * boxPx, y, boxPx, boxPx)
+            // Adjacent lit boxes of a row are one rectangle, so a row costs
+            // one fill per run of bars rather than one per box.
+            let runStart = -1
+            for (let band = 0; band <= columns; band += 1) {
+              const lit = band < columns && row < drawnLit[band] && row !== Math.max(drawnLit[band], drawnPeak[band]) - 1
+              if (lit && runStart < 0) runStart = band
+              else if (!lit && runStart >= 0) {
+                context.fillRect(runStart * boxPx, y, (band - runStart) * boxPx, boxPx)
+                runStart = -1
+              }
             }
           }
           context.globalAlpha = 1

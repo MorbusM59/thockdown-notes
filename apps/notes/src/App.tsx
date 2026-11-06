@@ -3408,7 +3408,11 @@ function App() {
       isDoubleSizeMode: overrides?.isDoubleSizeMode ?? isDoubleSizeMode,
       reviewGutterVisibleBySection: overrides?.reviewGutterVisibleBySection ?? reviewGutterVisibleBySection,
       reviewFlagsVisibleBySection: overrides?.reviewFlagsVisibleBySection ?? reviewFlagsVisibleBySection,
-      emptySceneStepBySection: overrides?.emptySceneStepBySection ?? emptySceneStepBySection,
+      // Only the slots that exist: a closed slot's id is never used again.
+      emptySceneStepBySection: Object.fromEntries(
+        Object.entries(overrides?.emptySceneStepBySection ?? emptySceneStepBySection)
+          .filter(([sectionId]) => editorSections.some((entry) => entry.id === sectionId)),
+      ),
       adventure: overrides && 'adventure' in overrides ? overrides.adventure ?? null : adventureSave,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
@@ -3488,6 +3492,7 @@ function App() {
     reviewGutterVisibleBySection,
     reviewFlagsVisibleBySection,
     emptySceneStepBySection,
+    editorSections,
     viewSpacing,
     viewLetterSpacingEm,
     viewStyle,
