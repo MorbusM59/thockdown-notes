@@ -15,8 +15,8 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { publishThemeControls } from './visualizer/themeControls'
-import { readMusicEqPreset, setMusicEqPreset, subscribeMusicEqPreset } from './sound/musicEqPreset'
-import { sanitizeMusicEqPreset } from './shared/musicEqPresets'
+import { readMusicEqPreset, readMusicEqStrength, setMusicEqPreset, setMusicEqStrength, subscribeMusicEqPreset } from './sound/musicEqPreset'
+import { sanitizeMusicEqPreset, sanitizeMusicEqStrength } from './shared/musicEqPresets'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
@@ -2264,6 +2264,7 @@ function App() {
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
   const musicEqPreset = useSyncExternalStore(subscribeMusicEqPreset, readMusicEqPreset)
+  const musicEqStrength = useSyncExternalStore(subscribeMusicEqPreset, readMusicEqStrength)
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
   const [musicRestoreSongId, setMusicRestoreSongId] = useState<number | null>(null)
@@ -3453,6 +3454,7 @@ function App() {
       musicActiveSlots,
       musicPoolFilter,
       musicEqPreset,
+      musicEqStrength,
       layoutChoices: persistedLayoutChoices,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
       // Live while a track plays, so a save at any moment (quit included)
@@ -3591,6 +3593,7 @@ function App() {
     musicActiveSlots,
     musicPoolFilter,
     musicEqPreset,
+    musicEqStrength,
     persistedLayoutChoices,
     darkMode,
     uiMode,
@@ -5453,6 +5456,9 @@ ${markdownHtml}
             }
             if (appState.menu.musicPoolFilter) setMusicPoolFilter(sanitizePoolFilter(appState.menu.musicPoolFilter))
             if (appState.menu.musicEqPreset) setMusicEqPreset(sanitizeMusicEqPreset(appState.menu.musicEqPreset))
+            // After the solid, which sets its own level: a saved strength overrides it (a save from before the amp has none).
+            const savedEqStrength = sanitizeMusicEqStrength(appState.menu.musicEqStrength)
+            if (savedEqStrength !== undefined) setMusicEqStrength(savedEqStrength)
             if (typeof appState.menu.musicLastSongId === 'number') {
               const positionSec = appState.menu.musicLastPositionSec ?? 0
               const wasPlaying = appState.menu.musicWasPlaying ?? false
@@ -8982,6 +8988,7 @@ ${markdownHtml}
                         musicVolume={musicVolume}
                         musicReverbAmount={musicReverbAmount}
                         musicReverbRoom={musicReverbRoom}
+                        musicEqStrength={musicEqStrength}
                         pitchJitterAmount={pitchJitterAmount}
                         setPitchJitterAmount={setPitchJitterAmount}
                         audioSpatial={audioSpatial}

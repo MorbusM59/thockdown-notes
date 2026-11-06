@@ -212,6 +212,8 @@ export interface PersistedMenuState {
   musicPoolFilter?: { artist: string; album: string; title: string };
   /** The music's EQ preset (`sound/musicEqPreset.ts`), the visualizer's solid. */
   musicEqPreset?: MusicEqPreset;
+  /** The EQ's strength, the amp (`sound/musicEqPreset.ts`); a solid sets it, the slider moves it. */
+  musicEqStrength?: number;
   /**
    * The layout each context last showed: the regular app and the F5
    * visualizer each remember a light/dark mode and the loadout entry active

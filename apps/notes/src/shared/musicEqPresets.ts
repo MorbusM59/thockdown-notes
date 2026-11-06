@@ -13,3 +13,17 @@ export const DEFAULT_MUSIC_EQ_PRESET: MusicEqPreset = 'flat'
 export function sanitizeMusicEqPreset(value: unknown): MusicEqPreset {
   return (MUSIC_EQ_PRESETS as readonly unknown[]).includes(value) ? (value as MusicEqPreset) : DEFAULT_MUSIC_EQ_PRESET
 }
+
+/**
+ * The AMP: the EQ's strength as one continuous number (the Options > Music
+ * slider). A solid sets it to its preset's value; the slider moves it freely
+ * between. Persisted as `musicEqStrength`.
+ */
+export const MUSIC_EQ_STRENGTH_MIN = -1
+export const MUSIC_EQ_STRENGTH_MAX = 1
+
+export function sanitizeMusicEqStrength(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(MUSIC_EQ_STRENGTH_MIN, Math.min(MUSIC_EQ_STRENGTH_MAX, value))
+    : undefined
+}

@@ -10,6 +10,8 @@ import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
 import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
 import { readNowPlaying } from '../sound/nowPlaying'
+import { setMusicEqStrength } from '../sound/musicEqPreset'
+import { DEFAULT_MUSIC_EQ_PRESET, MUSIC_EQ_STRENGTH, MUSIC_EQ_STRENGTH_MAX, MUSIC_EQ_STRENGTH_MIN } from '../shared/musicEqPresets'
 import { BRILLIANCE_NEUTRAL } from '@thockdown/audio/liveBrilliance'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
@@ -529,6 +531,7 @@ export interface SidebarOptionsPanelProps {
   musicVolume: number
   musicReverbAmount: number
   musicReverbRoom: number
+  musicEqStrength: number
   pitchJitterAmount: number
   setPitchJitterAmount: (value: number) => void
   audioSpatial: number
@@ -784,6 +787,7 @@ export function SidebarOptionsPanel({
   musicVolume,
   musicReverbAmount,
   musicReverbRoom,
+  musicEqStrength,
   pitchJitterAmount,
   setPitchJitterAmount,
   audioSpatial,
@@ -2532,7 +2536,7 @@ export function SidebarOptionsPanel({
           {/* Volume, reverb and room are the music bar's levels: set through the
               same rule its controls use (adjusting a muted volume or a bypassed
               reverb turns it back on), so the two places cannot disagree. */}
-          <OptionsSliderRows rows={[3, 3]}>
+          <OptionsSliderRows rows={[4, 3]}>
             <CompactScrollbarSlider
               id="music-volume"
               min={0}
@@ -2543,6 +2547,17 @@ export function SidebarOptionsPanel({
               ariaLabel="Music volume"
               defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.volume}
               onCommit={(value) => readNowPlaying().setLevel('volume', value)}
+            />
+            <CompactScrollbarSlider
+              id="music-eq-strength"
+              min={MUSIC_EQ_STRENGTH_MIN}
+              max={MUSIC_EQ_STRENGTH_MAX}
+              step={0.01}
+              value={musicEqStrength}
+              trackLabel="amp"
+              ariaLabel="Music amp: the strength of the EQ curve the visualizer's solids choose, less bass and air at the left, more to the right"
+              defaultValue={MUSIC_EQ_STRENGTH[DEFAULT_MUSIC_EQ_PRESET]}
+              onCommit={(value) => setMusicEqStrength(clamp(value, MUSIC_EQ_STRENGTH_MIN, MUSIC_EQ_STRENGTH_MAX))}
             />
             <CompactScrollbarSlider
               id="music-brilliance"
