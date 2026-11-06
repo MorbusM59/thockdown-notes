@@ -21,11 +21,13 @@ export interface WindowControlsApi {
   /** The page's own zoom factor (double size mode's 2x), independent of the display's scaling. */
   getPageZoomFactor(): number;
   /**
-   * The window as it is on screen now, as a JPEG: held over the page while
-   * double size mode switches (`window/freezeFrame.ts`), so no frame in
-   * between is ever seen.
+   * Sets that zoom from the page itself, synchronously, so a change made in
+   * the same task lands in the same frame (double size mode's switch). The
+   * main process is still told (`setDoubleSizeMode`) for the window minimum;
+   * its own setZoomFactor then finds the zoom already there. Answers the
+   * zoom the page is at afterwards.
    */
-  capturePage(): Promise<Uint8Array>;
+  setPageZoomFactor(factor: number): number;
   // Custom window dragging: see shared/windowDrag.ts and the handlers in main.ts.
   startWindowDrag(screenX: number, screenY: number): void;
   moveWindowDrag(screenX: number, screenY: number): void;
@@ -62,7 +64,6 @@ export const WINDOW_CONTROL_SEND_CHANNELS = {
 
 export const WINDOW_CONTROL_INVOKE_CHANNELS = {
   toggleUtilityCollapse: 'window-control:toggle-utility-collapse',
-  capturePage: 'window-control:capture-page',
 } as const satisfies InvokeChannels<WindowControlsApi>;
 
 /** What the main process tells the window about its own state, unprompted. */
