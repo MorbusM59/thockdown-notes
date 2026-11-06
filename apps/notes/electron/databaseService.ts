@@ -3215,10 +3215,27 @@ export class DatabaseService {
       if (kind === 'default-custom' || kind === 'custom') {
         this.writeLoadoutMeta(`lastCustomId:${mode}`, targetId);
       }
+      // Selecting any other entry discards the unsaved changes: there is no
+      // way back to them, so keeping them would only leave a hidden copy.
+      if (kind !== 'pending') this.discardPendingUiLoadout(sign, timestamp);
     });
 
     tx();
     return this.buildListResult();
+  }
+
+  /**
+   * Resets a mode's unsaved-changes row to an inert copy of its default
+   * custom layout. Run inside the caller's transaction.
+   */
+  private discardPendingUiLoadout(sign: 1 | -1, timestamp: number): void {
+    const defaultCustomRow = this.readLoadoutRow(LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign);
+    if (!defaultCustomRow) return;
+    this.requireDb().prepare(`
+      UPDATE ui_loadout_entries
+      SET isActive = 0, signature = ?, payloadJson = ?, updatedAt = ?
+      WHERE id = ?
+    `).run(defaultCustomRow.signature, JSON.stringify(defaultCustomRow.payload), timestamp, LOADOUT_PENDING_ID_ABS * sign);
   }
 
   updatePendingUiLoadout(mode: unknown, loadout: unknown): UiLoadoutListResult {
@@ -3300,16 +3317,7 @@ export class DatabaseService {
 
       this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, newId);
 
-      // Reset the pending row back to an inert copy of default-custom.
-      const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
-      const defaultCustomRow = this.readLoadoutRow(defaultCustomId);
-      if (defaultCustomRow) {
-        db.prepare(`
-          UPDATE ui_loadout_entries
-          SET isActive = 0, signature = ?, payloadJson = ?, updatedAt = ?
-          WHERE id = ?
-        `).run(defaultCustomRow.signature, JSON.stringify(defaultCustomRow.payload), timestamp, pendingId);
-      }
+      this.discardPendingUiLoadout(sign, timestamp);
     });
 
     tx();

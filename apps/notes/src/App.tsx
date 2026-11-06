@@ -3108,32 +3108,21 @@ function App() {
   /**
    * Steps the current mode's layout to the next (+1) or previous (-1) preset,
    * wrapping, in the order the options panel lists them: the factory presets,
-   * then the saved custom slots, then the unsaved changes if there are any.
-   * From an entry outside that list (the default custom layout) the step starts from before the
+   * then the saved custom slots. From an entry outside that list (unsaved
+   * changes, or the default custom layout) the step starts from before the
    * first preset, so +1 lands on the first and -1 on the last. Selecting goes
    * through `selectLoadoutPreset`, the same path as pressing the preset's
    * button, so the choice is persisted the same way.
    */
   const stepLayoutPreset = useCallback((direction: 1 | -1) => {
-    // The row holding unsaved changes joins the cycle last, so stepping away
-    // from it and back returns to it; setActive never rewrites that row, so
-    // stepping writes nothing. While nothing is unsaved it is an inert copy
-    // of another entry and is left out.
-    const pending = entriesForCurrentMode.find((entry) => idKind(entry.id) === 'pending')
-    const hasPendingChanges = pending !== undefined
-      && !entriesForCurrentMode.some((entry) => entry.id !== pending.id && entry.signature === pending.signature)
-    const cycle = [
-      ...factoryPresetEntriesForCurrentMode,
-      ...customSlotEntriesForCurrentMode,
-      ...(hasPendingChanges ? [pending] : []),
-    ]
+    const cycle = [...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode]
     if (cycle.length === 0) return
     const current = cycle.findIndex((entry) => entry.id === activeEntryForCurrentMode?.id)
     const next = current < 0
       ? (direction > 0 ? 0 : cycle.length - 1)
       : (current + direction + cycle.length) % cycle.length
     void selectLoadoutPreset(cycle[next].id)
-  }, [entriesForCurrentMode, factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
+  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
   // --- Separate layouts for the app and the visualizer -------------------
   // The regular app and the visualizer each remember the layout they last
   // showed (a light/dark mode and the entry active in it). Only one is in
@@ -3146,6 +3135,10 @@ function App() {
   // the flip of isVisualizerMode rather than in toggleVisualizerMode, so
   // every way out (F3, Escape, the OS leaving full screen) swaps alike.
   const [layoutChoices, setLayoutChoices] = useState<LayoutChoices>({})
+  // Unsaved changes are never remembered as a side's choice: they belong to
+  // whichever side is showing them and are discarded by any other selection.
+  const rememberable = (choice: LayoutChoice | undefined) =>
+    (choice && idKind(choice.loadoutId) !== 'pending' ? choice : undefined)
   const liveLayoutChoice = useMemo<LayoutChoice | undefined>(
     () => (activeEntryForCurrentMode ? { uiMode, loadoutId: activeEntryForCurrentMode.id } : undefined),
     [uiMode, activeEntryForCurrentMode],
@@ -3155,7 +3148,11 @@ function App() {
     if (choice.uiMode === liveLayoutChoice?.uiMode && choice.loadoutId === liveLayoutChoice.loadoutId) return
     if (choice.uiMode !== uiMode) setUiMode(choice.uiMode)
     const sign = modeSign(choice.uiMode)
-    const remembered = uiLoadoutEntries.find((entry) => entry.id === choice.loadoutId)
+    // A remembered unsaved-changes row is gone once its changes were saved
+    // or discarded, which leaves it an inert copy; treat it as missing.
+    const remembered = idKind(choice.loadoutId) === 'pending'
+      ? undefined
+      : uiLoadoutEntries.find((entry) => entry.id === choice.loadoutId)
     if (remembered) {
       // The look is applied in this same update as the mode, from the entry
       // already in hand, and the database is only told which entry is now
@@ -3179,15 +3176,19 @@ function App() {
   useEffect(() => {
     if (wasVisualizerModeRef.current === isVisualizerMode) return
     wasVisualizerModeRef.current = isVisualizerMode
+    // Unsaved changes travel with the switch: they are what the reader is
+    // tuning, so both sides show them until they are saved or discarded, and
+    // neither side remembers them (selecting anything else discards them).
+    if (liveLayoutChoice && idKind(liveLayoutChoice.loadoutId) === 'pending') return
     const leaving: keyof LayoutChoices = isVisualizerMode ? 'app' : 'visualizer'
     const entering: keyof LayoutChoices = isVisualizerMode ? 'visualizer' : 'app'
-    setLayoutChoices((previous) => ({ ...previous, [leaving]: liveLayoutChoice ?? previous[leaving] }))
+    setLayoutChoices((previous) => ({ ...previous, [leaving]: rememberable(liveLayoutChoice) ?? previous[leaving] }))
     applyLayoutChoice(layoutChoices[entering])
   }, [isVisualizerMode, liveLayoutChoice, layoutChoices, applyLayoutChoice])
   const persistedLayoutChoices = useMemo<LayoutChoices>(
     () => (isVisualizerMode
-      ? { ...layoutChoices, visualizer: liveLayoutChoice ?? layoutChoices.visualizer }
-      : { ...layoutChoices, app: liveLayoutChoice ?? layoutChoices.app }),
+      ? { ...layoutChoices, visualizer: rememberable(liveLayoutChoice) ?? layoutChoices.visualizer }
+      : { ...layoutChoices, app: rememberable(liveLayoutChoice) ?? layoutChoices.app }),
     [isVisualizerMode, layoutChoices, liveLayoutChoice],
   )
 
@@ -3221,12 +3222,15 @@ function App() {
         setLastCustomIdByMode(result.lastCustomIdByMode)
         const launchId = launchAppLayoutIdRef.current
         const remembered = result.entries.find((entry) => entry.id === launchId)
-        if (remembered && !remembered.isActive) {
+        const sign = modeSign(uiMode)
+        const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
+        // Unsaved changes are kept over the remembered choice: selecting it
+        // would discard them.
+        const keepsUnsaved = active !== undefined && idKind(active.id) === 'pending'
+        if (remembered && !remembered.isActive && !keepsUnsaved) {
           void selectLoadoutPreset(remembered.id)
           return
         }
-        const sign = modeSign(uiMode)
-        const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
         if (active) applyEntryToLiveState(active)
       })
       .catch((error) => {

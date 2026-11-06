@@ -62,6 +62,15 @@ describe('DatabaseService caret loadout fields', () => {
     rmSync(dataRoot, { recursive: true, force: true })
   })
 
+  it('discards unsaved changes when another entry is selected', () => {
+    db.updatePendingUiLoadout('light', pendingLightPayload())
+    const pendingId = db.listUiLoadouts().entries.find((row) => row.id > 0 && row.isActive)!.id
+    db.setActiveUiLoadout(1)
+    const pending = db.listUiLoadouts().entries.find((row) => row.id === pendingId)!
+    expect(pending.isActive).toBe(false)
+    expect(pending.payload).not.toMatchObject(caretOverrides)
+  })
+
   it('round-trips every caret field through a real restart', async () => {
     db.updatePendingUiLoadout('light', pendingLightPayload())
     db.saveCustomUiLoadout('light')
