@@ -29,7 +29,7 @@
  */
 
 import { flushSync } from 'react-dom'
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { subscribeMusicMix, subscribeMusicSemitoneScore } from '../sound/musicBeat'
 import { MUSIC_SEMITONE_CONFIRM_SEC } from '../sound/musicSemitoneScore'
@@ -195,18 +195,26 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
     .map((run) => ({ ...run, column: run.column + TOP_ROW_INSET_BOXES }))
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  // The spectrum meter of the last layout, which the next one carries on from.
+  const meterRef = useRef<SpectrumBallistics | null>(null)
   const chromaCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const [gapColumn, setGapColumn] = useState<number | null>(null)
 
   // The frame loop. Rebuilt when the layout changes, since the number of
   // bands is the number of columns and the canvas is sized to the strip.
 
-  useEffect(() => {
+  // A layout effect, and the first draw made in it: rebuilding resizes (and
+  // so clears) the canvas, and a passive effect runs after the frame paints,
+  // which showed a frame of the old strip, then an empty one. The meter
+  // carries on from the last one's bars (`continuing`), so the new strip's
+  // first frame is the spectrum where it stood.
+  useLayoutEffect(() => {
     const canvas = canvasRef.current
     if (!scene || columns <= 0) return
     const tap = stripRows > 0 ? new SpectrumTap(columns) : null
     tap?.start()
-    const meter = new SpectrumBallistics(columns)
+    const meter = SpectrumBallistics.continuing(meterRef.current, columns)
+    meterRef.current = meter
     const levels = new Float32Array(columns)
     const drawnLit = new Int16Array(columns).fill(-1)
     const drawnPeak = new Int16Array(columns).fill(-1)
@@ -410,6 +418,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
     const wake = () => {
       if (frame === null) frame = requestAnimationFrame(tick)
     }
+    draw()
     wake()
     const unsubscribePlaying = musicPlayerService.subscribePlaying(wake)
     const unsubscribeSong = subscribeNowPlaying(wake)

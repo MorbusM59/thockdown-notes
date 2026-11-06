@@ -762,6 +762,27 @@ export class SpectrumBallistics {
     this.speeds = new Float32Array(bands)
   }
 
+  /**
+   * A meter of `bands` bands that starts where `previous` stands, each band
+   * taking the state of the old band at the same position along the
+   * spectrum. The bands always split one frequency range, so a band's
+   * position is its frequency, and a layout that changes the column count
+   * (the window resized, double size mode) carries the bars on rather than
+   * dropping them to the floor and letting them climb back.
+   */
+  static continuing(previous: SpectrumBallistics | null, bands: number): SpectrumBallistics {
+    const meter = new SpectrumBallistics(bands)
+    if (!previous || previous.bands <= 0) return meter
+    for (let band = 0; band < bands; band += 1) {
+      const from = Math.min(previous.bands - 1, Math.floor(((band + 0.5) * previous.bands) / bands))
+      meter.levels[band] = previous.levels[from]
+      meter.peaks[band] = previous.peaks[from]
+      meter.holds[band] = previous.holds[from]
+      meter.speeds[band] = previous.speeds[from]
+    }
+    return meter
+  }
+
   /** Moves every bar toward `targets` (dB per band) over `dtSec`. */
   step(targets: Float32Array, dtSec: number): void {
     const dt = Math.max(0, dtSec)

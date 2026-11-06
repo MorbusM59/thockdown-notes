@@ -1792,6 +1792,8 @@ function App() {
   // "Double size" mode: 2x page zoom paired with a doubled window minimum --
   // see the window-control:double-size-mode handler in electron/main.ts.
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
+  const isDoubleSizeModeRef = useRef(isDoubleSizeMode)
+  isDoubleSizeModeRef.current = isDoubleSizeMode
   // The size mode actually ON SCREEN: it follows the zoom the page really has,
   // not the one requested. isDoubleSizeMode is the reader's choice (the
   // button, what is saved); the zoom it asks for is applied by the main
@@ -2141,24 +2143,25 @@ function App() {
   }, [sidebarMode, lastSidebarModeBeforeOptions, isImmersiveMode, isSidebarVisible, setImmersiveMode])
 
   const handleToggleDoubleSizeMode = useCallback(() => {
-    setIsDoubleSizeMode((previous) => {
-      const next = !previous
-      // Notify main process so it can apply page zoom + the doubled window minimum immediately
-      try {
-        window.windowControls?.setDoubleSizeMode?.(next)
-      } catch {
-        // ignore
-      }
-
-      // Persist app state menu snapshot with updated double-size mode --
-      // always through persistMenuStateNow, via its ref proxy (see
-      // persistMenuStateNowRef's own doc comment for why -- this handler is
-      // declared before persistMenuStateNow, same TDZ/staleness situation as
-      // toggleSidebarVisible above).
-      persistMenuStateNowRef.current({ isDoubleSizeMode: next })
-
-      return next
-    })
+    const next = !isDoubleSizeModeRef.current
+    isDoubleSizeModeRef.current = next
+    // The zoom is set HERE, in the page, and the sizes keyed to it are
+    // committed in the same task (flushSync), so the next frame is the new
+    // mode whole. Left to the main process, the zoom arrived over IPC a frame
+    // or more after the switch, and the frames between showed one mode's
+    // sizes at the other's zoom. The main process still applies the doubled
+    // window minimum, and its setZoomFactor finds the zoom already there.
+    // Without window controls (browser mode) there is no zoom to follow.
+    if (window.windowControls) {
+      window.windowControls.setPageZoomFactor(next ? 2 : 1)
+      flushSync(() => setIsDoubleSizeApplied(next))
+      window.windowControls.setDoubleSizeMode(next)
+    }
+    setIsDoubleSizeMode(next)
+    // Persisted through persistMenuStateNow via its ref proxy (see
+    // persistMenuStateNowRef's own doc comment: this handler is declared
+    // before it, the same TDZ/staleness situation as toggleSidebarVisible).
+    persistMenuStateNowRef.current({ isDoubleSizeMode: next })
     // buildMenuStateSnapshot/persistMenuStateNow are declared later in this
     // component (via useCallback further down), so listing them here would
     // throw a TDZ ReferenceError the moment this dependency array is
