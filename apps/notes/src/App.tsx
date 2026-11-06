@@ -15,7 +15,7 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { publishThemeControls } from './visualizer/themeControls'
-import { DEFAULT_SOUNDSTAGE_PREFERENCES, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeMusicEqStrength, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeMusicEqStrength, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
@@ -6603,9 +6603,21 @@ ${markdownHtml}
   useEffect(() => {
     publishSoundstageControls({
       solid: visualizerSolid,
-      step: (direction) => selectFactorySoundstage(steppedFactorySoundstage(soundstagePreferences.factory, direction)),
+      // The custom stage sits after the last factory stage: forward from it
+      // goes to custom, and back from custom returns to the last factory stage.
+      step: (direction) => {
+        if (visualizerSolid === 'custom') {
+          if (direction === -1) selectFactorySoundstage(soundstagePreferences.factory)
+          return
+        }
+        if (direction === 1 && visualizerSolid === FACTORY_SOUNDSTAGE_IDS[FACTORY_SOUNDSTAGE_IDS.length - 1]) {
+          applySoundstage(soundstagePreferences.custom)
+          return
+        }
+        selectFactorySoundstage(steppedFactorySoundstage(visualizerSolid, direction))
+      },
     })
-  }, [visualizerSolid, soundstagePreferences.factory, selectFactorySoundstage])
+  }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.custom, selectFactorySoundstage, applySoundstage])
 
   useEffect(() => {
     typingSoundManager.setPitchJitterAmount(pitchJitterAmount)

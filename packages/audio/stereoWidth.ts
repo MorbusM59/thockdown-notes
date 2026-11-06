@@ -89,8 +89,9 @@ export class StereoWidth {
     this.nodes = [this.input, split, halfLeft, halfRight, highPass, this.sideGain, negate, this.output];
   }
 
-  setWidth(width: number): void {
-    this.sideGain.gain.setTargetAtTime(stereoWidthSideGain(width), this.context.currentTime, WIDTH_GLIDE_SEC);
+  /** Glide to `width` with time constant `seconds`. */
+  setWidth(width: number, seconds = WIDTH_GLIDE_SEC): void {
+    this.sideGain.gain.setTargetAtTime(stereoWidthSideGain(width), this.context.currentTime, seconds);
   }
 
   dispose(): void {

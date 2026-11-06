@@ -206,7 +206,14 @@ const AMP_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number;
   { type: 'peaking', frequencyHz: 3000, q: 1, gainDb: 8 },
   { type: 'highshelf', frequencyHz: 10000, q: 0.7, gainDb: 16 },
 ];
-const EQ_SMOOTHING_SEC = 0.05;
+/**
+ * The time constant every sound setting glides on (amp, brilliance, width,
+ * reverb amount, room's near low-pass): within 5% of the target after three
+ * of them, 150 ms, so switching soundstages, which moves all of them at once,
+ * is a short blend rather than a step. The room itself crossfades on its own,
+ * longer clock (room.ts's ROOM_CROSSFADE_SEC). Volume keeps its faster one.
+ */
+const SETTING_GLIDE_SEC = 0.05;
 const VOLUME_SMOOTHING_SEC = 0.02;
 
 type PlaybackEndHandler = () => void;
@@ -426,7 +433,7 @@ export class MusicPlayerService {
     const context = this.audioCtx;
     if (!context) return;
     this.eqBands.forEach((filter, i) => {
-      filter.gain.setTargetAtTime(AMP_EQ_BANDS[i].gainDb * strength, context.currentTime, EQ_SMOOTHING_SEC);
+      filter.gain.setTargetAtTime(AMP_EQ_BANDS[i].gainDb * strength, context.currentTime, SETTING_GLIDE_SEC);
     });
   }
 
@@ -447,17 +454,17 @@ export class MusicPlayerService {
     }
     if (this.dryGain && this.wetGain && this.audioCtx) {
       const now = this.audioCtx.currentTime;
-      this.dryGain.gain.cancelScheduledValues(now);
-      this.dryGain.gain.setValueAtTime(1 - this.config.reverbAmount, now);
-      this.wetGain.gain.cancelScheduledValues(now);
-      this.wetGain.gain.setValueAtTime(this.config.reverbAmount, now);
+      this.dryGain.gain.cancelAndHoldAtTime(now);
+      this.dryGain.gain.setTargetAtTime(1 - this.config.reverbAmount, now, SETTING_GLIDE_SEC);
+      this.wetGain.gain.cancelAndHoldAtTime(now);
+      this.wetGain.gain.setTargetAtTime(this.config.reverbAmount, now, SETTING_GLIDE_SEC);
     }
     // The room rebuilds itself only when its shape changed, once the control rests (liveRoom.ts).
     this.room?.setRoom(this.roomShape());
-    if (cfg.stereoWidth !== undefined && cfg.stereoWidth !== prev.stereoWidth) this.width?.setWidth(this.config.stereoWidth);
-    this.brilliance?.set(this.config.brilliance);
+    if (cfg.stereoWidth !== undefined && cfg.stereoWidth !== prev.stereoWidth) this.width?.setWidth(this.config.stereoWidth, SETTING_GLIDE_SEC);
+    this.brilliance?.set(this.config.brilliance, SETTING_GLIDE_SEC);
     if (this.foliageFilter && this.audioCtx && cfg.reverbFoliage !== undefined && cfg.reverbFoliage !== prev.reverbFoliage) {
-      this.foliageFilter.frequency.setTargetAtTime(foliageNearCutoffHz(this.config.reverbFoliage), this.audioCtx.currentTime, 0.05);
+      this.foliageFilter.frequency.setTargetAtTime(foliageNearCutoffHz(this.config.reverbFoliage), this.audioCtx.currentTime, SETTING_GLIDE_SEC);
     }
   }
 
