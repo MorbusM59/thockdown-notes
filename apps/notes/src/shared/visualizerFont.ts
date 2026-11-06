@@ -11,7 +11,8 @@ import {
 
 /**
  * The full-screen visualizer's typography (Options > Visualizer Font), one
- * setting for every visualizer and independent of the editor's. Its scene is
+ * setting for every visualizer and independent of the editor's (the size is
+ * remembered per size mode, in App's fontSizesByMode). Its scene is
  * a grid of SQUARE boxes, so where the editor has an x-box and a y-box this
  * has one `boxSize`: a multiple of the font size, read exactly as the
  * editor's y-box (line height) is, and the box's width is its height.

@@ -488,6 +488,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     // Double size mode's own font sizes -- missing or damaged stays missing,
     // see sanitizeOptionalFontSizePx.
     doubleSizeEditorFontSize: sanitizeOptionalFontSizePx(input?.doubleSizeEditorFontSize),
+    doubleSizeVisualizerFontSize: sanitizeOptionalFontSizePx(input?.doubleSizeVisualizerFontSize),
     doubleSizeViewFontSize: sanitizeOptionalFontSizePx(input?.doubleSizeViewFontSize),
     doubleSizeUiFontScale: sanitizeOptionalUiFontScale(input?.doubleSizeUiFontScale),
     borderRadiusRegularPx: sanitizeIntegerInRange(

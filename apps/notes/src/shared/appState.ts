@@ -91,6 +91,8 @@ export interface PersistedMenuState {
   uiFontScale?: number;
   /** Double size mode's own font sizes (App.tsx fontSizesByMode). Absent in saves from before they existed, or when damaged: the app then seeds each from its regular counterpart above. */
   doubleSizeEditorFontSize?: number;
+  /** Double size mode's visualizer font size; `visualizerFont.sizePx` is the regular mode's. */
+  doubleSizeVisualizerFontSize?: number;
   doubleSizeViewFontSize?: number;
   doubleSizeUiFontScale?: number;
   borderRadiusRegularPx?: number;
