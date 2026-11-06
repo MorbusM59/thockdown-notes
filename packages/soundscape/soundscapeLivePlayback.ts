@@ -21,8 +21,8 @@
  *   generator out 1 (send) -> return gain -> room (@thockdown/audio/liveRoom.ts) -> voice gain
  *   every voice gain -> mix gain -> bus compressor -> brilliance -> volume -> shared limiter
  *
- * BRILLIANCE (@thockdown/audio/brilliance.ts) is the mix's, not a voice's: three
- * BiquadFilterNodes and a makeup gain, gliding to a new setting; across a
+ * BRILLIANCE (@thockdown/audio/liveBrilliance.ts) is the mix's, not a voice's: its
+ * filters and makeup gain, gliding to a new setting; across a
  * change of soundscape they glide over the crossfade.
  *
  * A settings change goes to the current voice: the generator takes it at
@@ -35,13 +35,11 @@ import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from './soundscapeNo
 import { LiveRoom } from '@thockdown/audio/liveRoom';
 import type { SoundscapePlayback, SoundscapePlaybackHandlers } from './SoundscapeEngine';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
-import { brillianceCurve, BRILLIANCE_BANDS } from '@thockdown/audio/brilliance';
+import { BRILLIANCE_GLIDE_SEC, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
 import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, SOUNDSCAPE_SPACE_RETURN } from './soundscapeMix';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
 import generatorUrl from './soundscape-generator?url';
 
-/** The glide on the tone when brilliance changes. */
-const BRILLIANCE_GLIDE_SEC = 0.05;
 /** The glide on the space's return when its amount changes. */
 const RETURN_TIME_CONSTANT_SEC = 0.08;
 
@@ -161,39 +159,10 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
   compressor.release.value = BUS_COMPRESSOR.releaseSec;
   const volume = context.createGain();
   volume.gain.value = 0;
-  const bands = BRILLIANCE_BANDS.map((band) => {
-    const filter = context.createBiquadFilter();
-    filter.type = band.kind;
-    filter.frequency.value = band.frequencyHz;
-    if (band.kind === 'peaking') filter.Q.value = band.q;
-    return filter;
-  });
-  const makeup = context.createGain();
+  const brilliance = new LiveBrilliance(context);
   mixGain.connect(compressor);
-  let tail: AudioNode = compressor;
-  for (const filter of bands) {
-    tail.connect(filter);
-    tail = filter;
-  }
-  tail.connect(makeup);
-  makeup.connect(volume);
-  let brilliance: number | null = null;
-  /** Glide the tone to `value` with time constant `seconds` (at once, for the first). */
-  const setBrilliance = (value: number, seconds: number) => {
-    if (value === brilliance) return;
-    const curve = brillianceCurve(value, context.sampleRate);
-    const now = context.currentTime;
-    const targets: Array<[AudioParam, number]> = [
-      ...bands.map((filter, index): [AudioParam, number] => [filter.gain, curve.gainsDb[index]]),
-      [makeup.gain, curve.makeup],
-    ];
-    for (const [param, target] of targets) {
-      param.cancelScheduledValues(now);
-      if (brilliance === null) param.setValueAtTime(target, now);
-      else param.setTargetAtTime(target, now, seconds);
-    }
-    brilliance = value;
-  };
+  compressor.connect(brilliance.input);
+  brilliance.output.connect(volume);
   connectToOutput(volume);
 
   let closed = false;
@@ -207,7 +176,7 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
 
   return {
     configure(configuration, transitionSec) {
-      setBrilliance(configuration.space.brilliance, transitionSec > 0 ? transitionSec / 3 : BRILLIANCE_GLIDE_SEC);
+      brilliance.set(configuration.space.brilliance, transitionSec > 0 ? transitionSec / 3 : BRILLIANCE_GLIDE_SEC);
       if (transitionSec <= 0) {
         voice.configure(configuration);
         return;
@@ -242,8 +211,7 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
       leaving.clear();
       voice.close();
       mixGain.disconnect();
-      for (const filter of bands) filter.disconnect();
-      makeup.disconnect();
+      brilliance.dispose();
       compressor.disconnect();
       volume.disconnect();
     },

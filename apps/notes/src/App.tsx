@@ -2247,6 +2247,7 @@ function App() {
   const [musicReverbRoom, setMusicReverbRoom] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.reverbRoom)
   const [musicReverbFoliage, setMusicReverbFoliage] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage)
   const [musicStereoWidth, setMusicStereoWidth] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.stereoWidth)
+  const [musicBrilliance, setMusicBrilliance] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.brilliance)
   // Mute / bypass are flags over the levels above, never a zeroed level plus a
   // remembered copy -- see PersistedMenuState's note on why.
   const [musicMuted, setMusicMuted] = useState(false)
@@ -3444,6 +3445,7 @@ function App() {
       musicReverbRoom,
       musicReverbFoliage,
       musicStereoWidth,
+      musicBrilliance,
       musicMuted,
       musicReverbBypassed,
       musicSoundOptionsOpen,
@@ -3581,6 +3583,7 @@ function App() {
     musicReverbRoom,
     musicReverbFoliage,
     musicStereoWidth,
+    musicBrilliance,
     musicMuted,
     musicReverbBypassed,
     musicSoundOptionsOpen,
@@ -5436,6 +5439,7 @@ ${markdownHtml}
             if (typeof appState.menu.musicReverbRoom === 'number') setMusicReverbRoom(appState.menu.musicReverbRoom)
             if (typeof appState.menu.musicReverbFoliage === 'number') setMusicReverbFoliage(clamp(appState.menu.musicReverbFoliage, 0, 1))
             setMusicStereoWidth(sanitizeStereoWidth(appState.menu.musicStereoWidth))
+            if (typeof appState.menu.musicBrilliance === 'number') setMusicBrilliance(clamp(appState.menu.musicBrilliance, 0, 1))
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
             setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
@@ -6548,11 +6552,12 @@ ${markdownHtml}
     typingSoundManager.setReverbSpace(audioReverbSpace)
   }, [audioReverbSpace])
 
-  // The music's room foliage and stereo width: Options > Music. Volume, reverb
-  // and room size are the music bar's (AudioControls), which writes them.
+  // The music's room foliage, stereo width and brilliance: Options > Music.
+  // Volume, reverb and room size are written by the music bar (AudioControls),
+  // which applies its mute and bypass flags to them.
   useEffect(() => {
-    musicPlayerService.setConfig({ reverbFoliage: musicReverbFoliage, stereoWidth: musicStereoWidth })
-  }, [musicReverbFoliage, musicStereoWidth])
+    musicPlayerService.setConfig({ reverbFoliage: musicReverbFoliage, stereoWidth: musicStereoWidth, brilliance: musicBrilliance })
+  }, [musicReverbFoliage, musicStereoWidth, musicBrilliance])
 
   useEffect(() => {
     typingSoundManager.setPitchJitterAmount(pitchJitterAmount)
@@ -8972,6 +8977,11 @@ ${markdownHtml}
                         setMusicReverbFoliage={setMusicReverbFoliage}
                         musicStereoWidth={musicStereoWidth}
                         setMusicStereoWidth={setMusicStereoWidth}
+                        musicBrilliance={musicBrilliance}
+                        setMusicBrilliance={setMusicBrilliance}
+                        musicVolume={musicVolume}
+                        musicReverbAmount={musicReverbAmount}
+                        musicReverbRoom={musicReverbRoom}
                         pitchJitterAmount={pitchJitterAmount}
                         setPitchJitterAmount={setPitchJitterAmount}
                         audioSpatial={audioSpatial}

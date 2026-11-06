@@ -1,12 +1,13 @@
 import { LiveRoom } from '@thockdown/audio/liveRoom';
 import { StereoWidth } from '@thockdown/audio/stereoWidth';
+import { BRILLIANCE_NEUTRAL, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
 
 /**
  * MusicPlayerService — Web Audio API based music playback.
  *
  * Signal chain:
- *   HTMLAudioElement → MediaElementSourceNode → EQ → GainNode ─┬→ dryGain ─────────┬→ StereoWidth → limiter → destination
+ *   HTMLAudioElement → MediaElementSourceNode → EQ → brilliance → GainNode ─┬→ dryGain ─────────┬→ StereoWidth → limiter → destination
  *                                                               └→ LiveRoom → wetGain ┘
  *
  * The limiter is the app's shared output stage (audioOutputBus.ts), which the
@@ -16,7 +17,9 @@ import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutpu
  * The reverb is the family's one ROOM (@thockdown/audio/room.ts, played by
  * liveRoom.ts): the room slider is its SIZE and `reverbFoliage` its FOLIAGE,
  * the same two numbers the soundscape's space is made of. WIDTH
- * (@thockdown/audio/stereoWidth.ts) acts on what is heard, dry and wet
+ * BRILLIANCE (@thockdown/audio/liveBrilliance.ts) is the soundscape's soft-to-crisp
+ * tilt, after the EQ and before the volume, so the reverb hears it too.
+ * WIDTH (@thockdown/audio/stereoWidth.ts) acts on what is heard, dry and wet
  * together, so above 1 it widens the room as well as the recording and at 0
  * it is a true mono fold-down. At width 1 it is the identity.
  */
@@ -27,6 +30,7 @@ export interface MusicPlayerConfig {
   reverbRoom: number;   // 0–1  the room's SIZE (room.ts)
   reverbFoliage: number; // 0–1  the room's FOLIAGE (room.ts): bare and bright to dense and dark
   stereoWidth: number;  // STEREO_WIDTH_MIN–MAX, 1 neutral (stereoWidth.ts)
+  brilliance: number;   // 0 soft, 0.5 neutral, 1 crisp (brilliance.ts)
 }
 
 export const DEFAULT_MUSIC_PLAYER_CONFIG: Readonly<MusicPlayerConfig> = {
@@ -35,6 +39,7 @@ export const DEFAULT_MUSIC_PLAYER_CONFIG: Readonly<MusicPlayerConfig> = {
   reverbRoom: 0.3,
   reverbFoliage: 0,
   stereoWidth: 1,
+  brilliance: BRILLIANCE_NEUTRAL,
 };
 
 /**
@@ -214,6 +219,7 @@ export class MusicPlayerService {
   private wetGain: GainNode | null = null;
   private room: LiveRoom | null = null;
   private width: StereoWidth | null = null;
+  private brilliance: LiveBrilliance | null = null;
   private eqBands: BiquadFilterNode[] = [];
   private eqStrength = 0;
   private config: MusicPlayerConfig = { ...DEFAULT_MUSIC_PLAYER_CONFIG };
@@ -349,9 +355,11 @@ export class MusicPlayerService {
       this.room = new LiveRoom(context);
       this.room.setRoom(this.roomShape());
       this.width = new StereoWidth(context, this.config.stereoWidth);
+      this.brilliance = new LiveBrilliance(context);
+      this.brilliance.set(this.config.brilliance);
 
       // The EQ sits between the source and the volume: element → each
-      // AMP_EQ_BANDS filter in turn → gainNode.
+      // AMP_EQ_BANDS filter in turn → brilliance → gainNode.
       this.eqBands = AMP_EQ_BANDS.map((band) => {
         const filter = context.createBiquadFilter();
         filter.type = band.type;
@@ -361,7 +369,8 @@ export class MusicPlayerService {
         return filter;
       });
       for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
-      this.eqBands[this.eqBands.length - 1].connect(this.gainNode);
+      this.eqBands[this.eqBands.length - 1].connect(this.brilliance.input);
+      this.brilliance.output.connect(this.gainNode);
 
       // gainNode → dryGain, and gainNode → room → wetGain; both → width → limiter
       this.gainNode.connect(this.dryGain);
@@ -438,6 +447,7 @@ export class MusicPlayerService {
     // The room rebuilds itself only when its shape changed, once the control rests (liveRoom.ts).
     this.room?.setRoom(this.roomShape());
     if (cfg.stereoWidth !== undefined && cfg.stereoWidth !== prev.stereoWidth) this.width?.setWidth(this.config.stereoWidth);
+    this.brilliance?.set(this.config.brilliance);
   }
 
   private roomShape(): { size: number; foliage: number } {

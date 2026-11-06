@@ -199,6 +199,8 @@ export interface PersistedMenuState {
   musicReverbFoliage?: number;
   /** The music's stereo width, STEREO_WIDTH_MIN-MAX with 1 neutral (@thockdown/audio/stereoWidth.ts). */
   musicStereoWidth?: number;
+  /** The music's brilliance, 0 soft, 0.5 neutral, 1 crisp (@thockdown/audio/brilliance.ts). */
+  musicBrilliance?: number;
   /** Volume silenced; `musicVolume` keeps the level to come back to. */
   musicMuted?: boolean;
   /** Reverb bypassed; both the reverb and the room button reflect this one flag. */

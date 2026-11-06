@@ -397,6 +397,7 @@ describe('StateService app-state field round-trip', () => {
         musicReverbRoom: 0.75,
         musicReverbFoliage: 0.4,
         musicStereoWidth: 1.3,
+        musicBrilliance: 0.8,
         musicMuted: true,
         musicReverbBypassed: true,
         musicSoundOptionsOpen: true,
@@ -414,6 +415,7 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicReverbRoom).toBe(0.75)
     expect(loaded.menu?.musicReverbFoliage).toBe(0.4)
     expect(loaded.menu?.musicStereoWidth).toBe(1.3)
+    expect(loaded.menu?.musicBrilliance).toBe(0.8)
   })
 
   // The sixth ("Lounge") bucket needs the persisted-slot allowlist to know

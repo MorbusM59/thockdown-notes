@@ -9,6 +9,8 @@ import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visu
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
 import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
+import { readNowPlaying } from '../sound/nowPlaying'
+import { BRILLIANCE_NEUTRAL } from '@thockdown/audio/liveBrilliance'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
@@ -522,6 +524,11 @@ export interface SidebarOptionsPanelProps {
   setMusicReverbFoliage: (value: number) => void
   musicStereoWidth: number
   setMusicStereoWidth: (value: number) => void
+  musicBrilliance: number
+  setMusicBrilliance: (value: number) => void
+  musicVolume: number
+  musicReverbAmount: number
+  musicReverbRoom: number
   pitchJitterAmount: number
   setPitchJitterAmount: (value: number) => void
   audioSpatial: number
@@ -772,6 +779,11 @@ export function SidebarOptionsPanel({
   setMusicReverbFoliage,
   musicStereoWidth,
   setMusicStereoWidth,
+  musicBrilliance,
+  setMusicBrilliance,
+  musicVolume,
+  musicReverbAmount,
+  musicReverbRoom,
   pitchJitterAmount,
   setPitchJitterAmount,
   audioSpatial,
@@ -2517,17 +2529,31 @@ export function SidebarOptionsPanel({
         iconClass="fa-music"
       >
         <div className="utility-setting-slider-stack" aria-label="Music controls">
-          <OptionsSliderRows>
+          {/* Volume, reverb and room are the music bar's levels: set through the
+              same rule its controls use (adjusting a muted volume or a bypassed
+              reverb turns it back on), so the two places cannot disagree. */}
+          <OptionsSliderRows rows={[3, 3]}>
             <CompactScrollbarSlider
-              id="music-reverb-foliage"
+              id="music-volume"
               min={0}
               max={1}
               step={0.01}
-              value={musicReverbFoliage}
-              trackLabel="foliage"
-              ariaLabel="Music room foliage: bare and bright to dense and dark"
-              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage}
-              onCommit={(value) => setMusicReverbFoliage(clamp(value, 0, 1))}
+              value={musicVolume}
+              trackLabel="volume"
+              ariaLabel="Music volume"
+              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.volume}
+              onCommit={(value) => readNowPlaying().setLevel('volume', value)}
+            />
+            <CompactScrollbarSlider
+              id="music-brilliance"
+              min={0}
+              max={1}
+              step={0.01}
+              value={musicBrilliance}
+              trackLabel="brilliance"
+              ariaLabel="Music brilliance: soft and warm at the left, neutral in the middle, crisp at the right"
+              defaultValue={BRILLIANCE_NEUTRAL}
+              onCommit={(value) => setMusicBrilliance(clamp(value, 0, 1))}
             />
             <CompactScrollbarSlider
               id="music-stereo-width"
@@ -2539,6 +2565,39 @@ export function SidebarOptionsPanel({
               ariaLabel="Music stereo width: mono at the left, as recorded at the default, wider to the right"
               defaultValue={STEREO_WIDTH_NEUTRAL}
               onCommit={(value) => setMusicStereoWidth(sanitizeStereoWidth(value))}
+            />
+            <CompactScrollbarSlider
+              id="music-reverb"
+              min={0}
+              max={1}
+              step={0.01}
+              value={musicReverbAmount}
+              trackLabel="reverb"
+              ariaLabel="Music reverb amount"
+              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbAmount}
+              onCommit={(value) => readNowPlaying().setLevel('reverb', value)}
+            />
+            <CompactScrollbarSlider
+              id="music-reverb-room"
+              min={0}
+              max={1}
+              step={0.01}
+              value={musicReverbRoom}
+              trackLabel="room"
+              ariaLabel="Music room size: a small room to a wide valley"
+              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbRoom}
+              onCommit={(value) => readNowPlaying().setLevel('room', value)}
+            />
+            <CompactScrollbarSlider
+              id="music-reverb-foliage"
+              min={0}
+              max={1}
+              step={0.01}
+              value={musicReverbFoliage}
+              trackLabel="foliage"
+              ariaLabel="Music room foliage: bare and bright to dense and dark"
+              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage}
+              onCommit={(value) => setMusicReverbFoliage(clamp(value, 0, 1))}
             />
           </OptionsSliderRows>
         </div>
