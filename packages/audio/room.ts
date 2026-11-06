@@ -205,17 +205,18 @@ export function buildRoomImpulseResponse(
     if (at + burstLength >= length) break;
     const level = REFLECTION_GAIN * (1 - (FOLIAGE_REFLECTION_LOSS * foliage)) * (0.7 ** order)
       * Math.exp(-6.9078 * ((at - preDelay) / sampleRate) / decaySec);
-    // A Hann-windowed noise burst of unit energy: at the minimum smear it is
-    // nearly a click, at full foliage a soft swell.
-    let energy = 0;
-    for (let index = 0; index < burstLength; index += 1) {
-      const window = 0.5 - (0.5 * Math.cos((2 * Math.PI * (index + 0.5)) / burstLength));
-      burst[index] = ((random() * 2) - 1) * window;
-      energy += burst[index] * burst[index];
-    }
-    const norm = energy > 0 ? 1 / Math.sqrt(energy) : 0;
+    // A Hann-windowed noise burst of unit energy, drawn afresh for each side
+    // so a reflection arrives at both ears decorrelated, like the tail: at the
+    // minimum smear it is nearly a click, at full foliage a soft swell.
     const lean = order % 2 === 0 ? [1, 0.55] : [0.55, 1];
     channels.forEach((data, side) => {
+      let energy = 0;
+      for (let index = 0; index < burstLength; index += 1) {
+        const window = 0.5 - (0.5 * Math.cos((2 * Math.PI * (index + 0.5)) / burstLength));
+        burst[index] = ((random() * 2) - 1) * window;
+        energy += burst[index] * burst[index];
+      }
+      const norm = energy > 0 ? 1 / Math.sqrt(energy) : 0;
       for (let index = 0; index < burstLength; index += 1) data[at + index] += level * lean[side] * burst[index] * norm;
     });
   }
