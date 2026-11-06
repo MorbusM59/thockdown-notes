@@ -4,6 +4,7 @@ import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
 import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
+import { switchUnderFrozenFrame } from './window/freezeFrame'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -2145,19 +2146,22 @@ function App() {
   const handleToggleDoubleSizeMode = useCallback(() => {
     const next = !isDoubleSizeModeRef.current
     isDoubleSizeModeRef.current = next
-    // The zoom is set HERE, in the page, and the sizes keyed to it are
-    // committed in the same task (flushSync), so the next frame is the new
-    // mode whole. Left to the main process, the zoom arrived over IPC a frame
-    // or more after the switch, and the frames between showed one mode's
-    // sizes at the other's zoom. The main process still applies the doubled
-    // window minimum, and its setZoomFactor finds the zoom already there.
-    // Without window controls (browser mode) there is no zoom to follow.
-    if (window.windowControls) {
-      window.windowControls.setPageZoomFactor(next ? 2 : 1)
-      flushSync(() => setIsDoubleSizeApplied(next))
-      window.windowControls.setDoubleSizeMode(next)
+    // The switch happens under a frozen frame (window/freezeFrame.ts): the
+    // window as it was is held over everything while the main process
+    // applies the zoom and the page lays itself out again, and is lifted in
+    // the frame the new zoom arrives in. The zoom, the window's new CSS size
+    // and the sizes keyed to the mode reach the screen on different frames,
+    // and no ordering of them can put them in one, so none of those frames
+    // is shown.
+    const controls = window.windowControls
+    // The mode's own state is set under it too, since the controls that show
+    // it would otherwise change in the frame that is captured.
+    const apply = () => {
+      controls?.setDoubleSizeMode(next)
+      setIsDoubleSizeMode(next)
     }
-    setIsDoubleSizeMode(next)
+    if (controls) void switchUnderFrozenFrame(controls, next ? 2 : 1, apply)
+    else apply()
     // Persisted through persistMenuStateNow via its ref proxy (see
     // persistMenuStateNowRef's own doc comment: this handler is declared
     // before it, the same TDZ/staleness situation as toggleSidebarVisible).

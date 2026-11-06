@@ -936,6 +936,11 @@ function registerIpcHandlers() {
   }, ipcMain.on.bind(ipcMain))
 
   registerInvokeHandlers<WindowControlsApi, IpcMainInvokeEvent>(WINDOW_CONTROL_INVOKE_CHANNELS, {
+    capturePage: async () => {
+      if (!win || win.isDestroyed()) return new Uint8Array()
+      const image = await win.webContents.capturePage()
+      return new Uint8Array(image.toJPEG(95))
+    },
     toggleUtilityCollapse: (_event, payload: unknown) => {
       if (!win || win.isDestroyed()) return false
 

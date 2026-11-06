@@ -58,7 +58,6 @@ const windowControls: WindowControlsApi = {
   // webContents.setZoomFactor). Read synchronously by the custom cursor,
   // which has to convert its stored pointer position when the zoom changes.
   getPageZoomFactor: () => webFrame.getZoomFactor(),
-  setPageZoomFactor: (factor: number) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor() },
   onMaximizeStateChange: (callback) => onWindowEvent('maximizeState', callback),
   onCollapsedStateChange: (callback) => onWindowEvent('collapsedState', callback),
   onFullScreenStateChange: (callback) => onWindowEvent('fullScreenState', callback),
