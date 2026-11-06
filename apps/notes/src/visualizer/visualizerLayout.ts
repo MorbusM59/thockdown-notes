@@ -52,6 +52,9 @@ export type VisualizerLayout = {
   cutout: { column: number; row: number; size: number }
 }
 
+/** Empty rows between the screen's top edge and the top strip's first row. */
+const TOP_ROW_OFFSET = 1
+
 /** The scene's layout for a `widthPx` by `heightPx` slot with square boxes of `boxPx`, and a cutout of about `cutoutPx`. */
 export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx: number, cutoutPx: number): VisualizerLayout {
   const box = Math.max(1, boxPx)
@@ -63,11 +66,12 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   // Both strips have to fit with at least a row between them.
   const stripRows = Math.max(0, Math.min(ceiling, Math.floor((rows - 1) / 2)))
 
-  const creditsRow = stripRows >= 5 ? 0 : null
-  const progressRow = stripRows < 1 ? null : creditsRow === null ? 0 : 2
-  const titleRow = stripRows >= 3 ? progressRow! + 2 : null
+  // The rows start one empty row below the screen's top edge (TOP_ROW_OFFSET).
+  const creditsRow = stripRows >= TOP_ROW_OFFSET + 5 ? TOP_ROW_OFFSET : null
+  const progressRow = stripRows < TOP_ROW_OFFSET + 1 ? null : creditsRow === null ? TOP_ROW_OFFSET : creditsRow + 2
+  const titleRow = stripRows >= TOP_ROW_OFFSET + 3 ? progressRow! + 2 : null
   const spectrumTopRow = rows - stripRows
-  const chromaRow = stripRows >= 6 && columns > 0 ? stripRows - 1 : null
+  const chromaRow = stripRows >= TOP_ROW_OFFSET + 6 && columns > 0 ? stripRows - 1 : null
 
   const middleRows = rows - 2 * stripRows
   const wanted = Math.max(1, Math.round(cutoutPx / box))
