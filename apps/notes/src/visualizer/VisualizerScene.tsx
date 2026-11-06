@@ -79,18 +79,9 @@ import {
 
 /** The empty state's diameter (`--circle-diameter`, editor.css), which the cutout matches. */
 const EMPTY_SCENE_DIAMETER_PX = 220
-<<<<<<< HEAD
 /** Empty boxes between the screen edge and the top strip's rows, on each side. */
 const TOP_ROW_INSET_BOXES = 1
 
-/**
- * The scene's boxes are as wide as the editor's would be with this much
- * x-box padding, whatever the reader's own x-box setting, and as tall as
- * they are wide.
- */
-export const VISUALIZER_GLYPH_SIDE_GAP_PX = 4
-=======
->>>>>>> 853d095 (Give the visualizer its own font setting)
 /** The longest step a frame may take, so a frame after a stall does not drop every bar at once. */
 const MAX_FRAME_SEC = 0.1
 
