@@ -53,7 +53,7 @@ export function ThemeArrows({ layout }: { layout: VisualizerLayout }) {
         <div
           key={`hit-${arrow.key}`}
           className="visualizer-bucket-hit"
-          data-tooltip={arrow.label}
+          aria-label={arrow.label}
           style={{ left: originXPx + arrow.column * boxPx, top: originYPx + arrow.row * boxPx, width: arrow.width * boxPx, height: arrow.height * boxPx }}
           onPointerDown={(event) => {
             if (event.button === 0) arrow.press()
