@@ -10,8 +10,8 @@ import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
 import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
 import { readNowPlaying } from '../sound/nowPlaying'
-import { setMusicEqStrength } from '../sound/musicEqPreset'
-import { DEFAULT_MUSIC_EQ_PRESET, MUSIC_EQ_STRENGTH, MUSIC_EQ_STRENGTH_MAX, MUSIC_EQ_STRENGTH_MIN } from '../shared/musicEqPresets'
+import { SoundstageOptions } from './SoundstageOptions'
+import { MUSIC_EQ_STRENGTH_MAX, MUSIC_EQ_STRENGTH_MIN, NEUTRAL_SOUNDSTAGE, type ActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from '../shared/soundstages'
 import { BRILLIANCE_NEUTRAL } from '@thockdown/audio/liveBrilliance'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
@@ -532,6 +532,13 @@ export interface SidebarOptionsPanelProps {
   musicReverbAmount: number
   musicReverbRoom: number
   musicEqStrength: number
+  setMusicEqStrength: (value: number) => void
+  soundstagePreferences: SoundstagePreferences
+  setSoundstagePreferences: (update: (previous: SoundstagePreferences) => SoundstagePreferences) => void
+  liveSoundstage: SoundstageSettings
+  activeSoundstage: ActiveSoundstage
+  applySoundstage: (settings: SoundstageSettings) => void
+  selectFactorySoundstage: (id: FactorySoundstageId) => void
   pitchJitterAmount: number
   setPitchJitterAmount: (value: number) => void
   audioSpatial: number
@@ -788,6 +795,13 @@ export function SidebarOptionsPanel({
   musicReverbAmount,
   musicReverbRoom,
   musicEqStrength,
+  setMusicEqStrength,
+  soundstagePreferences,
+  setSoundstagePreferences,
+  liveSoundstage,
+  activeSoundstage,
+  applySoundstage,
+  selectFactorySoundstage,
   pitchJitterAmount,
   setPitchJitterAmount,
   audioSpatial,
@@ -2536,7 +2550,7 @@ export function SidebarOptionsPanel({
           {/* Volume, reverb and room are the music bar's levels: set through the
               same rule its controls use (adjusting a muted volume or a bypassed
               reverb turns it back on), so the two places cannot disagree. */}
-          <OptionsSliderRows rows={[1, 3, 3]}>
+          <OptionsSliderRows rows={[1]}>
             <CompactScrollbarSlider
               id="music-volume"
               min={0}
@@ -2548,6 +2562,17 @@ export function SidebarOptionsPanel({
               defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.volume}
               onCommit={(value) => readNowPlaying().setLevel('volume', value)}
             />
+          </OptionsSliderRows>
+          <SoundstageOptions
+            preferences={soundstagePreferences}
+            setPreferences={setSoundstagePreferences}
+            live={liveSoundstage}
+            active={activeSoundstage}
+            apply={applySoundstage}
+            selectFactory={selectFactorySoundstage}
+          />
+          <OptionsSubsectionLabel>Stage settings</OptionsSubsectionLabel>
+          <OptionsSliderRows rows={[3, 3]}>
             <CompactScrollbarSlider
               id="music-eq-strength"
               min={MUSIC_EQ_STRENGTH_MIN}
@@ -2555,8 +2580,8 @@ export function SidebarOptionsPanel({
               step={0.01}
               value={musicEqStrength}
               trackLabel="amp"
-              ariaLabel="Music amp: the strength of the EQ curve the visualizer's solids choose, less bass and air at the left, more to the right"
-              defaultValue={MUSIC_EQ_STRENGTH[DEFAULT_MUSIC_EQ_PRESET]}
+              ariaLabel="Music amp: the strength of the EQ curve, less bass and air at the left, more to the right"
+              defaultValue={NEUTRAL_SOUNDSTAGE.amp}
               onCommit={(value) => setMusicEqStrength(clamp(value, MUSIC_EQ_STRENGTH_MIN, MUSIC_EQ_STRENGTH_MAX))}
             />
             <CompactScrollbarSlider

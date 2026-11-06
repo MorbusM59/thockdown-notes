@@ -399,6 +399,7 @@ describe('StateService app-state field round-trip', () => {
         musicStereoWidth: 1.3,
         musicBrilliance: 0.8,
         musicEqStrength: 0.4,
+        musicSoundstages: { factory: 'wide', custom: { amp: 0.1, brilliance: 0.6, width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { amp: 0.3, brilliance: 0.4, width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
         musicMuted: true,
         musicReverbBypassed: true,
         musicSoundOptionsOpen: true,
@@ -418,6 +419,9 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicStereoWidth).toBe(1.3)
     expect(loaded.menu?.musicBrilliance).toBe(0.8)
     expect(loaded.menu?.musicEqStrength).toBe(0.4)
+    expect(loaded.menu?.musicSoundstages?.factory).toBe('wide')
+    expect(loaded.menu?.musicSoundstages?.custom.room).toBe(0.3)
+    expect(loaded.menu?.musicSoundstages?.saved[0]?.settings.room).toBe(0.7)
   })
 
   // The sixth ("Lounge") bucket needs the persisted-slot allowlist to know

@@ -195,7 +195,7 @@ export function resolveSeekPress(
 }
 
 /**
- * The music's EQ (`musicEqPreset.ts`, the visualizer's solid): one "punchy
+ * The music's EQ (the AMP of a soundstage, `shared/soundstages.ts`): one "punchy
  * rock" curve (a bass shelf, a scooped low-mid, a presence lift and an air
  * shelf), applied all the time at the preset's strength, a share of the
  * gains below. A negative strength turns the curve over: less bass and air.
@@ -420,7 +420,7 @@ export class MusicPlayerService {
     return this.config.volume > 1e-3 ? 1 / this.config.volume : 0;
   }
 
-  /** The EQ's strength (`musicEqPreset.ts`): each band's gain is its `gainDb` times this, moved to over a short time constant. */
+  /** The EQ's strength (the amp, `shared/soundstages.ts`): each band's gain is its `gainDb` times this, moved to over a short time constant. */
   setEqStrength(strength: number): void {
     this.eqStrength = strength;
     const context = this.audioCtx;

@@ -15,7 +15,7 @@ import type {
 import { sanitizeGameSave } from '../src/adventure/save';
 import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
 import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
-import { sanitizeMusicEqPreset, sanitizeMusicEqStrength } from '../src/shared/musicEqPresets';
+import { sanitizeMusicEqStrength, sanitizeSoundstagePreferences } from '../src/shared/soundstages';
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings } from '../src/shared/flowSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
@@ -604,7 +604,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicSoundOptionsOpen: sanitizeOptionalBoolean(input?.musicSoundOptionsOpen),
     musicActiveSlots: sanitizeMusicActiveSlots(input?.musicActiveSlots),
     musicPoolFilter: input?.musicPoolFilter === undefined ? undefined : sanitizePoolFilter(input.musicPoolFilter),
-    musicEqPreset: input?.musicEqPreset === undefined ? undefined : sanitizeMusicEqPreset(input.musicEqPreset),
+    musicSoundstages: input?.musicSoundstages === undefined ? undefined : sanitizeSoundstagePreferences(input.musicSoundstages),
     musicEqStrength: sanitizeMusicEqStrength(input?.musicEqStrength),
     musicLastSongId: sanitizeOptionalNumber(input?.musicLastSongId),
     musicLastPositionSec: sanitizeOptionalNumber(input?.musicLastPositionSec),

@@ -1,4 +1,4 @@
-import type { MusicEqPreset } from './musicEqPresets';
+import type { SoundstagePreferences } from './soundstages';
 import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
 import type { VisualizerFont } from './visualizerFont';
@@ -210,9 +210,9 @@ export interface PersistedMenuState {
   musicActiveSlots?: number[];
   /** The pool's filter (`audioPlayer.ts`'s `MusicPoolFilter`), set in the visualizer. */
   musicPoolFilter?: { artist: string; album: string; title: string };
-  /** The music's EQ preset (`sound/musicEqPreset.ts`), the visualizer's solid. */
-  musicEqPreset?: MusicEqPreset;
-  /** The EQ's strength, the amp (`sound/musicEqPreset.ts`); a solid sets it, the slider moves it. */
+  /** The music's soundstages (`shared/soundstages.ts`): the last factory stage, the custom stage, the saved ones. */
+  musicSoundstages?: SoundstagePreferences;
+  /** The EQ's strength, the amp (`shared/soundstages.ts`). */
   musicEqStrength?: number;
   /**
    * The layout each context last showed: the regular app and the F5

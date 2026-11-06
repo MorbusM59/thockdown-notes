@@ -77,6 +77,24 @@ const OCTAHEDRON: SolidDef = {
   ],
 }
 
+/**
+ * Not a Platonic solid: Kepler's STELLA OCTANGULA, two tetrahedra pushed
+ * through each other, their eight corners a cube's. It names the CUSTOM
+ * soundstage in the visualizer (shared/soundstages.ts), the one stage that
+ * is not a factory one, so it is the one shape that is not a Platonic solid
+ * -- and built from the first of them. Never drawn at random.
+ */
+const STELLA_OCTANGULA: SolidDef = {
+  vertices: [
+    [1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1],
+    [-1, -1, -1], [-1, 1, 1], [1, -1, 1], [1, 1, -1],
+  ],
+  faces: [
+    [0, 1, 2], [0, 2, 3], [0, 3, 1], [1, 3, 2],
+    [4, 5, 6], [4, 6, 7], [4, 7, 5], [5, 7, 6],
+  ],
+}
+
 const PHI = (1 + Math.sqrt(5)) / 2
 
 const ICOSAHEDRON: SolidDef = {
@@ -281,12 +299,16 @@ function buildSolidScene(rand: () => number, forced: SolidDef | null): SolidScen
 const sceneCache = new Map<string, SolidScene>()
 
 /** The solids from fewest faces to most, as the visualizer steps through them (`solidSeed`). */
-const SOLIDS_BY_FACES: readonly SolidDef[] = [TETRAHEDRON, CUBE, OCTAHEDRON, SOLIDS[4], ICOSAHEDRON]
+const SOLIDS_BY_FACES: readonly SolidDef[] = [TETRAHEDRON, CUBE, OCTAHEDRON, SOLIDS[4], ICOSAHEDRON, STELLA_OCTANGULA]
+
+/** `solidSeed`'s index for the custom soundstage's stella octangula, after the five Platonic solids. */
+export const CUSTOM_SOLID_INDEX = 5
 
 /**
  * A seed that shows the `index`-th solid by face count (0 the tetrahedron,
- * 4 the icosahedron), its tumble still drawn from `base`: the visualizer's
- * solid names the music's EQ preset rather than being drawn at random.
+ * 4 the icosahedron, then CUSTOM_SOLID_INDEX), its tumble still drawn from
+ * `base`: the visualizer's solid names the music's soundstage rather than
+ * being drawn at random.
  */
 export function solidSeed(base: string, index: number): string {
   return `${base}#solid=${index}`

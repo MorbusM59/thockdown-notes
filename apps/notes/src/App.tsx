@@ -1,5 +1,5 @@
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
 import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
@@ -15,8 +15,9 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { publishThemeControls } from './visualizer/themeControls'
-import { readMusicEqPreset, readMusicEqStrength, setMusicEqPreset, setMusicEqStrength, subscribeMusicEqPreset } from './sound/musicEqPreset'
-import { sanitizeMusicEqPreset, sanitizeMusicEqStrength } from './shared/musicEqPresets'
+import { DEFAULT_SOUNDSTAGE_PREFERENCES, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeMusicEqStrength, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { publishSoundstageControls } from './sound/soundstageControls'
+import { readNowPlaying } from './sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
@@ -2263,8 +2264,9 @@ function App() {
   }, [soundscapePreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
-  const musicEqPreset = useSyncExternalStore(subscribeMusicEqPreset, readMusicEqPreset)
-  const musicEqStrength = useSyncExternalStore(subscribeMusicEqPreset, readMusicEqStrength)
+  // The amp (the EQ's strength) and the soundstages (shared/soundstages.ts).
+  const [musicEqStrength, setMusicEqStrength] = useState(0)
+  const [soundstagePreferences, setSoundstagePreferences] = useState<SoundstagePreferences>(DEFAULT_SOUNDSTAGE_PREFERENCES)
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
   const [musicRestoreSongId, setMusicRestoreSongId] = useState<number | null>(null)
@@ -3453,7 +3455,7 @@ function App() {
       soundscapes: soundscapePreferences,
       musicActiveSlots,
       musicPoolFilter,
-      musicEqPreset,
+      musicSoundstages: soundstagePreferences,
       musicEqStrength,
       layoutChoices: persistedLayoutChoices,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
@@ -3592,7 +3594,7 @@ function App() {
     soundscapePreferences,
     musicActiveSlots,
     musicPoolFilter,
-    musicEqPreset,
+    soundstagePreferences,
     musicEqStrength,
     persistedLayoutChoices,
     darkMode,
@@ -5455,8 +5457,7 @@ ${markdownHtml}
               )
             }
             if (appState.menu.musicPoolFilter) setMusicPoolFilter(sanitizePoolFilter(appState.menu.musicPoolFilter))
-            if (appState.menu.musicEqPreset) setMusicEqPreset(sanitizeMusicEqPreset(appState.menu.musicEqPreset))
-            // After the solid, which sets its own level: a saved strength overrides it (a save from before the amp has none).
+            setSoundstagePreferences(sanitizeSoundstagePreferences(appState.menu.musicSoundstages))
             const savedEqStrength = sanitizeMusicEqStrength(appState.menu.musicEqStrength)
             if (savedEqStrength !== undefined) setMusicEqStrength(savedEqStrength)
             if (typeof appState.menu.musicLastSongId === 'number') {
@@ -6564,6 +6565,47 @@ ${markdownHtml}
   useEffect(() => {
     musicPlayerService.setConfig({ reverbFoliage: musicReverbFoliage, stereoWidth: musicStereoWidth, brilliance: musicBrilliance })
   }, [musicReverbFoliage, musicStereoWidth, musicBrilliance])
+  useEffect(() => {
+    musicPlayerService.setEqStrength(musicEqStrength)
+  }, [musicEqStrength])
+
+  // SOUNDSTAGES (shared/soundstages.ts): the live settings ARE the stage;
+  // which stage is active is derived from them, never stored.
+  const liveSoundstage = useMemo<SoundstageSettings>(() => ({
+    amp: musicEqStrength,
+    brilliance: musicBrilliance,
+    width: musicStereoWidth,
+    reverb: musicReverbAmount,
+    size: musicReverbRoom,
+    room: musicReverbFoliage,
+  }), [musicEqStrength, musicBrilliance, musicStereoWidth, musicReverbAmount, musicReverbRoom, musicReverbFoliage])
+  // Anything played that is not a factory stage becomes the custom stage.
+  useEffect(() => {
+    setSoundstagePreferences((previous) => customAfterLiveChange(liveSoundstage, previous))
+  }, [liveSoundstage])
+  /** Play a stage: every setting at once. Reverb and size go through the music bar's own rule (a bypassed reverb turns back on). */
+  const applySoundstage = useCallback((settings: SoundstageSettings) => {
+    setMusicEqStrength(settings.amp)
+    setMusicBrilliance(settings.brilliance)
+    setMusicStereoWidth(settings.width)
+    setMusicReverbFoliage(settings.room)
+    readNowPlaying().setLevel('reverb', settings.reverb)
+    readNowPlaying().setLevel('room', settings.size)
+  }, [])
+  const selectFactorySoundstage = useCallback((id: FactorySoundstageId) => {
+    setSoundstagePreferences((previous) => (previous.factory === id ? previous : { ...previous, factory: id }))
+    applySoundstage(factorySoundstage(id).settings)
+  }, [applySoundstage])
+  const activeSoundstage = useMemo(() => matchingSoundstage(liveSoundstage, soundstagePreferences), [liveSoundstage, soundstagePreferences])
+  // The visualizer's solid: the factory stage playing, or the custom shape for
+  // anything else; pressing it steps from the last factory stage chosen.
+  const visualizerSolid = activeSoundstage.kind === 'factory' ? activeSoundstage.id : 'custom'
+  useEffect(() => {
+    publishSoundstageControls({
+      solid: visualizerSolid,
+      step: (direction) => selectFactorySoundstage(steppedFactorySoundstage(soundstagePreferences.factory, direction)),
+    })
+  }, [visualizerSolid, soundstagePreferences.factory, selectFactorySoundstage])
 
   useEffect(() => {
     typingSoundManager.setPitchJitterAmount(pitchJitterAmount)
@@ -8989,6 +9031,13 @@ ${markdownHtml}
                         musicReverbAmount={musicReverbAmount}
                         musicReverbRoom={musicReverbRoom}
                         musicEqStrength={musicEqStrength}
+                        setMusicEqStrength={setMusicEqStrength}
+                        soundstagePreferences={soundstagePreferences}
+                        setSoundstagePreferences={setSoundstagePreferences}
+                        liveSoundstage={liveSoundstage}
+                        activeSoundstage={activeSoundstage}
+                        applySoundstage={applySoundstage}
+                        selectFactorySoundstage={selectFactorySoundstage}
                         pitchJitterAmount={pitchJitterAmount}
                         setPitchJitterAmount={setPitchJitterAmount}
                         audioSpatial={audioSpatial}

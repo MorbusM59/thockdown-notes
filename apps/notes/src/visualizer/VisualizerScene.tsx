@@ -47,9 +47,9 @@ import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
 import { readPanelsShown, subscribePanelsShown } from './panelsShown'
-import { readMusicEqPreset, stepMusicEqPreset, subscribeMusicEqPreset } from '../sound/musicEqPreset'
-import { MUSIC_EQ_PRESETS } from '../shared/musicEqPresets'
-import { solidSeed } from '../editor/EmptyStateScene'
+import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
+import { FACTORY_SOUNDSTAGE_IDS } from '../shared/soundstages'
+import { CUSTOM_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
 import { LevelBars } from './LevelBars'
@@ -488,10 +488,11 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
   } as CSSProperties
 
   const panelsShown = useSyncExternalStore(subscribePanelsShown, readPanelsShown)
-  // The solid in the cutout is the music's EQ preset: a left press steps to
-  // the solid with more faces, a right press back (musicEqPreset.ts).
-  const eqPreset = useSyncExternalStore(subscribeMusicEqPreset, readMusicEqPreset)
-  const solid = solidSeed(sceneSeed, MUSIC_EQ_PRESETS.indexOf(eqPreset))
+  // The solid in the cutout names the music's soundstage (shared/soundstages.ts):
+  // a Platonic solid per factory stage, the stella octangula for a custom one.
+  // A left press steps to the next factory stage, a right press back.
+  const soundstage = useSyncExternalStore(subscribeSoundstageControls, readSoundstageControls)
+  const solid = solidSeed(sceneSeed, soundstage.solid === 'custom' ? CUSTOM_SOLID_INDEX : FACTORY_SOUNDSTAGE_IDS.indexOf(soundstage.solid))
   return (
     <div ref={setScene} className={panelsShown ? 'visualizer-scene' : 'visualizer-scene is-panels-hidden'} tabIndex={-1} data-visualizer-scene="" style={style}>
       {width > 0 && (
@@ -578,10 +579,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
                 height: cutoutRect.size,
                 '--visualizer-face-radius': `${closure?.faceRadiusPx ?? 0}px`,
               } as CSSProperties}
-              onClick={() => stepMusicEqPreset(1)}
+              onClick={() => soundstage.step(1)}
               onContextMenu={(event: ReactMouseEvent) => {
                 event.preventDefault()
-                stepMusicEqPreset(-1)
+                soundstage.step(-1)
               }}
               data-secondary-press="action"
             >
