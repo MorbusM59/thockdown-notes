@@ -82,7 +82,7 @@ export const FACTORY_SOUNDSTAGES: readonly FactorySoundstage[] = [
   { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-scale-balanced', settings: NEUTRAL_SOUNDSTAGE },
   { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { amp: 0.2, brilliance: 0.8, width: 1.5, reverb: 0.2, size: 0.8, room: 0 } },
   { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { amp: 0.5, brilliance: 0.5, width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
-  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-keyboard', settings: { amp: 0.8, brilliance: 0.7, width: 1.5, reverb: 0.3, size: 0, room: 0 } },
+  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-keyboard', settings: { amp: 0.8, brilliance: 0.5, width: 1.2, reverb: 0.2, size: 0, room: 1 } },
 ]
 
 export function factorySoundstage(id: FactorySoundstageId): FactorySoundstage {
