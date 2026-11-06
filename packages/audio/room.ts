@@ -38,8 +38,8 @@
  *   the soundscape also dulls DISTANT sources by it
  *   (@thockdown/soundscape/soundscapeDsp.ts's resolveSoundscapeSpace).
  * - The two sides are DECORRELATED (independent noise per channel), so the
- *   tail surrounds rather than sits in the middle, and the reflections lean
- *   to alternate sides. This is what makes a room WIDE; a width stage on the
+ *   tail surrounds rather than sits in the middle, and every reflection
+ *   arrives at equal level on both sides with its own burst per side; a width stage on the
  *   wet signal (stereoWidth.ts) can widen it further but not create it.
  *
  * LEVEL. The response must be convolved WITHOUT normalisation (a browser's
@@ -193,7 +193,7 @@ export function buildRoomImpulseResponse(
     for (let index = preDelay; index < length; index += 1) data[index] *= scale;
   }
 
-  // Reflections: alternate sides, each quieter by its order and by the air
+  // Reflections: equal on both sides, each quieter by its order and by the air
   // it crossed (the tail's own decay), smeared by foliage into a burst that
   // keeps its energy. Their level is a gain on what is sent to the space.
   const gap = roomReflectionGapSec(size, space.echoGapMaxSec) * sampleRate;
@@ -208,7 +208,11 @@ export function buildRoomImpulseResponse(
     // A Hann-windowed noise burst of unit energy, drawn afresh for each side
     // so a reflection arrives at both ears decorrelated, like the tail: at the
     // minimum smear it is nearly a click, at full foliage a soft swell.
-    const lean = order % 2 === 0 ? [1, 0.55] : [0.55, 1];
+    // Equal on both sides. Reflections used to LEAN to alternate sides
+    // (1 : 0.55), and the first, loudest one is tens of milliseconds behind
+    // the direct sound -- the precedence (Haas) range, where a louder early
+    // copy on one side pulls the whole image to it and the other side reads
+    // as a delayed, distant copy. Width comes from the decorrelated bursts.
     channels.forEach((data, side) => {
       let energy = 0;
       for (let index = 0; index < burstLength; index += 1) {
@@ -217,7 +221,7 @@ export function buildRoomImpulseResponse(
         energy += burst[index] * burst[index];
       }
       const norm = energy > 0 ? 1 / Math.sqrt(energy) : 0;
-      for (let index = 0; index < burstLength; index += 1) data[at + index] += level * lean[side] * burst[index] * norm;
+      for (let index = 0; index < burstLength; index += 1) data[at + index] += level * burst[index] * norm;
     });
   }
 
