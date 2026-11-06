@@ -7,7 +7,7 @@
  * chain from the browser's own nodes (soundscapeLivePlayback.ts), from the
  * numbers exported here, and the two were measured equal (apps/soundscapes/README.md).
  *
- *   direct --------------------------------------+
+ *   direct x direct gain -----------------------+
  *   send -> space (convolution) x return gain ---+-> x MIX_GAIN -> compressor -> brilliance -> out
  *
  * What it does NOT do is the listener's master volume and the on/off fade:
@@ -39,6 +39,19 @@ export const MIX_BLOCK = BLOCK;
 export const SOUNDSCAPE_MIX_GAIN = 0.5;
 /** The space's return at `amount` 1. */
 export const SOUNDSCAPE_SPACE_RETURN = 1.2;
+/** How much of the DIRECT sound `amount` 1 takes away: amount is a dry/wet balance, not only a return level. */
+export const SOUNDSCAPE_SPACE_DRY_DUCK = 0.6;
+
+/**
+ * What the space's AMOUNT does, on both platforms: the room's return rises
+ * and the direct sound falls with it, so 0 is bone dry and 1 is mostly room.
+ * A return alone was nearly inaudible, because a reverberated noise layer
+ * sounds like the same noise a little louder.
+ */
+export function soundscapeSpaceGains(amount: number): { direct: number; wet: number } {
+  const a = Number.isFinite(amount) ? Math.max(0, Math.min(1, amount)) : 0;
+  return { direct: 1 - (SOUNDSCAPE_SPACE_DRY_DUCK * a), wet: SOUNDSCAPE_SPACE_RETURN * a };
+}
 
 /**
  * Gentle, for a soundscape whose own volume leaves it loud enough to reach
@@ -65,6 +78,8 @@ export interface MixSnapshot {
   readonly pendingRoom: SoundscapeSpaceSettings | null;
   readonly returnGain: number;
   readonly returnTarget: number;
+  readonly directGain: number;
+  readonly directTarget: number;
   readonly brilliance: number | null;
   readonly makeup: number;
   readonly makeupTarget: number;
@@ -80,6 +95,9 @@ export class SoundscapeMix {
   private pendingRoom: SoundscapeSpaceSettings | null = null;
   private returnGain = 0;
   private returnTarget = 0;
+  /** NaN until the first space, which is then taken at once rather than glided to from nothing. */
+  private directGain = Number.NaN;
+  private directTarget = 1;
   /** Brilliance (@thockdown/audio/brilliance.ts): a filter per band on the mix, then the makeup that keeps its loudness. */
   private readonly toneFilters = BRILLIANCE_BANDS.map(() => new StereoBiquad());
   private brilliance: number | null = null;
@@ -99,7 +117,10 @@ export class SoundscapeMix {
    * soundscapeRenderAhead.ts, THE ROOM). A newer room replaces one not yet built.
    */
   setSpace(space: SoundscapeSpaceSettings): void {
-    this.returnTarget = SOUNDSCAPE_SPACE_RETURN * space.amount;
+    const gains = soundscapeSpaceGains(space.amount);
+    this.returnTarget = gains.wet;
+    this.directTarget = gains.direct;
+    if (Number.isNaN(this.directGain)) this.directGain = gains.direct;
     if (space.brilliance !== this.brilliance) {
       const curve = brillianceCurve(space.brilliance, this.sampleRate);
       BRILLIANCE_BANDS.forEach((band, index) => {
@@ -123,6 +144,8 @@ export class SoundscapeMix {
       pendingRoom: this.pendingRoom,
       returnGain: this.returnGain,
       returnTarget: this.returnTarget,
+      directGain: this.directGain,
+      directTarget: this.directTarget,
       brilliance: this.brilliance,
       makeup: this.makeup,
       makeupTarget: this.makeupTarget,
@@ -139,6 +162,8 @@ export class SoundscapeMix {
     this.pendingRoom = snapshot.pendingRoom;
     this.returnGain = snapshot.returnGain;
     this.returnTarget = snapshot.returnTarget;
+    this.directGain = snapshot.directGain;
+    this.directTarget = snapshot.directTarget;
     this.brilliance = snapshot.brilliance;
     this.makeup = snapshot.makeup;
     this.makeupTarget = snapshot.makeupTarget;
@@ -168,12 +193,16 @@ export class SoundscapeMix {
     this.convolvers[1].process(send[1], this.wetRight);
     const from = this.returnGain;
     const step = (this.returnTarget - from) / MIX_BLOCK;
+    const directFrom = Number.isNaN(this.directGain) ? this.directTarget : this.directGain;
+    const directStep = (this.directTarget - directFrom) / MIX_BLOCK;
     for (let index = 0; index < MIX_BLOCK; index += 1) {
       const wet = from + (step * (index + 1));
-      out[0][index] = SOUNDSCAPE_MIX_GAIN * (direct[0][index] + (wet * this.wetLeft[index]));
-      out[1][index] = SOUNDSCAPE_MIX_GAIN * (direct[1][index] + (wet * this.wetRight[index]));
+      const dry = directFrom + (directStep * (index + 1));
+      out[0][index] = SOUNDSCAPE_MIX_GAIN * ((dry * direct[0][index]) + (wet * this.wetLeft[index]));
+      out[1][index] = SOUNDSCAPE_MIX_GAIN * ((dry * direct[1][index]) + (wet * this.wetRight[index]));
     }
     this.returnGain = this.returnTarget;
+    this.directGain = this.directTarget;
     this.compressor.process(out[0], out[1]);
     for (const filter of this.toneFilters) {
       filter.process(0, out[0]);

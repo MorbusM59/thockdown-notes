@@ -17,7 +17,7 @@
  *
  * One VOICE per soundscape heard:
  *
- *   generator out 0 (direct) ----------------------------------> voice gain
+ *   generator out 0 (direct) -> direct gain --------------------> voice gain
  *   generator out 1 (send) -> return gain -> room (@thockdown/audio/liveRoom.ts) -> voice gain
  *   every voice gain -> mix gain -> bus compressor -> brilliance -> volume -> shared limiter
  *
@@ -36,7 +36,7 @@ import { LiveRoom } from '@thockdown/audio/liveRoom';
 import type { SoundscapePlayback, SoundscapePlaybackHandlers } from './SoundscapeEngine';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
 import { BRILLIANCE_GLIDE_SEC, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
-import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, SOUNDSCAPE_SPACE_RETURN } from './soundscapeMix';
+import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, soundscapeSpaceGains } from './soundscapeMix';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
 import generatorUrl from './soundscape-generator?url';
 
@@ -74,6 +74,7 @@ class Voice {
   readonly gain: GainNode;
   private readonly generator: AudioWorkletNode;
   private readonly returnGain: GainNode;
+  private readonly directGain: GainNode;
   private readonly room: LiveRoom;
   private returnTarget = -1;
 
@@ -92,7 +93,9 @@ class Voice {
     this.generator.onprocessorerror = () => onFailure('Soundscape generator stopped unexpectedly');
     this.gain = context.createGain();
     this.gain.connect(destination);
-    this.generator.connect(this.gain, 0);
+    this.directGain = context.createGain();
+    this.generator.connect(this.directGain, 0);
+    this.directGain.connect(this.gain);
     this.returnGain = context.createGain();
     this.returnGain.gain.value = 0;
     this.generator.connect(this.returnGain, 1);
@@ -108,11 +111,15 @@ class Voice {
   configure(message: ConfigureMessage): void {
     this.generator.port.postMessage(message.generator);
     const space = message.space;
-    const returnTarget = SOUNDSCAPE_SPACE_RETURN * space.amount;
+    const gains = soundscapeSpaceGains(space.amount);
+    const returnTarget = gains.wet;
     if (returnTarget !== this.returnTarget) {
       const now = this.context.currentTime;
-      if (this.returnTarget < 0) this.returnGain.gain.setValueAtTime(returnTarget, now);
-      else this.returnGain.gain.setTargetAtTime(returnTarget, now, RETURN_TIME_CONSTANT_SEC);
+      const first = this.returnTarget < 0;
+      for (const [param, target] of [[this.returnGain.gain, returnTarget], [this.directGain.gain, gains.direct]] as const) {
+        if (first) param.setValueAtTime(target, now);
+        else param.setTargetAtTime(target, now, RETURN_TIME_CONSTANT_SEC);
+      }
       this.returnTarget = returnTarget;
     }
     this.room.setRoom(space);
@@ -130,6 +137,7 @@ class Voice {
     this.generator.port.postMessage({ type: 'stop' });
     this.generator.disconnect();
     this.returnGain.disconnect();
+    this.directGain.disconnect();
     this.room.dispose();
     this.gain.disconnect();
   }

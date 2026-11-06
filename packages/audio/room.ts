@@ -63,6 +63,23 @@ export interface RoomShape {
 export const ROOM_DECAY_MIN_SEC = 0.35;
 export const ROOM_DECAY_MAX_SEC = 7;
 export const ROOM_MAX_LENGTH_SEC = 8;
+/**
+ * FOLIAGE'S DRY HALF: what dense surroundings do to a sound heard NEAR, not
+ * through the room -- a gentle low-pass (FOLIAGE_NEAR_CUTOFF_OPEN_HZ in the
+ * open down to FOLIAGE_NEAR_CUTOFF_DENSE_HZ among dense, soft obstacles).
+ * The room's response carries the wet half. A consumer applies this to its
+ * direct sound so foliage is heard whatever the reverb's amount: the
+ * soundscape at a layer's near end (soundscapeDsp.ts's resolveSoundscapeSpace,
+ * which carries on to the far end), the music player on the whole track.
+ */
+export const FOLIAGE_NEAR_CUTOFF_OPEN_HZ = 18000;
+export const FOLIAGE_NEAR_CUTOFF_DENSE_HZ = 7000;
+
+export function foliageNearCutoffHz(foliage: number): number {
+  const dense = Number.isFinite(foliage) ? Math.max(0, Math.min(1, foliage)) : 0;
+  return logLerp(FOLIAGE_NEAR_CUTOFF_OPEN_HZ, FOLIAGE_NEAR_CUTOFF_DENSE_HZ, dense);
+}
+
 /** How long a new room takes to fade in over the old, wherever it is played (liveRoom.ts, and Android's soundscapeMix.ts). */
 export const ROOM_CROSSFADE_SEC = 0.35;
 const HIGH_BAND_CROSSOVER_HZ = 1500;

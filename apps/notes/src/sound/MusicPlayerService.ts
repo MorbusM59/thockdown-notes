@@ -1,4 +1,5 @@
 import { LiveRoom } from '@thockdown/audio/liveRoom';
+import { foliageNearCutoffHz } from '@thockdown/audio/room';
 import { StereoWidth } from '@thockdown/audio/stereoWidth';
 import { BRILLIANCE_NEUTRAL, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
@@ -7,7 +8,7 @@ import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutpu
  * MusicPlayerService — Web Audio API based music playback.
  *
  * Signal chain:
- *   HTMLAudioElement → MediaElementSourceNode → EQ → brilliance → GainNode ─┬→ dryGain ─────────┬→ StereoWidth → limiter → destination
+ *   HTMLAudioElement → MediaElementSourceNode → EQ → brilliance → foliage low-pass → GainNode ─┬→ dryGain ─────────┬→ StereoWidth → limiter → destination
  *                                                               └→ LiveRoom → wetGain ┘
  *
  * The limiter is the app's shared output stage (audioOutputBus.ts), which the
@@ -220,6 +221,8 @@ export class MusicPlayerService {
   private room: LiveRoom | null = null;
   private width: StereoWidth | null = null;
   private brilliance: LiveBrilliance | null = null;
+  /** Foliage's dry half (room.ts's foliageNearCutoffHz): the whole track among the trees, not only its reverb. */
+  private foliageFilter: BiquadFilterNode | null = null;
   private eqBands: BiquadFilterNode[] = [];
   private eqStrength = 0;
   private config: MusicPlayerConfig = { ...DEFAULT_MUSIC_PLAYER_CONFIG };
@@ -357,9 +360,13 @@ export class MusicPlayerService {
       this.width = new StereoWidth(context, this.config.stereoWidth);
       this.brilliance = new LiveBrilliance(context);
       this.brilliance.set(this.config.brilliance);
+      this.foliageFilter = context.createBiquadFilter();
+      this.foliageFilter.type = 'lowpass';
+      this.foliageFilter.Q.value = Math.SQRT1_2;
+      this.foliageFilter.frequency.value = foliageNearCutoffHz(this.config.reverbFoliage);
 
       // The EQ sits between the source and the volume: element → each
-      // AMP_EQ_BANDS filter in turn → brilliance → gainNode.
+      // AMP_EQ_BANDS filter in turn → brilliance → foliage low-pass → gainNode.
       this.eqBands = AMP_EQ_BANDS.map((band) => {
         const filter = context.createBiquadFilter();
         filter.type = band.type;
@@ -370,7 +377,8 @@ export class MusicPlayerService {
       });
       for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
       this.eqBands[this.eqBands.length - 1].connect(this.brilliance.input);
-      this.brilliance.output.connect(this.gainNode);
+      this.brilliance.output.connect(this.foliageFilter);
+      this.foliageFilter.connect(this.gainNode);
 
       // gainNode → dryGain, and gainNode → room → wetGain; both → width → limiter
       this.gainNode.connect(this.dryGain);
@@ -448,6 +456,9 @@ export class MusicPlayerService {
     this.room?.setRoom(this.roomShape());
     if (cfg.stereoWidth !== undefined && cfg.stereoWidth !== prev.stereoWidth) this.width?.setWidth(this.config.stereoWidth);
     this.brilliance?.set(this.config.brilliance);
+    if (this.foliageFilter && this.audioCtx && cfg.reverbFoliage !== undefined && cfg.reverbFoliage !== prev.reverbFoliage) {
+      this.foliageFilter.frequency.setTargetAtTime(foliageNearCutoffHz(this.config.reverbFoliage), this.audioCtx.currentTime, 0.05);
+    }
   }
 
   private roomShape(): { size: number; foliage: number } {

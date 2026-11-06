@@ -4,6 +4,7 @@
  * thread than per block in the generator -- gains, the distance rule, the
  * noise cycle and filter-gain tables, the chimes' tuning.
  */
+import { foliageNearCutoffHz } from '@thockdown/audio/room';
 import {
   SOUNDSCAPE_NOISE_SWEEP_OCTAVES,
   SOUNDSCAPE_RAIN_DROPS_MAX_PER_SEC,
@@ -56,15 +57,13 @@ export interface SoundscapeSpace {
  * slightly obstructed. Near things crisp and far things soft is the
  * strongest single cue of standing among trees.
  */
-const DISTANCE_CUTOFF_NEAR_OPEN_HZ = 18000;
-const DISTANCE_CUTOFF_NEAR_DENSE_HZ = 7000;
 const DISTANCE_CUTOFF_FAR_OPEN_HZ = 4000;
 const DISTANCE_CUTOFF_FAR_DENSE_HZ = 700;
 
 export function resolveSoundscapeSpace(distance: number, foliage: number): SoundscapeSpace {
   const bounded = Number.isFinite(distance) ? Math.max(0, Math.min(1, distance)) : 0;
   const dense = Number.isFinite(foliage) ? Math.max(0, Math.min(1, foliage)) : 0;
-  const near = DISTANCE_CUTOFF_NEAR_OPEN_HZ * ((DISTANCE_CUTOFF_NEAR_DENSE_HZ / DISTANCE_CUTOFF_NEAR_OPEN_HZ) ** dense);
+  const near = foliageNearCutoffHz(dense);
   const far = DISTANCE_CUTOFF_FAR_OPEN_HZ * ((DISTANCE_CUTOFF_FAR_DENSE_HZ / DISTANCE_CUTOFF_FAR_OPEN_HZ) ** dense);
   return {
     cutoffHz: near * ((far / near) ** bounded),
