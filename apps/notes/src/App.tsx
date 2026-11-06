@@ -7709,20 +7709,11 @@ ${markdownHtml}
           filterFields.type('title', event.key, fresh)
           return
         }
-        const layoutChord = matchShortcut(event, 'visualizerNextLayout')
-          ? 1
-          : matchShortcut(event, 'visualizerPreviousLayout') ? -1 : 0
-        if (layoutChord !== 0 && readPanelsShown() && filterFields) {
+        // Layouts and light / dark are F3 and F4 here as everywhere; Tab
+        // only enters the filter fields while the panels are up.
+        if (matchShortcut(event, 'visualizerFilterField') && readPanelsShown() && filterFields) {
           event.preventDefault()
           filterFields.focus('title')
-          return
-        }
-        if (layoutChord !== 0 || matchShortcut(event, 'visualizerLightDark')) {
-          event.preventDefault()
-          if (!event.repeat) {
-            if (layoutChord !== 0) stepLayoutPreset(layoutChord)
-            else toggleUiMode()
-          }
           return
         }
       }

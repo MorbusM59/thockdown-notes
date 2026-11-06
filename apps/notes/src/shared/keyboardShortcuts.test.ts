@@ -48,9 +48,8 @@ describe('keyboard shortcut declarations', () => {
   })
 
   it('reserves visualizer layout and audio keys for their declared actions', () => {
-    expect(matchShortcut(press('Tab'), 'visualizerNextLayout')).not.toBeNull()
-    expect(matchShortcut(press('Tab', { shift: true }), 'visualizerPreviousLayout')).not.toBeNull()
-    expect(matchShortcut(press('Tab', { shift: true }), 'visualizerNextLayout')).toBeNull()
+    expect(matchShortcut(press('Tab'), 'visualizerFilterField')).not.toBeNull()
+    expect(matchShortcut(press('Tab', { shift: true }), 'visualizerFilterField')).not.toBeNull()
     expect(matchShortcut(press(' ', { code: 'Space' }), 'visualizerPlayPause')).not.toBeNull()
     expect(matchShortcut(press('ArrowLeft'), 'visualizerSeekBack')).not.toBeNull()
     expect(matchShortcut(press('ArrowRight'), 'visualizerSeekForward')).not.toBeNull()

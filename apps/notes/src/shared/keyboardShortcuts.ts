@@ -183,9 +183,7 @@ export const SHORTCUTS = {
   visualizer: { section: 'layout', chords: [{ key: 'F5' }], label: 'Visualizer' },
   // The window control's right click, as a key; unlisted like the game.
   adventure: { section: 'layout', chords: [{ key: 'F8' }], label: 'ThockQuest', unlisted: true },
-  visualizerNextLayout: { section: 'layout', chords: [{ key: 'Tab' }], label: 'Next layout, or the next filter field with the panels up (visualizer)' },
-  visualizerPreviousLayout: { section: 'layout', chords: [{ key: 'Tab', shift: true }], label: 'Previous layout, or the previous filter field with the panels up (visualizer)' },
-  visualizerLightDark: { section: 'layout', chords: [{ key: 'Enter' }], label: 'Light / dark (visualizer)' },
+  visualizerFilterField: { section: 'layout', chords: [{ key: 'Tab' }, { key: 'Tab', shift: true }], label: 'Into the filter fields, panels up (visualizer)' },
   visualizerPlayPause: { section: 'layout', chords: [{ code: 'Space' }], label: 'Play / pause music (visualizer)', matchedBy: 'visualizer-audio' },
   visualizerSeekBack: { section: 'layout', chords: [{ key: 'ArrowLeft' }], label: 'Seek back / previous song (visualizer)', matchedBy: 'visualizer-audio' },
   visualizerSeekForward: { section: 'layout', chords: [{ key: 'ArrowRight' }], label: 'Seek forward / next song (visualizer)', matchedBy: 'visualizer-audio' },
