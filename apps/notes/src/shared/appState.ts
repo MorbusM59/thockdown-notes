@@ -201,6 +201,14 @@ export interface PersistedMenuState {
   musicPoolFilter?: { artist: string; album: string; title: string };
   /** The music's EQ preset (`sound/musicEqPreset.ts`), the visualizer's solid. */
   musicEqPreset?: MusicEqPreset;
+  /**
+   * The layout each context last showed: the regular app and the F3
+   * visualizer each remember a light/dark mode and the loadout entry active
+   * in it, and entering or leaving the visualizer switches between them. The
+   * one in effect is the live layout, so it is written from `uiMode` and the
+   * active entry when the snapshot is built; the other is the stored memory.
+   */
+  layoutChoices?: LayoutChoices;
   /** Last-played song's DB id, its playback position, and whether it was playing — restored on next launch. */
   musicLastSongId?: number;
   musicLastPositionSec?: number;
@@ -305,3 +313,7 @@ export interface AppStateApi {
   loadWindowState(): Promise<WindowState>;
   saveWindowState(state: WindowState): Promise<void>;
 }
+
+/** A remembered layout: a light/dark mode and the loadout entry id active in it. */
+export type LayoutChoice = { uiMode: 'light' | 'dark'; loadoutId: number };
+export type LayoutChoices = { app?: LayoutChoice; visualizer?: LayoutChoice };

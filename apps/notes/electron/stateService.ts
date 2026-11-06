@@ -4,6 +4,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
   AppState,
+  LayoutChoice,
+  LayoutChoices,
   PersistedMenuState,
   PersistedSidebarViewState,
   PersistedViewportState,
@@ -159,6 +161,20 @@ function sanitizeUiMode(input: unknown): 'light' | 'dark' {
     return input;
   }
   return DEFAULT_APP_STATE.menu!.uiMode ?? 'light';
+}
+
+function sanitizeLayoutChoice(input: unknown): LayoutChoice | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const { uiMode, loadoutId } = input as Partial<LayoutChoice>;
+  if (uiMode !== 'light' && uiMode !== 'dark') return undefined;
+  if (typeof loadoutId !== 'number' || !Number.isInteger(loadoutId) || loadoutId === 0) return undefined;
+  return { uiMode, loadoutId };
+}
+
+function sanitizeLayoutChoices(input: unknown): LayoutChoices | undefined {
+  if (!input || typeof input !== 'object') return undefined;
+  const { app, visualizer } = input as Record<string, unknown>;
+  return { app: sanitizeLayoutChoice(app), visualizer: sanitizeLayoutChoice(visualizer) };
 }
 
 const VALID_VIEW_STYLES = [
@@ -557,6 +573,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     glaze: sanitizeGlazeSettings(input?.glaze, DEFAULT_APP_STATE.menu!.glaze ?? DEFAULT_GLAZE_SETTINGS),
     boxBevel: sanitizeBoxBevel(input?.boxBevel),
     uiMode: sanitizeUiMode(input?.uiMode),
+    layoutChoices: sanitizeLayoutChoices(input?.layoutChoices),
     textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
     textureMaterials: sanitizeTextureMaterials(input?.textureMaterials),
     audioKeyVolume: sanitizeOptionalNumber(input?.audioKeyVolume),

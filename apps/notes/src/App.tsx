@@ -33,7 +33,7 @@ import {
   DEFAULT_TYPING_SOUND_SET,
   typingSoundManager,
 } from './sound/TypingSoundManager'
-import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
+import type { LayoutChoice, LayoutChoices, PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
 import {
@@ -2153,6 +2153,10 @@ function App() {
   const [wheelStepRows, setWheelStepRowsState] = useState(() => getWheelStepRows())
   const [wheelStepLines, setWheelStepLinesState] = useState(() => getWheelStepLines())
   const [uiMode, setUiMode] = useState<UiLoadoutMode>('light')
+  // The app's remembered loadout entry, read once at launch (see the
+  // loadout list effect) so a session that quit inside the visualizer opens
+  // on the app's layout rather than the visualizer's.
+  const launchAppLayoutIdRef = useRef<number | null>(null)
   const [uiLoadoutEntries, setUiLoadoutEntries] = useState<UiLoadoutEntry[]>([])
   const [lastCustomIdByMode, setLastCustomIdByMode] = useState<{ light: number; dark: number }>({
     light: LOADOUT_DEFAULT_CUSTOM_ID_ABS,
@@ -3119,6 +3123,52 @@ function App() {
       : (current + direction + cycle.length) % cycle.length
     void selectLoadoutPreset(cycle[next].id)
   }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
+  // --- Separate layouts for the app and the visualizer -------------------
+  // The regular app and the visualizer each remember the layout they last
+  // showed (a light/dark mode and the entry active in it). Only one is in
+  // effect at a time, and the one in effect IS the live layout (uiMode and
+  // the active entry), so `layoutChoices` holds the other one: written from
+  // the live layout at the moment the visualizer is entered or left, and
+  // the stored choice of the side being entered is applied. The snapshot
+  // fills the side in effect from the live layout, so a change made while
+  // in either one is remembered with no tracking of its own. Detected on
+  // the flip of isVisualizerMode rather than in toggleVisualizerMode, so
+  // every way out (F3, Escape, the OS leaving full screen) swaps alike.
+  const [layoutChoices, setLayoutChoices] = useState<LayoutChoices>({})
+  const liveLayoutChoice = useMemo<LayoutChoice | undefined>(
+    () => (activeEntryForCurrentMode ? { uiMode, loadoutId: activeEntryForCurrentMode.id } : undefined),
+    [uiMode, activeEntryForCurrentMode],
+  )
+  const applyLayoutChoice = useCallback((choice: LayoutChoice | undefined) => {
+    if (!choice) return
+    if (choice.uiMode === liveLayoutChoice?.uiMode && choice.loadoutId === liveLayoutChoice.loadoutId) return
+    if (choice.uiMode !== uiMode) setUiMode(choice.uiMode)
+    const sign = modeSign(choice.uiMode)
+    if (uiLoadoutEntries.some((entry) => entry.id === choice.loadoutId)) {
+      void selectLoadoutPreset(choice.loadoutId)
+      return
+    }
+    // The remembered entry is gone (a deleted custom slot): keep the mode
+    // and show whatever that mode has active, as switching modes does.
+    const active = uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
+    if (active && choice.uiMode !== uiMode) applyEntryToLiveState(active)
+  }, [liveLayoutChoice, uiMode, uiLoadoutEntries, selectLoadoutPreset, applyEntryToLiveState])
+  const wasVisualizerModeRef = useRef(false)
+  useEffect(() => {
+    if (wasVisualizerModeRef.current === isVisualizerMode) return
+    wasVisualizerModeRef.current = isVisualizerMode
+    const leaving: keyof LayoutChoices = isVisualizerMode ? 'app' : 'visualizer'
+    const entering: keyof LayoutChoices = isVisualizerMode ? 'visualizer' : 'app'
+    setLayoutChoices((previous) => ({ ...previous, [leaving]: liveLayoutChoice ?? previous[leaving] }))
+    applyLayoutChoice(layoutChoices[entering])
+  }, [isVisualizerMode, liveLayoutChoice, layoutChoices, applyLayoutChoice])
+  const persistedLayoutChoices = useMemo<LayoutChoices>(
+    () => (isVisualizerMode
+      ? { ...layoutChoices, visualizer: liveLayoutChoice ?? layoutChoices.visualizer }
+      : { ...layoutChoices, app: liveLayoutChoice ?? layoutChoices.app }),
+    [isVisualizerMode, layoutChoices, liveLayoutChoice],
+  )
+
   // The visualizer's arrow boxes (visualizer/ThemeArrows.tsx) step the
   // layouts and switch light and dark through these.
   useEffect(() => {
@@ -3147,6 +3197,12 @@ function App() {
         if (cancelled) return
         setUiLoadoutEntries(result.entries)
         setLastCustomIdByMode(result.lastCustomIdByMode)
+        const launchId = launchAppLayoutIdRef.current
+        const remembered = result.entries.find((entry) => entry.id === launchId)
+        if (remembered && !remembered.isActive) {
+          void selectLoadoutPreset(remembered.id)
+          return
+        }
         const sign = modeSign(uiMode)
         const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
         if (active) applyEntryToLiveState(active)
@@ -3334,6 +3390,7 @@ function App() {
       musicActiveSlots,
       musicPoolFilter,
       musicEqPreset,
+      layoutChoices: persistedLayoutChoices,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
       // Live while a track plays, so a save at any moment (quit included)
       // has the position as it is; otherwise where the pause or the track
@@ -3467,6 +3524,7 @@ function App() {
     musicActiveSlots,
     musicPoolFilter,
     musicEqPreset,
+    persistedLayoutChoices,
     darkMode,
     uiMode,
     filterInvert,
@@ -5277,7 +5335,13 @@ ${markdownHtml}
             ))
             setGlazeSettings(sanitizeGlazeSettings(appState.menu.glaze, DEFAULT_GLAZE_SETTINGS))
             setBoxBevel(sanitizeBoxBevel(appState.menu.boxBevel))
-            setUiMode(appState.menu.uiMode === 'dark' ? 'dark' : 'light')
+            // A launch always opens in the regular app, so it shows the app's
+            // remembered layout even if the last session quit inside the
+            // visualizer (whose layout was the live one then).
+            const restoredLayoutChoices = appState.menu.layoutChoices ?? {}
+            setLayoutChoices(restoredLayoutChoices)
+            launchAppLayoutIdRef.current = restoredLayoutChoices.app?.loadoutId ?? null
+            setUiMode(restoredLayoutChoices.app?.uiMode ?? (appState.menu.uiMode === 'dark' ? 'dark' : 'light'))
             applyDarkModePreset(appState.menu.darkMode ?? 'none')
             setFilterInvert(appState.menu.filterInvert ?? 0)
             setFilterSepia(appState.menu.filterSepia ?? 0)
