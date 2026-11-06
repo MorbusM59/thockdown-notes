@@ -12,6 +12,7 @@ import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type MusicPoolFilter } from './shared/audioPlayer'
 import { togglePanelsShown } from './visualizer/panelsShown'
+import { publishThemeControls } from './visualizer/themeControls'
 import { readMusicEqPreset, setMusicEqPreset, subscribeMusicEqPreset } from './sound/musicEqPreset'
 import { sanitizeMusicEqPreset } from './shared/musicEqPresets'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
@@ -3118,6 +3119,11 @@ function App() {
       : (current + direction + cycle.length) % cycle.length
     void selectLoadoutPreset(cycle[next].id)
   }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
+  // The visualizer's arrow boxes (visualizer/ThemeArrows.tsx) step the
+  // layouts and switch light and dark through these.
+  useEffect(() => {
+    publishThemeControls({ isDark: uiMode === 'dark', stepLayout: stepLayoutPreset, toggleUiMode })
+  }, [uiMode, stepLayoutPreset, toggleUiMode])
 
   // Runs once persistence has fully restored appState (including uiMode,
   // set deep inside the bootstrap effect further below). Firing this on

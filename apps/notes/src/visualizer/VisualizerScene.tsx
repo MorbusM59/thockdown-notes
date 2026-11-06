@@ -52,6 +52,7 @@ import { solidSeed } from '../editor/EmptyStateScene'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
 import { LevelBars } from './LevelBars'
+import { ThemeArrows } from './ThemeArrows'
 import { dropWideGlyphs } from './cellGlyphs'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
 import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
@@ -527,6 +528,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
           {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
           {levelArea && <LevelBars layout={layout} area={levelArea} />}
+          <ThemeArrows layout={layout} />
 
           {layout.progressRow !== null && (
             <div
