@@ -176,8 +176,9 @@ export const SHORTCUTS = {
   newNote: { section: 'content', chords: [{ key: 'n', ctrl: true }], label: 'New note' },
   newNoteFromClipboard: { section: 'content', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'with pasted title' },
   toggleSidebar: { section: 'layout', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
-  lightDark: { section: 'layout', chords: [{ key: 'F2' }], label: 'Light / dark mode' },
-  doubleSize: { section: 'layout', chords: [{ key: 'F3' }], label: 'Double size mode' },
+  doubleSize: { section: 'layout', chords: [{ key: 'F2' }], label: 'Double size mode' },
+  lightDark: { section: 'layout', chords: [{ key: 'F3' }], label: 'Light / dark mode' },
+  nextLayout: { section: 'layout', chords: [{ key: 'F4' }], label: 'Next layout of this mode' },
   immersive: { section: 'layout', chords: [{ key: 'F11' }, { code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
   visualizer: { section: 'layout', chords: [{ key: 'F5' }], label: 'Visualizer' },
   // The window control's right click, as a key; unlisted like the game.

@@ -7775,11 +7775,14 @@ ${markdownHtml}
 
       // Immersive mode, from anywhere: Ctrl+Shift+Space, and the same key to
       // leave. A held key toggles once, not per repeat.
-      // F2 light / dark, F3 double size, F8 the adventure (the User Guide
-      // control's right click). Repeats ignored, so a held key toggles once.
+      // F2 double size, F3 light / dark, F4 the next layout of this mode
+      // (its presets, then its custom slots, as the visualizer's Space
+      // steps), F8 the adventure (the User Guide control's right click).
+      // Repeats ignored, so a held key acts once.
       const toggleChord: Array<[ShortcutId, () => void]> = [
-        ['lightDark', toggleUiMode],
         ['doubleSize', handleToggleDoubleSizeMode],
+        ['lightDark', toggleUiMode],
+        ['nextLayout', () => stepLayoutPreset(1)],
         ['adventure', () => { void handleHelpGuideContextMenu() }],
       ]
       for (const [id, run] of toggleChord) {
