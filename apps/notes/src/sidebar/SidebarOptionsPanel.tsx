@@ -2510,10 +2510,10 @@ export function SidebarOptionsPanel({
           <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
             <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
             <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F3), shown on each hit of its mix" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit of its mix, in the visualizer mode (F3)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.accentColor || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum, the progress track and the song text in the visualizer mode (F3). Until picked it follows the caret colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, accentColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.letterboxColor || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F3). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, letterboxColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F5), shown on each hit of its mix" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit of its mix, in the visualizer mode (F5)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.accentColor || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum, the progress track and the song text in the visualizer mode (F5). Until picked it follows the caret colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, accentColor: css } }))} />
+            <ColorTargetButton color={visualizer.immersive.letterboxColor || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, letterboxColor: css } }))} />
           </div>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[1, 1]}>
@@ -2562,7 +2562,7 @@ export function SidebarOptionsPanel({
                 step={0.005}
                 value={visualizer.immersive.glazeStrength}
                 trackLabel="glaze"
-                tooltipLabel="Strength of the glaze that sways in the visualizer mode (F3): every linear and radial layer of this layout's glaze, at this strength"
+                tooltipLabel="Strength of the glaze that sways in the visualizer mode (F5): every linear and radial layer of this layout's glaze, at this strength"
                 ariaLabel="Immersive: strength of the visualizer's glaze"
                 defaultValue={layoutVisualizer.immersive.glazeStrength}
                 formatValue={(value) => value.toFixed(3)}
@@ -2661,7 +2661,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.waveBoxes}
                 trackLabel="wave"
-                tooltipLabel="Boxes from one band of the grid wave to the next, in the visualizer mode (F3)"
+                tooltipLabel="Boxes from one band of the grid wave to the next, in the visualizer mode (F5)"
                 ariaLabel="Immersive: grid wave length in boxes"
                 defaultValue={layoutVisualizer.immersive.waveBoxes}
                 formatValue={(value) => Math.round(value).toString()}

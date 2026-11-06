@@ -154,7 +154,7 @@ export interface SectionEditorAreaProps {
   /** Immersive mode (App.tsx isImmersiveMode) -- the edit view draws its scroll track into the grid (CM6Editor). */
   isImmersiveMode: boolean
   /**
-   * The visualizer mode (F3, App.tsx's `immersion`) is showing in THIS slot:
+   * The visualizer mode (F5, App.tsx's `immersion`) is showing in THIS slot:
    * the scene (visualizer/VisualizerScene.tsx) is drawn over the note, which
    * stays mounted underneath and is not drawn.
    */

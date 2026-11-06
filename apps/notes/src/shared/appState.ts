@@ -207,7 +207,7 @@ export interface PersistedMenuState {
   /** The music's EQ preset (`sound/musicEqPreset.ts`), the visualizer's solid. */
   musicEqPreset?: MusicEqPreset;
   /**
-   * The layout each context last showed: the regular app and the F3
+   * The layout each context last showed: the regular app and the F5
    * visualizer each remember a light/dark mode and the loadout entry active
    * in it, and entering or leaving the visualizer switches between them. The
    * one in effect is the live layout, so it is written from `uiMode` and the

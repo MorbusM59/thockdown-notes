@@ -78,7 +78,7 @@ export interface SectionHandle extends
    * ring rather than by a route of its own.
    */
   exitSlotOverlay: (() => void) | null
-  /** Switches this slot's speed reading mode (`speedReading/useSpeedReading.ts`); F2 is App's. */
+  /** Switches this slot's speed reading mode (`speedReading/useSpeedReading.ts`); F9 is App's. */
   toggleSpeedReading: () => void
   setIsPreviewMode: Dispatch<SetStateAction<boolean>>
   setActiveNoteId: Dispatch<SetStateAction<string | null>>

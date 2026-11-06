@@ -98,6 +98,12 @@ export interface ShortcutDeclaration {
    * (`speedReading/speedReadingSession.ts`) in the window's capture phase,
    * ahead of every other binding.
    */
+  /**
+   * Matched like any other declaration but described nowhere: not in the
+   * quick reference, not in the User Guide. For a binding the reader is
+   * meant to find rather than be told about (the hidden game's key).
+   */
+  unlisted?: true
   matchedBy?: 'codemirror' | 'escape-hold' | 'help-key' | 'ring' | 'table-keys' | 'speed-reading' | 'visualizer-audio'
 }
 
@@ -170,8 +176,12 @@ export const SHORTCUTS = {
   newNote: { section: 'content', chords: [{ key: 'n', ctrl: true }], label: 'New note' },
   newNoteFromClipboard: { section: 'content', chords: [{ key: 'n', ctrl: true, shift: true }], label: 'with pasted title' },
   toggleSidebar: { section: 'layout', chords: [{ code: 'Space', ctrl: true }], label: 'Show / hide sidebar' },
-  immersive: { section: 'layout', chords: [{ code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
-  visualizer: { section: 'layout', chords: [{ key: 'F3' }], label: 'Visualizer' },
+  lightDark: { section: 'layout', chords: [{ key: 'F2' }], label: 'Light / dark mode' },
+  doubleSize: { section: 'layout', chords: [{ key: 'F3' }], label: 'Double size mode' },
+  immersive: { section: 'layout', chords: [{ key: 'F11' }, { code: 'Space', ctrl: true, shift: true }], label: 'Immersive mode' },
+  visualizer: { section: 'layout', chords: [{ key: 'F5' }], label: 'Visualizer' },
+  // The window control's right click, as a key; unlisted like the game.
+  adventure: { section: 'layout', chords: [{ key: 'F8' }], label: 'ThockQuest', unlisted: true },
   visualizerNextLayout: { section: 'layout', chords: [{ key: 'Tab' }], label: 'Next layout, or the next filter field with the panels up (visualizer)' },
   visualizerPreviousLayout: { section: 'layout', chords: [{ key: 'Tab', shift: true }], label: 'Previous layout, or the previous filter field with the panels up (visualizer)' },
   visualizerLightDark: { section: 'layout', chords: [{ key: 'Enter' }], label: 'Light / dark (visualizer)' },
@@ -227,7 +237,7 @@ export const SHORTCUTS = {
   imageResize: { section: 'images', chords: withMods(ARROWS_UD, { ctrl: true, shift: true }), label: 'Grow / shrink', matchedBy: 'table-keys' },
   imageClearLayout: { section: 'images', chords: [{ key: 'Backspace', shift: true }], label: 'Clear size and alignment', matchedBy: 'table-keys' },
 
-  speedReading: { section: 'speedReading', chords: [{ key: 'F2' }], label: 'Speed reading on / off' },
+  speedReading: { section: 'speedReading', chords: [{ key: 'F9' }], label: 'Speed reading on / off' },
   speedReadingAdvance: {
     section: 'speedReading',
     chords: [{ code: 'Space' }, { key: 'ArrowDown' }],
@@ -356,5 +366,5 @@ export function pressPrefix(declaration: ShortcutDeclaration): string | null {
 }
 
 export function shortcutsInSection(section: ShortcutSectionId): ShortcutDeclaration[] {
-  return (Object.values(SHORTCUTS) as ShortcutDeclaration[]).filter((entry) => entry.section === section)
+  return (Object.values(SHORTCUTS) as ShortcutDeclaration[]).filter((entry) => entry.section === section && !entry.unlisted)
 }

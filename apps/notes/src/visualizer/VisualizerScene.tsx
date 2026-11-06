@@ -1,5 +1,5 @@
 /**
- * The visualizer mode's scene (F3), drawn over the active slot in place of
+ * The visualizer mode's scene (F5), drawn over the active slot in place of
  * its note: a grid of square boxes framing the empty scene's tumbling solid,
  * the music's spectrum along the bottom, its estimated semitone notes above it and
  * what is playing along the top. Where everything goes is

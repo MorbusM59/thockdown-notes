@@ -1,5 +1,5 @@
 /**
- * One speed reading session: the speed reading mode (F2, `useSpeedReading.ts`)
+ * One speed reading session: the speed reading mode (F9, `useSpeedReading.ts`)
  * running in one view over one note. The mode switching off, the view or the
  * note changing, or the escape ring coming up ends the session; nothing the
  * reader presses inside it does.
@@ -25,7 +25,7 @@
  * row is hidden and an edit there would be made blind; plain typing keys are
  * swallowed besides, so they do not move the hidden caret. Everything else passes through and does
  * what it does anywhere: Escape switches views (and the mode reads on in the
- * other one), F2 switches the mode off, a shortcut with a modifier is that
+ * other one), F9 switches the mode off, a shortcut with a modifier is that
  * shortcut, and a click is a click.
  *
  * Escape's press is also the edit view's moment to hand its position over

@@ -4,7 +4,7 @@ import { startSpeedReadingSession, type SpeedReadingSession } from './speedReadi
 
 /**
  * A slot's speed reading MODE (`speedReadingSession.ts`), published on its
- * section handle so App's F2, the slot's toggle button and the escape menu
+ * section handle so App's F9, the slot's toggle button and the escape menu
  * can switch it in whichever slot they speak for.
  *
  * The mode belongs to the slot, not to a view: switching views keeps it and

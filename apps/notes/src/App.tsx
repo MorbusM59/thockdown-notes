@@ -1703,7 +1703,7 @@ function App() {
   const [appShellMeasuredWidthPx, setAppShellMeasuredWidthPx] = useState(0)
   const [isSidebarVisible, setIsSidebarVisible] = useState(true)
   // Immersion, ONE setting with three values. Immersive mode: the active
-  // slot alone, full screen, no chrome. The visualizer (F3) is immersive mode
+  // slot alone, full screen, no chrome. The visualizer (F5) is immersive mode
   // with the active slot showing the visualizer scene over its note
   // (visualizer/VisualizerScene.tsx); being one setting rather than a second
   // flag beside the first, "visualizer but not immersive" cannot be
@@ -1716,7 +1716,7 @@ function App() {
   const [immersion, setImmersionState] = useState<'off' | 'immersive' | 'visualizer'>('off')
   const isImmersiveMode = immersion !== 'off'
   const isVisualizerMode = immersion === 'visualizer'
-  // What F3 (or Escape) returns to when the visualizer is left.
+  // What F5 (or Escape) returns to when the visualizer is left.
   const immersionBeforeVisualizerRef = useRef<'off' | 'immersive'>('off')
   const isSidebarShown = isSidebarVisible && !isImmersiveMode
   const appShellWidthPx = Math.max(
@@ -3157,7 +3157,7 @@ function App() {
   // fills the side in effect from the live layout, so a change made while
   // in either one is remembered with no tracking of its own. Detected on
   // the flip of isVisualizerMode rather than in toggleVisualizerMode, so
-  // every way out (F3, Escape, the OS leaving full screen) swaps alike.
+  // every way out (F5, Escape, the OS leaving full screen) swaps alike.
   const [layoutChoices, setLayoutChoices] = useState<LayoutChoices>({})
   // Unsaved changes are never remembered as a side's choice: they belong to
   // whichever side is showing them and are discarded by any other selection.
@@ -3181,7 +3181,7 @@ function App() {
       // The look is applied in this same update as the mode, from the entry
       // already in hand, and the database is only told which entry is now
       // active: applying on the reply instead would let a reply that arrives
-      // after a quick second F3 put this layout back over the other one.
+      // after a quick second F5 put this layout back over the other one.
       applyEntryToLiveState(remembered)
       void window.thockdownLoadouts?.setActive(remembered.id)
         .then((result) => {
@@ -7670,7 +7670,7 @@ ${markdownHtml}
       if (isVisualizerMode && event.key === 'Escape') escapeConsumedByFieldRef.current = true
       if (event.defaultPrevented) return
 
-      // F3 enters and leaves the visualizer from anywhere, a filter field
+      // F5 enters and leaves the visualizer from anywhere, a filter field
       // included. A held key toggles once, not per repeat.
       if (matchShortcut(event, 'visualizer')) {
         event.preventDefault()
@@ -7678,7 +7678,7 @@ ${markdownHtml}
         return
       }
 
-      // Escape in the visualizer never leaves it (F3 does): in a filter
+      // Escape in the visualizer never leaves it (F5 does): in a filter
       // field it empties and leaves the field (its own handler,
       // PoolFilter.tsx), anywhere else it shows or hides the panels.
       if (isVisualizerMode && event.key === 'Escape') {
@@ -7772,6 +7772,21 @@ ${markdownHtml}
 
       // Immersive mode, from anywhere: Ctrl+Shift+Space, and the same key to
       // leave. A held key toggles once, not per repeat.
+      // F2 light / dark, F3 double size, F8 the adventure (the User Guide
+      // control's right click). Repeats ignored, so a held key toggles once.
+      const toggleChord: Array<[ShortcutId, () => void]> = [
+        ['lightDark', toggleUiMode],
+        ['doubleSize', handleToggleDoubleSizeMode],
+        ['adventure', () => { void handleHelpGuideContextMenu() }],
+      ]
+      for (const [id, run] of toggleChord) {
+        if (matchShortcut(event, id)) {
+          event.preventDefault()
+          if (!event.repeat) run()
+          return
+        }
+      }
+
       if (matchShortcut(event, 'immersive')) {
         event.preventDefault()
         if (event.repeat) return
@@ -7885,7 +7900,7 @@ ${markdownHtml}
         return
       }
 
-      // F2 switches the active slot's speed reading mode on and off: on, it
+      // F9 switches the active slot's speed reading mode on and off: on, it
       // reads from the caret in the edit view and from what is on screen in
       // the render view (speedReading/useSpeedReading.ts).
       if (!isEditorControlField && activeSection?.activeNoteId
@@ -8055,6 +8070,8 @@ ${markdownHtml}
     toggleSidebarVisible,
     toggleUiMode,
     toggleVisualizerMode,
+    handleToggleDoubleSizeMode,
+    handleHelpGuideContextMenu,
   ])
 
   /**
@@ -8074,7 +8091,7 @@ ${markdownHtml}
   const returnKeyboardToActiveSurface = useCallback(() => {
     const slot = document.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(activeSectionId)}"]`)
     // The visualizer's scene is the slot's surface while it is up: it takes
-    // F3 and Escape, and the hidden note must not take keystrokes.
+    // F5 and Escape, and the hidden note must not take keystrokes.
     if (isVisualizerMode) {
       slot?.querySelector<HTMLElement>('[data-visualizer-scene]')?.focus({ preventScroll: true })
       return

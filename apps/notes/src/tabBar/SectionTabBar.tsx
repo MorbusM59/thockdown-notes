@@ -454,7 +454,7 @@ export function SectionTabBar({
         <button
           type="button"
           className={`btn-icon section-render-mode-toggle${isSpeedReading ? ' is-active' : ''}`}
-          data-tooltip={isSpeedReading ? 'Stop speed reading (F2)' : 'Speed reading (F2)'}
+          data-tooltip={isSpeedReading ? 'Stop speed reading (F9)' : 'Speed reading (F9)'}
           aria-label={isSpeedReading ? 'Stop speed reading' : 'Speed reading'}
           aria-pressed={isSpeedReading}
           onClick={onToggleSpeedReading}

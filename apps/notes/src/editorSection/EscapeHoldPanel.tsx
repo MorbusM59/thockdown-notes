@@ -88,7 +88,7 @@ export interface EscapeHoldPanelProps {
   onExportPdf: (scope: ExportScope) => void | Promise<void>
   onExportMd: (scope: ExportScope) => void | Promise<void>
   onOpenHelp: () => void | Promise<void>
-  /** This slot's speed reading mode, which the ring can switch like F2 does. */
+  /** This slot's speed reading mode, which the ring can switch like F9 does. */
   isSpeedReading: boolean
   onToggleSpeedReading: () => void
   /**
