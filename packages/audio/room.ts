@@ -213,7 +213,7 @@ export function buildRoomImpulseResponse(
     // the direct sound -- the precedence (Haas) range, where a louder early
     // copy on one side pulls the whole image to it and the other side reads
     // as a delayed, distant copy. Width comes from the decorrelated bursts.
-    channels.forEach((data, side) => {
+    channels.forEach((data) => {
       let energy = 0;
       for (let index = 0; index < burstLength; index += 1) {
         const window = 0.5 - (0.5 * Math.cos((2 * Math.PI * (index + 0.5)) / burstLength));
