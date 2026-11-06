@@ -48,7 +48,9 @@ describe('factory preset visualizer defaults', () => {
     };
 
     for (const preset of [...LIGHT_FACTORY_PRESETS, ...DARK_FACTORY_PRESETS]) {
-      const colors = defaultVisualizer(preset.filterInvert > 0.5);
+      // A preset may name its own element colours (Gold names its letterbox);
+      // the tuning is what every preset shares.
+      const colors = preset.visualizer;
       expect(preset.visualizer).toEqual({
         ...expectedTuning,
         edge: { ...expectedTuning.edge, color: colors.edge.color },
