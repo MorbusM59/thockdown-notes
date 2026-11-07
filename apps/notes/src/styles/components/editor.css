@@ -549,6 +549,11 @@
   inherits: false;
   initial-value: 0;
 }
+@property --beat-wash {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
 
 .editor-beat-edge {
   display:        none;
@@ -646,13 +651,13 @@
   inset:            0;
   border-radius:    var(--border-radius-regular);
   pointer-events:   none;
-  opacity:          var(--beat-pane, 0);
+  opacity:          var(--beat-wash, 0);
   background-color: var(--beat-pane-color);
 }
 
 html[data-beat-edge] .editor-section-column.is-active .editor-beat-edge,
 html[data-beat-pane] .editor-section-column.is-active .editor-beat-pane.has-grid,
-html[data-beat-pane] .editor-section-column.is-active .editor-beat-wash.is-shown {
+html[data-beat-wash] .editor-section-column.is-active .editor-beat-wash.is-shown {
   display:     block;
   will-change: opacity;
 }

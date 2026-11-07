@@ -59,6 +59,7 @@ import {
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
   type VisualizerChannel,
+  type VisualizerEdgeChannel,
   type VisualizerMix,
   type VisualizerTrackerName,
   type VisualizerSettings,
@@ -1055,20 +1056,30 @@ export function SidebarOptionsPanel({
     }
 
     // One coloured block: its mix, its effect and fall, plus the edge's spread and blur.
-    const renderBeatChannel = (key: 'edge' | 'pane', label: string, effect: string) => {
-      const channel: VisualizerChannel = visualizer[key]
-      const defaults: VisualizerChannel = key === 'edge' ? visualizerDefaults.edge : visualizerDefaults.pane
-      const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
+    // One block (an edge or a pane) of the grid beat or of the visualizer
+    // mode: its mix, effect and fall, and for an edge its geometry. `id`
+    // keeps every slider's id unique, the two sets being separate settings.
+    const renderBeatChannel = <C extends VisualizerChannel>(
+      id: string,
+      label: string,
+      effect: string,
+      channel: C,
+      defaults: C,
+      set: (patch: Partial<C>) => void,
+    ) => {
+      const edge = 'spreadPx' in channel ? (channel as unknown as VisualizerEdgeChannel) : null
+      const edgeDefaults = defaults as unknown as VisualizerEdgeChannel
+      const setEdge = set as unknown as (patch: Partial<VisualizerEdgeChannel>) => void
       return (
         <>
           <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
             <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={key === 'edge' ? [3, 3, 2] : [3, 3]}>
-              {renderMixSliders(`beat-${key}`, label, channel.mix, defaults.mix, (mix) => set({ mix }))}
+            <OptionsSliderRows rows={edge ? [3, 3, 2] : [3, 3]}>
+              {renderMixSliders(id, label, channel.mix, defaults.mix, (mix) => set({ mix } as Partial<C>))}
               <CompactScrollbarSlider
-                id={`beat-${key}-effect`}
+                id={`${id}-effect`}
                 min={-1}
                 max={1}
                 step={0.01}
@@ -1077,36 +1088,36 @@ export function SidebarOptionsPanel({
                 tooltipLabel={`How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`}
                 ariaLabel={`${label}: effect, negative inverts`}
                 defaultValue={defaults.effect}
-                onCommit={(value) => set({ effect: value })}
+                onCommit={(value) => set({ effect: value } as Partial<C>)}
               />
-              {renderFallSliders(`beat-${key}`, label, channel, defaults, 'each hit', set)}
+              {renderFallSliders(id, label, channel, defaults, 'each hit', (patch) => set(patch as Partial<C>))}
               {/* An array, not a fragment: OptionsSliderRows counts its children, and a fragment is one. */}
-              {key === 'edge' && [
+              {edge && [
                   <CompactScrollbarSlider
                     key="spread"
-                    id="beat-edge-spread"
+                    id={`${id}-spread`}
                     min={0}
                     max={EDGE_SPREAD_MAX_PX}
                     step={1}
-                    value={visualizer.edge.spreadPx}
+                    value={edge.spreadPx}
                     trackLabel="spread"
                     tooltipLabel="Pixels: how far the edge reaches in from the editor's edges before it starts to fade"
-                    ariaLabel="Edge: spread in pixels"
-                    defaultValue={visualizerDefaults.edge.spreadPx}
-                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, spreadPx: Math.round(value) } }))}
+                    ariaLabel={`${label}: spread in pixels`}
+                    defaultValue={edgeDefaults.spreadPx}
+                    onCommit={(value) => setEdge({ spreadPx: Math.round(value) })}
                   />,
                   <CompactScrollbarSlider
                     key="blur"
-                    id="beat-edge-blur"
+                    id={`${id}-blur`}
                     min={0}
                     max={EDGE_BLUR_MAX_PX}
                     step={1}
-                    value={visualizer.edge.blurPx}
+                    value={edge.blurPx}
                     trackLabel="blur"
                     tooltipLabel="Pixels: how soft the edge fades inward; 0 is a hard line"
-                    ariaLabel="Edge: blur in pixels"
-                    defaultValue={visualizerDefaults.edge.blurPx}
-                    onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, blurPx: Math.round(value) } }))}
+                    ariaLabel={`${label}: blur in pixels`}
+                    defaultValue={edgeDefaults.blurPx}
+                    onCommit={(value) => setEdge({ blurPx: Math.round(value) })}
                   />,
               ]}
             </OptionsSliderRows>
@@ -1114,6 +1125,8 @@ export function SidebarOptionsPanel({
         </>
       )
     }
+    const setGrid = <K extends keyof VisualizerSettings['grid']>(key: K) =>
+      (patch: Partial<VisualizerSettings['grid'][K]>) => setVisualizer((prev) => ({ ...prev, grid: { ...prev.grid, [key]: { ...prev.grid[key], ...patch } } }))
 
     /**
      * The true-mode hold's canceller, so a release or a pointer leaving the
@@ -2591,6 +2604,59 @@ export function SidebarOptionsPanel({
 
       {features.visualizer ? (
       <AccordionSection
+        className="sidebar-options-section-beat-detection"
+        ariaLabel="Beat detection"
+        heading="Beat detection"
+      >
+          <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
+          <div className="utility-setting-slider-stack" aria-label="Beat timing">
+            <OptionsSliderRows rows={[1, 1]}>
+              <CompactScrollbarSlider
+                id="beat-delay"
+                min={BEAT_DELAY_MIN_MS}
+                max={BEAT_DELAY_MAX_MS}
+                step={5}
+                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
+                trackLabel="delay"
+                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
+                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
+                defaultValue={0}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="beat-response"
+                min={BEAT_RESPONSE_MIN_DB}
+                max={BEAT_RESPONSE_MAX_DB}
+                step={1}
+                value={beatSettings.responseDb}
+                trackLabel="response"
+                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
+                ariaLabel="Beat pulse: dB below full scale that still gives a full response"
+                defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
+              />
+            </OptionsSliderRows>
+          </div>
+          {renderTrackers()}
+      </AccordionSection>
+      ) : null}
+
+      {features.visualizer ? (
+      <AccordionSection
+        className="sidebar-options-section-grid-beat"
+        ariaLabel="Grid Beat"
+        heading="Grid Beat"
+      >
+          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', visualizer.grid.edge, visualizerDefaults.grid.edge, setGrid('edge'))}
+          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the edit view', visualizer.grid.editorPane, visualizerDefaults.grid.editorPane, setGrid('editorPane'))}
+          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the render view', visualizer.grid.readerPane, visualizerDefaults.grid.readerPane, setGrid('readerPane'))}
+      </AccordionSection>
+      ) : null}
+
+      {features.visualizer ? (
+      <AccordionSection
         className="sidebar-options-section-visualizer"
         ariaLabel="Visualizer"
         heading="Visualizer"
@@ -2631,42 +2697,10 @@ export function SidebarOptionsPanel({
               },
             ]}
           />
-          <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
-          <div className="utility-setting-slider-stack" aria-label="Beat timing">
-            <OptionsSliderRows rows={[1, 1]}>
-              <CompactScrollbarSlider
-                id="beat-delay"
-                min={BEAT_DELAY_MIN_MS}
-                max={BEAT_DELAY_MAX_MS}
-                step={5}
-                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
-                trackLabel="delay"
-                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
-                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
-                defaultValue={0}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
-              />
-              <CompactScrollbarSlider
-                id="beat-response"
-                min={BEAT_RESPONSE_MIN_DB}
-                max={BEAT_RESPONSE_MAX_DB}
-                step={1}
-                value={beatSettings.responseDb}
-                trackLabel="response"
-                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
-                ariaLabel="Beat pulse: dB below full scale that still gives a full response"
-                defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
-              />
-            </OptionsSliderRows>
-          </div>
-          {renderTrackers()}
-          {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
-          {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
+          {renderBeatChannel('visualizer-edge', 'Edge', 'the edge round the visualizer mode\'s scene shows', visualizer.edge, visualizerDefaults.edge, (patch) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, ...patch } })))}
+          {renderBeatChannel('visualizer-pane', 'Pane', 'the scene\'s box outlines show in the visualizer mode', visualizer.pane, visualizerDefaults.pane, (patch) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, ...patch } })))}
           <div className="utility-setting-button-row" role="group" aria-label="Immersive glaze controls">
-            <OptionsSubsectionLabel>Glaze (immersive)</OptionsSubsectionLabel>
+            <OptionsSubsectionLabel>Glaze</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
             <OptionsSliderRows rows={[3, 4, 3]}>
@@ -2765,7 +2799,7 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
           <div className="utility-setting-button-row" role="group" aria-label="Immersive wave controls">
-            <OptionsSubsectionLabel>Wave (immersive)</OptionsSubsectionLabel>
+            <OptionsSubsectionLabel>Wave</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
             <OptionsSliderRows rows={[3, 3, 2]}>
@@ -2813,7 +2847,7 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
           <div className="utility-setting-button-row" role="group" aria-label="Immersive pulse controls">
-            <OptionsSubsectionLabel>Pulse (immersive)</OptionsSubsectionLabel>
+            <OptionsSubsectionLabel>Pulse</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
             <OptionsSliderRows rows={[3, 3, 3]}>

@@ -1,7 +1,7 @@
 /**
  * The flow's and the beat pulse's CSS variables (`--flow-trail-source`,
  * `--flow-trail-source-saturation`, `--flow-caret-effect`, `--beat-caret`,
- * `--beat-edge`, `--beat-pane`), written onto the elements that read them rather than onto
+ * `--beat-edge`, `--beat-pane`, `--beat-wash`), written onto the elements that read them rather than onto
  * `<html>`.
  *
  * They change on every frame the meter moves. A custom property is inherited

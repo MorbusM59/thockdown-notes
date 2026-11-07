@@ -132,16 +132,27 @@ export interface VisualizerSettings {
   trackers: VisualizerTrackers
   /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo. */
   caret: VisualizerCaret
-  /** The active editor's edge, an inner shadow; a response deepens it. */
+  /** GRID BEAT: the blocks on the editor while the visualizer mode is NOT up (Options > Grid Beat). */
+  grid: VisualizerGridBeat
+  /** The visualizer mode's edge (F5), an inner shadow round its scene; a response deepens it. Its fall also times the centre pulse's solid thump. */
   edge: VisualizerEdgeChannel
-  /**
-   * The pane: in the edit view, a copy of the box outlines over the grid's
-   * own; in any view without a grid, a flat wash of its colour over the
-   * editor. A response draws it.
-   */
+  /** The visualizer mode's pane: a copy of the scene's box outlines over its grid. A response draws it. */
   pane: VisualizerChannel
-  /** The visualizer mode's own look (F5), as opposed to the beat's effects on the editor. */
+  /** The rest of the visualizer mode's own look (F5). */
   immersive: VisualizerImmersive
+}
+
+/**
+ * The beat on the editor (Options > Grid Beat), independent of the
+ * visualizer mode's own edge and pane. A response draws each.
+ */
+export interface VisualizerGridBeat {
+  /** The active editor's edge, an inner shadow. */
+  edge: VisualizerEdgeChannel
+  /** The edit view's pane: a copy of the box outlines over the grid's own. */
+  editorPane: VisualizerChannel
+  /** The render (reader) view's pane: a flat wash of the pane colour over the editor, which has no grid there. */
+  readerPane: VisualizerChannel
 }
 
 /**
@@ -342,11 +353,15 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
  * layout of 2026-11-03 (the factory presets' tuning when the visualizer was
  * still part of a layout), its fall lengths rounded to what the sliders show.
  */
+const DEFAULT_SAVED_EDGE: VisualizerEdgeChannel = { ...DEFAULT_VISUALIZER_EDGE, fallSec: 0.5, spreadPx: 10, blurPx: 200 }
+const DEFAULT_SAVED_PANE: VisualizerChannel = { ...DEFAULT_VISUALIZER_PANE, effect: 0.7, shape: -0.2, fallSec: 0.3 }
+
 export const DEFAULT_VISUALIZER: VisualizerSettings = {
   trackers: DEFAULT_VISUALIZER_TRACKERS,
   caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.5 },
-  edge: { ...DEFAULT_VISUALIZER_EDGE, fallSec: 0.5, spreadPx: 10, blurPx: 200 },
-  pane: { ...DEFAULT_VISUALIZER_PANE, effect: 0.7, shape: -0.2, fallSec: 0.3 },
+  grid: { edge: DEFAULT_SAVED_EDGE, editorPane: DEFAULT_SAVED_PANE, readerPane: DEFAULT_SAVED_PANE },
+  edge: DEFAULT_SAVED_EDGE,
+  pane: DEFAULT_SAVED_PANE,
   immersive: {
     ...DEFAULT_VISUALIZER_IMMERSIVE,
     glazeStrength: 0.06, glazeSpread: -1, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 10,
@@ -576,6 +591,7 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
   const edgeInput = source.edge ?? source.shade
   const paneInput = source.pane ?? source.outline
   const edge = sanitizeEdgeChannel(edgeInput, d.edge)
+  const pane = sanitizeChannel(paneInput, d.pane)
   // LEGACY: a layout saved before the trackers had none, and its centre
   // pulse rode the edge's hits; it keeps the edge's drum (a band, which no
   // pulse took then, reads as the thump, the pulse's default).
@@ -587,10 +603,23 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
   return {
     trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
     caret: sanitizeCaret(source.caret, d.caret),
+    // A save from before the grid beat was separated from the visualizer
+    // mode's (2026-11-07) had one edge and one pane for both: each copy
+    // starts from them.
+    grid: sanitizeGridBeat(source.grid, { edge, editorPane: pane, readerPane: pane }),
     edge,
-    pane: sanitizeChannel(paneInput, d.pane),
+    pane,
     // ...and its wave followed the snare, whatever the default wave mix is now.
     immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('pierce') : null),
+  }
+}
+
+function sanitizeGridBeat(input: unknown, d: VisualizerGridBeat): VisualizerGridBeat {
+  const source = fieldsOf(input)
+  return {
+    edge: sanitizeEdgeChannel(source.edge, d.edge),
+    editorPane: sanitizeChannel(source.editorPane, d.editorPane),
+    readerPane: sanitizeChannel(source.readerPane, d.readerPane),
   }
 }
 

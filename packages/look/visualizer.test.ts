@@ -27,6 +27,20 @@ describe('sanitizeVisualizer', () => {
   })
 })
 
+describe('the grid beat', () => {
+  it('copies an old save\'s edge and pane into both grid panes, then stands apart', () => {
+    const v = sanitizeVisualizer({ edge: { effect: 0.7, spreadPx: 12 }, pane: { effect: 0.2 } })
+    expect(v.grid.edge.effect).toBe(v.edge.effect)
+    expect(v.grid.edge.spreadPx).toBe(v.edge.spreadPx)
+    expect(v.grid.editorPane).toEqual(v.pane)
+    expect(v.grid.readerPane).toEqual(v.pane)
+    const w = sanitizeVisualizer({ ...v, grid: { ...v.grid, readerPane: { ...v.pane, effect: 0.9 } } })
+    expect(w.grid.readerPane.effect).toBe(0.9)
+    expect(w.grid.editorPane.effect).toBe(v.pane.effect)
+    expect(w.pane).toEqual(v.pane)
+  })
+})
+
 describe('sanitizeVisualizerColors', () => {
   it('gives a layout without them the defaults for its inversion', () => {
     expect(sanitizeVisualizerColors(undefined, false)).toEqual(defaultVisualizerColors(false))

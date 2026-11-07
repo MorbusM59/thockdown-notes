@@ -313,7 +313,7 @@ export function SectionEditorArea({
   // pane copies that one instead (the editor's is not drawn meanwhile).
   const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode || isVisualizerMode)
   const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-pane']))
-  const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-pane']))
+  const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
   const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
     beatPaneRef(el)
     beatMirrorRef(el)

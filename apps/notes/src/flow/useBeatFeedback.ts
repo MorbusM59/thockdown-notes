@@ -15,8 +15,13 @@
  *   playing, a tempo found): at any other moment the caret blinks.
  * - `--beat-edge`, the opacity of the active editor's beat edge
  *   (`.editor-beat-edge`, shown and promoted under `html[data-beat-edge]`).
- * - `--beat-pane`, the opacity of the pane (the box outlines' copy, or a flat wash where there is no grid)
- *   (`.editor-beat-pane.has-grid` in the edit view, `.editor-beat-wash.is-shown` behind the stage elsewhere; shown and promoted under `html[data-beat-pane]`).
+ * - `--beat-pane`, the opacity of the editor pane (the box outlines' copy, `.editor-beat-pane.has-grid`
+ *   in the edit view and over the visualizer scene; shown and promoted under `html[data-beat-pane]`).
+ * - `--beat-wash`, the opacity of the reader pane (a flat wash where there is no grid,
+ *   `.editor-beat-wash.is-shown` behind the stage; under `html[data-beat-wash]`).
+ *
+ * Outside the visualizer mode they follow the grid beat (`VisualizerSettings.grid`);
+ * inside it, the mode's own edge and pane.
  *
  * An inverted block (a negative effect) rests at its full effect while music plays and a hit
  * (or, for the caret, a beat) takes it away; with nothing playing every block is off either way, so an
@@ -36,7 +41,7 @@ import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers
 import { useOutputDevice } from '../sound/outputDevice'
 import { setFlowStyle } from './flowStyle'
 
-type BlockName = 'caret' | 'edge' | 'pane'
+type BlockName = 'caret' | 'edge' | 'pane' | 'wash'
 
 /** What a block subscribes with: a mix for the edge and pane, the caret's two fields for the caret's clock. */
 /** The caret's block as it plays: its fall, and the layout's caret effect as its depth. */
@@ -94,7 +99,10 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
   }, [channel])
 }
 
-export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean, caretEffect: number): void {
+/** A block that shows nothing: the reader pane while the visualizer mode is up, where there is no reader view. */
+const OFF_CHANNEL: VisualizerChannel = { effect: 0, mix: { thump: 0, pierce: 0, tick: 0 }, shape: 0, fallSec: 1 }
+
+export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean, caretEffect: number, isVisualizerMode: boolean): void {
   // Set before the blocks subscribe (effects run in order), so the first
   // analysis already listens to the trackers.
   const { trackers } = visualizer
@@ -102,10 +110,14 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   // The beat's depth is the layout's caret effect, the blink's own slider (-1..1).
   const caretBlock = useMemo(() => ({ ...visualizer.caret, effect: caretEffect }), [visualizer.caret, caretEffect])
   useBeatBlock('caret', caretBlock, enabled && caretFollowsMusic, subscribeClock)
-  useBeatBlock('edge', visualizer.edge, enabled, subscribeMix)
-  useBeatBlock('pane', visualizer.pane, enabled, subscribeMix)
-  const edgeSpreadPx = visualizer.edge.spreadPx
-  const edgeBlurPx = visualizer.edge.blurPx
+  // The same two elements show the grid beat on the editor and the visualizer
+  // mode's own edge and pane over its scene, each set of settings in its turn.
+  const shownEdge = isVisualizerMode ? visualizer.edge : visualizer.grid.edge
+  useBeatBlock('edge', shownEdge, enabled, subscribeMix)
+  useBeatBlock('pane', isVisualizerMode ? visualizer.pane : visualizer.grid.editorPane, enabled, subscribeMix)
+  useBeatBlock('wash', isVisualizerMode ? OFF_CHANNEL : visualizer.grid.readerPane, enabled, subscribeMix)
+  const edgeSpreadPx = shownEdge.spreadPx
+  const edgeBlurPx = shownEdge.blurPx
   const { edge: edgeColor, pane: paneColor, wave: waveColor, pulse: pulseColor, accent: accentColor, letterbox: letterboxColor } = colors
   const { waveBoxes, waveBeats, waveTurn, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
