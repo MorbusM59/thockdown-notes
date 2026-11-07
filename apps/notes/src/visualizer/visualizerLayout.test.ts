@@ -32,18 +32,18 @@ describe('computeVisualizerLayout', () => {
 
   it('drops the credits, then the title, as the strip gets shorter', () => {
     const at = (stripRowsWanted: number) => computeVisualizerLayout(2000, (stripRowsWanted * 20) / 0.2 + 1, 20, 220)
-    expect(at(6)).toMatchObject({ creditsRow: 1, progressRow: 3, titleRow: 5 })
-    expect(at(5)).toMatchObject({ progressRow: 1, titleRow: 3, creditsRow: null })
-    expect(at(3)).toMatchObject({ progressRow: 1, titleRow: null, creditsRow: null })
-    expect(at(1)).toMatchObject({ progressRow: null, titleRow: null, creditsRow: null })
+    expect(at(4)).toMatchObject({ creditsRow: 1, titleRow: 3 })
+    expect(at(3)).toMatchObject({ titleRow: 1, creditsRow: null })
+    expect(at(1)).toMatchObject({ titleRow: null, creditsRow: null })
   })
 
   it('places a full-width chroma row at the top strip bottom when it fits without overlapping content', () => {
     const at = (stripRowsWanted: number, columns: number) =>
       computeVisualizerLayout(columns * 20, (stripRowsWanted * 20) / 0.2 + 1, 20, 220)
-    expect(at(10, 40)).toMatchObject({ chromaRow: 9 })
+    expect(at(10, 40)).toMatchObject({ chromaRow: 8 })
     expect(at(6, 40)).toMatchObject({ chromaRow: null })
-    expect(at(10, 11)).toMatchObject({ chromaRow: 9 })
+    expect(at(7, 40)).toMatchObject({ chromaRow: 5 })
+    expect(at(10, 11)).toMatchObject({ chromaRow: 8 })
     expect(at(10, 0)).toMatchObject({ chromaRow: null })
   })
 

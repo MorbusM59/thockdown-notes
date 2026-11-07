@@ -72,6 +72,7 @@ import {
   bucketListArea,
   poolFilterArea,
   levelBarsArea,
+  progressBarArea,
   trackSpan,
   type VisualizerLayout,
 } from './visualizerLayout'
@@ -182,6 +183,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
   const bucketArea = useMemo(() => bucketListArea(layout), [layout])
   const filterArea = useMemo(() => poolFilterArea(layout), [layout])
   const levelArea = useMemo(() => levelBarsArea(layout), [layout])
+  const progressArea = useMemo(() => progressBarArea(layout), [layout])
+  const progressColumns = progressArea?.columns ?? 0
 
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const glyphFont = `${fontSizePx}px ${fontFamily}`
@@ -289,7 +292,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
     // playhead has crossed into another box, which is seconds apart.
     const moveGap = () => {
       const duration = musicPlayerService.currentDurationSec
-      setGapColumn(readNowPlaying().song ? playheadColumn(rowColumns, musicPlayerService.currentTime, duration) : null)
+      setGapColumn(readNowPlaying().song ? playheadColumn(progressColumns, musicPlayerService.currentTime, duration) : null)
     }
 
     const draw = () => {
@@ -433,17 +436,17 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
       transientBand?.unsubscribe()
       reducedMotion.removeEventListener('change', wake)
     }
-  }, [scene, columns, rowColumns, stripRows, boxPx, chromaRow])
+  }, [scene, columns, progressColumns, stripRows, boxPx, chromaRow])
 
   const handleProgressPress = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
     const rect = event.currentTarget.getBoundingClientRect()
     const column = Math.floor((event.clientX - rect.left) / boxPx)
-    const press = progressPress(rowColumns, column)
+    const press = progressPress(progressColumns, column)
     if (press.kind === 'previous') readNowPlaying().jumpSong(-1)
     else if (press.kind === 'next') readNowPlaying().jumpSong(1)
     else if (press.kind === 'seek') void musicPlayerService.setCurrentTimeFraction(press.fraction)
-  }, [boxPx, rowColumns])
+  }, [boxPx, progressColumns])
 
   const box = boxPx
   // The cutout covers the inside of its boxes: a box's first pixel row and
@@ -476,8 +479,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
   // The grid-line layer needs the hole only when the rings replace the
   // straight lines; at roundness 0 the cutout covers it, as it always did.
   const gridLinesHole: CSSProperties = closure?.gridRing ? closure.hole : {}
-  const track = trackSpan(rowColumns)
-  const rowLeftPx = originXPx + TOP_ROW_INSET_BOXES * box
+  const track = trackSpan(progressColumns)
+  const progressLeftPx = originXPx + (progressArea?.column ?? 0) * box
   const rowTop = (row: number) => originYPx + row * box
   const style = {
     '--editor-cell-width': `${box}px`,
@@ -501,17 +504,17 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           <div className="visualizer-strip is-middle" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
           <div className="visualizer-strip is-bottom" style={{ top: rowTop(spectrumTopRow) }} />
 
-          {layout.progressRow !== null && rowColumns >= 2 && (
+          {progressArea && progressColumns >= 2 && (
             <>
-              <div className="visualizer-lit" style={{ left: rowLeftPx, top: rowTop(layout.progressRow), width: box, height: box }} />
+              <div className="visualizer-lit" style={{ left: progressLeftPx, top: rowTop(progressArea.row), width: box, height: box }} />
               {/* The track is drawn as the lit runs either side of the
                   playhead's box, so that box is truly missing: painting the
                   strip's colour over a lit track let the caret colour show
                   through wherever the strip's colour is translucent. */}
               {trackRuns(track, gapColumn).map((run) => (
-                <div key={run.first} className="visualizer-lit" style={{ left: rowLeftPx + run.first * box, top: rowTop(layout.progressRow!), width: run.count * box, height: box }} />
+                <div key={run.first} className="visualizer-lit" style={{ left: progressLeftPx + run.first * box, top: rowTop(progressArea.row), width: run.count * box, height: box }} />
               ))}
-              <div className="visualizer-lit" style={{ left: rowLeftPx + (rowColumns - 1) * box, top: rowTop(layout.progressRow), width: box, height: box }} />
+              <div className="visualizer-lit" style={{ left: progressLeftPx + (progressColumns - 1) * box, top: rowTop(progressArea.row), width: box, height: box }} />
             </>
           )}
           {layout.titleRow !== null && <LetterBoxes runs={title} row={layout.titleRow} layout={layout} />}
@@ -559,10 +562,10 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           {levelArea && <LevelBars layout={layout} area={levelArea} />}
           <CursorIdle />
 
-          {layout.progressRow !== null && (
+          {progressArea && (
             <div
               className="visualizer-progress-hit"
-              style={{ left: rowLeftPx, top: rowTop(layout.progressRow), width: rowColumns * box, height: box }}
+              style={{ left: progressLeftPx, top: rowTop(progressArea.row), width: progressColumns * box, height: box }}
               onPointerDown={handleProgressPress}
             />
           )}

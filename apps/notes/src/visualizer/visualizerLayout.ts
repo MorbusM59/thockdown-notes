@@ -17,9 +17,11 @@
  * at most `MAX_STRIP_ROWS` boxes and at most `MAX_STRIP_SHARE` of the
  * screen's height. The top strip's rows, counted from the first full row:
  * the credits (the artist, then `CREDITS_GAP_BOXES` empty boxes, then the
- * album), a gap, the progress track, a gap, the title. A strip too short for
- * all five drops the credits first and then the title, and the progress track
- * moves up to the first row; it always stays.
+ * album), a gap, the title; a strip too short for both drops the credits and
+ * the title moves up to the first row. The semitone row sits one row above
+ * the strip's last, so one empty row parts it from the middle section. The
+ * progress track is not in the strip: it is the middle section's top line,
+ * the volume bar's counterpart above the cutout (`progressBarArea`).
  *
  * THE CUTOUT is the empty scene's square, centred, as many whole boxes wide
  * as the empty state's own diameter (`--circle-diameter`) rounds to, so it is
@@ -41,7 +43,6 @@ export type VisualizerLayout = {
   /** The height of each strip, in boxes. Zero when the screen is too small for one. */
   stripRows: number
   /** The top strip's rows (indices into the grid's rows), or null when the strip is too short for them. */
-  progressRow: number | null
   titleRow: number | null
   creditsRow: number | null
   /** The first row of the spectrum strip. */
@@ -67,11 +68,11 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   const stripRows = Math.max(0, Math.min(ceiling, Math.floor((rows - 1) / 2)))
 
   // The rows start one empty row below the screen's top edge (TOP_ROW_OFFSET).
-  const creditsRow = stripRows >= TOP_ROW_OFFSET + 5 ? TOP_ROW_OFFSET : null
-  const progressRow = stripRows < TOP_ROW_OFFSET + 1 ? null : creditsRow === null ? TOP_ROW_OFFSET : creditsRow + 2
-  const titleRow = stripRows >= TOP_ROW_OFFSET + 3 ? progressRow! + 2 : null
+  const creditsRow = stripRows >= TOP_ROW_OFFSET + 3 ? TOP_ROW_OFFSET : null
+  const titleRow = stripRows < TOP_ROW_OFFSET + 1 ? null : creditsRow === null ? TOP_ROW_OFFSET : creditsRow + 2
   const spectrumTopRow = rows - stripRows
-  const chromaRow = stripRows >= TOP_ROW_OFFSET + 6 && columns > 0 ? stripRows - 1 : null
+  // One empty row above the middle section, and at least one below the title.
+  const chromaRow = titleRow !== null && stripRows - 2 >= titleRow + 2 && columns > 0 ? stripRows - 2 : null
 
   const middleRows = rows - 2 * stripRows
   const wanted = Math.max(1, Math.round(cutoutPx / box))
@@ -89,13 +90,24 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
     columns,
     rows,
     stripRows,
-    progressRow,
     titleRow,
     creditsRow,
     spectrumTopRow,
     chromaRow,
     cutout,
   }
+}
+
+/**
+ * The progress track's place: the middle section's second row (one empty row
+ * below the top strip), exactly as wide as the volume bar and in its columns,
+ * so the two frame the cutout above and below. Null without a volume bar.
+ */
+export function progressBarArea(layout: VisualizerLayout): LevelBar | null {
+  const levels = levelBarsArea(layout)
+  const row = layout.stripRows + 1
+  if (!levels || row >= levels.reverb.row || row >= layout.cutout.row) return null
+  return { column: levels.volume.column, row, columns: levels.volume.columns }
 }
 
 /**
