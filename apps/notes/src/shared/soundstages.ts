@@ -67,11 +67,11 @@ export interface FactorySoundstage {
 
 /** In the solids' order: index 0 is the tetrahedron, 4 the icosahedron. */
 export const FACTORY_SOUNDSTAGES: readonly FactorySoundstage[] = [
-  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { eq: [{ hz: 20, db: 5, handle: 2 }, { hz: 71, db: 8, handle: 2 }, { hz: 905, db: -6, handle: 2 }, { hz: 20000, db: -7, handle: 0 }], width: 1, reverb: 1, size: 0.1, room: 1 } },
-  { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-scale-balanced', settings: NEUTRAL_SOUNDSTAGE },
-  { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 167, db: -3, handle: 1 }, { hz: 5000, db: 3, handle: 2 }, { hz: 20000, db: 1, handle: 2 }], width: 1.5, reverb: 0.1, size: 1, room: 0 } },
-  { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { eq: [{ hz: 20, db: 1.5, handle: 0 }, { hz: 60, db: 4, handle: 1.6 }, { hz: 700, db: -4, handle: 1 }, { hz: 5100, db: 3, handle: 1 }, { hz: 20000, db: 1.5, handle: 2 }], width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
-  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-keyboard', settings: { eq: [{ hz: 20, db: 7, handle: 2 }, { hz: 67, db: 10, handle: 1.7 }, { hz: 302, db: -10, handle: 1.35 }, { hz: 6500, db: 6.5, handle: 1.05 }, { hz: 20000, db: 1.5, handle: 0 }], width: 1.4, reverb: 0.15, size: 0.3, room: 0.4 } },
+  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cube', settings: { eq: [{ hz: 20, db: 5, handle: 2 }, { hz: 71, db: 8, handle: 2 }, { hz: 905, db: -6, handle: 2 }, { hz: 20000, db: -7, handle: 0 }], width: 1, reverb: 1, size: 0.3, room: 0.8 } },
+  { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-box-open', settings: NEUTRAL_SOUNDSTAGE },
+  { id: 'wide', name: 'Wide', icon: 'fa-solid fa-wifi', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 167, db: -3, handle: 1 }, { hz: 5000, db: 3, handle: 2 }, { hz: 20000, db: 1, handle: 2 }], width: 1.5, reverb: 0.1, size: 1, room: 0 } },
+  { id: 'amped', name: 'Amped', icon: 'fa-solid fa-plug', settings: { eq: [{ hz: 20, db: 1.5, handle: 0 }, { hz: 60, db: 4, handle: 1.6 }, { hz: 700, db: -4, handle: 1 }, { hz: 5100, db: 3, handle: 1 }, { hz: 20000, db: 1.5, handle: 2 }], width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
+  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-burst', settings: { eq: [{ hz: 20, db: 7, handle: 2 }, { hz: 67, db: 10, handle: 1.7 }, { hz: 302, db: -10, handle: 1.35 }, { hz: 6500, db: 6.5, handle: 1.05 }, { hz: 20000, db: 1.5, handle: 0 }], width: 1.4, reverb: 0.15, size: 0.3, room: 0.4 } },
 ]
 
 export function factorySoundstage(id: FactorySoundstageId): FactorySoundstage {
