@@ -397,8 +397,8 @@ describe('StateService app-state field round-trip', () => {
         musicReverbRoom: 0.75,
         musicReverbFoliage: 0.4,
         musicStereoWidth: 1.3,
-        musicEqCurve: { skew: -1, shape: 1.5, stretch: 2, amount: 6 },
-        musicSoundstages: { factory: 'wide', custom: { skew: 0.5, shape: -1, stretch: 1.5, amount: 3, width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { skew: -2, shape: 2, stretch: 3, amount: 9, width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
+        musicEqCurve: [{ hz: 20, db: 1, handle: 0 }, { hz: 300, db: -2, handle: 0.5 }, { hz: 20000, db: 0, handle: 0.2 }],
+        musicSoundstages: { factory: 'wide', custom: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
         musicMuted: true,
         musicReverbBypassed: true,
         musicSoundOptionsOpen: true,
@@ -416,7 +416,7 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicReverbRoom).toBe(0.75)
     expect(loaded.menu?.musicReverbFoliage).toBe(0.4)
     expect(loaded.menu?.musicStereoWidth).toBe(1.3)
-    expect(loaded.menu?.musicEqCurve).toEqual({ skew: -1, shape: 1.5, stretch: 2, amount: 6 })
+    expect(loaded.menu?.musicEqCurve).toEqual([{ hz: 20, db: 1, handle: 0 }, { hz: 300, db: -2, handle: 0.5 }, { hz: 20000, db: 0, handle: 0.2 }])
     expect(loaded.menu?.musicSoundstages?.factory).toBe('wide')
     expect(loaded.menu?.musicSoundstages?.custom.room).toBe(0.3)
     expect(loaded.menu?.musicSoundstages?.saved[0]?.settings.room).toBe(0.7)

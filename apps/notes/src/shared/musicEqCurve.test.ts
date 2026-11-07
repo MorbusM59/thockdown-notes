@@ -2,78 +2,134 @@ import { describe, expect, it } from 'vitest'
 
 import {
   EQ_BAND_COUNT,
+  EQ_GRID_POINTS,
+  EQ_HIGH_HZ,
+  EQ_LOW_HZ,
+  EQ_MAX_POINTS,
+  EQ_SPAN_SEMITONES,
   FLAT_EQ_CURVE,
   eqBankResponseDb,
+  eqCurveDbAt,
   eqCurveGainsDb,
+  editEqPoint,
+  eqSegment,
+  insertEqPoint,
+  insertEqPointAfter,
+  removeEqPoint,
   fitEqBandGains,
+  hzAtSemitones,
   sanitizeEqCurve,
-  type EqCurveParams,
+  semitonesOf,
+  type EqPoint,
 } from './musicEqCurve'
 
-const SAMPLES: EqCurveParams[] = []
-for (const skew of [-3, -1.5, 0, 1, 3]) {
-  for (const shape of [-5, -1, -0.3, 0.5, 2, 5]) {
-    for (const stretch of [1, 2.5, 5]) SAMPLES.push({ skew, shape, stretch, amount: 10 })
-  }
+function curve(...middle: [number, number, number][]): EqPoint[] {
+  return [
+    { hz: EQ_LOW_HZ, db: 2, handle: 0.3 },
+    ...middle.map(([hz, db, handle]) => ({ hz, db, handle })),
+    { hz: EQ_HIGH_HZ, db: -3, handle: 0.6 },
+  ]
 }
 
-function maxAbs(values: ArrayLike<number>): number {
-  let out = 0
-  for (let k = 0; k < values.length; k += 1) out = Math.max(out, Math.abs(values[k]))
-  return out
+const SAMPLES: EqPoint[][] = []
+for (const handle of [0, 0.25, 0.5, 1]) {
+  SAMPLES.push(curve([100, 6, handle], [1000, -6, handle], [8000, 4, handle]))
+  SAMPLES.push(curve([60, -12, handle], [61, 12, handle], [5000, 15, handle], [5200, -15, handle]))
+  SAMPLES.push(curve([400, 9, handle]))
 }
 
 describe('musicEqCurve', () => {
-  it('is exactly flat when off', () => {
-    expect(maxAbs(fitEqBandGains(FLAT_EQ_CURVE))).toBe(0)
-    expect(maxAbs(fitEqBandGains({ skew: 1, shape: 0, stretch: 2, amount: 12 }))).toBe(0)
-    expect(maxAbs(fitEqBandGains({ skew: 1, shape: 2, stretch: 2, amount: 0 }))).toBe(0)
+  it('is exactly flat when every point is at 0 dB', () => {
+    expect(Array.from(fitEqBandGains(FLAT_EQ_CURVE)).every((gain) => gain === 0)).toBe(true)
   })
 
-  it('is amount times the curve: never past +-amount, 0 dB outside the bump, fading in from shape 0', () => {
-    for (const params of SAMPLES) {
-      const target = eqCurveGainsDb(params)
-      for (const value of target) expect(Math.abs(value)).toBeLessThanOrEqual(10 + 1e-9)
-      const half = eqCurveGainsDb({ ...params, amount: 5 })
-      for (let k = 0; k < target.length; k += 1) expect(half[k]).toBeCloseTo(target[k] / 2, 9)
+  it('passes through every point', () => {
+    for (const points of SAMPLES) {
+      for (const point of points) expect(eqCurveDbAt(points, semitonesOf(point.hz))).toBeCloseTo(point.db, 6)
     }
-    const peak = (shape: number) => Math.max(...Array.from(eqCurveGainsDb({ skew: 0, shape, stretch: 1, amount: 10 })).map(Math.abs))
-    expect(peak(5)).toBeCloseTo(10, 2)
-    expect(peak(0.1)).toBeLessThan(1e-3)
-    for (let shape = 0.2; shape <= 5; shape += 0.1) expect(peak(shape)).toBeGreaterThan(peak(shape - 0.1))
-    const edges = eqCurveGainsDb({ skew: 0, shape: 2, stretch: 1, amount: 10 })
-    expect(Math.abs(edges[0])).toBeLessThan(1e-9)
   })
 
-  it('is finite everywhere and the bank follows it', () => {
+  it('keeps each segment a function of frequency at every handle length', () => {
+    for (const points of SAMPLES) {
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const xs = eqSegment(points, index).map(([x]) => x)
+        for (let k = 1; k < xs.length; k += 1) expect(xs[k]).toBeGreaterThanOrEqual(xs[k - 1] - 1e-9)
+      }
+    }
+  })
+
+  it('is straight between points with no handles', () => {
+    const points = curve([1000, 10, 0]).map((point) => ({ ...point, handle: 0 }))
+    const mid = (semitonesOf(1000) + semitonesOf(EQ_HIGH_HZ)) / 2
+    expect(eqCurveDbAt(points, mid)).toBeCloseTo((10 - 3) / 2, 6)
+  })
+
+  it('is played by the bank within half a dB from 30 Hz to 10 kHz on smooth curves', () => {
     let worst = 0
-    let edge = 0
-    for (const params of SAMPLES) {
-      const gains = fitEqBandGains(params)
+    for (const handle of [0.5, 1]) {
+      const points = curve([100, 6, handle], [1000, -6, handle], [8000, 4, handle])
+      const gains = fitEqBandGains(points)
       expect(gains.length).toBe(EQ_BAND_COUNT)
-      for (const gain of gains) expect(Number.isFinite(gain)).toBe(true)
-      const target = eqCurveGainsDb(params)
+      const target = eqCurveGainsDb(points)
       const response = eqBankResponseDb(gains)
-      // 30 Hz to 10 kHz: at the window's ends the curve can rise near-vertically (a plateau's power 1/|shape|)
-      // and a third-octave bank rolls off there, so the edges (to 18 kHz; above it nothing is held) get a looser bound.
-      for (let k = 0; k < 235; k += 1) edge = Math.max(edge, Math.abs(response[k] - target[k]))
       for (let k = 14; k < 201; k += 1) worst = Math.max(worst, Math.abs(response[k] - target[k]))
     }
-    expect(worst).toBeLessThan(1.5)
-    expect(edge).toBeLessThan(7)
+    expect(worst).toBeLessThan(0.5)
+    expect(EQ_GRID_POINTS).toBeGreaterThan(200)
   })
 
-  it('mirrors a negative skew across the middle of the spectrum', () => {
-    for (const params of SAMPLES) {
-      const plus = eqCurveGainsDb({ ...params, skew: Math.abs(params.skew) })
-      const minus = eqCurveGainsDb({ ...params, skew: -Math.abs(params.skew) })
-      for (let k = 0; k < plus.length; k += 1) expect(minus[k]).toBeCloseTo(plus[plus.length - 1 - k], 9)
-    }
+  it('sanitizes into a valid curve', () => {
+    expect(sanitizeEqCurve({ skew: 1 })).toEqual(FLAT_EQ_CURVE)
+    const out = sanitizeEqCurve([
+      { hz: 5, db: 99, handle: 3 },
+      { hz: 200, db: 1, handle: 0.5 },
+      { hz: 205, db: 2, handle: 0.5 },
+      { hz: 100, db: 2, handle: 0.5 },
+      { hz: 'x', db: 0 },
+      { hz: 30000, db: -99, handle: -1 },
+    ])
+    expect(out).toEqual([
+      { hz: EQ_LOW_HZ, db: 15, handle: 1 },
+      { hz: 200, db: 1, handle: 0.5 },
+      { hz: EQ_HIGH_HZ, db: -15, handle: 0 },
+    ])
+    const many = Array.from({ length: 30 }, (_, k) => ({ hz: hzAtSemitones(2 + (k * 3)), db: 0, handle: 0 }))
+    expect(sanitizeEqCurve([FLAT_EQ_CURVE[0], ...many, FLAT_EQ_CURVE[1]]).length).toBe(EQ_MAX_POINTS)
+    expect(semitonesOf(EQ_HIGH_HZ)).toBeCloseTo(EQ_SPAN_SEMITONES, 9)
+  })
+})
+
+describe('musicEqCurve editing', () => {
+  const base = curve([1000, 0, 0.5])
+
+  it('keeps the ends on the axis and the points between their neighbours', () => {
+    expect(editEqPoint(base, 0, { semitones: 30, db: 4 })[0]).toEqual({ hz: EQ_LOW_HZ, db: 4, handle: 0.3 })
+    const moved = editEqPoint(base, 1, { semitones: 500, db: 99, handle: 2 })[1]
+    expect(semitonesOf(moved.hz)).toBeCloseTo(EQ_SPAN_SEMITONES - 1, 9)
+    expect(moved.db).toBe(15)
+    expect(moved.handle).toBe(1)
   })
 
-  it('snaps shape to its 0.1 grid and clamps', () => {
-    expect(sanitizeEqCurve({ skew: 9, shape: 0.04, stretch: 0, amount: 99 })).toEqual({ skew: 3, shape: 0, stretch: 1, amount: 15 })
-    expect(sanitizeEqCurve({ shape: 1.26 }).shape).toBeCloseTo(1.3, 9)
-    expect(sanitizeEqCurve(null)).toEqual(FLAT_EQ_CURVE)
+  it('inserts in order, refuses one too close or past the cap, and never removes an end', () => {
+    const added = insertEqPoint(base, 12, 3)
+    expect(added?.index).toBe(1)
+    expect(added?.curve.length).toBe(4)
+    expect(insertEqPoint(base, 0.5, 0)).toBeNull()
+    expect(insertEqPoint(base, semitonesOf(1000) + 0.5, 0)).toBeNull()
+    let full: EqPoint[] = base
+    for (let k = 1; full.length < EQ_MAX_POINTS; k += 1) full = insertEqPoint(full, k * 6, 0)?.curve ?? full
+    expect(insertEqPoint(full, 100, 0)).toBeNull()
+    expect(removeEqPoint(base, 0)).toEqual(base)
+    expect(removeEqPoint(base, 2)).toEqual(base)
+    expect(removeEqPoint(base, 1).length).toBe(2)
+  })
+
+  it('adds a point between a point and the next one, on the curve', () => {
+    const added = insertEqPointAfter(base, 1)
+    expect(added?.index).toBe(2)
+    const at = semitonesOf(added!.curve[2].hz)
+    expect(at).toBeGreaterThan(semitonesOf(1000))
+    expect(added!.curve[2].db).toBeCloseTo(Math.round(eqCurveDbAt(base, at) * 2) / 2, 9)
+    expect(insertEqPointAfter(base, 2)?.index).toBe(2)
   })
 })

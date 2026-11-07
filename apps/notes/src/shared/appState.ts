@@ -1,4 +1,4 @@
-import type { EqCurveParams } from './musicEqCurve';
+import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
 import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
@@ -212,7 +212,7 @@ export interface PersistedMenuState {
   /** The music's soundstages (`shared/soundstages.ts`): the last factory stage, the custom stage, the saved ones. */
   musicSoundstages?: SoundstagePreferences;
   /** The music's EQ curve (`shared/musicEqCurve.ts`). */
-  musicEqCurve?: EqCurveParams;
+  musicEqCurve?: EqPoint[];
   /**
    * The layout each context last showed: the regular app and the F5
    * visualizer each remember a light/dark mode and the loadout entry active

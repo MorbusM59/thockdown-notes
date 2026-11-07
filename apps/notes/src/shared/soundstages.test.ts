@@ -9,7 +9,7 @@ import {
   steppedFactorySoundstage,
 } from './soundstages'
 
-const someCustom = { skew: 0.4, shape: 1.3, stretch: 2, amount: 5, width: 1.03, reverb: 0.3, size: 0.5, room: 0.6 }
+const someCustom = { eq: [{ hz: 20, db: 1, handle: 0 }, { hz: 440, db: -3, handle: 0.5 }, { hz: 20000, db: 0, handle: 0 }], width: 1.03, reverb: 0.3, size: 0.5, room: 0.6 }
 
 describe('soundstages', () => {
   it('derives the active stage from the live settings: factory, then saved, then custom', () => {
@@ -37,11 +37,11 @@ describe('soundstages', () => {
   it('sanitizes a stored record into range, dropping what is unusable', () => {
     const out = sanitizeSoundstagePreferences({
       factory: 'nope',
-      custom: { skew: 5, width: 'x', room: -1 },
+      custom: { eq: 'old', width: 'x', room: -1 },
       saved: [{ id: 'a', settings: someCustom }, { id: 'a', settings: someCustom }, { settings: someCustom }, null],
     })
     expect(out.factory).toBe('neutral')
-    expect(out.custom.skew).toBe(3)
+    expect(out.custom.eq).toEqual([{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }])
     expect(out.custom.width).toBe(1)
     expect(out.custom.room).toBe(0)
     expect(out.saved.map((stage) => stage.id)).toEqual(['a'])

@@ -15,7 +15,7 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { publishThemeControls } from './visualizer/themeControls'
-import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqCurveParams } from './shared/musicEqCurve'
+import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
 import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
@@ -2265,7 +2265,7 @@ function App() {
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
   // The EQ curve (shared/musicEqCurve.ts) and the soundstages (shared/soundstages.ts).
-  const [musicEqCurve, setMusicEqCurve] = useState<EqCurveParams>(FLAT_EQ_CURVE)
+  const [musicEqCurve, setMusicEqCurve] = useState<EqPoint[]>(() => FLAT_EQ_CURVE.map((point) => ({ ...point })))
   const [soundstagePreferences, setSoundstagePreferences] = useState<SoundstagePreferences>(DEFAULT_SOUNDSTAGE_PREFERENCES)
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
@@ -6568,7 +6568,7 @@ ${markdownHtml}
   // SOUNDSTAGES (shared/soundstages.ts): the live settings ARE the stage;
   // which stage is active is derived from them, never stored.
   const liveSoundstage = useMemo<SoundstageSettings>(() => ({
-    ...musicEqCurve,
+    eq: musicEqCurve,
     width: musicStereoWidth,
     reverb: musicReverbAmount,
     size: musicReverbRoom,
@@ -6580,7 +6580,7 @@ ${markdownHtml}
   }, [liveSoundstage])
   /** Play a stage: every setting at once. Reverb and size go through the music bar's own rule (a bypassed reverb turns back on). */
   const applySoundstage = useCallback((settings: SoundstageSettings) => {
-    setMusicEqCurve({ skew: settings.skew, shape: settings.shape, stretch: settings.stretch, amount: settings.amount })
+    setMusicEqCurve(settings.eq.map((point) => ({ ...point })))
     setMusicStereoWidth(settings.width)
     setMusicReverbFoliage(settings.room)
     readNowPlaying().setLevel('reverb', settings.reverb)

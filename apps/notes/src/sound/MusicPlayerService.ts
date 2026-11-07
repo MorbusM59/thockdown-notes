@@ -3,7 +3,7 @@ import { foliageNearCutoffHz, type RoomShape } from '@thockdown/audio/room';
 import { StereoWidth } from '@thockdown/audio/stereoWidth';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
 
-import { EQ_BAND_COUNT, EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q, fitEqBandGains, type EqCurveParams } from '../shared/musicEqCurve';
+import { EQ_BAND_COUNT, EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q, fitEqBandGains, type EqCurve } from '../shared/musicEqCurve';
 
 /**
  * MusicPlayerService — Web Audio API based music playback.
@@ -19,7 +19,7 @@ import { EQ_BAND_COUNT, EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q, fitEqBandGains, type 
  * The reverb is the family's one ROOM (@thockdown/audio/room.ts, played by
  * liveRoom.ts): the room slider is its SIZE and `reverbFoliage` its FOLIAGE,
  * the same two numbers the soundscape's space is made of.
- * The EQ is a CURVE (`shared/musicEqCurve.ts`: skew, shape, stretch, amount)
+ * The EQ is a CURVE the reader draws (`shared/musicEqCurve.ts`: points joined by a smooth path)
  * played by a bank of third-octave peaking filters whose gains are fitted to
  * it once per change of the curve; it sits before the volume, so the reverb
  * hears it too. It is the music's own and the soundscape never has it.
@@ -414,8 +414,8 @@ export class MusicPlayerService {
   }
 
   /** The EQ curve: the band gains are fitted to it here, once, and each band glides to its gain. */
-  setEqCurve(params: EqCurveParams): void {
-    this.eqGainsDb = fitEqBandGains(params);
+  setEqCurve(curve: EqCurve): void {
+    this.eqGainsDb = fitEqBandGains(curve);
     const context = this.audioCtx;
     if (!context) return;
     const now = context.currentTime;

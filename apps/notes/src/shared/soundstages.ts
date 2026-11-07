@@ -1,15 +1,4 @@
-import {
-  EQ_AMOUNT_MAX,
-  EQ_AMOUNT_MIN,
-  EQ_SHAPE_MAX,
-  EQ_SHAPE_MIN,
-  EQ_SKEW_MAX,
-  EQ_SKEW_MIN,
-  EQ_STRETCH_MAX,
-  EQ_STRETCH_MIN,
-  FLAT_EQ_CURVE,
-  type EqCurveParams,
-} from './musicEqCurve'
+import { FLAT_EQ_CURVE, sameEqCurve, sanitizeEqCurve, type EqPoint } from './musicEqCurve'
 
 /**
  * SOUNDSTAGES: named sets of the music's sound (everything in Options > Music
@@ -37,8 +26,10 @@ import {
 const WIDTH_MIN = 0
 const WIDTH_MAX = 1.5
 
-/** One stage: every music setting but the volume. The first four are the EQ curve (`musicEqCurve.ts`). */
-export interface SoundstageSettings extends EqCurveParams {
+/** One stage: every music setting but the volume. */
+export interface SoundstageSettings {
+  /** The EQ curve's points (`musicEqCurve.ts`). */
+  eq: EqPoint[]
   /** 0 mono, 1 as recorded, 1.5 widest (`stereoWidth.ts`). */
   width: number
   /** The reverb's wet amount, 0..1. */
@@ -49,13 +40,10 @@ export interface SoundstageSettings extends EqCurveParams {
   room: number
 }
 
-export const SOUNDSTAGE_KEYS = ['skew', 'shape', 'stretch', 'amount', 'width', 'reverb', 'size', 'room'] as const satisfies readonly (keyof SoundstageSettings)[]
+/** The settings that are one number each; the EQ curve is compared and sanitized on its own. */
+export const SOUNDSTAGE_KEYS = ['width', 'reverb', 'size', 'room'] as const satisfies readonly (keyof SoundstageSettings)[]
 
-const RANGES: Record<keyof SoundstageSettings, readonly [number, number]> = {
-  skew: [EQ_SKEW_MIN, EQ_SKEW_MAX],
-  shape: [EQ_SHAPE_MIN, EQ_SHAPE_MAX],
-  stretch: [EQ_STRETCH_MIN, EQ_STRETCH_MAX],
-  amount: [EQ_AMOUNT_MIN, EQ_AMOUNT_MAX],
+const RANGES: Record<(typeof SOUNDSTAGE_KEYS)[number], readonly [number, number]> = {
   width: [WIDTH_MIN, WIDTH_MAX],
   reverb: [0, 1],
   size: [0, 1],
@@ -63,7 +51,7 @@ const RANGES: Record<keyof SoundstageSettings, readonly [number, number]> = {
 }
 
 /** The music player's defaults (`DEFAULT_MUSIC_PLAYER_CONFIG`): the neutral stage. */
-export const NEUTRAL_SOUNDSTAGE: Readonly<SoundstageSettings> = { ...FLAT_EQ_CURVE, width: 1, reverb: 0, size: 0.3, room: 0 }
+export const NEUTRAL_SOUNDSTAGE: Readonly<SoundstageSettings> = { eq: FLAT_EQ_CURVE.map((point) => ({ ...point })), width: 1, reverb: 0, size: 0.3, room: 0 }
 
 export const FACTORY_SOUNDSTAGE_IDS = ['muted', 'neutral', 'wide', 'amped', 'thocky'] as const
 export type FactorySoundstageId = (typeof FACTORY_SOUNDSTAGE_IDS)[number]
@@ -79,11 +67,11 @@ export interface FactorySoundstage {
 
 /** In the solids' order: index 0 is the tetrahedron, 4 the icosahedron. */
 export const FACTORY_SOUNDSTAGES: readonly FactorySoundstage[] = [
-  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { skew: -1.5, shape: 1, stretch: 1.5, amount: 4, width: 1, reverb: 1, size: 0.1, room: 1 } },
+  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { eq: [{ hz: 20, db: 2, handle: 0 }, { hz: 150, db: 2, handle: 0.5 }, { hz: 3000, db: -4, handle: 0.5 }, { hz: 20000, db: -9, handle: 0 }], width: 1, reverb: 1, size: 0.1, room: 1 } },
   { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-scale-balanced', settings: NEUTRAL_SOUNDSTAGE },
-  { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { skew: 2, shape: 1, stretch: 1.5, amount: 3, width: 1.5, reverb: 0.1, size: 1, room: 0 } },
-  { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { skew: 0, shape: -1, stretch: 1, amount: 4, width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
-  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-keyboard', settings: { skew: 0, shape: -1.5, stretch: 1, amount: 6, width: 1.2, reverb: 0.2, size: 0, room: 1 } },
+  { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 250, db: -1.5, handle: 0.5 }, { hz: 8000, db: 3, handle: 0.5 }, { hz: 20000, db: 3, handle: 0 }], width: 1.5, reverb: 0.1, size: 1, room: 0 } },
+  { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { eq: [{ hz: 20, db: 3, handle: 0 }, { hz: 80, db: 4, handle: 0.5 }, { hz: 700, db: -2, handle: 0.5 }, { hz: 5000, db: 2.5, handle: 0.5 }, { hz: 20000, db: 2, handle: 0 }], width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
+  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-keyboard', settings: { eq: [{ hz: 20, db: 2, handle: 0 }, { hz: 90, db: 5, handle: 0.5 }, { hz: 500, db: 1, handle: 0.5 }, { hz: 4000, db: -2, handle: 0.5 }, { hz: 20000, db: -4, handle: 0 }], width: 1.2, reverb: 0.2, size: 0, room: 1 } },
 ]
 
 export function factorySoundstage(id: FactorySoundstageId): FactorySoundstage {
@@ -119,7 +107,7 @@ export const DEFAULT_SOUNDSTAGE_PREFERENCES: SoundstagePreferences = {
  * arithmetic on a value that went through a slider and back.
  */
 export function sameSoundstage(a: SoundstageSettings, b: SoundstageSettings): boolean {
-  return SOUNDSTAGE_KEYS.every((key) => Math.abs(a[key] - b[key]) < 0.0005)
+  return sameEqCurve(a.eq, b.eq) && SOUNDSTAGE_KEYS.every((key) => Math.abs(a[key] - b[key]) < 0.0005)
 }
 
 /** What the live settings are: a factory stage, else a saved one, else the custom stage. */
@@ -145,7 +133,7 @@ export function matchingSoundstage(live: SoundstageSettings, preferences: Sounds
 export function customAfterLiveChange(live: SoundstageSettings, preferences: SoundstagePreferences): SoundstagePreferences {
   if (FACTORY_SOUNDSTAGES.some((stage) => sameSoundstage(stage.settings, live))) return preferences
   if (sameSoundstage(preferences.custom, live)) return preferences
-  return { ...preferences, custom: { ...live } }
+  return { ...preferences, custom: { ...live, eq: live.eq.map((point) => ({ ...point })) } }
 }
 
 /** The factory stage `direction` places from the last one chosen, stopping at either end. */
@@ -156,7 +144,7 @@ export function steppedFactorySoundstage(from: FactorySoundstageId, direction: 1
 
 function sanitizeSettings(value: unknown, fallback: SoundstageSettings): SoundstageSettings {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const out = { ...fallback }
+  const out = { ...fallback, eq: input.eq === undefined ? fallback.eq.map((point) => ({ ...point })) : sanitizeEqCurve(input.eq) }
   for (const key of SOUNDSTAGE_KEYS) {
     const raw = input[key]
     if (typeof raw === 'number' && Number.isFinite(raw)) out[key] = Math.max(RANGES[key][0], Math.min(RANGES[key][1], raw))

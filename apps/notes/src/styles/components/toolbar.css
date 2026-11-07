@@ -434,31 +434,107 @@
   opacity: 0.45;
 }
 
-/* Options > Music: the EQ curve graph, one row of the six-wide options grid (EqCurveGraph.tsx). */
+/* Options > Music: the EQ curve editor (EqCurveEditor.tsx). The graph is two
+   rows of the six-wide options grid and wears a slider track; its points are
+   half-size slider thumbs, the selected one in the pressed thumb's border. */
 .options-eq-graph {
-  grid-column: 1 / -1;
-  width:       100%;
-  height:      100%;
-  color:       var(--color-text-80);
+  position:     relative;
+  grid-column:  1 / -1;
+  grid-row:     span 2;
+  touch-action: none;
+  outline:      none;
 }
 
 .options-eq-graph svg {
-  display: block;
-  width:   100%;
-  height:  100%;
+  position:       absolute;
+  inset:          0;
+  width:          100%;
+  height:         100%;
+  pointer-events: none;
+  color:          var(--color-text-40);
 }
 
-.options-eq-graph-grid {
-  stroke:         currentColor;
-  stroke-opacity: 0.2;
-  stroke-width:   1;
-  vector-effect:  non-scaling-stroke;
+.options-eq-graph-octave,
+.options-eq-graph-centre {
+  stroke:           currentColor;
+  stroke-width:     1;
+  vector-effect:    non-scaling-stroke;
+}
+
+.options-eq-graph-octave {
+  stroke-dasharray: 1 3;
+}
+
+.options-eq-graph-centre {
+  stroke-dasharray: 4 3;
 }
 
 .options-eq-graph-curve {
   fill:            none;
-  stroke:          currentColor;
+  stroke:          var(--color-text-80);
   stroke-width:    1.5;
   stroke-linejoin: round;
   vector-effect:   non-scaling-stroke;
+}
+
+.options-eq-point {
+  width:     calc((var(--canonical-scroll-handle-thickness) + 2px) / 2 + 2px);
+  height:    calc((var(--canonical-scroll-handle-thickness) + 2px) / 2 + 2px);
+  transform: translate(-50%, -50%);
+  z-index:   2;
+}
+
+.options-eq-point.is-active {
+  border-color: rgba(81, 73, 66, 0.8);
+}
+
+/* One row of six track-styled cells per point, under the graph. */
+.options-eq-rows {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--toolbar-options-gap);
+  margin-top:     var(--toolbar-options-gap);
+}
+
+.options-eq-row {
+  display:               grid;
+  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr 0.8fr 0.8fr;
+  column-gap:            var(--toolbar-options-gap);
+  height:                var(--canonical-scroll-thickness);
+}
+
+.options-eq-cell {
+  box-sizing:    border-box;
+  min-width:     0;
+  height:        100%;
+  margin:        0;
+  padding:       0;
+  border:        1px solid var(--canonical-scroll-track-border);
+  border-radius: var(--border-radius-regular);
+  background:    var(--canonical-scroll-track-bg);
+  box-shadow:    var(--box-shadow-inverted-light);
+  color:         var(--color-text-80);
+  font-size:     calc(10px * var(--ui-font-scale));
+  line-height:   1;
+  text-align:    center;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+}
+
+.options-eq-row.is-active .options-eq-index {
+  border-color: rgba(81, 73, 66, 0.8);
+}
+
+.options-eq-field {
+  outline: none;
+  font-family: inherit;
+}
+
+.options-eq-field:focus {
+  border-color: var(--btn-border-active);
+}
+
+.options-eq-button.is-disabled {
+  opacity: 0.4;
 }
