@@ -73,8 +73,8 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   const safeRows = Math.max(0, Math.floor(heightPx / box) - 1)
   const safeColumns = Math.max(0, Math.floor(widthPx / box) - 1)
   const safeStripRows = Math.max(0, Math.min(STRIP_ROWS, Math.floor((safeRows - 1) / 2)))
-  const wanted = Math.max(1, Math.round(cutoutPx / box))
-  const size = Math.max(0, Math.min(wanted, safeRows - 2 * safeStripRows, safeColumns))
+  // Odd, so a centre box sits on the screen's centre lines.
+  const size = largestOddAtMost(Math.min(cutoutBoxes(cutoutPx, box), safeRows - 2 * safeStripRows, safeColumns))
   const cutLeftPx = Math.floor((widthPx - size * box) / 2)
   const cutTopPx = Math.floor((heightPx - size * box) / 2)
   const originXPx = ((cutLeftPx % box) + box) % box
@@ -367,9 +367,18 @@ export const REQUIRED_ROWS_BESIDE_CUTOUT = 2 * (STRIP_ROWS + 2)
  * line height first, down to 1, and then the font size with it.
  */
 export function fitVisualizerBox(heightPx: number, boxPx: number, fontSizePx: number, cutoutPx: number): { boxPx: number; fontSizePx: number } {
-  const fits = (box: number) => box * (REQUIRED_ROWS_BESIDE_CUTOUT + Math.max(1, Math.round(cutoutPx / box))) <= heightPx
+  const fits = (box: number) => box * (REQUIRED_ROWS_BESIDE_CUTOUT + cutoutBoxes(cutoutPx, box)) <= heightPx
   let box = Math.max(1, boxPx)
   if (heightPx <= 0) return { boxPx: box, fontSizePx }
   while (box > 1 && !fits(box)) box -= 1
   return { boxPx: box, fontSizePx: Math.min(fontSizePx, box) }
+}
+
+/** The cutout's size in boxes for about `cutoutPx`: the nearest odd count, at least one. */
+export function cutoutBoxes(cutoutPx: number, boxPx: number): number {
+  return Math.max(1, 2 * Math.round((cutoutPx / boxPx - 1) / 2) + 1)
+}
+
+function largestOddAtMost(n: number): number {
+  return n < 1 ? 0 : n % 2 === 1 ? n : n - 1
 }
