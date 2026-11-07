@@ -96,7 +96,7 @@ describe('DatabaseService caret loadout fields', () => {
       caretHaloBlurPx: -4,
       caretAnimationDurationMs: 1,
       caretFrameDurationMs: 100000,
-      caretEffectStrengthPercent: -20,
+      caretEffectStrengthPercent: -250,
       // A value that is not a known preset key must not reach the stylesheet
       // as an animation name.
       caretAnimationPreset: 'heartbeat; } body { display: none } @keyframes x {',
@@ -110,7 +110,7 @@ describe('DatabaseService caret loadout fields', () => {
     expect(stored.caretHaloBlurPx).toBe(0)
     expect(stored.caretAnimationDurationMs).toBe(100)
     expect(stored.caretFrameDurationMs).toBe(500)
-    expect(stored.caretEffectStrengthPercent).toBe(0)
+    expect(stored.caretEffectStrengthPercent).toBe(-100)
     expect(stored.caretAnimationPreset).toBe(DEFAULT_CARET_SETTINGS.animationPreset)
   })
 
