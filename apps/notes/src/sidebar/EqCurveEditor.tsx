@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
+import { HOLD_GRACE_PX } from '@thockdown/interaction/holdTiming'
 import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
 
 import {
@@ -48,8 +49,11 @@ interface Drag {
   index: number
   mode: 'move' | 'handle'
   pointerId: number
+  startX: number
   startY: number
   startHandle: number
+  /** Whether the pointer has left the grace radius; a right press that never does removes the point. */
+  moved: boolean
 }
 
 /**
@@ -139,7 +143,9 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
       index,
       mode: event.button === 2 ? 'handle' : 'move',
       pointerId: event.pointerId,
+      startX: event.clientX,
       startY: event.clientY,
+      moved: false,
       startHandle: curveRef.current[index]?.handle ?? 0,
     }
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -148,6 +154,10 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
+    if (!drag.moved) {
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < HOLD_GRACE_PX) return
+      drag.moved = true
+    }
     const { semitones, db, height } = pointerValues(event)
     if (drag.mode === 'move') {
       edit(drag.index, { semitones, db })
@@ -158,8 +168,15 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
   }
 
   const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId !== event.pointerId) return
+    const drag = dragRef.current
+    if (drag?.pointerId !== event.pointerId) return
     dragRef.current = null
+    // A right press released without dragging removes the point (the end points stay).
+    const curve = curveRef.current
+    if (event.type === 'pointerup' && drag.mode === 'handle' && !drag.moved && drag.index > 0 && drag.index < curve.length - 1) {
+      onChange(removeEqPoint(curve, drag.index))
+      setSelected(null)
+    }
   }
 
   const removeSelected = () => {
@@ -222,7 +239,7 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
           tabIndex={0}
           role="group"
           aria-label="Music EQ curve"
-          data-tooltip={'EQ curve: 20 Hz to 20 kHz, -15 to +15 dB\nClick to add a point, drag to move it, right-drag up or down to round it.\nArrows move the selected point, Delete removes it.'}
+          data-tooltip={'EQ curve: 20 Hz to 20 kHz, -15 to +15 dB\nClick to add a point, drag to move it, right-drag up or down to round it, right-click to remove it.\nArrows move the selected point, Delete removes it.'}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
