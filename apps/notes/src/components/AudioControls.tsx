@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicPoolFilter, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
-import { samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
+import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -881,6 +881,7 @@ export const AudioControls = memo(function AudioControls({
     filterRef.current = filter
     onPoolFilterChange(filter)
   }, [onPoolFilterChange])
+  const isPoolFiltered = !samePoolFilter(poolFilter, EMPTY_POOL_FILTER)
   const publishedPool = useMemo(() => ({ slots: activeSlots, counts, filter: poolFilter }), [activeSlots, counts, poolFilter])
   const publishedLevels = useMemo(() => ({ volume, reverb: reverbAmount, room: reverbRoom }), [volume, reverbAmount, reverbRoom])
   const publishedSetLevel = useCallback((level: keyof SoundLevels, fraction: number) => { mediaActionsRef.current.setLevel(level, fraction) }, [])
@@ -1092,22 +1093,26 @@ export const AudioControls = memo(function AudioControls({
           <span className="fa-solid fa-backward" aria-hidden="true" />
         </button>
 
-        {/* Favorability / skip button */}
+        {/* Favorability / skip button. While a pool filter is in force (set in
+            the visualizer), its left press clears the filter instead, and the
+            button shows that state: a magnifying glass, pressed. */}
         <button
           type="button"
-          className={`audio-ctrl-btn${currentSong?.priority === 0 ? ' is-active' : ''}`}
-          data-tooltip={currentSong?.priority === 0
-            ? 'Left-click: clear the replay marker. Right-click: skip. Hold right-click: purge.'
-            : 'Left-click: favourite (replay next). Right-click: skip. Hold right-click: purge.'}
-          aria-label="Favourite or skip current song"
-          aria-pressed={currentSong?.priority === 0}
-          onClick={() => { void handleFavoriteLeft() }}
+          className={`audio-ctrl-btn${isPoolFiltered || currentSong?.priority === 0 ? ' is-active' : ''}`}
+          data-tooltip={isPoolFiltered
+            ? 'Songs are filtered. Left-click: clear the filter. Right-click: skip. Hold right-click: purge.'
+            : currentSong?.priority === 0
+              ? 'Left-click: clear the replay marker. Right-click: skip. Hold right-click: purge.'
+              : 'Left-click: favourite (replay next). Right-click: skip. Hold right-click: purge.'}
+          aria-label={isPoolFiltered ? 'Clear song filter, or skip current song' : 'Favourite or skip current song'}
+          aria-pressed={isPoolFiltered || currentSong?.priority === 0}
+          onClick={() => { if (isPoolFiltered) setPoolFilter(EMPTY_POOL_FILTER); else void handleFavoriteLeft() }}
           data-secondary-press="action"
           onContextMenu={handleFavoriteContextMenu}
           onPointerDown={handleFavPointerDown}
           onPointerUp={(e) => { void handleFavPointerUp(e) }}
         >
-          <span className="fa-solid fa-heart" aria-hidden="true" />
+          <span className={`fa-solid ${isPoolFiltered ? 'fa-magnifying-glass' : 'fa-heart'}`} aria-hidden="true" />
         </button>
 
         {/* Fast forward */}
