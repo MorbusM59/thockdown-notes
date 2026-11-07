@@ -3,6 +3,7 @@ import type { SoundstagePreferences } from './soundstages';
 import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
 import type { VisualizerFont } from './visualizerFont';
+import type { VisualizerSettings } from '@thockdown/look/visualizer';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
 import type { InvokeChannels } from './ipcContract';
@@ -73,8 +74,15 @@ export interface PersistedMenuState {
   editorFontSize?: number;
   editorSpacing?: number;
   editorGlyphPaddingPx?: number;
-  /** Options > Visualizer Font; absent in a save from before it existed, and then the defaults (shared/visualizerFont.ts). */
+  /** Options > Visualizer (its font); absent in a save from before it existed, and then the defaults (shared/visualizerFont.ts). */
   visualizerFont?: VisualizerFont;
+  /**
+   * Options > Visualizer: how the visualizer follows the music, one setting
+   * for every layout (its colours are each layout's). Absent in a save from
+   * before it became global, until `electron/visualizerTuningMigration.ts`
+   * writes the active layout's there; the renderer then takes the defaults.
+   */
+  visualizer?: VisualizerSettings;
   uiFontStyle?:
     | 'system'
     | 'ibmplexsans'

@@ -1,17 +1,23 @@
 /**
- * The visualizer: elements of the look that follow the playing music, saved
- * with the layout like every other part of it (Options > Visualizer). Three
+ * The visualizer: elements of the look that follow the playing music. Three
  * independent BLOCKS, each following the trackers through its own mix with
  * its own timing: the caret, which dips; the active editor's EDGE (an inner shadow); and the
- * PANE (the box outlines in the edit view, a flat wash of colour anywhere else). The edge and the pane each have a colour, picked like any
- * other layout colour (so a theme's invert applies to it as to the rest).
+ * PANE (the box outlines in the edit view, a flat wash of colour anywhere else);
+ * plus the visualizer mode's own scene (`VisualizerImmersive`).
  *
- * Whether the visualizer is on, and the per-device visual delay, are NOT
- * here: on/off persists across layout switches (as the custom cursor's
- * does), and a delay belongs to the sound device, not to a look
- * (`apps/notes/src/shared/beatSettings.ts`). The engine is the notes app's
- * `sound/musicBeat.ts`; this file is only the shape, its defaults and its
- * sanitizer, shared by the renderer and the main process.
+ * The cut between what is GLOBAL and what belongs to a LAYOUT: how the
+ * visualizer follows the music (`VisualizerSettings`, Options > Visualizer)
+ * is one setting for every layout, saved in the app state; its COLOURS
+ * (`VisualizerColors`, Options > Colors) are part of the layout, picked like
+ * any other layout colour (so a theme's invert applies to them as to the
+ * rest), and so is whether the caret follows the music (the layout's
+ * `caretFollowsMusic`, a button of the caret's blink row).
+ *
+ * Whether the visualizer is on, the per-device visual delay and the
+ * response are not here either (`apps/notes/src/shared/beatSettings.ts`).
+ * The engine is the notes app's `sound/musicBeat.ts`; this file is only the
+ * shapes, their defaults and their sanitizers, shared by the renderer and
+ * the main process.
  */
 
 /**
@@ -95,24 +101,20 @@ export interface VisualizerChannel {
  * so it has only the depth of each beat (`effect`, as a channel's) and the
  * fall each beat makes (`shape` and `fallSec`, cut at the next beat).
  *
- * `followsMusic` is the switch (Options > Caret, the last button of the blink
- * row): while it is on, music is playing and a beat has been found, the caret
- * follows the beat; at any other moment it blinks with its own blink, which
- * the switch leaves selected. The block's sliders are shown only while it is on.
+ * Whether the caret follows at all is the layout's (`caretFollowsMusic`,
+ * Options > Caret, the last button of the blink row): while it is on, music
+ * is playing and a beat has been found, the caret follows the beat; at any
+ * other moment it blinks with its own blink, which the switch leaves
+ * selected. The block's sliders are shown only while it is on.
  */
-export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'shape' | 'fallSec'> & { followsMusic: boolean }
-
-/** A block drawn in a colour of its own. */
-export interface VisualizerColorChannel extends VisualizerChannel {
-  color: string
-}
+export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'shape' | 'fallSec'>
 
 /**
  * The edge's geometry, which does not follow the music: only its opacity
  * does. It is drawn as two inset shadows (editor.css's `.editor-beat-edge`),
  * a narrow edge (an eighth of the blur) and a soft body.
  */
-export interface VisualizerEdgeChannel extends VisualizerColorChannel {
+export interface VisualizerEdgeChannel extends VisualizerChannel {
   /** How far, in px, the edge's solid part reaches in from the editor's edges (both shadows' spread radius). */
   spreadPx: number
   /** How soft its edge is, in px: the soft body's blur radius; the narrow edge's is an eighth of it. */
@@ -136,8 +138,8 @@ export interface VisualizerSettings {
    * own; in any view without a grid, a flat wash of its colour over the
    * editor. A response draws it.
    */
-  pane: VisualizerColorChannel
-  /** The visualizer mode's own look (F3), as opposed to the beat's effects on the editor. */
+  pane: VisualizerChannel
+  /** The visualizer mode's own look (F5), as opposed to the beat's effects on the editor. */
   immersive: VisualizerImmersive
 }
 
@@ -168,8 +170,6 @@ export interface VisualizerImmersive {
   swayReturn: number
   /** -`SWAY_DRIFT_MAX_PX` to it: a steady drift of the linear stacks along their gradient, px a second for the nearest; 0 none. */
   swayDrift: number
-  /** The grid wave's colour (apps/notes's GridWave.tsx), picked like any layout colour, before the theme's invert. */
-  waveColor: string
   /** The grid wave's length, in boxes, from one band's peak to the next. */
   waveBoxes: number
   /** Beats of the music (`subscribeMusicTempo`) a wave band takes to travel one wave length. */
@@ -193,20 +193,6 @@ export interface VisualizerImmersive {
    */
   waveShape: number
   waveFallSec: number
-  /** The centre pulse's colour (GridWave.tsx), picked like any layout colour. */
-  pulseColor: string
-  /**
-   * The visualizer's ACCENT: the spectrum's bars and the progress track's lit
-   * boxes. Empty follows the theme's caret colour, which is what both drew in
-   * before they had a colour of their own.
-   */
-  accentColor: string
-  /**
-   * The LETTERBOX: the top and bottom strips around the scene. Empty follows
-   * the theme's leading and trailing zone colours, the editor's top and bottom
-   * sections, which is what the strips drew in before they had one of their own.
-   */
-  letterboxColor: string
   /** The centre pulse's starting speed, in grid boxes per second, at the ring's inner edge. */
   pulseSpeed: number
   /** 0.1 to 5 seconds: the centre pulse's speed halves every this long (exponentially). */
@@ -257,7 +243,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveColor: 'rgba(0, 0, 0, 0.086)', waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseColor: 'rgba(0, 0, 0, 0.086)', pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, accentColor: '', letterboxColor: '', waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -330,14 +316,12 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
 }
 
 export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
-  followsMusic: true,
   effect: -1,
   shape: -1,
   fallSec: 1.515,
 }
 
-/** The edge's and the pane's sliders, without their colours (which depend on the layout's inversion, `defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_EDGE: Omit<VisualizerEdgeChannel, 'color'> = {
+export const DEFAULT_VISUALIZER_EDGE: VisualizerEdgeChannel = {
   ...DEFAULT_VISUALIZER_CHANNEL,
   effect: 0.2,
   shape: -0.5,
@@ -354,50 +338,71 @@ export const DEFAULT_VISUALIZER_PANE: VisualizerChannel = {
 }
 
 /**
- * The defaults for a layout, which depend on whether it is inverted: a
- * colour is picked BEFORE the theme's invert, so an edge that darkens and
- * a pane that brightens on screen are stored the other way round in an
- * inverted layout.
+ * The visualizer every layout shares until it is tuned: the author's saved
+ * layout of 2026-11-03 (the factory presets' tuning when the visualizer was
+ * still part of a layout), its fall lengths rounded to what the sliders show.
  */
-export function defaultVisualizer(inverted: boolean): VisualizerSettings {
-  // Every setting but the colours is shared by light and dark: the author's
-  // dark layout exported 2026-11-03, read through sanitizeVisualizer (its
-  // legacy waveSec 2 is the 4 beats it migrates to). The colours are each
-  // side's own (light: the author's light layout of 2026-11-01).
-  const colors = inverted ? DARK_VISUALIZER_COLORS : LIGHT_VISUALIZER_COLORS
-  return {
-    trackers: DEFAULT_VISUALIZER_TRACKERS,
-    caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.515 },
-    edge: { ...DEFAULT_VISUALIZER_EDGE, color: colors.edge, fallSec: 0.5, spreadPx: 10, blurPx: 200 },
-    pane: { ...DEFAULT_VISUALIZER_PANE, color: colors.pane, effect: 0.68, shape: -0.12, fallSec: 0.3324631894533917 },
-    immersive: { ...SHARED_VISUALIZER_IMMERSIVE, ...colors.immersive },
-  }
+export const DEFAULT_VISUALIZER: VisualizerSettings = {
+  trackers: DEFAULT_VISUALIZER_TRACKERS,
+  caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.5 },
+  edge: { ...DEFAULT_VISUALIZER_EDGE, fallSec: 0.5, spreadPx: 10, blurPx: 200 },
+  pane: { ...DEFAULT_VISUALIZER_PANE, effect: 0.7, shape: -0.2, fallSec: 0.3 },
+  immersive: {
+    ...DEFAULT_VISUALIZER_IMMERSIVE,
+    glazeStrength: 0.06, glazeSpread: -1, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 10,
+    waveBoxes: 72, waveBeats: 4, waveTurn: 4, waveShape: -0.5, waveFallSec: 1.5,
+    waveMix: { thump: 0, pierce: 1, tick: 0 },
+    glazeMix: { thump: 0, pierce: 1, tick: 0 },
+    pulseSpeed: 35, pulseHalfLifeSec: 0.75, pulseFadeSec: 1.5, pulseSoftness: 0.5, pulseBoost: 0.5,
+    cutoutRound: 1,
+  },
 }
 
-const SHARED_VISUALIZER_IMMERSIVE: VisualizerImmersive = {
-  ...DEFAULT_VISUALIZER_IMMERSIVE,
-  glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 10,
-  waveBoxes: 72, waveBeats: 4, waveTurn: 4, waveShape: -0.5, waveFallSec: 1.9949745588310253,
-  waveMix: { thump: 0, pierce: 1, tick: 0 },
-  glazeMix: { thump: 0, pierce: 1, tick: 0 },
-  pulseSpeed: 35, pulseHalfLifeSec: 0.7, pulseFadeSec: 1.2, pulseSoftness: 0.5, pulseBoost: 0.5,
-  cutoutRound: 1,
-}
-
-type VisualizerColors = {
+/**
+ * The visualizer's colours, part of the layout (Options > Colors), each
+ * picked like any layout colour, BEFORE the theme's invert.
+ */
+export interface VisualizerColors {
+  /** The active editor's edge (an inner shadow). */
   edge: string
+  /** The pane: the box outlines in the edit view, a flat wash anywhere else. */
   pane: string
-  immersive: Pick<VisualizerImmersive, 'waveColor' | 'pulseColor' | 'accentColor' | 'letterboxColor'>
+  /** The grid wave in the visualizer mode (apps/notes's GridWave.tsx). */
+  wave: string
+  /** The centre pulse in the visualizer mode (GridWave.tsx). */
+  pulse: string
+  /**
+   * The visualizer mode's ACCENT: the spectrum's bars and the progress
+   * track's lit boxes. Empty follows the theme's caret colour, which is
+   * what both drew in before they had a colour of their own.
+   */
+  accent: string
+  /**
+   * The LETTERBOX: the strips around the visualizer mode's scene. Empty
+   * follows the theme's leading and trailing zone colours, the editor's top
+   * and bottom sections.
+   */
+  letterbox: string
 }
 
 const LIGHT_VISUALIZER_COLORS: VisualizerColors = {
   edge: 'rgba(0, 0, 0, 0.451)', pane: 'rgba(255, 255, 255, 1)',
-  immersive: { waveColor: 'rgba(255, 255, 255, 0.314)', pulseColor: 'rgba(255, 255, 255, 0.392)', accentColor: 'rgba(0, 0, 0, 0.235)', letterboxColor: 'rgba(255, 255, 255, 1)' },
+  wave: 'rgba(255, 255, 255, 0.314)', pulse: 'rgba(255, 255, 255, 0.392)', accent: 'rgba(0, 0, 0, 0.235)', letterbox: 'rgba(255, 255, 255, 1)',
 }
 
 const DARK_VISUALIZER_COLORS: VisualizerColors = {
   edge: 'rgba(0, 0, 0, 0.784)', pane: 'rgba(0, 0, 0, 0.275)',
-  immersive: { waveColor: 'rgba(255, 255, 255, 1)', pulseColor: 'rgba(0, 0, 0, 0.137)', accentColor: '', letterboxColor: '' },
+  wave: 'rgba(255, 255, 255, 1)', pulse: 'rgba(0, 0, 0, 0.137)', accent: '', letterbox: '',
+}
+
+/**
+ * A layout's default colours, which depend on whether it is inverted: a
+ * colour is picked BEFORE the theme's invert, so an edge that darkens and a
+ * pane that brightens on screen are stored the other way round in an
+ * inverted layout.
+ */
+export function defaultVisualizerColors(inverted: boolean): VisualizerColors {
+  return inverted ? DARK_VISUALIZER_COLORS : LIGHT_VISUALIZER_COLORS
 }
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
@@ -510,37 +515,16 @@ function sanitizeFall(source: Fields, d: Pick<VisualizerChannel, 'shape' | 'fall
   }
 }
 
-/**
- * The blink preset that became the follow-the-music switch. A layout saved
- * with it chose the button that is now the switch, so it reads as the switch
- * on (and its blink falls back to the default, `sanitizeLoadout`'s job).
- */
-export const LEGACY_FOLLOW_MUSIC_CARET_PRESET = 'bounce'
-
-/**
- * The caret's fields; anything else an older layout saved with it (a source, a band) is dropped.
- * A layout saved before the switch existed followed the music whenever its
- * caret block had an effect, so that is what it reads as, or as on when its
- * blink was the old bounce (`legacyCaretPreset`).
- */
-function sanitizeCaret(input: unknown, d: VisualizerCaret, legacyCaretPreset: unknown): VisualizerCaret {
-  const source = (input && typeof input === 'object' ? input : null) as Partial<Record<string, unknown>> | null
-  const effect = sanitizeEffect(source ?? {}, d.effect)
-  const followsMusic = typeof source?.followsMusic === 'boolean'
-    ? source.followsMusic
-    : legacyCaretPreset === LEGACY_FOLLOW_MUSIC_CARET_PRESET || (source !== null && effect !== 0)
-  return { followsMusic, effect, ...sanitizeFall(source ?? {}, d) }
-}
-
-function sanitizeColorChannel(input: unknown, d: VisualizerColorChannel): VisualizerColorChannel {
-  const color = input && typeof input === 'object' ? (input as { color?: unknown }).color : undefined
-  return { ...sanitizeChannel(input, d), color: typeof color === 'string' && color.length > 0 ? color : d.color }
+/** The caret's fields; anything else an older layout saved with it (a source, a band, its switch) is dropped. */
+function sanitizeCaret(input: unknown, d: VisualizerCaret): VisualizerCaret {
+  const source = fieldsOf(input)
+  return { effect: sanitizeEffect(source, d.effect), ...sanitizeFall(source, d) }
 }
 
 function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): VisualizerEdgeChannel {
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<string, unknown>>
+  const source = fieldsOf(input)
   return {
-    ...sanitizeColorChannel(input, d),
+    ...sanitizeChannel(input, d),
     spreadPx: Math.round(bounded(source.spreadPx, 0, EDGE_SPREAD_MAX_PX, d.spreadPx)),
     blurPx: Math.round(bounded(source.blurPx, 0, EDGE_BLUR_MAX_PX, d.blurPx)),
   }
@@ -556,7 +540,6 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX_PX, SWAY_PUSH_MAX_PX, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),
     swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX_PX, SWAY_DRIFT_MAX_PX, d.swayDrift),
-    waveColor: typeof source.waveColor === 'string' && source.waveColor.length > 0 ? source.waveColor : d.waveColor,
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     // A layout saved before the travel counted beats (2026-11-03) saved seconds, read at the fallback tempo.
     waveBeats: Math.round(bounded(source.waveBeats ?? (typeof source.waveSec === 'number' ? source.waveSec / WAVE_FALLBACK_BEAT_SEC : undefined), WAVE_BEATS_MIN, WAVE_BEATS_MAX, d.waveBeats)),
@@ -569,15 +552,12 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     waveTurn: Math.round(bounded(source.waveTurn, -WAVE_TURN_MAX, WAVE_TURN_MAX, d.waveTurn)),
     waveShape: bounded(source.waveShape, -1, 1, d.waveShape),
     waveFallSec: bounded(source.waveFallSec, FALL_MIN_SEC, FALL_MAX_SEC, d.waveFallSec),
-    pulseColor: typeof source.pulseColor === 'string' && source.pulseColor.length > 0 ? source.pulseColor : d.pulseColor,
     pulseSpeed: bounded(source.pulseSpeed, PULSE_SPEED_MIN, PULSE_SPEED_MAX, d.pulseSpeed),
     pulseHalfLifeSec: bounded(source.pulseHalfLifeSec, PULSE_SEC_MIN, PULSE_SEC_MAX, d.pulseHalfLifeSec),
     pulseFadeSec: bounded(source.pulseFadeSec, PULSE_SEC_MIN, PULSE_SEC_MAX, d.pulseFadeSec),
     pulseSoftness: bounded(source.pulseSoftness, 0, 1, d.pulseSoftness),
     pulseBoost: bounded(source.pulseBoost, 0, 1, d.pulseBoost),
     cutoutRound: bounded(source.cutoutRound, 0, 1, d.cutoutRound),
-    accentColor: typeof source.accentColor === 'string' ? source.accentColor : d.accentColor,
-    letterboxColor: typeof source.letterboxColor === 'string' ? source.letterboxColor : d.letterboxColor,
   }
 }
 
@@ -585,15 +565,13 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
 type LegacyBlockName = 'shade' | 'outline'
 
 /**
- * Every field bounded; a missing one takes the default for a layout of that
- * inversion. `legacyCaretPreset` is the layout's saved blink preset, read
- * only to migrate a layout from before the caret's follow-the-music switch.
+ * Every field bounded; a missing one takes the default. Also reads a
+ * visualizer saved inside a layout before it became global (with its
+ * colours, which are dropped here and read by `sanitizeVisualizerColors`),
+ * which is how the active layout's tuning became the global one.
  */
-export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCaretPreset?: unknown): VisualizerSettings {
-  const d = defaultVisualizer(inverted)
-  // A layout saved before the visualizer existed takes the defaults whole:
-  // the caret's legacy reading below (no caret block, not following) is for
-  // a layout that HAD a visualizer, saved before the caret's switch.
+export function sanitizeVisualizer(input: unknown): VisualizerSettings {
+  const d = DEFAULT_VISUALIZER
   if (!input || typeof input !== 'object') return d
   const source = input as Partial<Record<keyof VisualizerSettings | LegacyBlockName, unknown>>
   const edgeInput = source.edge ?? source.shade
@@ -609,12 +587,66 @@ export function sanitizeVisualizer(input: unknown, inverted: boolean, legacyCare
     : soleMix(edge.mix.pierce > 0 ? 'pierce' : 'thump')
   return {
     trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
-    caret: sanitizeCaret(source.caret, d.caret, legacyCaretPreset),
+    caret: sanitizeCaret(source.caret, d.caret),
     edge,
-    pane: sanitizeColorChannel(paneInput, d.pane),
+    pane: sanitizeChannel(paneInput, d.pane),
     // ...and its wave followed the snare, whatever the default wave mix is now.
     immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('pierce') : null),
   }
+}
+
+function colorOr(value: unknown, fallback: string, allowEmpty: boolean): string {
+  return typeof value === 'string' && (allowEmpty || value.length > 0) ? value : fallback
+}
+
+/**
+ * A layout's visualizer colours, each a string (the accent and the letterbox
+ * may be empty: they then follow the theme); a missing one takes the default
+ * for a layout of that inversion. `legacyVisualizer` is the visualizer a
+ * layout saved before the colours were separated from it (2026-11-07), whose
+ * colours sat on its blocks.
+ */
+export function sanitizeVisualizerColors(input: unknown, inverted: boolean, legacyVisualizer?: unknown): VisualizerColors {
+  const d = defaultVisualizerColors(inverted)
+  const source = fieldsOf(input)
+  const legacy = fieldsOf(legacyVisualizer)
+  const immersive = fieldsOf(legacy.immersive)
+  return {
+    edge: colorOr(source.edge ?? fieldsOf(legacy.edge ?? legacy.shade).color, d.edge, false),
+    pane: colorOr(source.pane ?? fieldsOf(legacy.pane ?? legacy.outline).color, d.pane, false),
+    wave: colorOr(source.wave ?? immersive.waveColor, d.wave, false),
+    pulse: colorOr(source.pulse ?? immersive.pulseColor, d.pulse, false),
+    accent: colorOr(source.accent ?? immersive.accentColor, d.accent, true),
+    letterbox: colorOr(source.letterbox ?? immersive.letterboxColor, d.letterbox, true),
+  }
+}
+
+/**
+ * The blink preset that became the follow-the-music switch. A layout saved
+ * with it chose the button that is now the switch, so it reads as the switch
+ * on (and its blink falls back to the default, `sanitizeLoadout`'s job).
+ */
+export const LEGACY_FOLLOW_MUSIC_CARET_PRESET = 'bounce'
+
+/** Whether a layout that names no `caretFollowsMusic` follows the music: on, as the factory layouts do. */
+export const DEFAULT_CARET_FOLLOWS_MUSIC = true
+
+/**
+ * A layout's `caretFollowsMusic`. A layout saved before it moved out of the
+ * visualizer (2026-11-07) kept it as the visualizer caret's `followsMusic`;
+ * one saved before the switch existed followed the music whenever its caret
+ * block had an effect, or when its blink was the old bounce
+ * (`legacyCaretPreset`); one with no visualizer at all takes the default.
+ */
+export function sanitizeCaretFollowsMusic(input: unknown, legacyVisualizer: unknown, legacyCaretPreset: unknown): boolean {
+  if (typeof input === 'boolean') return input
+  if (legacyCaretPreset === LEGACY_FOLLOW_MUSIC_CARET_PRESET) return true
+  if (!legacyVisualizer || typeof legacyVisualizer !== 'object') return DEFAULT_CARET_FOLLOWS_MUSIC
+  const caret = (legacyVisualizer as Fields).caret
+  if (!caret || typeof caret !== 'object') return false
+  const source = caret as Fields
+  if (typeof source.followsMusic === 'boolean') return source.followsMusic
+  return sanitizeEffect(source, DEFAULT_VISUALIZER_CARET.effect) !== 0
 }
 
 /**

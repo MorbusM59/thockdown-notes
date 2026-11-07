@@ -2,7 +2,7 @@ import type { TextureMaterialsBySurface } from './textureTypes';
 import type { GlazeSettings } from './glaze';
 import type { BoxBevelSettings } from './boxBevel';
 import type { CaretAnimationPresetKey } from './caretSettings';
-import type { VisualizerSettings } from './visualizer';
+import type { VisualizerColors } from './visualizer';
 
 export const LOADOUT_CHANNELS = {
   list: 'loadout:list',
@@ -125,11 +125,12 @@ export type UiLayoutLoadout = {
   caretAnimationDurationMs: number;
   caretFrameDurationMs: number;
   caretEffectStrengthPercent: number;
-  // The visualizer's blocks (Options > Visualizer): how the caret, the edge
-  // and the pane follow the music. Its on/off and the per-device delay
-  // are NOT here -- they live in PersistedMenuState.beat, which persists
-  // across layout switches (see visualizer.ts).
-  visualizer: VisualizerSettings;
+  // Whether the caret follows the music (Options > Caret, the blink row's
+  // last button) and the visualizer's colours (Options > Colors). How the
+  // visualizer follows the music is NOT here: it is global, in
+  // PersistedMenuState.visualizer (see visualizer.ts).
+  caretFollowsMusic: boolean;
+  visualizerColors: VisualizerColors;
 };
 
 // ---------------------------------------------------------------------------

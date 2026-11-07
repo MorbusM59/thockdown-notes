@@ -16,6 +16,7 @@ import { NOTE_LIFECYCLE_CHANNELS, NOTE_LIFECYCLE_EVENTS, type NoteLifecycleApi, 
 import { APP_STATE_CHANNELS, type AppStateApi, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
 import { DatabaseService } from './databaseService'
+import { migrateVisualizerTuning } from './visualizerTuningMigration'
 import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS, type ExternalFileEvents, type ExternalFilesApi } from '../src/shared/externalFiles'
 import { TEXTURE_CHANNELS, type TextureCacheApi } from '../src/shared/textures'
 import { AUDIO_BOUNCE_CHANNELS, type AudioBounceCacheApi } from '../src/shared/audioBounceCache'
@@ -1854,6 +1855,7 @@ app.whenReady().then(async () => {
     console.warn('[db] startup sanity issues', sanity)
   }
   registerIpcHandlers()
+  await migrateVisualizerTuning(stateService!, databaseService).catch((error) => console.error('[state] visualizer migration failed', error))
   await ensureHelpGuide(databaseService, noteLifecycleService!)
 
   // Proxy thockdown-music:// → file system reads so the renderer can load local

@@ -145,7 +145,7 @@ import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedRead
 import { useBeatFeedback } from './flow/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
-import { defaultVisualizer, sanitizeVisualizer, type VisualizerSettings } from '@thockdown/look/visualizer'
+import { DEFAULT_CARET_FOLLOWS_MUSIC, DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -342,7 +342,7 @@ interface FontSizeSet {
   editorFontSize: number
   viewFontSize: number
   uiFontScale: number
-  /** The visualizer's font size (Options > Visualizer Font); its font and box size are one value for both modes. */
+  /** The visualizer's font size (Options > Visualizer (its font)); its font and box size are one value for both modes. */
   visualizerFontSize: number
 }
 interface FontSizesByMode {
@@ -856,7 +856,8 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
     caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
     caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
-    visualizer: sanitizeVisualizer(source.visualizer, toFiniteNumber(source.filterInvert, 0) > 0.5, source.caretAnimationPreset),
+    caretFollowsMusic: sanitizeCaretFollowsMusic(source.caretFollowsMusic, source.visualizer, source.caretAnimationPreset),
+    visualizerColors: sanitizeVisualizerColors(source.visualizerColors, toFiniteNumber(source.filterInvert, 0) > 0.5, source.visualizer),
   }
 }
 
@@ -1510,8 +1511,11 @@ function App() {
   const [caretAnimationDurationMs, setCaretAnimationDurationMs] = useState(DEFAULT_CARET_SETTINGS.animationDurationMs)
   const [caretFrameDurationMs, setCaretFrameDurationMs] = useState(DEFAULT_CARET_SETTINGS.frameDurationMs)
   const [caretEffectStrengthPercent, setCaretEffectStrengthPercent] = useState(DEFAULT_CARET_SETTINGS.effectStrengthPercent)
-  // The visualizer's blocks, part of the layout (Options > Visualizer).
-  const [visualizer, setVisualizer] = useState<VisualizerSettings>(() => defaultVisualizer(false))
+  // How the visualizer follows the music, global (Options > Visualizer, saved in the app state).
+  const [visualizer, setVisualizer] = useState<VisualizerSettings>(DEFAULT_VISUALIZER)
+  // The layout's part of it: whether the caret follows the music, and the colours.
+  const [caretFollowsMusic, setCaretFollowsMusic] = useState(DEFAULT_CARET_FOLLOWS_MUSIC)
+  const [visualizerColors, setVisualizerColors] = useState<VisualizerColors>(() => defaultVisualizerColors(false))
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
   const [windowModeTransitionOverlayNonce, setWindowModeTransitionOverlayNonce] = useState(0)
@@ -2232,7 +2236,7 @@ function App() {
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [audioSpatial, setAudioSpatial] = useState(0)
-  useBeatFeedback(features.visualizer, beatSettings, visualizer)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, caretFollowsMusic)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
@@ -2639,7 +2643,8 @@ function App() {
       caretAnimationDurationMs,
       caretFrameDurationMs,
       caretEffectStrengthPercent,
-      visualizer,
+      caretFollowsMusic,
+      visualizerColors,
     }
   }, [
     borderRadiusRegularPx,
@@ -2701,7 +2706,8 @@ function App() {
     caretAnimationDurationMs,
     caretFrameDurationMs,
     caretEffectStrengthPercent,
-    visualizer,
+    caretFollowsMusic,
+    visualizerColors,
   ])
 
   const applyUiLayoutLoadout = useCallback((loadoutInput: unknown) => {
@@ -2903,7 +2909,8 @@ function App() {
       Math.round(loadout.caretEffectStrengthPercent ?? DEFAULT_CARET_SETTINGS.effectStrengthPercent),
       CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
     ))
-    setVisualizer(loadout.visualizer)
+    setCaretFollowsMusic(loadout.caretFollowsMusic)
+    setVisualizerColors(loadout.visualizerColors)
   }, [applyDarkModePreset])
 
   const capturedUiLayoutLoadout = useMemo(
@@ -3404,6 +3411,7 @@ function App() {
       // The regular mode's size is the one stored inside; double size mode's has its own field.
       visualizerFont: { ...visualizerFontShared, sizePx: fontSizesByMode.regular.visualizerFontSize },
       doubleSizeVisualizerFontSize: fontSizesByMode.double.visualizerFontSize,
+      visualizer,
       uiFontStyle,
       uiFontScale: fontSizesByMode.regular.uiFontScale,
       // Double size mode's own font sizes -- see fontSizesByMode.
@@ -3561,6 +3569,7 @@ function App() {
     editorSpacing,
     editorStyle,
     visualizerFontShared,
+    visualizer,
     exportFolder,
     getActiveSection,
     renderScrollDynamic,
@@ -5319,6 +5328,7 @@ ${markdownHtml}
               const { style, boxSize } = sanitizeVisualizerFont(appState.menu.visualizerFont) ?? DEFAULT_VISUALIZER_FONT
               setVisualizerFontShared({ style, boxSize })
             }
+            setVisualizer(appState.menu.visualizer ?? DEFAULT_VISUALIZER)
             setEditorGlyphPaddingPx(
               clamp(
                 roundEditorGlyphPaddingPx(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
@@ -9061,6 +9071,10 @@ ${markdownHtml}
                         beatSettings={beatSettings}
                         visualizer={visualizer}
                         setVisualizer={setVisualizer}
+                        caretFollowsMusic={caretFollowsMusic}
+                        setCaretFollowsMusic={setCaretFollowsMusic}
+                        visualizerColors={visualizerColors}
+                        setVisualizerColors={setVisualizerColors}
                         setBeatSettings={setBeatSettings}
                         borderRadiusRegularPx={borderRadiusRegularPx}
                         setBorderRadiusRegularPx={setBorderRadiusRegularPx}

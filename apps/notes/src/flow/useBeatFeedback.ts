@@ -10,7 +10,7 @@
  *   opacity. Unlike the other two it follows no band and no detected hit: it
  *   dips on every beat of a steady clock that follows the music's tempo
  *   (`subscribeMusicClock`), each dip falling on its own shape and length.
- *   It runs only while its switch is on (`VisualizerCaret.followsMusic`),
+ *   It runs only while the layout's switch is on (`caretFollowsMusic`),
  *   and the attribute is set only while that clock HAS a beat (music
  *   playing, a tempo found): at any other moment the caret blinks.
  * - `--beat-edge`, the opacity of the active editor's beat edge
@@ -22,14 +22,14 @@
  * (or, for the caret, a beat) takes it away; with nothing playing every block is off either way, so an
  * inverted one does not sit over the editor in silence. A block with no
  * effect subscribes nothing and keeps its ordinary look; the `<html>`
- * attributes change once when a block is switched, never per frame. The two
- * coloured blocks' colours are static between edits and are set once on
+ * attributes change once when a block is switched, never per frame. The
+ * layout's colours (`VisualizerColors`) are static between edits and are set once on
  * `<html>` (`--beat-edge-color`, `--beat-edge-spread`, `--beat-edge-blur`, `--beat-pane-color`).
  */
 
 import { setGridWaveSettings } from '../visualizer/gridWaveTurn'
 import { useEffect, useRef } from 'react'
-import type { VisualizerCaret, VisualizerChannel, VisualizerSettings } from '@thockdown/look/visualizer'
+import type { VisualizerCaret, VisualizerChannel, VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix } from '../sound/musicBeat'
@@ -92,19 +92,18 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
   }, [channel])
 }
 
-export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings): void {
+export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean): void {
   // Set before the blocks subscribe (effects run in order), so the first
-  // analysis already listens to this layout's trackers.
+  // analysis already listens to the trackers.
   const { trackers } = visualizer
   useEffect(() => setVisualizerTrackers(trackers), [trackers])
-  useBeatBlock('caret', visualizer.caret, enabled && visualizer.caret.followsMusic, subscribeClock)
+  useBeatBlock('caret', visualizer.caret, enabled && caretFollowsMusic, subscribeClock)
   useBeatBlock('edge', visualizer.edge, enabled, subscribeMix)
   useBeatBlock('pane', visualizer.pane, enabled, subscribeMix)
-  const edgeColor = visualizer.edge.color
   const edgeSpreadPx = visualizer.edge.spreadPx
   const edgeBlurPx = visualizer.edge.blurPx
-  const paneColor = visualizer.pane.color
-  const { waveColor, waveBoxes, waveBeats, waveTurn, pulseColor, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, accentColor, letterboxColor } = visualizer.immersive
+  const { edge: edgeColor, pane: paneColor, wave: waveColor, pulse: pulseColor, accent: accentColor, letterbox: letterboxColor } = colors
+  const { waveBoxes, waveBeats, waveTurn, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
   useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, glazePushes: swayPush !== 0, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
   useEffect(() => {
@@ -122,7 +121,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     else root.removeProperty('--visualizer-accent-color')
     if (letterboxColor) root.setProperty('--visualizer-letterbox-color', letterboxColor)
     else root.removeProperty('--visualizer-letterbox-color')
-  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, pulseColor, pulseSoftness, accentColor, letterboxColor])
+  }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, pulseColor, accentColor, letterboxColor])
   const device = useOutputDevice(enabled)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])

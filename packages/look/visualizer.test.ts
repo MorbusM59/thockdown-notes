@@ -1,43 +1,69 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_VISUALIZER_IMMERSIVE, DEFAULT_VISUALIZER_TRACKERS, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_VISUALIZER_CARET, defaultVisualizer, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, DEFAULT_VISUALIZER_TRACKERS, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_VISUALIZER_CARET, DEFAULT_VISUALIZER, DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
-  it('fills a layout saved before the visualizer with the defaults for its inversion', () => {
-    expect(sanitizeVisualizer(undefined, false)).toEqual(defaultVisualizer(false))
-    expect(sanitizeVisualizer(undefined, true)).toEqual(defaultVisualizer(true))
-    expect(defaultVisualizer(true).edge.color).not.toBe(defaultVisualizer(false).edge.color)
+  it('fills a save without a visualizer with the defaults', () => {
+    expect(sanitizeVisualizer(undefined)).toEqual(DEFAULT_VISUALIZER)
   })
 
-  it('keeps each block its own mix, colour and effect, bounded', () => {
+  it('keeps each block its own mix and effect, bounded, and drops a colour saved with a layout', () => {
     const v = sanitizeVisualizer({
       trackers: {},
       edge: { mix: { thump: 2, pierce: -1, tick: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -7 },
       pane: { mix: 'x', color: '' },
-      immersive: { pulseMix: { thump: 0.5, tick: 1 } },
-    }, false)
-    expect(v.edge).toMatchObject({ mix: { thump: 1, pierce: 0, tick: 0.4 }, color: 'rgba(1, 2, 3, 0.5)', effect: -1 })
-    expect(v.pane.mix).toEqual(defaultVisualizer(false).pane.mix)
-    expect(v.pane.color).toBe(defaultVisualizer(false).pane.color)
-    expect(v.immersive.pulseMix).toEqual({ thump: 0.5, pierce: defaultVisualizer(false).immersive.pulseMix.pierce, tick: 1 })
+      immersive: { pulseMix: { thump: 0.5, tick: 1 }, waveColor: 'red' },
+    })
+    expect(v.edge).toMatchObject({ mix: { thump: 1, pierce: 0, tick: 0.4 }, effect: -1 })
+    expect(v.edge).not.toHaveProperty('color')
+    expect(v.immersive).not.toHaveProperty('waveColor')
+    expect(v.pane.mix).toEqual(DEFAULT_VISUALIZER.pane.mix)
+    expect(v.immersive.pulseMix).toEqual({ thump: 0.5, pierce: DEFAULT_VISUALIZER.immersive.pulseMix.pierce, tick: 1 })
     expect(v.caret.effect).toBe(DEFAULT_VISUALIZER_CARET.effect)
   })
 
-  it('keeps only what the caret reads, so an older save with a source loads without it', () => {
-    const v = sanitizeVisualizer({ caret: { effect: 0.3, shape: 0.2, fallSec: 0.5, source: 'snare', frequencyHz: 300, contrast: 0.2 } }, false)
-    expect(v.caret).toEqual({ followsMusic: true, effect: 0.3, shape: 0.2, fallSec: 0.5 })
+  it('keeps only what the caret reads, so an older save with a source or its switch loads without it', () => {
+    const v = sanitizeVisualizer({ caret: { followsMusic: false, effect: 0.3, shape: 0.2, fallSec: 0.5, source: 'snare', frequencyHz: 300, contrast: 0.2 } })
+    expect(v.caret).toEqual({ effect: 0.3, shape: 0.2, fallSec: 0.5 })
+  })
+})
+
+describe('sanitizeVisualizerColors', () => {
+  it('gives a layout without them the defaults for its inversion', () => {
+    expect(sanitizeVisualizerColors(undefined, false)).toEqual(defaultVisualizerColors(false))
+    expect(sanitizeVisualizerColors(undefined, true)).toEqual(defaultVisualizerColors(true))
+    expect(defaultVisualizerColors(true).edge).not.toBe(defaultVisualizerColors(false).edge)
+  })
+
+  it('reads the colours a layout saved on its visualizer blocks before they were separated', () => {
+    const legacy = {
+      edge: { color: 'rgba(1, 2, 3, 0.5)' }, pane: { color: '' },
+      immersive: { waveColor: 'w', pulseColor: 'p', accentColor: '', letterboxColor: 'l' },
+    }
+    expect(sanitizeVisualizerColors(undefined, false, legacy)).toEqual({
+      edge: 'rgba(1, 2, 3, 0.5)', pane: defaultVisualizerColors(false).pane, wave: 'w', pulse: 'p', accent: '', letterbox: 'l',
+    })
+    // The legacy block names too.
+    expect(sanitizeVisualizerColors(undefined, false, { shade: { color: 's' }, outline: { color: 'o' } })).toMatchObject({ edge: 's', pane: 'o' })
+    // Saved colours win over a legacy visualizer.
+    expect(sanitizeVisualizerColors({ edge: 'e' }, false, legacy).edge).toBe('e')
+  })
+})
+
+describe('sanitizeCaretFollowsMusic', () => {
+  it('keeps a saved switch, else reads the visualizer caret a layout saved it on', () => {
+    expect(sanitizeCaretFollowsMusic(false, { caret: { followsMusic: true } }, 'bounce')).toBe(false)
+    expect(sanitizeCaretFollowsMusic(undefined, { caret: { followsMusic: false, effect: 0.4 } }, undefined)).toBe(false)
   })
 
   it('migrates a layout from before the caret switch: it followed the music whenever its caret had an effect', () => {
-    expect(sanitizeVisualizer({ caret: { effect: 0.4 } }, false).caret.followsMusic).toBe(true)
-    expect(sanitizeVisualizer({ caret: { effect: 0 } }, false).caret.followsMusic).toBe(false)
-    // A visualizer with no caret block never followed; no visualizer at all takes the defaults.
-    expect(sanitizeVisualizer({}, false).caret.followsMusic).toBe(false)
-    expect(sanitizeVisualizer(undefined, false).caret.followsMusic).toBe(DEFAULT_VISUALIZER_CARET.followsMusic)
+    expect(sanitizeCaretFollowsMusic(undefined, { caret: { effect: 0.4 } }, undefined)).toBe(true)
+    expect(sanitizeCaretFollowsMusic(undefined, { caret: { effect: 0 } }, undefined)).toBe(false)
+    // A visualizer with no caret block never followed; no visualizer at all takes the default.
+    expect(sanitizeCaretFollowsMusic(undefined, {}, undefined)).toBe(false)
+    expect(sanitizeCaretFollowsMusic(undefined, undefined, undefined)).toBe(DEFAULT_CARET_FOLLOWS_MUSIC)
     // The old bounce blink is now the switch's button.
-    expect(sanitizeVisualizer(undefined, false, 'bounce').caret.followsMusic).toBe(true)
-    expect(sanitizeVisualizer({ caret: { effect: 0 } }, false, 'bounce').caret.followsMusic).toBe(true)
-    // A saved switch wins over both.
-    expect(sanitizeVisualizer({ caret: { effect: 0.4, followsMusic: false } }, false, 'bounce').caret.followsMusic).toBe(false)
+    expect(sanitizeCaretFollowsMusic(undefined, undefined, 'bounce')).toBe(true)
+    expect(sanitizeCaretFollowsMusic(undefined, { caret: { effect: 0 } }, 'bounce')).toBe(true)
   })
 })
 
@@ -47,7 +73,7 @@ describe('a layout saved with the kicks, hits and band trackers', () => {
       trackers: { kicks: { contrast: 0.3 }, hits: { contrast: 0.2 }, band: { frequencyHz: 20000, octaves: 4, contrast: 0 } },
       edge: { mix: { kicks: 1, hits: 0.5, band: 0.25 } },
       immersive: { waveMix: { kicks: 0, hits: 0, band: 1 } },
-    }, false)
+    })
     expect(v.trackers).toEqual({ thump: { contrast: 0.3, pattern: 0.5 }, pierce: { contrast: 0.2, pattern: 0.5 }, tick: DEFAULT_VISUALIZER_TRACKERS.tick })
     expect(v.edge.mix).toEqual({ thump: 1, pierce: 0.5, tick: 0.25 })
     expect(v.immersive.waveMix).toEqual(soleMix('tick'))
@@ -59,7 +85,7 @@ describe('a layout saved before the trackers', () => {
     const v = sanitizeVisualizer({
       edge: { source: 'kick', groove: 0.8, contrast: 0.3, frequencyHz: 90 },
       pane: { source: 'hat', groove: 7, contrast: 0.1 },
-    }, false)
+    })
     expect(v.edge.mix).toEqual(soleMix('thump'))
     expect(v.pane.mix).toEqual(soleMix('tick'))
     expect(v.trackers.thump).toEqual({ contrast: 0.3, pattern: 0.5 })
@@ -72,24 +98,24 @@ describe('a layout saved before the trackers', () => {
   })
 
   it('reads a band block as following the tick', () => {
-    const v = sanitizeVisualizer({ edge: { source: 'band', frequencyHz: 440, octaves: 2, contrast: 0.2 }, pane: { source: 'band', frequencyHz: 99 } }, false)
+    const v = sanitizeVisualizer({ edge: { source: 'band', frequencyHz: 440, octaves: 2, contrast: 0.2 }, pane: { source: 'band', frequencyHz: 99 } })
     expect(v.trackers.tick).toEqual(DEFAULT_VISUALIZER_TRACKERS.tick)
     expect(v.pane.mix).toEqual(soleMix('tick'))
-    expect(sanitizeVisualizer({ edge: { source: 'kick', effect: 0 } }, false).immersive.pulseMix.thump).toBe(0)
+    expect(sanitizeVisualizer({ edge: { source: 'kick', effect: 0 } }).immersive.pulseMix.thump).toBe(0)
     // A band edge set no pulse drum: the thump.
     expect(v.immersive.pulseMix).toEqual(soleMix('thump'))
   })
 
   it('reads a layout saved before the source existed', () => {
-    const v = sanitizeVisualizer({ pane: { frequencyHz: 0 }, edge: { frequencyHz: 440 } }, false)
+    const v = sanitizeVisualizer({ pane: { frequencyHz: 0 }, edge: { frequencyHz: 440 } })
     expect(v.pane.mix).toEqual(soleMix('thump'))
     expect(v.edge.mix).toEqual(soleMix('tick'))
   })
 
   it('looks as the defaults did for a layout that saved the defaults', () => {
-    const v = sanitizeVisualizer({ edge: { source: 'kick' }, pane: { source: 'snare' } }, false)
-    expect(v.edge.mix).toEqual(defaultVisualizer(false).edge.mix)
-    expect(v.pane.mix).toEqual(defaultVisualizer(false).pane.mix)
+    const v = sanitizeVisualizer({ edge: { source: 'kick' }, pane: { source: 'snare' } })
+    expect(v.edge.mix).toEqual(DEFAULT_VISUALIZER.edge.mix)
+    expect(v.pane.mix).toEqual(DEFAULT_VISUALIZER.pane.mix)
     expect(v.trackers).toEqual(DEFAULT_VISUALIZER_TRACKERS)
   })
 })
@@ -114,22 +140,22 @@ describe('mixResponse', () => {
 })
 
 it('reads an old saved scale as gone, and gives the glaze the wave\'s mix when it had none', () => {
-  const v = sanitizeVisualizer({ immersive: { waveMix: { kicks: 0.4, hits: 0, band: 0.6, normalize: 1 } } }, false)
+  const v = sanitizeVisualizer({ immersive: { waveMix: { kicks: 0.4, hits: 0, band: 0.6, normalize: 1 } } })
   expect(v.immersive.waveMix).toEqual({ thump: 0.4, pierce: 0, tick: 0.6 })
   expect(v.immersive.glazeMix).toEqual({ thump: 0.4, pierce: 0, tick: 0.6 })
-  const w = sanitizeVisualizer({ immersive: { waveMix: { kicks: 1, hits: 0, band: 0 }, glazeMix: { kicks: 0, hits: 0.5, band: 0 } } }, false)
+  const w = sanitizeVisualizer({ immersive: { waveMix: { kicks: 1, hits: 0, band: 0 }, glazeMix: { kicks: 0, hits: 0.5, band: 0 } } })
   expect(w.immersive.glazeMix).toEqual({ thump: 0, pierce: 0.5, tick: 0 })
 })
 
 it('turns a saved amount and invert into a signed effect', () => {
-  const v = sanitizeVisualizer({ caret: { amount: 0.4, invert: true }, edge: { amount: 0.3 } }, false)
+  const v = sanitizeVisualizer({ caret: { amount: 0.4, invert: true }, edge: { amount: 0.3 } })
   expect(v.caret.effect).toBe(-0.4)
   expect(v.edge.effect).toBe(0.3)
   expect(v.caret).not.toHaveProperty('invert')
 })
 
 it('reads the fall of a layout saved with one mass slider, or with the first fall shape', () => {
-  const v = sanitizeVisualizer({ caret: { mass: 0 }, edge: { mass: 1 }, pane: { fallSec: 99, fallShape: 3 } }, false)
+  const v = sanitizeVisualizer({ caret: { mass: 0 }, edge: { mass: 1 }, pane: { fallSec: 99, fallShape: 3 } })
   expect(v.caret).toMatchObject({ shape: 1, fallSec: FALL_MIN_SEC })
   expect(v.edge.shape).toBe(-1)
   expect(v.edge.fallSec).toBeCloseTo(1.6, 6)
@@ -185,16 +211,16 @@ describe('pulseCurve', () => {
 })
 
 it('gives a save without the edge geometry its defaults, and bounds and rounds what it has', () => {
-  expect(sanitizeVisualizer({ edge: {} }, false).edge).toMatchObject({ spreadPx: defaultVisualizer(false).edge.spreadPx, blurPx: defaultVisualizer(false).edge.blurPx })
-  expect(sanitizeVisualizer({ edge: { spreadPx: 14.7, blurPx: 900 } }, false).edge).toMatchObject({ spreadPx: 15, blurPx: 200 })
-  expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }, false).edge).toMatchObject({ spreadPx: 0, blurPx: defaultVisualizer(false).edge.blurPx })
+  expect(sanitizeVisualizer({ edge: {} }).edge).toMatchObject({ spreadPx: DEFAULT_VISUALIZER.edge.spreadPx, blurPx: DEFAULT_VISUALIZER.edge.blurPx })
+  expect(sanitizeVisualizer({ edge: { spreadPx: 14.7, blurPx: 900 } }).edge).toMatchObject({ spreadPx: 15, blurPx: 200 })
+  expect(sanitizeVisualizer({ edge: { spreadPx: -5, blurPx: 'x' } }).edge).toMatchObject({ spreadPx: 0, blurPx: DEFAULT_VISUALIZER.edge.blurPx })
 })
 
 it('reads a layout saved under the old block names, shade and outline, as the edge and the pane', () => {
-  const v = sanitizeVisualizer({ shade: { effect: 0.4, spreadPx: 12 }, outline: { effect: -0.3, color: 'rgba(1, 2, 3, 1)' } }, false)
+  const v = sanitizeVisualizer({ shade: { effect: 0.4, spreadPx: 12 }, outline: { effect: -0.3, color: 'rgba(1, 2, 3, 1)' } })
   expect(v.edge).toMatchObject({ effect: 0.4, spreadPx: 12 })
-  expect(v.pane).toMatchObject({ effect: -0.3, color: 'rgba(1, 2, 3, 1)' })
-  expect(sanitizeVisualizer({ edge: { effect: 0.1 }, shade: { effect: 0.9 } }, false).edge.effect).toBe(0.1)
+  expect(v.pane).toMatchObject({ effect: -0.3 })
+  expect(sanitizeVisualizer({ edge: { effect: 0.1 }, shade: { effect: 0.9 } }).edge.effect).toBe(0.1)
 })
 
 // The fall slider (SidebarOptionsPanel's `renderFallSliders`) is a log track
@@ -202,7 +228,7 @@ it('reads a layout saved under the old block names, shade and outline, as the ed
 // a reset snaps the default to that grid (CompactScrollbarSlider's
 // `snapValue`), so it must land back on the default, for every block.
 it('every block\'s default fall survives the fall slider\'s reset', () => {
-  const v = defaultVisualizer(false)
+  const v = DEFAULT_VISUALIZER
   for (const fall of [v.caret.fallSec, v.edge.fallSec, v.pane.fallSec]) {
     const min = Math.log(FALL_MIN_SEC)
     const step = Math.log(fall / FALL_MIN_SEC) / 90
@@ -223,14 +249,14 @@ describe('glazeLayerShare', () => {
   })
 
   it('bounds a saved immersive block and defaults a missing one', () => {
-    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -99, swayReturn: 9, swayDrift: 999, waveColor: 7, waveBoxes: 9999, waveBeats: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseColor: '', pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }, false).immersive).toEqual({ waveMix: soleMix('pierce'), glazeMix: soleMix('pierce'), pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: -10, swayReturn: 1, swayDrift: 200, waveColor: defaultVisualizer(false).immersive.waveColor, waveBoxes: 256, waveBeats: 1, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseColor: defaultVisualizer(false).immersive.pulseColor, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1, accentColor: defaultVisualizer(false).immersive.accentColor, letterboxColor: defaultVisualizer(false).immersive.letterboxColor })
-    expect(sanitizeVisualizer({ trackers: {} }, false).immersive).toEqual(defaultVisualizer(false).immersive)
+    expect(sanitizeVisualizer({ immersive: { glazeStrength: 9, glazeSpread: -9, swayRangePx: 999, swaySpread: 5, swayPush: -99, swayReturn: 9, swayDrift: 999, waveBoxes: 9999, waveBeats: 0, waveTurn: -9, waveShape: 3, waveFallSec: 99, pulseSpeed: 999, pulseHalfLifeSec: 0, pulseFadeSec: 99, pulseSoftness: 7, pulseBoost: -2, cutoutRound: 3 } }).immersive).toEqual({ waveMix: soleMix('pierce'), glazeMix: soleMix('pierce'), pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, glazeStrength: IMMERSIVE_GLAZE_STRENGTH_MAX, glazeSpread: -1, swayRangePx: 200, swaySpread: 1, swayPush: -10, swayReturn: 1, swayDrift: 200, waveBoxes: 256, waveBeats: 1, waveTurn: -5, waveShape: 1, waveFallSec: FALL_MAX_SEC, pulseSpeed: 100, pulseHalfLifeSec: 0.1, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 0, cutoutRound: 1})
+    expect(sanitizeVisualizer({ trackers: {} }).immersive).toEqual(DEFAULT_VISUALIZER.immersive)
   })
 
   it('reads a wave travel saved in seconds as beats at the fallback tempo', () => {
-    expect(sanitizeVisualizer({ immersive: { waveSec: 3.5 } }, false).immersive.waveBeats).toBe(7)
-    expect(sanitizeVisualizer({ immersive: { waveSec: 30 } }, false).immersive.waveBeats).toBe(60)
-    expect(sanitizeVisualizer({ immersive: { waveSec: 6, waveBeats: 16 } }, false).immersive.waveBeats).toBe(16)
+    expect(sanitizeVisualizer({ immersive: { waveSec: 3.5 } }).immersive.waveBeats).toBe(7)
+    expect(sanitizeVisualizer({ immersive: { waveSec: 30 } }).immersive.waveBeats).toBe(60)
+    expect(sanitizeVisualizer({ immersive: { waveSec: 6, waveBeats: 16 } }).immersive.waveBeats).toBe(16)
   })
 })
 

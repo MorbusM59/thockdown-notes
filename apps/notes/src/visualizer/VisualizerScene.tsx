@@ -86,7 +86,7 @@ const TOP_ROW_INSET_BOXES = 1
 const MAX_FRAME_SEC = 0.1
 
 export type VisualizerSceneProps = {
-  /** The scene's box, this wide and this tall: Options > Visualizer Font's box size (`shared/visualizerFont.ts`'s `visualizerBoxPx`). */
+  /** The scene's box, this wide and this tall: Options > Visualizer (its font)'s box size (`shared/visualizerFont.ts`'s `visualizerBoxPx`). */
   boxPx: number
   fontFamily: string
   fontSizePx: number

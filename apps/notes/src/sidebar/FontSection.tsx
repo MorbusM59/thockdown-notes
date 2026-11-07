@@ -27,21 +27,32 @@ export type FontSectionProps<Key extends string> = {
 }
 
 /**
- * The options panel's font section: a picker of fonts, each shown as "Aa" in
- * itself, above a row of sliders. Every font setting (editor, reader, UI,
- * visualizer) is this one layout, differing only in its fonts and sliders.
+ * The options panel's font section: its `FontControls` under a heading of its
+ * own. Every font setting (editor, reader, UI, visualizer) is this one layout,
+ * differing only in its fonts and sliders.
  */
-export function FontSection<Key extends string>({
-  heading,
-  className,
+export function FontSection<Key extends string>({ heading, className, ...controls }: FontSectionProps<Key>) {
+  return (
+    <AccordionSection className={className} ariaLabel={heading} heading={heading}>
+      <FontControls {...controls} />
+    </AccordionSection>
+  )
+}
+
+/**
+ * A picker of fonts, each shown as "Aa" in itself, above a row of sliders:
+ * a font section's body, also placed at the top of a section that is about
+ * more than its font (the visualizer's).
+ */
+export function FontControls<Key extends string>({
   pickerLabel,
   options,
   activeKey,
   onSelect,
   sliders,
-}: FontSectionProps<Key>) {
+}: Omit<FontSectionProps<Key>, 'heading' | 'className'>) {
   return (
-    <AccordionSection className={className} ariaLabel={heading} heading={heading}>
+    <>
       <div className="typography-grid" role="group" aria-label={pickerLabel}>
         {options.map((option) => (
           <button
@@ -64,6 +75,6 @@ export function FontSection<Key extends string>({
           </div>
         ))}
       </div>
-    </AccordionSection>
+    </>
   )
 }

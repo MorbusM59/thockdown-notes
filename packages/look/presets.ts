@@ -17,7 +17,7 @@ import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import type { UiLayoutLoadout } from './loadouts';
 import { deriveFlowTrail, deriveLightFlowTrail } from './flowColor';
 import { sceneOf } from './scene';
-import { defaultVisualizer, sanitizeVisualizer } from './visualizer';
+import { DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors } from './visualizer';
 
 type PartialTextureMaterialSettings = Omit<Partial<TextureMaterialSettings>, 'color'> & {
   color?: Partial<TextureColorHsva>;
@@ -66,8 +66,8 @@ function mergeTextureMaterialSettings(
  * (a preset that names its own visualizer keeps it).
  */
 function withDerivedColors(loadout: UiLayoutLoadout): UiLayoutLoadout {
-  return withFlowTrail(loadout.visualizer === NEUTRAL_BASE.visualizer
-    ? { ...loadout, visualizer: defaultVisualizer(loadout.filterInvert > 0.5) }
+  return withFlowTrail(loadout.visualizerColors === NEUTRAL_BASE.visualizerColors
+    ? { ...loadout, visualizerColors: defaultVisualizerColors(loadout.filterInvert > 0.5) }
     : loadout);
 }
 
@@ -79,53 +79,8 @@ function withFlowTrail(loadout: UiLayoutLoadout): UiLayoutLoadout {
   return { ...loadout, highlightColors: { ...loadout.highlightColors, flowTrail } };
 }
 
-// The saved custom layout's sparse visualizer values, completed from the
-// neutral light defaults. Factory presets share its tuning but keep their
-// own element colours.
-const FACTORY_VISUALIZER_SETTINGS = (() => {
-  const base = defaultVisualizer(false);
-  return {
-    ...base,
-    caret: { ...base.caret, fallSec: 1.5 },
-    edge: { ...base.edge, fallSec: 0.5 },
-    pane: { ...base.pane, effect: 0.7, fallSec: 0.3, shape: -0.2 },
-    immersive: {
-      ...base.immersive,
-      glazeStrength: 0.06,
-      glazeSpread: -1,
-      swayDrift: 10,
-      waveFallSec: 1.5,
-      waveMix: { ...base.immersive.waveMix, pierce: 1 },
-      pulseSpeed: 35,
-      pulseHalfLifeSec: 0.75,
-      pulseFadeSec: 1.5,
-      pulseSoftness: 0.5,
-      pulseBoost: 0.5,
-    },
-  };
-})();
-
-function withFactoryVisualizerSettings(loadout: UiLayoutLoadout): UiLayoutLoadout {
-  const colors = loadout.visualizer;
-  return {
-    ...loadout,
-    visualizer: {
-      ...FACTORY_VISUALIZER_SETTINGS,
-      edge: { ...FACTORY_VISUALIZER_SETTINGS.edge, color: colors.edge.color },
-      pane: { ...FACTORY_VISUALIZER_SETTINGS.pane, color: colors.pane.color },
-      immersive: {
-        ...FACTORY_VISUALIZER_SETTINGS.immersive,
-        accentColor: colors.immersive.accentColor,
-        waveColor: colors.immersive.waveColor,
-        pulseColor: colors.immersive.pulseColor,
-        letterboxColor: colors.immersive.letterboxColor,
-      },
-    },
-  };
-}
-
 function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
-  return withFactoryVisualizerSettings(withDerivedColors({
+  return withDerivedColors({
     ...NEUTRAL_BASE,
     ...overrides,
     glaze: {
@@ -146,7 +101,7 @@ function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
       editorEditText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorEditText, overrides.textureMaterials?.editorEditText),
       editorRenderText: mergeTextureMaterialSettings(DEFAULT_TEXTURE_MATERIALS.editorRenderText, overrides.textureMaterials?.editorRenderText),
     },
-  }));
+  });
 }
 
 // A neutral, untextured, unfiltered baseline shared by both default-custom
@@ -242,7 +197,8 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
-  visualizer: defaultVisualizer(false),
+  caretFollowsMusic: DEFAULT_CARET_FOLLOWS_MUSIC,
+  visualizerColors: defaultVisualizerColors(false),
 };
 
 export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = withDerivedColors({
@@ -303,7 +259,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
   // Layout 4: Paper
   buildPreset({ borderRadiusRegularPx: 2, borderAlphaPercent: 170, boxShadowAlphaPercent: 70, audioBassVolume: 0.07, audioTrebleVolume: 0.09, typingSoundEnabled: true, filterSepia: 0.86, filterHueRotate: 7, filterBrightness: 0.9500000000000001, filterContrast: 1.2, filterSaturate: 0.10200000000000001, filterColorize: 0.92, cursorCenterColor: 'rgba(0, 0, 0, 0.746)', cursorTrailColor: 'rgba(0, 0, 0, 1)', cursorDotCount: 8, cursorRadiusPx: 15, cursorSpinHz: 0.1, cursorTrailThicknessPx: 1, cursorTrailFadeMs: 1550, cursorDotSizePx: 0, cursorCenterSizePx: 3, cursorHaloColor: 'rgba(255, 255, 255, 0.59)', cursorHaloRadiusPx: 10, cursorHaloFalloff: 25, cursorPulseMagnitude: 0, cursorClickSkew: 0.59, cursorClickMaxSpeed: 1, caretOutlineWidthPx: 1, caretHaloSpreadPx: 6, caretHaloBlurPx: 8, caretHaloColor: 'rgba(255, 255, 255, 1)', caretAnimationPreset: 'fadeMid', caretAnimationDurationMs: 700, caretEffectStrengthPercent: 67, glaze: {"gloomOpacity":0.46,"gloomPosition":1.5,"gloomShape":0,"linearOpacity":0.005,"linearSeed":643472,"linearStackCount":5,"radialCount":4,"radialOpacity":0.06,"radialSeed":3709,"sheenOpacity":0.5}, highlightColors: {"appButtons":"rgba(255, 255, 255, 1)","background":"rgba(0, 0, 0, 0.016)","base":"rgba(240, 237, 235, 1)","bottomBackground":"rgba(0, 0, 0, 0.039)","caret":"rgba(255, 255, 255, 1)","grid":"rgba(210, 207, 206, 1)","gridOutline":"rgba(255, 255, 255, 0.631)","inputFields":"rgba(230, 230, 230, 1)","markdownBlockquote":"rgba(255, 255, 255, 1)","markdownChecked":"rgba(255, 255, 255, 1)","markdownCode":"rgba(255, 255, 255, 1)","markdownHeadline":"rgba(255, 255, 255, 1)","markdownList":"rgba(255, 255, 255, 1)","markdownUnchecked":"rgba(255, 255, 255, 1)","search":"rgba(255, 255, 255, 1)","selectionEdit":"rgba(255, 255, 255, 1)","selectionRender":"rgba(255, 255, 255, 1)","textBase":"rgba(0, 0, 0, 1)","textEmbossEdit":"rgba(255, 255, 255, 0)","textEmbossRender":"rgba(255, 255, 255, 0)","textEmbossUi":"rgba(255, 255, 255, 0)","topBackground":"rgba(0, 0, 0, 0.039)"}, editorTextColors: {"editorEditText":"rgba(0, 0, 0, 1)"}, textureMaterials: {"appGrid":{"color":{"a":0.0392,"h":0,"s":0,"v":0},"granularity":1,"seed":698383,"vSteps":6},"editorEditText":{"color":{"a":0,"h":0,"s":0,"v":0},"enabled":false,"granularity":1,"seed":698383,"vSteps":6},"sidebarContent":{"color":{"a":0,"h":0,"s":0,"v":0},"enabled":false,"granularity":1,"seed":698383,"vSteps":6}} }),
   // Layout 5: Gold
-  buildPreset({ borderRadiusRegularPx: 20, borderAlphaPercent: 160, boxShadowAlphaPercent: 150, audioBassVolume: 0.2, audioReverbStrength: 0.11, audioReverbSpace: 1, typingSoundEnabled: true, typingSoundSet: 'C', filterSepia: 0.86, filterHueRotate: 360, filterBrightness: 0.87, filterContrast: 1.5, filterSaturate: 0.556, filterColorize: 0.92, cursorDotColor: 'rgba(70, 43, 0, 0.361)', cursorCenterColor: 'rgba(70, 43, 0, 0.755)', cursorTrailColor: 'rgba(255, 160, 65, 1)', cursorDotCount: 5, cursorSpinHz: 0.2, cursorTrailThicknessPx: 4, cursorTrailFadeMs: 800, cursorHaloColor: 'rgba(255, 160, 65, 0.357)', cursorHaloRadiusPx: 30, cursorHaloFalloff: 18, caretSizeDeviationPx: -1, caretOutlineWidthPx: 1, caretOutlineColor: 'rgba(10, 10, 10, 0.351)', caretHaloSpreadPx: 12, caretHaloBlurPx: 20, caretHaloColor: 'rgba(255, 255, 255, 0.633)', caretAnimationPreset: 'fadeEarly', caretAnimationDurationMs: 1600, caretEffectStrengthPercent: 40, glaze: {"gloomOpacity":0.46,"gloomPosition":1.5,"gloomShape":0,"linearOpacity":0.01,"linearSeed":32916,"linearStackCount":5,"radialCount":4,"radialOpacity":0.1,"radialSeed":3709,"sheenOpacity":0.5}, highlightColors: {"appButtons":"rgba(208, 208, 208, 1)","background":"rgba(0, 0, 0, 0.079)","base":"rgba(220, 217, 216, 1)","bottomBackground":"rgba(0, 0, 0, 0.13)","caret":"rgba(255, 255, 255, 0.863)","flowTrail":"rgba(137, 126, 118, 0.8)","grid":"rgba(249, 246, 244, 1)","gridOutline":"rgba(255, 0, 0, 0.157)","gutterBackground":"rgba(0, 0, 0, 0.137)","inputFields":"rgba(0, 0, 0, 0.256)","lineNumber":"rgba(0, 0, 0, 1)","markdownBlockquote":"rgba(255, 255, 255, 1)","markdownChecked":"rgba(255, 255, 255, 1)","markdownCode":"rgba(255, 255, 255, 1)","markdownHeadline":"rgba(255, 255, 255, 1)","markdownList":"rgba(255, 255, 255, 1)","markdownUnchecked":"rgba(255, 255, 255, 1)","reviewLine":"rgba(0, 0, 0, 0.078)","textBase":"rgba(0, 0, 0, 1)","textEmbossEdit":"rgba(255, 255, 255, 0.294)","textEmbossRender":"rgba(255, 255, 255, 0.294)","textEmbossUi":"rgba(255, 255, 255, 0.294)","topBackground":"rgba(0, 0, 0, 0.13)","warningLine":"rgba(0, 0, 0, 0.137)"}, editorTextColors: {"editorEditText":"rgba(0, 0, 0, 1)"}, textureMaterials: {"appGrid":{"color":{"a":0.1733,"h":0,"s":0,"v":0},"granularity":20,"seed":789107,"vSteps":7},"editorEditText":{"color":{"a":1,"h":0,"s":0,"v":0.9137},"granularity":13,"seed":352551,"vSteps":4},"editorRenderText":{"color":{"a":1,"h":0,"s":0,"v":0.9137},"granularity":13,"seed":352551,"vSteps":4},"sidebarContent":{"color":{"a":1,"h":0,"s":0,"v":0.9137},"granularity":13,"seed":352551,"vSteps":4}}, visualizer: sanitizeVisualizer({"caret":{"fallSec":1.5},"immersive":{"glazeSpread":-1,"glazeStrength":0.06,"letterboxColor":"rgba(255, 220, 220, 1)","pulseFadeSec":1.5,"pulseHalfLifeSec":0.75,"waveFallSec":1.5},"pane":{"effect":0.7,"fallSec":0.3,"shape":-0.2}}, false) }),
+  buildPreset({ borderRadiusRegularPx: 20, borderAlphaPercent: 160, boxShadowAlphaPercent: 150, audioBassVolume: 0.2, audioReverbStrength: 0.11, audioReverbSpace: 1, typingSoundEnabled: true, typingSoundSet: 'C', filterSepia: 0.86, filterHueRotate: 360, filterBrightness: 0.87, filterContrast: 1.5, filterSaturate: 0.556, filterColorize: 0.92, cursorDotColor: 'rgba(70, 43, 0, 0.361)', cursorCenterColor: 'rgba(70, 43, 0, 0.755)', cursorTrailColor: 'rgba(255, 160, 65, 1)', cursorDotCount: 5, cursorSpinHz: 0.2, cursorTrailThicknessPx: 4, cursorTrailFadeMs: 800, cursorHaloColor: 'rgba(255, 160, 65, 0.357)', cursorHaloRadiusPx: 30, cursorHaloFalloff: 18, caretSizeDeviationPx: -1, caretOutlineWidthPx: 1, caretOutlineColor: 'rgba(10, 10, 10, 0.351)', caretHaloSpreadPx: 12, caretHaloBlurPx: 20, caretHaloColor: 'rgba(255, 255, 255, 0.633)', caretAnimationPreset: 'fadeEarly', caretAnimationDurationMs: 1600, caretEffectStrengthPercent: 40, glaze: {"gloomOpacity":0.46,"gloomPosition":1.5,"gloomShape":0,"linearOpacity":0.01,"linearSeed":32916,"linearStackCount":5,"radialCount":4,"radialOpacity":0.1,"radialSeed":3709,"sheenOpacity":0.5}, highlightColors: {"appButtons":"rgba(208, 208, 208, 1)","background":"rgba(0, 0, 0, 0.079)","base":"rgba(220, 217, 216, 1)","bottomBackground":"rgba(0, 0, 0, 0.13)","caret":"rgba(255, 255, 255, 0.863)","flowTrail":"rgba(137, 126, 118, 0.8)","grid":"rgba(249, 246, 244, 1)","gridOutline":"rgba(255, 0, 0, 0.157)","gutterBackground":"rgba(0, 0, 0, 0.137)","inputFields":"rgba(0, 0, 0, 0.256)","lineNumber":"rgba(0, 0, 0, 1)","markdownBlockquote":"rgba(255, 255, 255, 1)","markdownChecked":"rgba(255, 255, 255, 1)","markdownCode":"rgba(255, 255, 255, 1)","markdownHeadline":"rgba(255, 255, 255, 1)","markdownList":"rgba(255, 255, 255, 1)","markdownUnchecked":"rgba(255, 255, 255, 1)","reviewLine":"rgba(0, 0, 0, 0.078)","textBase":"rgba(0, 0, 0, 1)","textEmbossEdit":"rgba(255, 255, 255, 0.294)","textEmbossRender":"rgba(255, 255, 255, 0.294)","textEmbossUi":"rgba(255, 255, 255, 0.294)","topBackground":"rgba(0, 0, 0, 0.13)","warningLine":"rgba(0, 0, 0, 0.137)"}, editorTextColors: {"editorEditText":"rgba(0, 0, 0, 1)"}, textureMaterials: {"appGrid":{"color":{"a":0.1733,"h":0,"s":0,"v":0},"granularity":20,"seed":789107,"vSteps":7},"editorEditText":{"color":{"a":1,"h":0,"s":0,"v":0.9137},"granularity":13,"seed":352551,"vSteps":4},"editorRenderText":{"color":{"a":1,"h":0,"s":0,"v":0.9137},"granularity":13,"seed":352551,"vSteps":4},"sidebarContent":{"color":{"a":1,"h":0,"s":0,"v":0.9137},"granularity":13,"seed":352551,"vSteps":4}}, visualizerColors: { ...defaultVisualizerColors(false), letterbox: 'rgba(255, 220, 220, 1)' } }),
 ];
 
 export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [

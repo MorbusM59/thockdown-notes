@@ -10,7 +10,7 @@ import {
 } from '../editor/EditorTypography'
 
 /**
- * The full-screen visualizer's typography (Options > Visualizer Font), one
+ * The full-screen visualizer's typography (Options > Visualizer (its font)), one
  * setting for every visualizer and independent of the editor's (the size is
  * remembered per size mode, in App's fontSizesByMode). Its scene is
  * a grid of SQUARE boxes, so where the editor has an x-box and a y-box this

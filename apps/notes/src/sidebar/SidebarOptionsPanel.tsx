@@ -1,10 +1,10 @@
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
-import { useMemo, useRef } from 'react'
+import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
-import { FontSection } from './FontSection'
+import { FontControls, FontSection } from './FontSection'
 import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
@@ -62,7 +62,8 @@ import {
   type VisualizerMix,
   type VisualizerTrackerName,
   type VisualizerSettings,
-  defaultVisualizer,
+  type VisualizerColors,
+  DEFAULT_VISUALIZER,
 } from '@thockdown/look/visualizer'
 import { ColorPickerRow } from '../colorPicker/ColorPickerRow'
 import { ColorTargetButton } from '../colorPicker/ColorTargetButton'
@@ -554,6 +555,10 @@ export interface SidebarOptionsPanelProps {
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   visualizer: VisualizerSettings
   setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
+  caretFollowsMusic: boolean
+  setCaretFollowsMusic: (updater: (previous: boolean) => boolean) => void
+  visualizerColors: VisualizerColors
+  setVisualizerColors: (updater: (previous: VisualizerColors) => VisualizerColors) => void
 
   borderRadiusRegularPx: number
   setBorderRadiusRegularPx: (value: number) => void
@@ -815,6 +820,10 @@ export function SidebarOptionsPanel({
   setBeatSettings,
   visualizer,
   setVisualizer,
+  caretFollowsMusic,
+  setCaretFollowsMusic,
+  visualizerColors,
+  setVisualizerColors,
   borderRadiusRegularPx,
   setBorderRadiusRegularPx,
   spacingRegularPx,
@@ -902,13 +911,13 @@ export function SidebarOptionsPanel({
   caretEffectStrengthPercent,
   setCaretEffectStrengthPercent,
 }: SidebarOptionsPanelProps) {
-    // What a slider resets to is THIS layout's default, light or dark (`defaultVisualizer`).
-    const layoutVisualizer = useMemo(() => defaultVisualizer(filterInvert > 0.5), [filterInvert])
+    // What a slider resets to: the visualizer is global, so one default for every layout.
+    const visualizerDefaults = DEFAULT_VISUALIZER
     // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
     // With the Visualizer off it cannot be used at all, so it is disabled (and
     // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
     const caretFollowUnavailable = !features.visualizer
-    const caretFollowWaits = caretFollowUnavailable || (visualizer.caret.followsMusic && visualizer.caret.effect === 0)
+    const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && visualizer.caret.effect === 0)
     const outputDevice = useOutputDevice(features.visualizer)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
     // length, the length on a log track so each step of it feels the same.
@@ -960,7 +969,7 @@ export function SidebarOptionsPanel({
           trackLabel={field}
           tooltipLabel={tooltipLabel}
           ariaLabel={`Caret: ${ariaName}`}
-          defaultValue={layoutVisualizer.caret[field]}
+          defaultValue={visualizerDefaults.caret[field]}
           onCommit={(value) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, [field]: value } }))}
         />
       )
@@ -972,7 +981,7 @@ export function SidebarOptionsPanel({
           <div className="utility-setting-slider-stack" aria-label="Caret settings">
             <OptionsSliderRows rows={[1, 2]}>
               {slider('effect', -1, 'How far the caret dips from its peak on each beat. Right of centre a beat adds it; left of centre it is inverted, resting at that much while music plays and a beat takes it away; the centre turns it off. The caret keeps a steady beat that follows the tempo of the music playing now', 'effect, negative inverts')}
-              {renderFallSliders('beat-caret', 'Caret', caret, layoutVisualizer.caret, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
+              {renderFallSliders('beat-caret', 'Caret', caret, visualizerDefaults.caret, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
             </OptionsSliderRows>
           </div>
         </>
@@ -1029,7 +1038,7 @@ export function SidebarOptionsPanel({
                   trackLabel="contrast"
                   tooltipLabel="How strong a hit must be, against the others around it, before it responds: higher keeps only the strongest, and only what is mostly this"
                   ariaLabel={`${label}: contrast`}
-                  defaultValue={layoutVisualizer.trackers[key].contrast}
+                  defaultValue={visualizerDefaults.trackers[key].contrast}
                   onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], contrast: value } } }))}
                 />,
                 <CompactScrollbarSlider
@@ -1042,7 +1051,7 @@ export function SidebarOptionsPanel({
                   trackLabel="pattern"
                   tooltipLabel="How far hits follow the bar's pattern rather than only what is heard: at 0 the signal alone, higher lifts a weak hit toward the same place in the bars around it and fills in expected hits that barely sound"
                   ariaLabel={`${label}: pattern`}
-                  defaultValue={layoutVisualizer.trackers[key].pattern}
+                  defaultValue={visualizerDefaults.trackers[key].pattern}
                   formatValue={(value) => Math.round(value * 100).toString()}
                   onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], pattern: value } } }))}
                 />,
@@ -1063,7 +1072,7 @@ export function SidebarOptionsPanel({
     // One coloured block: its mix, its effect and fall, plus the edge's spread and blur.
     const renderBeatChannel = (key: 'edge' | 'pane', label: string, effect: string) => {
       const channel: VisualizerChannel = visualizer[key]
-      const defaults: VisualizerChannel = key === 'edge' ? layoutVisualizer.edge : layoutVisualizer.pane
+      const defaults: VisualizerChannel = key === 'edge' ? visualizerDefaults.edge : visualizerDefaults.pane
       const set = (patch: Partial<VisualizerChannel>) => setVisualizer((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }))
       return (
         <>
@@ -1098,7 +1107,7 @@ export function SidebarOptionsPanel({
                     trackLabel="spread"
                     tooltipLabel="Pixels: how far the edge reaches in from the editor's edges before it starts to fade"
                     ariaLabel="Edge: spread in pixels"
-                    defaultValue={layoutVisualizer.edge.spreadPx}
+                    defaultValue={visualizerDefaults.edge.spreadPx}
                     onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, spreadPx: Math.round(value) } }))}
                   />,
                   <CompactScrollbarSlider
@@ -1111,7 +1120,7 @@ export function SidebarOptionsPanel({
                     trackLabel="blur"
                     tooltipLabel="Pixels: how soft the edge fades inward; 0 is a hard line"
                     ariaLabel="Edge: blur in pixels"
-                    defaultValue={layoutVisualizer.edge.blurPx}
+                    defaultValue={visualizerDefaults.edge.blurPx}
                     onCommit={(value) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, blurPx: Math.round(value) } }))}
                   />,
               ]}
@@ -1350,45 +1359,6 @@ export function SidebarOptionsPanel({
         ]}
       />
 
-      <FontSection
-        className="sidebar-options-section-visualizer-font"
-        heading="Visualizer Font"
-        pickerLabel="Visualizer typography"
-        options={EDITOR_STYLE_OPTIONS}
-        activeKey={visualizerFont.style}
-        onSelect={(style) => setVisualizerFont({ ...visualizerFont, style })}
-        sliders={[
-          {
-            id: 'visualizer-font-size',
-            min: EDITOR_FONT_SIZE_MIN_PX,
-            max: EDITOR_FONT_SIZE_MAX_PX,
-            step: EDITOR_FONT_SIZE_STEP_PX,
-            value: visualizerFont.sizePx,
-            trackLabel: 'size',
-            ariaLabel: 'Visualizer font size',
-            defaultValue: visualizerFontSizeDefault,
-            onCommit: (value) => setVisualizerFont({
-              ...visualizerFont,
-              sizePx: clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
-            }),
-          },
-          {
-            id: 'visualizer-box-size',
-            min: EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
-            max: EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
-            step: EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
-            value: visualizerFont.boxSize,
-            trackLabel: 'box size',
-            ariaLabel: 'Visualizer box size',
-            defaultValue: DEFAULT_VISUALIZER_BOX_SIZE,
-            onCommit: (value) => setVisualizerFont({
-              ...visualizerFont,
-              boxSize: clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
-            }),
-          },
-        ]}
-      />
-
       <AccordionSection
         className="sidebar-options-section-layouts"
         ariaLabel="Custom Layouts"
@@ -1513,6 +1483,17 @@ export function SidebarOptionsPanel({
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
           {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
         </div>
+        {features.visualizer ? (<>
+          <OptionsSubsectionLabel>Visualizer</OptionsSubsectionLabel>
+          <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Visualizer colors">
+            <ColorTargetButton color={visualizerColors.edge} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, edge: css }))} />
+            <ColorTargetButton color={visualizerColors.pane} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, pane: css }))} />
+            <ColorTargetButton color={visualizerColors.wave} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F5), shown on each hit of its mix" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, wave: css }))} />
+            <ColorTargetButton color={visualizerColors.pulse} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit of its mix, in the visualizer mode (F5)" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, pulse: css }))} />
+            <ColorTargetButton color={visualizerColors.accent || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum, the progress track and the song text in the visualizer mode (F5). Until picked it follows the caret colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, accent: css }))} />
+            <ColorTargetButton color={visualizerColors.letterbox || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, letterbox: css }))} />
+          </div>
+        </>) : null}
       </AccordionSection>
 
       {features.glaze ? (
@@ -2308,20 +2289,20 @@ export function SidebarOptionsPanel({
             })}
             {/* Not a blink but a switch beside them: the blink selected above
                 stays selected and is what the caret falls back to whenever
-                there is no beat to follow (VisualizerCaret.followsMusic). */}
+                there is no beat to follow (the layout's caretFollowsMusic). */}
             <button
               type="button"
-              className={`btn-icon options-color-swatch options-caret-preset-btn${visualizer.caret.followsMusic ? ' is-active' : ''}${caretFollowWaits ? ' is-dimmed' : ''}`}
+              className={`btn-icon options-color-swatch options-caret-preset-btn${caretFollowsMusic ? ' is-active' : ''}${caretFollowWaits ? ' is-dimmed' : ''}`}
               data-tooltip={caretFollowUnavailable
                 ? 'Follow the music needs the Visualizer: switch it on (the drum) in the feature bar. Until then the caret blinks as selected'
                 : caretFollowWaits
                 ? "Follow the music is on but not in effect: the caret's effect under Visualizer is at its centre. Until then the caret blinks as selected"
                 : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected'}
               aria-label="Caret follows the music"
-              aria-pressed={visualizer.caret.followsMusic}
+              aria-pressed={caretFollowsMusic}
               // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
               aria-disabled={caretFollowUnavailable}
-              onClick={() => caretFollowUnavailable || setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, followsMusic: !prev.caret.followsMusic } }))}
+              onClick={() => caretFollowUnavailable || setCaretFollowsMusic((prev) => !prev)}
             >
               <span className="fa-solid fa-music" aria-hidden="true" />
             </button>
@@ -2624,18 +2605,44 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-visualizer"
         ariaLabel="Visualizer"
         heading="Visualizer"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout. Its delay is kept for every layout."
       >
-          <ColorPickerRow />
-          <div className="options-caret-settings-grid" role="group" aria-label="Visualizer colours">
-            <ColorTargetButton color={visualizer.edge.color} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, color: css } }))} />
-            <ColorTargetButton color={visualizer.pane.color} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, color: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.waveColor} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F5), shown on each hit of its mix" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.pulseColor} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit of its mix, in the visualizer mode (F5)" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.accentColor || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum, the progress track and the song text in the visualizer mode (F5). Until picked it follows the caret colour" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, accentColor: css } }))} />
-            <ColorTargetButton color={visualizer.immersive.letterboxColor || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, letterboxColor: css } }))} />
-          </div>
+          <FontControls
+            pickerLabel="Visualizer typography"
+            options={EDITOR_STYLE_OPTIONS}
+            activeKey={visualizerFont.style}
+            onSelect={(style) => setVisualizerFont({ ...visualizerFont, style })}
+            sliders={[
+              {
+                id: 'visualizer-font-size',
+                min: EDITOR_FONT_SIZE_MIN_PX,
+                max: EDITOR_FONT_SIZE_MAX_PX,
+                step: EDITOR_FONT_SIZE_STEP_PX,
+                value: visualizerFont.sizePx,
+                trackLabel: 'size',
+                ariaLabel: 'Visualizer font size',
+                defaultValue: visualizerFontSizeDefault,
+                onCommit: (value) => setVisualizerFont({
+                  ...visualizerFont,
+                  sizePx: clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
+                }),
+              },
+              {
+                id: 'visualizer-box-size',
+                min: EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
+                max: EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
+                step: EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
+                value: visualizerFont.boxSize,
+                trackLabel: 'box size',
+                ariaLabel: 'Visualizer box size',
+                defaultValue: DEFAULT_VISUALIZER_BOX_SIZE,
+                onCommit: (value) => setVisualizerFont({
+                  ...visualizerFont,
+                  boxSize: clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
+                }),
+              },
+            ]}
+          />
+          <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[1, 1]}>
               <CompactScrollbarSlider
@@ -2658,7 +2665,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={beatSettings.responseDb}
                 trackLabel="response"
-                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half. Kept for every layout"
+                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
                 ariaLabel="Beat pulse: dB below full scale that still gives a full response"
                 defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
                 formatValue={(value) => Math.round(value).toString()}
@@ -2667,7 +2674,7 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
           {renderTrackers()}
-          {visualizer.caret.followsMusic && renderBeatCaret()}
+          {caretFollowsMusic && renderBeatCaret()}
           {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
           {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
           <div className="utility-setting-button-row" role="group" aria-label="Immersive glaze controls">
@@ -2675,7 +2682,7 @@ export function SidebarOptionsPanel({
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
             <OptionsSliderRows rows={[3, 4, 3]}>
-              {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, layoutVisualizer.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
+              {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, visualizerDefaults.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
                 min={0}
@@ -2685,7 +2692,7 @@ export function SidebarOptionsPanel({
                 trackLabel="glaze"
                 tooltipLabel="Strength of the glaze that sways in the visualizer mode (F5): every linear and radial layer of this layout's glaze, at this strength"
                 ariaLabel="Immersive: strength of the visualizer's glaze"
-                defaultValue={layoutVisualizer.immersive.glazeStrength}
+                defaultValue={visualizerDefaults.immersive.glazeStrength}
                 formatValue={(value) => value.toFixed(3)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeStrength: value } }))}
               />
@@ -2698,7 +2705,7 @@ export function SidebarOptionsPanel({
                 trackLabel="spread"
                 tooltipLabel="How the visualizer's glaze strength is shared between its layers by depth: the centre gives every layer all of it; left fades the farthest out and keeps the nearest, right the reverse"
                 ariaLabel="Immersive: spread of the visualizer's glaze strength across its layers, negative favours the nearest"
-                defaultValue={layoutVisualizer.immersive.glazeSpread}
+                defaultValue={visualizerDefaults.immersive.glazeSpread}
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeSpread: value } }))}
               />
@@ -2711,7 +2718,7 @@ export function SidebarOptionsPanel({
                 trackLabel="range"
                 tooltipLabel="px the nearest glaze layer sways from rest in the visualizer mode, at the music's usual loudness (louder passages widen it, silence calms it)"
                 ariaLabel="Immersive: how far the nearest glaze layer sways, in pixels"
-                defaultValue={layoutVisualizer.immersive.swayRangePx}
+                defaultValue={visualizerDefaults.immersive.swayRangePx}
                 formatValue={(value) => Math.round(value).toString()}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayRangePx: Math.round(value) } }))}
               />
@@ -2724,7 +2731,7 @@ export function SidebarOptionsPanel({
                 trackLabel="depth"
                 tooltipLabel="How much less each glaze layer sways than the one in front of it: at the left every layer sways as far as the nearest, at the right each sways half as far as the one in front"
                 ariaLabel="Immersive: how much less each glaze layer sways than the one in front of it"
-                defaultValue={layoutVisualizer.immersive.swaySpread}
+                defaultValue={visualizerDefaults.immersive.swaySpread}
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
               />
@@ -2737,7 +2744,7 @@ export function SidebarOptionsPanel({
                 trackLabel="push"
                 tooltipLabel="px each hit of the glaze's mix above pushes the glaze's light stripes across them, for the nearest: right of centre forward, left of centre in reverse, 0 at the centre not at all"
                 ariaLabel="Immersive: how far each hit of the glaze mix pushes the glaze stripes, pixels"
-                defaultValue={layoutVisualizer.immersive.swayPush}
+                defaultValue={visualizerDefaults.immersive.swayPush}
                 formatValue={(value) => value.toFixed(1)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: Math.round(value * 10) / 10 } }))}
               />
@@ -2750,7 +2757,7 @@ export function SidebarOptionsPanel({
                 trackLabel="return"
                 tooltipLabel="How far the glaze slides back after a push, in percent, on the wave's fall: 0 keeps the whole push, 100 returns it to where it was"
                 ariaLabel="Immersive: share of each push the glaze slides back, percent"
-                defaultValue={layoutVisualizer.immersive.swayReturn}
+                defaultValue={visualizerDefaults.immersive.swayReturn}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayReturn: value } }))}
               />
@@ -2763,7 +2770,7 @@ export function SidebarOptionsPanel({
                 trackLabel="drift"
                 tooltipLabel="A steady, endless drift of the glaze's light stripes across them, in px a second for the nearest: the centre holds them still, right drifts them one way and left the other"
                 ariaLabel="Immersive: steady drift of the glaze stripes, pixels per second, negative drifts the other way"
-                defaultValue={layoutVisualizer.immersive.swayDrift}
+                defaultValue={visualizerDefaults.immersive.swayDrift}
                 formatValue={(value) => String(Math.round(value))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
               />
@@ -2774,7 +2781,7 @@ export function SidebarOptionsPanel({
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
             <OptionsSliderRows rows={[3, 3, 2]}>
-              {renderMixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, layoutVisualizer.immersive.waveMix, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
+              {renderMixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, visualizerDefaults.immersive.waveMix, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-wave-boxes"
                 min={WAVE_BOXES_MIN}
@@ -2784,7 +2791,7 @@ export function SidebarOptionsPanel({
                 trackLabel="wave"
                 tooltipLabel="Boxes from one band of the grid wave to the next, in the visualizer mode (F5)"
                 ariaLabel="Immersive: grid wave length in boxes"
-                defaultValue={layoutVisualizer.immersive.waveBoxes}
+                defaultValue={visualizerDefaults.immersive.waveBoxes}
                 formatValue={(value) => Math.round(value).toString()}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveBoxes: Math.round(value) } }))}
               />
@@ -2797,7 +2804,7 @@ export function SidebarOptionsPanel({
                 trackLabel="travel"
                 tooltipLabel="Beats a band of the grid wave takes to travel one wave length (at 120 BPM while no beat is found)"
                 ariaLabel="Immersive: beats the grid wave takes to travel one wave length"
-                defaultValue={layoutVisualizer.immersive.waveBeats}
+                defaultValue={visualizerDefaults.immersive.waveBeats}
                 formatValue={(value) => Math.round(value).toString()}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveBeats: Math.round(value) } }))}
               />
@@ -2810,11 +2817,11 @@ export function SidebarOptionsPanel({
                 trackLabel="turn"
                 tooltipLabel="Beats per turn of the grid wave's fastest pivot, with the music's beat: the centre holds it still, right turns it clockwise and left counter-clockwise (shown negative), at 16, 8, 4, 2 and 1 beats towards either end. Three pivots turn together (the screen's centre, a quarter of the screen to its left and a quarter to its right), the outer two 16 and 4 times slower"
                 ariaLabel="Immersive: beats per turn of the grid wave's fastest pivot, negative counter-clockwise, 0 still"
-                defaultValue={layoutVisualizer.immersive.waveTurn}
+                defaultValue={visualizerDefaults.immersive.waveTurn}
                 formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveTurn: Math.round(value) } }))}
               />
-              {renderFallSliders('visualizer-wave', 'Immersive wave', { shape: visualizer.immersive.waveShape, fallSec: visualizer.immersive.waveFallSec }, { shape: layoutVisualizer.immersive.waveShape, fallSec: layoutVisualizer.immersive.waveFallSec }, 'the wave after each hit', (patch) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, ...(patch.shape !== undefined ? { waveShape: patch.shape } : {}), ...(patch.fallSec !== undefined ? { waveFallSec: patch.fallSec } : {}) } })))}
+              {renderFallSliders('visualizer-wave', 'Immersive wave', { shape: visualizer.immersive.waveShape, fallSec: visualizer.immersive.waveFallSec }, { shape: visualizerDefaults.immersive.waveShape, fallSec: visualizerDefaults.immersive.waveFallSec }, 'the wave after each hit', (patch) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, ...(patch.shape !== undefined ? { waveShape: patch.shape } : {}), ...(patch.fallSec !== undefined ? { waveFallSec: patch.fallSec } : {}) } })))}
             </OptionsSliderRows>
           </div>
           <div className="utility-setting-button-row" role="group" aria-label="Immersive pulse controls">
@@ -2822,7 +2829,7 @@ export function SidebarOptionsPanel({
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
             <OptionsSliderRows rows={[3, 3, 3]}>
-              {renderMixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, layoutVisualizer.immersive.pulseMix, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
+              {renderMixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, visualizerDefaults.immersive.pulseMix, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-pulse-speed"
                 min={PULSE_SPEED_MIN}
@@ -2832,7 +2839,7 @@ export function SidebarOptionsPanel({
                 trackLabel="pulse"
                 tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on each hit of its mix"
                 ariaLabel="Immersive: centre pulse starting speed, boxes per second"
-                defaultValue={layoutVisualizer.immersive.pulseSpeed}
+                defaultValue={visualizerDefaults.immersive.pulseSpeed}
                 formatValue={(value) => String(Math.round(value))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSpeed: Math.round(value) } }))}
               />
@@ -2845,7 +2852,7 @@ export function SidebarOptionsPanel({
                 trackLabel="slow"
                 tooltipLabel="How quickly the centre pulse slows, in milliseconds: its speed halves every this long. A short half-life can stop the ring before it leaves the screen"
                 ariaLabel="Immersive: centre pulse speed half-life, milliseconds"
-                defaultValue={layoutVisualizer.immersive.pulseHalfLifeSec}
+                defaultValue={visualizerDefaults.immersive.pulseHalfLifeSec}
                 formatValue={(value) => String(Math.round(value * 1000))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseHalfLifeSec: Math.round(value * 10) / 10 } }))}
               />
@@ -2858,7 +2865,7 @@ export function SidebarOptionsPanel({
                 trackLabel="boost"
                 tooltipLabel="Signal boost of the centre pulse, in percent: at 100 every hit sends a full ring and thump, at 0 each is as strong as the hit that set it off"
                 ariaLabel="Immersive: centre pulse signal boost, percent"
-                defaultValue={layoutVisualizer.immersive.pulseBoost}
+                defaultValue={visualizerDefaults.immersive.pulseBoost}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseBoost: value } }))}
               />
@@ -2871,7 +2878,7 @@ export function SidebarOptionsPanel({
                 trackLabel="fade"
                 tooltipLabel="How long each centre pulse takes to fade from full to nothing, in milliseconds"
                 ariaLabel="Immersive: centre pulse fade duration, milliseconds"
-                defaultValue={layoutVisualizer.immersive.pulseFadeSec}
+                defaultValue={visualizerDefaults.immersive.pulseFadeSec}
                 formatValue={(value) => String(Math.round(value * 1000))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseFadeSec: Math.round(value * 10) / 10 } }))}
               />
@@ -2884,7 +2891,7 @@ export function SidebarOptionsPanel({
                 trackLabel="soft"
                 tooltipLabel="How softly the centre pulse's ring fades at its edges, in percent: 0 is a band with hard edges, 100 a smooth swell with no flat middle"
                 ariaLabel="Immersive: centre pulse edge softness, percent"
-                defaultValue={layoutVisualizer.immersive.pulseSoftness}
+                defaultValue={visualizerDefaults.immersive.pulseSoftness}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSoftness: value } }))}
               />
@@ -2897,7 +2904,7 @@ export function SidebarOptionsPanel({
                 trackLabel="round"
                 tooltipLabel="How round the centre panel's corners are, in percent: 0 square, 100 a circle. The grid around it stays whole boxes either way"
                 ariaLabel="Immersive: centre panel corner roundness, percent"
-                defaultValue={layoutVisualizer.immersive.cutoutRound}
+                defaultValue={visualizerDefaults.immersive.cutoutRound}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, cutoutRound: value } }))}
               />

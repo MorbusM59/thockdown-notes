@@ -38,7 +38,7 @@ import {
 } from '@thockdown/look/presets';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel } from '@thockdown/look/boxBevel';
-import { defaultVisualizer, sanitizeVisualizer } from '@thockdown/look/visualizer';
+import { DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors } from '@thockdown/look/visualizer';
 import {
   DEFAULT_CUSTOM_CURSOR_SETTINGS,
   CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
@@ -214,7 +214,8 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
-  visualizer: defaultVisualizer(false),
+  caretFollowsMusic: DEFAULT_CARET_FOLLOWS_MUSIC,
+  visualizerColors: defaultVisualizerColors(false),
 };
 
 type SqliteDatabase = import('better-sqlite3').Database;
@@ -484,7 +485,8 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
     return null;
   }
 
-  const source = input as Partial<UiLayoutLoadout>;
+  // `visualizer`: the visualizer a layout carried before it became global, read only for its colours and caret switch.
+  const source = input as Partial<UiLayoutLoadout> & { visualizer?: unknown };
   const highlights = source.highlightColors && typeof source.highlightColors === 'object'
     ? source.highlightColors as Partial<UiLayoutLoadout['highlightColors']>
     : {};
@@ -598,9 +600,12 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
     caretAnimationDurationMs: clampInteger(source.caretAnimationDurationMs, CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationDurationMs),
     caretFrameDurationMs: clampInteger(source.caretFrameDurationMs, CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretFrameDurationMs),
     caretEffectStrengthPercent: clampInteger(source.caretEffectStrengthPercent, CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT, DEFAULT_UI_LAYOUT_LOADOUT.caretEffectStrengthPercent),
-    // A layout saved before the visualizer existed gets the defaults for its
-    // own inversion (its colours are picked before the theme's invert).
-    visualizer: sanitizeVisualizer(source.visualizer, (source.filterInvert ?? 0) > 0.5, source.caretAnimationPreset),
+    // A layout saved while the visualizer was part of it (before 2026-11-07)
+    // reads its colours and its caret switch from there; one saved before the
+    // visualizer existed gets the defaults for its own inversion (its colours
+    // are picked before the theme's invert).
+    caretFollowsMusic: sanitizeCaretFollowsMusic(source.caretFollowsMusic, source.visualizer, source.caretAnimationPreset),
+    visualizerColors: sanitizeVisualizerColors(source.visualizerColors, (source.filterInvert ?? 0) > 0.5, source.visualizer),
   };
 }
 
@@ -627,13 +632,13 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'caretSizeDeviationPx', 'caretOutlineWidthPx', 'caretOutlineColor',
   'caretHaloSpreadPx', 'caretHaloBlurPx', 'caretHaloColor',
   'caretAnimationPreset', 'caretAnimationDurationMs', 'caretFrameDurationMs',
-  'caretEffectStrengthPercent',
+  'caretEffectStrengthPercent', 'caretFollowsMusic',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when
 // they differ from NEUTRAL_BASE (DEFAULT_CUSTOM_LIGHT).
 const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
-  'glaze', 'boxBevel', 'highlightColors', 'editorTextColors', 'textureMaterials', 'visualizer',
+  'glaze', 'boxBevel', 'highlightColors', 'editorTextColors', 'textureMaterials', 'visualizerColors',
 ];
 
 /** Build the override fragment of one .tdl line against NEUTRAL_BASE. */
@@ -704,6 +709,8 @@ export class DatabaseService {
     this.ensureImageReferenceIndex();
     this.ensureProtectedTags();
     await ensureHelpNote(this);
+    // Before seeding, which rewrites every row through the normalizer and so drops it.
+    this.legacyVisualizerByMode = this.readActiveLegacyVisualizers();
     this.ensureLoadoutsSeeded();
   }
 
@@ -3144,6 +3151,35 @@ export class DatabaseService {
   private writeLoadoutMeta(key: string, value: number): void {
     const db = this.requireDb();
     db.prepare(`INSERT OR REPLACE INTO ui_loadout_meta (key, value) VALUES (?, ?)`).run(key, String(value));
+  }
+
+  /**
+   * The visualizer each mode's active layout was saved with while the
+   * visualizer was part of a layout (before 2026-11-07), read raw from its
+   * row when the database opened, before seeding rewrote the rows without
+   * it; undefined where it had none. Read once, by
+   * `visualizerTuningMigration.ts`, to make it the global visualizer.
+   */
+  private legacyVisualizerByMode: Record<UiLoadoutMode, unknown> = { light: undefined, dark: undefined };
+
+  readActiveLegacyVisualizer(mode: UiLoadoutMode): unknown {
+    return this.legacyVisualizerByMode[mode];
+  }
+
+  private readActiveLegacyVisualizers(): Record<UiLoadoutMode, unknown> {
+    const rows = this.requireDb().prepare(`
+      SELECT id, payloadJson FROM ui_loadout_entries WHERE isActive = 1
+    `).all() as Array<{ id: number; payloadJson: string }>;
+    const of = (sign: number): unknown => {
+      const row = rows.find((candidate) => candidate.id * sign > 0);
+      if (!row) return undefined;
+      try {
+        return (JSON.parse(row.payloadJson) as { visualizer?: unknown }).visualizer;
+      } catch {
+        return undefined;
+      }
+    };
+    return { light: of(1), dark: of(-1) };
   }
 
   private readLoadoutRow(id: number): UiLoadoutEntry | null {

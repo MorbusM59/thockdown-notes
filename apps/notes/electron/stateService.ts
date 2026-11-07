@@ -19,6 +19,7 @@ import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings } from '../src/shared/flowSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
+import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
@@ -619,6 +620,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     features: sanitizeFeatureToggles(input),
     flow: sanitizeFlowSettings(input?.flow),
     visualizerFont: sanitizeVisualizerFont(input?.visualizerFont),
+    // Absent stays absent: that is how the one-time migration from the active layout knows to run.
+    visualizer: input?.visualizer === undefined ? undefined : sanitizeVisualizer(input.visualizer),
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
     chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
