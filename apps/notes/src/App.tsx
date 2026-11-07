@@ -14,7 +14,6 @@ import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type MusicPoolFilter } from './shared/audioPlayer'
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
-import { publishThemeControls } from './visualizer/themeControls'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
 import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
 import { publishSoundstageControls } from './sound/soundstageControls'
@@ -3225,12 +3224,6 @@ function App() {
       : { ...layoutChoices, app: rememberable(liveLayoutChoice) ?? layoutChoices.app }),
     [isVisualizerMode, layoutChoices, liveLayoutChoice],
   )
-
-  // The visualizer's arrow boxes (visualizer/ThemeArrows.tsx) step the
-  // layouts and switch light and dark through these.
-  useEffect(() => {
-    publishThemeControls({ isDark: uiMode === 'dark', stepLayout: stepLayoutPreset, toggleUiMode })
-  }, [uiMode, stepLayoutPreset, toggleUiMode])
 
   // Runs once persistence has fully restored appState (including uiMode,
   // set deep inside the bootstrap effect further below). Firing this on
