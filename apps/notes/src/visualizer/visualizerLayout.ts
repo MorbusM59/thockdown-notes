@@ -216,13 +216,21 @@ export function fitToRow(text: string, columns: number): string {
   return Array.from(text).slice(0, Math.max(0, columns)).join('')
 }
 
-/** The empty boxes the song list keeps between its right edge and the cutout. */
-export const SONG_LIST_CUTOUT_GAP_BOXES = 10
+/**
+ * The empty boxes the song list, the bucket list and the pool filter keep
+ * from the cutout: as many as there are empty rows between the cutout and
+ * the progress bar, so all four sides of the orb keep one distance, and that
+ * distance grows and shrinks with the screen.
+ */
+export function cutoutGapBoxes(layout: VisualizerLayout): number {
+  const barRow = layout.progressRow ?? layout.stripRows - 1
+  return Math.max(1, layout.cutout.row - barRow - 1)
+}
 
 /**
  * The song list's rectangle, in boxes: from the middle section's second row
  * and second column to its second-to-last row, its right edge at least
- * `SONG_LIST_CUTOUT_GAP_BOXES` empty boxes left of the cutout. Only every
+ * `cutoutGapBoxes` empty boxes left of the cutout. Only every
  * other row of it holds an entry, from its first row, so `slots` is how many
  * entries it shows. Null when it has no room for an entry of at least one
  * character (five boxes: two accents, two gaps, one letter).
@@ -231,7 +239,7 @@ export function songListArea(layout: VisualizerLayout): { column: number; row: n
   const row = layout.contentTopRow
   const lastRow = layout.contentBottomRow
   const column = 1
-  const lastColumn = (layout.cutout.size > 0 ? layout.cutout.column : layout.columns) - SONG_LIST_CUTOUT_GAP_BOXES - 1
+  const lastColumn = (layout.cutout.size > 0 ? layout.cutout.column : layout.columns) - cutoutGapBoxes(layout) - 1
   const rows = lastRow - row + 1
   const columns = lastColumn - column + 1
   if (layout.stripRows <= 0 || rows < 1 || columns < 5) return null
@@ -254,7 +262,7 @@ export function songListEntry(name: string, columns: number): { text: string; cl
  * The bucket list's rectangle: the song list's mirrored across the scene,
  * from the middle section's second row to its second-to-last, its right
  * edge one box in from the scene's and its left edge at least
- * `SONG_LIST_CUTOUT_GAP_BOXES` empty boxes right of the cutout. Entries on
+ * `cutoutGapBoxes` empty boxes right of the cutout. Entries on
  * every other row from the top, right-aligned.
  */
 export function bucketListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
@@ -263,7 +271,7 @@ export function bucketListArea(layout: VisualizerLayout): { column: number; row:
   const filter = poolFilterArea(layout)
   const lastRow = filter ? filter.row - 2 : layout.contentBottomRow
   const lastColumn = layout.columns - 2
-  const column = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + SONG_LIST_CUTOUT_GAP_BOXES
+  const column = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
   const rows = lastRow - row + 1
   const columns = lastColumn - column + 1
   if (layout.stripRows <= 0 || rows < 1 || columns < 5) return null
@@ -286,7 +294,7 @@ export type PoolFilterArea = {
 /**
  * The pool filter's two rows, bottom-right of the middle section: the right
  * edge one box in from the scene's (the bucket list's), the left at least
- * `SONG_LIST_CUTOUT_GAP_BOXES` empty boxes right of the cutout, and the
+ * `cutoutGapBoxes` empty boxes right of the cutout, and the
  * bottom row on the song list's last entry row, so the two blocks share a
  * lowest line (one row above the middle's last, or two when the song list's
  * every-other-row pattern ends there). The top row is two above it.
@@ -303,7 +311,7 @@ export function poolFilterArea(layout: VisualizerLayout): PoolFilterArea | null 
   const row = bottomRow - 2
   if (layout.stripRows <= 0 || row < firstRow) return null
   const lastColumn = layout.columns - 2
-  const leftLimit = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + SONG_LIST_CUTOUT_GAP_BOXES
+  const leftLimit = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
   const room = Math.min(POOL_FILTER_MAX_COLUMNS, lastColumn - leftLimit + 1)
   const fieldColumns = Math.floor((room - 3) / 2)
   if (fieldColumns < 1) return null

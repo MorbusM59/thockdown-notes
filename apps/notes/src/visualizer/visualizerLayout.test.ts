@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, LEVEL_BARS_GAP_BOXES, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, fitVisualizerBox, STRIP_ROWS } from './visualizerLayout'
+import { bucketListArea, LEVEL_BARS_GAP_BOXES, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, cutoutGapBoxes, songListArea, songListEntry, fitVisualizerBox, STRIP_ROWS } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('gives both strips exactly eight rows wherever they fit', () => {
@@ -59,6 +59,15 @@ describe('computeVisualizerLayout', () => {
       expect(Number.isInteger(column) && Number.isInteger(row)).toBe(true)
       expect(Math.abs(left - (w - left - size * box))).toBeLessThanOrEqual(1)
       expect(Math.abs(top - (h - top - size * box))).toBeLessThanOrEqual(1)
+    }
+  })
+})
+
+describe('cutoutGapBoxes', () => {
+  it('keeps the lists as far from the orb as the progress bar is', () => {
+    for (const h of [700, 900, 1080, 1440]) {
+      const layout = computeVisualizerLayout(1920, h, 20, 220)
+      expect(cutoutGapBoxes(layout)).toBe(layout.cutout.row - (layout.progressRow as number) - 1)
     }
   })
 })
@@ -134,7 +143,7 @@ describe('song list', () => {
     expect(area.row).toBe(layout.contentTopRow)
     expect(area.row + area.rows - 1).toBe(layout.contentBottomRow)
     expect(area.column).toBe(1)
-    expect(layout.cutout.column - (area.column + area.columns)).toBe(SONG_LIST_CUTOUT_GAP_BOXES)
+    expect(layout.cutout.column - (area.column + area.columns)).toBe(cutoutGapBoxes(layout))
     expect(area.slots).toBe(Math.ceil(area.rows / 2))
   })
 
@@ -152,7 +161,7 @@ describe('bucket list', () => {
     expect(buckets.row).toBe(songs.row)
     expect(buckets.row + buckets.rows - 1).toBe(poolFilterArea(layout)!.row - 2)
     expect(layout.columns - (buckets.column + buckets.columns)).toBe(songs.column)
-    expect(buckets.column - (layout.cutout.column + layout.cutout.size)).toBe(SONG_LIST_CUTOUT_GAP_BOXES)
+    expect(buckets.column - (layout.cutout.column + layout.cutout.size)).toBe(cutoutGapBoxes(layout))
   })
 })
 
@@ -166,7 +175,7 @@ describe('pool filter', () => {
       expect(area.column + area.columns).toBe(layout.columns - 1)
       expect(area.columns).toBe(2 * area.fieldColumns + 3)
       expect(area.columns).toBeLessThanOrEqual(POOL_FILTER_MAX_COLUMNS)
-      expect(area.column - (layout.cutout.column + layout.cutout.size)).toBeGreaterThanOrEqual(SONG_LIST_CUTOUT_GAP_BOXES)
+      expect(area.column - (layout.cutout.column + layout.cutout.size)).toBeGreaterThanOrEqual(cutoutGapBoxes(layout))
     }
   })
 
