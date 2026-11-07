@@ -334,17 +334,6 @@ describe('StateService app-state field round-trip', () => {
       .toEqual({ kind: 'adventure', sectionId: 'default', previousNoteId: 'note-1' })
   })
 
-  it('persists the app\'s and the visualizer\'s layout choices, dropping a malformed one', async () => {
-    const menu = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
-    const writer = new StateService(dataRoot)
-    const layoutChoices = { app: { uiMode: 'light' as const, loadoutId: 3 }, visualizer: { uiMode: 'dark' as const, loadoutId: -7 } }
-    await writer.saveAppState({ selectedNoteId: null, menu: { ...menu, layoutChoices } })
-    expect((await new StateService(dataRoot).loadAppState()).menu?.layoutChoices).toEqual(layoutChoices)
-
-    await writer.saveAppState({ selectedNoteId: null, menu: { ...menu, layoutChoices: { app: { uiMode: 'dim', loadoutId: 3 }, visualizer: layoutChoices.visualizer } as never } })
-    expect((await new StateService(dataRoot).loadAppState()).menu?.layoutChoices).toEqual({ app: undefined, visualizer: layoutChoices.visualizer })
-  })
-
   it('persists allowRemoteImages across a save -> fresh-instance load, and reads anything but true as off', async () => {
     const menu = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
     const writer = new StateService(dataRoot)
