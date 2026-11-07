@@ -79,7 +79,9 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     const slots: SlotCells[] = []
     for (let slot = 0; slot < area.slots; slot += 1) {
       const row = slot * 2
-      const plate = box('visualizer-song-plate', boxesLayer, 0, row)
+      // The plate fills only the boxes between the two accent boxes, which sit on
+      // the middle section itself rather than on the plate.
+      const plate = box('visualizer-song-plate', boxesLayer, 1, row)
       const open = box('visualizer-lit', boxesLayer, 0, row)
       const close = box('visualizer-lit', boxesLayer, 0, row)
       const letters: HTMLDivElement[] = []
@@ -131,7 +133,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
         cells.close.hidden = false
         cells.close.style.left = `${closingColumn * boxPx}px`
         cells.plate.hidden = !isCurrent
-        cells.plate.style.width = `${(closingColumn + 1) * boxPx}px`
+        cells.plate.style.width = `${Math.max(0, closingColumn - 1) * boxPx}px`
         for (let index = 0; index < cells.letters.length; index += 1) {
           const char = chars[index] ?? ''
           cells.letters[index].textContent = char === ' ' ? '' : char
@@ -148,7 +150,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const holes = []
       for (let slot = 0; slot < slots.length; slot += 1) {
         if (slots[slot].plate.hidden) continue
-        holes.push({ x: left, y: top - middle.offsetTop + slot * 2 * boxPx, width: parseFloat(slots[slot].plate.style.width), height: boxPx })
+        holes.push({ x: left + boxPx, y: top - middle.offsetTop + slot * 2 * boxPx, width: parseFloat(slots[slot].plate.style.width), height: boxPx })
       }
       setMiddleHoles(middle, 'song-list', holes)
     }

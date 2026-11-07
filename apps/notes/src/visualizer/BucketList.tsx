@@ -48,7 +48,7 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
     if (!middle) return
     const holes = holeKey === '' ? [] : holeKey.split(';').map((part) => {
       const [x, y, width] = part.split(',').map(Number)
-      return { x, y: y - middle.offsetTop, width: width * boxPx, height: boxPx }
+      return { x: x + boxPx, y: y - middle.offsetTop, width: (width - 2) * boxPx, height: boxPx }
     })
     setMiddleHoles(middle, 'bucket-list', holes)
     return () => setMiddleHoles(middle, 'bucket-list', [])
@@ -60,7 +60,8 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
       <div ref={anchorRef} hidden />
       {entries.map((entry) => (
         <Fragment key={`b${entry.slot}`}>
-          {entry.active && <div className="visualizer-song-plate visualizer-bucket-box" style={cell(entry.left, entry.top, entry.width)} />}
+          {/* The plate fills only the boxes between the two accent boxes, which sit on the middle section itself. */}
+          {entry.active && <div className="visualizer-song-plate visualizer-bucket-box" style={cell(entry.left + boxPx, entry.top, entry.width - 2)} />}
           <div className="visualizer-lit visualizer-bucket-box" style={cell(entry.left, entry.top)} />
           <div className="visualizer-lit visualizer-bucket-box" style={cell(entry.left + (entry.width - 1) * boxPx, entry.top)} />
         </Fragment>
