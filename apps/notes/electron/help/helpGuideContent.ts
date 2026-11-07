@@ -1005,7 +1005,7 @@ ${shortcutTable()}
 - **Media keys and the system player** — your keyboard's play/pause, next and previous keys, and the media controls your system shows (on Windows, the flyout beside the volume), drive this player and show the current song. Previous steps back through what you have heard; next picks a fresh song, as right-clicking fast-forward does.
 - **Mini mode** — the expand button on the player's right leaves mini mode and maximizes the window (its arrows point that way). Your previous window size isn't lost: un-maximizing returns to it.
 - **Soundstages** — the headphones button swaps the row of five music slots and the Soundscapes switch for the six soundstages (the same buttons as in the settings panel's Music section), and swaps back. Click one to play the music through it.
-- Scroll over the headphones button to adjust sound: plain scroll for volume, \`Shift\` for reverb, \`Ctrl\` for room size. Turning the volume up this way also unmutes.
+- Scroll over the headphones button to adjust sound: plain scroll for volume, \`Shift\` for reverb, \`Ctrl\` for room size. Right-click it to mute or unmute; turning the volume up by scrolling also unmutes.
 - **Resuming across restarts** — if music was playing when the app was last closed, it resumes on launch (same song and position), fading in over 10 seconds from silence and full reverb up to your usual volume/reverb settings.
 `,
   `## Data Storage
