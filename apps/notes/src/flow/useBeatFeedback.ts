@@ -107,8 +107,10 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   // analysis already listens to the trackers.
   const { trackers } = visualizer
   useEffect(() => setVisualizerTrackers(trackers), [trackers])
-  // The beat's depth is the layout's caret effect, the blink's own slider (-1..1).
-  const caretBlock = useMemo(() => ({ ...visualizer.caret, effect: caretEffect }), [visualizer.caret, caretEffect])
+  // The beat's depth is the layout's caret effect, the blink's own slider
+  // (-1..1), read inverted: the slider says what the blink does to the caret
+  // at rest, and the beat moves it the opposite way.
+  const caretBlock = useMemo(() => ({ ...visualizer.caret, effect: -caretEffect }), [visualizer.caret, caretEffect])
   useBeatBlock('caret', caretBlock, enabled && caretFollowsMusic, subscribeClock)
   // The same two elements show the grid beat on the editor and the visualizer
   // mode's own edge and pane over its scene, each set of settings in its turn.
