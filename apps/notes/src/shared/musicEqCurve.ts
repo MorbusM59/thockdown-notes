@@ -127,8 +127,15 @@ export function eqCurveGainsDb(params: EqCurveParams): Float64Array {
 /** Third-octave centres from 20 Hz: 20 * 2^(k/3), the last at 20.3 kHz. */
 export const EQ_BAND_COUNT = 31
 export const EQ_BAND_FREQUENCIES_HZ: readonly number[] = Array.from({ length: EQ_BAND_COUNT }, (_, k) => EQ_LOW_HZ * 2 ** (k / 3))
-/** A third of an octave wide (Q = sqrt(2^(1/3)) / (2^(1/3) - 1)). */
-export const EQ_BAND_Q = Math.sqrt(2 ** (1 / 3)) / ((2 ** (1 / 3)) - 1)
+/**
+ * Wider than the third-octave spacing: a bell exactly as wide as the gap
+ * between centres (Q ~4.3) leaves a dip between neighbours and a bump at each
+ * centre, a scalloped ripple of about +-0.5 dB that the fit cannot remove,
+ * since it sets only the heights. Overlapping bells sum smoothly, and the fit
+ * already accounts for the overlap; the cost is that the narrowest spikes come
+ * out a little rounder.
+ */
+export const EQ_BAND_Q = 1.5
 /** The rate the fit assumes; a peaking filter's shape barely changes between 44.1 and 48 kHz in the audible range. */
 const FIT_SAMPLE_RATE = 48000
 
