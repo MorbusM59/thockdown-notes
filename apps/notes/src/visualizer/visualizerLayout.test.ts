@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, LEVEL_BARS_GAP_BOXES, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, cutoutGapBoxes, songListArea, songListEntry, fitVisualizerBox, STRIP_ROWS } from './visualizerLayout'
+import { bucketListArea, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, cutoutGapBoxes, songListArea, songListEntry, fitVisualizerBox, STRIP_ROWS } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('gives both strips exactly eight rows wherever they fit', () => {
@@ -187,17 +187,10 @@ describe('pool filter', () => {
 })
 
 describe('level bars', () => {
-  it('runs volume across the bottom strip, reverb and room under the cutout on the lowest line', () => {
+  it('runs volume across the whole row above the bottom strip', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
-    const songs = songListArea(layout)!
-    const bars = levelBarsArea(layout)!
-    expect(bars.volume).toEqual({ column: 0, row: layout.bottomStripRow - 1, columns: layout.columns })
+    expect(levelBarsArea(layout)!.volume).toEqual({ column: 0, row: layout.bottomStripRow - 1, columns: layout.columns })
     expect(progressBarArea(layout)).toEqual({ column: 0, row: 7, columns: layout.columns })
-    expect(bars.reverb.row).toBe(songs.row + 2 * (songs.slots - 1))
-    expect(bars.room.row).toBe(bars.reverb.row)
-    expect(layout.cutout.column - bars.reverb.column).toBe(8)
-    expect(bars.room.column + bars.room.columns - (layout.cutout.column + layout.cutout.size)).toBe(8)
-    expect(bars.room.column - (bars.reverb.column + bars.reverb.columns)).toBeGreaterThanOrEqual(LEVEL_BARS_GAP_BOXES)
   })
 
   it('keeps both ends lit and inverts a press', () => {

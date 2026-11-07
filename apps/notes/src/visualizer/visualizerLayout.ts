@@ -49,7 +49,7 @@ export type VisualizerLayout = {
   creditsRow: number | null
   /** The first row of the bottom strip (the volume bar's row). */
   bottomStripRow: number
-  /** The middle section's rows for what sits beside the cutout (song list, buckets, filter, reverb and room): one empty row from each bar. */
+  /** The middle section's rows for what sits beside the cutout (song list, buckets, filter): one empty row from each bar. */
   contentTopRow: number
   contentBottomRow: number
   /** The progress track's row (the middle section's first) and the volume bar's (its last), or null without room for them. */
@@ -332,37 +332,13 @@ export function fieldWindow(text: string, caret: number, columns: number): { cha
   return { chars: all.slice(start, start + columns), caretColumn: at - start }
 }
 
-/** How far the reverb/room span reaches past the cutout on each side. */
-export const LEVEL_BARS_OVERHANG_BOXES = 8
-/** The empty boxes between the reverb bar and the room bar. */
-export const LEVEL_BARS_GAP_BOXES = 10
-
 export type LevelBar = { column: number; row: number; columns: number }
-export type LevelBarsArea = { volume: LevelBar; reverb: LevelBar; room: LevelBar }
+export type LevelBarsArea = { volume: LevelBar }
 
-/**
- * The sound level bars. Volume is the middle section's last row, just above
- * the bottom strip, full width.
- * Reverb and room sit under the cutout on the song list's (and the pool
- * filter's) lowest line, reverb flush with the left end of a span reaching
- * `LEVEL_BARS_OVERHANG_BOXES` past the cutout on each side and room with its
- * right, `LEVEL_BARS_GAP_BOXES` apart. Null without a volume row, a cutout,
- * or room for bars of three boxes below the cutout.
- */
+/** The volume bar: the middle section's last row, just above the bottom strip, full width. Null without a volume row. */
 export function levelBarsArea(layout: VisualizerLayout): LevelBarsArea | null {
-  const songs = songListArea(layout)
   const volume = fullWidthBar(layout, layout.volumeRow)
-  if (!songs || !volume || layout.cutout.size <= 0) return null
-  const row = songs.row + 2 * (songs.slots - 1)
-  const column = layout.cutout.column - LEVEL_BARS_OVERHANG_BOXES
-  const columns = layout.cutout.size + 2 * LEVEL_BARS_OVERHANG_BOXES
-  const side = Math.floor((columns - LEVEL_BARS_GAP_BOXES) / 2)
-  if (row < layout.cutout.row + layout.cutout.size || column < 0 || side < 3) return null
-  return {
-    volume,
-    reverb: { column, row, columns: side },
-    room: { column: column + columns - side, row, columns: side },
-  }
+  return volume ? { volume } : null
 }
 
 /**
