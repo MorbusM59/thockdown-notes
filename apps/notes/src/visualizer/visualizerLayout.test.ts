@@ -58,31 +58,30 @@ describe('the progress track', () => {
     for (let i = 0; i <= 1000; i += 1) {
       const column = playheadColumn(columns, (i / 1000) * 180, 180)
       expect(column).not.toBeNull()
-      expect(column!).toBeGreaterThanOrEqual(2)
-      expect(column!).toBeLessThanOrEqual(columns - 3)
+      expect(column!).toBeGreaterThanOrEqual(1)
+      expect(column!).toBeLessThanOrEqual(columns - 2)
       seen.add(column!)
     }
-    expect(seen.size).toBe(columns - 4)
+    expect(seen.size).toBe(columns - 2)
   })
 
   it('puts the playhead on the box that was pressed', () => {
     const columns = 37
-    for (let column = 2; column <= columns - 3; column += 1) {
+    for (let column = 1; column <= columns - 2; column += 1) {
       const startSec = columnToFraction(columns, column)! * 180
       expect(playheadColumn(columns, startSec, 180)).toBe(column)
       // A seek reported a little short of where it was sent still lands on the box pressed.
       expect(playheadColumn(columns, startSec - 0.02, 180)).toBe(column)
       // The end of the box before is still that box.
-      expect(playheadColumn(columns, startSec - 0.2, 180)).toBe(Math.max(2, column - 1))
+      expect(playheadColumn(columns, startSec - 0.2, 180)).toBe(Math.max(1, column - 1))
     }
   })
 
-  it('makes the ends previous and next, and the second boxes dead', () => {
+  it('makes the ends previous and next, and the track run right up to them', () => {
     expect(progressPress(30, 0)).toEqual({ kind: 'previous' })
     expect(progressPress(30, 29)).toEqual({ kind: 'next' })
-    expect(progressPress(30, 1)).toEqual({ kind: 'none' })
-    expect(progressPress(30, 28)).toEqual({ kind: 'none' })
-    expect(progressPress(30, 2)).toEqual({ kind: 'seek', fraction: 0 })
+    expect(progressPress(30, 1)).toEqual({ kind: 'seek', fraction: 0 })
+    expect(progressPress(30, 28)).toEqual({ kind: 'seek', fraction: 27 / 28 })
   })
 })
 
@@ -151,8 +150,8 @@ describe('level bars', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
     const songs = songListArea(layout)!
     const bars = levelBarsArea(layout)!
-    expect(bars.volume).toEqual({ column: 1, row: layout.bottomStripRow, columns: layout.columns - 2 })
-    expect(progressBarArea(layout)).toEqual({ column: 1, row: 7, columns: layout.columns - 2 })
+    expect(bars.volume).toEqual({ column: 0, row: layout.bottomStripRow, columns: layout.columns })
+    expect(progressBarArea(layout)).toEqual({ column: 0, row: 7, columns: layout.columns })
     expect(bars.reverb.row).toBe(songs.row + 2 * (songs.slots - 1))
     expect(bars.room.row).toBe(bars.reverb.row)
     expect(layout.cutout.column - bars.reverb.column).toBe(8)

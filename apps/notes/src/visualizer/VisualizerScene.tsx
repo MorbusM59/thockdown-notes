@@ -52,7 +52,7 @@ import { FACTORY_SOUNDSTAGE_IDS } from '../shared/soundstages'
 import { CUSTOM_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
-import { LevelBars } from './LevelBars'
+import { BarEndGlyphs, LevelBars } from './LevelBars'
 import { CursorIdle } from './CursorIdle'
 import { dropWideGlyphs } from './cellGlyphs'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
@@ -514,6 +514,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
                 <div key={run.first} className="visualizer-lit" style={{ left: progressLeftPx + run.first * box, top: rowTop(progressArea.row), width: run.count * box, height: box }} />
               ))}
               <div className="visualizer-lit" style={{ left: progressLeftPx + (progressColumns - 1) * box, top: rowTop(progressArea.row), width: box, height: box }} />
+              <BarEndGlyphs layout={layout} bar={progressArea} glyphs={['<', '>']} />
             </>
           )}
           {layout.titleRow !== null && <LetterBoxes runs={title} row={layout.titleRow} layout={layout} />}

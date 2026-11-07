@@ -18,9 +18,9 @@
  * `CREDITS_GAP_BOXES` empty boxes, then the album), empty, the title, empty,
  * the semitone row, empty, the progress track. The BOTTOM strip: the volume
  * bar, empty, then the spectrum in the rest. A row that does not fit a short
- * strip is left out (null). The text rows and both bars span the columns
- * between `ROW_INSET_BOXES` from each edge; the semitone row and spectrum
- * span every column. The middle section holds only what sits beside the
+ * strip is left out (null). The text rows span the columns between
+ * `ROW_INSET_BOXES` from each edge; both bars, the semitone row and the
+ * spectrum span every column. The middle section holds only what sits beside the
  * cutout (song list, buckets, filter, reverb and room).
  *
  * THE CUTOUT is the empty scene's square, centred, as many whole boxes wide
@@ -29,7 +29,7 @@
  */
 
 export const STRIP_ROWS = 8
-/** Boxes left empty at each screen edge by the text rows and the two bars. */
+/** Boxes left empty at each screen edge by the text rows. */
 export const ROW_INSET_BOXES = 1
 export const CREDITS_GAP_BOXES = 3
 
@@ -107,10 +107,9 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   }
 }
 
-/** A full-width bar on `row`: every column but `ROW_INSET_BOXES` at each edge. */
+/** A bar on `row` running edge to edge, every column of the grid. */
 function fullWidthBar(layout: VisualizerLayout, row: number | null): LevelBar | null {
-  const columns = layout.columns - 2 * ROW_INSET_BOXES
-  return row === null || columns < 3 ? null : { column: ROW_INSET_BOXES, row, columns }
+  return row === null || layout.columns < 3 ? null : { column: 0, row, columns: layout.columns }
 }
 
 /** The progress track's place: the top strip's last row, full width. */
@@ -120,12 +119,13 @@ export function progressBarArea(layout: VisualizerLayout): LevelBar | null {
 
 /**
  * The progress track, one row of `columns` boxes: the first and last boxes
- * are the previous- and next-track buttons, the second and second-to-last
- * are dead, and the TRACK is everything between. Fewer than five boxes
- * leaves no track.
+ * are the previous- and next-track buttons (always lit, carrying `<` and
+ * `>`), and the TRACK is everything between, so the playhead's empty box
+ * sits right beside a button at either end, the way a level bar's gap does.
+ * Fewer than three boxes leaves no track.
  */
 export function trackSpan(columns: number): { first: number; count: number } {
-  return { first: 2, count: Math.max(0, columns - 4) }
+  return { first: 1, count: Math.max(0, columns - 2) }
 }
 
 /**

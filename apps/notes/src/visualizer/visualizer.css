@@ -99,6 +99,13 @@
   white-space: pre;
 }
 
+/* The glyph on a bar's end box (the progress track's < and >, the volume
+   bar's - and +): the box is lit in the accent, so the glyph takes the strip's
+   own colour, the accent inverted. */
+.visualizer-letter.is-bar-end {
+  color: var(--visualizer-letterbox-color, var(--color-bg-regular));
+}
+
 .visualizer-scene > .visualizer-progress-hit {
   z-index: 6;
   pointer-events: auto;

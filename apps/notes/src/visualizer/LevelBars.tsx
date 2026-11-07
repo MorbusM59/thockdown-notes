@@ -29,6 +29,24 @@ function labelsOf(area: LevelBarsArea, firstRow: number): Array<{ text: string; 
   ]
 }
 
+/** The glyphs on a bar's two end boxes, drawn over its lit boxes in the inverted accent. */
+export function BarEndGlyphs({ layout, bar, glyphs }: { layout: VisualizerLayout; bar: LevelBar; glyphs: readonly [string, string] }) {
+  const { boxPx, originXPx, originYPx } = layout
+  return (
+    <>
+      {[0, bar.columns - 1].map((column, index) => (
+        <div
+          key={column}
+          className="visualizer-letter is-bar-end"
+          style={{ left: originXPx + (bar.column + column) * boxPx, top: originYPx + bar.row * boxPx, width: boxPx, height: boxPx, lineHeight: `${boxPx}px` }}
+        >
+          {glyphs[index]}
+        </div>
+      ))}
+    </>
+  )
+}
+
 export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: LevelBarsArea }) {
   const levels = useSyncExternalStore(subscribeNowPlaying, () => readNowPlaying().levels)
   const { boxPx, originXPx, originYPx } = layout
@@ -49,6 +67,7 @@ export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: Le
           {char}
         </div>
       )))}
+      <BarEndGlyphs layout={layout} bar={area.volume} glyphs={['\u2013', '+']} />
       {BARS.map((key) => {
         const bar = area[key]
         const gap = levelGapColumn(bar.columns, levels[key])
