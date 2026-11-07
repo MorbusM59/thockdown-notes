@@ -433,3 +433,32 @@
 .options-caret-preset-btn.is-dimmed {
   opacity: 0.45;
 }
+
+/* Options > Music: the EQ curve graph, one row of the six-wide options grid (EqCurveGraph.tsx). */
+.options-eq-graph {
+  grid-column: 1 / -1;
+  width:       100%;
+  height:      100%;
+  color:       var(--color-text-80);
+}
+
+.options-eq-graph svg {
+  display: block;
+  width:   100%;
+  height:  100%;
+}
+
+.options-eq-graph-grid {
+  stroke:         currentColor;
+  stroke-opacity: 0.2;
+  stroke-width:   1;
+  vector-effect:  non-scaling-stroke;
+}
+
+.options-eq-graph-curve {
+  fill:            none;
+  stroke:          currentColor;
+  stroke-width:    1.5;
+  stroke-linejoin: round;
+  vector-effect:   non-scaling-stroke;
+}

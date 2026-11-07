@@ -15,7 +15,8 @@ import type {
 import { sanitizeGameSave } from '../src/adventure/save';
 import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
 import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
-import { sanitizeMusicEqStrength, sanitizeSoundstagePreferences } from '../src/shared/soundstages';
+import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
+import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
 import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings } from '../src/shared/flowSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
@@ -598,14 +599,13 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicReverbRoom: sanitizeOptionalNumber(input?.musicReverbRoom),
     musicReverbFoliage: sanitizeOptionalNumber(input?.musicReverbFoliage),
     musicStereoWidth: sanitizeOptionalNumber(input?.musicStereoWidth),
-    musicBrilliance: sanitizeOptionalNumber(input?.musicBrilliance),
     musicMuted: sanitizeOptionalBoolean(input?.musicMuted),
     musicReverbBypassed: sanitizeOptionalBoolean(input?.musicReverbBypassed),
     musicSoundOptionsOpen: sanitizeOptionalBoolean(input?.musicSoundOptionsOpen),
     musicActiveSlots: sanitizeMusicActiveSlots(input?.musicActiveSlots),
     musicPoolFilter: input?.musicPoolFilter === undefined ? undefined : sanitizePoolFilter(input.musicPoolFilter),
     musicSoundstages: input?.musicSoundstages === undefined ? undefined : sanitizeSoundstagePreferences(input.musicSoundstages),
-    musicEqStrength: sanitizeMusicEqStrength(input?.musicEqStrength),
+    musicEqCurve: input?.musicEqCurve === undefined ? undefined : sanitizeEqCurve(input.musicEqCurve),
     musicLastSongId: sanitizeOptionalNumber(input?.musicLastSongId),
     musicLastPositionSec: sanitizeOptionalNumber(input?.musicLastPositionSec),
     musicWasPlaying: sanitizeOptionalBoolean(input?.musicWasPlaying),

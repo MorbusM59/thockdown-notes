@@ -397,9 +397,8 @@ describe('StateService app-state field round-trip', () => {
         musicReverbRoom: 0.75,
         musicReverbFoliage: 0.4,
         musicStereoWidth: 1.3,
-        musicBrilliance: 0.8,
-        musicEqStrength: 0.4,
-        musicSoundstages: { factory: 'wide', custom: { amp: 0.1, brilliance: 0.6, width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { amp: 0.3, brilliance: 0.4, width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
+        musicEqCurve: { skew: -1, shape: 1.5, stretch: 2, amount: 6 },
+        musicSoundstages: { factory: 'wide', custom: { skew: 0.5, shape: -1, stretch: 1.5, amount: 3, width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { skew: -2, shape: 2, stretch: 3, amount: 9, width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
         musicMuted: true,
         musicReverbBypassed: true,
         musicSoundOptionsOpen: true,
@@ -417,8 +416,7 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicReverbRoom).toBe(0.75)
     expect(loaded.menu?.musicReverbFoliage).toBe(0.4)
     expect(loaded.menu?.musicStereoWidth).toBe(1.3)
-    expect(loaded.menu?.musicBrilliance).toBe(0.8)
-    expect(loaded.menu?.musicEqStrength).toBe(0.4)
+    expect(loaded.menu?.musicEqCurve).toEqual({ skew: -1, shape: 1.5, stretch: 2, amount: 6 })
     expect(loaded.menu?.musicSoundstages?.factory).toBe('wide')
     expect(loaded.menu?.musicSoundstages?.custom.room).toBe(0.3)
     expect(loaded.menu?.musicSoundstages?.saved[0]?.settings.room).toBe(0.7)

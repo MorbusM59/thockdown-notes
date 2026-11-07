@@ -11,8 +11,9 @@ import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_N
 import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
 import { readNowPlaying } from '../sound/nowPlaying'
 import { SoundstageOptions } from './SoundstageOptions'
-import { MUSIC_EQ_STRENGTH_MAX, MUSIC_EQ_STRENGTH_MIN, NEUTRAL_SOUNDSTAGE, type ActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from '../shared/soundstages'
-import { BRILLIANCE_NEUTRAL } from '@thockdown/audio/liveBrilliance'
+import { EQ_AMOUNT_MAX, EQ_AMOUNT_MIN, EQ_SHAPE_MAX, EQ_SHAPE_MIN, EQ_SHAPE_STEP, EQ_SKEW_MAX, EQ_SKEW_MIN, EQ_STRETCH_MAX, EQ_STRETCH_MIN, FLAT_EQ_CURVE, sanitizeEqCurve, type EqCurveParams } from '../shared/musicEqCurve'
+import { EqCurveGraph } from './EqCurveGraph'
+import { type ActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from '../shared/soundstages'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
@@ -526,13 +527,11 @@ export interface SidebarOptionsPanelProps {
   setMusicReverbFoliage: (value: number) => void
   musicStereoWidth: number
   setMusicStereoWidth: (value: number) => void
-  musicBrilliance: number
-  setMusicBrilliance: (value: number) => void
   musicVolume: number
   musicReverbAmount: number
   musicReverbRoom: number
-  musicEqStrength: number
-  setMusicEqStrength: (value: number) => void
+  musicEqCurve: EqCurveParams
+  setMusicEqCurve: (value: EqCurveParams) => void
   soundstagePreferences: SoundstagePreferences
   setSoundstagePreferences: (update: (previous: SoundstagePreferences) => SoundstagePreferences) => void
   liveSoundstage: SoundstageSettings
@@ -789,13 +788,11 @@ export function SidebarOptionsPanel({
   setMusicReverbFoliage,
   musicStereoWidth,
   setMusicStereoWidth,
-  musicBrilliance,
-  setMusicBrilliance,
   musicVolume,
   musicReverbAmount,
   musicReverbRoom,
-  musicEqStrength,
-  setMusicEqStrength,
+  musicEqCurve,
+  setMusicEqCurve,
   soundstagePreferences,
   setSoundstagePreferences,
   liveSoundstage,
@@ -2572,29 +2569,56 @@ export function SidebarOptionsPanel({
             selectFactory={selectFactorySoundstage}
           />
           <OptionsSubsectionLabel>Stage settings</OptionsSubsectionLabel>
-          <OptionsSliderRows rows={[3, 3]}>
+          <div className="options-loadout-grid">
+            <EqCurveGraph curve={musicEqCurve} />
+          </div>
+          <OptionsSliderRows rows={[2, 2]}>
             <CompactScrollbarSlider
-              id="music-eq-strength"
-              min={MUSIC_EQ_STRENGTH_MIN}
-              max={MUSIC_EQ_STRENGTH_MAX}
+              id="music-eq-skew"
+              min={EQ_SKEW_MIN}
+              max={EQ_SKEW_MAX}
               step={0.01}
-              value={musicEqStrength}
-              trackLabel="amp"
-              ariaLabel="Music amp: the strength of the EQ curve, less bass and air at the left, more to the right"
-              defaultValue={NEUTRAL_SOUNDSTAGE.amp}
-              onCommit={(value) => setMusicEqStrength(clamp(value, MUSIC_EQ_STRENGTH_MIN, MUSIC_EQ_STRENGTH_MAX))}
+              value={musicEqCurve.skew}
+              trackLabel="skew"
+              ariaLabel="Music EQ skew: the curve moved toward the bass at the left, toward the treble at the right"
+              defaultValue={FLAT_EQ_CURVE.skew}
+              onCommit={(value) => setMusicEqCurve(sanitizeEqCurve({ ...musicEqCurve, skew: value }))}
             />
             <CompactScrollbarSlider
-              id="music-brilliance"
-              min={0}
-              max={1}
-              step={0.01}
-              value={musicBrilliance}
-              trackLabel="brilliance"
-              ariaLabel="Music brilliance: soft and warm at the left, neutral in the middle, crisp at the right"
-              defaultValue={BRILLIANCE_NEUTRAL}
-              onCommit={(value) => setMusicBrilliance(clamp(value, 0, 1))}
+              id="music-eq-shape"
+              min={-EQ_SHAPE_MAX}
+              max={-EQ_SHAPE_MIN}
+              step={EQ_SHAPE_STEP}
+              value={-musicEqCurve.shape}
+              trackLabel="shape"
+              ariaLabel="Music EQ shape: a mid bump at the left, a bass and treble lift at the right, sharper toward the middle, off at the centre"
+              defaultValue={-FLAT_EQ_CURVE.shape}
+              onCommit={(value) => setMusicEqCurve(sanitizeEqCurve({ ...musicEqCurve, shape: -value }))}
             />
+            <CompactScrollbarSlider
+              id="music-eq-stretch"
+              min={EQ_STRETCH_MIN}
+              max={EQ_STRETCH_MAX}
+              step={0.01}
+              value={musicEqCurve.stretch}
+              trackLabel="stretch"
+              ariaLabel="Music EQ stretch: how wide the curve is"
+              defaultValue={FLAT_EQ_CURVE.stretch}
+              onCommit={(value) => setMusicEqCurve(sanitizeEqCurve({ ...musicEqCurve, stretch: value }))}
+            />
+            <CompactScrollbarSlider
+              id="music-eq-amount"
+              min={EQ_AMOUNT_MIN}
+              max={EQ_AMOUNT_MAX}
+              step={0.1}
+              value={musicEqCurve.amount}
+              trackLabel="amount"
+              ariaLabel="Music EQ amount: how many decibels the curve spans either side of zero"
+              defaultValue={FLAT_EQ_CURVE.amount}
+              onCommit={(value) => setMusicEqCurve(sanitizeEqCurve({ ...musicEqCurve, amount: value }))}
+            />
+          </OptionsSliderRows>
+          <OptionsSliderRows rows={[2, 2]}>
             <CompactScrollbarSlider
               id="music-stereo-width"
               min={STEREO_WIDTH_MIN}

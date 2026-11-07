@@ -15,7 +15,8 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { publishThemeControls } from './visualizer/themeControls'
-import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeMusicEqStrength, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqCurveParams } from './shared/musicEqCurve'
+import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
@@ -2248,7 +2249,6 @@ function App() {
   const [musicReverbRoom, setMusicReverbRoom] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.reverbRoom)
   const [musicReverbFoliage, setMusicReverbFoliage] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage)
   const [musicStereoWidth, setMusicStereoWidth] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.stereoWidth)
-  const [musicBrilliance, setMusicBrilliance] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.brilliance)
   // Mute / bypass are flags over the levels above, never a zeroed level plus a
   // remembered copy -- see PersistedMenuState's note on why.
   const [musicMuted, setMusicMuted] = useState(false)
@@ -2264,8 +2264,8 @@ function App() {
   }, [soundscapePreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
-  // The amp (the EQ's strength) and the soundstages (shared/soundstages.ts).
-  const [musicEqStrength, setMusicEqStrength] = useState(0)
+  // The EQ curve (shared/musicEqCurve.ts) and the soundstages (shared/soundstages.ts).
+  const [musicEqCurve, setMusicEqCurve] = useState<EqCurveParams>(FLAT_EQ_CURVE)
   const [soundstagePreferences, setSoundstagePreferences] = useState<SoundstagePreferences>(DEFAULT_SOUNDSTAGE_PREFERENCES)
   // Last-played song/position/playing-state restored from the previous session,
   // handed to AudioControls once as its "initial*" props (see below).
@@ -3448,7 +3448,6 @@ function App() {
       musicReverbRoom,
       musicReverbFoliage,
       musicStereoWidth,
-      musicBrilliance,
       musicMuted,
       musicReverbBypassed,
       musicSoundOptionsOpen,
@@ -3456,7 +3455,7 @@ function App() {
       musicActiveSlots,
       musicPoolFilter,
       musicSoundstages: soundstagePreferences,
-      musicEqStrength,
+      musicEqCurve,
       layoutChoices: persistedLayoutChoices,
       musicLastSongId: musicPlaybackRef.current.songId ?? undefined,
       // Live while a track plays, so a save at any moment (quit included)
@@ -3587,7 +3586,6 @@ function App() {
     musicReverbRoom,
     musicReverbFoliage,
     musicStereoWidth,
-    musicBrilliance,
     musicMuted,
     musicReverbBypassed,
     musicSoundOptionsOpen,
@@ -3595,7 +3593,7 @@ function App() {
     musicActiveSlots,
     musicPoolFilter,
     soundstagePreferences,
-    musicEqStrength,
+    musicEqCurve,
     persistedLayoutChoices,
     darkMode,
     uiMode,
@@ -5444,7 +5442,6 @@ ${markdownHtml}
             if (typeof appState.menu.musicReverbRoom === 'number') setMusicReverbRoom(appState.menu.musicReverbRoom)
             if (typeof appState.menu.musicReverbFoliage === 'number') setMusicReverbFoliage(clamp(appState.menu.musicReverbFoliage, 0, 1))
             setMusicStereoWidth(sanitizeStereoWidth(appState.menu.musicStereoWidth))
-            if (typeof appState.menu.musicBrilliance === 'number') setMusicBrilliance(clamp(appState.menu.musicBrilliance, 0, 1))
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
             setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
@@ -5458,8 +5455,7 @@ ${markdownHtml}
             }
             if (appState.menu.musicPoolFilter) setMusicPoolFilter(sanitizePoolFilter(appState.menu.musicPoolFilter))
             setSoundstagePreferences(sanitizeSoundstagePreferences(appState.menu.musicSoundstages))
-            const savedEqStrength = sanitizeMusicEqStrength(appState.menu.musicEqStrength)
-            if (savedEqStrength !== undefined) setMusicEqStrength(savedEqStrength)
+            setMusicEqCurve(sanitizeEqCurve(appState.menu.musicEqCurve))
             if (typeof appState.menu.musicLastSongId === 'number') {
               const positionSec = appState.menu.musicLastPositionSec ?? 0
               const wasPlaying = appState.menu.musicWasPlaying ?? false
@@ -6559,34 +6555,32 @@ ${markdownHtml}
     typingSoundManager.setReverbSpace(audioReverbSpace)
   }, [audioReverbSpace])
 
-  // The music's room foliage, stereo width and brilliance: Options > Music.
+  // The music's room foliage, stereo width and EQ curve: Options > Music.
   // Volume, reverb and room size are written by the music bar (AudioControls),
   // which applies its mute and bypass flags to them.
   useEffect(() => {
-    musicPlayerService.setConfig({ reverbFoliage: musicReverbFoliage, stereoWidth: musicStereoWidth, brilliance: musicBrilliance })
-  }, [musicReverbFoliage, musicStereoWidth, musicBrilliance])
+    musicPlayerService.setConfig({ reverbFoliage: musicReverbFoliage, stereoWidth: musicStereoWidth })
+  }, [musicReverbFoliage, musicStereoWidth])
   useEffect(() => {
-    musicPlayerService.setEqStrength(musicEqStrength)
-  }, [musicEqStrength])
+    musicPlayerService.setEqCurve(musicEqCurve)
+  }, [musicEqCurve])
 
   // SOUNDSTAGES (shared/soundstages.ts): the live settings ARE the stage;
   // which stage is active is derived from them, never stored.
   const liveSoundstage = useMemo<SoundstageSettings>(() => ({
-    amp: musicEqStrength,
-    brilliance: musicBrilliance,
+    ...musicEqCurve,
     width: musicStereoWidth,
     reverb: musicReverbAmount,
     size: musicReverbRoom,
     room: musicReverbFoliage,
-  }), [musicEqStrength, musicBrilliance, musicStereoWidth, musicReverbAmount, musicReverbRoom, musicReverbFoliage])
+  }), [musicEqCurve, musicStereoWidth, musicReverbAmount, musicReverbRoom, musicReverbFoliage])
   // Anything played that is not a factory stage becomes the custom stage.
   useEffect(() => {
     setSoundstagePreferences((previous) => customAfterLiveChange(liveSoundstage, previous))
   }, [liveSoundstage])
   /** Play a stage: every setting at once. Reverb and size go through the music bar's own rule (a bypassed reverb turns back on). */
   const applySoundstage = useCallback((settings: SoundstageSettings) => {
-    setMusicEqStrength(settings.amp)
-    setMusicBrilliance(settings.brilliance)
+    setMusicEqCurve({ skew: settings.skew, shape: settings.shape, stretch: settings.stretch, amount: settings.amount })
     setMusicStereoWidth(settings.width)
     setMusicReverbFoliage(settings.room)
     readNowPlaying().setLevel('reverb', settings.reverb)
@@ -9037,13 +9031,11 @@ ${markdownHtml}
                         setMusicReverbFoliage={setMusicReverbFoliage}
                         musicStereoWidth={musicStereoWidth}
                         setMusicStereoWidth={setMusicStereoWidth}
-                        musicBrilliance={musicBrilliance}
-                        setMusicBrilliance={setMusicBrilliance}
                         musicVolume={musicVolume}
                         musicReverbAmount={musicReverbAmount}
                         musicReverbRoom={musicReverbRoom}
-                        musicEqStrength={musicEqStrength}
-                        setMusicEqStrength={setMusicEqStrength}
+                        musicEqCurve={musicEqCurve}
+                        setMusicEqCurve={setMusicEqCurve}
                         soundstagePreferences={soundstagePreferences}
                         setSoundstagePreferences={setSoundstagePreferences}
                         liveSoundstage={liveSoundstage}

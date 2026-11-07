@@ -1,3 +1,4 @@
+import type { EqCurveParams } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
 import type { FeatureToggles } from './features';
 import type { FlowSettings } from './flowSettings';
@@ -199,8 +200,6 @@ export interface PersistedMenuState {
   musicReverbFoliage?: number;
   /** The music's stereo width, STEREO_WIDTH_MIN-MAX with 1 neutral (@thockdown/audio/stereoWidth.ts). */
   musicStereoWidth?: number;
-  /** The music's brilliance, 0 soft, 0.5 neutral, 1 crisp (@thockdown/audio/brilliance.ts). */
-  musicBrilliance?: number;
   /** Volume silenced; `musicVolume` keeps the level to come back to. */
   musicMuted?: boolean;
   /** Reverb bypassed; both the reverb and the room button reflect this one flag. */
@@ -212,8 +211,8 @@ export interface PersistedMenuState {
   musicPoolFilter?: { artist: string; album: string; title: string };
   /** The music's soundstages (`shared/soundstages.ts`): the last factory stage, the custom stage, the saved ones. */
   musicSoundstages?: SoundstagePreferences;
-  /** The EQ's strength, the amp (`shared/soundstages.ts`). */
-  musicEqStrength?: number;
+  /** The music's EQ curve (`shared/musicEqCurve.ts`). */
+  musicEqCurve?: EqCurveParams;
   /**
    * The layout each context last showed: the regular app and the F5
    * visualizer each remember a light/dark mode and the loadout entry active

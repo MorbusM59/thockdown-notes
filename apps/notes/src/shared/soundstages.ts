@@ -1,3 +1,16 @@
+import {
+  EQ_AMOUNT_MAX,
+  EQ_AMOUNT_MIN,
+  EQ_SHAPE_MAX,
+  EQ_SHAPE_MIN,
+  EQ_SKEW_MAX,
+  EQ_SKEW_MIN,
+  EQ_STRETCH_MAX,
+  EQ_STRETCH_MIN,
+  FLAT_EQ_CURVE,
+  type EqCurveParams,
+} from './musicEqCurve'
+
 /**
  * SOUNDSTAGES: named sets of the music's sound (everything in Options > Music
  * but the volume, which is global). Pure, and shared with the main process's
@@ -20,26 +33,12 @@
  * steps count from.
  */
 
-/** The AMP (the EQ curve's strength, `MusicPlayerService`'s `AMP_EQ_BANDS`): 0 is flat, negative is less bass and air. */
-export const MUSIC_EQ_STRENGTH_MIN = -1
-export const MUSIC_EQ_STRENGTH_MAX = 1
-
-export function sanitizeMusicEqStrength(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(MUSIC_EQ_STRENGTH_MIN, Math.min(MUSIC_EQ_STRENGTH_MAX, value))
-    : undefined
-}
-
 /** `stereoWidth.ts`'s range, restated here because the main process cannot import the audio package's Web Audio module. */
 const WIDTH_MIN = 0
 const WIDTH_MAX = 1.5
 
-/** One stage: every music setting but the volume. */
-export interface SoundstageSettings {
-  /** The EQ's strength, MUSIC_EQ_STRENGTH_MIN..MAX. */
-  amp: number
-  /** 0 soft, 0.5 neutral, 1 crisp (`brilliance.ts`). */
-  brilliance: number
+/** One stage: every music setting but the volume. The first four are the EQ curve (`musicEqCurve.ts`). */
+export interface SoundstageSettings extends EqCurveParams {
   /** 0 mono, 1 as recorded, 1.5 widest (`stereoWidth.ts`). */
   width: number
   /** The reverb's wet amount, 0..1. */
@@ -50,11 +49,13 @@ export interface SoundstageSettings {
   room: number
 }
 
-export const SOUNDSTAGE_KEYS = ['amp', 'brilliance', 'width', 'reverb', 'size', 'room'] as const satisfies readonly (keyof SoundstageSettings)[]
+export const SOUNDSTAGE_KEYS = ['skew', 'shape', 'stretch', 'amount', 'width', 'reverb', 'size', 'room'] as const satisfies readonly (keyof SoundstageSettings)[]
 
 const RANGES: Record<keyof SoundstageSettings, readonly [number, number]> = {
-  amp: [MUSIC_EQ_STRENGTH_MIN, MUSIC_EQ_STRENGTH_MAX],
-  brilliance: [0, 1],
+  skew: [EQ_SKEW_MIN, EQ_SKEW_MAX],
+  shape: [EQ_SHAPE_MIN, EQ_SHAPE_MAX],
+  stretch: [EQ_STRETCH_MIN, EQ_STRETCH_MAX],
+  amount: [EQ_AMOUNT_MIN, EQ_AMOUNT_MAX],
   width: [WIDTH_MIN, WIDTH_MAX],
   reverb: [0, 1],
   size: [0, 1],
@@ -62,7 +63,7 @@ const RANGES: Record<keyof SoundstageSettings, readonly [number, number]> = {
 }
 
 /** The music player's defaults (`DEFAULT_MUSIC_PLAYER_CONFIG`): the neutral stage. */
-export const NEUTRAL_SOUNDSTAGE: Readonly<SoundstageSettings> = { amp: 0, brilliance: 0.5, width: 1, reverb: 0, size: 0.3, room: 0 }
+export const NEUTRAL_SOUNDSTAGE: Readonly<SoundstageSettings> = { ...FLAT_EQ_CURVE, width: 1, reverb: 0, size: 0.3, room: 0 }
 
 export const FACTORY_SOUNDSTAGE_IDS = ['muted', 'neutral', 'wide', 'amped', 'thocky'] as const
 export type FactorySoundstageId = (typeof FACTORY_SOUNDSTAGE_IDS)[number]
@@ -78,11 +79,11 @@ export interface FactorySoundstage {
 
 /** In the solids' order: index 0 is the tetrahedron, 4 the icosahedron. */
 export const FACTORY_SOUNDSTAGES: readonly FactorySoundstage[] = [
-  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { amp: 0.8, brilliance: 0.2, width: 1, reverb: 1, size: 0.1, room: 1 } },
+  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { skew: -1.5, shape: 1, stretch: 1.5, amount: 4, width: 1, reverb: 1, size: 0.1, room: 1 } },
   { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-scale-balanced', settings: NEUTRAL_SOUNDSTAGE },
-  { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { amp: 0.2, brilliance: 0.8, width: 1.5, reverb: 0.1, size: 1, room: 0 } },
-  { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { amp: 0.5, brilliance: 0.5, width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
-  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-keyboard', settings: { amp: 0.8, brilliance: 0.5, width: 1.2, reverb: 0.2, size: 0, room: 1 } },
+  { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { skew: 2, shape: 1, stretch: 1.5, amount: 3, width: 1.5, reverb: 0.1, size: 1, room: 0 } },
+  { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { skew: 0, shape: -1, stretch: 1, amount: 4, width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
+  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-keyboard', settings: { skew: 0, shape: -1.5, stretch: 1, amount: 6, width: 1.2, reverb: 0.2, size: 0, room: 1 } },
 ]
 
 export function factorySoundstage(id: FactorySoundstageId): FactorySoundstage {

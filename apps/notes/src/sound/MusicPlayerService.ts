@@ -1,15 +1,16 @@
 import { LiveRoom } from '@thockdown/audio/liveRoom';
 import { foliageNearCutoffHz, type RoomShape } from '@thockdown/audio/room';
 import { StereoWidth } from '@thockdown/audio/stereoWidth';
-import { BRILLIANCE_NEUTRAL, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
 import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutputBus';
+
+import { EQ_BAND_COUNT, EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q, fitEqBandGains, type EqCurveParams } from '../shared/musicEqCurve';
 
 /**
  * MusicPlayerService — Web Audio API based music playback.
  *
  * Signal chain:
- *   HTMLAudioElement → MediaElementSourceNode → EQ → brilliance → foliage low-pass → GainNode ─┬→ dryGain ─────────┬→ StereoWidth → limiter → destination
- *                                                               └→ LiveRoom → wetGain ┘
+ *   HTMLAudioElement → MediaElementSourceNode → EQ bank → foliage low-pass → GainNode ─┬→ dryGain ─────────┬→ StereoWidth → limiter → destination
+ *                                                      └→ LiveRoom → wetGain ┘
  *
  * The limiter is the app's shared output stage (audioOutputBus.ts), which the
  * soundscape engine joins as well, so music and ambience are limited
@@ -17,9 +18,11 @@ import { connectToOutput, outputContext } from '@thockdown/soundscape/audioOutpu
  *
  * The reverb is the family's one ROOM (@thockdown/audio/room.ts, played by
  * liveRoom.ts): the room slider is its SIZE and `reverbFoliage` its FOLIAGE,
- * the same two numbers the soundscape's space is made of. WIDTH
- * BRILLIANCE (@thockdown/audio/liveBrilliance.ts) is the soundscape's soft-to-crisp
- * tilt, after the EQ and before the volume, so the reverb hears it too.
+ * the same two numbers the soundscape's space is made of.
+ * The EQ is a CURVE (`shared/musicEqCurve.ts`: skew, shape, stretch, amount)
+ * played by a bank of third-octave peaking filters whose gains are fitted to
+ * it once per change of the curve; it sits before the volume, so the reverb
+ * hears it too. It is the music's own and the soundscape never has it.
  * WIDTH (@thockdown/audio/stereoWidth.ts) acts on what is heard, dry and wet
  * together, so above 1 it widens the room as well as the recording and at 0
  * it is a true mono fold-down. At width 1 it is the identity.
@@ -31,7 +34,6 @@ export interface MusicPlayerConfig {
   reverbRoom: number;   // 0–1  the room's SIZE (room.ts)
   reverbFoliage: number; // 0–1  the room's FOLIAGE (room.ts): bare and bright to dense and dark
   stereoWidth: number;  // STEREO_WIDTH_MIN–MAX, 1 neutral (stereoWidth.ts)
-  brilliance: number;   // 0 soft, 0.5 neutral, 1 crisp (brilliance.ts)
 }
 
 export const DEFAULT_MUSIC_PLAYER_CONFIG: Readonly<MusicPlayerConfig> = {
@@ -40,7 +42,6 @@ export const DEFAULT_MUSIC_PLAYER_CONFIG: Readonly<MusicPlayerConfig> = {
   reverbRoom: 0.3,
   reverbFoliage: 0,
   stereoWidth: 1,
-  brilliance: BRILLIANCE_NEUTRAL,
 };
 
 /**
@@ -195,19 +196,7 @@ export function resolveSeekPress(
 }
 
 /**
- * The music's EQ (the AMP of a soundstage, `shared/soundstages.ts`): one "punchy
- * rock" curve (a bass shelf, a scooped low-mid, a presence lift and an air
- * shelf), applied all the time at the preset's strength, a share of the
- * gains below. A negative strength turns the curve over: less bass and air.
- */
-const AMP_EQ_BANDS: ReadonlyArray<{ type: BiquadFilterType; frequencyHz: number; q: number; gainDb: number }> = [
-  { type: 'lowshelf', frequencyHz: 100, q: 0.7, gainDb: 16 },
-  { type: 'peaking', frequencyHz: 500, q: 0.9, gainDb: -8 },
-  { type: 'peaking', frequencyHz: 3000, q: 1, gainDb: 8 },
-  { type: 'highshelf', frequencyHz: 10000, q: 0.7, gainDb: 16 },
-];
-/**
- * The time constant every sound setting glides on (amp, brilliance, width,
+ * The time constant every sound setting glides on (the EQ's band gains, width,
  * reverb amount, room's near low-pass): within 5% of the target after three
  * of them, 150 ms, so switching soundstages, which moves all of them at once,
  * is a short blend rather than a step. The room itself crossfades on its own,
@@ -227,11 +216,11 @@ export class MusicPlayerService {
   private wetGain: GainNode | null = null;
   private room: LiveRoom | null = null;
   private width: StereoWidth | null = null;
-  private brilliance: LiveBrilliance | null = null;
   /** Foliage's dry half (room.ts's foliageNearCutoffHz): the whole track among the trees, not only its reverb. */
   private foliageFilter: BiquadFilterNode | null = null;
   private eqBands: BiquadFilterNode[] = [];
-  private eqStrength = 0;
+  /** The fitted gain of each band in dB, kept so a graph built later starts where the curve is. */
+  private eqGainsDb: Float64Array = new Float64Array(EQ_BAND_COUNT);
   private config: MusicPlayerConfig = { ...DEFAULT_MUSIC_PLAYER_CONFIG };
   private onEndedHandler: PlaybackEndHandler | null = null;
   private currentFilePath: string | null = null;
@@ -365,26 +354,23 @@ export class MusicPlayerService {
       this.room = new LiveRoom(context);
       this.room.setRoom(this.roomShape());
       this.width = new StereoWidth(context, this.config.stereoWidth);
-      this.brilliance = new LiveBrilliance(context);
-      this.brilliance.set(this.config.brilliance);
       this.foliageFilter = context.createBiquadFilter();
       this.foliageFilter.type = 'lowpass';
       this.foliageFilter.Q.value = Math.SQRT1_2;
       this.foliageFilter.frequency.value = foliageNearCutoffHz(this.config.reverbFoliage);
 
       // The EQ sits between the source and the volume: element → each
-      // AMP_EQ_BANDS filter in turn → brilliance → foliage low-pass → gainNode.
-      this.eqBands = AMP_EQ_BANDS.map((band) => {
+      // band of the bank in turn → foliage low-pass → gainNode.
+      this.eqBands = EQ_BAND_FREQUENCIES_HZ.map((frequencyHz, band) => {
         const filter = context.createBiquadFilter();
-        filter.type = band.type;
-        filter.frequency.value = band.frequencyHz;
-        filter.Q.value = band.q;
-        filter.gain.value = band.gainDb * this.eqStrength;
+        filter.type = 'peaking';
+        filter.frequency.value = frequencyHz;
+        filter.Q.value = EQ_BAND_Q;
+        filter.gain.value = this.eqGainsDb[band];
         return filter;
       });
       for (let i = 1; i < this.eqBands.length; i++) this.eqBands[i - 1].connect(this.eqBands[i]);
-      this.eqBands[this.eqBands.length - 1].connect(this.brilliance.input);
-      this.brilliance.output.connect(this.foliageFilter);
+      this.eqBands[this.eqBands.length - 1].connect(this.foliageFilter);
       this.foliageFilter.connect(this.gainNode);
 
       // gainNode → dryGain, and gainNode → room → wetGain; both → width → limiter
@@ -427,13 +413,15 @@ export class MusicPlayerService {
     return this.config.volume > 1e-3 ? 1 / this.config.volume : 0;
   }
 
-  /** The EQ's strength (the amp, `shared/soundstages.ts`): each band's gain is its `gainDb` times this, moved to over a short time constant. */
-  setEqStrength(strength: number): void {
-    this.eqStrength = strength;
+  /** The EQ curve: the band gains are fitted to it here, once, and each band glides to its gain. */
+  setEqCurve(params: EqCurveParams): void {
+    this.eqGainsDb = fitEqBandGains(params);
     const context = this.audioCtx;
     if (!context) return;
-    this.eqBands.forEach((filter, i) => {
-      filter.gain.setTargetAtTime(AMP_EQ_BANDS[i].gainDb * strength, context.currentTime, SETTING_GLIDE_SEC);
+    const now = context.currentTime;
+    this.eqBands.forEach((filter, band) => {
+      filter.gain.cancelAndHoldAtTime(now);
+      filter.gain.setTargetAtTime(this.eqGainsDb[band], now, SETTING_GLIDE_SEC);
     });
   }
 
@@ -462,7 +450,6 @@ export class MusicPlayerService {
     // The room rebuilds itself only when its shape changed, once the control rests (liveRoom.ts).
     this.room?.setRoom(this.roomShape());
     if (cfg.stereoWidth !== undefined && cfg.stereoWidth !== prev.stereoWidth) this.width?.setWidth(this.config.stereoWidth, SETTING_GLIDE_SEC);
-    this.brilliance?.set(this.config.brilliance, SETTING_GLIDE_SEC);
     if (this.foliageFilter && this.audioCtx && cfg.reverbFoliage !== undefined && cfg.reverbFoliage !== prev.reverbFoliage) {
       this.foliageFilter.frequency.setTargetAtTime(foliageNearCutoffHz(this.config.reverbFoliage), this.audioCtx.currentTime, SETTING_GLIDE_SEC);
     }
