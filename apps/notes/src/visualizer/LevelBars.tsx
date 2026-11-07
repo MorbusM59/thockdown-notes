@@ -1,6 +1,6 @@
 /**
- * The visualizer's sound level bars (`levelBarsArea`): volume across the
- * bottom strip's first row, reverb and room under the cutout. Each is the progress track's language --
+ * The visualizer's sound level bars (`levelBarsArea`): volume on the
+ * middle section's last row, just above the bottom strip, reverb and room under the cutout. Each is the progress track's language --
  * a row of accent boxes with one empty box at the level -- whose two end
  * boxes are always lit, so the level runs over the boxes between them
  * (`levelGapColumn`). A press sets the level at the box pressed
@@ -17,7 +17,7 @@ const BARS: ReadonlyArray<keyof SoundLevels> = ['volume', 'reverb', 'room']
 /**
  * The middle bars' names, one letter per box like the song list's:
  * "reverb" and "size" two rows above their bars, flush with the bar's outer
- * end. The volume bar, alone on the bottom strip's first row, needs no name.
+ * end. The volume bar, alone on its own row, needs no name.
  * A name that would leave the middle section is not drawn.
  */
 function labelsOf(area: LevelBarsArea, firstRow: number): Array<{ text: string; column: number; row: number }> {
@@ -29,11 +29,19 @@ function labelsOf(area: LevelBarsArea, firstRow: number): Array<{ text: string; 
   ]
 }
 
-/** The glyphs on a bar's two end boxes, drawn over its lit boxes in the inverted accent. */
+/**
+ * What frames an edge-to-edge bar: the glyphs on its two end boxes, drawn
+ * over its lit boxes in the inverted accent, and the screen's cut-off part
+ * boxes beyond them (the grid's margin either side), lit in the accent so the
+ * bar reaches the screen's edges.
+ */
 export function BarEndGlyphs({ layout, bar, glyphs }: { layout: VisualizerLayout; bar: LevelBar; glyphs: readonly [string, string] }) {
   const { boxPx, originXPx, originYPx } = layout
+  const top = originYPx + bar.row * boxPx
   return (
     <>
+      {originXPx > 0 && <div className="visualizer-lit" style={{ left: 0, top, width: originXPx, height: boxPx }} />}
+      {originXPx > 0 && <div className="visualizer-lit" style={{ left: originXPx + (bar.column + bar.columns) * boxPx, right: 0, top, height: boxPx }} />}
       {[0, bar.columns - 1].map((column, index) => (
         <div
           key={column}
@@ -58,7 +66,7 @@ export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: Le
   })
   return (
     <>
-      {labelsOf(area, layout.stripRows + 1).flatMap((label) => Array.from(label.text).map((char, index) => (
+      {labelsOf(area, layout.contentTopRow).flatMap((label) => Array.from(label.text).map((char, index) => (
         <div
           key={`${label.text}${index}`}
           className="visualizer-letter is-panel"

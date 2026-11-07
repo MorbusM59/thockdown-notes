@@ -3,17 +3,18 @@ import { bucketListArea, LEVEL_BARS_GAP_BOXES, levelAtColumn, levelBarsArea, lev
 
 describe('computeVisualizerLayout', () => {
   it('gives both strips exactly eight rows wherever they fit', () => {
-    expect(computeVisualizerLayout(1920, 1080, 10, 220).stripRows).toBe(8)
-    expect(computeVisualizerLayout(1920, 1080, 60, 220).stripRows).toBe(8)
+    expect(computeVisualizerLayout(1920, 1080, 10, 220).stripRows).toBe(7)
+    expect(computeVisualizerLayout(1920, 1080, 60, 220).stripRows).toBe(7)
     expect(computeVisualizerLayout(1920, 300, 30, 220).stripRows).toBe(4)
   })
 
   it('lays out the top strip and the bottom strip row by row', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
-    expect(layout).toMatchObject({ creditsRow: 1, titleRow: 3, chromaRow: 5, progressRow: 7, stripRows: 8 })
-    expect(layout.volumeRow).toBe(layout.bottomStripRow)
-    expect(layout.bottomStripRow).toBe(layout.rows - 8)
-    expect(layout.spectrumRow).toBe(layout.bottomStripRow + 2)
+    expect(layout).toMatchObject({ creditsRow: 1, titleRow: 3, chromaRow: 5, progressRow: 7, stripRows: 7, contentTopRow: 9 })
+    expect(layout.bottomStripRow).toBe(layout.rows - 7)
+    expect(layout.volumeRow).toBe(layout.bottomStripRow - 1)
+    expect(layout.contentBottomRow).toBe(layout.bottomStripRow - 3)
+    expect(layout.spectrumRow).toBe(layout.bottomStripRow + 1)
     expect(layout.spectrumRows).toBe(6)
   })
 
@@ -40,7 +41,7 @@ describe('computeVisualizerLayout', () => {
 
   it('leaves out the rows a short strip has no room for', () => {
     const at = (rows: number) => computeVisualizerLayout(2000, rows * 20, 20, 220)
-    expect(at(9)).toMatchObject({ stripRows: 4, creditsRow: 1, titleRow: 3, chromaRow: null, progressRow: null, spectrumRows: 2 })
+    expect(at(9)).toMatchObject({ stripRows: 4, creditsRow: 1, titleRow: 3, chromaRow: null, progressRow: null, volumeRow: null, spectrumRows: 3 })
     expect(at(3)).toMatchObject({ stripRows: 1, creditsRow: null, titleRow: null, spectrumRows: 0 })
   })
 
@@ -99,8 +100,8 @@ describe('song list', () => {
   it('sits between the strips, a column in, ten boxes clear of the cutout', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
     const area = songListArea(layout)!
-    expect(area.row).toBe(layout.stripRows + 1)
-    expect(area.row + area.rows - 1).toBe(layout.bottomStripRow - 2)
+    expect(area.row).toBe(layout.contentTopRow)
+    expect(area.row + area.rows - 1).toBe(layout.contentBottomRow)
     expect(area.column).toBe(1)
     expect(layout.cutout.column - (area.column + area.columns)).toBe(SONG_LIST_CUTOUT_GAP_BOXES)
     expect(area.slots).toBe(Math.ceil(area.rows / 2))
@@ -150,7 +151,7 @@ describe('level bars', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
     const songs = songListArea(layout)!
     const bars = levelBarsArea(layout)!
-    expect(bars.volume).toEqual({ column: 0, row: layout.bottomStripRow, columns: layout.columns })
+    expect(bars.volume).toEqual({ column: 0, row: layout.bottomStripRow - 1, columns: layout.columns })
     expect(progressBarArea(layout)).toEqual({ column: 0, row: 7, columns: layout.columns })
     expect(bars.reverb.row).toBe(songs.row + 2 * (songs.slots - 1))
     expect(bars.room.row).toBe(bars.reverb.row)

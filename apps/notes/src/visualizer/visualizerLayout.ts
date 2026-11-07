@@ -16,19 +16,20 @@
  * (fewer only on a screen too short for both and a row between them). The
  * TOP strip, from its first row: empty, the credits (the artist, then
  * `CREDITS_GAP_BOXES` empty boxes, then the album), empty, the title, empty,
- * the semitone row, empty, the progress track. The BOTTOM strip: the volume
- * bar, empty, then the spectrum in the rest. A row that does not fit a short
- * strip is left out (null). The text rows span the columns between
- * `ROW_INSET_BOXES` from each edge; both bars, the semitone row and the
- * spectrum span every column. The middle section holds only what sits beside the
- * cutout (song list, buckets, filter, reverb and room).
+ * the semitone row, empty. The BOTTOM strip: empty, then the spectrum in the
+ * rest. Just outside them, on the middle section's first and last rows, run
+ * the progress track and the volume bar, edge to edge. A row that does not
+ * fit is left out (null). The text rows span the columns between
+ * `ROW_INSET_BOXES` from each edge; the bars, the semitone row and the
+ * spectrum span every column. Everything else in the middle section sits
+ * beside the cutout between `contentTopRow` and `contentBottomRow`.
  *
  * THE CUTOUT is the empty scene's square, centred, as many whole boxes wide
  * as the empty state's own diameter (`--circle-diameter`) rounds to, so it is
  * the size the empty scene has in immersive mode, laid onto the grid.
  */
 
-export const STRIP_ROWS = 8
+export const STRIP_ROWS = 7
 /** Boxes left empty at each screen edge by the text rows. */
 export const ROW_INSET_BOXES = 1
 export const CREDITS_GAP_BOXES = 3
@@ -48,7 +49,10 @@ export type VisualizerLayout = {
   creditsRow: number | null
   /** The first row of the bottom strip (the volume bar's row). */
   bottomStripRow: number
-  /** The progress track's row (the top strip's last) and the volume bar's, or null when the strip is too short. */
+  /** The middle section's rows for what sits beside the cutout (song list, buckets, filter, reverb and room): one empty row from each bar. */
+  contentTopRow: number
+  contentBottomRow: number
+  /** The progress track's row (the middle section's first) and the volume bar's (its last), or null without room for them. */
   progressRow: number | null
   volumeRow: number | null
   /** The spectrum's first row and height, in rows (zero when the strip is too short). */
@@ -73,10 +77,16 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   const creditsRow = topRow(1)
   const titleRow = topRow(3)
   const chromaRow = columns > 0 ? topRow(5) : null
-  const progressRow = topRow(7)
   const bottomStripRow = rows - stripRows
-  const volumeRow = stripRows > 0 ? bottomStripRow : null
-  const spectrumRows = Math.max(0, stripRows - 2)
+  // The two bars sit just outside the strips, on the middle section's first
+  // and last rows, when the middle has room for both and a row between.
+  const barsFit = stripRows > 0 && bottomStripRow - stripRows >= 3
+  const progressRow = barsFit ? stripRows : null
+  const volumeRow = barsFit ? bottomStripRow - 1 : null
+  // What sits beside the cutout keeps one empty row from each bar.
+  const contentTopRow = stripRows + (barsFit ? 2 : 1)
+  const contentBottomRow = bottomStripRow - (barsFit ? 3 : 2)
+  const spectrumRows = Math.max(0, stripRows - 1)
   const spectrumRow = rows - spectrumRows
 
   const middleRows = rows - 2 * stripRows
@@ -98,6 +108,8 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
     titleRow,
     creditsRow,
     bottomStripRow,
+    contentTopRow,
+    contentBottomRow,
     progressRow,
     volumeRow,
     spectrumRow,
@@ -112,7 +124,7 @@ function fullWidthBar(layout: VisualizerLayout, row: number | null): LevelBar | 
   return row === null || layout.columns < 3 ? null : { column: 0, row, columns: layout.columns }
 }
 
-/** The progress track's place: the top strip's last row, full width. */
+/** The progress track's place: the middle section's first row, just below the top strip, full width. */
 export function progressBarArea(layout: VisualizerLayout): LevelBar | null {
   return fullWidthBar(layout, layout.progressRow)
 }
@@ -209,8 +221,8 @@ export const SONG_LIST_CUTOUT_GAP_BOXES = 10
  * character (five boxes: two accents, two gaps, one letter).
  */
 export function songListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
-  const row = layout.stripRows + 1
-  const lastRow = layout.bottomStripRow - 2
+  const row = layout.contentTopRow
+  const lastRow = layout.contentBottomRow
   const column = 1
   const lastColumn = (layout.cutout.size > 0 ? layout.cutout.column : layout.columns) - SONG_LIST_CUTOUT_GAP_BOXES - 1
   const rows = lastRow - row + 1
@@ -239,10 +251,10 @@ export function songListEntry(name: string, columns: number): { text: string; cl
  * every other row from the top, right-aligned.
  */
 export function bucketListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
-  const row = layout.stripRows + 1
+  const row = layout.contentTopRow
   // Above the pool filter, a free row between them, when there is one.
   const filter = poolFilterArea(layout)
-  const lastRow = filter ? filter.row - 2 : layout.bottomStripRow - 2
+  const lastRow = filter ? filter.row - 2 : layout.contentBottomRow
   const lastColumn = layout.columns - 2
   const column = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + SONG_LIST_CUTOUT_GAP_BOXES
   const rows = lastRow - row + 1
@@ -279,8 +291,8 @@ export type PoolFilterArea = {
  */
 export function poolFilterArea(layout: VisualizerLayout): PoolFilterArea | null {
   const songs = songListArea(layout)
-  const firstRow = layout.stripRows + 1
-  const bottomRow = songs ? songs.row + 2 * (songs.slots - 1) : layout.bottomStripRow - 2
+  const firstRow = layout.contentTopRow
+  const bottomRow = songs ? songs.row + 2 * (songs.slots - 1) : layout.contentBottomRow
   const row = bottomRow - 2
   if (layout.stripRows <= 0 || row < firstRow) return null
   const lastColumn = layout.columns - 2
@@ -314,7 +326,8 @@ export type LevelBar = { column: number; row: number; columns: number }
 export type LevelBarsArea = { volume: LevelBar; reverb: LevelBar; room: LevelBar }
 
 /**
- * The sound level bars. Volume is the bottom strip's first row, full width.
+ * The sound level bars. Volume is the middle section's last row, just above
+ * the bottom strip, full width.
  * Reverb and room sit under the cutout on the song list's (and the pool
  * filter's) lowest line, reverb flush with the left end of a span reaching
  * `LEVEL_BARS_OVERHANG_BOXES` past the cutout on each side and room with its
