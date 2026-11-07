@@ -16,6 +16,7 @@ import {
   insertEqPoint,
   insertEqPointAfter,
   removeEqPoint,
+  setEqPointFrequency,
   fitEqBandGains,
   hzAtSemitones,
   sanitizeEqCurve,
@@ -32,7 +33,7 @@ function curve(...middle: [number, number, number][]): EqPoint[] {
 }
 
 const SAMPLES: EqPoint[][] = []
-for (const handle of [0, 0.25, 0.5, 1]) {
+for (const handle of [0, 0.25, 0.5, 1, 2]) {
   SAMPLES.push(curve([100, 6, handle], [1000, -6, handle], [8000, 4, handle]))
   SAMPLES.push(curve([60, -12, handle], [61, 12, handle], [5000, 15, handle], [5200, -15, handle]))
   SAMPLES.push(curve([400, 9, handle]))
@@ -89,7 +90,7 @@ describe('musicEqCurve', () => {
       { hz: 30000, db: -99, handle: -1 },
     ])
     expect(out).toEqual([
-      { hz: EQ_LOW_HZ, db: 15, handle: 1 },
+      { hz: EQ_LOW_HZ, db: 15, handle: 2 },
       { hz: 200, db: 1, handle: 0.5 },
       { hz: EQ_HIGH_HZ, db: -15, handle: 0 },
     ])
@@ -107,7 +108,7 @@ describe('musicEqCurve editing', () => {
     const moved = editEqPoint(base, 1, { semitones: 500, db: 99, handle: 2 })[1]
     expect(semitonesOf(moved.hz)).toBeCloseTo(EQ_SPAN_SEMITONES - 1, 9)
     expect(moved.db).toBe(15)
-    expect(moved.handle).toBe(1)
+    expect(moved.handle).toBe(2)
   })
 
   it('inserts in order, refuses one too close or past the cap, and never removes an end', () => {
@@ -122,6 +123,17 @@ describe('musicEqCurve editing', () => {
     expect(removeEqPoint(base, 0)).toEqual(base)
     expect(removeEqPoint(base, 2)).toEqual(base)
     expect(removeEqPoint(base, 1).length).toBe(2)
+  })
+
+  it('moves a typed frequency past its neighbours into its place, inside the axis', () => {
+    const points = curve([100, 1, 0.5], [1000, 2, 0.5])
+    const moved = setEqPointFrequency(points, 1, 5000)
+    expect(moved?.index).toBe(2)
+    expect(moved?.curve.map((point) => Math.round(point.hz))).toEqual([20, 1000, 5000, 20000])
+    expect(moved?.curve[2].db).toBe(1)
+    expect(semitonesOf(setEqPointFrequency(points, 1, 99999)!.curve[2].hz)).toBeCloseTo(EQ_SPAN_SEMITONES - 1, 9)
+    expect(setEqPointFrequency(points, 1, 1001)).toBeNull()
+    expect(setEqPointFrequency(points, 0, 500)).toBeNull()
   })
 
   it('adds a point between a point and the next one, on the curve', () => {

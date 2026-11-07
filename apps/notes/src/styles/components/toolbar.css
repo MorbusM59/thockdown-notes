@@ -438,11 +438,19 @@
    rows of the six-wide options grid and wears a slider track; its points are
    half-size slider thumbs, the selected one in the pressed thumb's border. */
 .options-eq-graph {
+  --eq-point-size: calc((var(--canonical-scroll-handle-thickness) + 2px) / 2 + 2px);
   position:     relative;
   grid-column:  1 / -1;
   grid-row:     span 2;
   touch-action: none;
   outline:      none;
+}
+
+/* The drawing area, inset so a point at either end sits whole inside the
+   track with 2px to spare; points and curve are both placed within it. */
+.options-eq-plot {
+  position: absolute;
+  inset:    calc(var(--eq-point-size) / 2 + 2px);
 }
 
 .options-eq-graph svg {
@@ -478,8 +486,8 @@
 }
 
 .options-eq-point {
-  width:     calc((var(--canonical-scroll-handle-thickness) + 2px) / 2 + 2px);
-  height:    calc((var(--canonical-scroll-handle-thickness) + 2px) / 2 + 2px);
+  width:     var(--eq-point-size);
+  height:    var(--eq-point-size);
   transform: translate(-50%, -50%);
   z-index:   2;
 }

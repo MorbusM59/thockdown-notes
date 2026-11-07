@@ -17,10 +17,12 @@
  * the next (the end points: towards their one neighbour), which is the
  * direction that bends the curve least through the point. A handle's length is
  * set by how far it reaches ALONG THE FREQUENCY AXIS: `handle` times half the
- * gap to the nearer neighbour. Half, so that two facing handles never cross,
- * which keeps each segment's control points in frequency order and so the path
- * a function of frequency at every setting: one gain per frequency, never a
- * loop. A handle of 0 is a corner; 1 is the roundest the point can be.
+ * gap to the nearer neighbour, so 0 is a corner, 1 a round point, and up to
+ * EQ_HANDLE_MAX (2) a flatter plateau. Where two facing handles would together
+ * reach past the gap between their points, both are shortened in proportion
+ * until they just meet (`eqSegment`), which keeps each segment's control
+ * points in frequency order and so the path a function of frequency at every
+ * setting: one gain per frequency, never a loop.
  *
  * PLAYED (`fitEqBandGains`): the path is sampled on EQ_GRID_POINTS and a bank
  * of EQ_BAND_COUNT peaking filters is fitted to it once per change of the
@@ -34,7 +36,7 @@ export interface EqPoint {
   hz: number
   /** -EQ_DB_MAX..+EQ_DB_MAX. */
   db: number
-  /** 0..1: how round the curve is through this point (see the header). */
+  /** 0..EQ_HANDLE_MAX: how round the curve is through this point (see the header). */
   handle: number
 }
 
@@ -50,7 +52,8 @@ export const EQ_DB_STEP = 0.5
 export const EQ_SEMITONE_STEP = 1
 export const EQ_HANDLE_STEP = 0.05
 /** The handle a point placed by the reader starts with. */
-export const EQ_DEFAULT_HANDLE = 0.5
+export const EQ_DEFAULT_HANDLE = 1
+export const EQ_HANDLE_MAX = 2
 export const EQ_MIN_GAP_SEMITONES = 1
 /** The end points included. */
 export const EQ_MAX_POINTS = 12
@@ -89,7 +92,7 @@ function sanitizePoint(value: unknown, hz: number): EqPoint {
   return {
     hz,
     db: clamp(finite(input.db, 0), -EQ_DB_MAX, EQ_DB_MAX),
-    handle: clamp(finite(input.handle, 0), 0, 1),
+    handle: clamp(finite(input.handle, 0), 0, EQ_HANDLE_MAX),
   }
 }
 
@@ -153,8 +156,11 @@ export function eqSegment(curve: EqCurve, index: number): [number, number][] {
   const b = curve[index + 1]
   const ax = semitonesOf(a.hz)
   const bx = semitonesOf(b.hz)
-  const outReach = handleReach(curve, index)
-  const inReach = handleReach(curve, index + 1)
+  // Facing handles that would cross are shortened together until they meet.
+  const wanted = handleReach(curve, index) + handleReach(curve, index + 1)
+  const fit = wanted > bx - ax ? (bx - ax) / wanted : 1
+  const outReach = handleReach(curve, index) * fit
+  const inReach = handleReach(curve, index + 1) * fit
   return [
     [ax, a.db],
     [ax + outReach, a.db + (handleSlope(curve, index) * outReach)],
@@ -349,7 +355,7 @@ export function editEqPoint(curve: EqCurve, index: number, change: { semitones?:
     point.hz = hzAtSemitones(clamp(change.semitones, low, high))
   }
   if (change.db !== undefined) point.db = clamp(change.db, -EQ_DB_MAX, EQ_DB_MAX)
-  if (change.handle !== undefined) point.handle = clamp(change.handle, 0, 1)
+  if (change.handle !== undefined) point.handle = clamp(change.handle, 0, EQ_HANDLE_MAX)
   return next
 }
 
@@ -365,7 +371,7 @@ export function insertEqPoint(curve: EqCurve, semitones: number, db: number, han
   if (semitones - semitonesOf(curve[index - 1].hz) < EQ_MIN_GAP_SEMITONES) return null
   if (semitonesOf(curve[index].hz) - semitones < EQ_MIN_GAP_SEMITONES) return null
   const next = curve.map((point) => ({ ...point }))
-  next.splice(index, 0, { hz: hzAtSemitones(semitones), db: clamp(db, -EQ_DB_MAX, EQ_DB_MAX), handle: clamp(handle, 0, 1) })
+  next.splice(index, 0, { hz: hzAtSemitones(semitones), db: clamp(db, -EQ_DB_MAX, EQ_DB_MAX), handle: clamp(handle, 0, EQ_HANDLE_MAX) })
   return { curve: next, index }
 }
 
@@ -382,4 +388,20 @@ export function insertEqPointAfter(curve: EqCurve, index: number): { curve: EqPo
 export function removeEqPoint(curve: EqCurve, index: number): EqPoint[] {
   if (index <= 0 || index >= curve.length - 1) return curve.map((point) => ({ ...point }))
   return curve.filter((_, i) => i !== index).map((point) => ({ ...point }))
+}
+
+/**
+ * A typed frequency: unlike a drag, it may land past a neighbour, and the
+ * point moves to its place in the order. It stays inside the axis, at least
+ * EQ_MIN_GAP_SEMITONES from the ends; a frequency that close to another point
+ * is refused (null). The ends' frequencies are fixed. Returns the curve and
+ * the point's new index.
+ */
+export function setEqPointFrequency(curve: EqCurve, index: number, hz: number): { curve: EqPoint[]; index: number } | null {
+  if (index <= 0 || index >= curve.length - 1 || !(hz > 0)) return null
+  const semitones = clamp(semitonesOf(hz), EQ_MIN_GAP_SEMITONES, EQ_SPAN_SEMITONES - EQ_MIN_GAP_SEMITONES)
+  const point = curve[index]
+  const others = curve.filter((_, i) => i !== index)
+  const placed = insertEqPoint(others, semitones, point.db, point.handle)
+  return placed
 }

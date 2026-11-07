@@ -14,6 +14,7 @@ import {
   eqSegment,
   insertEqPoint,
   insertEqPointAfter,
+  setEqPointFrequency,
   removeEqPoint,
   semitonesOf,
   type EqPoint,
@@ -61,6 +62,7 @@ interface Drag {
 export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
   const [selected, setSelected] = useState<number | null>(null)
   const graphRef = useRef<HTMLDivElement>(null)
+  const plotRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<Drag | null>(null)
   const curveRef = useRef(curve)
@@ -107,7 +109,7 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
   }, yController)
 
   const pointerValues = (event: { clientX: number; clientY: number }) => {
-    const rect = graphRef.current!.getBoundingClientRect()
+    const rect = plotRef.current!.getBoundingClientRect()
     const semitones = ((event.clientX - rect.left) / rect.width) * EQ_SPAN_SEMITONES
     const db = (0.5 - ((event.clientY - rect.top) / rect.height)) * 2 * EQ_DB_MAX
     return { semitones: snap(semitones, EQ_SEMITONE_STEP), db: snap(db, EQ_DB_STEP), height: rect.height }
@@ -237,6 +239,7 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
           onContextMenu={(event) => event.preventDefault()}
         >
           <div className="utility-setting-scrollbar-rail" aria-hidden="true" />
+          <div className="options-eq-plot" ref={plotRef}>
           <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" aria-hidden="true">
             {OCTAVES.map((x) => (
               <line key={x} className="options-eq-graph-octave" x1={x} x2={x} y1={0} y2={HEIGHT} />
@@ -252,6 +255,7 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
               style={{ left: `${(xOf(semitonesOf(point.hz)) / WIDTH) * 100}%`, top: `${(yOf(point.db) / HEIGHT) * 100}%` }}
             />
           ))}
+          </div>
         </div>
       </div>
       <div className="options-eq-rows" role="group" aria-label="Music EQ points">
@@ -263,6 +267,12 @@ export function EqCurveEditor({ curve, onChange }: EqCurveEditorProps) {
             isActive={index === active}
             onSelect={() => setSelected(index)}
             onEdit={(change) => edit(index, change)}
+            onSetHz={(hz) => {
+              const moved = setEqPointFrequency(curve, index, hz)
+              if (!moved) return
+              onChange(moved.curve)
+              setSelected(moved.index)
+            }}
             onRemove={() => {
               onChange(removeEqPoint(curve, index))
               setSelected(null)
@@ -286,13 +296,15 @@ interface EqPointRowProps {
   isActive: boolean
   onSelect: () => void
   onEdit: (change: { semitones?: number; db?: number; handle?: number }) => void
+  onSetHz: (hz: number) => void
   onRemove: () => void
   onAdd: () => void
 }
 
-function EqPointRow({ curve, index, isActive, onSelect, onEdit, onRemove, onAdd }: EqPointRowProps) {
+function EqPointRow({ curve, index, isActive, onSelect, onEdit, onSetHz, onRemove, onAdd }: EqPointRowProps) {
   const point = curve[index]
-  const isEnd = index === 0 || index === curve.length - 1
+  const isLast = index === curve.length - 1
+  const isEnd = index === 0 || isLast
   const label = index === 0 ? 'min' : index === curve.length - 1 ? 'max' : String(index)
   const at = semitonesOf(point.hz)
   return (
@@ -304,7 +316,7 @@ function EqPointRow({ curve, index, isActive, onSelect, onEdit, onRemove, onAdd 
         raw={String(Math.round(point.hz))}
         readOnly={isEnd}
         onFocus={onSelect}
-        onType={(value) => { if (value > 0) onEdit({ semitones: semitonesOf(value) }) }}
+        onType={onSetHz}
         onStep={(direction) => onEdit({ semitones: at + (direction * EQ_SEMITONE_STEP) })}
       />
       <EqField
@@ -316,7 +328,7 @@ function EqPointRow({ curve, index, isActive, onSelect, onEdit, onRemove, onAdd 
         onStep={(direction) => onEdit({ db: snap(point.db, EQ_DB_STEP) + (direction * EQ_DB_STEP) })}
       />
       <EqField
-        ariaLabel={`Point ${label} handle, 0 to 1`}
+        ariaLabel={`Point ${label} handle, 0 to 2`}
         display={point.handle.toFixed(2)}
         raw={String(point.handle)}
         onFocus={onSelect}
@@ -335,10 +347,11 @@ function EqPointRow({ curve, index, isActive, onSelect, onEdit, onRemove, onAdd 
       </button>
       <button
         type="button"
-        className="options-eq-cell options-eq-button"
-        data-tooltip="Add a point after this one"
+        className={`options-eq-cell options-eq-button${isLast ? ' is-disabled' : ''}`}
+        data-tooltip={isLast ? 'No point can follow the last one' : 'Add a point after this one'}
         aria-label={`Add a point after point ${label}`}
-        onClick={onAdd}
+        aria-disabled={isLast}
+        onClick={() => { if (!isLast) onAdd() }}
       >
         <span className="fa-solid fa-plus" aria-hidden="true" />
       </button>
