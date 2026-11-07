@@ -144,8 +144,8 @@ function handleReach(curve: EqCurve, index: number): number {
 
 /**
  * The slope (dB per semitone) the handles of a point lie along: the line
- * between its neighbours while its gain lies between theirs, and level when
- * the point is a peak or a dip, so the curve turns at the point itself rather
+ * between its neighbours while its gain lies strictly between theirs, and level when
+ * the point is a peak, a dip or level with a neighbour, so the curve turns at the point itself rather
  * than overshooting it. An end point has one neighbour and aims at it.
  */
 function handleSlope(curve: EqCurve, index: number): number {
@@ -153,7 +153,7 @@ function handleSlope(curve: EqCurve, index: number): number {
     const { db } = curve[index]
     const lo = Math.min(curve[index - 1].db, curve[index + 1].db)
     const hi = Math.max(curve[index - 1].db, curve[index + 1].db)
-    if (db < lo || db > hi) return 0
+    if (db <= lo || db >= hi) return 0
   }
   const from = curve[Math.max(0, index - 1)]
   const to = curve[Math.min(curve.length - 1, index + 1)]
