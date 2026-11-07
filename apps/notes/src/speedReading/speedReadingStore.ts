@@ -52,6 +52,11 @@ export interface SpeedReadingRow {
 export interface SpeedReadingDisplay {
   /** The words per minute the session is running at. */
   wpm: number
+  /**
+   * Whole seconds to the note's end reading on at that pace: in the edit view
+   * to its last chunk, in the render view until its last line is in view.
+   */
+  secondsLeft: number
   /** Null in the render view, which shows the page itself. */
   row: SpeedReadingRow | null
 }

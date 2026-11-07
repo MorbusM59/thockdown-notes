@@ -1540,7 +1540,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   // see usePreviewScrollbar's own note on why it is not the scroller.
   const previewBridgeHostRef = useRef<HTMLDivElement | null>(null)
 
-  const { previewMarkdownElement, previewBlockCount } = usePreviewMarkdownRendering({
+  const { previewMarkdownElement, previewBlockCount, readWordsBelowView } = usePreviewMarkdownRendering({
     notes,
     activeNoteId,
     readEditorText,
@@ -1736,6 +1736,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     latestEditorSelectionRef,
     adapterRef,
     previewScrollRef,
+    readWordsBelowView,
   })
 
   const exitSlotOverlay = useMemo<(() => void) | null>(() => {

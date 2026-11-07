@@ -28,7 +28,7 @@ export interface SpeedReadingSettings {
   /**
    * Milliseconds every chunk stays on screen before its letters are counted:
    * the time to see and recognise a fixation's worth of text, which does not
-   * shrink with a shorter chunk (`chunkDurationSec`).
+   * shrink with a shorter chunk (`speedReadingPace.ts`).
    */
   fixationMs: number
   /** The bell's dynamic `a`, as the Animations section's `ramp`. */
@@ -44,39 +44,10 @@ export const SPEED_READING_WPM_MAX = 1500
 export const SPEED_READING_WPM_STEP = 5
 export const SPEED_READING_ROW_WIDTH_MIN = 6
 export const SPEED_READING_ROW_WIDTH_MAX = 60
-/** Average letters to a word, with its space: how many words a full row holds. */
+/** Average letters to a word, with its space: the render view's estimate of plain text's words per line. */
 export const SPEED_READING_LETTERS_PER_WORD = 6
 
 export const SPEED_READING_FIXATION_MAX_MS = 600
-/** Marks that end a sentence, in any script this app's reader is likely to type. */
-const SENTENCE_END = '.!?…‽⁇⁈⁉。！？'
-/** Marks that end a clause. */
-const CLAUSE_END = ',;:、，；：،'
-
-
-/**
- * Seconds a chunk stays on screen at full pace, as rapid serial visual
- * presentation times it: a fixed FIXATION every chunk pays, plus a time per
- * letter, plus a pause after a sentence's end (one fixation) or a clause's
- * (half of one); a line break's empty chunk is the fixation alone. The per-letter time is solved from the words per minute so
- * that a full row of average text -- `rowWidth / LETTERS_PER_WORD` words, each
- * of `LETTERS_PER_WORD - 1` letters -- takes exactly what the pace says it
- * should; when the fixation alone already exceeds that, the per-letter time is
- * zero and the fixation is the floor, so a high pace stops shortening chunks
- * below what can be recognised.
- */
-export function chunkDurationSec(text: string, wpm: number, rowWidth: number, fixationMs: number): number {
-  const fixation = Math.max(0, fixationMs) / 1000
-  const fullRowWords = Math.max(1, rowWidth / SPEED_READING_LETTERS_PER_WORD)
-  const fullRowSec = (fullRowWords * 60) / Math.max(1, wpm)
-  const fullRowLetters = fullRowWords * (SPEED_READING_LETTERS_PER_WORD - 1)
-  const perLetter = Math.max(0, fullRowSec - fixation) / fullRowLetters
-  const letters = text.replace(/\s/g, '').length
-  const last = text.replace(/[\s"'«»‹›“”„‘’‚「」『』)\]}*_-]+$/u, '').slice(-1)
-  const pause = last === '' ? 0 : SENTENCE_END.includes(last) ? fixation : CLAUSE_END.includes(last) ? fixation / 2 : 0
-  return fixation + perLetter * letters + pause
-}
-
 export const SPEED_READING_CURVE_RAMP_MIN = 0.1
 export const SPEED_READING_CURVE_RAMP_MAX = 5
 export const SPEED_READING_CURVE_SHAPE_MIN = 0.1

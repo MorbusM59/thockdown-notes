@@ -282,7 +282,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - **Render view** scrolls the page on its own from what is on screen, at your words per minute, measured from the text as it is laid out. Hold \`Space\` or \`↓\` to ease to a pause; let go to ease back up.
 - **Edit view** greys out the grid and shows the note a few words at a time in one row, starting at the caret. \`Space\` or \`↓\` shows the next words; hold it to read on at your pace. \`↑\` goes back. When you stop, the caret is at the end of the last words shown.
-- \`←\` and \`→\` make it slower or faster in steps of 5; hold to sweep. The word count shows the pace while you read.
+- \`←\` and \`→\` make it slower or faster in steps of 5; hold to sweep. The word count shows the pace while you read, and the time left in the note at that pace.
 - \`Esc\` switches views and keeps reading. \`F9\` stops.
 `,
   `## Internal Linking
@@ -883,7 +883,7 @@ ${shortcutTable()}
 
 *The pace of [Speed Reading]($#speed-reading) and how it eases.*
 
-- **Edit**: the edit view's words per minute; **row**, its reading row in boxes; and **fixation**, the time every chunk stays before its letters are counted, which is also the shortest a chunk can stay; a sentence's end adds one fixation and a comma half of one. Chunks also end at punctuation and around quotations, and a line break shows an empty row for one fixation. A full row of average words still reads at your pace.
+- **Edit**: the edit view's words per minute; **row**, its reading row in boxes; and **fixation**, the time every chunk stays before its letters are counted, which is also the shortest a chunk can stay; a sentence's end adds one fixation and a comma half of one. Chunks also end at punctuation and around quotations, and a line break shows an empty row for one fixation. Pauses and fixations are taken out of your pace, not added to it, so the words still go by at the figure shown unless the fixations alone are longer.
 - **Render**: the render view's words per minute.
 - **Curve**: **ramp**, **shape** and **speed** shape the ease into a held \`Space\` and out of and back from a pause, like the same three in [Animations]($#animations), with their own values.
 

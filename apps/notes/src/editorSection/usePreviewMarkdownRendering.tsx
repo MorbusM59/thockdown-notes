@@ -50,7 +50,8 @@ import {
   resolvePreviewCharScrollOffset,
   resolvePreviewCharViewport,
 } from './previewCharPosition'
-import type { PreviewBlockMeasurement, PreviewCharViewport } from './previewCharPosition'
+import { findBlockAtChar, type PreviewBlockMeasurement, type PreviewCharViewport } from './previewCharPosition'
+import { countWordsFrom } from '../speedReading/speedReadingChunks'
 import {
   measurePreviewBlockGeometry,
   readPreviewEdgePaddingPx,
@@ -319,6 +320,8 @@ export interface UsePreviewMarkdownRenderingResult {
    * progressively.
    */
   previewBlockCount: number
+  /** Words of the note below the bottom of the pane, or null before the pane can say. */
+  readWordsBelowView: () => number | null
 }
 
 interface PreviewMarkdownBlockProps {
@@ -1611,6 +1614,35 @@ export function usePreviewMarkdownRendering({
     })
   }, [readBlockMeasurements, previewScrollRef, isWindowed, previewWindow.api])
 
+  /**
+   * Words of the note below the bottom of the pane, for speed reading's time
+   * left (`speedReadingSession.ts`): the pane's character viewport, the words
+   * of every later block, and the cut block's words in proportion to its
+   * characters. Each block's words are counted once per split (the same
+   * markdown-aware count the edit view reads by) and prefix-summed, so a
+   * read is a binary search rather than a walk of the note.
+   */
+  const blockWordPrefixRef = useRef<{ blocks: typeof previewBlocks; prefix: Float64Array } | null>(null)
+  const readWordsBelowView = useCallback((): number | null => {
+    const viewport = readCharViewport()
+    const offsets = blockCharOffsetsRef.current
+    const blocks = previewBlocksRef.current
+    if (!viewport || !offsets || offsets.length !== blocks.length + 1) return null
+    if (blockWordPrefixRef.current?.blocks !== blocks) {
+      const prefix = new Float64Array(blocks.length + 1)
+      for (let i = 0; i < blocks.length; i += 1) prefix[i + 1] = prefix[i] + countWordsFrom(blocks[i].text, 0)
+      blockWordPrefixRef.current = { blocks, prefix }
+    }
+    const { prefix } = blockWordPrefixRef.current
+    const endChar = viewport.startChar + viewport.visibleChars
+    if (endChar >= viewport.totalChars) return 0
+    const index = findBlockAtChar(offsets, endChar)
+    const span = offsets[index + 1] - offsets[index]
+    const passed = span > 0 ? Math.min(1, Math.max(0, (endChar - offsets[index]) / span)) : 1
+    const blockWords = prefix[index + 1] - prefix[index]
+    return prefix[blocks.length] - prefix[index + 1] + blockWords * (1 - passed)
+  }, [readCharViewport, previewBlocksRef])
+
   const scrollToChar = useCallback((charOffset: number) => {
     if (isWindowed) { previewWindow.api.scrollToChar(charOffset); return }
     const offset = resolvePreviewCharScrollOffset({
@@ -2169,5 +2201,6 @@ export function usePreviewMarkdownRendering({
      * stopped being synchronous.
      */
     previewBlockCount: previewBlocks.length,
+    readWordsBelowView,
   }
 }

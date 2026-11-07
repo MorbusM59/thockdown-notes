@@ -31,6 +31,8 @@ export interface UseSpeedReadingOptions {
   latestEditorSelectionRef: MutableRefObject<EditorSelectionState>
   adapterRef: MutableRefObject<EditorAdapter | null>
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
+  /** The render pane's words below its bottom edge, for the time left. */
+  readWordsBelowView: () => number | null
 }
 
 export function useSpeedReading({
@@ -42,11 +44,14 @@ export function useSpeedReading({
   latestEditorSelectionRef,
   adapterRef,
   previewScrollRef,
+  readWordsBelowView,
 }: UseSpeedReadingOptions): { isSpeedReading: boolean; isReadingEditView: boolean; toggleSpeedReading: () => void } {
   const [isSpeedReading, setIsSpeedReading] = useState(false)
   const sessionRef = useRef<SpeedReadingSession | null>(null)
   const readTextRef = useRef(readDisplayedText)
   readTextRef.current = readDisplayedText
+  const readWordsBelowRef = useRef(readWordsBelowView)
+  readWordsBelowRef.current = readWordsBelowView
 
   const placeCaret = useCallback((offset: number) => {
     adapterRef.current?.applySnapshot({
@@ -62,7 +67,7 @@ export function useSpeedReading({
     if (isPreviewMode) {
       const scroller = previewScrollRef.current
       if (!scroller) return
-      sessionRef.current = startSpeedReadingSession({ view: 'render', scroller }, { onLeave: () => {} })
+      sessionRef.current = startSpeedReadingSession({ view: 'render', scroller, readWordsBelow: () => readWordsBelowRef.current() }, { onLeave: () => {} })
     } else {
       sessionRef.current = startSpeedReadingSession(
         { view: 'edit', text: readTextRef.current(), from: latestEditorSelectionRef.current.start },

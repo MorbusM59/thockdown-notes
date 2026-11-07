@@ -90,6 +90,7 @@ export function nextChunk(text: string, from: number, width: number): SpeedReadi
   let end = from
   let pos = Math.max(0, from)
   let crossedBeforeWords = false
+  let scannedPrefix = false
 
   while (pos < text.length) {
     // The whitespace before the next token: a line break in it ends a chunk
@@ -102,7 +103,10 @@ export function nextChunk(text: string, from: number, width: number): SpeedReadi
     if (pos >= text.length) break
     if (crossedLine && parts.length > 0) break
     if (crossedLine && from > 0) crossedBeforeWords = true
-    pos = pastLinePrefix(text, pos)
+    // Only a line's first token can be part of its prefix; asking for every
+    // token would rescan the line from its start each time.
+    if (crossedLine || !scannedPrefix) pos = pastLinePrefix(text, pos)
+    scannedPrefix = true
     if (pos >= text.length) break
     if (isSpace(text[pos])) continue
 
@@ -137,4 +141,33 @@ export function nextChunk(text: string, from: number, width: number): SpeedReadi
 
   if (parts.length === 0) return null
   return { text: parts.join(' '), start, end, words: parts.length }
+}
+
+/**
+ * How many words reading on from `from` would show: the words of every chunk
+ * `nextChunk` would return from there, counted without building one. One
+ * pass over the source, so a session pays for it once rather than per chunk
+ * (`speedReadingPace.ts`); a word longer than the row, which reading cuts
+ * into pieces, counts once here and once per piece there.
+ */
+export function countWordsFrom(text: string, from: number): number {
+  let count = 0
+  let pos = Math.max(0, from)
+  let atLineStart = true
+  while (pos < text.length) {
+    while (pos < text.length && isSpace(text[pos])) {
+      if (text[pos] === '\n') atLineStart = true
+      pos += 1
+    }
+    if (pos >= text.length) break
+    if (atLineStart) pos = pastLinePrefix(text, pos)
+    atLineStart = false
+    if (pos >= text.length) break
+    if (isSpace(text[pos])) continue
+    let tokenEnd = pos
+    while (tokenEnd < text.length && !isSpace(text[tokenEnd])) tokenEnd += 1
+    if (displayWord(text.slice(pos, tokenEnd)) !== '') count += 1
+    pos = tokenEnd
+  }
+  return count
 }

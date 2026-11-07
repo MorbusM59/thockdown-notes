@@ -40,9 +40,9 @@ import { buildHoldRampPlan, holdFullTravelSec, quantizeHoldTravel, sampleHoldTra
 import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
 import { cancelSmoothScroll } from '@thockdown/interaction/smoothScrollRegistry'
 import { RESTING, stepSpeedEnvelope, type SpeedCurve, type SpeedEnvelopeState } from './speedEnvelope'
-import { nextChunk, wordStartAt, type SpeedReadingChunk } from './speedReadingChunks'
+import { nextChunk, wordStartAt } from './speedReadingChunks'
+import { EditPacer } from './speedReadingPace'
 import {
-  chunkDurationSec,
   clampWpm,
   SPEED_READING_LETTERS_PER_WORD,
   SPEED_READING_WPM_MAX,
@@ -53,7 +53,12 @@ import { commitSpeedReadingSettings, getSpeedReadingSettings, setSpeedReadingDis
 
 export type SpeedReadingSessionTarget =
   | { view: 'edit'; text: string; from: number }
-  | { view: 'render'; scroller: HTMLElement }
+  | {
+    view: 'render'
+    scroller: HTMLElement
+    /** Words of the note below the pane's bottom edge (`usePreviewMarkdownRendering`), or null before it can say. */
+    readWordsBelow: () => number | null
+  }
 
 export interface SpeedReadingSession {
   /** Stops the session; the mode, the view or the note changed. */
@@ -101,15 +106,34 @@ const MAX_PACE_OVER_TEXT = 4
 /** An average letter's width, as a share of the font size. */
 const LETTER_WIDTH_EM = 0.5
 
-function countWords(text: string | null): number {
-  if (!text) return 0
+/** Elements that sit inside a line of text rather than starting one. */
+const INLINE_TAGS = new Set(['A', 'ABBR', 'B', 'CODE', 'DEL', 'EM', 'I', 'INS', 'KBD', 'MARK', 'Q', 'S', 'SMALL', 'SPAN', 'STRONG', 'SUB', 'SUP', 'U'])
+
+/**
+ * Words in a rendered block, as a reader sees them. `textContent` would join
+ * two list items or two table cells into one word, since the markup puts no
+ * space between them, so the text nodes are walked and a word ends wherever a
+ * new line of text starts -- a different block-level parent, or a line break
+ * or image between two runs. A word split by emphasis (`**bo**ld`) stays one.
+ */
+function countRenderedWords(root: Element): number {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
   let count = 0
   let inWord = false
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i)
-    const space = code === 32 || code === 10 || code === 9 || code === 13 || code === 160
-    if (!space && !inWord) count += 1
-    inWord = !space
+  let lastLine: Element | null = null
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    let line = node.parentElement
+    while (line && line !== root && INLINE_TAGS.has(line.tagName)) line = line.parentElement
+    const before = node.previousSibling
+    if (line !== lastLine || (before instanceof Element && !INLINE_TAGS.has(before.tagName))) inWord = false
+    lastLine = line
+    const text = node.nodeValue ?? ''
+    for (let i = 0; i < text.length; i += 1) {
+      const code = text.charCodeAt(i)
+      const space = code === 32 || code === 10 || code === 9 || code === 13 || code === 160
+      if (!space && !inWord) count += 1
+      inWord = !space
+    }
   }
   return count
 }
@@ -125,21 +149,43 @@ function plainTextDensity(scroller: HTMLElement): number {
   return wordsPerLine / lineHeight
 }
 
-/** Words per pixel of what is on screen now, or null where nothing could be counted. */
+const BLOCK_SELECTOR = '[data-index], [data-tail-index]'
+
+/**
+ * Words per pixel of what is on screen now, or null where nothing could be
+ * counted. Measured over the CONTIGUOUS run of blocks from the first one on
+ * screen to the last, gaps included: the scroll travels the margins between
+ * blocks too, and summing block heights alone left them out and read slow.
+ */
 function measuredDensity(scroller: HTMLElement): number | null {
   const rect = scroller.getBoundingClientRect()
   const x = rect.left + rect.width / 2
-  const seen = new Set<Element>()
-  let words = 0
-  let height = 0
+  const found: Element[] = []
   for (let i = 0; i < DENSITY_PROBES; i += 1) {
     const y = rect.top + (rect.height * (i + 0.5)) / DENSITY_PROBES
-    const block = document.elementFromPoint(x, y)?.closest('[data-index], [data-tail-index]')
-    if (!block || seen.has(block) || !scroller.contains(block)) continue
-    seen.add(block)
-    words += countWords(block.textContent)
-    height += block.getBoundingClientRect().height
+    const block = document.elementFromPoint(x, y)?.closest(BLOCK_SELECTOR)
+    if (block && scroller.contains(block) && !found.includes(block)) found.push(block)
   }
+  if (found.length === 0) return null
+  const first = found[0]
+  const last = found[found.length - 1]
+  // The run between the first and last probe hit, so a block no probe landed on
+  // is counted as well; probes in another container fall back to their own blocks.
+  const run: Element[] = []
+  for (let el: Element | null = first; el; el = el.nextElementSibling) {
+    if (el.matches(BLOCK_SELECTOR)) run.push(el)
+    if (el === last) break
+  }
+  const blocks = run[run.length - 1] === last ? run : found
+  let words = 0
+  for (const block of blocks) words += countRenderedWords(block)
+  // To the NEXT block's top where there is one, so the run carries one gap per
+  // block, as the page does, rather than one fewer.
+  const after = blocks[blocks.length - 1].nextElementSibling
+  const end = after?.matches(BLOCK_SELECTOR)
+    ? after.getBoundingClientRect().top
+    : blocks[blocks.length - 1].getBoundingClientRect().bottom
+  const height = end - blocks[0].getBoundingClientRect().top
   return height > 0 ? words / height : null
 }
 
@@ -156,22 +202,25 @@ export function startSpeedReadingSession(
     return { ramp: s.curveRamp, shape: s.curveShape, speedSec: s.curveSpeedSec }
   }
 
-  // Edit view: the chunk on show, and where each earlier one began.
-  let chunk: SpeedReadingChunk | null = null
+  // Edit view: the chunk on show and the pace ahead of it, and where each
+  // earlier chunk began.
+  let pacer: EditPacer | null = null
   const history: number[] = []
   let timeCredit = 0
   if (target.view === 'edit') {
-    chunk = nextChunk(target.text, wordStartAt(target.text, target.from), widthBoxes)
+    let first = nextChunk(target.text, wordStartAt(target.text, target.from), widthBoxes)
       ?? nextChunk(target.text, 0, widthBoxes)
     // A session opens on words: a line break the caret happens to sit before
     // is a pause between lines, and there is no line before the first one.
-    while (chunk && chunk.words === 0) chunk = nextChunk(target.text, chunk.end, widthBoxes)
-    if (!chunk) return null
+    while (first && first.words === 0) first = nextChunk(target.text, first.end, widthBoxes)
+    if (!first) return null
+    pacer = new EditPacer(target.text, first, widthBoxes)
   }
 
   // Render view: the scroll position kept in floating point (scrollTop rounds),
   // what was last written, and the page's measured words per pixel.
   const scroller = target.view === 'render' ? target.scroller : null
+  const readWordsBelow = target.view === 'render' ? target.readWordsBelow : null
   // The render pane scrolls smoothly in CSS, which would animate every one of
   // this loop's writes and so retarget itself each frame without moving; any
   // journey already under way is the reader's past, not where they read from.
@@ -210,28 +259,32 @@ export function startSpeedReadingSession(
   let lastFrameMs: number | null = null
   let ended = false
 
+  // The render view's time left, kept from the last frame: the distance to
+  // the end of the page at the pace the page is scrolling at.
+  let renderSecondsLeft = 0
   const publish = () => {
+    const secondsLeft = pacer ? pacer.timeLeftSec(wpm, getSpeedReadingSettings().fixationMs) : renderSecondsLeft
     setSpeedReadingDisplay({
       wpm,
-      row: chunk ? { text: chunk.text, widthBoxes } : null,
+      secondsLeft: Math.round(secondsLeft),
+      row: pacer ? { text: pacer.current.text, widthBoxes } : null,
     })
   }
 
   const advance = (): boolean => {
-    if (target.view !== 'edit' || !chunk) return false
-    const next = nextChunk(target.text, chunk.end, widthBoxes)
-    if (!next) return false
-    history.push(chunk.start)
-    chunk = next
+    if (!pacer) return false
+    const start = pacer.current.start
+    if (!pacer.advance()) return false
+    history.push(start)
     publish()
     return true
   }
 
   const back = () => {
-    if (target.view !== 'edit') return
+    if (!pacer) return
     const start = history.pop()
     if (start === undefined) return
-    chunk = nextChunk(target.text, start, widthBoxes) ?? chunk
+    pacer.back(start)
     publish()
   }
 
@@ -259,8 +312,8 @@ export function startSpeedReadingSession(
       envelope = step.state
       timeCredit += step.fullPaceSec
       const { fixationMs } = getSpeedReadingSettings()
-      while (chunk) {
-        const duration = chunkDurationSec(chunk.text, wpm, widthBoxes, fixationMs)
+      while (pacer) {
+        const duration = pacer.durationSec(wpm, fixationMs)
         if (timeCredit < duration) break
         timeCredit -= duration
         if (!advance()) {
@@ -293,6 +346,16 @@ export function startSpeedReadingSession(
       scroller.scrollTop = Math.floor(position)
       written = scroller.scrollTop
       showFraction(Math.max(0, Math.min(0.999, position - written)))
+      // Until the last line has scrolled into view: the words still below the
+      // pane, at the words per minute. The page's pixels cannot say this,
+      // because a long note's pane holds only a window of its blocks.
+      const below = readWordsBelow?.() ?? null
+      const secondsLeft = below === null ? (max - position) / pxPerSec : (below * 60) / wpm
+      if (Math.round(secondsLeft) !== Math.round(renderSecondsLeft)) {
+        renderSecondsLeft = secondsLeft
+        publish()
+      }
+      renderSecondsLeft = secondsLeft
       // At the end of the page it simply stops moving and waits for a key: a
       // page still being laid out, or one shorter than the pane, would
       // otherwise end the session before it had begun.
@@ -312,7 +375,7 @@ export function startSpeedReadingSession(
   }
 
   const leave = () => {
-    if (target.view === 'edit' && chunk) handlers.onLeave(chunk.words > 0 ? chunk.end : chunk.start)
+    if (pacer) handlers.onLeave(pacer.current.words > 0 ? pacer.current.end : pacer.current.start)
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
