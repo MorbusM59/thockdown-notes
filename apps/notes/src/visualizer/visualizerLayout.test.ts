@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, LEVEL_BARS_GAP_BOXES, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry } from './visualizerLayout'
+import { bucketListArea, LEVEL_BARS_GAP_BOXES, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, SONG_LIST_CUTOUT_GAP_BOXES, songListArea, songListEntry, fitVisualizerBox, STRIP_ROWS } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('gives both strips exactly eight rows wherever they fit', () => {
@@ -23,11 +23,11 @@ describe('computeVisualizerLayout', () => {
       const layout = computeVisualizerLayout(w, h, box, 220)
       expect(layout.originYPx + layout.rows * box).toBeLessThanOrEqual(h)
       expect(layout.originXPx + layout.columns * box).toBeLessThanOrEqual(w)
-      // Centred: the two margins differ by at most the odd pixel.
-      expect(w - layout.originXPx - layout.columns * box - layout.originXPx).toBeGreaterThanOrEqual(0)
-      expect(w - layout.originXPx - layout.columns * box - layout.originXPx).toBeLessThanOrEqual(1)
-      expect(h - layout.originYPx - layout.rows * box - layout.originYPx).toBeGreaterThanOrEqual(0)
-      expect(h - layout.originYPx - layout.rows * box - layout.originYPx).toBeLessThanOrEqual(1)
+      // The part boxes at the edges are each less than a whole box.
+      expect(layout.originXPx).toBeLessThan(box)
+      expect(w - layout.originXPx - layout.columns * box).toBeLessThan(box)
+      expect(layout.originYPx).toBeLessThan(box)
+      expect(h - layout.originYPx - layout.rows * box).toBeLessThan(box)
       expect(layout.stripRows).toBeLessThan(layout.bottomStripRow + 1)
       expect(2 * layout.stripRows).toBeLessThan(Math.max(1, layout.rows))
       const { row, size, column } = layout.cutout
@@ -40,7 +40,7 @@ describe('computeVisualizerLayout', () => {
   })
 
   it('leaves out the rows a short strip has no room for', () => {
-    const at = (rows: number) => computeVisualizerLayout(2000, rows * 20, 20, 220)
+    const at = (rows: number) => computeVisualizerLayout(2000, rows * 20, 20, 20)
     expect(at(9)).toMatchObject({ stripRows: 4, creditsRow: 1, titleRow: 3, chromaRow: null, progressRow: null, volumeRow: null, spectrumRows: 3 })
     expect(at(3)).toMatchObject({ stripRows: 1, creditsRow: null, titleRow: null, spectrumRows: 0 })
   })
@@ -48,7 +48,38 @@ describe('computeVisualizerLayout', () => {
   it('sizes the cutout to the empty scene in whole boxes, centred', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
     expect(layout.cutout.size).toBe(11)
-    expect(layout.cutout.column).toBe(Math.floor((layout.columns - 11) / 2))
+  })
+
+  it('puts the cutout dead centre on the screen, whatever the box', () => {
+    for (const [w, h, box] of [[1920, 1080, 20], [1920, 1080, 23], [1366, 768, 17], [2560, 1440, 31], [801, 601, 13]]) {
+      const layout = computeVisualizerLayout(w, h, box, 220)
+      const { column, row, size } = layout.cutout
+      const left = layout.originXPx + column * box
+      const top = layout.originYPx + row * box
+      expect(Number.isInteger(column) && Number.isInteger(row)).toBe(true)
+      expect(Math.abs(left - (w - left - size * box))).toBeLessThanOrEqual(1)
+      expect(Math.abs(top - (h - top - size * box))).toBeLessThanOrEqual(1)
+    }
+  })
+})
+
+describe('fitVisualizerBox', () => {
+  it('keeps the reader\'s box and font where everything fits', () => {
+    expect(fitVisualizerBox(1080, 22, 18, 220)).toEqual({ boxPx: 22, fontSizePx: 18 })
+  })
+
+  it('shrinks the line height first, then the font, until strips, bars, padding and cutout fit', () => {
+    for (let h = 300; h <= 1600; h += 7) {
+      const { boxPx, fontSizePx } = fitVisualizerBox(h, 60, 30, 220)
+      const layout = computeVisualizerLayout(1920, h, boxPx, 220)
+      expect(layout.cutout.row).toBeGreaterThanOrEqual(STRIP_ROWS + 2)
+      expect(layout.rows - layout.cutout.row - layout.cutout.size).toBeGreaterThanOrEqual(STRIP_ROWS + 2)
+      expect(layout.volumeRow).toBe(layout.bottomStripRow - 1)
+      expect(layout.progressRow).toBe(STRIP_ROWS)
+      expect(fontSizePx).toBe(Math.min(30, boxPx))
+      // The largest box that fits: one more would not.
+      if (boxPx < 60) expect((boxPx + 1) * (18 + Math.round(220 / (boxPx + 1)))).toBeGreaterThan(h)
+    }
   })
 })
 

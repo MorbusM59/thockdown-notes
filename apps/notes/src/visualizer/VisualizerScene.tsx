@@ -63,6 +63,7 @@ import { cutoutClosure, gridOutlineMask, type CutoutRing } from './cutoutRing'
 import { MusicBreath, applySway, breathScales } from './parallaxSway'
 import {
   computeVisualizerLayout,
+  fitVisualizerBox,
   creditsLine,
   type RowText,
   fitToRow,
@@ -171,10 +172,11 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
   })
 }
 
-export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, gridOutlineRef }: VisualizerSceneProps) {
+export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
-  const bevel = useBoxBevelImages(boxPx, boxPx)
   const { width, height } = useBoxSize(scene)
+  const { boxPx, fontSizePx } = fitVisualizerBox(height, readerBoxPx, readerFontSizePx, EMPTY_SCENE_DIAMETER_PX)
+  const bevel = useBoxBevelImages(boxPx, boxPx)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
   const { columns, originXPx, originYPx, stripRows, bottomStripRow, spectrumRow, spectrumRows, chromaRow, cutout } = layout
   const cutoutRound = useSyncExternalStore(subscribeGridWaveSettings, readCutoutRound)

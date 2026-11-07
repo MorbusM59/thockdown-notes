@@ -67,10 +67,20 @@ export type VisualizerLayout = {
 /** The scene's layout for a `widthPx` by `heightPx` slot with square boxes of `boxPx`, and a cutout of about `cutoutPx`. */
 export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx: number, cutoutPx: number): VisualizerLayout {
   const box = Math.max(1, boxPx)
-  const columns = Math.max(0, Math.floor(widthPx / box))
-  const rows = Math.max(0, Math.floor(heightPx / box))
-  const originXPx = Math.floor((widthPx - columns * box) / 2)
-  const originYPx = Math.floor((heightPx - rows * box) / 2)
+  // The cutout is sized against the rows a grid of this box can always hold,
+  // and the grid is then phased so the cutout sits dead centre: the part boxes
+  // at the screen's edges take whatever is left, up to nearly a box each.
+  const safeRows = Math.max(0, Math.floor(heightPx / box) - 1)
+  const safeColumns = Math.max(0, Math.floor(widthPx / box) - 1)
+  const safeStripRows = Math.max(0, Math.min(STRIP_ROWS, Math.floor((safeRows - 1) / 2)))
+  const wanted = Math.max(1, Math.round(cutoutPx / box))
+  const size = Math.max(0, Math.min(wanted, safeRows - 2 * safeStripRows, safeColumns))
+  const cutLeftPx = Math.floor((widthPx - size * box) / 2)
+  const cutTopPx = Math.floor((heightPx - size * box) / 2)
+  const originXPx = ((cutLeftPx % box) + box) % box
+  const originYPx = ((cutTopPx % box) + box) % box
+  const columns = Math.max(0, Math.floor((widthPx - originXPx) / box))
+  const rows = Math.max(0, Math.floor((heightPx - originYPx) / box))
   // Both strips have to fit with at least a row between them.
   const stripRows = Math.max(0, Math.min(STRIP_ROWS, Math.floor((rows - 1) / 2)))
   const topRow = (index: number) => (index < stripRows ? index : null)
@@ -89,12 +99,9 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   const spectrumRows = Math.max(0, stripRows - 1)
   const spectrumRow = rows - spectrumRows
 
-  const middleRows = rows - 2 * stripRows
-  const wanted = Math.max(1, Math.round(cutoutPx / box))
-  const size = Math.max(0, Math.min(wanted, middleRows, columns))
   const cutout = {
-    column: Math.floor((columns - size) / 2),
-    row: stripRows + Math.floor((middleRows - size) / 2),
+    column: (cutLeftPx - originXPx) / box,
+    row: (cutTopPx - originYPx) / box,
     size,
   }
 
@@ -364,4 +371,21 @@ export function levelGapColumn(columns: number, fraction: number): number {
 export function levelAtColumn(columns: number, column: number): number {
   const span = columns - 2
   return span <= 1 ? 0 : Math.max(0, Math.min(1, (column - 1) / (span - 1)))
+}
+
+/** Rows the scene needs besides the cutout: each strip, its bar and a row of padding, top and bottom. */
+export const REQUIRED_ROWS_BESIDE_CUTOUT = 2 * (STRIP_ROWS + 2)
+
+/**
+ * The box and font size the scene is drawn at in a slot `heightPx` tall: the
+ * reader's own when both strips, both bars, a row of padding each side and the
+ * cutout all fit; otherwise the largest box that fits, reached by lowering the
+ * line height first, down to 1, and then the font size with it.
+ */
+export function fitVisualizerBox(heightPx: number, boxPx: number, fontSizePx: number, cutoutPx: number): { boxPx: number; fontSizePx: number } {
+  const fits = (box: number) => box * (REQUIRED_ROWS_BESIDE_CUTOUT + Math.max(1, Math.round(cutoutPx / box))) <= heightPx
+  let box = Math.max(1, boxPx)
+  if (heightPx <= 0) return { boxPx: box, fontSizePx }
+  while (box > 1 && !fits(box)) box -= 1
+  return { boxPx: box, fontSizePx: Math.min(fontSizePx, box) }
 }
