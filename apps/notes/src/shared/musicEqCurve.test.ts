@@ -63,6 +63,14 @@ describe('musicEqCurve', () => {
     expect(edge).toBeLessThan(7)
   })
 
+  it('mirrors a negative skew across the middle of the spectrum', () => {
+    for (const params of SAMPLES) {
+      const plus = eqCurveGainsDb({ ...params, skew: Math.abs(params.skew) })
+      const minus = eqCurveGainsDb({ ...params, skew: -Math.abs(params.skew) })
+      for (let k = 0; k < plus.length; k += 1) expect(minus[k]).toBeCloseTo(plus[plus.length - 1 - k], 9)
+    }
+  })
+
   it('snaps shape to its 0.1 grid and clamps', () => {
     expect(sanitizeEqCurve({ skew: 9, shape: 0.04, stretch: 0, amount: 99 })).toEqual({ skew: 3, shape: 0, stretch: 1, amount: 15 })
     expect(sanitizeEqCurve({ shape: 1.26 }).shape).toBeCloseTo(1.3, 9)

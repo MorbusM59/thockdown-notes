@@ -97,10 +97,15 @@ export function isEqOff(params: EqCurveParams): boolean {
 /** The raw curve j(x) above, 0 outside the bump's support. */
 export function curveShape(x: number, { skew: a, shape: b, stretch: c }: EqCurveParams): number {
   if (Math.abs(b) < EQ_SHAPE_STEP / 2) return 0
+  // A negative skew is the positive one mirrored across the middle of the
+  // spectrum: the curve for |a| read at 1 - x. Using the signed a inside as
+  // well (2^a < 1) skewed the other way AND moved the bump, so -a was not the
+  // mirror of +a.
+  const skew = Math.abs(a)
   const along = a >= 0 ? x : 1 - x
-  const u = (along + (0.5 * c) - (0.5 ** (2 ** (a * (c - 1))))) / c
+  const u = (along + (0.5 * c) - (0.5 ** (2 ** (skew * (c - 1))))) / c
   if (!(u >= 0 && u <= 1)) return 0
-  const v = u ** (2 ** a)
+  const v = u ** (2 ** skew)
   const inner = -(v * (v - 1))
   return Math.sign(b) * (inner ** (1 / Math.abs(b)))
 }
