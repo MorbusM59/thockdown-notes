@@ -30,13 +30,19 @@ describe('musicEqCurve', () => {
     expect(maxAbs(fitEqBandGains({ skew: 1, shape: 2, stretch: 2, amount: 0 }))).toBe(0)
   })
 
-  it('spans exactly -amount..+amount wherever it is on', () => {
+  it('is amount times the curve: never past +-amount, 0 dB outside the bump, fading in from shape 0', () => {
     for (const params of SAMPLES) {
       const target = eqCurveGainsDb(params)
-      const values = Array.from(target)
-      expect(Math.min(...values)).toBeCloseTo(-10, 9)
-      expect(Math.max(...values)).toBeCloseTo(10, 9)
+      for (const value of target) expect(Math.abs(value)).toBeLessThanOrEqual(10 + 1e-9)
+      const half = eqCurveGainsDb({ ...params, amount: 5 })
+      for (let k = 0; k < target.length; k += 1) expect(half[k]).toBeCloseTo(target[k] / 2, 9)
     }
+    const peak = (shape: number) => Math.max(...Array.from(eqCurveGainsDb({ skew: 0, shape, stretch: 1, amount: 10 })).map(Math.abs))
+    expect(peak(5)).toBeCloseTo(10, 2)
+    expect(peak(0.1)).toBeLessThan(1e-3)
+    for (let shape = 0.2; shape <= 5; shape += 0.1) expect(peak(shape)).toBeGreaterThan(peak(shape - 0.1))
+    const edges = eqCurveGainsDb({ skew: 0, shape: 2, stretch: 1, amount: 10 })
+    expect(Math.abs(edges[0])).toBeLessThan(1e-9)
   })
 
   it('is finite everywhere and the bank follows it', () => {

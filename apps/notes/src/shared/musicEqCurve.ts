@@ -18,11 +18,16 @@
  * and its sign; the SLIDER shows -b, so raising it turns a mid bump into a
  * bass-and-treble lift. b = 0 is EQ OFF, exactly flat.
  *
- * NORMALISED, then SCALED (`eqCurveGainsDb`): the curve as it falls on the
- * audible window is stretched to span 0..2, moved down by 1, and multiplied
- * by d (0 to 15 dB), so whatever the shape, the EQ runs from exactly -d to
- * +d dB across 20 Hz to 20 kHz. d therefore adds level as well as tone: a
- * mid bump of d = 6 lifts the mids 6 dB and lowers the extremes 6 dB.
+ * SCALED, not normalised (`eqCurveGainsDb`): the curve's own values are
+ * multiplied by d over the one constant RAW_PEAK_AT_MAX_SHAPE, the tallest
+ * the bump can be (0.25^(1/EQ_SHAPE_MAX), at the extreme of b). So d is a
+ * plain factor, in dB at that extreme, and the bump's height follows b's own
+ * curve, 0.25^(1/|b|): nothing at b = 0 and growing smoothly with |b|, so b
+ * fades the EQ in rather than switching it on at full strength. Outside the
+ * bump the curve stays at exactly 0 dB, so the EQ never changes the level of
+ * what it does not touch. (A normalisation to exactly -d..+d stood here
+ * first: it made the smallest |b| a full-strength spike, a jump at b = 0, and
+ * pushed the shoulders down to -d.)
  *
  * PLAYED (`fitEqBandGains`): the target curve is not a filter, so a bank of
  * EQ_BAND_COUNT third-octave peaking filters is fitted to it once per change
@@ -40,7 +45,7 @@ export interface EqCurveParams {
   shape: number
   /** Width, EQ_STRETCH_MIN..EQ_STRETCH_MAX. */
   stretch: number
-  /** Depth in dB, EQ_AMOUNT_MIN..EQ_AMOUNT_MAX: the curve spans -d..+d. */
+  /** A factor in dB, EQ_AMOUNT_MIN..EQ_AMOUNT_MAX: the bump's height at the extreme of shape. */
   amount: number
 }
 
@@ -100,25 +105,19 @@ export function curveShape(x: number, { skew: a, shape: b, stretch: c }: EqCurve
   return Math.sign(b) * (inner ** (1 / Math.abs(b)))
 }
 
-/** Where the curve is sampled for normalising, fitting and drawing: evenly on the log axis. */
+/** Where the curve is sampled for fitting and drawing: evenly on the log axis. */
 export const EQ_GRID_POINTS = 241
 const GRID: readonly number[] = Array.from({ length: EQ_GRID_POINTS }, (_, k) => k / (EQ_GRID_POINTS - 1))
 
-/** The target in dB at each grid point: normalised to -1..1 over the audible window, times d. All zeros when off. */
+/** The tallest the bump can be: v(1 - v) peaks at 0.25, raised to 1/|shape| at the largest |shape|. */
+const RAW_PEAK_AT_MAX_SHAPE = 0.25 ** (1 / EQ_SHAPE_MAX)
+
+/** The target in dB at each grid point: the curve times amount / RAW_PEAK_AT_MAX_SHAPE. All zeros when off. */
 export function eqCurveGainsDb(params: EqCurveParams): Float64Array {
   const out = new Float64Array(EQ_GRID_POINTS)
   if (isEqOff(params)) return out
-  let low = Infinity
-  let high = -Infinity
-  for (let k = 0; k < EQ_GRID_POINTS; k += 1) {
-    const value = curveShape(GRID[k], params)
-    out[k] = value
-    if (value < low) low = value
-    if (value > high) high = value
-  }
-  const span = high - low
-  if (!(span > 1e-12)) return out.fill(0)
-  for (let k = 0; k < EQ_GRID_POINTS; k += 1) out[k] = params.amount * ((2 * (out[k] - low) / span) - 1)
+  const factor = params.amount / RAW_PEAK_AT_MAX_SHAPE
+  for (let k = 0; k < EQ_GRID_POINTS; k += 1) out[k] = factor * curveShape(GRID[k], params)
   return out
 }
 
