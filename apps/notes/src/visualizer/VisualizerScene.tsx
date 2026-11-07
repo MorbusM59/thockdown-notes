@@ -73,14 +73,13 @@ import {
   poolFilterArea,
   levelBarsArea,
   progressBarArea,
+  ROW_INSET_BOXES,
   trackSpan,
   type VisualizerLayout,
 } from './visualizerLayout'
 
 /** The empty state's diameter (`--circle-diameter`, editor.css), which the cutout matches. */
 const EMPTY_SCENE_DIAMETER_PX = 220
-/** Empty boxes between the screen edge and the top strip's rows, on each side. */
-const TOP_ROW_INSET_BOXES = 1
 
 /** The longest step a frame may take, so a frame after a stall does not drop every bar at once. */
 const MAX_FRAME_SEC = 0.1
@@ -177,7 +176,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
   const bevel = useBoxBevelImages(boxPx, boxPx)
   const { width, height } = useBoxSize(scene)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
-  const { columns, originXPx, originYPx, stripRows, spectrumTopRow, chromaRow, cutout } = layout
+  const { columns, originXPx, originYPx, stripRows, bottomStripRow, spectrumRow, spectrumRows, chromaRow, cutout } = layout
   const cutoutRound = useSyncExternalStore(subscribeGridWaveSettings, readCutoutRound)
   const songArea = useMemo(() => songListArea(layout), [layout])
   const bucketArea = useMemo(() => bucketListArea(layout), [layout])
@@ -190,11 +189,11 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
   const glyphFont = `${fontSizePx}px ${fontFamily}`
   // The top strip's rows (credits, progress track, title) keep one empty box
   // from each screen edge: they span the columns between, from column 1.
-  const rowColumns = Math.max(0, columns - 2 * TOP_ROW_INSET_BOXES)
+  const rowColumns = Math.max(0, columns - 2 * ROW_INSET_BOXES)
   const titleText = nowPlaying.song ? fitToRow(dropWideGlyphs(songTitleText(nowPlaying.song), glyphFont), rowColumns) : ''
-  const title: RowText[] = titleText.length > 0 ? [{ column: TOP_ROW_INSET_BOXES, text: titleText }] : []
+  const title: RowText[] = titleText.length > 0 ? [{ column: ROW_INSET_BOXES, text: titleText }] : []
   const credits = (nowPlaying.song ? creditsLine(dropWideGlyphs(songArtistText(nowPlaying.song), glyphFont), dropWideGlyphs(songAlbumText(nowPlaying.song), glyphFont), rowColumns) : [])
-    .map((run) => ({ ...run, column: run.column + TOP_ROW_INSET_BOXES }))
+    .map((run) => ({ ...run, column: run.column + ROW_INSET_BOXES }))
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   // The spectrum meter of the last layout, which the next one carries on from.
@@ -213,7 +212,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
   useLayoutEffect(() => {
     const canvas = canvasRef.current
     if (!scene || columns <= 0) return
-    const tap = stripRows > 0 ? new SpectrumTap(columns) : null
+    const tap = spectrumRows > 0 ? new SpectrumTap(columns) : null
     tap?.start()
     const meter = SpectrumBallistics.continuing(meterRef.current, columns)
     meterRef.current = meter
@@ -264,7 +263,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
     let activityTrackUrl = musicPlayerService.trackUrl
     if (canvas) {
       canvas.width = Math.round(columns * boxPx * dpr)
-      canvas.height = Math.round(stripRows * boxPx * dpr)
+      canvas.height = Math.round(spectrumRows * boxPx * dpr)
     }
     if (chromaCanvas) {
       chromaCanvas.width = Math.round(columns * boxPx * dpr)
@@ -299,8 +298,8 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
       if (context && canvas) {
         let changed = false
         for (let band = 0; band < columns; band += 1) {
-          const lit = litRows(meter.levels[band], stripRows)
-          const peak = litRows(meter.peaks[band], stripRows)
+          const lit = litRows(meter.levels[band], spectrumRows)
+          const peak = litRows(meter.peaks[band], spectrumRows)
           if (lit !== drawnLit[band] || peak !== drawnPeak[band]) {
             changed = true
             drawnLit[band] = lit
@@ -309,14 +308,14 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
         }
         if (changed) {
           context.setTransform(dpr, 0, 0, dpr, 0, 0)
-          context.clearRect(0, 0, columns * boxPx, stripRows * boxPx)
+          context.clearRect(0, 0, columns * boxPx, spectrumRows * boxPx)
           context.fillStyle = accentColor
           // Row k from the bottom (0-based) of a strip n rows tall is drawn
           // at 1 - k/(n+1), so a bar fades towards the top; the peak, the box
           // that lingers, is drawn whole. Each row at that row's alpha.
-          for (let row = 0; row < stripRows; row += 1) {
-            context.globalAlpha = 0.5 - row / (2 * stripRows)
-            const y = (stripRows - 1 - row) * boxPx
+          for (let row = 0; row < spectrumRows; row += 1) {
+            context.globalAlpha = 0.5 - row / (2 * spectrumRows)
+            const y = (spectrumRows - 1 - row) * boxPx
             // Adjacent lit boxes of a row are one rectangle, so a row costs
             // one fill per run of bars rather than one per box.
             let runStart = -1
@@ -332,7 +331,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           context.globalAlpha = 1
           for (let band = 0; band < columns; band += 1) {
             const top = Math.max(drawnLit[band], drawnPeak[band])
-            if (top > 0) context.fillRect(band * boxPx, (stripRows - top) * boxPx, boxPx, boxPx)
+            if (top > 0) context.fillRect(band * boxPx, (spectrumRows - top) * boxPx, boxPx, boxPx)
           }
         }
       }
@@ -436,7 +435,7 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
       transientBand?.unsubscribe()
       reducedMotion.removeEventListener('change', wake)
     }
-  }, [scene, columns, progressColumns, stripRows, boxPx, chromaRow])
+  }, [scene, columns, progressColumns, spectrumRows, boxPx, chromaRow])
 
   const handleProgressPress = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return
@@ -500,9 +499,9 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
       {width > 0 && (
         <>
           <div className="visualizer-strip is-top" style={{ height: rowTop(stripRows) }} />
-          <div className="visualizer-strip is-hole-fill" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
-          <div className="visualizer-strip is-middle" style={{ top: rowTop(stripRows), height: rowTop(spectrumTopRow) - rowTop(stripRows) }} />
-          <div className="visualizer-strip is-bottom" style={{ top: rowTop(spectrumTopRow) }} />
+          <div className="visualizer-strip is-hole-fill" style={{ top: rowTop(stripRows), height: rowTop(bottomStripRow) - rowTop(stripRows) }} />
+          <div className="visualizer-strip is-middle" style={{ top: rowTop(stripRows), height: rowTop(bottomStripRow) - rowTop(stripRows) }} />
+          <div className="visualizer-strip is-bottom" style={{ top: rowTop(bottomStripRow) }} />
 
           {progressArea && progressColumns >= 2 && (
             <>
@@ -520,11 +519,11 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           {layout.titleRow !== null && <LetterBoxes runs={title} row={layout.titleRow} layout={layout} />}
           {layout.creditsRow !== null && <LetterBoxes runs={credits} row={layout.creditsRow} layout={layout} />}
 
-          {stripRows > 0 && (
+          {spectrumRows > 0 && (
             <canvas
               ref={canvasRef}
               className="visualizer-spectrum"
-              style={{ left: originXPx, top: rowTop(spectrumTopRow), width: columns * box, height: stripRows * box }}
+              style={{ left: originXPx, top: rowTop(spectrumRow), width: columns * box, height: spectrumRows * box }}
             />
           )}
           {chromaRow !== null && (

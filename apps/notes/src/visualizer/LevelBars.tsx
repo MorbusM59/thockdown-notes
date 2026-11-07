@@ -1,6 +1,6 @@
 /**
- * The visualizer's sound level bars (`levelBarsArea`): volume under the
- * cutout, reverb and room above it. Each is the progress track's language --
+ * The visualizer's sound level bars (`levelBarsArea`): volume across the
+ * bottom strip's first row, reverb and room under the cutout. Each is the progress track's language --
  * a row of accent boxes with one empty box at the level -- whose two end
  * boxes are always lit, so the level runs over the boxes between them
  * (`levelGapColumn`). A press sets the level at the box pressed
@@ -15,22 +15,18 @@ import { levelAtColumn, levelGapColumn, type LevelBar, type LevelBarsArea, type 
 const BARS: ReadonlyArray<keyof SoundLevels> = ['volume', 'reverb', 'room']
 
 /**
- * Each bar's name, one letter per box like the song list's: "volume" ("vol"
- * on an odd-width bar, so it can sit exactly in the middle) centred
- * over the volume bar on the row of the reverb and room bars (in the gap
- * between them), "reverb" and "size" two rows above their bars, flush with
- * the bar's outer end. A name that would leave the middle section is not drawn.
+ * The middle bars' names, one letter per box like the song list's:
+ * "reverb" and "size" two rows above their bars, flush with the bar's outer
+ * end. The volume bar, alone on the bottom strip's first row, needs no name.
+ * A name that would leave the middle section is not drawn.
  */
 function labelsOf(area: LevelBarsArea, firstRow: number): Array<{ text: string; column: number; row: number }> {
-  const { volume, reverb, room } = area
-  // Exactly centred: an even bar (the cutout's parity) takes "volume", an odd one "vol".
-  const name = volume.columns % 2 === 0 ? 'volume' : 'vol'
-  const labels = [{ text: name, column: volume.column + (volume.columns - name.length) / 2, row: reverb.row }]
-  if (reverb.row - 2 >= firstRow) {
-    labels.push({ text: 'reverb', column: reverb.column, row: reverb.row - 2 })
-    labels.push({ text: 'size', column: room.column + room.columns - 4, row: room.row - 2 })
-  }
-  return labels
+  const { reverb, room } = area
+  if (reverb.row - 2 < firstRow) return []
+  return [
+    { text: 'reverb', column: reverb.column, row: reverb.row - 2 },
+    { text: 'size', column: room.column + room.columns - 4, row: room.row - 2 },
+  ]
 }
 
 export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: LevelBarsArea }) {
