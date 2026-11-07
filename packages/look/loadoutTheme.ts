@@ -36,7 +36,7 @@ import {
   scaleAlphaInCssValue,
 } from './colorMath'
 import { sceneOf } from './scene'
-import { FALLBACK_FLOW_TRAIL, flowGlowOf } from './flowColor'
+import { FALLBACK_TRAIL_COLOR } from './trailColor'
 import {
   GLAZE_GLOOM_OPACITY_MAX,
   GLAZE_LINEAR_OPACITY_MAX,
@@ -423,7 +423,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--color-gutter-bg': colors.gutterBackground,
     '--color-immersive-scroll-thumb': colors.immersiveScrollThumb,
     // A loadout saved before the trail existed has no colour for it: the default faint amber.
-    '--color-flow-trail': colors.flowTrail ?? FALLBACK_FLOW_TRAIL,
+    '--color-typing-trail': colors.flowTrail ?? FALLBACK_TRAIL_COLOR,
     '--color-review-line': colors.reviewLine,
     '--color-warning-line': colors.warningLine,
     // Opaque, with the chosen alpha applied as opacity on the whole number:
@@ -447,13 +447,10 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
   }
 
   // The scene's effects as DATA (scene.ts), so the filter string, the
-  // image correction and the flow colour's on-screen value are read off one
+  // image correction and the trail colour's fit are read off one
   // description and cannot disagree about what the scene does.
   const scene = sceneOf(loadout)
   const { filterEffects, invertViaBlendMode, colorize } = scene
-  // The flow overlays sit outside the scene, so they take the trail's
-  // on-screen colour rather than its stored one (flowColor.ts).
-  rootVariables['--color-flow-glow'] = flowGlowOf(colors.flowTrail ?? FALLBACK_FLOW_TRAIL, scene)
   const wrapperStyle: CSSProperties = { backgroundColor: 'var(--palette-parchment-lightest)' }
   if (filterEffects.length > 0) wrapperStyle.filter = filterEffects.map(sceneEffectCss).join(' ')
   // What an image is actually seen through: the filter, plus the blend

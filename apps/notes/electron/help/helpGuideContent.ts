@@ -246,19 +246,16 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - One switch for the whole app; it underlines in the editor you are typing in.
 
-### [Typing Flow](#typing-flow)
+### [Typing Trail](#typing-trail)
 
 > **Where?**
-> Switched on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}), tuned in Settings panel → Flow.
+> Switched on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}), tuned in Settings panel → Typing Trail.
 
-*Steady, fast typing builds a flow that the colours, the reverb and the caret answer, and a playing soundscape's weather picks up with it, and playing music gets a punchier EQ.*
+*A faint trail along the line you are typing in, so your eye always finds it.*
 
-- Every character you type adds flow, and flow drains steadily all the time, faster once you stop. An unhurried, even pace is enough to fill the meter and hold it.
-- Corrections and arrow keys never cost flow; only stopping does.
-- While you type, the word count shows your current speed instead, in letters per second: a number for your own reference, not for comparing with others. It switches back when you pause.
-- In flow, each character you type lights the grid lines above and below it, paler at low flow and in its full colour at full flow, and the caret's cell is framed in the same lines as its source; it fades over the time and shape set in the flow options, and its colour and its alpha are under Colors, in Editor Boxes.
-- **look**, **reverb** and **trail** set how strongly each answers.
-- While you type, the caret stops blinking and holds steady; when you stop, it eases back into its blink.
+- Each letter you type lights the grid lines above and below it, and the trail fades behind you. It builds up gently over the first letters you type rather than appearing at full strength.
+- **fade** and **shape** set how a mark fades out; **gain** is how many letters the trail takes to reach its full colour. The colour is under Colors, in Editor Boxes.
+- Each letter you type holds the caret steady, and it eases back into its blink as the trail fades.
 
 ### [Visualizer](#visualizer)
 
@@ -804,7 +801,7 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel, the row below the theme presets.
 
-*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), the [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}), [Glaze]($#glaze) and [Typing Flow](${guideLink('NOTES-EDITING', 'typing-flow')}).*
+*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), the [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}), [Glaze]($#glaze) and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}).*
 
 - A feature that is off is gone, not just hidden: its settings leave the panel and it costs nothing while it is off. Switch it back on and everything is as you left it.
 - These switches are the same for every layout. A layout still decides how a feature looks and sounds, and can have silent keys or no glaze of its own.

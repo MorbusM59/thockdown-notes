@@ -135,59 +135,39 @@
   animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* The typing flow trail: one segment per character typed in flow, tracing
-   the grid lines above and below its cell as 1px edges in the reader's
-   flowTrail colour, with nothing inside the cell, so it never lowers the
-   contrast of the words just typed. The editor sets place and size; the
-   alpha on top of the colour's own is animated from script
-   (flow/flowTrail.ts). */
-.flow-trail-box {
+/* The typing trail: one segment per character typed, tracing the grid lines
+   above and below its cell as 1px edges in the reader's trail colour, with
+   nothing inside the cell, so it never lowers the contrast of the words just
+   typed. The editor sets place and size; the segment's level is its opacity,
+   animated from script (typingTrail/typingTrail.ts). */
+.typing-trail-box {
   position: absolute;
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border-top: 1px solid var(--color-flow-trail-now);
-  border-bottom: 1px solid var(--color-flow-trail-now);
+  border-top: 1px solid var(--color-typing-trail);
+  border-bottom: 1px solid var(--color-typing-trail);
 }
 
 /* The caret left behind at a manual line break (CM6Editor's keydown): its
-   cell framed like the trail's source, the caret's colour copied inside. */
-.flow-trail-ghost {
+   cell framed in the trail colour, the caret's colour copied inside. */
+.typing-trail-ghost {
   position: absolute;
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border: 1px solid var(--color-flow-trail-now);
+  border: 1px solid var(--color-typing-trail);
 }
-.flow-trail-ghost-caret {
+.typing-trail-ghost-caret {
   position: absolute;
   /* Positioned against the cell's outer edge, not inside its border. */
   margin: -1px 0 0 -1px;
 }
 
-/* The trail's source: the caret's grid cell, all four lines, at the live
-   flow (--flow-trail-source for alpha, --flow-trail-source-saturation for
-   colour; flow/useFlowFeedback.ts), placed with the caret by CM6Editor. */
-.flow-trail-source {
-  box-sizing: border-box;
-  border: 1px solid var(--color-flow-trail-now);
-  --flow-trail-saturation: var(--flow-trail-source-saturation, 0);
-  opacity: var(--flow-trail-source, 0);
-}
-
-/* The trail's colour now: the flow colour at a share of its own HSL
-   saturation, --flow-trail-saturation, the flow level the box was typed at
-   (set on each box by the editor; flow/flowTrail.ts). */
-.flow-trail-box,
-.flow-trail-source,
-.flow-trail-ghost {
-  --color-flow-trail-now: hsl(from var(--color-flow-trail) h calc(s * var(--flow-trail-saturation, 1)) l / alpha);
-}
-
 /* Low-power toggle: the blink otherwise repaints the caret indefinitely while
    idle, not just while typing. */
 /* The beat pulse on the caret (Options > Caret's follow-the-music switch;
-   flow/useBeatFeedback.ts): while the caret follows a beat its blink is held
+   beat/useBeatFeedback.ts): while the caret follows a beat its blink is held
    at its peak (--beat-caret-hold, read by the blink keyframes) and the
    music's response dips it (--beat-caret, set on the caret alone). The hold
    is a registered number so it can TRANSITION: it eases in over one blink
@@ -388,15 +368,3 @@ html[data-beat-caret] .thockdown-block-caret {
   background-repeat: repeat-y;
 }
 
-/* The typing flow's look (flow/FlowOverlays.tsx): blend layers above the
-   filtered scene whose opacity alone follows the flow meter. */
-.flow-overlay {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  will-change: opacity;
-}
-.flow-overlay-saturation { background: hsl(0 100% 50%); mix-blend-mode: saturation; }
-.flow-overlay-warmth { background: rgb(var(--color-flow-glow)); mix-blend-mode: soft-light; }
-.flow-overlay-glow { background: #ffffff; mix-blend-mode: screen; }

@@ -10,9 +10,8 @@ import { attachUndoHistory, createUndoHistoryScope, detachUndoHistory, readOnlyE
 import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
-import { flowMeter } from '../flow/flowMeter';
-import { flowStyleTarget, readFlowStyle } from '../flow/flowStyle';
-import { TRAIL_ALPHA_AT_FULL_FLOW, fadeTrailBox, lineRampShare, setTrailIdle, trailGroup } from '../flow/flowTrail';
+import { typingTrail } from '../typingTrail/typingTrail';
+import { liveStyleTarget } from '../shared/liveStyle';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';
@@ -268,7 +267,7 @@ export interface CM6EditorProps {
   /**
    * Receives the box-outline grid layer while it is mounted, so something
    * drawn outside the edit pane can line up with it (the beat pulse's
-   * outline, `flow/useBeatGridMirror.ts`) without reaching into the pane.
+   * outline, `beat/useBeatGridMirror.ts`) without reaching into the pane.
    */
   gridOutlineRef?: (el: HTMLDivElement | null) => void;
   // Whether this editor's own split-view section is the currently active
@@ -502,7 +501,7 @@ function transformStepSpec(oldText: string, next: EditorTransformResult, isolate
   // A transform reports the range it rebuilt (a Tab rewrites its whole line),
   // which is not what changed: the text both sides share at either end is
   // trimmed off, so the edit CM6 applies is the minimal one and everything
-  // mapped through it -- marks, the flow trail's anchors -- moves with the
+  // mapped through it -- marks, the typing trail's anchors -- moves with the
   // text it belongs to instead of being treated as deleted and re-inserted.
   let start = Math.max(0, Math.min(oldText.length, from));
   let end = Math.max(start, Math.min(oldText.length, to));
@@ -1141,14 +1140,6 @@ export function CM6Editor({
   // Immersive mode's painted scroll column -- see paintScrollThumb.
   const gridScrollPaintRef = useRef<HTMLDivElement | null>(null);
   const [caretStyle, setCaretStyle] = useState<React.CSSProperties | null>(null);
-  // The flow trail's SOURCE: the caret's grid cell traced on all four grid
-  // lines in the trail's colour, at the live flow (--flow-trail-source, set by
-  // flow/useFlowFeedback.ts), drawn above the caret. Shown and placed with the
-  // caret, so it is state beside caretStyle and also written straight to the
-  // element like the caret's own transform.
-  const [flowSourceStyle, setFlowSourceStyle] = useState<React.CSSProperties | null>(null);
-  const flowSourceElRef = useRef<HTMLDivElement | null>(null);
-  const [flowSourceElFlowRef] = useState(() => flowStyleTarget(flowSourceElRef, ['--flow-trail-source', '--flow-trail-source-saturation']));
   const caretAnimationFrameRef = useRef<number | null>(null);
   // scrollerRect/layerRect don't change on a plain text keystroke -- only
   // the selection Range rect does. Cached across updateCaret calls and only
@@ -1160,44 +1151,33 @@ export function CM6Editor({
   // The caret's own DOM node, so its new position can be written in the SAME
   // frame that computed it. See applyCaretStyle below for why that matters.
   const caretElRef = useRef<HTMLDivElement | null>(null);
-  // The caret reads --flow-caret-effect, set on it rather than on <html> (flow/flowStyle.ts).
-  const [caretElFlowRef] = useState(() => flowStyleTarget(caretElRef, ['--flow-caret-effect', '--beat-caret']));
+  // The caret reads --caret-typing-hold and --beat-caret, set on it rather than on <html> (shared/liveStyle.ts).
+  const [caretElLiveRef] = useState(() => liveStyleTarget(caretElRef, ['--caret-typing-hold', '--beat-caret']));
   /**
-   * The typing flow trail (flowMeter.trailBox): a clip box over the scroller
+   * The typing trail (typingTrail/typingTrail.ts): a clip box over the scroller
    * and, inside it, a layer moved by -scrollTop, so a box placed in SCROLL
    * coordinates stays on its cell however the view scrolls. Both are written
    * imperatively by updateCaret, and boxes are plain DOM appended per
    * keystroke and removed by their own animationend: no React state per
    * character.
    */
-  const flowTrailClipRef = useRef<HTMLDivElement | null>(null);
-  const flowTrailLayerRef = useRef<HTMLDivElement | null>(null);
-  // The boxes' own layer: its opacity is the trail's shared alpha factor
-  // (flow/flowTrail.ts's TRAIL_ALPHA_AT_FULL_FLOW), and its children are the
-  // idle-decay groups (trailGroup).
-  const flowTrailBoxesRef = useRef<HTMLDivElement | null>(null);
-  // Which visual row the last box was drawn on and how many boxes it has had,
-  // for the trail's new-row ramp (flow/flowTrail.ts's lineRampShare).
-  const flowTrailRowRef = useRef<{ top: number; count: number }>({ top: Number.NaN, count: 0 });
+  const typingTrailClipRef = useRef<HTMLDivElement | null>(null);
+  const typingTrailLayerRef = useRef<HTMLDivElement | null>(null);
+  // The boxes' own layer.
+  const typingTrailBoxesRef = useRef<HTMLDivElement | null>(null);
   // The most recent box: a manual line break (Enter) right after it leaves a
   // fading copy of the caret behind in the cell where the line was broken.
-  const flowTrailLastRef = useRef<HTMLElement | null>(null);
+  const typingTrailLastRef = useRef<HTMLElement | null>(null);
   // Every box still on screen, anchored to the DOCUMENT position of the
   // character it was typed for, so text moving under the trail (a Tab or a
   // character inserted before it, a line added above) carries the box with
   // it: each edit maps the positions through its ChangeSet and re-places the
-  // boxes whose position moved (relayoutFlowTrail). `fresh` marks a box
+  // boxes whose position moved (relayoutTypingTrail). `fresh` marks a box
   // whose own character has not been inserted yet: that first edit is mapped
   // with assoc -1 so the box stays at the character's start, every later one
   // with assoc 1 so text inserted exactly there pushes it along. A box whose
   // character is deleted stops being tracked and stays where it was.
-  const flowTrailAnchorsRef = useRef<Array<{ el: HTMLElement; pos: number; fresh: boolean }>>([]);
-  useEffect(() => {
-    const unsubscribeIdle = flowMeter.subscribeIdle((factor) => {
-      if (flowTrailBoxesRef.current) setTrailIdle(flowTrailBoxesRef.current, factor);
-    });
-    return unsubscribeIdle;
-  }, []);
+  const typingTrailAnchorsRef = useRef<Array<{ el: HTMLElement; pos: number; fresh: boolean }>>([]);
   const [highlightRects, setHighlightRects] = useState<HighlightRect[]>([]);
   // A dragged table cell's drop target: the range of the note it covers,
   // while a drag is over one, drawn in the selection's own highlight
@@ -2205,14 +2185,7 @@ export function CM6Editor({
    * Only the move case takes this path. Hiding the caret (`null`) unmounts
    * the element, which nothing here can do sooner than React can.
    */
-  const applyCaretStyle = useCallback((style: { transform: string; width: number; height: number }, source: { transform: string; width: number; height: number }) => {
-    const sourceEl = flowSourceElRef.current;
-    if (sourceEl) {
-      sourceEl.style.transform = source.transform;
-      sourceEl.style.width = `${source.width}px`;
-      sourceEl.style.height = `${source.height}px`;
-    }
-    setFlowSourceStyle(source);
+  const applyCaretStyle = useCallback((style: { transform: string; width: number; height: number }) => {
     const caretEl = caretElRef.current;
     if (caretEl) {
       caretEl.style.transform = style.transform;
@@ -2227,7 +2200,7 @@ export function CM6Editor({
   /**
    * The caret's cell in SCROLL coordinates, read from the live DOM selection:
    * the same arithmetic updateCaret uses, without its visibility checks, so a
-   * keydown can place a flow trail box on the cell it is about to type into.
+   * keydown can place a typing trail box on the cell it is about to type into.
    */
   const readCaretCellInScroll = useCallback((view: EditorView) => {
     const domSelection = window.getSelection();
@@ -2253,18 +2226,18 @@ export function CM6Editor({
     };
   }, []);
 
-  /** The flow trail's anchors mapped through an edit, and the boxes whose character moved re-placed on its cell (see flowTrailAnchorsRef). */
-  const relayoutFlowTrail = useCallback((view: EditorView, changes: ChangeSet) => {
+  /** The typing trail's anchors mapped through an edit, and the boxes whose character moved re-placed on its cell (see typingTrailAnchorsRef). */
+  const relayoutTypingTrail = useCallback((view: EditorView, changes: ChangeSet) => {
     const moved: Array<{ el: HTMLElement; pos: number }> = [];
-    const kept: typeof flowTrailAnchorsRef.current = [];
-    for (const anchor of flowTrailAnchorsRef.current) {
+    const kept: typeof typingTrailAnchorsRef.current = [];
+    for (const anchor of typingTrailAnchorsRef.current) {
       if (!anchor.el.isConnected) continue;
       const pos = changes.mapPos(anchor.pos, anchor.fresh ? -1 : 1, MapMode.TrackDel);
       if (pos === null) continue;
       kept.push({ ...anchor, pos, fresh: false });
       if (pos !== anchor.pos) moved.push({ el: anchor.el, pos });
     }
-    flowTrailAnchorsRef.current = kept;
+    typingTrailAnchorsRef.current = kept;
     if (moved.length === 0) return;
     // Read the new cells in CM6's measure phase, after the edit is laid out,
     // with the same quantization the caret and the keydown use.
@@ -2329,8 +2302,8 @@ export function CM6Editor({
     const caretLayerRect = caretLayerRectRef.current;
 
     // The trail follows the scroll even while the caret is off-screen.
-    const trailClip = flowTrailClipRef.current;
-    const trailLayer = flowTrailLayerRef.current;
+    const trailClip = typingTrailClipRef.current;
+    const trailLayer = typingTrailLayerRef.current;
     if (trailClip && trailLayer) {
       trailClip.style.transform = `translate(${scrollerRect.left - caretLayerRect.left}px, ${scrollerRect.top - caretLayerRect.top}px)`;
       trailClip.style.width = `${scroller.clientWidth}px`;
@@ -2381,12 +2354,6 @@ export function CM6Editor({
       transform: `translate(${scrollerLeftInLayer + absoluteLeft + caretOriginInsetPx}px, ${scrollerTopInLayer + topInViewport + caretOriginInsetPx}px)`,
       width: caretWidthPx,
       height: caretHeightPx,
-    }, {
-      // The grid cell itself: its four 1px grid lines, as a trail box draws
-      // its top and bottom ones (one pixel over, to cover the far lines).
-      transform: `translate(${scrollerLeftInLayer + absoluteLeft}px, ${scrollerTopInLayer + topInViewport}px)`,
-      width: runtimeCellWidthPx + 1,
-      height: lineHeightPxNow + 1,
     });
   }, [applyCaretStyle]);
 
@@ -4108,58 +4075,51 @@ export function CM6Editor({
       EditorView.domEventObservers({
         keydown: (event, view) => {
           lastPhysicalKeyCodeRef.current = event.code;
-          // The typing flow meter (flow/flowMeter.ts) hears every key typed
-          // into an editable note; a read-only one (the User Guide) types
-          // nothing, and an IME composition is not keystrokes.
+          // The typing trail (typingTrail/typingTrail.ts) hears every key
+          // typed into an editable note; a read-only one (the User Guide)
+          // types nothing, and an IME composition is not keystrokes.
           if (!view.state.readOnly && !event.isComposing) {
-            const box = flowMeter.trailBox(event);
+            const level = typingTrail.levelFor(event);
             // Read the caret's cell NOW rather than from the last caret
             // update: that update runs on the next frame, so two keys typed
             // within one frame would otherwise both land on the same cell
             // and every other character would leave no box of its own.
-            const cell = box ? readCaretCellInScroll(view) : null;
-            const trailLayer = flowTrailBoxesRef.current;
-            if (box && cell && trailLayer) {
+            const cell = level !== null ? readCaretCellInScroll(view) : null;
+            const trailLayer = typingTrailBoxesRef.current;
+            if (level !== null && cell && trailLayer) {
               // The trail traces the 1px grid lines above and below each
               // cell the character lands in (the grid cell, not the caret's
               // inset box), segments abutting so the lines run continuously;
               // nothing is drawn inside the cell, so it never sits behind a
-              // glyph. Its saturation is the flow it was typed at
-              // (flow/flowTrail.ts), kept as it fades.
+              // glyph.
               const el = document.createElement('div');
-              el.className = 'flow-trail-box';
+              el.className = 'typing-trail-box';
               el.style.transform = `translate(${cell.grid.left}px, ${cell.grid.top}px)`;
               el.style.width = `${cell.grid.width}px`;
               el.style.height = `${cell.grid.height + 1}px`;
-              el.style.setProperty('--flow-trail-saturation', box.saturation.toFixed(3));
-              trailGroup(trailLayer).appendChild(el);
-              flowTrailLastRef.current = el;
-              flowTrailAnchorsRef.current.push({ el, pos: view.state.selection.main.head, fresh: true });
-              const row = flowTrailRowRef.current;
-              if (row.top === cell.grid.top) row.count += 1;
-              else { row.top = cell.grid.top; row.count = 1; }
-              fadeTrailBox(el, box.level * lineRampShare(row.count, box.lineRamp), box.fadeMaxTime, box.fadeShape);
+              trailLayer.appendChild(el);
+              typingTrailLastRef.current = el;
+              typingTrailAnchorsRef.current.push({ el, pos: view.state.selection.main.head, fresh: true });
+              typingTrail.fadeBox(el, level);
             }
-            if (event.key === 'Enter' && flowTrailLastRef.current) {
-              flowTrailLastRef.current = null;
+            if (event.key === 'Enter' && typingTrailLastRef.current) {
+              typingTrailLastRef.current = null;
               // The caret left behind: the caret's grid cell framed in the
-              // trail's colour at the flow of the moment (like the trail's
-              // source), with a copy of the caret inside it in its colour as
+              // trail's colour at the level the last box has faded to, with a copy of the caret inside it in its colour as
               // it stands now, on the cell where the line was broken, fading
               // on the trail's curve and anchored like the boxes.
               const caretEl = caretElRef.current;
               const caretCell = caretEl ? readCaretCellInScroll(view) : null;
-              const ghostLayer = flowTrailBoxesRef.current;
+              const ghostLayer = typingTrailBoxesRef.current;
               if (caretEl && caretCell && ghostLayer) {
                 const caretLook = getComputedStyle(caretEl);
                 const ghost = document.createElement('div');
-                ghost.className = 'flow-trail-ghost';
+                ghost.className = 'typing-trail-ghost';
                 ghost.style.transform = `translate(${caretCell.grid.left}px, ${caretCell.grid.top}px)`;
                 ghost.style.width = `${caretCell.grid.width + 1}px`;
                 ghost.style.height = `${caretCell.grid.height + 1}px`;
-                ghost.style.setProperty('--flow-trail-saturation', readFlowStyle('--flow-trail-source-saturation') ?? '0');
                 const fill = document.createElement('div');
-                fill.className = 'flow-trail-ghost-caret';
+                fill.className = 'typing-trail-ghost-caret';
                 fill.style.left = `${caretCell.left - caretCell.grid.left}px`;
                 fill.style.top = `${caretCell.top - caretCell.grid.top}px`;
                 fill.style.width = `${caretCell.width}px`;
@@ -4167,15 +4127,11 @@ export function CM6Editor({
                 fill.style.backgroundColor = caretLook.backgroundColor;
                 fill.style.borderRadius = caretLook.borderRadius;
                 ghost.appendChild(fill);
-                trailGroup(ghostLayer).appendChild(ghost);
-                const fade = flowMeter.trailFade();
-                // Starts at full strength, under the layer's full-flow alpha
-                // like every box, and with the idle decay like them.
-                fadeTrailBox(ghost, 1, fade.fadeMaxTime, fade.fadeShape);
-                flowTrailAnchorsRef.current.push({ el: ghost, pos: view.state.selection.main.head, fresh: true });
+                ghostLayer.appendChild(ghost);
+                typingTrail.fadeBox(ghost, typingTrail.currentLevel());
+                typingTrailAnchorsRef.current.push({ el: ghost, pos: view.state.selection.main.head, fresh: true });
               }
             }
-            flowMeter.reportKey(event);
           }
           if (debugInputLagEnabled) {
             debugLastKeydownAtRef.current = performance.now();
@@ -4532,7 +4488,7 @@ export function CM6Editor({
             });
           }
         }
-        if (update.docChanged && flowTrailAnchorsRef.current.length > 0) relayoutFlowTrail(update.view, update.changes);
+        if (update.docChanged && typingTrailAnchorsRef.current.length > 0) relayoutTypingTrail(update.view, update.changes);
         if (update.docChanged) {
           // Exact position remap via CM6's own ChangeSet.mapPos -- the same
           // mechanism CM6 uses internally to reposition marks/decorations/
@@ -6712,16 +6668,16 @@ export function CM6Editor({
       {/* Always mounted, so a fading trail outlives the caret hiding. Below
           the caret (8) and the text (10). */}
       <div
-        ref={flowTrailClipRef}
+        ref={typingTrailClipRef}
         style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 7 }}
       >
-        <div ref={flowTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }}>
-          <div ref={flowTrailBoxesRef} style={{ position: 'absolute', top: 0, left: 0, opacity: TRAIL_ALPHA_AT_FULL_FLOW }} />
+        <div ref={typingTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }}>
+          <div ref={typingTrailBoxesRef} style={{ position: 'absolute', top: 0, left: 0 }} />
         </div>
       </div>
       {hasViewportLines && fontReady && !caretHidden && caretStyle && (
         <div
-          ref={caretElFlowRef}
+          ref={caretElLiveRef}
           className="thockdown-block-caret"
           style={{
             position: 'absolute',
@@ -6743,14 +6699,6 @@ export function CM6Editor({
             // background-color; see index.css's .thockdown-block-caret.
             ...caretStyle,
           }}
-        />
-      )}
-      {hasViewportLines && fontReady && !caretHidden && caretStyle && flowSourceStyle && (
-        <div
-          ref={flowSourceElFlowRef}
-          className="flow-trail-source"
-          // Above the caret (8), below the text (10).
-          style={{ position: 'absolute', pointerEvents: 'none', zIndex: 9, top: 0, left: 0, ...flowSourceStyle }}
         />
       )}
     </div>

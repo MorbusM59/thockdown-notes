@@ -136,12 +136,11 @@ import {
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { VisualizerGlaze } from './visualizer/VisualizerGlaze'
-import { FlowOverlays } from './flow/FlowOverlays'
-import { useFlowFeedback } from './flow/useFlowFeedback'
-import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings, type FlowSettings } from './shared/flowSettings'
+import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings, type TypingTrailSettings } from './shared/typingTrailSettings'
+import { typingTrail } from './typingTrail/typingTrail'
 import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type SpeedReadingSettings } from './speedReading/speedReadingSettings'
 import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
-import { useBeatFeedback } from './flow/useBeatFeedback'
+import { useBeatFeedback } from './beat/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { DEFAULT_CARET_FOLLOWS_MUSIC, DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
@@ -1458,8 +1457,10 @@ function App() {
   // feature down when it is off.
   const [features, setFeatures] = useState<FeatureToggles>(DEFAULT_FEATURE_TOGGLES)
   const spellCheckEnabled = features.spellCheck
-  const [flowSettings, setFlowSettings] = useState<FlowSettings>(DEFAULT_FLOW_SETTINGS)
-  useFlowFeedback(features.flow, flowSettings)
+  const [typingTrailSettings, setTypingTrailSettings] = useState<TypingTrailSettings>(DEFAULT_TYPING_TRAIL_SETTINGS)
+  useEffect(() => {
+    typingTrail.configure({ enabled: features.typingTrail, ...typingTrailSettings })
+  }, [features.typingTrail, typingTrailSettings])
   // Every change is persisted at once, through the one sanctioned path (see
   // persistMenuStateNowRef). An effect rather than a call in the setter, so
   // the snapshot is built from the render that already holds the new value.
@@ -1474,7 +1475,7 @@ function App() {
   useEffect(() => onSpeedReadingSettingsCommit(setSpeedReadingSettings), [])
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [flowSettings, beatSettings, speedReadingSettings, features])
+  }, [typingTrailSettings, beatSettings, speedReadingSettings, features])
   const customCursorEnabled = features.customCursor
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
@@ -3430,7 +3431,7 @@ function App() {
         },
       },
       features,
-      flow: flowSettings,
+      typingTrail: typingTrailSettings,
       beat: beatSettings,
       speedReading: speedReadingSettings,
       chapterBarMode: chapterBarModeRef.current,
@@ -3465,7 +3466,7 @@ function App() {
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
     features,
-    flowSettings,
+    typingTrailSettings,
     beatSettings,
     speedReadingSettings,
     allowRemoteImages,
@@ -5432,7 +5433,7 @@ ${markdownHtml}
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
             setFeatures(sanitizeFeatureToggles(appState.menu))
-            setFlowSettings(sanitizeFlowSettings(appState.menu.flow))
+            setTypingTrailSettings(sanitizeTypingTrailSettings(appState.menu.typingTrail))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
@@ -8968,8 +8969,8 @@ ${markdownHtml}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
                         features={features}
                         setFeatures={setFeatures}
-                        flowSettings={flowSettings}
-                        setFlowSettings={setFlowSettings}
+                        typingTrailSettings={typingTrailSettings}
+                        setTypingTrailSettings={setTypingTrailSettings}
                         speedReadingSettings={speedReadingSettings}
                         setSpeedReadingSettings={setSpeedReadingSettings}
                         beatSettings={beatSettings}
@@ -9533,8 +9534,6 @@ ${markdownHtml}
         <ThemeBlendOverlays theme={theme} />
         <ImageCorrectionFilter theme={theme} />
       </div>
-      {/* After the filter wrapper, not inside it: see FlowOverlays. */}
-      <FlowOverlays strength={features.flow ? flowSettings.look : 0} />
       {/* Mounted once, app-wide -- not scoped to the editor. See that
           component's own doc comment for why it's a sibling of
           .app-saturate-wrapper (not nested inside it) and how it tracks the

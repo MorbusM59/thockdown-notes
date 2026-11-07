@@ -350,7 +350,7 @@ describe('StateService app-state field round-trip', () => {
 
   it('persists the feature toggles across a save -> fresh-instance load', async () => {
     const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
-    const features = { spellCheck: true, customCursor: false, keySounds: false, visualizer: true, glaze: false, flow: true, caretBlink: false }
+    const features = { spellCheck: true, customCursor: false, keySounds: false, visualizer: true, glaze: false, typingTrail: true, caretBlink: false }
     await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, features } })
     expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual(features)
   })
@@ -362,8 +362,22 @@ describe('StateService app-state field round-trip', () => {
     }
     await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: legacy as unknown as PersistedMenuState })
     expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual({
-      spellCheck: true, customCursor: false, keySounds: true, visualizer: true, glaze: true, flow: true, caretBlink: false,
+      spellCheck: true, customCursor: false, keySounds: true, visualizer: true, glaze: true, typingTrail: true, caretBlink: false,
     })
+  })
+
+  it('reads a save from before the typing trail: the feature from `flow`, the fade kept, the rest of the flow record dropped', async () => {
+    const legacy = {
+      sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '',
+      features: { spellCheck: false, customCursor: true, keySounds: true, visualizer: false, glaze: true, flow: true, caretBlink: true },
+      flow: { fadeMaxTime: 5, fadeShape: -2, look: 0.3, reverb: 0.7, trail: 0.4, amp: 1, gainPercent: 5 },
+    }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: legacy as unknown as PersistedMenuState })
+    const menu = (await new StateService(dataRoot).loadAppState()).menu as unknown as Record<string, unknown>
+    expect((menu.features as Record<string, unknown>).typingTrail).toBe(true)
+    expect('flow' in (menu.features as object)).toBe(false)
+    expect(menu.typingTrail).toEqual({ fadeMaxTime: 5, fadeShape: -2, gain: 12 })
+    expect('flow' in menu).toBe(false)
   })
 
   // The music player's sound-options row replaced the sidebar's volume/reverb

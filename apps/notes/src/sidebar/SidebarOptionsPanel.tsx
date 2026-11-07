@@ -26,10 +26,10 @@ const BOX_BEVEL_SLIDERS: ReadonlyArray<{ field: keyof BoxBevelSettings; min: num
 ]
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
-  DEFAULT_FLOW_SETTINGS,
-  FLOW_FADE_MAX_TIME_MAX, FLOW_FADE_MAX_TIME_MIN, FLOW_FADE_SHAPE_MAX, FLOW_FADE_SHAPE_MIN,
-  type FlowSettings,
-} from '../shared/flowSettings'
+  DEFAULT_TYPING_TRAIL_SETTINGS,
+  TRAIL_FADE_MAX_TIME_MAX, TRAIL_FADE_MAX_TIME_MIN, TRAIL_FADE_SHAPE_MAX, TRAIL_FADE_SHAPE_MIN, TRAIL_GAIN_MAX, TRAIL_GAIN_MIN,
+  type TypingTrailSettings,
+} from '../shared/typingTrailSettings'
 import {
   BEAT_DELAY_MAX_MS,
   BEAT_DELAY_MIN_MS,
@@ -353,7 +353,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   grid: 'Box Grid',
   gutterBackground: 'Gutter Background',
   immersiveScrollThumb: 'Immersive Scroll Thumb',
-  flowTrail: 'Typing flow trail color',
+  flowTrail: 'Typing trail color',
   reviewLine: 'Review Flag Color',
   warningLine: 'Warning Flag Color',
   lineNumber: 'Line Number Color',
@@ -548,8 +548,8 @@ export interface SidebarOptionsPanelProps {
   onAllowRemoteImagesChange: (value: boolean) => void
   features: FeatureToggles
   setFeatures: (updater: (previous: FeatureToggles) => FeatureToggles) => void
-  flowSettings: FlowSettings
-  setFlowSettings: (updater: (previous: FlowSettings) => FlowSettings) => void
+  typingTrailSettings: TypingTrailSettings
+  setTypingTrailSettings: (updater: (previous: TypingTrailSettings) => TypingTrailSettings) => void
   speedReadingSettings: SpeedReadingSettings
   setSpeedReadingSettings: (updater: (previous: SpeedReadingSettings) => SpeedReadingSettings) => void
   beatSettings: BeatSettings
@@ -813,8 +813,8 @@ export function SidebarOptionsPanel({
   onAllowRemoteImagesChange,
   features,
   setFeatures,
-  flowSettings,
-  setFlowSettings,
+  typingTrailSettings,
+  setTypingTrailSettings,
   speedReadingSettings,
   setSpeedReadingSettings,
   beatSettings,
@@ -2940,76 +2940,53 @@ export function SidebarOptionsPanel({
         onChange={onSoundscapePreferencesChange}
       />
 
-      {features.flow ? (
+      {features.typingTrail ? (
       <AccordionSection
-        className="sidebar-options-section-flow"
-        ariaLabel="Flow"
-        heading="Flow"
+        className="sidebar-options-section-typing-trail"
+        ariaLabel="Typing Trail"
+        heading="Typing Trail"
       >
-          <div className="utility-setting-slider-stack" aria-label="Typing flow settings">
-            {/* How the trail fades (fade, shape) and how flow is answered (look, reverb, trail). How the meter itself moves is fixed (shared/flowSettings.ts). */}
-            <OptionsSliderRows rows={[2, 2, 1]}>
+          <div className="utility-setting-slider-stack" aria-label="Typing trail settings">
+            {/* How a trail mark fades (fade, shape) and how many characters the trail takes to reach full strength (gain); typingTrail/typingTrail.ts. */}
+            <OptionsSliderRows rows={[3]}>
               <CompactScrollbarSlider
-                id="flow-fade-time"
-                min={FLOW_FADE_MAX_TIME_MIN}
-                max={FLOW_FADE_MAX_TIME_MAX}
+                id="typing-trail-fade-time"
+                min={TRAIL_FADE_MAX_TIME_MIN}
+                max={TRAIL_FADE_MAX_TIME_MAX}
                 step={0.1}
-                value={flowSettings.fadeMaxTime}
+                value={typingTrailSettings.fadeMaxTime}
                 trackLabel="fade"
-                tooltipLabel="Seconds a trail mark takes to fade out"
-                ariaLabel="How long a flow trail mark takes to fade out, in seconds"
-                defaultValue={DEFAULT_FLOW_SETTINGS.fadeMaxTime}
+                tooltipLabel="Seconds a trail mark, and the caret's hold after a typed letter, take to fade out"
+                ariaLabel="How long a typing trail mark takes to fade out, in seconds"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeMaxTime}
                 formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeMaxTime: value }))}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeMaxTime: value }))}
               />
               <CompactScrollbarSlider
-                id="flow-fade-shape"
-                min={FLOW_FADE_SHAPE_MIN}
-                max={FLOW_FADE_SHAPE_MAX}
+                id="typing-trail-fade-shape"
+                min={TRAIL_FADE_SHAPE_MIN}
+                max={TRAIL_FADE_SHAPE_MAX}
                 step={0.1}
-                value={flowSettings.fadeShape}
+                value={typingTrailSettings.fadeShape}
                 trackLabel="shape"
-                tooltipLabel="Trail fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
-                ariaLabel="Shape of the flow trail's fade"
-                defaultValue={DEFAULT_FLOW_SETTINGS.fadeShape}
+                tooltipLabel="Fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
+                ariaLabel="Shape of the typing trail's fade"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeShape}
                 formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, fadeShape: value }))}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeShape: value }))}
               />
               <CompactScrollbarSlider
-                id="flow-look"
-                min={0}
-                max={1}
-                step={0.01}
-                value={flowSettings.look}
-                trackLabel="look"
-                tooltipLabel="Flow look: colour, contrast and glaze"
-                ariaLabel="Strength of the flow's effect on the look"
-                defaultValue={DEFAULT_FLOW_SETTINGS.look}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, look: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-reverb"
-                min={0}
-                max={1}
-                step={0.01}
-                value={flowSettings.reverb}
-                trackLabel="reverb"
-                tooltipLabel="Flow reverb"
-                ariaLabel="Strength of the flow's reverb"
-                defaultValue={DEFAULT_FLOW_SETTINGS.reverb}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, reverb: value }))}
-              />
-              <CompactScrollbarSlider
-                id="flow-trail"
-                min={0}
-                max={1}
-                step={0.01}
-                value={flowSettings.trail}
-                trackLabel="trail"
-                tooltipLabel="Flow trail: the lines left along what you type, stronger and more colourful as flow grows (the trail's colour is in Colors, Boxes)"
-                ariaLabel="Strength of the flow's trail"
-                defaultValue={DEFAULT_FLOW_SETTINGS.trail}
-                onCommit={(value) => setFlowSettings((prev) => ({ ...prev, trail: value }))}
+                id="typing-trail-gain"
+                min={TRAIL_GAIN_MIN}
+                max={TRAIL_GAIN_MAX}
+                step={1}
+                value={typingTrailSettings.gain}
+                trackLabel="gain"
+                tooltipLabel="Letters the trail takes to reach its full colour: each new mark starts one step brighter than the last mark has faded to (the colour is in Colors, Boxes)"
+                ariaLabel="Steps the typing trail takes to reach full strength"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gain}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, gain: Math.round(value) }))}
               />
             </OptionsSliderRows>
           </div>

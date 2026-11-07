@@ -4,7 +4,7 @@ import { mapThroughScene, type SceneEffect } from './imageCorrection'
  * What the theme's scene does to a colour on its way to the screen, as data:
  * the one description `themeFrame` builds the filter string and the blend
  * overlays from, and that anything needing a colour's ON-SCREEN value (the
- * flow colour, `flowColor.ts`) reads instead of restating the order.
+ * trail colour, `trailColor.ts`) reads instead of restating the order.
  *
  * The order on screen is: content, then the invert blend overlay (only when
  * invert is the scene's sole effect, see `invertViaBlendMode`), then the

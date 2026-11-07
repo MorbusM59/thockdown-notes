@@ -14,7 +14,7 @@
  * `sanitizeMenu` can use it.
  */
 
-export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'glaze', 'flow', 'caretBlink'] as const
+export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'glaze', 'typingTrail', 'caretBlink'] as const
 
 /**
  * The features the bar offers. The caret blink is a feature in every sense
@@ -33,7 +33,7 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
   keySounds: true,
   visualizer: false,
   glaze: true,
-  flow: false,
+  typingTrail: false,
   caretBlink: true,
 }
 
@@ -54,7 +54,8 @@ export function sanitizeFeatureToggles(menu: unknown): FeatureToggles {
     spellCheck: source.spellCheckEnabled,
     customCursor: source.customCursorEnabled,
     visualizer: beat.enabled,
-    flow: flow.enabled,
+    // Saved as `flow` in the record before the typing flow became the typing trail.
+    typingTrail: stored && 'flow' in stored ? stored.flow : flow.enabled,
     caretBlink: typeof source.reducedCaretAnimation === 'boolean' ? !source.reducedCaretAnimation : undefined,
   }
   const result = { ...DEFAULT_FEATURE_TOGGLES }

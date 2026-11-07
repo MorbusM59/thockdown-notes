@@ -1,7 +1,7 @@
 /**
  * Hands the music's trackers (`sound/musicBeat.ts`), each block through its own mix, to the visualizer's blocks
  * (`@thockdown/look/visualizer`), each a CSS variable on the one element that
- * reads it (`flowStyle.ts`, never `<html>`), already scaled by the block's
+ * reads it (`shared/liveStyle.ts`, never `<html>`), already scaled by the block's
  * effect and turned over when that effect is negative, so CSS only reads it:
  *
  * - `--beat-caret`, the caret's DIP: while the caret follows the music its
@@ -39,7 +39,7 @@ import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
-import { setFlowStyle } from './flowStyle'
+import { setLiveStyle } from '../shared/liveStyle'
 
 type BlockName = 'caret' | 'edge' | 'pane' | 'wash'
 
@@ -80,16 +80,16 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
       const { effect } = channelRef.current
       const value = !musicPlayerService.isPlaying ? 0 : effect < 0 ? -effect * (1 - response) : effect * response
       // Quantized to the 1/255 an 8-bit colour channel resolves: every step
-      // that can change a pixel is written, and nothing finer (setFlowStyle
+      // that can change a pixel is written, and nothing finer (setLiveStyle
       // skips a value equal to the last).
       const steps = Math.round(value * 255)
-      setFlowStyle(variable, steps <= 0 ? null : (steps / 255).toFixed(4))
+      setLiveStyle(variable, steps <= 0 ? null : (steps / 255).toFixed(4))
     }, (present) => root.toggleAttribute(attribute, present))
     subscriptionRef.current = subscription
     return () => {
       subscriptionRef.current = null
       subscription.unsubscribe()
-      setFlowStyle(variable, null)
+      setLiveStyle(variable, null)
       root.removeAttribute(attribute)
     }
   }, [name, active, subscribeTo])

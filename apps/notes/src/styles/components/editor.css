@@ -519,7 +519,7 @@
 }
 
 /* The visualizer's edge and pane blocks (Options > Visualizer;
-   flow/useBeatFeedback.ts). Each is a layer of its own over the active editor
+   beat/useBeatFeedback.ts). Each is a layer of its own over the active editor
    whose opacity is its block's value (--beat-edge, --beat-pane, set on the
    element alone), present only on the active editor and only while its block
    follows the music (`html[data-beat-edge]`, `html[data-beat-pane]`), and

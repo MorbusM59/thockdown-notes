@@ -13,7 +13,7 @@ const FEATURE_PRESENTATION: Record<Exclude<FeatureId, 'caretBlink'>, { icon: str
   keySounds: { icon: 'fa-solid fa-keyboard', label: 'Keystroke sounds' },
   visualizer: { icon: 'fa-solid fa-drum', label: 'Visualizer' },
   glaze: { icon: 'fa-solid fa-wand-magic-sparkles', label: 'Glaze' },
-  flow: { icon: 'fa-solid fa-water', label: 'Typing flow' },
+  typingTrail: { icon: 'fa-solid fa-water', label: 'Typing trail' },
 }
 
 /** The custom cursor does not exist on Linux (shared/platform.ts), so neither does its switch. */

@@ -102,7 +102,7 @@ export function useBeatGridMirror(isGridView: boolean): {
       resize.disconnect()
       restyle.disconnect()
       // Removed property by property: the element's style also carries
-      // --beat-pane, written per frame by flowStyle.ts.
+      // --beat-pane, written per frame by shared/liveStyle.ts.
       for (const property of MIRRORED_PROPERTIES) mirror.style.removeProperty(property)
       for (const [, target] of MASK_PROPERTIES) mirror.style.removeProperty(target)
       for (const [, target] of RING_PROPERTIES) mirror.style.removeProperty(target)

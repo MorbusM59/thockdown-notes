@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
-import { TypingRateOrWordCount } from '../flow/TypingRateOrWordCount'
-import { useBeatGridMirror } from '../flow/useBeatGridMirror'
-import { flowStyleTarget } from '../flow/flowStyle'
+import { WordCountOrPace } from './WordCountOrPace'
+import { useBeatGridMirror } from '../beat/useBeatGridMirror'
+import { liveStyleTarget } from '../shared/liveStyle'
 import type { ClipboardEvent, CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
@@ -303,20 +303,20 @@ export function SectionEditorArea({
   // chapter of the guide is sealed too, not just its root.
   const isSealedNote = isSealedNoteId(menuIdentityNoteId) || isSealedNoteId(activeNoteId)
 
-  // The visualizer's edge reads --beat-edge, set on it alone (flow/flowStyle.ts).
-  const [beatEdgeRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-edge']))
+  // The visualizer's edge reads --beat-edge, set on it alone (shared/liveStyle.ts).
+  const [beatEdgeRef] = useState(() => liveStyleTarget<HTMLDivElement>({ current: null }, ['--beat-edge']))
   // The visualizer's pane, two elements reading --beat-pane: in the edit view
   // the box outlines' copy, on a layer of its own beside the edge's
-  // (flow/useBeatGridMirror.ts); in any view without a grid a flat wash
+  // (beat/useBeatGridMirror.ts); in any view without a grid a flat wash
   // OVER the texture and under the text: one copy right after each pane's
   // texture layer (only the shown pane's is visible), because a wash behind
   // the stage was hidden by any texture of high alpha.
   // The visualizer's scene has a grid of its own, over the editor's, and the
   // pane copies that one instead (the editor's is not drawn meanwhile).
   const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode || isVisualizerMode)
-  const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-pane']))
-  const [beatWashEditRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
-  const [beatWashRenderRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
+  const [beatPaneRef] = useState(() => liveStyleTarget<HTMLDivElement>({ current: null }, ['--beat-pane']))
+  const [beatWashEditRef] = useState(() => liveStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
+  const [beatWashRenderRef] = useState(() => liveStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
   const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
     beatPaneRef(el)
     beatMirrorRef(el)
@@ -741,13 +741,13 @@ export function SectionEditorArea({
         </div>
         <div className="wordcount-panel" aria-live="polite">
           {activeNoteId ? (
-            <TypingRateOrWordCount active={isSectionActive}>
+            <WordCountOrPace active={isSectionActive}>
               <span data-tooltip="Words, then characters, in this note">
                 <b className="readout-figure">{activeNoteDocumentStats.wordCount.toLocaleString()}</b>
                 <span className="readout-separator">{'  |  '}</span>
                 <span className="readout-figure">{activeNoteDocumentStats.characterCount.toLocaleString()}</span>
               </span>
-            </TypingRateOrWordCount>
+            </WordCountOrPace>
           ) : null}
         </div>
         {imageStorage.state !== 'none' ? (

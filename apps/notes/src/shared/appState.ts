@@ -1,7 +1,7 @@
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
 import type { FeatureToggles } from './features';
-import type { FlowSettings } from './flowSettings';
+import type { TypingTrailSettings } from './typingTrailSettings';
 import type { VisualizerFont } from './visualizerFont';
 import type { VisualizerSettings } from '@thockdown/look/visualizer';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
@@ -236,8 +236,8 @@ export interface PersistedMenuState {
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
   /** Which features exist at all: the toggle bar at the top of Options. See shared/features.ts. */
   features?: FeatureToggles;
-  /** Typing flow's tuning (Options > Flow; on/off is `features.flow`); see flow/flowModel.ts. */
-  flow?: FlowSettings;
+  /** The typing trail's tuning (Options > Typing Trail; on/off is `features.typingTrail`); see typingTrail/typingTrail.ts. Saved as `flow` before 0.7.4, read from there by `sanitizeMenu`. */
+  typingTrail?: TypingTrailSettings;
   speedReading?: SpeedReadingSettings;
   /** The visualizer's per-device delay (Options > Visualizer; on/off is `features.visualizer`); see sound/musicBeat.ts. */
   beat?: BeatSettings;

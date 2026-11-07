@@ -15,7 +15,7 @@ import { DARK_PRESET_BOX_BEVEL, DEFAULT_BOX_BEVEL } from './boxBevel';
 import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
 import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import type { UiLayoutLoadout } from './loadouts';
-import { deriveFlowTrail, deriveLightFlowTrail } from './flowColor';
+import { deriveTrailColor, deriveLightTrailColor } from './trailColor';
 import { sceneOf } from './scene';
 import { DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors } from './visualizer';
 
@@ -55,27 +55,27 @@ function mergeTextureMaterialSettings(
   };
 }
 
-// A preset that names no flow colour gets one from its box colour (`grid`,
-// flowColor.ts): a light theme a warmer, much darker shade of it, a dark
+// A preset that names no trail colour gets one from its box colour (`grid`,
+// trailColor.ts): a light theme a warmer, much darker shade of it, a dark
 // theme a brighter, glowier version of it as seen through its own scene.
 // Stored on the preset, so the colour picker shows and edits what the preset
 // actually uses.
 /**
- * The colours a preset leaves unset that follow from it: the flow trail's
+ * The colours a preset leaves unset that follow from it: the typing trail's
  * from the grid, and the visualizer's from whether the layout is inverted
  * (a preset that names its own visualizer keeps it).
  */
 function withDerivedColors(loadout: UiLayoutLoadout): UiLayoutLoadout {
-  return withFlowTrail(loadout.visualizerColors === NEUTRAL_BASE.visualizerColors
+  return withTrailColor(loadout.visualizerColors === NEUTRAL_BASE.visualizerColors
     ? { ...loadout, visualizerColors: defaultVisualizerColors(loadout.filterInvert > 0.5) }
     : loadout);
 }
 
-function withFlowTrail(loadout: UiLayoutLoadout): UiLayoutLoadout {
+function withTrailColor(loadout: UiLayoutLoadout): UiLayoutLoadout {
   if (loadout.highlightColors.flowTrail) return loadout;
   const flowTrail = loadout.filterInvert > 0
-    ? deriveFlowTrail(loadout.highlightColors.grid, sceneOf(loadout))
-    : deriveLightFlowTrail(loadout.highlightColors.grid);
+    ? deriveTrailColor(loadout.highlightColors.grid, sceneOf(loadout))
+    : deriveLightTrailColor(loadout.highlightColors.grid);
   return { ...loadout, highlightColors: { ...loadout.highlightColors, flowTrail } };
 }
 

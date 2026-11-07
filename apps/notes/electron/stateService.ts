@@ -15,7 +15,7 @@ import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetter
 import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
-import { DEFAULT_FLOW_SETTINGS, sanitizeFlowSettings } from '../src/shared/flowSettings';
+import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
@@ -70,7 +70,7 @@ const DEFAULT_APP_STATE: AppState = {
       find: { scrollTop: 0 },
     },
     features: DEFAULT_FEATURE_TOGGLES,
-    flow: DEFAULT_FLOW_SETTINGS,
+    typingTrail: DEFAULT_TYPING_TRAIL_SETTINGS,
     beat: DEFAULT_BEAT_SETTINGS,
   },
 };
@@ -601,7 +601,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
     // Reads the record, or for an older save the separate fields it replaced.
     features: sanitizeFeatureToggles(input),
-    flow: sanitizeFlowSettings(input?.flow),
+    // A save from before the typing trail had its own record keeps its fade in `flow`.
+    typingTrail: sanitizeTypingTrailSettings(input?.typingTrail ?? (input as { flow?: unknown } | undefined)?.flow),
     visualizerFont: sanitizeVisualizerFont(input?.visualizerFont),
     // Absent stays absent: that is how the one-time migration from the active layout knows to run.
     visualizer: input?.visualizer === undefined ? undefined : sanitizeVisualizer(input.visualizer),

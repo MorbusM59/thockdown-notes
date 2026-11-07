@@ -301,26 +301,27 @@ function formatNumber(value: number, decimals = 3): string {
  * keyframes DISCRETELY, flipping between stop values instead of ramping
  * between them, which silently reduced the whole blink to four hard steps and
  * made the frame setting invisible. Newer Chromium interpolates them fine,
- * which is exactly why the two holds' alpha adjustments are the only deliberate
+ * which is exactly why the holds' alpha adjustments are the only deliberate
  * `var()` exception here. Keep them limited to alpha math; do not add
  * `color-mix()` or unrelated variables to the animated stops.
  */
 /**
  * The caret's HOLD blends the animated alpha toward the colour's own alpha,
  * the peak of the blink: at 1 the caret stands still at its peak, and as the
- * hold falls the blink takes over again. Two holds, the larger wins: the
- * flow's (`--flow-caret-effect`, 1 while the reader types, falling with the
- * idle decay) and the music's (`--beat-caret-hold`, 1 while the caret follows
- * a beat, eased in and out by a transition in index.css, so the blink and the
- * beat hand over without a jump).
+ * hold falls the blink takes over again. Two holds, the larger wins, so
+ * neither can break the other: the typing hold (`--caret-typing-hold`, 1 the
+ * moment the caret moves, falling back on the typing trail's fade curve) and
+ * the music's (`--beat-caret-hold`, 1 while the caret follows a beat, eased
+ * in and out by a transition in index.css, so the blink and the beat hand
+ * over without a jump).
  */
-function flowAdjustedRgba(color: RgbaColor, alphaScale: number): string {
+function holdAdjustedRgba(color: RgbaColor, alphaScale: number): string {
   const baseAlpha = formatNumber(clampAlphaChannel(color.a), 4)
   const animatedAlpha = formatNumber(
     clampAlphaChannel(color.a * Math.max(0, Math.min(1, alphaScale))),
     4,
   )
-  const alpha = `calc(${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * max(var(--flow-caret-effect, 0), var(--beat-caret-hold, 0)))`
+  const alpha = `calc(${animatedAlpha} + (${baseAlpha} - ${animatedAlpha}) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0)))`
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 
@@ -454,9 +455,9 @@ export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions):
     // one object rather than a ring around a blinking centre.
     const alpha = resolveEffectiveAlpha(stop.alpha, effectStrengthPercent)
     const declarations = [
-      `background-color: ${flowAdjustedRgba(fill, alpha)};`,
-      `outline-color: ${flowAdjustedRgba(outline, alpha)};`,
-      `box-shadow: 0 0 ${blur}px ${spread}px ${flowAdjustedRgba(halo, alpha)};`,
+      `background-color: ${holdAdjustedRgba(fill, alpha)};`,
+      `outline-color: ${holdAdjustedRgba(outline, alpha)};`,
+      `box-shadow: 0 0 ${blur}px ${spread}px ${holdAdjustedRgba(halo, alpha)};`,
     ]
     return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
   })
