@@ -368,7 +368,7 @@
   background-color: var(--color-bg-regular);
 }
 .visualizer-scene.is-panels-hidden > .visualizer-song-list-hit,
-.visualizer-scene.is-panels-hidden > .visualizer-bucket-hit,
+.visualizer-scene.is-panels-hidden > .visualizer-bucket-hit:not(.is-always),
 .visualizer-scene.is-panels-hidden > .visualizer-filter-input {
   pointer-events: none;
 }

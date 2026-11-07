@@ -71,12 +71,15 @@ export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: Le
       {BARS.map((key) => {
         const bar = area[key]
         const gap = levelGapColumn(bar.columns, levels[key])
+        // Volume lives in the bottom strip and stays when the panels are hidden;
+        // reverb and room are panel content and fade with them.
+        const boxClass = key === 'volume' ? 'visualizer-lit' : 'visualizer-lit visualizer-bucket-box'
         return (
           <Fragment key={key}>
-            <div className="visualizer-lit visualizer-bucket-box" style={place(bar, 0, gap)} />
-            <div className="visualizer-lit visualizer-bucket-box" style={place(bar, gap + 1, bar.columns - gap - 1)} />
+            <div className={boxClass} style={place(bar, 0, gap)} />
+            <div className={boxClass} style={place(bar, gap + 1, bar.columns - gap - 1)} />
             <div
-              className="visualizer-bucket-hit"
+              className={key === 'volume' ? 'visualizer-bucket-hit is-always' : 'visualizer-bucket-hit'}
               style={place(bar, 0, bar.columns)}
               onPointerDown={(event) => {
                 if (event.button !== 0) return
