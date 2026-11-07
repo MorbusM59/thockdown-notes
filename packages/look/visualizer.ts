@@ -359,7 +359,11 @@ const DEFAULT_SAVED_PANE: VisualizerChannel = { ...DEFAULT_VISUALIZER_PANE, effe
 export const DEFAULT_VISUALIZER: VisualizerSettings = {
   trackers: DEFAULT_VISUALIZER_TRACKERS,
   caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.5 },
-  grid: { edge: DEFAULT_SAVED_EDGE, editorPane: DEFAULT_SAVED_PANE, readerPane: DEFAULT_SAVED_PANE },
+  grid: {
+    edge: { ...DEFAULT_SAVED_EDGE, effect: 0.3, spreadPx: 0, blurPx: 100 },
+    editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
+    readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
+  },
   edge: DEFAULT_SAVED_EDGE,
   pane: DEFAULT_SAVED_PANE,
   immersive: {
