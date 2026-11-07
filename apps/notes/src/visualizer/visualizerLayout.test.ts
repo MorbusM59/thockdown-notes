@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, cutoutGapBoxes, songListArea, songListEntry, fitVisualizerBox, cutoutBoxes, STRIP_ROWS } from './visualizerLayout'
+import { bucketListArea, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, cutoutGapBoxes, songListArea, songListEntry, fitVisualizerBox, MIN_SCENE_ROWS, STRIP_ROWS } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('gives both strips exactly eight rows wherever they fit', () => {
@@ -88,7 +88,12 @@ describe('fitVisualizerBox', () => {
       expect(layout.progressRow).toBe(STRIP_ROWS)
       expect(fontSizePx).toBe(Math.min(30, boxPx))
       // The largest box that fits: one more would not.
-      if (boxPx < 60) expect((boxPx + 1) * (18 + cutoutBoxes(220, boxPx + 1))).toBeGreaterThan(h)
+      expect(layout.rows).toBeGreaterThanOrEqual(MIN_SCENE_ROWS)
+      if (boxPx < 60) {
+        const bigger = computeVisualizerLayout(1920, h, boxPx + 1, 220)
+        const above = bigger.cutout.row
+        expect(above < STRIP_ROWS + 2 || bigger.rows - above - bigger.cutout.size < STRIP_ROWS + 2 || bigger.rows < MIN_SCENE_ROWS).toBe(true)
+      }
     }
   })
 })

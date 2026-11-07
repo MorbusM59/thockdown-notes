@@ -361,13 +361,26 @@ export function levelAtColumn(columns: number, column: number): number {
 export const REQUIRED_ROWS_BESIDE_CUTOUT = 2 * (STRIP_ROWS + 2)
 
 /**
+ * The fewest full rows the scene may have: both strips, both bars, and the
+ * bucket list's five entries plus the pool filter's two rows with the empty
+ * row between each (7 + 1 + 5 * 2 - 1 + 2 + 2 + 1 + 7).
+ */
+export const MIN_SCENE_ROWS = 31
+
+/**
  * The box and font size the scene is drawn at in a slot `heightPx` tall: the
  * reader's own when both strips, both bars, a row of padding each side and the
  * cutout all fit; otherwise the largest box that fits, reached by lowering the
  * line height first, down to 1, and then the font size with it.
  */
 export function fitVisualizerBox(heightPx: number, boxPx: number, fontSizePx: number, cutoutPx: number): { boxPx: number; fontSizePx: number } {
-  const fits = (box: number) => box * (REQUIRED_ROWS_BESIDE_CUTOUT + cutoutBoxes(cutoutPx, box)) <= heightPx
+  // The full rows above the cutout (the grid is phased on it, so the rows
+  // below are as many or one more), as computeVisualizerLayout places them.
+  const fits = (box: number) => {
+    const size = cutoutBoxes(cutoutPx, box)
+    const above = Math.floor(Math.floor((heightPx - size * box) / 2) / box)
+    return 2 * above >= REQUIRED_ROWS_BESIDE_CUTOUT && 2 * above + size >= MIN_SCENE_ROWS
+  }
   let box = Math.max(1, boxPx)
   if (heightPx <= 0) return { boxPx: box, fontSizePx }
   while (box > 1 && !fits(box)) box -= 1
