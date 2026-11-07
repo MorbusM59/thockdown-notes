@@ -158,6 +158,14 @@
   box-sizing: border-box;
   border: 1px solid var(--color-typing-trail);
 }
+/* The trail's source: the caret's grid cell, all four lines, at the level
+   the next mark would start at (--typing-trail-source, written while the
+   trail is fading by typingTrail/typingTrail.ts), placed with the caret. */
+.typing-trail-source {
+  box-sizing: border-box;
+  border: 1px solid var(--color-typing-trail);
+  opacity: var(--typing-trail-source, 0);
+}
 .typing-trail-ghost-caret {
   position: absolute;
   /* Positioned against the cell's outer edge, not inside its border. */

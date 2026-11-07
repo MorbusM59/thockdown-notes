@@ -77,6 +77,13 @@ export function typesCharacter(event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'm
  * trail behind it goes. The blink keyframes take the larger of it and the
  * music's hold (`buildCaretBlinkKeyframesCss`), so neither breaks the other.
  * A frame loop runs only while the hold is falling.
+ *
+ * The same loop writes the trail's SOURCE, `--typing-trail-source`: the
+ * caret's grid cell framed in the trail colour at the level the next box
+ * would start at, the last box's level plus one gain step, faded with it
+ * (`min(1, (level + gain) x hold)`, the hold and the last box sharing a birth
+ * time and a curve). So the frame shows the trail's current strength and
+ * goes out with it, with no jump when the fade ends.
  */
 let holdStartSec: number | null = null
 let holdFrame: number | null = null
@@ -88,15 +95,23 @@ function holdStep(): void {
   if (hold <= 0) {
     holdStartSec = null
     setLiveStyle('--caret-typing-hold', null)
+    setLiveStyle('--typing-trail-source', null)
     return
   }
   setLiveStyle('--caret-typing-hold', hold.toFixed(3))
+  setLiveStyle('--typing-trail-source', sourceLevel(hold).toFixed(3))
   holdFrame = requestAnimationFrame(holdStep)
+}
+
+/** The source frame's level: the next box's starting level, faded by the hold. */
+function sourceLevel(hold: number): number {
+  return Math.min(1, ((last?.level ?? 0) + settings.gainPercent / 100) * hold)
 }
 
 function holdCaret(): void {
   holdStartSec = nowSec()
   setLiveStyle('--caret-typing-hold', '1')
+  setLiveStyle('--typing-trail-source', sourceLevel(1).toFixed(3))
   if (holdFrame === null) holdFrame = requestAnimationFrame(holdStep)
 }
 
@@ -105,6 +120,7 @@ function releaseCaret(): void {
   holdFrame = null
   holdStartSec = null
   setLiveStyle('--caret-typing-hold', null)
+  setLiveStyle('--typing-trail-source', null)
 }
 
 let enabled = false

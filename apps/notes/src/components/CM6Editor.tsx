@@ -1153,6 +1153,14 @@ export function CM6Editor({
   const caretElRef = useRef<HTMLDivElement | null>(null);
   // The caret reads --caret-typing-hold and --beat-caret, set on it rather than on <html> (shared/liveStyle.ts).
   const [caretElLiveRef] = useState(() => liveStyleTarget(caretElRef, ['--caret-typing-hold', '--beat-caret']));
+  // The typing trail's SOURCE: the caret's grid cell, all four 1px grid
+  // lines, in the trail colour at the strength the next mark would start at
+  // (--typing-trail-source, typingTrail/typingTrail.ts). Placed with the
+  // caret, as state beside caretStyle and written straight to the element
+  // like the caret's own transform (applyCaretStyle).
+  const [trailSourceStyle, setTrailSourceStyle] = useState<{ transform: string; width: number; height: number } | null>(null);
+  const trailSourceElRef = useRef<HTMLDivElement | null>(null);
+  const [trailSourceElLiveRef] = useState(() => liveStyleTarget(trailSourceElRef, ['--typing-trail-source']));
   /**
    * The typing trail (typingTrail/typingTrail.ts): a clip box over the scroller
    * and, inside it, a layer moved by -scrollTop, so a box placed in SCROLL
@@ -2185,7 +2193,14 @@ export function CM6Editor({
    * Only the move case takes this path. Hiding the caret (`null`) unmounts
    * the element, which nothing here can do sooner than React can.
    */
-  const applyCaretStyle = useCallback((style: { transform: string; width: number; height: number }) => {
+  const applyCaretStyle = useCallback((style: { transform: string; width: number; height: number }, cell: { transform: string; width: number; height: number }) => {
+    const sourceEl = trailSourceElRef.current;
+    if (sourceEl) {
+      sourceEl.style.transform = cell.transform;
+      sourceEl.style.width = `${cell.width}px`;
+      sourceEl.style.height = `${cell.height}px`;
+    }
+    setTrailSourceStyle(cell);
     const caretEl = caretElRef.current;
     if (caretEl) {
       caretEl.style.transform = style.transform;
@@ -2354,6 +2369,13 @@ export function CM6Editor({
       transform: `translate(${scrollerLeftInLayer + absoluteLeft + caretOriginInsetPx}px, ${scrollerTopInLayer + topInViewport + caretOriginInsetPx}px)`,
       width: caretWidthPx,
       height: caretHeightPx,
+    }, {
+      // The grid cell itself, for the trail's source: its four 1px grid
+      // lines, one pixel over to cover the far ones, as a trail mark draws
+      // its top and bottom.
+      transform: `translate(${scrollerLeftInLayer + absoluteLeft}px, ${scrollerTopInLayer + topInViewport}px)`,
+      width: runtimeCellWidthPx + 1,
+      height: lineHeightPxNow + 1,
     });
   }, [applyCaretStyle]);
 
@@ -6701,6 +6723,14 @@ export function CM6Editor({
             // background-color; see index.css's .thockdown-block-caret.
             ...caretStyle,
           }}
+        />
+      )}
+      {hasViewportLines && fontReady && !caretHidden && caretStyle && trailSourceStyle && (
+        <div
+          ref={trailSourceElLiveRef}
+          className="typing-trail-source"
+          // Above the caret (8), below the text (10).
+          style={{ position: 'absolute', pointerEvents: 'none', zIndex: 9, top: 0, left: 0, ...trailSourceStyle }}
         />
       )}
     </div>
