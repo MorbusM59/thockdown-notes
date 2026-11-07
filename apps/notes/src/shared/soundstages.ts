@@ -57,6 +57,9 @@ export const FACTORY_SOUNDSTAGE_IDS = ['muted', 'neutral', 'wide', 'amped', 'tho
 export type FactorySoundstageId = (typeof FACTORY_SOUNDSTAGE_IDS)[number]
 export const DEFAULT_FACTORY_SOUNDSTAGE: FactorySoundstageId = 'neutral'
 
+/** The custom stage's button: the marker the custom layout button wears, since it works the same way. */
+export const CUSTOM_SOUNDSTAGE_ICON = 'fa-solid fa-marker'
+
 export interface FactorySoundstage {
   id: FactorySoundstageId
   name: string

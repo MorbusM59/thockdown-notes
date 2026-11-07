@@ -54,25 +54,6 @@
   font-size:          10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
-/* Numeric readouts in the sound-options row. Tabular figures so a level
-   ticking 8 -> 9 -> 10 under the wheel doesn't shift the digits sideways. */
-.audio-sound-level {
-  font-size:          10px; /* two-digit readout, fixed box -- see --ui-font-scale's scope note in tokens.css */
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
-  user-select:        none;
-  cursor:             ns-resize;
-  /* The hold gesture captures the pointer; without this a touch drag would be
-     taken as a scroll and cancel the press mid-adjustment. */
-  touch-action:       none;
-}
-
-/* A level whose toggle is currently off. Still legible and still adjustable
-   (scrolling it turns the toggle back on), just visibly not in effect. */
-.audio-sound-level.is-dimmed {
-  opacity: 0.45;
-}
-
 .audio-ctrl-btn[data-hovered] {
   background:   var(--btn-bg-hover);
   border-color: var(--btn-border-hover);

@@ -1,15 +1,15 @@
 /**
- * Pure helpers for the music player's sound-options row -- the six buttons the
- * headphones toggle swaps in over the playlist buckets.
+ * Pure helpers for the music levels (volume, reverb, room) as the music bar's
+ * headphones wheel, the visualizer's level bars and the hold gesture read
+ * them.
  *
- * Everything here is a total function over plain values so the row's behaviour
- * (what a wheel notch is worth, which glyph a level maps to, what a toggle
- * does) is testable without mounting the player or touching Web Audio.
+ * Everything here is a total function over plain values so what a wheel notch
+ * is worth is testable without mounting the player or touching Web Audio.
  *
  * ## The two number spaces, and why they are separate
  * The audio graph (`MusicPlayerService`) has always taken 0-1 fractions, and
- * persisted state stores them that way. The row displays 0-99 because a
- * two-digit readout is what fits in a square button. `toDisplayLevel` /
+ * persisted state stores them that way. Levels are adjusted in 0-99 steps, the
+ * two-digit readout that once fit a square button. `toDisplayLevel` /
  * `fromDisplayLevel` are the only place that conversion happens, and they are
  * exact inverses on the display side (`fromDisplayLevel(toDisplayLevel(d))`
  * round-trips every integer 0-99), so scrolling up and back down lands on the
@@ -59,77 +59,4 @@ export function nudgeLevel(fraction: number, deltaY: number, coarse: boolean): n
   // Wheel up (negative deltaY) increases, matching every other value control.
   const direction = deltaY < 0 ? 1 : -1;
   return fromDisplayLevel(toDisplayLevel(fraction) + direction * step);
-}
-
-/**
- * Speaker glyph tiers for the volume button, as [exclusive upper bound of the
- * displayed level, glyph]. Three equal thirds of the 0-99 range: 0-32, 33-65,
- * 66-99.
- */
-export const VOLUME_ICON_TIERS: readonly string[] = [
-  'fa-solid fa-volume-off',
-  'fa-solid fa-volume-low',
-  'fa-solid fa-volume-high',
-];
-
-/**
- * Speaker glyph for the volume toggle.
- *
- * Muted shows `fa-ban`, the same bar the reverb switch uses, rather than a
- * quiet speaker: a bar reads as "switched off" at a glance and cannot be
- * confused with a level that merely happens to be low, which `fa-volume-off`
- * genuinely is at the bottom of its own tier. One "off" mark across all three
- * switches also means the row can be read without knowing which control is
- * which.
- *
- * The highlight on these switches marks the DEVIATION, not the healthy state:
- * lit means muted or bypassed. A row of six controls that all light up during
- * ordinary listening would make the lit state mean nothing; lighting only what
- * is currently turned off makes "something here is off" readable at a glance.
- */
-export function volumeIcon(volume: number, isMuted: boolean): string {
-  if (isMuted) return 'fa-solid fa-ban';
-  return pickTier(VOLUME_ICON_TIERS, volume);
-}
-
-/**
- * Map a 0-1 level onto a tier list.
- *
- * Splitting the DISPLAY range rather than the raw fraction is what makes the
- * boundaries land on the numbers the button prints beside it, so the glyph
- * changes exactly when the readout crosses the stated value.
- *
- * The tier width is floored, which puts any remainder in the TOP tier rather
- * than spreading it: three tiers give 0-32 / 33-65 / 66-99 (33, 33, 34) and
- * four give 0-24 / 25-49 / 50-74 / 75-99 (25 each). An even split would put
- * the three-tier boundaries at 33.3 and 66.6, which lands the glyph change on
- * a number the readout never shows.
- */
-function pickTier(tiers: readonly string[], level: number): string {
-  const display = toDisplayLevel(level);
-  const perTier = Math.floor((SOUND_LEVEL_MAX_DISPLAY + 1) / tiers.length);
-  return tiers[Math.min(tiers.length - 1, Math.floor(display / perTier))];
-}
-
-/**
- * Room-size glyph, in four tiers across the 0-99 range: a box, a room, a hall,
- * open air. Rendered on the room button, which doubles as the second face of
- * the reverb bypass toggle -- when reverb is bypassed it shows `fa-ban`
- * instead, exactly as the reverb button does, because they are one switch.
- */
-export const ROOM_ICON_TIERS: readonly string[] = [
-  'fa-solid fa-cube',
-  'fa-solid fa-house',
-  'fa-solid fa-church',
-  'fa-solid fa-mountain',
-];
-
-export function roomIcon(room: number, isReverbBypassed: boolean): string {
-  if (isReverbBypassed) return 'fa-solid fa-ban';
-  return pickTier(ROOM_ICON_TIERS, room);
-}
-
-/** Reverb toggle glyph: the antenna when engaged, the bar when bypassed. */
-export function reverbIcon(isReverbBypassed: boolean): string {
-  return isReverbBypassed ? 'fa-solid fa-ban' : 'fa-solid fa-wifi';
 }

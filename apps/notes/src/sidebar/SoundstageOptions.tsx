@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 
 import {
+  CUSTOM_SOUNDSTAGE_ICON,
   FACTORY_SOUNDSTAGES,
   MAX_SAVED_SOUNDSTAGES,
   NEUTRAL_SOUNDSTAGE,
@@ -12,8 +13,6 @@ import {
   type SoundstageSettings,
 } from '../shared/soundstages'
 
-/** The custom stage's button: the marker the custom layout button wears, since it works the same way. */
-const CUSTOM_ICON = 'fa-solid fa-marker'
 
 interface SoundstageOptionsProps {
   preferences: SoundstagePreferences
@@ -81,7 +80,7 @@ export function SoundstageOptions({ preferences, setPreferences, live, active, a
           aria-label="Custom soundstage"
           onClick={() => apply(preferences.custom)}
         >
-          <span className={CUSTOM_ICON} aria-hidden="true" />
+          <span className={CUSTOM_SOUNDSTAGE_ICON} aria-hidden="true" />
         </button>
       </div>
 

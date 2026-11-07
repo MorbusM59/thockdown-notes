@@ -6610,6 +6610,10 @@ ${markdownHtml}
         }
         selectFactorySoundstage(steppedFactorySoundstage(visualizerSolid, direction))
       },
+      select: (stage) => {
+        if (stage === 'custom') applySoundstage(soundstagePreferences.custom)
+        else selectFactorySoundstage(stage)
+      },
     })
   }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.custom, selectFactorySoundstage, applySoundstage])
 

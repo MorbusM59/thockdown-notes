@@ -1,17 +1,20 @@
 /**
  * The soundstage controls the visualizer's solid reaches (`VisualizerScene.tsx`):
  * App publishes which solid names the stage playing (a factory stage, or
- * `custom` for anything else, shared/soundstages.ts) and how to step through
- * the factory stages, so the scene needs no props for them.
+ * `custom` for anything else, shared/soundstages.ts), how to step through
+ * the factory stages and how to play one directly (the music bar's stage
+ * row, `AudioControls.tsx`), so neither needs props for them.
  */
 import type { FactorySoundstageId } from '../shared/soundstages'
 
 export type SoundstageControls = {
   solid: FactorySoundstageId | 'custom'
   step: (direction: 1 | -1) => void
+  /** Play a factory stage, or the custom stage. */
+  select: (stage: FactorySoundstageId | 'custom') => void
 }
 
-let controls: SoundstageControls = { solid: 'neutral', step: () => {} }
+let controls: SoundstageControls = { solid: 'neutral', step: () => {}, select: () => {} }
 const listeners = new Set<() => void>()
 
 export function publishSoundstageControls(next: SoundstageControls): void {

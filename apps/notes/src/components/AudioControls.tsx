@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicPoolFilter, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
 import { samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
@@ -15,11 +15,8 @@ import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePr
 import {
   fromDisplayLevel,
   nudgeLevel,
-  reverbIcon,
-  roomIcon,
   SOUND_LEVEL_MAX_DISPLAY,
   toDisplayLevel,
-  volumeIcon,
 } from '@thockdown/soundscape/musicSoundOptions'
 import {
   emptyPlayHistory,
@@ -29,7 +26,6 @@ import {
 } from '../shared/musicPlayHistory'
 import {
   useHoldToAdjust,
-  type HoldToAdjustHandlers,
   type HoldToAdjustKeyboardController,
 } from '../shared/useHoldToAdjust'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
@@ -39,6 +35,8 @@ import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
+import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
+import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 
 // Purging a song from the library and clearing a playlist slot are both
@@ -903,25 +901,14 @@ export const AudioControls = memo(function AudioControls({
     : 'No song'
 
   // ---------------------------------------------------------------- sound options
-  // The headphones button swaps the bottom row's six playlist buckets for six
-  // sound controls. It is a swap, not an overlay: the row keeps its geometry,
-  // so nothing under the cursor moves and the grid stays 2x6 in both states.
+  // The headphones button swaps the bottom row's six playlist buckets for the
+  // six soundstages (the five factory stages and the custom one, played
+  // through the published soundstage controls). It is a swap, not an overlay:
+  // the row keeps its geometry, so nothing under the cursor moves and the
+  // grid stays 2x6 in both states.
   //
   // Adjusting a level while its toggle is off turns the toggle back on. A
-  // number that changes while nothing can be heard is a dead control, and the
-  // toggle button remains the way to silence it again deliberately.
-  //
-  // These three switches light (is-active) when they are OFF -- see volumeIcon's
-  // note in musicSoundOptions.ts. The highlight marks what deviates from plain
-  // listening, so an unattended row reads as "nothing is muted" at a glance.
-
-  const handleMuteToggle = useCallback(() => {
-    onMutedChange(!isMuted)
-  }, [isMuted, onMutedChange])
-
-  const handleReverbBypassToggle = useCallback(() => {
-    onReverbBypassedChange(!isReverbBypassed)
-  }, [isReverbBypassed, onReverbBypassedChange])
+  // number that changes while nothing can be heard is a dead control.
 
   // Wheel and hold share the "adjusting turns it back on" rule, so they share
   // the intent that expresses it rather than each remembering to do it.
@@ -950,27 +937,10 @@ export const AudioControls = memo(function AudioControls({
     onReverbRoomChange(nudgeLevel(reverbRoom, deltaY, coarse))
   }, [reverbRoom, unbypassForAdjust, onReverbRoomChange])
 
-  const handleVolumeWheel = useCallback((event: WheelEvent) => {
-    event.preventDefault()
-    nudgeVolume(event.deltaY, event.shiftKey)
-  }, [nudgeVolume])
-
-  const handleReverbWheel = useCallback((event: WheelEvent) => {
-    event.preventDefault()
-    nudgeReverb(event.deltaY, event.shiftKey)
-  }, [nudgeReverb])
-
-  const handleRoomWheel = useCallback((event: WheelEvent) => {
-    event.preventDefault()
-    nudgeRoom(event.deltaY, event.shiftKey)
-  }, [nudgeRoom])
-
   // The headphones button adjusts sound from the wheel whichever row is
   // showing: plain scroll for volume, Shift for reverb, Ctrl for room. The
-  // modifiers pick the level here, so there is no coarse step -- the readouts
-  // keep Shift-for-ten. Native and non-passive for the same reason as the
-  // readouts (see SoundLevelButton), and also so Ctrl+wheel cannot zoom the
-  // page instead.
+  // modifiers pick the level here, so there is no coarse step. Native and non-passive so the page cannot scroll
+  // under it, and so Ctrl+wheel cannot zoom the page instead.
   const soundOptionsButtonRef = useRef<HTMLButtonElement | null>(null)
   const handleSoundOptionsWheel = useCallback((event: WheelEvent) => {
     event.preventDefault()
@@ -994,53 +964,18 @@ export const AudioControls = memo(function AudioControls({
     onVolumeChange(fromDisplayLevel(display))
   }, [onVolumeChange])
 
-  const handleReverbLevel = useCallback((display: number) => {
-    onReverbAmountChange(fromDisplayLevel(display))
-  }, [onReverbAmountChange])
-
-  const handleRoomLevel = useCallback((display: number) => {
-    onReverbRoomChange(fromDisplayLevel(display))
-  }, [onReverbRoomChange])
-
   const volumeHoldControllerRef = useRef<HoldToAdjustKeyboardController | null>(null)
-  const reverbHoldControllerRef = useRef<HoldToAdjustKeyboardController | null>(null)
-  const roomHoldControllerRef = useRef<HoldToAdjustKeyboardController | null>(null)
   const volumeDisplayRef = useRef(toDisplayLevel(volume))
-  const reverbDisplayRef = useRef(toDisplayLevel(reverbAmount))
-  const roomDisplayRef = useRef(toDisplayLevel(reverbRoom))
   volumeDisplayRef.current = toDisplayLevel(volume)
-  reverbDisplayRef.current = toDisplayLevel(reverbAmount)
-  roomDisplayRef.current = toDisplayLevel(reverbRoom)
 
-  const volumeHoldHandlers = useHoldToAdjust({
+  // The visualizer's Up/Down keys hold the volume through this controller.
+  useHoldToAdjust({
     getValue: () => volumeDisplayRef.current,
     onChange: handleVolumeLevel,
     onHoldStart: unmuteForAdjust,
     min: 0,
     max: SOUND_LEVEL_MAX_DISPLAY,
   }, volumeHoldControllerRef)
-  const reverbHoldHandlers = useHoldToAdjust({
-    getValue: () => reverbDisplayRef.current,
-    onChange: handleReverbLevel,
-    onHoldStart: unbypassForAdjust,
-    min: 0,
-    max: SOUND_LEVEL_MAX_DISPLAY,
-  }, reverbHoldControllerRef)
-  const roomHoldHandlers = useHoldToAdjust({
-    getValue: () => roomDisplayRef.current,
-    onChange: handleRoomLevel,
-    onHoldStart: unbypassForAdjust,
-    min: 0,
-    max: SOUND_LEVEL_MAX_DISPLAY,
-  }, roomHoldControllerRef)
-
-  useEffect(() => {
-    if (isSoundOptionsOpen) return
-    volumeHoldControllerRef.current?.cancel()
-    reverbHoldControllerRef.current?.cancel()
-    roomHoldControllerRef.current?.cancel()
-  }, [isSoundOptionsOpen])
-
   useEffect(() => {
     if (!isVisualizerMode) return
     const activeKeys = visualizerKeysDownRef.current
@@ -1113,9 +1048,7 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [isVisualizerMode, handlePlayToggle, startSeekHold, stopSeekScrub, jumpSong, handleSeekActivate])
 
-  const volumeGlyph = useMemo(() => volumeIcon(volume, isMuted), [volume, isMuted])
-  const reverbGlyph = useMemo(() => reverbIcon(isReverbBypassed), [isReverbBypassed])
-  const roomGlyph = useMemo(() => roomIcon(reverbRoom, isReverbBypassed), [reverbRoom, isReverbBypassed])
+  const soundstage = useSyncExternalStore(subscribeSoundstageControls, readSoundstageControls)
 
   // ---------------------------------------------------------------- render
 
@@ -1192,13 +1125,13 @@ export const AudioControls = memo(function AudioControls({
           <span className="fa-solid fa-forward" aria-hidden="true" />
         </button>
 
-        {/* Sound-options toggle: swaps the bottom row between buckets and levels */}
+        {/* Soundstage toggle: swaps the bottom row between buckets and soundstages */}
         <button
           ref={soundOptionsButtonRef}
           type="button"
           className={`audio-ctrl-btn${isSoundOptionsOpen ? ' is-active' : ''}`}
           data-tooltip={soundOptionsTooltip}
-          aria-label={isSoundOptionsOpen ? 'Show playlists' : 'Show sound options'}
+          aria-label={isSoundOptionsOpen ? 'Show playlists' : 'Show soundstages'}
           aria-pressed={isSoundOptionsOpen}
           onClick={() => onSoundOptionsOpenChange(!isSoundOptionsOpen)}
         >
@@ -1208,65 +1141,29 @@ export const AudioControls = memo(function AudioControls({
         {/* Bottom row — playlist buckets, or the sound options in their place */}
         {isSoundOptionsOpen ? (
           <>
+            {FACTORY_SOUNDSTAGES.map((stage) => (
+              <button
+                key={stage.id}
+                type="button"
+                className={`audio-ctrl-btn audio-sound-btn${soundstage.solid === stage.id ? ' is-active' : ''}`}
+                data-tooltip={stage.name}
+                aria-label={`${stage.name} soundstage`}
+                aria-pressed={soundstage.solid === stage.id}
+                onClick={() => soundstage.select(stage.id)}
+              >
+                <span className={stage.icon} aria-hidden="true" />
+              </button>
+            ))}
             <button
               type="button"
-              className={`audio-ctrl-btn audio-sound-btn${isMuted ? ' is-active' : ''}`}
-              data-tooltip={isMuted ? `Muted — click to restore volume ${toDisplayLevel(volume)}` : 'Mute'}
-              aria-label={isMuted ? 'Unmute music' : 'Mute music'}
-              aria-pressed={isMuted}
-              onClick={handleMuteToggle}
+              className={`audio-ctrl-btn audio-sound-btn${soundstage.solid === 'custom' ? ' is-active' : ''}`}
+              data-tooltip="Custom"
+              aria-label="Custom soundstage"
+              aria-pressed={soundstage.solid === 'custom'}
+              onClick={() => soundstage.select('custom')}
             >
-              <span className={volumeGlyph} aria-hidden="true" />
+              <span className={CUSTOM_SOUNDSTAGE_ICON} aria-hidden="true" />
             </button>
-
-            <SoundLevelButton
-              value={volume}
-              onWheel={handleVolumeWheel}
-              holdHandlers={volumeHoldHandlers}
-              label="Music volume"
-              tooltip="Volume — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
-              isDimmed={isMuted}
-            />
-
-            <button
-              type="button"
-              className={`audio-ctrl-btn audio-sound-btn${isReverbBypassed ? ' is-active' : ''}`}
-              data-tooltip={isReverbBypassed ? `Reverb off — click to restore ${toDisplayLevel(reverbAmount)}` : 'Turn reverb off'}
-              aria-label={isReverbBypassed ? 'Enable reverb' : 'Disable reverb'}
-              aria-pressed={isReverbBypassed}
-              onClick={handleReverbBypassToggle}
-            >
-              <span className={reverbGlyph} aria-hidden="true" />
-            </button>
-
-            <SoundLevelButton
-              value={reverbAmount}
-              onWheel={handleReverbWheel}
-              holdHandlers={reverbHoldHandlers}
-              label="Music reverb amount"
-              tooltip="Reverb — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
-              isDimmed={isReverbBypassed}
-            />
-
-            <button
-              type="button"
-              className={`audio-ctrl-btn audio-sound-btn${isReverbBypassed ? ' is-active' : ''}`}
-              data-tooltip={isReverbBypassed ? 'Reverb off — click to restore' : `Reverb size ${toDisplayLevel(reverbRoom)} — click to turn reverb off`}
-              aria-label={isReverbBypassed ? 'Enable reverb' : 'Disable reverb'}
-              aria-pressed={isReverbBypassed}
-              onClick={handleReverbBypassToggle}
-            >
-              <span className={roomGlyph} aria-hidden="true" />
-            </button>
-
-            <SoundLevelButton
-              value={reverbRoom}
-              onWheel={handleRoomWheel}
-              holdHandlers={roomHoldHandlers}
-              label="Music reverb size"
-              tooltip="Reverb size — scroll to adjust (Shift: by 10). Hold left to lower, right to raise."
-              isDimmed={isReverbBypassed}
-            />
           </>
         ) : (
           <>
@@ -1311,61 +1208,6 @@ export const AudioControls = memo(function AudioControls({
 })
 
 /**
- * One of the three numeric level buttons in the sound-options row: prints a
- * 0-99 readout and takes a wheel over it.
- *
- * It exists as its own component purely so each readout owns the ref that
- * `useNonPassiveWheel` needs. The listener has to be native and non-passive
- * (React's delegated synthetic wheel runs late enough that the browser can
- * already have nudged the nearest scrollable ancestor -- the sidebar, here --
- * before preventDefault lands), and a hook cannot be called in a loop.
- *
- * Pressing it holds to sweep the value (left down, right up) on the same
- * motion curve the app scrolls with -- see shared/holdToAdjust.ts for why that
- * curve rather than a linear ramp. It stays a div with `tabIndex={-1}` rather
- * than a button because there is no discrete click action to expose: every
- * gesture on it is continuous, and its value is announced through the slider
- * role above.
- */
-function SoundLevelButton({
-  value,
-  onWheel,
-  holdHandlers,
-  label,
-  tooltip,
-  isDimmed,
-}: {
-  value: number
-  onWheel: (event: WheelEvent) => void
-  holdHandlers: HoldToAdjustHandlers
-  label: string
-  tooltip: string
-  isDimmed: boolean
-}) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  useNonPassiveWheel(ref, onWheel)
-
-  const display = toDisplayLevel(value)
-
-  return (
-    <div
-      ref={ref}
-      className={`audio-ctrl-btn audio-sound-level${isDimmed ? ' is-dimmed' : ''}`}
-      role="slider"
-      aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={SOUND_LEVEL_MAX_DISPLAY}
-      aria-valuenow={display}
-      tabIndex={-1}
-      data-tooltip={tooltip}
-      {...holdHandlers}
-    >
-      {display}
-    </div>
-  )
-}
-
-/**
  * The Soundscapes switch at the end of the playlist row, which is also the
  * Soundscapes master volume: a click turns soundscapes on or off, a wheel over
  * it nudges the level exactly like a music level readout (Shift: by 10), and
@@ -1373,7 +1215,7 @@ function SoundLevelButton({
  * user's own (nextSoundscapePreset) -- turning soundscapes on. Wheeling turns soundscapes on if it was off -- the same "adjusting
  * turns it back on" rule the music volume follows with mute.
  *
- * Its own component for the reason SoundLevelButton is: it owns the ref its
+ * Its own component because it owns the ref its
  * native wheel listener is bound to. The playlist row unmounts while the
  * sound options are showing, and a listener bound from the parent would not
  * be re-bound to the new button when the row comes back.
