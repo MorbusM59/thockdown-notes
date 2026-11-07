@@ -957,6 +957,7 @@ export const AudioControls = memo(function AudioControls({
     `[Scroll] Volume: ${toDisplayLevel(volume)}${isMuted ? ' (muted)' : ''}`,
     `[Shift] Reverb: ${toDisplayLevel(reverbAmount)}${isReverbBypassed ? ' (off)' : ''}`,
     `[Ctrl] Room: ${toDisplayLevel(reverbRoom)}${isReverbBypassed ? ' (off)' : ''}`,
+    isMuted ? '[Right-click] Unmute' : '[Right-click] Mute',
   ].join('\n')
 
   // The hold gesture speaks in printed 0-99 levels; the graph wants fractions.
@@ -1134,6 +1135,11 @@ export const AudioControls = memo(function AudioControls({
           aria-label={isSoundOptionsOpen ? 'Show playlists' : 'Show soundstages'}
           aria-pressed={isSoundOptionsOpen}
           onClick={() => onSoundOptionsOpenChange(!isSoundOptionsOpen)}
+          data-secondary-press="action"
+          onContextMenu={(event) => {
+            event.preventDefault()
+            onMutedChange(!isMuted)
+          }}
         >
           <span className="fa-solid fa-headphones" aria-hidden="true" />
         </button>
