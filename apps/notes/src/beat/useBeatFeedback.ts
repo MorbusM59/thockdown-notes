@@ -102,7 +102,7 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
 /** A block that shows nothing: the reader pane while the visualizer mode is up, where there is no reader view. */
 const OFF_CHANNEL: VisualizerChannel = { effect: 0, mix: { thump: 0, pierce: 0, tick: 0 }, shape: 0, fallSec: 1 }
 
-export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean, caretEffect: number, isVisualizerMode: boolean): void {
+export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean, caretEffect: number, isVisualizerMode: boolean, uiMode: 'light' | 'dark'): void {
   // Set before the blocks subscribe (effects run in order), so the first
   // analysis already listens to the trackers.
   const { trackers } = visualizer
@@ -114,10 +114,11 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   useBeatBlock('caret', caretBlock, enabled && caretFollowsMusic, subscribeClock)
   // The same two elements show the grid beat on the editor and the visualizer
   // mode's own edge and pane over its scene, each set of settings in its turn.
-  const shownEdge = isVisualizerMode ? visualizer.edge : visualizer.grid.edge
+  const grid = visualizer.grid[uiMode]
+  const shownEdge = isVisualizerMode ? visualizer.edge : grid.edge
   useBeatBlock('edge', shownEdge, enabled, subscribeMix)
-  useBeatBlock('pane', isVisualizerMode ? visualizer.pane : visualizer.grid.editorPane, enabled, subscribeMix)
-  useBeatBlock('wash', isVisualizerMode ? OFF_CHANNEL : visualizer.grid.readerPane, enabled, subscribeMix)
+  useBeatBlock('pane', isVisualizerMode ? visualizer.pane : grid.editorPane, enabled, subscribeMix)
+  useBeatBlock('wash', isVisualizerMode ? OFF_CHANNEL : grid.readerPane, enabled, subscribeMix)
   const edgeSpreadPx = shownEdge.spreadPx
   const edgeBlurPx = shownEdge.blurPx
   const { edge: edgeColor, pane: paneColor, wave: waveColor, pulse: pulseColor, accent: accentColor, letterbox: letterboxColor } = colors

@@ -28,16 +28,30 @@ describe('sanitizeVisualizer', () => {
 })
 
 describe('the grid beat', () => {
-  it('copies an old save\'s edge and pane into both grid panes, then stands apart', () => {
+  it('copies an old save\'s edge and pane into both modes\' grid panes, then stands apart', () => {
     const v = sanitizeVisualizer({ edge: { effect: 0.7, spreadPx: 12 }, pane: { effect: 0.2 } })
-    expect(v.grid.edge.effect).toBe(v.edge.effect)
-    expect(v.grid.edge.spreadPx).toBe(v.edge.spreadPx)
-    expect(v.grid.editorPane).toEqual(v.pane)
-    expect(v.grid.readerPane).toEqual(v.pane)
-    const w = sanitizeVisualizer({ ...v, grid: { ...v.grid, readerPane: { ...v.pane, effect: 0.9 } } })
-    expect(w.grid.readerPane.effect).toBe(0.9)
-    expect(w.grid.editorPane.effect).toBe(v.pane.effect)
+    for (const mode of ['light', 'dark'] as const) {
+      expect(v.grid[mode].edge.effect).toBe(v.edge.effect)
+      expect(v.grid[mode].edge.spreadPx).toBe(v.edge.spreadPx)
+      expect(v.grid[mode].editorPane).toEqual(v.pane)
+      expect(v.grid[mode].readerPane).toEqual(v.pane)
+    }
+    const w = sanitizeVisualizer({ ...v, grid: { ...v.grid, dark: { ...v.grid.dark, readerPane: { ...v.pane, effect: 0.9 } } } })
+    expect(w.grid.dark.readerPane.effect).toBe(0.9)
+    expect(w.grid.light.readerPane.effect).toBe(v.pane.effect)
+    expect(w.grid.dark.editorPane.effect).toBe(v.pane.effect)
     expect(w.pane).toEqual(v.pane)
+  })
+
+  it('reads a single-set save into both modes', () => {
+    const single = { ...DEFAULT_VISUALIZER.grid.dark, editorPane: { ...DEFAULT_VISUALIZER.grid.dark.editorPane, effect: 0.42 } }
+    const v = sanitizeVisualizer({ ...DEFAULT_VISUALIZER, grid: single })
+    expect(v.grid.light).toEqual(v.grid.dark)
+    expect(v.grid.light.editorPane.effect).toBe(0.42)
+  })
+
+  it('round-trips the defaults', () => {
+    expect(sanitizeVisualizer(DEFAULT_VISUALIZER).grid).toEqual(DEFAULT_VISUALIZER.grid)
   })
 })
 

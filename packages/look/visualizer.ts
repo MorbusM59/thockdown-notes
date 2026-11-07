@@ -132,8 +132,13 @@ export interface VisualizerSettings {
   trackers: VisualizerTrackers
   /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo. */
   caret: VisualizerCaret
-  /** GRID BEAT: the blocks on the editor while the visualizer mode is NOT up (Options > Grid Beat). */
-  grid: VisualizerGridBeat
+  /**
+   * GRID BEAT: the blocks on the editor while the visualizer mode is NOT up
+   * (Options > Grid Beat), one set per light/dark mode: the same response
+   * reads very differently on a light page and a dark one. The active
+   * mode's set is shown and edited.
+   */
+  grid: VisualizerGridBeatModes
   /** The visualizer mode's edge (F5), an inner shadow round its scene; a response deepens it. Its fall also times the centre pulse's solid thump. */
   edge: VisualizerEdgeChannel
   /** The visualizer mode's pane: a copy of the scene's box outlines over its grid. A response draws it. */
@@ -146,6 +151,11 @@ export interface VisualizerSettings {
  * The beat on the editor (Options > Grid Beat), independent of the
  * visualizer mode's own edge and pane. A response draws each.
  */
+export interface VisualizerGridBeatModes {
+  light: VisualizerGridBeat
+  dark: VisualizerGridBeat
+}
+
 export interface VisualizerGridBeat {
   /** The active editor's edge, an inner shadow. */
   edge: VisualizerEdgeChannel
@@ -360,9 +370,16 @@ export const DEFAULT_VISUALIZER: VisualizerSettings = {
   trackers: DEFAULT_VISUALIZER_TRACKERS,
   caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.5 },
   grid: {
-    edge: { ...DEFAULT_SAVED_EDGE, effect: 0.3, spreadPx: 0, blurPx: 100 },
-    editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
-    readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
+    dark: {
+      edge: { ...DEFAULT_SAVED_EDGE, effect: 0.3, spreadPx: 0, blurPx: 100 },
+      editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
+      readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
+    },
+    light: {
+      edge: { ...DEFAULT_SAVED_EDGE, effect: 0.3, spreadPx: 0, blurPx: 100 },
+      editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.5 },
+      readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.5 },
+    },
   },
   edge: DEFAULT_SAVED_EDGE,
   pane: DEFAULT_SAVED_PANE,
@@ -610,12 +627,28 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
     // A save from before the grid beat was separated from the visualizer
     // mode's (2026-11-07) had one edge and one pane for both: each copy
     // starts from them.
-    grid: sanitizeGridBeat(source.grid, { edge, editorPane: pane, readerPane: pane }),
+    grid: sanitizeGridBeatModes(source.grid, { edge, editorPane: pane, readerPane: pane }, d.grid),
     edge,
     pane,
     // ...and its wave followed the snare, whatever the default wave mix is now.
     immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('pierce') : null),
   }
+}
+
+/**
+ * A save from before the grid beat was split by light/dark mode
+ * (2026-11-07) holds one set, which both modes take; one from before the
+ * grid beat existed at all has none, and both modes take the visualizer
+ * mode's edge and pane (`legacy`). Otherwise each mode is read on its own.
+ */
+function sanitizeGridBeatModes(input: unknown, legacy: VisualizerGridBeat, d: VisualizerGridBeatModes): VisualizerGridBeatModes {
+  const source = fieldsOf(input)
+  if (input !== undefined && source.light === undefined && source.dark === undefined) {
+    const single = sanitizeGridBeat(input, legacy)
+    return { light: single, dark: single }
+  }
+  if (input === undefined) return { light: legacy, dark: legacy }
+  return { light: sanitizeGridBeat(source.light, d.light), dark: sanitizeGridBeat(source.dark, d.dark) }
 }
 
 function sanitizeGridBeat(input: unknown, d: VisualizerGridBeat): VisualizerGridBeat {

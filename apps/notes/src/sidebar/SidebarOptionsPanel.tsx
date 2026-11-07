@@ -63,6 +63,7 @@ import {
   type VisualizerMix,
   type VisualizerTrackerName,
   type VisualizerSettings,
+  type VisualizerGridBeat,
   type VisualizerColors,
   DEFAULT_VISUALIZER,
 } from '@thockdown/look/visualizer'
@@ -1125,8 +1126,14 @@ export function SidebarOptionsPanel({
         </>
       )
     }
-    const setGrid = <K extends keyof VisualizerSettings['grid']>(key: K) =>
-      (patch: Partial<VisualizerSettings['grid'][K]>) => setVisualizer((prev) => ({ ...prev, grid: { ...prev.grid, [key]: { ...prev.grid[key], ...patch } } }))
+    // Grid Beat shows and edits the active light/dark mode's set.
+    const shownGrid = visualizer.grid[uiMode]
+    const gridDefaults = visualizerDefaults.grid[uiMode]
+    const setGrid = <K extends keyof VisualizerGridBeat>(key: K) =>
+      (patch: Partial<VisualizerGridBeat[K]>) => setVisualizer((prev) => ({
+        ...prev,
+        grid: { ...prev.grid, [uiMode]: { ...prev.grid[uiMode], [key]: { ...prev.grid[uiMode][key], ...patch } } },
+      }))
 
     /**
      * The true-mode hold's canceller, so a release or a pointer leaving the
@@ -2649,9 +2656,9 @@ export function SidebarOptionsPanel({
         ariaLabel="Grid Beat"
         heading="Grid Beat"
       >
-          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', visualizer.grid.edge, visualizerDefaults.grid.edge, setGrid('edge'))}
-          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the edit view', visualizer.grid.editorPane, visualizerDefaults.grid.editorPane, setGrid('editorPane'))}
-          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the render view', visualizer.grid.readerPane, visualizerDefaults.grid.readerPane, setGrid('readerPane'))}
+          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
+          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the edit view', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
+          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the render view', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
       </AccordionSection>
       ) : null}
 

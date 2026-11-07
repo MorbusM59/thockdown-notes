@@ -2232,7 +2232,7 @@ function App() {
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [audioSpatial, setAudioSpatial] = useState(0)
-  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, caretFollowsMusic, caretEffectStrengthPercent / 100, isVisualizerMode)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, caretFollowsMusic, caretEffectStrengthPercent / 100, isVisualizerMode, uiMode)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
