@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { countWordsFrom, nextChunk } from './speedReadingChunks'
-import { chunkCost, EditPacer, formatClock } from './speedReadingPace'
+import { chunkCost, EditPacer, formatClock, paceFor } from './speedReadingPace'
 import { syntheticNote } from './speedReadingTestNote'
 
 /** Reads the whole note as the session does, returning words, seconds, and the time left the pacer predicted at the start and halfway. */
@@ -31,27 +31,24 @@ describe('edit view pace', () => {
     expect(countWordsFrom(note, 0)).toBe(words)
   })
 
-  // Pairs where the fixations leave time for letters; at 200ms a 12-box row
-  // tops out near 380 wpm and a 24-box row near 580 (the floor, below).
-  it.each([[100, 12], [250, 12], [100, 24], [300, 24], [450, 24], [300, 40], [600, 40]])('reads at the words per minute shown: %i wpm, %i boxes', (wpm, w) => {
-    for (const width of [w]) {
+  it.each([100, 250, 300, 450, 600, 1000, 1500])('reads at the words per minute shown: %i wpm', (wpm) => {
+    for (const width of [12, 24, 40]) {
       const { words, seconds } = readThrough(note, wpm, width, 200)
       expect((words / seconds) * 60 / wpm).toBeGreaterThan(0.99)
       expect((words / seconds) * 60 / wpm).toBeLessThan(1.01)
     }
   })
 
-  it('reads slower than the figure only where the fixations alone exceed it', () => {
-    const { words, seconds } = readThrough(note, 1500, 24, 200)
-    const chunks: number[] = []
-    for (let c = nextChunk(note, 0, 24); c; c = nextChunk(note, c.end, 24)) chunks.push(chunkCost(c).fixations)
-    // The floor: every chunk its fixations and nothing for its letters.
-    expect(seconds).toBeCloseTo(chunks.reduce((a, b) => a + b, 0) * 0.2, 6)
-    expect((words / seconds) * 60).toBeLessThan(1500)
+  it('keeps the reader\'s fixation wherever it fits, and shrinks it only past half the time', () => {
+    const cost = chunkCost({ text: 'one two three four.', words: 4 })
+    expect(paceFor(cost, 300, 0.2).fixationSec).toBe(0.2)
+    const fast = paceFor(cost, 1500, 0.2)
+    expect(fast.fixationSec).toBeLessThan(0.2)
+    expect(cost.fixations * fast.fixationSec).toBeCloseTo((4 * 60 / 1500) * 0.5, 9)
   })
 
   it('predicts the time left from the same model', () => {
-    for (const wpm of [250, 450]) {
+    for (const wpm of [250, 600, 1200]) {
       const r = readThrough(note, wpm, 24, 200)
       expect(r.predictedAtStart / r.seconds).toBeGreaterThan(0.98)
       expect(r.predictedAtStart / r.seconds).toBeLessThan(1.02)

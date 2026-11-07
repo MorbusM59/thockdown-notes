@@ -883,7 +883,7 @@ ${shortcutTable()}
 
 *The pace of [Speed Reading]($#speed-reading) and how it eases.*
 
-- **Edit**: the edit view's words per minute; **row**, its reading row in boxes; and **fixation**, the time every chunk stays before its letters are counted, which is also the shortest a chunk can stay; a sentence's end adds one fixation and a comma half of one. Chunks also end at punctuation and around quotations, and a line break shows an empty row for one fixation. Pauses and fixations are taken out of your pace, not added to it, so the words still go by at the figure shown unless the fixations alone are longer.
+- **Edit**: the edit view's words per minute; **row**, its reading row in boxes; and **fixation**, the time every chunk stays before its letters are counted; a sentence's end adds one fixation and a comma half of one. Chunks also end at punctuation and around quotations, and a line break shows an empty row for one fixation. Pauses and fixations are taken out of your pace, not added to it, so the words go by at the figure shown; at high paces the fixation shortens to keep up.
 - **Render**: the render view's words per minute.
 - **Curve**: **ramp**, **shape** and **speed** shape the ease into a held \`Space\` and out of and back from a pause, like the same three in [Animations]($#animations), with their own values.
 

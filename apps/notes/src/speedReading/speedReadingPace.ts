@@ -20,10 +20,10 @@
  * The solve is over a WINDOW of the chunks from the one on show onward
  * (`PACE_LOOKAHEAD_CHUNKS`), kept as running sums that move by one chunk per
  * step, so a dense passage and a passage of short lines each read at the pace
- * rather than one paying for the other. Where the fixations and pauses alone
- * exceed the window's budget the per-letter time is zero, and the reading is
- * slower than the figure: the fixation is the floor below which a chunk
- * cannot be recognised, and that is the reader's own setting.
+ * rather than one paying for the other. Where the fixations and pauses would
+ * take more than `MAX_FIXED_SHARE` of the window's time, the fixation shrinks
+ * with the pace instead of holding the reading below the figure: a high pace
+ * is the reader asking for less time per chunk, fixation included.
  *
  * ## Time left
  * The window's chunks are timed exactly; past it, the remaining words are
@@ -57,15 +57,29 @@ export function chunkCost(chunk: Pick<SpeedReadingChunk, 'text' | 'words'>): Chu
   return { words: chunk.words, letters, fixations: 1 + pause }
 }
 
-/** The per-letter seconds that make `sums` take exactly its words at `wpm`; zero where fixations alone exceed that. */
-export function perLetterSec(sums: ChunkCost, wpm: number, fixationSec: number): number {
-  if (sums.letters <= 0) return 0
-  const budget = (sums.words * 60) / Math.max(1, wpm)
-  return Math.max(0, budget - sums.fixations * fixationSec) / sums.letters
+/**
+ * The largest share of a window's time its fixations and pauses may take.
+ * Past it the fixation shrinks with the pace rather than holding the reading
+ * below the figure shown, so the letters always keep the other half.
+ */
+export const MAX_FIXED_SHARE = 0.5
+
+export interface Pace {
+  /** Seconds a fixation lasts at this pace: the reader's own, or less where that would not fit. */
+  fixationSec: number
+  perLetterSec: number
 }
 
-export function costDurationSec(cost: ChunkCost, perLetter: number, fixationSec: number): number {
-  return cost.fixations * fixationSec + cost.letters * perLetter
+/** The fixation and per-letter seconds that make `sums` take exactly its words at `wpm`. */
+export function paceFor(sums: ChunkCost, wpm: number, fixationSec: number): Pace {
+  const budget = (sums.words * 60) / Math.max(1, wpm)
+  const fixation = sums.fixations > 0 ? Math.min(fixationSec, (budget * MAX_FIXED_SHARE) / sums.fixations) : fixationSec
+  if (sums.letters <= 0) return { fixationSec: fixation, perLetterSec: 0 }
+  return { fixationSec: fixation, perLetterSec: Math.max(0, budget - sums.fixations * fixation) / sums.letters }
+}
+
+export function costDurationSec(cost: ChunkCost, pace: Pace): number {
+  return cost.fixations * pace.fixationSec + cost.letters * pace.perLetterSec
 }
 
 function add(into: ChunkCost, cost: ChunkCost, sign: 1 | -1): void {
@@ -125,17 +139,15 @@ export class EditPacer {
 
   /** Seconds the chunk on show stays at full pace. */
   durationSec(wpm: number, fixationMs: number): number {
-    const fixation = Math.max(0, fixationMs) / 1000
-    return costDurationSec(this.window[0].cost, perLetterSec(this.sums, wpm, fixation), fixation)
+    return costDurationSec(this.window[0].cost, paceFor(this.sums, wpm, Math.max(0, fixationMs) / 1000))
   }
 
   /** Seconds from the next chunk to the note's end, reading on at full pace. */
   timeLeftSec(wpm: number, fixationMs: number): number {
-    const fixation = Math.max(0, fixationMs) / 1000
-    const perLetter = perLetterSec(this.sums, wpm, fixation)
+    const pace = paceFor(this.sums, wpm, Math.max(0, fixationMs) / 1000)
     let windowSec = 0
-    for (const { cost } of this.window) windowSec += costDurationSec(cost, perLetter, fixation)
-    const aheadSec = windowSec - costDurationSec(this.window[0].cost, perLetter, fixation)
+    for (const { cost } of this.window) windowSec += costDurationSec(cost, pace)
+    const aheadSec = windowSec - costDurationSec(this.window[0].cost, pace)
     const secPerWord = this.sums.words > 0 ? windowSec / this.sums.words : 60 / Math.max(1, wpm)
     return aheadSec + this.wordsBeyond * secPerWord
   }
