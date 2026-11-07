@@ -28,7 +28,7 @@
  */
 
 import { setGridWaveSettings } from '../visualizer/gridWaveTurn'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { VisualizerCaret, VisualizerChannel, VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
@@ -39,7 +39,9 @@ import { setFlowStyle } from './flowStyle'
 type BlockName = 'caret' | 'edge' | 'pane'
 
 /** What a block subscribes with: a mix for the edge and pane, the caret's two fields for the caret's clock. */
-type BlockSettings = VisualizerChannel | VisualizerCaret
+/** The caret's block as it plays: its fall, and the layout's caret effect as its depth. */
+type CaretBlock = VisualizerCaret & Pick<VisualizerChannel, 'effect'>
+type BlockSettings = VisualizerChannel | CaretBlock
 
 interface BlockSubscription<T> {
   update: (settings: T) => void
@@ -54,7 +56,7 @@ const subscribeMix: Subscribe<VisualizerChannel> = (channel, listener, present) 
   return subscribeMusicMix(channel, listener)
 }
 
-const subscribeClock: Subscribe<VisualizerCaret> = (caret, listener, present) => subscribeMusicClock(caret, listener, present)
+const subscribeClock: Subscribe<CaretBlock> = (caret, listener, present) => subscribeMusicClock(caret, listener, present)
 
 function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: boolean, subscribeTo: Subscribe<T>): void {
   const active = on && channel.effect !== 0
@@ -92,12 +94,14 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
   }, [channel])
 }
 
-export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean): void {
+export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean, caretEffect: number): void {
   // Set before the blocks subscribe (effects run in order), so the first
   // analysis already listens to the trackers.
   const { trackers } = visualizer
   useEffect(() => setVisualizerTrackers(trackers), [trackers])
-  useBeatBlock('caret', visualizer.caret, enabled && caretFollowsMusic, subscribeClock)
+  // The beat's depth is the layout's caret effect, the blink's own slider (-1..1).
+  const caretBlock = useMemo(() => ({ ...visualizer.caret, effect: caretEffect }), [visualizer.caret, caretEffect])
+  useBeatBlock('caret', caretBlock, enabled && caretFollowsMusic, subscribeClock)
   useBeatBlock('edge', visualizer.edge, enabled, subscribeMix)
   useBeatBlock('pane', visualizer.pane, enabled, subscribeMix)
   const edgeSpreadPx = visualizer.edge.spreadPx

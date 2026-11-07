@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_VISUALIZER_IMMERSIVE, DEFAULT_VISUALIZER_TRACKERS, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_VISUALIZER_CARET, DEFAULT_VISUALIZER, DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, DEFAULT_VISUALIZER_TRACKERS, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_VISUALIZER, DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a save without a visualizer with the defaults', () => {
@@ -18,12 +18,12 @@ describe('sanitizeVisualizer', () => {
     expect(v.immersive).not.toHaveProperty('waveColor')
     expect(v.pane.mix).toEqual(DEFAULT_VISUALIZER.pane.mix)
     expect(v.immersive.pulseMix).toEqual({ thump: 0.5, pierce: DEFAULT_VISUALIZER.immersive.pulseMix.pierce, tick: 1 })
-    expect(v.caret.effect).toBe(DEFAULT_VISUALIZER_CARET.effect)
+    expect(v.caret).toEqual(DEFAULT_VISUALIZER.caret)
   })
 
   it('keeps only what the caret reads, so an older save with a source or its switch loads without it', () => {
     const v = sanitizeVisualizer({ caret: { followsMusic: false, effect: 0.3, shape: 0.2, fallSec: 0.5, source: 'snare', frequencyHz: 300, contrast: 0.2 } })
-    expect(v.caret).toEqual({ effect: 0.3, shape: 0.2, fallSec: 0.5 })
+    expect(v.caret).toEqual({ shape: 0.2, fallSec: 0.5 })
   })
 })
 
@@ -149,7 +149,6 @@ it('reads an old saved scale as gone, and gives the glaze the wave\'s mix when i
 
 it('turns a saved amount and invert into a signed effect', () => {
   const v = sanitizeVisualizer({ caret: { amount: 0.4, invert: true }, edge: { amount: 0.3 } })
-  expect(v.caret.effect).toBe(-0.4)
   expect(v.edge.effect).toBe(0.3)
   expect(v.caret).not.toHaveProperty('invert')
 })

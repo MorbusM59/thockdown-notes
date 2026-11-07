@@ -217,8 +217,9 @@ describe('buildCaretBlinkKeyframesCss', () => {
     expect(new Set(declarations).size).toBe(1)
   })
 
-  it('clamps effect strength rather than inverting or overshooting the blend', () => {
-    expect(fillAlphasOf(build({ effectStrengthPercent: -50 }))).toEqual([0.3, 0.3, 0.3, 0.3, 0.3])
+  it('inverts the blink left of centre and clamps past either end', () => {
+    expect(fillAlphasOf(build({ effectStrengthPercent: -50 }))).toEqual([0.21, 0.285, 0.165, 0.255, 0.21])
+    expect(fillAlphasOf(build({ effectStrengthPercent: -400 }))).toEqual([0.12, 0.27, 0.03, 0.21, 0.12])
     expect(fillAlphasOf(build({ effectStrengthPercent: 400 }))).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
   })
 

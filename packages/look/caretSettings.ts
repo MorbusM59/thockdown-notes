@@ -91,10 +91,14 @@ export const CARET_FRAME_DURATION_STEP_MS = 5
 // buildCaretBlinkKeyframesCss.
 export const CARET_FRAME_DURATION_DEFAULT_MS = CARET_FRAME_DURATION_MIN_MS
 
-// A shape at 0% strength is a static caret, so this is the one caret setting
-// whose default has to be its maximum: anything less would quietly damp the
-// heartbeat everyone already has.
-export const CARET_EFFECT_STRENGTH_MIN_PERCENT = 0
+// The caret's EFFECT, signed: 0 is a static caret; right of centre the blink
+// (and, while the caret follows the music, each beat) takes the caret away
+// from its colour; left of centre it is inverted, the caret resting that far
+// away and the blink (or beat) bringing it back. The default is the full
+// ordinary blink: anything less would quietly damp the heartbeat everyone
+// already has. One value for the blink and the beat (the visualizer's caret
+// block reads it as its effect, -1..1).
+export const CARET_EFFECT_STRENGTH_MIN_PERCENT = -100
 export const CARET_EFFECT_STRENGTH_MAX_PERCENT = 100
 export const CARET_EFFECT_STRENGTH_STEP_PERCENT = 1
 export const CARET_EFFECT_STRENGTH_DEFAULT_PERCENT = 100
@@ -322,7 +326,9 @@ function flowAdjustedRgba(color: RgbaColor, alphaScale: number): string {
 
 /**
  * Blends a stop's alpha multiplier toward 1 -- a caret sitting at its own
- * colours, i.e. no effect at all -- by the effect-strength slider.
+ * colours, i.e. no effect at all -- by the effect-strength slider. A
+ * negative strength inverts the stop: the caret then rests at `1 - |s|`
+ * where the blink peaks, and comes back to its colour where the blink dips.
  *
  * Applied here, at emit time, rather than to the preset's stops up front. The
  * blend is linear and so is the step interpolation in resolveEmittedStops, so
@@ -333,8 +339,8 @@ function flowAdjustedRgba(color: RgbaColor, alphaScale: number): string {
  * a static caret in the way that matters, not just the way it looks.
  */
 function resolveEffectiveAlpha(stopAlpha: number, effectStrengthPercent: number): number {
-  const strength = Math.max(0, Math.min(1, effectStrengthPercent / 100))
-  return 1 + ((stopAlpha - 1) * strength)
+  const strength = Math.max(-1, Math.min(1, effectStrengthPercent / 100))
+  return strength >= 0 ? 1 + ((stopAlpha - 1) * strength) : 1 + (stopAlpha * strength)
 }
 
 function parseColorOrFallback(color: string, fallback: string): RgbaColor {

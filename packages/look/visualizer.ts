@@ -98,8 +98,9 @@ export interface VisualizerChannel {
 /**
  * The caret's block: it ticks on a steady beat that follows the music's
  * tempo (the notes app's beat map, `sound/beatMap.ts`) rather than a tracker,
- * so it has only the depth of each beat (`effect`, as a channel's) and the
- * fall each beat makes (`shape` and `fallSec`, cut at the next beat).
+ * so it has only the fall each beat makes (`shape` and `fallSec`, cut at the
+ * next beat). The depth of each beat is the layout's caret EFFECT, one slider
+ * for the blink and the beat (`caretSettings.ts`, `effectStrengthPercent`).
  *
  * Whether the caret follows at all is the layout's (`caretFollowsMusic`,
  * Options > Caret, the last button of the blink row): while it is on, music
@@ -107,7 +108,7 @@ export interface VisualizerChannel {
  * other moment it blinks with its own blink, which the switch leaves
  * selected. The block's sliders are shown only while it is on.
  */
-export type VisualizerCaret = Pick<VisualizerChannel, 'effect' | 'shape' | 'fallSec'>
+export type VisualizerCaret = Pick<VisualizerChannel, 'shape' | 'fallSec'>
 
 /**
  * The edge's geometry, which does not follow the music: only its opacity
@@ -316,7 +317,6 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
 }
 
 export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
-  effect: -1,
   shape: -1,
   fallSec: 1.515,
 }
@@ -515,10 +515,9 @@ function sanitizeFall(source: Fields, d: Pick<VisualizerChannel, 'shape' | 'fall
   }
 }
 
-/** The caret's fields; anything else an older layout saved with it (a source, a band, its switch) is dropped. */
+/** The caret's fall; anything else an older save had on it (a source, a band, its switch, its effect) is dropped. */
 function sanitizeCaret(input: unknown, d: VisualizerCaret): VisualizerCaret {
-  const source = fieldsOf(input)
-  return { effect: sanitizeEffect(source, d.effect), ...sanitizeFall(source, d) }
+  return sanitizeFall(fieldsOf(input), d)
 }
 
 function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): VisualizerEdgeChannel {
@@ -646,7 +645,7 @@ export function sanitizeCaretFollowsMusic(input: unknown, legacyVisualizer: unkn
   if (!caret || typeof caret !== 'object') return false
   const source = caret as Fields
   if (typeof source.followsMusic === 'boolean') return source.followsMusic
-  return sanitizeEffect(source, DEFAULT_VISUALIZER_CARET.effect) !== 0
+  return sanitizeEffect(source, -1) !== 0
 }
 
 /**

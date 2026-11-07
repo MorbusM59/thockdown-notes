@@ -113,7 +113,7 @@ describe('DatabaseService visualizer loadout', () => {
     expect(migrated?.immersive).toMatchObject({ glazeStrength: 0.15, waveBoxes: 40 })
 
     // Once: a later tuning is not overwritten by the layout's.
-    const tuned = { ...DEFAULT_VISUALIZER, caret: { ...DEFAULT_VISUALIZER.caret, effect: 0.9 } }
+    const tuned = { ...DEFAULT_VISUALIZER, caret: { ...DEFAULT_VISUALIZER.caret, fallSec: 0.9 } }
     const appState = await state.loadAppState()
     await state.saveAppState({ ...appState, menu: { ...appState.menu!, visualizer: tuned } })
     await migrateVisualizerTuning(state, db)

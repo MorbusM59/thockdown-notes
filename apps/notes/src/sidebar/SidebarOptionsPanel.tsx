@@ -917,7 +917,9 @@ export function SidebarOptionsPanel({
     // With the Visualizer off it cannot be used at all, so it is disabled (and
     // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
     const caretFollowUnavailable = !features.visualizer
-    const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && visualizer.caret.effect === 0)
+    const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && caretEffectStrengthPercent === 0)
+    // The caret's Visualizer subsection: the beat's fall, while the caret follows the music.
+    const beatCaretShown = features.visualizer && caretFollowsMusic
     const outputDevice = useOutputDevice(features.visualizer)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
     // length, the length on a log track so each step of it feels the same.
@@ -959,28 +961,11 @@ export function SidebarOptionsPanel({
     // tempo (musicBeat.ts, `subscribeMusicClock`), so it has only a depth and a fall.
     const renderBeatCaret = () => {
       const caret = visualizer.caret
-      const slider = (field: 'effect', min: number, tooltipLabel: string, ariaName: string) => (
-        <CompactScrollbarSlider
-          id={`beat-caret-${field}`}
-          min={min}
-          max={1}
-          step={0.01}
-          value={caret[field]}
-          trackLabel={field}
-          tooltipLabel={tooltipLabel}
-          ariaLabel={`Caret: ${ariaName}`}
-          defaultValue={visualizerDefaults.caret[field]}
-          onCommit={(value) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, [field]: value } }))}
-        />
-      )
       return (
         <>
-          <div className="utility-setting-button-row" role="group" aria-label="Caret controls">
-            <OptionsSubsectionLabel>Caret</OptionsSubsectionLabel>
-          </div>
-          <div className="utility-setting-slider-stack" aria-label="Caret settings">
-            <OptionsSliderRows rows={[1, 2]}>
-              {slider('effect', -1, 'How far the caret dips from its peak on each beat. Right of centre a beat adds it; left of centre it is inverted, resting at that much while music plays and a beat takes it away; the centre turns it off. The caret keeps a steady beat that follows the tempo of the music playing now', 'effect, negative inverts')}
+          <OptionsSubsectionLabel>Visualizer</OptionsSubsectionLabel>
+          <div className="utility-setting-slider-stack" aria-label="Caret on the beat">
+            <OptionsSliderRows rows={[2]}>
               {renderFallSliders('beat-caret', 'Caret', caret, visualizerDefaults.caret, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
             </OptionsSliderRows>
           </div>
@@ -2296,8 +2281,8 @@ export function SidebarOptionsPanel({
               data-tooltip={caretFollowUnavailable
                 ? 'Follow the music needs the Visualizer: switch it on (the drum) in the feature bar. Until then the caret blinks as selected'
                 : caretFollowWaits
-                ? "Follow the music is on but not in effect: the caret's effect under Visualizer is at its centre. Until then the caret blinks as selected"
-                : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking (tuned under Visualizer). Otherwise it blinks as selected'}
+                ? "Follow the music is on but not in effect: the caret's effect is at its centre. Until then the caret holds still"
+                : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as its effect (its fall under Visualizer below). Otherwise it blinks as selected'}
               aria-label="Caret follows the music"
               aria-pressed={caretFollowsMusic}
               // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
@@ -2335,6 +2320,8 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setCaretFrameDurationMs(clamp(Math.round(value), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS))}
             />
           </div>
+          </>) : null}
+          {features.caretBlink || beatCaretShown ? (
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="caret-effect-strength"
@@ -2343,13 +2330,15 @@ export function SidebarOptionsPanel({
               step={CARET_EFFECT_STRENGTH_STEP_PERCENT}
               value={caretEffectStrengthPercent}
               trackLabel="effect"
-              ariaLabel="Caret effect strength as a percentage -- 100 is the blink at full strength, 0 is a static caret"
+              tooltipLabel="How far the blink, and each beat while the caret follows the music, takes the caret from its colour. Right of centre it takes it away; left of centre it is inverted, resting that far away and brought back; the centre holds the caret still"
+              ariaLabel="Caret effect as a percentage, negative inverts -- 100 is the blink at full strength, 0 is a still caret"
               defaultValue={CARET_EFFECT_STRENGTH_DEFAULT_PERCENT}
               onCommit={(value) => setCaretEffectStrengthPercent(clamp(Math.round(value), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT))}
             />
           </div>
-          </>) : null}
+          ) : null}
         </div>
+        {beatCaretShown && renderBeatCaret()}
       </AccordionSection>
 
       {features.keySounds ? (
@@ -2674,7 +2663,6 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
           {renderTrackers()}
-          {caretFollowsMusic && renderBeatCaret()}
           {renderBeatChannel('edge', 'Edge', 'the active editor\'s edge shows')}
           {renderBeatChannel('pane', 'Pane', 'the pane shows (the box outlines in the edit view, a flat wash of its colour elsewhere)')}
           <div className="utility-setting-button-row" role="group" aria-label="Immersive glaze controls">
