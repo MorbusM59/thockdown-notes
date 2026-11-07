@@ -1,4 +1,5 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useImperativeHandle, useRef } from 'react'
+import { linkProgram, useWebGL2Canvas } from './useWebGL2Canvas'
 
 /*
  * The centre pulse drawn as a real WAVEFRONT by one WebGL2 shader, in place of
@@ -127,20 +128,8 @@ export const PulseRingsCanvas = forwardRef<PulseRingsHandle, {
   const launchRef = useRef<(pulse: PulseLaunch) => void>(() => {})
   useImperativeHandle(ref, () => ({ launch: (pulse) => launchRef.current(pulse) }), [])
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    const gl = canvas?.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false })
-    if (!canvas || !gl) return
-    const compile = (type: number, src: string) => {
-      const shader = gl.createShader(type)!
-      gl.shaderSource(shader, src)
-      gl.compileShader(shader)
-      return shader
-    }
-    const program = gl.createProgram()!
-    gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX))
-    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT))
-    gl.linkProgram(program)
+  useWebGL2Canvas(canvasRef, (gl, canvas) => {
+    const program = linkProgram(gl, VERTEX, FRAGMENT)
     gl.useProgram(program)
     const buffer = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
