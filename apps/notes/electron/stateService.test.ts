@@ -376,7 +376,7 @@ describe('StateService app-state field round-trip', () => {
     const menu = (await new StateService(dataRoot).loadAppState()).menu as unknown as Record<string, unknown>
     expect((menu.features as Record<string, unknown>).typingTrail).toBe(true)
     expect('flow' in (menu.features as object)).toBe(false)
-    expect(menu.typingTrail).toEqual({ fadeMaxTime: 5, fadeShape: -2, gain: 12 })
+    expect(menu.typingTrail).toEqual({ fadeMaxTime: 5, fadeShape: -2, gainPercent: 8 })
     expect('flow' in menu).toBe(false)
   })
 

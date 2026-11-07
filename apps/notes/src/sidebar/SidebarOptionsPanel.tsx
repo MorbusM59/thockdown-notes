@@ -27,7 +27,7 @@ const BOX_BEVEL_SLIDERS: ReadonlyArray<{ field: keyof BoxBevelSettings; min: num
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
   DEFAULT_TYPING_TRAIL_SETTINGS,
-  TRAIL_FADE_MAX_TIME_MAX, TRAIL_FADE_MAX_TIME_MIN, TRAIL_FADE_SHAPE_MAX, TRAIL_FADE_SHAPE_MIN, TRAIL_GAIN_MAX, TRAIL_GAIN_MIN,
+  TRAIL_FADE_MAX_TIME_MAX, TRAIL_FADE_MAX_TIME_MIN, TRAIL_FADE_SHAPE_MAX, TRAIL_FADE_SHAPE_MIN, TRAIL_GAIN_PERCENT_MAX, TRAIL_GAIN_PERCENT_MIN,
   type TypingTrailSettings,
 } from '../shared/typingTrailSettings'
 import {
@@ -2984,16 +2984,16 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="typing-trail-gain"
-                min={TRAIL_GAIN_MIN}
-                max={TRAIL_GAIN_MAX}
+                min={TRAIL_GAIN_PERCENT_MIN}
+                max={TRAIL_GAIN_PERCENT_MAX}
                 step={1}
-                value={typingTrailSettings.gain}
+                value={typingTrailSettings.gainPercent}
                 trackLabel="gain"
-                tooltipLabel="Letters the trail takes to reach its full colour: each new mark starts one step brighter than the last mark has faded to (the colour is in Colors, Boxes)"
-                ariaLabel="Steps the typing trail takes to reach full strength"
-                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gain}
+                tooltipLabel="Percent of the trail's full colour each typed letter adds on top of what the last mark has faded to (the colour is in Colors, Boxes)"
+                ariaLabel="Percent of the typing trail's full strength each letter adds"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gainPercent}
                 formatValue={(value) => String(Math.round(value))}
-                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, gain: Math.round(value) }))}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, gainPercent: Math.round(value) }))}
               />
             </OptionsSliderRows>
           </div>

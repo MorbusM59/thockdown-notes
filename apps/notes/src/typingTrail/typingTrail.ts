@@ -14,10 +14,10 @@
  *    which the box removes itself.
  *
  * The level a new box starts at is what the PREVIOUS box has faded to at
- * that moment plus one step of `1 / gain`, capped at 1 (`nextTrailLevel`);
+ * that moment plus one step of `gainPercent / 100`, capped at 1 (`nextTrailLevel`);
  * the first box on a new visual row (a wrap or a line break) starts fresh,
  * from one step.
- * So the trail settles in over the first `gain` characters of a run rather
+ * So the trail settles in over its first `100 / gainPercent` characters rather
  * than appearing at full strength, holds at full while typing goes on faster
  * than a step fades, and starts again from low after a pause, because by
  * then the previous box has faded. The previous box's current level is
@@ -48,10 +48,10 @@ export function trailLevelAt(box: TrailBoxBirth, nowSec: number, settings: Typin
   return box.level * fadeCurve(nowSec - box.bornSec, settings.fadeMaxTime, settings.fadeShape)
 }
 
-/** The level a box created `nowSec` starts at: the previous box's current level plus `1 / gain`, at most 1. */
+/** The level a box created `nowSec` starts at: the previous box's current level plus `gainPercent / 100`, at most 1. */
 export function nextTrailLevel(previous: TrailBoxBirth | null, nowSec: number, settings: TypingTrailSettings): number {
   const before = previous === null ? 0 : trailLevelAt(previous, nowSec, settings)
-  return Math.min(1, before + 1 / Math.max(1, settings.gain))
+  return Math.min(1, before + settings.gainPercent / 100)
 }
 
 /** The curve sampled into a linear keyframe list; `map` turns each sample (1 falling to 0) into a keyframe's properties. */

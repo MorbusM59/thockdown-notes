@@ -601,8 +601,10 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
     // Reads the record, or for an older save the separate fields it replaced.
     features: sanitizeFeatureToggles(input),
-    // A save from before the typing trail had its own record keeps its fade in `flow`.
-    typingTrail: sanitizeTypingTrailSettings(input?.typingTrail ?? (input as { flow?: unknown } | undefined)?.flow),
+    // A save from before the typing trail had its own record keeps its fade
+    // in `flow`. Only the fade is taken: the flow's `gainPercent` meant
+    // something else and must not become the trail's.
+    typingTrail: sanitizeTypingTrailSettings(input?.typingTrail ?? legacyTrailFade((input as { flow?: unknown } | undefined)?.flow)),
     visualizerFont: sanitizeVisualizerFont(input?.visualizerFont),
     // Absent stays absent: that is how the one-time migration from the active layout knows to run.
     visualizer: input?.visualizer === undefined ? undefined : sanitizeVisualizer(input.visualizer),
@@ -642,6 +644,13 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** The typing flow's fade and shape, the only parts of its record the typing trail inherits. */
+function legacyTrailFade(flow: unknown): unknown {
+  if (!flow || typeof flow !== 'object') return undefined
+  const { fadeMaxTime, fadeShape } = flow as { fadeMaxTime?: unknown; fadeShape?: unknown }
+  return { fadeMaxTime, fadeShape }
 }
 
 export class StateService {

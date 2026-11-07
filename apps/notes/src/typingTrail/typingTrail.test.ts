@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fadeCurve, nextTrailLevel, trailLevelAt, typesCharacter, type TrailBoxBirth } from './typingTrail'
 
-const settings = { fadeMaxTime: 3, fadeShape: 0, gain: 20 }
+const settings = { fadeMaxTime: 3, fadeShape: 0, gainPercent: 5 }
 
 /** Types `count` characters `intervalSec` apart and returns each box's starting level. */
 function run(count: number, intervalSec: number, s = settings, from: TrailBoxBirth | null = null, startSec = 0): number[] {
@@ -28,14 +28,14 @@ describe('fadeCurve', () => {
 })
 
 describe('nextTrailLevel', () => {
-  it('adds one step of 1/gain to what the previous box has faded to', () => {
+  it('adds one step of gainPercent to what the previous box has faded to', () => {
     expect(nextTrailLevel(null, 0, settings)).toBeCloseTo(1 / 20)
     const previous = { level: 0.5, bornSec: 0 }
     expect(nextTrailLevel(previous, 1.5, settings)).toBeCloseTo(0.5 * 0.5 + 1 / 20)
   })
 
-  it('settles in over gain characters when typing is faster than a step fades', () => {
-    // Back to back, the previous box has not faded at all: the n-th box is n/gain.
+  it('settles in over 100 / gainPercent characters when typing is faster than a step fades', () => {
+    // Back to back, the previous box has not faded at all: the n-th box is n x 5%.
     const levels = run(25, 0, settings)
     levels.slice(0, 20).forEach((level, i) => expect(level).toBeCloseTo((i + 1) / 20))
     expect(levels.slice(20).every((level) => level === 1)).toBe(true)
@@ -48,7 +48,7 @@ describe('nextTrailLevel', () => {
       expect(Math.max(...levels)).toBeLessThanOrEqual(1)
       // The fixed point L = L * fade(interval) + step, where it is below 1.
       const fade = fadeCurve(interval, settings.fadeMaxTime, settings.fadeShape)
-      const fixed = Math.min(1, (1 / settings.gain) / (1 - fade))
+      const fixed = Math.min(1, (settings.gainPercent / 100) / (1 - fade))
       expect(levels[levels.length - 1]).toBeCloseTo(fixed, 6)
     }
   })
