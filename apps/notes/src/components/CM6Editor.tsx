@@ -4079,12 +4079,14 @@ export function CM6Editor({
           // typed into an editable note; a read-only one (the User Guide)
           // types nothing, and an IME composition is not keystrokes.
           if (!view.state.readOnly && !event.isComposing) {
-            const level = typingTrail.levelFor(event);
             // Read the caret's cell NOW rather than from the last caret
             // update: that update runs on the next frame, so two keys typed
             // within one frame would otherwise both land on the same cell
             // and every other character would leave no box of its own.
-            const cell = level !== null ? readCaretCellInScroll(view) : null;
+            const cell = typingTrail.leavesBox(event) ? readCaretCellInScroll(view) : null;
+            // The row is the cell's top: a new visual row (a wrap or a line
+            // break) starts the trail fresh.
+            const level = cell ? typingTrail.levelFor(event, cell.grid.top) : null;
             const trailLayer = typingTrailBoxesRef.current;
             if (level !== null && cell && trailLayer) {
               // The trail traces the 1px grid lines above and below each

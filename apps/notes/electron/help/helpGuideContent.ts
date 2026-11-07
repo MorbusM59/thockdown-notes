@@ -253,7 +253,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *A faint trail along the line you are typing in, so your eye always finds it.*
 
-- Each letter you type lights the grid lines above and below it, and the trail fades behind you. It builds up gently over the first letters you type rather than appearing at full strength.
+- Each letter you type lights the grid lines above and below it, and the trail fades behind you. It builds up gently over the first letters of each line rather than appearing at full strength.
 - **fade** and **shape** set how a mark fades out; **gain** is how many letters the trail takes to reach its full colour. The colour is under Colors, in Editor Boxes.
 - Each letter you type holds the caret steady, and it eases back into its blink as the trail fades.
 

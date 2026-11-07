@@ -14,7 +14,9 @@
  *    which the box removes itself.
  *
  * The level a new box starts at is what the PREVIOUS box has faded to at
- * that moment plus one step of `1 / gain`, capped at 1 (`nextTrailLevel`).
+ * that moment plus one step of `1 / gain`, capped at 1 (`nextTrailLevel`);
+ * the first box on a new visual row (a wrap or a line break) starts fresh,
+ * from one step.
  * So the trail settles in over the first `gain` characters of a run rather
  * than appearing at full strength, holds at full while typing goes on faster
  * than a step fades, and starts again from low after a pause, because by
@@ -108,6 +110,8 @@ function releaseCaret(): void {
 let enabled = false
 let settings: TypingTrailSettings = DEFAULT_TYPING_TRAIL_SETTINGS
 let last: TrailBoxBirth | null = null
+/** The visual row (the cell's top, in scroll coordinates) the last box was drawn on. */
+let lastRow: number | null = null
 
 const nowSec = (): number => performance.now() / 1000
 
@@ -118,20 +122,28 @@ export const typingTrail = {
     enabled = nextEnabled
     if (!enabled) {
       last = null
+      lastRow = null
       releaseCaret()
     }
   },
 
+  /** Whether this keydown leaves a box: the trail is on and the key types a character. */
+  leavesBox(event: KeyboardEvent): boolean {
+    return enabled && typesCharacter(event)
+  },
+
   /**
-   * The level the box this keydown leaves should start at, or null when it
-   * leaves none (the trail is off, or the key types no character). Records
-   * the box as the one the next keystroke builds on, and holds the caret.
+   * The level the box this keydown leaves on visual row `row` should start
+   * at, or null when it leaves none. A box on a new row starts fresh, from
+   * one step, rather than building on the row above. Records the box as the
+   * one the next keystroke builds on, and holds the caret.
    */
-  levelFor(event: KeyboardEvent): number | null {
+  levelFor(event: KeyboardEvent, row: number): number | null {
     if (!enabled || !typesCharacter(event)) return null
     const now = nowSec()
-    const level = nextTrailLevel(last, now, settings)
+    const level = nextTrailLevel(row === lastRow ? last : null, now, settings)
     last = { level, bornSec: now }
+    lastRow = row
     holdCaret()
     return level
   },
