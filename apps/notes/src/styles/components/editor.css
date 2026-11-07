@@ -639,18 +639,18 @@
 }
 
 /* The pane in any view without a grid (render view, an empty slot, a mode
-   that empties it): a flat wash of its colour, BEHIND the stage, so the
-   texture and the text are drawn over it. It sits in .editor-background
-   between that element's own fill and the stage, outside the stage's
-   masks; the stage overlapping a composited wash is promoted to a layer of
-   its own once, when the wash appears, and is not repainted by the wash's
-   opacity changing. */
+   that empties it): a flat wash of its colour, one copy right after each
+   pane's texture layer and at the texture's z-index, so it paints OVER the
+   texture (a texture of high alpha hid a wash behind the stage) and under
+   the text (z-index 2 and up). Promoted while shown, so its opacity changing
+   repaints nothing. */
 .editor-beat-wash {
   display:          none;
   position:         absolute;
   inset:            0;
   border-radius:    var(--border-radius-regular);
   pointer-events:   none;
+  z-index:          1;
   opacity:          var(--beat-wash, 0);
   background-color: var(--beat-pane-color);
 }

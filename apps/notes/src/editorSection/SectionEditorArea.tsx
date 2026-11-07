@@ -308,12 +308,15 @@ export function SectionEditorArea({
   // The visualizer's pane, two elements reading --beat-pane: in the edit view
   // the box outlines' copy, on a layer of its own beside the edge's
   // (flow/useBeatGridMirror.ts); in any view without a grid a flat wash
-  // BEHIND the stage, so it lies under the texture and the text.
+  // OVER the texture and under the text: one copy right after each pane's
+  // texture layer (only the shown pane's is visible), because a wash behind
+  // the stage was hidden by any texture of high alpha.
   // The visualizer's scene has a grid of its own, over the editor's, and the
   // pane copies that one instead (the editor's is not drawn meanwhile).
   const { gridRef: beatGridRef, mirrorRef: beatMirrorRef, hasGrid: beatPaneHasGrid } = useBeatGridMirror(!isPreviewMode || isVisualizerMode)
   const [beatPaneRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-pane']))
-  const [beatWashRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
+  const [beatWashEditRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
+  const [beatWashRenderRef] = useState(() => flowStyleTarget<HTMLDivElement>({ current: null }, ['--beat-wash']))
   const setBeatPaneEl = useCallback((el: HTMLDivElement | null) => {
     beatPaneRef(el)
     beatMirrorRef(el)
@@ -443,7 +446,6 @@ export function SectionEditorArea({
     >
       <main className={`editor-shell${isChapterPanelOpen ? ' chapter-panel-is-open' : ''}`}>
         <div className="editor-background">
-          <div ref={beatWashRef} className={`editor-beat-wash${beatPaneHasGrid ? '' : ' is-shown'}`} aria-hidden="true" />
           <div ref={setStageEl} className={`editor-stage${isPreviewMode ? ' is-preview-mode' : ''}${!activeNoteId ? ' is-empty' : ''}${isVisualizerMode ? ' is-visualizer' : ''}`}>
             {isEscapeHoldActive ? (
               // Pure dim+blur backdrop: its backdrop-filter blurs whatever's
@@ -483,6 +485,7 @@ export function SectionEditorArea({
             ) : null}
             <div className={`edit-container${isPreviewMode ? ' is-pane-hidden' : ''}`}>
               <div className="markdown-editor-texture" />
+              <div ref={beatWashEditRef} className={`editor-beat-wash${beatPaneHasGrid ? '' : ' is-shown'}`} aria-hidden="true" />
               {activeNoteId ? (
                 <CM6Editor
                   bindings={bindings}
@@ -515,6 +518,7 @@ export function SectionEditorArea({
             </div>
             <div ref={previewBridgeHostRef} className={`render-container${isPreviewMode ? '' : ' is-pane-hidden'}`} aria-hidden={!isPreviewMode}>
               <div ref={previewTextureRef} className="markdown-preview-texture" />
+              <div ref={beatWashRenderRef} className={`editor-beat-wash${beatPaneHasGrid ? '' : ' is-shown'}`} aria-hidden="true" />
               <div
                 ref={previewScrollRef}
                 onScroll={handlePreviewScroll}

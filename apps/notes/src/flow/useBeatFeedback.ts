@@ -18,7 +18,7 @@
  * - `--beat-pane`, the opacity of the editor pane (the box outlines' copy, `.editor-beat-pane.has-grid`
  *   in the edit view and over the visualizer scene; shown and promoted under `html[data-beat-pane]`).
  * - `--beat-wash`, the opacity of the reader pane (a flat wash where there is no grid,
- *   `.editor-beat-wash.is-shown` behind the stage; under `html[data-beat-wash]`).
+ *   `.editor-beat-wash.is-shown` over each pane's texture; under `html[data-beat-wash]`).
  *
  * Outside the visualizer mode they follow the grid beat (`VisualizerSettings.grid`);
  * inside it, the mode's own edge and pane.
