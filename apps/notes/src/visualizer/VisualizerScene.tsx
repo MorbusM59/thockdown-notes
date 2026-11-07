@@ -53,7 +53,6 @@ import { CUSTOM_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
 import { LevelBars } from './LevelBars'
-import { ThemeArrows } from './ThemeArrows'
 import { CursorIdle } from './CursorIdle'
 import { dropWideGlyphs } from './cellGlyphs'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
@@ -558,7 +557,6 @@ export function VisualizerScene({ boxPx, fontFamily, fontSizePx, sceneSeed, grid
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
           {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
           {levelArea && <LevelBars layout={layout} area={levelArea} />}
-          <ThemeArrows layout={layout} />
           <CursorIdle />
 
           {layout.progressRow !== null && (
