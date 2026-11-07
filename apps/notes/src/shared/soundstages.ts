@@ -67,7 +67,7 @@ export interface FactorySoundstage {
 
 /** In the solids' order: index 0 is the tetrahedron, 4 the icosahedron. */
 export const FACTORY_SOUNDSTAGES: readonly FactorySoundstage[] = [
-  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { eq: [{ hz: 20, db: 2, handle: 0 }, { hz: 150, db: 2, handle: 0.5 }, { hz: 3000, db: -4, handle: 0.5 }, { hz: 20000, db: -9, handle: 0 }], width: 1, reverb: 1, size: 0.1, room: 1 } },
+  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cloud', settings: { eq: [{ hz: 20, db: 5, handle: 2 }, { hz: 71, db: 8, handle: 2 }, { hz: 905, db: -6, handle: 2 }, { hz: 20000, db: -7, handle: 0 }], width: 1, reverb: 1, size: 0.1, room: 1 } },
   { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-scale-balanced', settings: NEUTRAL_SOUNDSTAGE },
   { id: 'wide', name: 'Wide', icon: 'fa-solid fa-arrows-left-right', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 250, db: -1.5, handle: 0.5 }, { hz: 8000, db: 3, handle: 0.5 }, { hz: 20000, db: 3, handle: 0 }], width: 1.5, reverb: 0.1, size: 1, room: 0 } },
   { id: 'amped', name: 'Amped', icon: 'fa-solid fa-bolt', settings: { eq: [{ hz: 20, db: 3, handle: 0 }, { hz: 80, db: 4, handle: 0.5 }, { hz: 700, db: -2, handle: 0.5 }, { hz: 5000, db: 2.5, handle: 0.5 }, { hz: 20000, db: 2, handle: 0 }], width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
