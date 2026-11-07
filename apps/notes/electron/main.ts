@@ -5,7 +5,8 @@ import { app, BrowserWindow, Menu, ipcMain, dialog, powerMonitor, protocol, shel
 import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
-import { existsSync, promises as fsPromises } from 'node:fs'
+import { createReadStream, existsSync, promises as fsPromises } from 'node:fs'
+import { Readable } from 'node:stream'
 import { moveLegacyDevData } from './legacyDevDataMove'
 import { NoteLifecycleService } from './noteLifecycleService'
 import { ExternalFileWatcher } from './externalFileWatcher'
@@ -1893,14 +1894,11 @@ app.whenReady().then(async () => {
           const start = match[1] ? parseInt(match[1], 10) : 0;
           const end   = Math.min(match[2] ? parseInt(match[2], 10) : totalSize - 1, totalSize - 1);
           const chunkSize = end - start + 1;
-          const buffer = Buffer.allocUnsafe(chunkSize);
-          const fd = await fsPromises.open(nativePath, 'r');
-          try {
-            await fd.read(buffer, 0, chunkSize, start);
-          } finally {
-            await fd.close();
-          }
-          return new Response(buffer, {
+          // Streamed, never read whole: Chromium asks for an open range
+          // ("bytes=0-") on every load and seek, which for an hour-long mix
+          // is the whole file held in memory per request.
+          const body = Readable.toWeb(createReadStream(nativePath, { start, end })) as ReadableStream;
+          return new Response(body, {
             status: 206,
             headers: {
               'Content-Type': mime,
@@ -1914,7 +1912,7 @@ app.whenReady().then(async () => {
       }
 
       // Full-file response (initial load or no Range header).
-      const data = await fsPromises.readFile(nativePath);
+      const data = Readable.toWeb(createReadStream(nativePath)) as ReadableStream;
       return new Response(data, {
         headers: {
           'Content-Type': mime,

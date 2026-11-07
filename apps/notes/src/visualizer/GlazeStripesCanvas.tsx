@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
+import { linkProgram, useWebGL2Canvas } from './useWebGL2Canvas'
 import type { GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { registerLinearSlide } from './parallaxSway'
 
@@ -120,21 +121,9 @@ export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {
   className?: string
 }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
-  useEffect(() => {
-    const canvas = ref.current
-    const gl = canvas?.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false })
-    if (!canvas || !gl) return
+  useWebGL2Canvas(ref, (gl, canvas) => {
     const used = stacks.slice(0, MAX_STACKS)
-    const compile = (type: number, src: string) => {
-      const shader = gl.createShader(type)!
-      gl.shaderSource(shader, src)
-      gl.compileShader(shader)
-      return shader
-    }
-    const program = gl.createProgram()!
-    gl.attachShader(program, compile(gl.VERTEX_SHADER, VERTEX))
-    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, FRAGMENT))
-    gl.linkProgram(program)
+    const program = linkProgram(gl, VERTEX, FRAGMENT)
     gl.useProgram(program)
     const buffer = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer)

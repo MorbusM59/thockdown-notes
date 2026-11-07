@@ -175,7 +175,7 @@ export const CARET_ANIMATION_PRESETS: Record<CaretAnimationPresetKey, CaretAnima
   },
   fadeEarly: {
     label: 'Fade in/out, peak at 15%',
-    iconClass: 'fa-caret-left',
+    iconClass: 'fa-caret-right',
     stops: [
       { atPercent: 0, alpha: 0 },
       { atPercent: 15, alpha: 1 },
@@ -184,7 +184,7 @@ export const CARET_ANIMATION_PRESETS: Record<CaretAnimationPresetKey, CaretAnima
   },
   fadeLate: {
     label: 'Fade in/out, peak at 85%',
-    iconClass: 'fa-caret-right',
+    iconClass: 'fa-caret-left',
     stops: [
       { atPercent: 0, alpha: 0 },
       { atPercent: 85, alpha: 1 },
