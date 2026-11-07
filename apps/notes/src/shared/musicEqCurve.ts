@@ -143,22 +143,36 @@ function handleReach(curve: EqCurve, index: number): number {
 }
 
 /**
- * The slope (dB per semitone) the handles of a point lie along: the line
- * between its neighbours while its gain lies strictly between theirs, and level when
- * the point is a peak, a dip or level with a neighbour, so the curve turns at the point itself rather
- * than overshooting it. An end point has one neighbour and aims at it.
+ * The slope (dB per semitone) the handles of a point lie along.
+ *
+ * An end point has one neighbour and aims at it. An inner point that is a
+ * peak, a dip or level with a neighbour gets level handles, so the curve turns
+ * at the point itself. Between those, the slope is shaped by where the point
+ * sits in the rectangle its two neighbours span:
+ * - horizontally, the neighbours' rise is taken over twice the gap to the
+ *   NEARER neighbour, so a point off-centre steepens; centred, that is
+ *   exactly the straight line between the neighbours;
+ * - vertically, that slope is scaled by a triangle that is 1 at the
+ *   rectangle's vertical middle and falls linearly to 0 at either
+ *   neighbour's gain, so the handles flatten gradually towards the edges.
  */
 function handleSlope(curve: EqCurve, index: number): number {
-  if (index > 0 && index < curve.length - 1) {
-    const { db } = curve[index]
-    const lo = Math.min(curve[index - 1].db, curve[index + 1].db)
-    const hi = Math.max(curve[index - 1].db, curve[index + 1].db)
-    if (db <= lo || db >= hi) return 0
+  if (index === 0 || index === curve.length - 1) {
+    const from = curve[Math.max(0, index - 1)]
+    const to = curve[Math.min(curve.length - 1, index + 1)]
+    const run = semitonesOf(to.hz) - semitonesOf(from.hz)
+    return run > 0 ? (to.db - from.db) / run : 0
   }
-  const from = curve[Math.max(0, index - 1)]
-  const to = curve[Math.min(curve.length - 1, index + 1)]
-  const run = semitonesOf(to.hz) - semitonesOf(from.hz)
-  return run > 0 ? (to.db - from.db) / run : 0
+  const prev = curve[index - 1]
+  const next = curve[index + 1]
+  const { db } = curve[index]
+  const lo = Math.min(prev.db, next.db)
+  const hi = Math.max(prev.db, next.db)
+  if (db <= lo || db >= hi) return 0
+  const at = semitonesOf(curve[index].hz)
+  const nearer = Math.min(at - semitonesOf(prev.hz), semitonesOf(next.hz) - at)
+  const vertical = 1 - Math.abs((2 * (db - lo)) / (hi - lo) - 1)
+  return ((next.db - prev.db) / (2 * nearer)) * vertical
 }
 
 /** One segment's four control points, as [semitones, dB] pairs. */
