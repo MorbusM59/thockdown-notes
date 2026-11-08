@@ -791,7 +791,7 @@ ${shortcutTable()}
 ### [Presets](#presets)
 
 > **Where?**
-> Settings panel → Layouts → Factory Presets.
+> Settings panel → Layouts → Layout Presets.
 
 *A row of built-in light and dark theme presets.*
 

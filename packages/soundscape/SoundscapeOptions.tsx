@@ -1,5 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import {
   SOUNDSCAPE_CHANNEL_ROSTER,
@@ -520,18 +521,23 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
 
 /**
  * The soundscape's controls in the desktop options panel's Soundscapes
- * section: the presets at the top with no heading, then the environment and
+ * section: the presets in an always-open subsection, then the environment and
  * the channels as collapsible subsections, the channel's own groups as
  * dividers inside the latter.
  */
-export function SoundscapeOptions(props: SoundscapeOptionsProps) {
+export function SoundscapeOptions({ isSearching, ...props }: SoundscapeOptionsProps & {
+  /** An options search is in force: the always-open presets step aside, as the panel's other fixed subsections do. */
+  isSearching: boolean
+}) {
   return (
     <SoundscapeParts
       {...props}
       arrangement="subsections"
       arrange={({ presets, environment, channels }) => (
         <>
-          <div className="utility-setting-slider-stack" aria-label="Soundscape presets">{presets}</div>
+          <OptionsFixedSection className="sidebar-options-section-soundscape-presets" heading="Soundscape Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+            {presets}
+          </OptionsFixedSection>
           <AccordionSection className="sidebar-options-section-soundscape-environment" ariaLabel="Environment" heading="Environment" iconClass="fa-torii-gate">
             {environment}
           </AccordionSection>

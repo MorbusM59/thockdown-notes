@@ -350,9 +350,12 @@
   padding-right: var(--spacing-regular);
 }
 
-/* A subsection that is always open (OptionsFixedSection) has no fold arrow. */
+/* A subsection that is always open (OptionsFixedSection) shows no fold
+   arrow, but keeps its box: the arrow's glyph is what sets a heading's
+   height, so hiding it rather than removing it keeps the fixed headings
+   spaced exactly like the folding ones. */
 .sidebar-options-section-heading.is-fixed::after {
-  content: none;
+  visibility: hidden;
 }
 
 .sidebar-options-accordion:not([open]) > .sidebar-options-section-heading::after {

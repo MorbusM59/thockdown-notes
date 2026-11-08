@@ -1528,7 +1528,7 @@ export function SidebarOptionsPanel({
       </>) : null}
 
       {showsSection('layouts') ? (<>
-      <OptionsFixedSection className="sidebar-options-section-factory-presets" heading="Factory Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+      <OptionsFixedSection className="sidebar-options-section-layout-presets" heading="Layout Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
         <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
             const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
@@ -3120,6 +3120,7 @@ export function SidebarOptionsPanel({
       <SoundscapeOptions
         preferences={soundscapePreferences}
         onChange={onSoundscapePreferencesChange}
+        isSearching={isSearching}
       />
 
       </>) : null}
