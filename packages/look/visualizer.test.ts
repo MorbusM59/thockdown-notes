@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_VISUALIZER_IMMERSIVE, DEFAULT_VISUALIZER_TRACKERS, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_VISUALIZER, DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, DEFAULT_VISUALIZER_TRACKERS, glazeLayerShare, IMMERSIVE_GLAZE_STRENGTH_MAX, DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, FALL_MAX_SEC, FALL_MIN_SEC, pulseCurve, pulseRingStrength, roundedSquareGauge, pulseTimeToTravel, pulseTravelBoxes, sanitizeVisualizer, mixResponse, soleMix } from './visualizer'
 
 describe('sanitizeVisualizer', () => {
   it('fills a save without a visualizer with the defaults', () => {
@@ -74,24 +74,6 @@ describe('sanitizeVisualizerColors', () => {
     expect(sanitizeVisualizerColors(undefined, false, { shade: { color: 's' }, outline: { color: 'o' } })).toMatchObject({ edge: 's', pane: 'o' })
     // Saved colours win over a legacy visualizer.
     expect(sanitizeVisualizerColors({ edge: 'e' }, false, legacy).edge).toBe('e')
-  })
-})
-
-describe('sanitizeCaretFollowsMusic', () => {
-  it('keeps a saved switch, else reads the visualizer caret a layout saved it on', () => {
-    expect(sanitizeCaretFollowsMusic(false, { caret: { followsMusic: true } }, 'bounce')).toBe(false)
-    expect(sanitizeCaretFollowsMusic(undefined, { caret: { followsMusic: false, effect: 0.4 } }, undefined)).toBe(false)
-  })
-
-  it('migrates a layout from before the caret switch: it followed the music whenever its caret had an effect', () => {
-    expect(sanitizeCaretFollowsMusic(undefined, { caret: { effect: 0.4 } }, undefined)).toBe(true)
-    expect(sanitizeCaretFollowsMusic(undefined, { caret: { effect: 0 } }, undefined)).toBe(false)
-    // A visualizer with no caret block never followed; no visualizer at all takes the default.
-    expect(sanitizeCaretFollowsMusic(undefined, {}, undefined)).toBe(false)
-    expect(sanitizeCaretFollowsMusic(undefined, undefined, undefined)).toBe(DEFAULT_CARET_FOLLOWS_MUSIC)
-    // The old bounce blink is now the switch's button.
-    expect(sanitizeCaretFollowsMusic(undefined, undefined, 'bounce')).toBe(true)
-    expect(sanitizeCaretFollowsMusic(undefined, { caret: { effect: 0 } }, 'bounce')).toBe(true)
   })
 })
 

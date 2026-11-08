@@ -10,7 +10,7 @@
  *   opacity. Unlike the other two it follows no band and no detected hit: it
  *   dips on every beat of a steady clock that follows the music's tempo
  *   (`subscribeMusicClock`), each dip falling on its own shape and length.
- *   It runs only while the layout's switch is on (`caretFollowsMusic`),
+ *   It runs only while the Caret Beat switch is on (`beatSettings.caretFollows`),
  *   and the attribute is set only while that clock HAS a beat (music
  *   playing, a tempo found): at any other moment the caret blinks.
  * - `--beat-edge`, the opacity of the active editor's beat edge

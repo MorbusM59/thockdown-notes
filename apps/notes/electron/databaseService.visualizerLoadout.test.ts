@@ -28,7 +28,7 @@ describe('DatabaseService visualizer loadout', () => {
     edge: 'rgba(12, 34, 56, 0.5)', pane: 'rgba(200, 100, 50, 0.25)', wave: 'rgba(10, 200, 90, 0.3)',
     pulse: 'rgba(1, 2, 3, 0.4)', accent: 'rgba(250, 20, 120, 1)', letterbox: 'rgba(5, 6, 7, 1)',
   }
-  const layout = { ...NEUTRAL_BASE, caretFollowsMusic: !NEUTRAL_BASE.caretFollowsMusic, visualizerColors }
+  const layout = { ...NEUTRAL_BASE, visualizerColors }
 
   const activeLight = (service: DatabaseService): UiLayoutLoadout => {
     const entry = service.listUiLoadouts().entries.find((row) => row.id > 0 && row.isActive)
@@ -54,7 +54,7 @@ describe('DatabaseService visualizer loadout', () => {
     const reopened = new DatabaseService(dataRoot)
     await reopened.initialize()
     try {
-      expect(activeLight(reopened)).toMatchObject({ caretFollowsMusic: layout.caretFollowsMusic, visualizerColors })
+      expect(activeLight(reopened)).toMatchObject({ visualizerColors })
     } finally {
       reopened.close()
       db = reopened
@@ -70,8 +70,8 @@ describe('DatabaseService visualizer loadout', () => {
     await fresh.initialize()
     try {
       fresh.importTdlLoadouts(tdl)
-      const imported = fresh.listUiLoadouts().entries.filter((row) => row.id > 0).map((row) => ({ caretFollowsMusic: row.payload.caretFollowsMusic, visualizerColors: row.payload.visualizerColors }))
-      expect(imported).toContainEqual({ caretFollowsMusic: layout.caretFollowsMusic, visualizerColors })
+      const imported = fresh.listUiLoadouts().entries.filter((row) => row.id > 0).map((row) => ({ visualizerColors: row.payload.visualizerColors }))
+      expect(imported).toContainEqual({ visualizerColors })
     } finally {
       fresh.close()
       rmSync(freshRoot, { recursive: true, force: true })
@@ -90,7 +90,7 @@ describe('DatabaseService visualizer loadout', () => {
     db.updatePendingUiLoadout('light', layout)
     db.saveCustomUiLoadout('light')
     // Written raw, as such a row sits in an existing database: the normalizer would drop the legacy field on any write.
-    const { visualizerColors: _colors, caretFollowsMusic: _follows, ...withoutNew } = NEUTRAL_BASE
+    const { visualizerColors: _colors, ...withoutNew } = NEUTRAL_BASE
     const activeId = db.listUiLoadouts().entries.find((row) => row.id > 0 && row.isActive)!.id
     ;(db as unknown as { requireDb(): import('better-sqlite3').Database }).requireDb()
       .prepare('UPDATE ui_loadout_entries SET payloadJson = ? WHERE id = ?')
@@ -101,7 +101,6 @@ describe('DatabaseService visualizer loadout', () => {
     db = new DatabaseService(dataRoot)
     await db.initialize()
     expect(activeLight(db)).toMatchObject({
-      caretFollowsMusic: false,
       visualizerColors: { edge: 'rgba(12, 34, 56, 0.5)', pane: 'rgba(200, 100, 50, 0.25)', wave: 'rgba(10, 200, 90, 0.3)', pulse: 'rgba(1, 2, 3, 0.4)', accent: '', letterbox: 'rgba(5, 6, 7, 1)' },
     })
 

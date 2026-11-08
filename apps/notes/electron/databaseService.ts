@@ -37,7 +37,7 @@ import {
 } from '@thockdown/look/presets';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel } from '@thockdown/look/boxBevel';
-import { DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors } from '@thockdown/look/visualizer';
+import { defaultVisualizerColors, sanitizeVisualizerColors } from '@thockdown/look/visualizer';
 import {
   DEFAULT_CUSTOM_CURSOR_SETTINGS,
   CURSOR_DOT_COUNT_MIN, CURSOR_DOT_COUNT_MAX,
@@ -213,7 +213,6 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
-  caretFollowsMusic: DEFAULT_CARET_FOLLOWS_MUSIC,
   visualizerColors: defaultVisualizerColors(false),
 };
 
@@ -600,10 +599,9 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
     caretFrameDurationMs: clampInteger(source.caretFrameDurationMs, CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretFrameDurationMs),
     caretEffectStrengthPercent: clampInteger(source.caretEffectStrengthPercent, CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT, DEFAULT_UI_LAYOUT_LOADOUT.caretEffectStrengthPercent),
     // A layout saved while the visualizer was part of it (before 2026-11-07)
-    // reads its colours and its caret switch from there; one saved before the
+    // reads its colours from there; one saved before the
     // visualizer existed gets the defaults for its own inversion (its colours
     // are picked before the theme's invert).
-    caretFollowsMusic: sanitizeCaretFollowsMusic(source.caretFollowsMusic, source.visualizer, source.caretAnimationPreset),
     visualizerColors: sanitizeVisualizerColors(source.visualizerColors, (source.filterInvert ?? 0) > 0.5, source.visualizer),
   };
 }
@@ -631,7 +629,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'caretSizeDeviationPx', 'caretOutlineWidthPx', 'caretOutlineColor',
   'caretHaloSpreadPx', 'caretHaloBlurPx', 'caretHaloColor',
   'caretAnimationPreset', 'caretAnimationDurationMs', 'caretFrameDurationMs',
-  'caretEffectStrengthPercent', 'caretFollowsMusic',
+  'caretEffectStrengthPercent',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when

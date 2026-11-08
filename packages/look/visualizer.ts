@@ -10,8 +10,8 @@
  * is one setting for every layout, saved in the app state; its COLOURS
  * (`VisualizerColors`, Options > Colors) are part of the layout, picked like
  * any other layout colour (so a theme's invert applies to them as to the
- * rest), and so is whether the caret follows the music (the layout's
- * `caretFollowsMusic`, a button of the caret's blink row).
+ * rest). Whether the caret follows the music is global
+ * (`beatSettings.caretFollows`), though its switch sits in the caret's blink row.
  *
  * Whether the visualizer is on, the per-device visual delay and the
  * response are not here either (`apps/notes/src/shared/beatSettings.ts`).
@@ -102,8 +102,8 @@ export interface VisualizerChannel {
  * next beat). The depth of each beat is the layout's caret EFFECT, one slider
  * for the blink and the beat (`caretSettings.ts`, `effectStrengthPercent`).
  *
- * Whether the caret follows at all is the layout's (`caretFollowsMusic`,
- * Options > Caret, the last button of the blink row): while it is on, music
+ * Whether the caret follows at all is global (`beatSettings.caretFollows`,
+ * switched from Options > Caret, the last button of the blink row): while it is on, music
  * is playing and a beat has been found, the caret follows the beat; at any
  * other moment it blinks with its own blink, which the switch leaves
  * selected. The block's sliders are shown only while it is on.
@@ -684,34 +684,6 @@ export function sanitizeVisualizerColors(input: unknown, inverted: boolean, lega
     accent: colorOr(source.accent ?? immersive.accentColor, d.accent, true),
     letterbox: colorOr(source.letterbox ?? immersive.letterboxColor, d.letterbox, true),
   }
-}
-
-/**
- * The blink preset that became the follow-the-music switch. A layout saved
- * with it chose the button that is now the switch, so it reads as the switch
- * on (and its blink falls back to the default, `sanitizeLoadout`'s job).
- */
-export const LEGACY_FOLLOW_MUSIC_CARET_PRESET = 'bounce'
-
-/** Whether a layout that names no `caretFollowsMusic` follows the music: on, as the factory layouts do. */
-export const DEFAULT_CARET_FOLLOWS_MUSIC = true
-
-/**
- * A layout's `caretFollowsMusic`. A layout saved before it moved out of the
- * visualizer (2026-11-07) kept it as the visualizer caret's `followsMusic`;
- * one saved before the switch existed followed the music whenever its caret
- * block had an effect, or when its blink was the old bounce
- * (`legacyCaretPreset`); one with no visualizer at all takes the default.
- */
-export function sanitizeCaretFollowsMusic(input: unknown, legacyVisualizer: unknown, legacyCaretPreset: unknown): boolean {
-  if (typeof input === 'boolean') return input
-  if (legacyCaretPreset === LEGACY_FOLLOW_MUSIC_CARET_PRESET) return true
-  if (!legacyVisualizer || typeof legacyVisualizer !== 'object') return DEFAULT_CARET_FOLLOWS_MUSIC
-  const caret = (legacyVisualizer as Fields).caret
-  if (!caret || typeof caret !== 'object') return false
-  const source = caret as Fields
-  if (typeof source.followsMusic === 'boolean') return source.followsMusic
-  return sanitizeEffect(source, -1) !== 0
 }
 
 /**

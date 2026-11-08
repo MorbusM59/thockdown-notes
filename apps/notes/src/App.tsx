@@ -145,7 +145,7 @@ import { useBeatFeedback } from './beat/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId } from './shared/optionsSections'
-import { DEFAULT_CARET_FOLLOWS_MUSIC, DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
+import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
 import { EditorToolbar } from './toolbar/EditorToolbar'
@@ -864,7 +864,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
     caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
     caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
-    caretFollowsMusic: sanitizeCaretFollowsMusic(source.caretFollowsMusic, source.visualizer, source.caretAnimationPreset),
     visualizerColors: sanitizeVisualizerColors(source.visualizerColors, toFiniteNumber(source.filterInvert, 0) > 0.5, source.visualizer),
   }
 }
@@ -1525,7 +1524,6 @@ function App() {
   // How the visualizer follows the music, global (Options > Visualizer, saved in the app state).
   const [visualizer, setVisualizer] = useState<VisualizerSettings>(DEFAULT_VISUALIZER)
   // The layout's part of it: whether the caret follows the music, and the colours.
-  const [caretFollowsMusic, setCaretFollowsMusic] = useState(DEFAULT_CARET_FOLLOWS_MUSIC)
   const [visualizerColors, setVisualizerColors] = useState<VisualizerColors>(() => defaultVisualizerColors(false))
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
   const [windowIsCollapsed, setWindowIsCollapsed] = useState(false)
@@ -2238,7 +2236,7 @@ function App() {
   const [audioReverbSpace, setAudioReverbSpace] = useState(0)
   const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
   const [audioSpatial, setAudioSpatial] = useState(0)
-  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, caretFollowsMusic, caretEffectStrengthPercent / 100, isVisualizerMode, uiMode)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, beatSettings.caretFollows, caretEffectStrengthPercent / 100, isVisualizerMode, uiMode)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
@@ -2643,7 +2641,6 @@ function App() {
       caretAnimationDurationMs,
       caretFrameDurationMs,
       caretEffectStrengthPercent,
-      caretFollowsMusic,
       visualizerColors,
     }
   }, [
@@ -2706,7 +2703,6 @@ function App() {
     caretAnimationDurationMs,
     caretFrameDurationMs,
     caretEffectStrengthPercent,
-    caretFollowsMusic,
     visualizerColors,
   ])
 
@@ -2909,7 +2905,6 @@ function App() {
       Math.round(loadout.caretEffectStrengthPercent ?? DEFAULT_CARET_SETTINGS.effectStrengthPercent),
       CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
     ))
-    setCaretFollowsMusic(loadout.caretFollowsMusic)
     setVisualizerColors(loadout.visualizerColors)
   }, [applyDarkModePreset])
 
@@ -8980,8 +8975,6 @@ ${markdownHtml}
                         beatSettings={beatSettings}
                         visualizer={visualizer}
                         setVisualizer={setVisualizer}
-                        caretFollowsMusic={caretFollowsMusic}
-                        setCaretFollowsMusic={setCaretFollowsMusic}
                         visualizerColors={visualizerColors}
                         setVisualizerColors={setVisualizerColors}
                         setBeatSettings={setBeatSettings}

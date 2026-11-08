@@ -559,8 +559,6 @@ export interface SidebarOptionsPanelProps {
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   visualizer: VisualizerSettings
   setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
-  caretFollowsMusic: boolean
-  setCaretFollowsMusic: (updater: (previous: boolean) => boolean) => void
   visualizerColors: VisualizerColors
   setVisualizerColors: (updater: (previous: VisualizerColors) => VisualizerColors) => void
 
@@ -823,8 +821,6 @@ export function SidebarOptionsPanel({
   setBeatSettings,
   visualizer,
   setVisualizer,
-  caretFollowsMusic,
-  setCaretFollowsMusic,
   visualizerColors,
   setVisualizerColors,
   borderRadiusRegularPx,
@@ -919,6 +915,7 @@ export function SidebarOptionsPanel({
     // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
     // With Grid Beat off it cannot be used at all, so it is disabled (and
     // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
+    const caretFollowsMusic = beatSettings.caretFollows
     const caretFollowUnavailable = !features.visualizer
     const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && caretEffectStrengthPercent === 0)
     // The Caret Beat switch beside the blink shapes (Layouts > Caret).
@@ -929,9 +926,9 @@ export function SidebarOptionsPanel({
         ? 'Caret Beat needs Grid Beat: switch it on (the drum) under Quick Access. Until then the caret blinks as selected'
         : caretFollowWaits
         ? "Caret Beat is on but not in effect: the caret's effect is at its centre. Until then the caret holds still"
-        : `Caret Beat: ${caretFollowsMusic ? 'on' : 'off'}. While music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as its effect. Kept per layout`,
+        : `Caret Beat: ${caretFollowsMusic ? 'on' : 'off'}. While music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as the layout's effect. The same for every layout`,
       dimmed: caretFollowWaits,
-      toggle: () => setCaretFollowsMusic((prev) => !prev),
+      toggle: () => setBeatSettings((prev) => ({ ...prev, caretFollows: !prev.caretFollows })),
     }
     // The caret's Visualizer subsection: the beat's fall, while the caret follows the music.
     const beatCaretShown = features.visualizer && caretFollowsMusic
@@ -2318,7 +2315,8 @@ export function SidebarOptionsPanel({
                 </button>
               )
             })}
-            {/* Caret Beat: the layout's caretFollowsMusic. The shape selected
+            {/* Caret Beat: a GLOBAL setting (beatSettings.caretFollows) whose
+                switch sits among this layout's blink shapes. The shape selected
                 beside it stays selected and is what the caret falls back to
                 whenever there is no beat to follow. */}
             <button

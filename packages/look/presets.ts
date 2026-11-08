@@ -14,7 +14,7 @@ import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import type { UiLayoutLoadout } from './loadouts';
 import { deriveTrailColor, deriveLightTrailColor } from './trailColor';
 import { sceneOf } from './scene';
-import { DEFAULT_CARET_FOLLOWS_MUSIC, defaultVisualizerColors } from './visualizer';
+import { defaultVisualizerColors } from './visualizer';
 
 type PartialTextureMaterialSettings = Omit<Partial<TextureMaterialSettings>, 'color'> & {
   color?: Partial<TextureColorHsva>;
@@ -194,7 +194,6 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
   caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
   caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
-  caretFollowsMusic: DEFAULT_CARET_FOLLOWS_MUSIC,
   visualizerColors: defaultVisualizerColors(false),
 };
 

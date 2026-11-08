@@ -128,7 +128,6 @@ export type UiLayoutLoadout = {
   // last button) and the visualizer's colours (Options > Colors). How the
   // visualizer follows the music is NOT here: it is global, in
   // PersistedMenuState.visualizer (see visualizer.ts).
-  caretFollowsMusic: boolean;
   visualizerColors: VisualizerColors;
 };
 
