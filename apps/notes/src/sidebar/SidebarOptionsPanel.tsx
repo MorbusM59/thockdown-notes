@@ -139,7 +139,6 @@ import {
   EDITOR_FONT_SIZE_MIN_PX,
   EDITOR_FONT_SIZE_MAX_PX,
   EDITOR_FONT_SIZE_STEP_PX,
-  DEFAULT_EDITOR_FONT_SIZE_PX,
   EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
   EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
   EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
@@ -159,7 +158,6 @@ import {
   UI_FONT_SCALE_MIN,
   UI_FONT_SCALE_MAX,
   UI_FONT_SCALE_STEP,
-  DEFAULT_UI_FONT_SCALE,
   roundUiFontScale,
   type UiFontKey,
 } from '../shared/UiTypography'
@@ -428,8 +426,8 @@ export interface SidebarOptionsPanelProps {
   scheduleFocusEditorInEditMode: () => void
   visualizerFont: VisualizerFont
   setVisualizerFont: (font: VisualizerFont) => void
-  /** The size slider's reset value, which differs between size modes. */
-  visualizerFontSizeDefault: number
+  /** The font size sliders' reset values, which differ between size modes. */
+  fontSizeDefaults: { editorFontSize: number; viewFontSize: number; uiFontScale: number; visualizerFontSize: number }
   uiFontStyle: UiFontKey
   setUiFontStyle: (key: UiFontKey) => void
   uiFontScale: number
@@ -703,7 +701,7 @@ export function SidebarOptionsPanel({
   scheduleFocusEditorInEditMode,
   visualizerFont,
   setVisualizerFont,
-  visualizerFontSizeDefault,
+  fontSizeDefaults,
   uiFontStyle,
   setUiFontStyle,
   uiFontScale,
@@ -1280,7 +1278,7 @@ export function SidebarOptionsPanel({
             value: editorFontSize,
             trackLabel: 'size',
             ariaLabel: 'Editor font size',
-            defaultValue: DEFAULT_EDITOR_FONT_SIZE_PX,
+            defaultValue: fontSizeDefaults.editorFontSize,
             onCommit: (value) => {
               setEditorFontSize(clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX))
               scheduleFocusEditorInEditMode()
@@ -1338,7 +1336,7 @@ export function SidebarOptionsPanel({
             value: viewFontSize,
             trackLabel: 'size',
             ariaLabel: 'Render font size',
-            defaultValue: DEFAULT_EDITOR_FONT_SIZE_PX,
+            defaultValue: fontSizeDefaults.viewFontSize,
             onCommit: (value) => setViewFontSize(
               clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
             ),
@@ -1389,7 +1387,7 @@ export function SidebarOptionsPanel({
             value: uiFontScale,
             trackLabel: 'size',
             ariaLabel: 'UI font size',
-            defaultValue: DEFAULT_UI_FONT_SCALE,
+            defaultValue: fontSizeDefaults.uiFontScale,
             onCommit: (value) => setUiFontScale(
               clamp(roundUiFontScale(value), UI_FONT_SCALE_MIN, UI_FONT_SCALE_MAX),
             ),
@@ -2853,7 +2851,7 @@ export function SidebarOptionsPanel({
                 value: visualizerFont.sizePx,
                 trackLabel: 'size',
                 ariaLabel: 'Visualizer font size',
-                defaultValue: visualizerFontSizeDefault,
+                defaultValue: fontSizeDefaults.visualizerFontSize,
                 onCommit: (value) => setVisualizerFont({
                   ...visualizerFont,
                   sizePx: clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),

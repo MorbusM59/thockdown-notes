@@ -205,10 +205,10 @@ function sanitizeFontSizePx(input: unknown): number {
   return DEFAULT_APP_STATE.menu!.editorFontSize ?? 16;
 }
 
-// For fields the renderer fills from elsewhere when absent (double size mode's
-// own font sizes, seeded from their regular counterparts): a missing or
-// damaged value stays MISSING rather than becoming the default, which would
-// silently defeat that seeding.
+// For fields whose default only the renderer knows (double size mode's own
+// font sizes, App.tsx's DEFAULT_FONT_SIZES_BY_MODE): a missing or damaged
+// value stays MISSING rather than becoming the regular mode's default, so the
+// renderer applies the double size default.
 function sanitizeOptionalFontSizePx(input: unknown): number | undefined {
   return typeof input === 'number' && Number.isFinite(input) ? sanitizeFontSizePx(input) : undefined;
 }

@@ -40,6 +40,8 @@ export const EDITOR_FONT_SIZE_MIN_PX = 6;
 export const EDITOR_FONT_SIZE_MAX_PX = 24;
 export const EDITOR_FONT_SIZE_STEP_PX = 0.5;
 export const DEFAULT_EDITOR_FONT_SIZE_PX = 16;
+/** The edit and render views' default in double size mode, where the page itself is doubled. */
+export const DEFAULT_DOUBLE_SIZE_EDITOR_FONT_SIZE_PX = 12;
 
 export const EDITOR_LINE_HEIGHT_MULTIPLIER_MIN = 0.8;
 export const EDITOR_LINE_HEIGHT_MULTIPLIER_MAX = 3;

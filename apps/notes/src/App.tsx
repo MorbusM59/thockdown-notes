@@ -154,6 +154,7 @@ import type { TextureCacheRequest } from './shared/textures'
 import {
   DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,
   DEFAULT_EDITOR_FONT_SIZE_PX,
+  DEFAULT_DOUBLE_SIZE_EDITOR_FONT_SIZE_PX,
   DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
   DEFAULT_EDITOR_STYLE,
   EDITOR_GLYPH_PADDING_MIN_PX,
@@ -176,6 +177,8 @@ import {
 import {
   DEFAULT_UI_FONT_KEY,
   DEFAULT_UI_FONT_SCALE,
+  DEFAULT_DOUBLE_SIZE_UI_FONT_SCALE,
+  uiScaleFactor,
   UI_FONT_SCALE_MIN,
   UI_FONT_SCALE_MAX,
   roundUiFontScale,
@@ -353,41 +356,41 @@ interface FontSizesByMode {
   regular: FontSizeSet
   double: FontSizeSet
 }
-const DEFAULT_FONT_SIZE_SET: FontSizeSet = {
-  editorFontSize: DEFAULT_EDITOR_FONT_SIZE_PX,
-  viewFontSize: DEFAULT_EDITOR_FONT_SIZE_PX,
-  uiFontScale: DEFAULT_UI_FONT_SCALE,
-  visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.regular,
+/** Each size mode's own defaults: double size halves nothing, the page is doubled, so its text defaults are set smaller. */
+const DEFAULT_FONT_SIZES_BY_MODE: FontSizesByMode = {
+  regular: {
+    editorFontSize: DEFAULT_EDITOR_FONT_SIZE_PX,
+    viewFontSize: DEFAULT_EDITOR_FONT_SIZE_PX,
+    uiFontScale: DEFAULT_UI_FONT_SCALE,
+    visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.regular,
+  },
+  double: {
+    editorFontSize: DEFAULT_DOUBLE_SIZE_EDITOR_FONT_SIZE_PX,
+    viewFontSize: DEFAULT_DOUBLE_SIZE_EDITOR_FONT_SIZE_PX,
+    uiFontScale: DEFAULT_DOUBLE_SIZE_UI_FONT_SCALE,
+    visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.double,
+  },
 }
 
 /**
  * Both size modes' font sizes from a saved menu, each through the bad-value
- * safeguard (resolvePersistedFontSizePx / resolvePersistedUiFontScale).
- *
- * The regular set lives in the original fields and falls back to the defaults.
- * The double-size set has fields of its own; one that is missing (a save from
- * before they existed) or damaged falls back to its REGULAR counterpart, not
- * to the default -- so nothing changes for the reader until they tune a size
- * in double size mode.
+ * safeguard (resolvePersistedFontSizePx / resolvePersistedUiFontScale). A
+ * missing or damaged value takes its own mode's default.
  */
 function resolvePersistedFontSizesByMode(menu: PersistedMenuState): FontSizesByMode {
-  const editorFontSize = resolvePersistedFontSizePx(menu.editorFontSize, DEFAULT_EDITOR_FONT_SIZE_PX)
-  const regular: FontSizeSet = {
-    editorFontSize,
-    viewFontSize: resolvePersistedFontSizePx(menu.viewFontSize, DEFAULT_EDITOR_FONT_SIZE_PX),
-    uiFontScale: resolvePersistedUiFontScale(menu.uiFontScale, DEFAULT_UI_FONT_SCALE),
-    visualizerFontSize: resolvePersistedFontSizePx(menu.visualizerFont?.sizePx, DEFAULT_VISUALIZER_FONT_SIZE_PX.regular),
-  }
-  const doubleEditorFontSize = resolvePersistedFontSizePx(menu.doubleSizeEditorFontSize, regular.editorFontSize)
+  const { regular: regularDefaults, double: doubleDefaults } = DEFAULT_FONT_SIZES_BY_MODE
   return {
-    regular,
+    regular: {
+      editorFontSize: resolvePersistedFontSizePx(menu.editorFontSize, regularDefaults.editorFontSize),
+      viewFontSize: resolvePersistedFontSizePx(menu.viewFontSize, regularDefaults.viewFontSize),
+      uiFontScale: resolvePersistedUiFontScale(menu.uiFontScale, regularDefaults.uiFontScale),
+      visualizerFontSize: resolvePersistedFontSizePx(menu.visualizerFont?.sizePx, regularDefaults.visualizerFontSize),
+    },
     double: {
-      editorFontSize: doubleEditorFontSize,
-      viewFontSize: resolvePersistedFontSizePx(menu.doubleSizeViewFontSize, regular.viewFontSize),
-      uiFontScale: resolvePersistedUiFontScale(menu.doubleSizeUiFontScale, regular.uiFontScale),
-      // Its own default rather than the regular size: unlike the editor's, the
-      // visualizer's double size default is set apart (smaller, since the page doubles).
-      visualizerFontSize: resolvePersistedFontSizePx(menu.doubleSizeVisualizerFontSize, DEFAULT_VISUALIZER_FONT_SIZE_PX.double),
+      editorFontSize: resolvePersistedFontSizePx(menu.doubleSizeEditorFontSize, doubleDefaults.editorFontSize),
+      viewFontSize: resolvePersistedFontSizePx(menu.doubleSizeViewFontSize, doubleDefaults.viewFontSize),
+      uiFontScale: resolvePersistedUiFontScale(menu.doubleSizeUiFontScale, doubleDefaults.uiFontScale),
+      visualizerFontSize: resolvePersistedFontSizePx(menu.doubleSizeVisualizerFontSize, doubleDefaults.visualizerFontSize),
     },
   }
 }
@@ -1588,16 +1591,14 @@ function App() {
   // Font sizes are remembered per size mode: edit view, render view and the
   // interface each keep one value for regular mode and one for double size,
   // so switching modes never asks the reader to re-tune them. Spacing needs
-  // no pair -- it scales with the zoom on its own. Both sets always exist (a
-  // save from before this seeds the double-size set from the regular one --
-  // see resolvePersistedFontSizesByMode). The three names below are the values
+  // no pair -- it scales with the zoom on its own. Both sets always exist,
+  // each with its own mode's defaults (DEFAULT_FONT_SIZES_BY_MODE). The names below are the values
   // of the mode on screen (isDoubleSizeApplied), and their setters write into
   // that mode's set only.
-  const [fontSizesByMode, setFontSizesByMode] = useState<FontSizesByMode>(() => ({
-    regular: DEFAULT_FONT_SIZE_SET,
-    double: { ...DEFAULT_FONT_SIZE_SET, visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.double },
-  }))
+  const [fontSizesByMode, setFontSizesByMode] = useState<FontSizesByMode>(DEFAULT_FONT_SIZES_BY_MODE)
   const { editorFontSize, viewFontSize, uiFontScale, visualizerFontSize } = isDoubleSizeApplied ? fontSizesByMode.double : fontSizesByMode.regular
+  // What the stylesheets' sizes are multiplied by; uiFontScale is the reader's number.
+  const uiScale = uiScaleFactor(uiFontScale)
 
   // Mirrors --sidebar-min-width in tokens.css: the sidebar has to be wide
   // enough for the options panel's always-visible top section (font
@@ -1610,7 +1611,7 @@ function App() {
   const sidebarWidthPx = useMemo(() => {
     const sidebarOptionsContentWidthPx = BTN_SQUARE_REGULAR_SIZE_PX * 6 + 7 * spacingRegularPx + 2
     const sidebarPaddingRightPx = spacingRegularPx * 2 // mirrors --spacing-large
-    const sidebarScrollbarSlotWidthPx = spacingRegularPx + scrollTrackSizeFor(uiFontScale).thicknessPx // mirrors --sidebar-scrollbar-slot-width
+    const sidebarScrollbarSlotWidthPx = spacingRegularPx + scrollTrackSizeFor(uiScale).thicknessPx // mirrors --sidebar-scrollbar-slot-width
     return Math.round(
       sidebarOptionsContentWidthPx
       + spacingRegularPx * 4 // mirrors --spacing-large * 2
@@ -1618,7 +1619,7 @@ function App() {
       + sidebarScrollbarSlotWidthPx
       + sidebarPaddingRightPx,
     )
-  }, [spacingRegularPx, uiFontScale])
+  }, [spacingRegularPx, uiScale])
 
   // The narrowest the toolbar column is allowed to get: exactly enough for the
   // formatting toolbar's compact layout to show three groups of three side by
@@ -1698,13 +1699,13 @@ function App() {
       + dateFilterRailPx
       + paginationPx
 
-    const noteCardPx = noteListRowContentHeightPx(uiFontScale) + 2 * largeGapPx
+    const noteCardPx = noteListRowContentHeightPx(uiScale) + 2 * largeGapPx
     const fourCardsPx = 2 * largeGapPx /* .notes-list padding */
       + SIDEBAR_MIN_VISIBLE_NOTE_CARDS * noteCardPx
       + (SIDEBAR_MIN_VISIBLE_NOTE_CARDS - 1) * largeGapPx
 
     return Math.ceil(computedChromePx + fourCardsPx + SUB_PIXEL_QUANTUM_PX)
-  }, [measuredMinHeightPx, sidebarWidthPx, spacingRegularPx, uiFontScale])
+  }, [measuredMinHeightPx, sidebarWidthPx, spacingRegularPx, uiScale])
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   // Whether the date/category/archive/trash views list stored images
@@ -4126,10 +4127,10 @@ function App() {
   useEffect(() => {
     const rootStyle = document.documentElement.style
     rootStyle.setProperty('--ui-font-family', resolveUiFontFamily(uiFontStyle))
-    rootStyle.setProperty('--ui-font-scale', String(uiFontScale))
-    installScrollTrackTokens(uiFontScale)
+    rootStyle.setProperty('--ui-font-scale', String(uiScale))
+    installScrollTrackTokens(uiScale)
     document.documentElement.dataset.uiFont = uiFontStyle
-  }, [uiFontStyle, uiFontScale])
+  }, [uiFontStyle, uiScale])
 
   const [clearAppStatePrimed, setClearAppStatePrimed] = useState(false)
 
@@ -8853,7 +8854,7 @@ ${markdownHtml}
                         scheduleFocusEditorInEditMode={() => getActiveSection()?.scheduleFocusEditorInEditMode()}
                         visualizerFont={visualizerFont}
                         setVisualizerFont={setVisualizerFont}
-                        visualizerFontSizeDefault={DEFAULT_VISUALIZER_FONT_SIZE_PX[isDoubleSizeApplied ? 'double' : 'regular']}
+                        fontSizeDefaults={DEFAULT_FONT_SIZES_BY_MODE[isDoubleSizeApplied ? 'double' : 'regular']}
                         uiFontStyle={uiFontStyle}
                         setUiFontStyle={setUiFontStyle}
                         uiFontScale={uiFontScale}

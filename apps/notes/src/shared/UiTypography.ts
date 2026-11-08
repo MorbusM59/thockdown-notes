@@ -52,10 +52,25 @@ export function resolveUiFontFamily(key: UiFontKey): string {
   return FONT_FAMILY_BY_KEY[key] ?? FONT_FAMILY_BY_KEY[DEFAULT_UI_FONT_KEY];
 }
 
-export const UI_FONT_SCALE_MIN = 0.85;
-export const UI_FONT_SCALE_MAX = 1.6;
+/**
+ * The UI font scale as the reader sets it. 1 is not the stylesheets' own
+ * size: the interface is drawn at UI_FONT_SCALE_BASE times it (so the
+ * stylesheets' 1 sits at 1/1.1 on this scale), and --ui-font-scale on the
+ * root carries that product (uiScaleFactor).
+ */
+export const UI_FONT_SCALE_MIN = 0.8;
+export const UI_FONT_SCALE_MAX = 1.5;
 export const UI_FONT_SCALE_STEP = 0.05;
-export const DEFAULT_UI_FONT_SCALE = 1;
+export const UI_FONT_SCALE_BASE = 1.1;
+/** The default in regular size mode. */
+export const DEFAULT_UI_FONT_SCALE = 1.2;
+/** The default in double size mode, where the page itself is doubled. */
+export const DEFAULT_DOUBLE_SIZE_UI_FONT_SCALE = 1;
+
+/** The factor the stylesheets' sizes are multiplied by, for a UI font scale. */
+export function uiScaleFactor(uiFontScale: number): number {
+  return uiFontScale * UI_FONT_SCALE_BASE;
+}
 
 export function roundUiFontScale(value: number): number {
   // 1/0.05 = 20: multiplying by the clean integer first (rather than
