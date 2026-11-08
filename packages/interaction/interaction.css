@@ -320,6 +320,15 @@
   gap:            var(--spacing-regular);
 }
 
+/* While a section folds or unfolds, AccordionSection.tsx sets the body's
+   height to a value smaller than its content: a clipping window, not a size
+   to lay out against. A flex item shrinks to fit by default, and one that
+   allows it (min-height: 0, as .options-loadout-grid has) collapsed to
+   nothing, so the controls below it drew over it until the unfold ended. */
+.sidebar-options-accordion-body > * {
+  flex-shrink: 0;
+}
+
 .sidebar-options-section-heading {
   margin:    0;
   padding:   0;
