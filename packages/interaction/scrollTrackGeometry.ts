@@ -13,10 +13,10 @@ export const SCROLL_TRACK_EDGE_GAP_PX = 3
 
 /**
  * A track's thickness (every scrollbar, slider shell and the bottom utility
- * row) and the gap between its thumb and its long sides, at UI font scale 1.
- * Both follow the UI font scale, so the controls grow with the text set in
- * and beside them; each is rounded to whole pixels so borders stay crisp and
- * the thumb stays centred.
+ * row) at UI font scale 1, and the gap between its thumb and its long sides.
+ * The thickness follows the UI font scale, rounded to whole pixels so borders
+ * stay crisp; the gap does not, so the thumb grows with the track and keeps
+ * the same distance from its edges.
  */
 export const SCROLL_THICKNESS_BASE_PX = 16
 export const SCROLL_HANDLE_GAP_BASE_PX = 4
@@ -29,7 +29,7 @@ export interface ScrollTrackSize {
 
 export function scrollTrackSizeFor(uiFontScale: number): ScrollTrackSize {
   const thicknessPx = Math.round(SCROLL_THICKNESS_BASE_PX * uiFontScale)
-  const handleGapPx = Math.round(SCROLL_HANDLE_GAP_BASE_PX * uiFontScale)
+  const handleGapPx = SCROLL_HANDLE_GAP_BASE_PX
   return { thicknessPx, handleGapPx, handleThicknessPx: thicknessPx - (handleGapPx * 2) }
 }
 
