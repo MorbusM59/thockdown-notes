@@ -381,9 +381,11 @@
 .snapshot-timeline-mark {
   position:       absolute;
   top:            50%;
-  width:          8px;
-  height:         8px;
-  margin-left:    -4px;
+  /* As large as a slider's thumb, so the marks keep the thumb's gap to the
+     track's edges at every UI font scale. */
+  width:          var(--canonical-scroll-handle-thickness);
+  height:         var(--canonical-scroll-handle-thickness);
+  margin-left:    calc(var(--canonical-scroll-handle-thickness) / -2);
   border-radius:  var(--border-radius-small);
   transform:      translateY(-50%);
   background:     transparent;
@@ -436,8 +438,8 @@
   position:       absolute;
   left:           50%;
   top:            50%;
-  width:          20px;
-  height:         20px;
+  width:          calc(var(--canonical-scroll-thickness) + 4px); /* 20px at scale 1 */
+  height:         calc(var(--canonical-scroll-thickness) + 4px);
   translate:      -50% -50%;
   rotate:         -90deg;
   pointer-events: none;
@@ -469,8 +471,8 @@
 }
 
 .manual-snapshot-circle-dot {
-  width:         8px;
-  height:        8px;
+  width:         var(--canonical-scroll-handle-thickness);
+  height:        var(--canonical-scroll-handle-thickness);
   border-radius: var(--border-radius-small);
   border: 1px solid var(--canonical-scroll-track-bg);
   background-color: var(--color-text-60);
