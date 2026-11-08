@@ -23,7 +23,7 @@ There is another advantage: Writing in markdown forces you to employ a certain c
 ## So how do you actually apply styling?
 Instead of clicking buttons in a rich text editor, you just **type special characters** to format your notes. To make things a bit more convenient. There are also **buttons in the toolbar** to do that job for you. So, in a way, this isn't as different from using a regular text editor, but you ned up with universally compatible output.
 
-*Hint: To see what your formatting might look like when interpreted, hit "Esc" or click the pen button at the right end of the tab bar above your editor. This switches between "Edit Mode" and "Render View".*
+*Hint: To see what your formatting might look like when interpreted, hit "Esc" or click the pen button at the right end of the tab bar above your editor. This switches between "Editor" and "Reader".*
 
 Here are the essentials:
 

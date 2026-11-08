@@ -1323,7 +1323,7 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-reader-font"
         heading="Reader Font"
         icon="fa-book-open"
-        pickerLabel="Render typography"
+        pickerLabel="Reader typography"
         options={VIEW_STYLE_OPTIONS}
         activeKey={viewStyle}
         onSelect={setViewStyle}
@@ -1518,8 +1518,8 @@ export function SidebarOptionsPanel({
             />
             {/* What one notch is worth, per pane. Two controls rather than one
                 because the panes count in different units and always have: the
-                edit view lands on row boundaries, so its step can only be a
-                whole number of rows, while the render view has no grid to land
+                editor lands on row boundaries, so its step can only be a
+                whole number of rows, while the reader has no grid to land
                 on and can take a fraction of a line. A single shared number
                 would have to be one or the other, and would be lying to one of
                 the panes. */}
@@ -1529,8 +1529,8 @@ export function SidebarOptionsPanel({
               max={WHEEL_STEP_ROWS_MAX}
               step={WHEEL_STEP_ROWS_STEP}
               value={wheelStepRows}
-              trackLabel="edit step"
-              ariaLabel="How many rows one notch of the wheel scrolls in edit mode."
+              trackLabel="editor step"
+              ariaLabel="How many rows one notch of the wheel scrolls in the editor."
               defaultValue={DEFAULT_WHEEL_STEP_ROWS}
               onCommit={(value) => setWheelStepRows(
                 clamp(Math.round(value), WHEEL_STEP_ROWS_MIN, WHEEL_STEP_ROWS_MAX),
@@ -1542,9 +1542,9 @@ export function SidebarOptionsPanel({
               max={WHEEL_STEP_LINES_MAX}
               step={WHEEL_STEP_LINES_STEP}
               value={wheelStepLines}
-              trackLabel="view step"
+              trackLabel="reader step"
               formatValue={formatWheelStepLines}
-              ariaLabel="How many lines of text one notch of the wheel scrolls in render view."
+              ariaLabel="How many lines of text one notch of the wheel scrolls in the reader."
               defaultValue={DEFAULT_WHEEL_STEP_LINES}
               onCommit={(value) => setWheelStepLines(
                 clamp(value, WHEEL_STEP_LINES_MIN, WHEEL_STEP_LINES_MAX),
@@ -1633,7 +1633,7 @@ export function SidebarOptionsPanel({
             className="text-icon text-icon-edit"
             color={editorTextColors.editorEditText}
             glyph="fa-solid fa-font"
-            tooltip="Edit mode text color"
+            tooltip="Editor text color"
             onApply={(css) => setEditorTextColorCss('editorEditText', css)}
           />
           {editorTextHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
@@ -1645,14 +1645,14 @@ export function SidebarOptionsPanel({
             className="text-icon text-icon-render"
             color={editorTextColors.editorRenderText}
             glyph="fa-solid fa-font"
-            tooltip="Render mode text color"
+            tooltip="Reader text color"
             onApply={(css) => setEditorTextColorCss('editorRenderText', css)}
           />
           {readerTextHighlightKeys.map((key) => renderHighlightSwatchButton(key))}
         </div>
 
         <OptionsSubsectionLabel>Editor Boxes</OptionsSubsectionLabel>
-        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Edit mode box colors">
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Editor box colors">
           {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
         </div>
         <OptionsSubsectionLabel>Box Bevel</OptionsSubsectionLabel>
@@ -1675,7 +1675,7 @@ export function SidebarOptionsPanel({
           </OptionsSliderRows>
         </div>
         <OptionsSubsectionLabel>Editor Markdown</OptionsSubsectionLabel>
-        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Edit mode markdown colors">
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Editor markdown colors">
           {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
         </div>
         {features.visualizer ? (<>
@@ -2825,8 +2825,8 @@ export function SidebarOptionsPanel({
         iconClass="fa-table-cells"
       >
           {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
-          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the edit view', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
-          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the render view', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
+          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
+          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
       </AccordionSection>
       ) : null}
 
@@ -3122,12 +3122,12 @@ export function SidebarOptionsPanel({
       </>) : null}
 
       {showsSection('tools') ? (<>
-      {/* Speed reading (Alt+<): the two views' paces, the edit view's row,
+      {/* Speed reading (Alt+<): the two views' paces, the editor's row,
           and the one curve both views ease with -- the same three numbers as
           Animations above, kept apart from them because a reading pace's ease
           is seconds long where a page key's journey is a fraction of one
           (speedReading/speedReadingSettings.ts). Grouped by where
-          each applies: the edit view's, the render view's, and the curve both
+          each applies: the editor's, the reader's, and the curve both
           share. */}
       <AccordionSection
         className="sidebar-options-section-speed-reading"
@@ -3135,8 +3135,8 @@ export function SidebarOptionsPanel({
         heading="Speed Reading"
         iconClass="fa-glasses"
       >
-        <OptionsSubsectionLabel>Edit</OptionsSubsectionLabel>
-        <div className="utility-setting-slider-stack" aria-label="Speed reading, edit">
+        <OptionsSubsectionLabel>Editor</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, editor">
           <OptionsSliderRows rows={[3]}>
             <CompactScrollbarSlider
               id="speed-reading-edit-wpm"
@@ -3144,9 +3144,9 @@ export function SidebarOptionsPanel({
               max={SPEED_READING_WPM_MAX}
               step={SPEED_READING_WPM_STEP}
               value={speedReadingSettings.editWpm}
-              trackLabel="edit"
-              tooltipLabel="Edit view: words per minute a held Space reads on at (Left / Right while reading)"
-              ariaLabel="Edit view speed reading pace in words per minute"
+              trackLabel="editor"
+              tooltipLabel="Editor: words per minute a held Space reads on at (Left / Right while reading)"
+              ariaLabel="Editor speed reading pace in words per minute"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.editWpm}
               formatValue={(value) => String(Math.round(value))}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, editWpm: Math.round(value) }))}
@@ -3158,8 +3158,8 @@ export function SidebarOptionsPanel({
               step={1}
               value={speedReadingSettings.rowWidth}
               trackLabel="row"
-              tooltipLabel="Edit view: the reading row's width in boxes; each chunk is as many words as fit"
-              ariaLabel="Width of the edit view's reading row in boxes"
+              tooltipLabel="Editor: the reading row's width in boxes; each chunk is as many words as fit"
+              ariaLabel="Width of the editor's reading row in boxes"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.rowWidth}
               formatValue={(value) => String(Math.round(value))}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, rowWidth: Math.round(value) }))}
@@ -3171,16 +3171,16 @@ export function SidebarOptionsPanel({
               step={10}
               value={speedReadingSettings.fixationMs}
               trackLabel="fixation"
-              tooltipLabel="Edit view: milliseconds every chunk stays before its letters count, and the shortest a chunk can be; a sentence's end adds one fixation, a comma half of one"
-              ariaLabel="Edit view fixation time per chunk in milliseconds"
+              tooltipLabel="Editor: milliseconds every chunk stays before its letters count, and the shortest a chunk can be; a sentence's end adds one fixation, a comma half of one"
+              ariaLabel="Editor fixation time per chunk in milliseconds"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.fixationMs}
               formatValue={(value) => String(Math.round(value))}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, fixationMs: Math.round(value) }))}
             />
           </OptionsSliderRows>
         </div>
-        <OptionsSubsectionLabel>Render</OptionsSubsectionLabel>
-        <div className="utility-setting-slider-stack" aria-label="Speed reading, render">
+        <OptionsSubsectionLabel>Reader</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, reader">
           <OptionsSliderRows rows={[1]}>
             <CompactScrollbarSlider
               id="speed-reading-render-wpm"
@@ -3188,9 +3188,9 @@ export function SidebarOptionsPanel({
               max={SPEED_READING_WPM_MAX}
               step={SPEED_READING_WPM_STEP}
               value={speedReadingSettings.renderWpm}
-              trackLabel="render"
-              tooltipLabel="Render view: words per minute the page scrolls at (Left / Right while reading)"
-              ariaLabel="Render view speed reading pace in words per minute"
+              trackLabel="reader"
+              tooltipLabel="Reader: words per minute the page scrolls at (Left / Right while reading)"
+              ariaLabel="Reader speed reading pace in words per minute"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.renderWpm}
               formatValue={(value) => String(Math.round(value))}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, renderWpm: Math.round(value) }))}
@@ -3207,7 +3207,7 @@ export function SidebarOptionsPanel({
               step={0.05}
               value={speedReadingSettings.curveRamp}
               trackLabel="ramp"
-              tooltipLabel="Speed curve ramp, as in Animations: how a held Space eases into the pace (edit) or a pause eases out of it and back (render)"
+              tooltipLabel="Speed curve ramp, as in Animations: how a held Space eases into the pace (editor) or a pause eases out of it and back (reader)"
               ariaLabel="Speed reading curve dynamic"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveRamp}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveRamp: value }))}

@@ -58,11 +58,11 @@ Hey there! Love the learning mindset!
 ## The Basics
 Let's get you started: At its most basic, Thockdown is about
 - **writing notes** in the **[Markdown Editor](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})** and
-- **reading notes** in the **[Markdown Renderer](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})**.
+- **reading notes** in the **[Markdown Reader](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})**.
 
 You can 
 - hit **Ctrl+N** to create a [**new note**](${guideLink('NOTES-EDITING', 'creating-notes')}),
-- [**toggle**](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}) between editor and renderer using the **Escape**-key,
+- [**toggle**](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}) between the editor and the reader using the **Escape**-key,
 - **hold Escape** to bring up the [quick access note menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}),
 - **hold F1** to see every [keyboard shortcut](${guideLink('SHORTCUTS')}) at a glance for as long as you hold it, or tap **F1** to open and close this guide,
 - use the [**side bar**](${guideLink('SIDEBAR-SEARCH', 'sidebar-views')}) to find the notes you created again later and (**menu** button to the left of the bar above)
@@ -151,7 +151,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Your changes save themselves a short moment after you stop typing.*
 
 - Autosave briefly pauses while you're actively editing the title line, so a half-typed title is never saved as the note's name.
-- Switching into preview mode forces an immediate save first, so what you see is always current.
+- Switching into reader forces an immediate save first, so what you see is always current.
 
 ### [Characters the Editor Keeps](#characters-the-editor-keeps)
 
@@ -163,24 +163,24 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Left out: emoji, Chinese, Japanese and Korean characters (they take two cells), and invisible characters such as zero-width spaces and joiners (they take none). They simply do not appear when you type or paste them.
 - Wider or narrower spaces become an ordinary space, and an accent typed as a separate mark is joined to its letter.
 - A note or file that already contains such characters has them removed when it opens.
-- Some fonts cannot draw every symbol (arrows, box drawing, Greek letters) at the width of one cell. In the edit view such a character shows as an empty cell, so nothing after it shifts; it is still in the note, and render view, search and exports show it. Another editor font may draw it.
+- Some fonts cannot draw every symbol (arrows, box drawing, Greek letters) at the width of one cell. In the editor such a character shows as an empty cell, so nothing after it shifts; it is still in the note, and reader, search and exports show it. Another editor font may draw it.
 
-### [Edit and Preview Modes](#edit-and-preview-modes)
+### [Editor and Reader](#edit-and-preview-modes)
 
 > **Where?**
 > The pen icon at the right of the tab bar, next to the "+", or \`Esc\`.
 
-*Toggles between the raw Markdown you type and the rendered, formatted view.*
+*Switches the slot between the editor, where you type the Markdown, and the reader, where it is shown formatted.*
 
 - Preview renders GitHub-Flavored Markdown: headings, bold/italic/strikethrough, lists (including task checklists with tick boxes), tables, blockquotes, syntax-highlighted code blocks, horizontal rules, images, and links.
-- A task checklist's box is clickable right there in preview, same as [clicking its caret in edit mode](${guideLink('TOOLBAR-FORMATTING', 'formatting-group')}) — it's the same checkbox either way, so the note's own text (and edit mode's view of it) updates immediately.
+- A task checklist's box is clickable right there in the reader, same as [clicking its caret in the editor](${guideLink('TOOLBAR-FORMATTING', 'formatting-group')}) — it's the same checkbox either way, so the note's own text (and editor's view of it) updates immediately.
 - \`Esc\` also blurs a focused field (like search) before it starts toggling modes, so it's safe to hit repeatedly.
 - **In a slot that isn't showing a note** — the User Guide — there is no other view to switch to, so the same button becomes an **exit** and closes what the slot is showing. \`Esc\` follows it, because \`Esc\` *is* that button: one key, one position, one meaning — leave whatever this slot is currently doing.
 
 ### [Quick Actions Menu](#quick-actions-menu)
 
 > **Where?**
-> Hold \`Esc\` for about a quarter of a second, anywhere in the editor area — works with a note open, an empty editor, or a read-only auto-generated one (Table of Contents, Open Items, the User Guide, ...).
+> Hold \`Esc\` for about a quarter of a second, anywhere in the slot — works with a note open, an empty editor, or a read-only auto-generated one (Table of Contents, Open Items, the User Guide, ...).
 
 *A small ring of choices over the editor for the note actions you reach for most, without leaving the keyboard.*
 
@@ -195,14 +195,14 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *This page, opened as an ordinary (timeless, read-only) note in whichever slot you triggered it from.*
 
-- Opens exactly like clicking any note in the sidebar does — as a temporary tab, replacing whatever that slot was showing. Leave it with the **exit button** where that slot's [edit/render toggle](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}) normally sits, or with \`Esc\`, which is the same button. Picking another note, a pinned tab, or anything from the sidebar also leaves it, the ordinary way.
+- Opens exactly like clicking any note in the sidebar does — as a temporary tab, replacing whatever that slot was showing. Leave it with the **exit button** where that slot's [editor/reader toggle](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}) normally sits, or with \`Esc\`, which is the same button. Picking another note, a pinned tab, or anything from the sidebar also leaves it, the ordinary way.
 - Browsable with the same chapter bar every note with chapters uses — click a chapter pill to jump to it, or the bookmark icon for a full table of contents.
 - Always render-only: nothing here can be edited, renamed, tagged, archived, or deleted.
 
 ### [Scrollbar Navigation](#scrollbar-navigation)
 
 > **Where?**
-> The scrollbar track alongside the editor, in both edit and preview mode.
+> The scrollbar track alongside the editor, in both edit and reader.
 
 *Left-click jumps straight to a spot; right-click pages up or down, one screen at a time.*
 
@@ -211,7 +211,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Right-click above or below the thumb to page up/down once, the same as pressing \`Page Up\`/\`Page Down\`. Right-clicking on the thumb itself does nothing.
 - Hold the right click down to keep paging continuously, just like holding \`Page Up\`/\`Page Down\` on the keyboard. It stops when you release the button, or as soon as the thumb reaches your cursor.
 - **What the thumb measures depends on the size of the note.** On a smaller note it represents actual screen space, the way a scrollbar normally does, so you keep the familiar sense of orientation as you write. On a larger one — which in practice usually means an external file — it represents character count instead, to give you an exact idea of how much information is left in the document regardless of that note's internal geometry.
-- That second reading is why, on a large note in render view, your position means the same thing whatever your view settings are: changing the font size or the pane width can re-flow every line without moving the thumb, and dragging it to the bottom of the track lands at the end of the note whether or not you've read your way down there before.
+- That second reading is why, on a large note in the reader, your position means the same thing whatever your view settings are: changing the font size or the pane width can re-flow every line without moving the thumb, and dragging it to the bottom of the track lands at the end of the note whether or not you've read your way down there before.
 
 ### [Word and Character Count](#word-and-character-count)
 
@@ -266,7 +266,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Its switch in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) turns it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
 - Its settings are the same for every layout. Its colours belong to the layout: Settings panel → Layouts → Colors → Visualizer.
-- Caret, edge and pane are separate blocks. The edge is a soft inner shadow along the editor's border. **Grid Beat** sets the edge, the **editor pane** (drawn over the box grid in the edit view) and the **reader pane** (an even wash of its colour over the whole editor in any view without a grid); the full-screen scene has its own edge and pane under **Visualizer**. The caret takes part only while **Caret Beat** is on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) (a layout setting): then, while music plays and a beat is found, it stops blinking and holds steady, and the music moves it on the beat, as far as the caret's **effect** says, in the opposite direction to the blink; its **shape** and **fall** are under Caret Beat in the caret's settings. Without a beat it blinks as selected.
+- Caret, edge and pane are separate blocks. The edge is a soft inner shadow along the editor's border. **Grid Beat** sets the edge, the **editor pane** (drawn over the box grid in the editor) and the **reader pane** (an even wash of its colour over the whole editor in any view without a grid); the full-screen scene has its own edge and pane under **Visualizer**. The caret takes part only while **Caret Beat** is on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) (a layout setting): then, while music plays and a beat is found, it stops blinking and holds steady, and the music moves it on the beat, as far as the caret's **effect** says, in the opposite direction to the blink; its **shape** and **fall** are under Caret Beat in the caret's settings. Without a beat it blinks as selected.
 - What the music is listened for is set once, under **Beat detection**, in three groups: **Thump** (the low end jumping: a kick, a bass stab), **Pierce** (a sharp sound cutting through: a snare, a clap) and **Tick** (the busy top: hats, shakers). One sound can be a little of two (a snare with some punch is a pierce with a slight thump). Each has a **contrast**: how strong a hit must be against the others around it before it responds, so raising it keeps only the strongest, and only what is mostly that group. Each block then has three sliders for how much the thump, the pierce and the tick drive it; they add up, capped at full. Then its **effect**: right of centre a hit adds the block, left of centre it is inverted, resting at full strength while music plays with a hit taking it away, and the centre turns it off; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
 - In the visualizer scene (F5), the last row of the top strip fills with chromatic semitone boxes, lit in the accent colour. Their brightness follows the estimated strength of each note, and multiple notes can light together. The estimate uses each note's fundamental and partials together, so energy explained by one note's overtones is not automatically shown as extra notes. This is a visual estimate rather than a transcription; closely related notes and unusual instrument timbres can still be ambiguous. A3 sits in the middle (in the right-center box when the row has an even number of boxes). After enough tonal material, the row estimates and holds the track's tuning; until then it uses A=440. To avoid brief broadband hits flashing many boxes, already-lit keys carry through a thump or pierce, and a new key revealed by one is admitted only when its decoded-track energy remains in the short look-ahead. Changes follow the audio, without waiting for a beat-grid boundary.
 - Left of the centre, the scene lists every song in the active playlists, in the order they will play, starting with the current one, highlighted, at the top. Scroll it with the wheel; when the mouse leaves, it returns to the top. Clicking a song plays it, and the songs after it follow in the same order. Right of the centre are your playlists; the highlighted ones are playing, and clicking one switches it on or off. Below them, the **artist**, **album** and **title** fields narrow the songs to those containing what you type, ignoring case; the list follows as you type, and once you leave the field (**Enter**, **Tab** to the next field, or a click elsewhere) the first song left on the list plays. Just start typing to search titles: the panels come up with every field emptied and the title field ready. **Esc** empties the field you are in; with no field in use it shows or hides the panels. **F5** leaves the visualizer. Under the centre, the long bar is the music's volume and the two above it its reverb (left) and room (right); each is named above it; the gap in each marks the level, and clicking a box sets it there.
@@ -280,8 +280,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Reads a note to you at a pace you set, from where you are.*
 
-- **Render view** scrolls the page on its own from what is on screen, at your words per minute, measured from the text as it is laid out. Hold \`Space\` or \`↓\` to ease to a pause; let go to ease back up.
-- **Edit view** greys out the grid and shows the note a few words at a time in one row, starting at the caret. \`Space\` or \`↓\` shows the next words; hold it to read on at your pace. \`↑\` goes back. When you stop, the caret is at the end of the last words shown.
+- **Reader** scrolls the page on its own from what is on screen, at your words per minute, measured from the text as it is laid out. Hold \`Space\` or \`↓\` to ease to a pause; let go to ease back up.
+- **Editor** greys out the grid and shows the note a few words at a time in one row, starting at the caret. \`Space\` or \`↓\` shows the next words; hold it to read on at your pace. \`↑\` goes back. When you stop, the caret is at the end of the last words shown.
 - \`←\` and \`→\` make it slower or faster in steps of 5; hold to sweep. The word count shows the pace while you read, and the time left in the note at that pace.
 - \`Esc\` switches views and keeps reading. \`F9\` stops.
 `,
@@ -290,7 +290,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Defining an Anchor](#defining-an-anchor)
 
 > **Where?**
-> Typed directly into a note's text, anywhere, in either edit or preview source — or select some text and hit the anchor button (right behind the link button) or \`Shift+Ctrl+L\`.
+> Typed directly into a note's text, anywhere, in either the editor or the reader — or select some text and hit the anchor button (right behind the link button) or \`Shift+Ctrl+L\`.
 
 *Turns a heading or phrase into a jump target with \`[Anchor Text](#anchor-id)\` — a real link whose destination is never clicked.*
 
@@ -470,11 +470,11 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Splits a note into sub-notes, browsable from a bar of their own.*
 
 - The chapter bar is always showing for whatever note is open, with or without chapters yet — there's no manual show/hide toggle. The bookmark pill at the start of its strip creates a new empty chapter at the end of the note and switches straight to it; New Chapter in the Quick Actions Menu does exactly the same thing.
-- The bar's leading icon buttons, before the chapter strip: the **tag toggle** (see [Tabs and Tags Mode]($#tabs-and-tags-mode)), then the auto-generated Open Items and Table of Contents chapters when they exist. The **edit/render toggle** is not here — it belongs to the slot, so it sits at the right end of the slot's tab bar (see [Edit and Preview Modes](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})).
+- The bar's leading icon buttons, before the chapter strip: the **tag toggle** (see [Tabs and Tags Mode]($#tabs-and-tags-mode)), then the auto-generated Open Items and Table of Contents chapters when they exist. The **editor/reader toggle** is not here — it belongs to the slot, so it sits at the right end of the slot's tab bar (see [Editor and Reader](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})).
 - The chapter strip's first tab after the bookmark pill is always the parent note itself (the house); every chapter follows in order. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
 - Drag a chapter pill to reorder it among its siblings — same drag-and-drop as reordering pinned tabs or tags: drop directly on another pill to land in front of it, or on the bar's empty space to send it to the end.
-- The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up as an icon button ahead of the chapter strip (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. Following one lands you in whichever mode you were already in: render view scrolls to the heading, edit mode puts the caret on it, ready to type. The parent's own title sits at the top, bold and unbulleted, apart from the list below it; every \`##\` heading after that — the parent's own, and each chapter's title — is a bullet at the same level, with that heading's own deeper headings nested under it. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into render view. Since it's a generated view rather than something you write, it has no [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})).
-- An auto-generated **Open Items** chapter appears beside the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own part — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into render view — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
+- The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up as an icon button ahead of the chapter strip (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. Following one lands you in whichever mode you were already in: reader scrolls to the heading, editor puts the caret on it, ready to type. The parent's own title sits at the top, bold and unbulleted, apart from the list below it; every \`##\` heading after that — the parent's own, and each chapter's title — is a bullet at the same level, with that heading's own deeper headings nested under it. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into the reader. Since it's a generated view rather than something you write, it has no [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})).
+- An auto-generated **Open Items** chapter appears beside the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own part — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into the reader — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
 - A chapter is a full note in its own right — its own regular tags don't exist; tags always belong to the parent — but it doesn't appear on its own in Date/Category/Find, only through its one parent's chapter bar. The exceptions are Trash, once deleted, and Archive, once archived (see below for both). A chapter belongs to exactly one parent, ever, and a chapter can't have chapters of its own. Dragging a note from the sidebar onto the chapter bar copies its content into a brand-new chapter and switches you to it, same as creating one any other way — the dragged note itself is untouched and stays independent, not linked to the copy. Dropping it on the bar's empty space adds it as the last chapter; dropping it directly on an existing chapter pill instead inserts it right in front of that one. Every heading in the copy shifts down one level (\`#\` becomes \`##\`, and so on) so its own title-heading nests under the parent's instead of competing with it — the original note's headings are untouched.
 - While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
 - A chapter's fate is tied to its parent's: permanently deleting a parent note permanently deletes all of its chapters with it.
@@ -576,11 +576,11 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Freezing a Note in Time](#freezing-a-note-in-time)
 
 > **Where?**
-> Switch the note to preview mode, then click the snowflake button beneath the editor (in the same spot the line-numbers button sits in edit mode).
+> Switch the note to the reader, then click the snowflake button beneath the editor (in the same spot the line-numbers button sits in the editor).
 
 *Locks a note down so it can't be changed by accident — on purpose, permanently, until you unfreeze it.*
 
-- Freezing clears the note's entire Time Machine history (and that of its chapters) and switches it to always show in preview — edit mode is unreachable while frozen.
+- Freezing clears the note's entire Time Machine history (and that of its chapters) and switches it to always show in the reader — the editor is unreachable while frozen.
 - While frozen, nothing about the note can be changed: no typing, no tag edits, no chapter reordering/renaming/archiving/deleting, no new snapshots, no archiving or deleting the note itself. The one exception is unfreezing it.
 - Click the same (now lit) snowflake button again to unfreeze — the note goes back to being a normal, editable note. Its history stays gone; freezing doesn't keep a backup.
 `,
@@ -593,8 +593,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *One global toolbar that always acts on whichever slot is currently active.*
 
-- Left: a split button pairing the dark-mode toggle (top) with double size (bottom). Switching between edit and render view is each slot's own business — \`Esc\` or the pen toggle at the right end of that slot's tab bar (see [Edit and Preview Modes](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})); exporting is in the [Quick Actions Menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}); creating a note is \`Ctrl+N\`.
-- The rest of the bar holds the formatting group, always visible in both edit and render view.
+- Left: a split button pairing the dark-mode toggle (top) with double size (bottom). Switching between editor and reader is each slot's own business — \`Esc\` or the pen toggle at the right end of that slot's tab bar (see [Editor and Reader](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})); exporting is in the [Quick Actions Menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}); creating a note is \`Ctrl+N\`.
+- The rest of the bar holds the formatting group, always visible in both editor and reader.
 
 ### [Formatting Group](#formatting-group)
 
@@ -605,7 +605,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; [table]($#tables); link insertion; table of contents.
 - The buttons resize themselves to the room the toolbar has: full-size squares on a single row whenever they all fit, and mini squares — wrapping onto a second row if they still don't fit — when they don't. Full-size, they carry the same glyph size and rounding as the chapter bar's own icon buttons, inset evenly from every edge of the toolbar. Nothing is ever dropped, and the toolbar keeps the same height either way, so widening or narrowing the window never shifts anything below it.
-- The group stays on screen in render view too, so the toolbar doesn't change shape when you flip modes. While a slot is in render view, clicking any of these buttons switches that slot to edit mode instead of formatting — it deliberately doesn't also apply the formatting, so a stray click on a rendered note can't quietly edit it. Click again once you're in edit mode to actually apply it. (On a chapter that's always rendered — an auto table of contents or Open Items — the buttons are disabled, since there's no edit mode to switch to.)
+- The group stays on screen in the reader too, so the toolbar doesn't change shape when you flip modes. While a slot is in the reader, clicking any of these buttons switches that slot to the editor instead of formatting — it deliberately doesn't also apply the formatting, so a stray click on a rendered note can't quietly edit it. Click again once you're in the editor to actually apply it. (On a chapter that's always rendered — an auto table of contents or Open Items — the buttons are disabled, since there's no editor to switch to.)
 - Each button reflects whether the current selection or line already has that formatting applied.
 - Most double as the keyboard shortcuts listed in [Keyboard Shortcuts](${guideLink('SHORTCUTS')}).
 - A checklist item's box (\`- [ ]\`) can be toggled two ways once the caret sits between its brackets: type any character to check it off with that character (type a space to uncheck it again), or click the caret itself — with the caret already there and not moving — to flip \`[ ]\`/\`[X]\` without touching the keyboard.
@@ -639,7 +639,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **\`Ctrl+Shift+←\`/\`→\`** with the caret in an image moves it left, to the centre, or right; text flows round a left or right image. **\`Ctrl+Shift+↑\`/\`↓\`** makes it bigger or smaller. **\`Shift+Backspace\`** puts it back to its natural size and place.
 - The keys write the title for you, e.g. \`"20em right"\`. Typed by hand: a width (\`12em\`, \`320px\`, \`50%\`), a height (\`x8em\`), both (\`12emx8em\`), and \`left\`, \`center\` or \`right\`. A title that looks like this but has a mistake in it is underlined with a wavy line, and the image ignores it.
 - **Drop or paste an image file** into a note to store it in the app (up to 20 MB). It is inserted as \`![name](&1)\`: \`&1\` is the stored image's id, and the note keeps showing it even if the original file moves or is deleted.
-- **In the render view**, \`Ctrl\`+drag an image onto another paragraph to move it there: dropped on the left third of the page it sits left, the middle centres it, the right third puts it right. \`Shift\`+drag resizes it (drag away from the side it is aligned to, or down, to grow), and \`Ctrl+Shift\`+drag changes width and height separately. \`Ctrl\`+drag near an edge or corner crops it instead, and \`Ctrl\`+right-click takes the crop off. Image files can be dropped onto a paragraph here too.
+- **In the reader**, \`Ctrl\`+drag an image onto another paragraph to move it there: dropped on the left third of the page it sits left, the middle centres it, the right third puts it right. \`Shift\`+drag resizes it (drag away from the side it is aligned to, or down, to grow), and \`Ctrl+Shift\`+drag changes width and height separately. \`Ctrl\`+drag near an edge or corner crops it instead, and \`Ctrl\`+right-click takes the crop off. Image files can be dropped onto a paragraph here too.
 - **The image button**, beside the word count, appears when a note has images: a globe while any of them is loaded from the web or a file, a database once all are stored in the app. **Hold left-click** to download and store them (this works with remote images turned off); **hold right-click** to point stored images back to where they came from. Either is one undo step. To give an image a name of your own before storing it, put \`&NAME\` in its title, as in \`"&LOGO 12em"\`.
 - **Image mode**: the toolbar's image button leaves an empty \`![]()\` at the caret and turns the sidebar to images; right-clicking the options button switches between images and notes. **Images in Order** lists the note's images with their alt text, and **Images by Section** groups them by \`##\` and \`###\` headings. In both, click an image to go to it, and its X takes it out of the note. Images from the web or a file show a globe; **hold left-click** on one to store it in the app. **Image Archive** holds every stored image, grouped by its own tags: click one to put it at the caret (inside an image it replaces the address and alt text and keeps the size and placement). **Hold right-click** on any image to view it in the slot, with its tags below (drag them into order; right-click its id to rename it in every note); a click in the sidebar closes it. A **right-click** on an image shows it whole.
 - **Right-click** in an image selects its alt text, then its id (when it has one), then the whole image. Inside a table, the table's keys and right-click take precedence.
@@ -657,7 +657,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - \`Tab\` moves between the find and replace fields.
 - \`Ctrl+Enter\` replaces every match at once, and so does a right-click on the sidebar's Find icon.
 - The \`Aa\` toggle means "case-sensitive" in plain find mode; in replace mode it's repurposed as "keep case," searching case-insensitively but re-casing each replacement to match what it's replacing.
-- What gets searched follows the mode you're in: in edit mode, the note's Markdown exactly as you typed it; in rendered mode, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
+- What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,
   `## External Files
@@ -665,7 +665,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Opening an External File](#opening-an-external-file)
 
 > **Where?**
-> Your OS file explorer, a file association, or drag-and-drop onto the editor area.
+> Your OS file explorer, a file association, or drag-and-drop onto the slot.
 
 *Edits a Markdown file from anywhere on your computer, in place.*
 
@@ -720,20 +720,20 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Export to PDF](#export-to-pdf)
 
 > **Where?**
-> Hold \`Esc\` → Export (or Export All), while in render view.
+> Hold \`Esc\` → Export (or Export All), while in the reader.
 
 *Exports the rendered note as a PDF file.*
 
 ### [Export to Markdown](#export-to-markdown)
 
 > **Where?**
-> Hold \`Esc\` → Export (or Export All), while in edit view.
+> Hold \`Esc\` → Export (or Export All), while in the editor.
 
 *Exports the raw note text as a \`.md\` file.*
 
 ### [Export All](#export-all)
 
-- Which format you get follows the view you're in: render view exports PDF, edit view exports Markdown.
+- Which format you get follows the view you're in: reader exports PDF, editor exports Markdown.
 - In a note with chapters, **Export** covers only the chapter (or parent) you're looking at. **Export All** assembles the parent and every chapter, in chapter order, into a single document named after the parent.
 - The auto-generated Table of Contents and Open Items chapters are not included.
 - The first export asks for a destination folder; later exports reuse it.
@@ -759,10 +759,10 @@ ${shortcutTable()}
 - **Music player** — see [Music Player](${guideLink('MUSIC-PLAYER')}).
 - **Mini mode** — collapses the window into a compact strip; the music player stays fully usable, sound options included. The button that got you there expands back out, maximized — see [Music Player](${guideLink('MUSIC-PLAYER')}).
 - **Immersive mode** (\`Ctrl+Shift+Space\`) — the window goes full screen with just the editor you're working in, edge to edge: no sidebar, toolbar, tabs or other slots. Press it again to come back exactly as you were. Opening the sidebar any way you normally would (\`Ctrl+Space\`, \`Ctrl+F\`, \`Ctrl+H\`) also brings you back, with the sidebar showing. Not available from mini mode.
-  - In edit view the scrollbar lives in the grid itself: the rightmost column of boxes is the track, and the darker boxes show where you are. Click anywhere else on it to travel there; hold to jump straight there. Its colour is **Immersive Scroll Thumb** in the colour settings.
+  - In the editor the scrollbar lives in the grid itself: the rightmost column of boxes is the track, and the darker boxes show where you are. Click anywhere else on it to travel there; hold to jump straight there. Its colour is **Immersive Scroll Thumb** in the colour settings.
 - **Minimize / Maximize–Restore / Close** — standard window controls.
 - **User Guide (graduation cap)** — the upper half of the split maximize button. Opens this guide, exactly like the Quick Actions Menu's own Help cell, see [The User Guide](${guideLink('NOTES-EDITING', 'the-user-guide')}).
-- **Dark mode / Double size** — a split button in the toolbar's left cluster (not in this bar): the top half switches the whole app between light and dark presets, the bottom half is double size (2x). Double size doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts. Font sizes — edit view, render view and the interface — are remembered separately for normal and double size: set them once in each, and switching back and forth keeps both.
+- **Dark mode / Double size** — a split button in the toolbar's left cluster (not in this bar): the top half switches the whole app between light and dark presets, the bottom half is double size (2x). Double size doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts. Font sizes — editor, reader and the interface — are remembered separately for normal and double size: set them once in each, and switching back and forth keeps both.
 - **How small the window goes** is worked out from what actually has to fit rather than being a fixed number: across, the sidebar, the toolbar's formatting buttons at three groups of three per row, and this bar; down, enough of the Date view to show four note cards. Both scale with the spacing setting, so a roomier spacing raises the floor and a tighter one lowers it. Hiding the sidebar drops the width floor by the sidebar's own width, and each extra split-view slot raises it once the slots need more room than the chrome does.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 `,
@@ -776,7 +776,7 @@ ${shortcutTable()}
 *The home for every appearance, sound, sync, and performance control in the app, in six sections: General, Layouts, Music, Soundscapes, Tools and Miscellaneous.*
 
 - The row of six buttons below the feature switches picks the section; the panel reopens on the one you left. Each section holds collapsible subsections, and only Layouts belongs to the layout: everything else is the same for every layout. A search looks through every section.
-- Most controls apply live. Every subsection is shown, whichever view you are in: where edit mode and render view differ, the editor's controls are headed "Editor" and the render view's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
+- Most controls apply live. Every subsection is shown, whichever view you are in: where editor and reader differ, the editor's controls are headed "Editor" and the reader's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
 - Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
 
 ### [Editor Font](#editor-font)
@@ -784,9 +784,9 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → General, followed by Reader Font.
 
-*Font family, size, spacing, and padding: Editor Font for edit mode (font family, size, glyph padding, line height), Reader Font for the render view (font family, size, letter spacing, line height).*
+*Font family, size, spacing, and padding: Editor Font for editor (font family, size, glyph padding, line height), Reader Font for the reader (font family, size, letter spacing, line height).*
 
-- You can also change these from the text itself: hold \`Ctrl\` and roll the wheel over the text of a note to change its size by one step per notch, \`Ctrl+Alt\` for the horizontal spacing (letter spacing in render view, glyph padding in edit mode), \`Ctrl+Shift\` for the line height. It changes the settings of whichever view the pointer is over, not the slot you are typing in, so with an edit slot and a render slot side by side you adjust each by pointing at it.
+- You can also change these from the text itself: hold \`Ctrl\` and roll the wheel over the text of a note to change its size by one step per notch, \`Ctrl+Alt\` for the horizontal spacing (letter spacing in the reader, glyph padding in the editor), \`Ctrl+Shift\` for the line height. It changes the settings of whichever view the pointer is over, not the slot you are typing in, so with a slot in the editor and a slot in the reader side by side you adjust each by pointing at it.
 
 ### [Presets](#presets)
 
@@ -884,8 +884,8 @@ ${shortcutTable()}
 
 *The pace of [Speed Reading]($#speed-reading) and how it eases.*
 
-- **Edit**: the edit view's words per minute; **row**, its reading row in boxes; and **fixation**, the time every chunk stays before its letters are counted; a sentence's end adds one fixation and a comma half of one. Chunks also end at punctuation and around quotations, and a line break shows an empty row for one fixation. Pauses and fixations are taken out of your pace, not added to it, so the words go by at the figure shown; at high paces the fixation shortens to keep up.
-- **Render**: the render view's words per minute.
+- **Editor**: the editor's words per minute; **row**, its reading row in boxes; and **fixation**, the time every chunk stays before its letters are counted; a sentence's end adds one fixation and a comma half of one. Chunks also end at punctuation and around quotations, and a line break shows an empty row for one fixation. Pauses and fixations are taken out of your pace, not added to it, so the words go by at the figure shown; at high paces the fixation shortens to keep up.
+- **Reader**: the reader's words per minute.
 - **Curve**: **ramp**, **shape** and **speed** shape the ease into a held \`Space\` and out of and back from a pause, like the same three in [Animations]($#animations), with their own values.
 
 ### [Scrolling](#scrolling)
@@ -895,11 +895,11 @@ ${shortcutTable()}
 
 *What your own hand does to the page: how far one turn of the wheel goes, and whether a spin of it keeps going after you let go.*
 
-- **Edit step** and **view step** are how far one notch of the wheel scrolls, one for each pane. Edit mode counts in whole rows (1 to 10); render view counts in lines of text and will take fractions of one (0.5 to 5). Both are measured in text rather than pixels on purpose: make the text bigger, or the line spacing wider, and a notch still moves the same amount of *reading* rather than quietly moving less of it.
-- **Auto scroll** and **dampen** are a pair, and they work the same way in edit mode and render view. Spin the wheel — three notches in the same direction, each within the number of milliseconds **auto scroll** is set to — and the text keeps scrolling on its own at the speed you spun, without you having to keep turning. Slid all the way left, **auto scroll** reads “off” and the wheel behaves exactly as it always has.
+- **Editor step** and **reader step** are how far one notch of the wheel scrolls, one for the editor and one for the reader. Editor counts in whole rows (1 to 10); reader counts in lines of text and will take fractions of one (0.5 to 5). Both are measured in text rather than pixels on purpose: make the text bigger, or the line spacing wider, and a notch still moves the same amount of *reading* rather than quietly moving less of it.
+- **Auto scroll** and **dampen** are a pair, and they work the same way in the editor and the reader. Spin the wheel — three notches in the same direction, each within the number of milliseconds **auto scroll** is set to — and the text keeps scrolling on its own at the speed you spun, without you having to keep turning. Slid all the way left, **auto scroll** reads “off” and the wheel behaves exactly as it always has.
 - **Dampen** decides how long the free scroll lasts before it winds down. It holds your speed for a good while and then lets go fairly quickly, rather than trailing off into a crawl; slide it right to have it let go sooner, left to make it last. At its leftmost position it never winds down at all — the text keeps going until you stop it. Either way, one more turn of the wheel stops it — as does typing, or clicking in the text. That stopping nudge only stops; it doesn't also scroll, so you can halt on the line you wanted rather than one past it.
 - **Cut off** is where the free scroll gives up: once the steps are arriving further apart than the number of milliseconds you set here, it stops. Between it and **dampen** you can have a scroll that eases off gently and ends early, or one that holds its pace and runs on until it hits the cut off.
-- In render view the free scroll glides rather than stepping line to line — there is no row grid there to step between — but it is the same spin, at the same speed, from the same settings.
+- In the reader the free scroll glides rather than stepping line to line — there is no row grid there to step between — but it is the same spin, at the same speed, from the same settings.
 - For half a second after a spin starts, the wheel is ignored. That's the tail of your own gesture: without it, the last few notches of the spin would either double the speed or cancel the scroll the instant it began.
 - These settings aren't part of a layout either — they stay as you left them across layout switches and app restarts.
 

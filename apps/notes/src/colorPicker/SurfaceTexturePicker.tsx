@@ -37,9 +37,9 @@ const TEXTURE_SEED_MAX = 1000000
 
 const SURFACES: ReadonlyArray<{ surface: TextureSurfaceKey; glyph: string; name: string }> = [
   { surface: 'appGrid', glyph: 'fa-solid fa-table-columns', name: 'Grid' },
-  { surface: 'editorEditText', glyph: 'fa-solid fa-pen', name: 'Edit view' },
+  { surface: 'editorEditText', glyph: 'fa-solid fa-pen', name: 'Editor' },
   { surface: 'sidebarContent', glyph: 'fa-solid fa-list', name: 'Sidebar' },
-  { surface: 'editorRenderText', glyph: 'fa-solid fa-book-open', name: 'Render view' },
+  { surface: 'editorRenderText', glyph: 'fa-solid fa-book-open', name: 'Reader' },
 ]
 
 const linkIdOf = (surface: TextureSurfaceKey) => `texture:${surface}`
@@ -56,7 +56,7 @@ const SURFACE_LAYERS: Record<TextureSurfaceKey, string> = {
  * What a surface's texture is drawn over: the backgrounds at and above the
  * element holding its layer, down to the first solid colour, read from the live DOM so the preview
  * matches the surface whatever the theme put there. Null when the surface is
- * not on screen (the render view while editing), and the preview then shows
+ * not on screen (the reader while editing), and the preview then shows
  * the texture over the panel's own background.
  */
 function surfaceBackground(surface: TextureSurfaceKey): string | null {

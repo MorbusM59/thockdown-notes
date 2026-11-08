@@ -145,7 +145,7 @@ export const SHORTCUT_PANELS: readonly ShortcutPanel[] = [
     sections: [{ id: 'tabBar', title: 'Tab bar' }, { id: 'chapterBar', title: 'Chapter bar' }, { id: 'timeline', title: 'Timeline' }],
   },
   {
-    title: 'Edit mode',
+    title: 'Editor',
     icon: 'fa-solid fa-pen',
     sections: [
       { id: 'native', title: 'Editing' },
@@ -169,7 +169,7 @@ const withMods = (chords: readonly KeyChord[], mods: Omit<KeyChord, 'key' | 'cod
   chords.map((chord) => ({ ...chord, ...mods }))
 
 export const SHORTCUTS = {
-  toggleView: { section: 'content', chords: [{ key: 'Escape' }], label: 'Edit / render view', matchedBy: 'escape-hold' },
+  toggleView: { section: 'content', chords: [{ key: 'Escape' }], label: 'Edit / reader', matchedBy: 'escape-hold' },
   quickActions: { section: 'content', chords: [{ key: 'Escape' }], press: 'hold', label: 'Quick actions menu', matchedBy: 'escape-hold' },
   userGuide: { section: 'content', chords: [{ key: 'F1' }], label: 'Toggle User Guide' },
   shortcutReference: { section: 'content', chords: [{ key: 'F1' }], press: 'hold', label: 'Quick Reference', matchedBy: 'help-key' },
@@ -240,10 +240,10 @@ export const SHORTCUTS = {
   speedReadingAdvance: {
     section: 'speedReading',
     chords: [{ code: 'Space' }, { key: 'ArrowDown' }],
-    label: 'Next words, hold to read on (edit); hold to pause (render)',
+    label: 'Next words, hold to read on (editor); hold to pause (reader)',
     matchedBy: 'speed-reading',
   },
-  speedReadingBack: { section: 'speedReading', chords: [{ key: 'ArrowUp' }], label: 'Previous words (edit)', matchedBy: 'speed-reading' },
+  speedReadingBack: { section: 'speedReading', chords: [{ key: 'ArrowUp' }], label: 'Previous words (editor)', matchedBy: 'speed-reading' },
   speedReadingPace: { section: 'speedReading', chords: ARROWS_LR, label: 'Slower / faster, hold to sweep', matchedBy: 'speed-reading' },
   speedReadingView: { section: 'speedReading', chords: [{ key: 'Escape' }], label: 'Other view, reading on', matchedBy: 'speed-reading' },
 

@@ -25,11 +25,11 @@ export interface SectionTabBarProps {
   isLeftmostSlot: boolean
   /** Whether there's room for one more 300px-minimum slot -- hides the "+" button when there isn't. */
   canCreateSlot: boolean
-  /** This slot's current view -- drives the edit/render toggle left of the add-slot "+" (active == edit mode). */
+  /** This slot's current view -- drives the editor/reader toggle left of the add-slot "+" (active == editor). */
   isPreviewMode: boolean
-  /** True while what's loaded is hard-locked to render view (auto-TOC, Open Items, or a timeless note -- EditorSection.tsx's isForcedPreviewNote). The toggle shows inactive and disabled then, rather than claiming a mode the note can't leave. */
+  /** True while what's loaded is hard-locked to the reader (auto-TOC, Open Items, or a timeless note -- EditorSection.tsx's isForcedPreviewNote). The toggle shows inactive and disabled then, rather than claiming a mode the note can't leave. */
   isForcedPreviewNote: boolean
-  /** Flips this slot between edit and render view. */
+  /** Flips this slot between editor and reader. */
   onToggleRenderViewMode: () => void
   /** This slot's speed reading mode (`speedReading/useSpeedReading.ts`). */
   isSpeedReading: boolean
@@ -441,8 +441,8 @@ export function SectionTabBar({
 
           A per-slot control, so it lives here at the
           slot's own edge rather than in the chapter bar (which speaks for one
-          note's internals). Active means edit mode, so a note that can't leave
-          render view (auto-TOC, Open Items, timeless) reads as plain inactive
+          note's internals). Active means editor, so a note that can't leave
+          reader (auto-TOC, Open Items, timeless) reads as plain inactive
           and takes no clicks, rather than showing a state the user can't act
           on. Sitting immediately left of the add-slot "+" also lets the two
           read together as slot-level actions: this is the writing window, and
@@ -477,11 +477,11 @@ export function SectionTabBar({
           type="button"
           className={`btn-icon section-render-mode-toggle${!isForcedPreviewNote && !isPreviewMode ? ' is-active' : ''}`}
           data-tooltip={isForcedPreviewNote
-            ? 'This note is always shown in render view'
-            : (isPreviewMode ? 'Switch to Edit Mode (Esc)' : 'Switch to Render View (Esc)')}
+            ? 'This note is always shown in the reader'
+            : (isPreviewMode ? 'Switch to Editor (Esc)' : 'Switch to Reader (Esc)')}
           aria-label={isForcedPreviewNote
-            ? 'This note is always shown in render view'
-            : (isPreviewMode ? 'Switch to Edit Mode' : 'Switch to Render View')}
+            ? 'This note is always shown in the reader'
+            : (isPreviewMode ? 'Switch to Editor' : 'Switch to Reader')}
           aria-pressed={!isForcedPreviewNote && !isPreviewMode}
           disabled={isForcedPreviewNote}
           onClick={onToggleRenderViewMode}

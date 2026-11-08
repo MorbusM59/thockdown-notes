@@ -77,10 +77,10 @@ export interface EditorToolbarProps extends Omit<UseMarkdownFormattingToolbarRes
   /** The image button also turns the sidebar to the image library, to pick what goes in the empty image. */
   showImageLibrary: () => void
   isPreviewMode: boolean
-  /** True while the active note is an auto-TOC/auto-Open-Items chapter, which is always shown in render view and can't be switched to edit mode. The formatting buttons stay visible but disabled, since their preview-mode behavior (switch to edit mode) is impossible there. */
+  /** True while the active note is an auto-TOC/auto-Open-Items chapter, which is always shown in the reader and can't be switched to the editor. The formatting buttons stay visible but disabled, since their preview-mode behavior (switch to the editor) is impossible there. */
   isForcedPreview: boolean
   activeNoteId: string | null
-  /** Flips the active section between edit and render view -- what every formatting button does instead of formatting while the section is in preview mode. */
+  /** Flips the active section between editor and reader -- what every formatting button does instead of formatting while the section is in the reader. */
   toggleRenderViewMode: () => void
   /** 'dark' while the app is in dark UI mode -- drives the top arm of the display-modes split button. */
   uiMode: string
@@ -96,10 +96,10 @@ export interface EditorToolbarProps extends Omit<UseMarkdownFormattingToolbarRes
  * `window_control`; the tabbar/viewer rectangle below it is what actually
  * repeats per section.
  *
- * The formatting group is rendered in both edit and preview mode -- the
+ * The formatting group is rendered in both edit and reader -- the
  * toolbar's shape shouldn't change under you just because the active section
- * flipped to render view. In preview mode every one of those buttons is
- * re-purposed into "switch this section to edit mode" (see `inEditMode`)
+ * flipped to the reader. In reader every one of those buttons is
+ * re-purposed into "switch this section to the editor" (see `inEditMode`)
  * rather than being hidden or inert: the first click gets you somewhere the
  * button can actually work, the second click does the formatting.
  */
@@ -143,9 +143,9 @@ export function EditorToolbar({
   const isFormattingToolbarCompact = useFormattingToolbarCompact(formattingToolbarRef)
 
   /**
-   * Wraps a formatting action so it only ever runs in edit mode. While the
-   * active section is in preview mode the click leaves the document alone and
-   * switches to edit mode instead -- deliberately NOT "switch, then apply",
+   * Wraps a formatting action so it only ever runs in the editor. While the
+   * active section is in the reader the click leaves the document alone and
+   * switches to the editor instead -- deliberately NOT "switch, then apply",
    * so a stray click on a rendered note can't silently edit it.
    */
   const inEditMode = (action: () => void) => () => {
@@ -156,7 +156,7 @@ export function EditorToolbar({
     action()
   }
 
-  // A forced-preview chapter can't leave render view at all, so the
+  // A forced-preview chapter can't leave reader at all, so the
   // preview-mode behavior above has nowhere to go -- disable rather than
   // leaving a row of buttons that do nothing when clicked.
   const formattingDisabled = !activeNoteId || (isPreviewMode && isForcedPreview)
