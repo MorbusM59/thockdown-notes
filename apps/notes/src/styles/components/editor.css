@@ -286,10 +286,10 @@
 
 .btn-icon.chapter-toggle-button,
 .btn-icon.manual-snapshot-circle {
-  width: var(--canonical-scroll-thickness);
-  height: var(--canonical-scroll-thickness);
-  min-width: var(--canonical-scroll-thickness);
-  min-height: var(--canonical-scroll-thickness);
+  width: var(--bottom-utility-bar-content-height);
+  height: var(--bottom-utility-bar-content-height);
+  min-width: var(--bottom-utility-bar-content-height);
+  min-height: var(--bottom-utility-bar-content-height);
   padding: 0;
   margin: 0;
   font-size: 10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
@@ -306,7 +306,7 @@
   flex:           0 0 auto;
   min-width:      0;
   white-space:    nowrap;
-  height:         var(--canonical-scroll-thickness);
+  height:         var(--bottom-utility-bar-content-height);
   padding:        0 var(--spacing-large);
   border:         1px solid var(--canonical-scroll-track-border);
   border-radius:  var(--border-radius-regular);
@@ -366,7 +366,7 @@
   display: block;
   position: relative;
   width: 100%;
-  height: var(--canonical-scroll-thickness);
+  height: var(--bottom-utility-bar-content-height);
 }
 
 .snapshot-timeline-rail {
@@ -457,8 +457,8 @@
 
 /* Manual-snapshot circle */
 .manual-snapshot-panel {
-  width: var(--canonical-scroll-thickness);
-  height: var(--canonical-scroll-thickness);
+  width: var(--bottom-utility-bar-content-height);
+  height: var(--bottom-utility-bar-content-height);
 }
 
 
