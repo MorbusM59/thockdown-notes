@@ -2617,7 +2617,7 @@ export function SidebarOptionsPanel({
       >
           <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
-            <OptionsSliderRows rows={[1, 1]}>
+            <OptionsSliderRows rows={[2]}>
               <CompactScrollbarSlider
                 id="beat-delay"
                 min={BEAT_DELAY_MIN_MS}
