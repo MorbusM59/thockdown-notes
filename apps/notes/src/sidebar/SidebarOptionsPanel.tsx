@@ -2029,7 +2029,7 @@ export function SidebarOptionsPanel({
       <AccordionSection
         ariaLabel="Filters"
         heading="Filters"
-        iconClass="fa-swatch-book"
+        iconClass="fa-swatchbook"
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
           {/* Colour, then light, then the whole-image effects. */}
