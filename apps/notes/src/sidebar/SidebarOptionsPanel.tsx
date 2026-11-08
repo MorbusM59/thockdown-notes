@@ -332,9 +332,16 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
 ]
 
 /** A dictionary's button face: a bundled one's language code, an installed one's name up to its first `_` or `-`, at most three letters. */
-function dictionaryBadge(dictionary: SpellCheckDictionary): string {
-  const stem = dictionary.bundled ? dictionary.id : (dictionary.id.split(/[_-]/)[0] || dictionary.id)
-  return stem.slice(0, 3).toUpperCase()
+/**
+ * A dictionary button's two lines: the language, and under it the region
+ * when there is one. An installed dictionary's id is its file name, which
+ * Hunspell names `<language>_<REGION>` (`en_GB`, `pt-BR`), so `en_GB` and
+ * `en_US` read apart.
+ */
+function dictionaryBadge(dictionary: SpellCheckDictionary): { language: string; region: string } {
+  if (dictionary.bundled) return { language: dictionary.id.toUpperCase(), region: dictionary.region ?? '' }
+  const [language, region = ''] = dictionary.id.split(/[_-]/)
+  return { language: (language || dictionary.id).slice(0, 3).toUpperCase(), region: region.slice(0, 3).toUpperCase() }
 }
 
 const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'flowTrail', 'spellCheck', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber']
@@ -3112,6 +3119,7 @@ export function SidebarOptionsPanel({
         <div className="options-loadout-grid" role="group" aria-label="Spell checking dictionaries">
           {availableDictionaries.map((dictionary) => {
             const isActive = spellCheckDictionaries.includes(dictionary.id)
+            const badge = dictionaryBadge(dictionary)
             const tooltip = `${dictionary.label}: ${isActive ? 'checking' : 'not checking'}${dictionary.bundled ? '' : '. Right-click removes this dictionary'}`
             return (
               <button
@@ -3130,7 +3138,10 @@ export function SidebarOptionsPanel({
                   if (!dictionary.bundled) void removeSpellCheckDictionary(dictionary.id)
                 }}
               >
-                <span aria-hidden="true">{dictionaryBadge(dictionary)}</span>
+                <span className="options-dictionary-badge" aria-hidden="true">
+                  <span className="options-dictionary-language">{badge.language}</span>
+                  {badge.region && <span className="options-dictionary-region">{badge.region}</span>}
+                </span>
               </button>
             )
           })}

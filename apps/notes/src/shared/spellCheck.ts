@@ -18,6 +18,8 @@ export type SpellCheckDictionary = {
   /** What the options panel shows. */
   label: string;
   bundled: boolean;
+  /** The region a bundled dictionary's spelling follows (en is US English), when it follows one. */
+  region?: string;
 };
 
 export type SpellCheckDictionaryFiles = {
@@ -26,10 +28,10 @@ export type SpellCheckDictionaryFiles = {
 };
 
 export const BUNDLED_DICTIONARIES: readonly SpellCheckDictionary[] = [
-  { id: 'en', label: 'English', bundled: true },
+  { id: 'en', label: 'English', bundled: true, region: 'US' },
   { id: 'es', label: 'Español', bundled: true },
   { id: 'fr', label: 'Français', bundled: true },
-  { id: 'de', label: 'Deutsch', bundled: true },
+  { id: 'de', label: 'Deutsch', bundled: true, region: 'DE' },
 ];
 
 /** What is active before the reader has chosen. */

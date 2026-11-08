@@ -547,3 +547,13 @@
 .options-eq-button.is-disabled {
   opacity: 0.4;
 }
+
+/* A dictionary button: the language over its region, at 80% and 50% of the button's text size. */
+.options-dictionary-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.options-dictionary-language { font-size: 0.8em; }
+.options-dictionary-region { font-size: 0.5em; margin-top: 0.15em; }
