@@ -68,7 +68,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   'sectionId' | 'isSectionActive' | 'activeNoteId' | 'isPreviewMode' | 'previewedSnapshotId' | 'bindings' | 'adapterRef' | 'sectionContainerRef'
   | 'onEditorSurfaceReady' | 'readEstablishedSelection'
   | 'readDisplayedText' | 'displayedTextKey' | 'isPreviewingSnapshot' | 'isCaretSuspended' | 'previewTextureRef' | 'previewBridgeHostRef'
-  | 'previewScrollRef' | 'handlePreviewScroll' | 'blockPreviewEditMutation' | 'previewMarkdownElement'
+  | 'previewScrollRef' | 'handlePreviewScroll' | 'previewMarkdownElement'
   | 'previewScrollbarTrackRef' | 'handlePreviewTrackPointerDown' | 'handlePreviewTrackContextMenu' | 'previewScrollbarThumbRef' | 'isDraggingPreviewScrollThumb'
   | 'isPreviewScrollThumbActive' | 'handlePreviewThumbPointerDown' | 'activeNoteDocumentStats' | 'noteSnapshots'
   | 'handleNavigateSnapshot' | 'handleBranchOpened' | 'handleBranchError' | 'timelineCurveConstant' | 'setTimelineCurveConstant'
@@ -265,8 +265,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   viewLetterSpacingEm,
   editorFontFamily,
   editorFontLoadVersion,
-  spellCheckEditEnabled,
-  spellCheckRenderEnabled,
+  spellCheckEnabled,
   highlightSearchColor,
   caretSizeDeviationPx,
   showLineNumbers,
@@ -1577,7 +1576,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handlePreviewTrackContextMenu,
     handlePreviewThumbPointerDown,
     handlePreviewScroll,
-    blockPreviewEditMutation,
     travelPreviewToRatio,
   } = usePreviewScrollbar({
     isPreviewMode,
@@ -2293,7 +2291,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         isExportingMd={isExportingMd}
         borderRadiusRegularPx={borderRadiusRegularPx}
         spacingRegularPx={spacingRegularPx}
-        spellCheckEditEnabled={spellCheckEditEnabled}
+        spellCheckEnabled={spellCheckEnabled}
         previewTextureRef={previewTextureRef}
         previewBridgeHostRef={previewBridgeHostRef}
         previewScrollRef={previewScrollRef}
@@ -2328,8 +2326,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
         )}
         isViewingTimelessNote={isViewingTimelessNote}
         onToggleTimeless={onToggleTimeless}
-        spellCheckRenderEnabled={spellCheckRenderEnabled}
-        blockPreviewEditMutation={blockPreviewEditMutation}
         previewMarkdownElement={previewMarkdownElement}
         previewScrollbarTrackRef={previewScrollbarTrackRef}
         handlePreviewTrackPointerDown={handlePreviewTrackPointerDown}

@@ -11,6 +11,7 @@ import { matchShortcut, type ShortcutId } from '../shared/keyboardShortcuts';
 import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { typingTrail } from '../typingTrail/typingTrail';
+import { spellCheckExtension } from '../spellCheck/spellCheckExtension';
 import { liveStyleTarget } from '../shared/liveStyle';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
@@ -1013,6 +1014,17 @@ export function CM6Editor({
   const undoHistoryScopeRef = useRef(createUndoHistoryScope());
   const activeHistoryKeyRef = useRef<string | null>(null);
   const spellCheckCompartmentRef = useRef(new Compartment());
+  // The spell-check outlines' element, inside the typing trail's scroll-following layer.
+  const spellOutlinesRef = useRef<HTMLDivElement | null>(null);
+  // One extension per editor, reused by every reconfigure: a compartment
+  // handed an equal extension keeps its plugin rather than rebuilding it.
+  const spellCheckExtensionRef = useRef<Extension | null>(null);
+  if (!spellCheckExtensionRef.current) {
+    spellCheckExtensionRef.current = spellCheckExtension({
+      readGrid: () => ({ lineHeightPx: lineHeightPxRef.current, cellWidthPx: cellWidthPxRef.current }),
+      host: () => spellOutlinesRef.current,
+    });
+  }
   // The grid-cell guard judges characters against the current font, so it
   // is reconfigured whenever the font, its size or its loaded state changes.
   const gridCellGuardCompartmentRef = useRef(new Compartment());
@@ -3822,7 +3834,10 @@ export function CM6Editor({
       pendingImageInsertionTracker,
       EditorView.lineWrapping,
       readOnlyCompartmentRef.current.of(readOnlyExtension(editorReadOnly)),
-      spellCheckCompartmentRef.current.of(EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) })),
+      // Chromium's own spell checker is off for good (spellcheck="false"):
+      // the app checks spelling itself, spellCheck/spellCheckExtension.ts.
+      EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: 'false' }),
+      spellCheckCompartmentRef.current.of(spellCheckEnabled && spellCheckExtensionRef.current ? spellCheckExtensionRef.current : []),
       gridCellGuardCompartmentRef.current.of(gridCellGuard({ family: fontFamily, sizePx: fontSizePx, ready: fontReady })),
       // CM6's own drawSelection() extension is deliberately NOT included --
       // both the cursor (block-grid caret overlay below) and the
@@ -3840,7 +3855,7 @@ export function CM6Editor({
       // `.editor-text[contenteditable]` DOM shape. This is the correct
       // target class going forward, not a workaround -- this element really
       // is "the editor text surface" other app code should find.
-      // Spellcheck is wired through a Compartment below so toggles can
+      // Spell checking is wired through a Compartment below so toggles can
       // reconfigure the live editor without remounting.
       // CM6's own base theme sets `.cm-scroller { height: 100% }`, which
       // resolves against `.cm-editor`'s height -- and `.cm-editor` itself
@@ -5321,10 +5336,8 @@ export function CM6Editor({
   // reach the live view at all, leaving the DOM's real `contenteditable`
   // stuck at whatever it was the instant this note's section first mounted.
   // Confirmed via a live Playwright check driving an actual note switch, not
-  // just reasoned about. `spellCheckEnabled` has the exact same
-  // mount-once-only gap one line below in `extensions` and is NOT fixed here
-  // -- out of scope for this change, left as a separate, pre-existing
-  // finding rather than folded in speculatively.
+  // just reasoned about. The spell checker's compartment is kept current the
+  // same way, in the effect below.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
@@ -5335,9 +5348,7 @@ export function CM6Editor({
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
-      effects: spellCheckCompartmentRef.current.reconfigure(
-        EditorView.contentAttributes.of({ class: 'editor-text', spellcheck: String(spellCheckEnabled) }),
-      ),
+      effects: spellCheckCompartmentRef.current.reconfigure(spellCheckEnabled && spellCheckExtensionRef.current ? spellCheckExtensionRef.current : []),
     });
   }, [spellCheckEnabled]);
 
@@ -6697,6 +6708,9 @@ export function CM6Editor({
       >
         <div ref={typingTrailLayerRef} style={{ position: 'absolute', top: 0, left: 0 }}>
           <div ref={typingTrailBoxesRef} style={{ position: 'absolute', top: 0, left: 0 }} />
+          {/* Spell checking's outlines share the trail's scroll-following
+              layer (spellCheck/spellCheckExtension.ts). */}
+          <div ref={spellOutlinesRef} style={{ position: 'absolute', top: 0, left: 0 }} />
         </div>
       </div>
       {hasViewportLines && fontReady && !caretHidden && caretStyle && (

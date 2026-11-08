@@ -1,6 +1,7 @@
 export type HighlightColorKey =
   | 'caret'
   | 'flowTrail'
+  | 'spellCheck'
   | 'search'
   | 'selectionEdit'
   | 'selectionRender'

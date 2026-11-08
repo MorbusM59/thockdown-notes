@@ -134,7 +134,9 @@ import {
   BOX_SHADOW_ALPHA_PERCENT_MIN,
   BOX_SHADOW_ALPHA_PERCENT_MAX,
 } from './shared/uiBounds'
-import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
+import { applyDocumentTheme, FALLBACK_SPELL_CHECK_COLOR, themeFrame } from '@thockdown/look/loadoutTheme'
+import { DEFAULT_SPELL_CHECK_DICTIONARIES } from './shared/spellCheck'
+import { spellCheckClient } from './spellCheck/spellCheckClient'
 import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { VisualizerGlaze } from './visualizer/VisualizerGlaze'
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings, type TypingTrailSettings } from './shared/typingTrailSettings'
@@ -413,6 +415,7 @@ const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   gutterBackground: 'rgba(196, 187, 182, 0.49)',
   immersiveScrollThumb: 'rgba(0, 0, 0, 0.333)',
   flowTrail: 'rgba(255, 170, 60, 0.9)',
+  spellCheck: FALLBACK_SPELL_CHECK_COLOR,
   reviewLine: 'rgba(255, 230, 0, 0.6)',
   warningLine: 'rgba(255, 50, 0, 0.2)',
   lineNumber: 'rgba(0, 0, 0, 0.6)',
@@ -729,6 +732,7 @@ function normalizeLoadoutHighlightColors(source: unknown): HighlightColors {
     gutterBackground: typeof record.gutterBackground === 'string' ? record.gutterBackground : DEFAULT_HIGHLIGHT_COLORS.gutterBackground,
     immersiveScrollThumb: typeof record.immersiveScrollThumb === 'string' ? record.immersiveScrollThumb : DEFAULT_HIGHLIGHT_COLORS.immersiveScrollThumb,
     flowTrail: typeof record.flowTrail === 'string' ? record.flowTrail : DEFAULT_HIGHLIGHT_COLORS.flowTrail,
+    spellCheck: typeof record.spellCheck === 'string' ? record.spellCheck : DEFAULT_HIGHLIGHT_COLORS.spellCheck,
     reviewLine: typeof record.reviewLine === 'string' ? record.reviewLine : DEFAULT_HIGHLIGHT_COLORS.reviewLine,
     warningLine: typeof record.warningLine === 'string' ? record.warningLine : DEFAULT_HIGHLIGHT_COLORS.warningLine,
     lineNumber: typeof record.lineNumber === 'string' ? record.lineNumber : DEFAULT_HIGHLIGHT_COLORS.lineNumber,
@@ -1467,6 +1471,13 @@ function App() {
   // feature down when it is off.
   const [features, setFeatures] = useState<FeatureToggles>(DEFAULT_FEATURE_TOGGLES)
   const spellCheckEnabled = features.spellCheck
+  const [spellCheckDictionaries, setSpellCheckDictionaries] = useState<string[]>(() => [...DEFAULT_SPELL_CHECK_DICTIONARIES])
+  // The spell checker (spellCheck/spellCheckClient.ts) is one per window;
+  // it loads nothing until an editor first asks, so this costs nothing while
+  // spell checking is off.
+  useEffect(() => {
+    spellCheckClient.setActiveDictionaries(spellCheckDictionaries)
+  }, [spellCheckDictionaries])
   const [typingTrailSettings, setTypingTrailSettings] = useState<TypingTrailSettings>(DEFAULT_TYPING_TRAIL_SETTINGS)
   useEffect(() => {
     typingTrail.configure({ enabled: features.typingTrail, ...typingTrailSettings })
@@ -2592,6 +2603,7 @@ function App() {
         gutterBackground: highlightColors.gutterBackground,
         immersiveScrollThumb: highlightColors.immersiveScrollThumb,
         flowTrail: highlightColors.flowTrail,
+        spellCheck: highlightColors.spellCheck,
         reviewLine: highlightColors.reviewLine,
         warningLine: highlightColors.warningLine,
         lineNumber: highlightColors.lineNumber,
@@ -2776,6 +2788,7 @@ function App() {
       gutterBackground: loadout.highlightColors.gutterBackground,
       immersiveScrollThumb: loadout.highlightColors.immersiveScrollThumb ?? DEFAULT_HIGHLIGHT_COLORS.immersiveScrollThumb,
       flowTrail: loadout.highlightColors.flowTrail ?? DEFAULT_HIGHLIGHT_COLORS.flowTrail,
+      spellCheck: loadout.highlightColors.spellCheck ?? DEFAULT_HIGHLIGHT_COLORS.spellCheck,
       reviewLine: loadout.highlightColors.reviewLine,
       warningLine: loadout.highlightColors.warningLine,
       lineNumber: loadout.highlightColors.lineNumber,
@@ -3378,6 +3391,7 @@ function App() {
       highlightGutterBackgroundColor: highlightColors.gutterBackground,
       highlightImmersiveScrollThumbColor: highlightColors.immersiveScrollThumb,
       highlightFlowTrailColor: highlightColors.flowTrail,
+      highlightSpellCheckColor: highlightColors.spellCheck,
       highlightReviewColor: highlightColors.reviewLine,
       highlightWarningColor: highlightColors.warningLine,
       highlightLineNumberColor: highlightColors.lineNumber,
@@ -3408,6 +3422,7 @@ function App() {
         },
       },
       features,
+      spellCheckDictionaries,
       typingTrail: typingTrailSettings,
       beat: beatSettings,
       speedReading: speedReadingSettings,
@@ -3443,6 +3458,7 @@ function App() {
     categoryCollapsedPrimary,
     categoryCollapsedSecondary,
     features,
+    spellCheckDictionaries,
     typingTrailSettings,
     beatSettings,
     speedReadingSettings,
@@ -5393,6 +5409,7 @@ ${markdownHtml}
               gutterBackground: appState.menu.highlightGutterBackgroundColor ?? DEFAULT_HIGHLIGHT_COLORS.gutterBackground,
               immersiveScrollThumb: appState.menu.highlightImmersiveScrollThumbColor ?? DEFAULT_HIGHLIGHT_COLORS.immersiveScrollThumb,
               flowTrail: appState.menu.highlightFlowTrailColor ?? DEFAULT_HIGHLIGHT_COLORS.flowTrail,
+              spellCheck: appState.menu.highlightSpellCheckColor ?? DEFAULT_HIGHLIGHT_COLORS.spellCheck,
               reviewLine: appState.menu.highlightReviewColor ?? DEFAULT_HIGHLIGHT_COLORS.reviewLine,
               warningLine: appState.menu.highlightWarningColor ?? DEFAULT_HIGHLIGHT_COLORS.warningLine,
               lineNumber: appState.menu.highlightLineNumberColor ?? DEFAULT_HIGHLIGHT_COLORS.lineNumber,
@@ -5413,6 +5430,7 @@ ${markdownHtml}
             // Global texture enable is intentionally fixed on; per-surface alpha controls visibility.
             setTextureMaterials(cloneTextureMaterials(appState.menu.textureMaterials ?? DEFAULT_TEXTURE_MATERIALS))
             setFeatures(sanitizeFeatureToggles(appState.menu))
+            setSpellCheckDictionaries(appState.menu.spellCheckDictionaries ?? [...DEFAULT_SPELL_CHECK_DICTIONARIES])
             setTypingTrailSettings(sanitizeTypingTrailSettings(appState.menu.typingTrail))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
@@ -8968,6 +8986,8 @@ ${markdownHtml}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
                         features={features}
                         setFeatures={setFeatures}
+                        spellCheckDictionaries={spellCheckDictionaries}
+                        setSpellCheckDictionaries={setSpellCheckDictionaries}
                         typingTrailSettings={typingTrailSettings}
                         setTypingTrailSettings={setTypingTrailSettings}
                         speedReadingSettings={speedReadingSettings}
@@ -9488,8 +9508,7 @@ ${markdownHtml}
                   editorFontFamily={editorFontFamily}
                   visualizerFont={visualizerFont}
                   editorFontLoadVersion={editorFontLoadVersion}
-                  spellCheckEditEnabled={spellCheckEnabled}
-                  spellCheckRenderEnabled={spellCheckEnabled}
+                  spellCheckEnabled={spellCheckEnabled}
                   highlightSearchColor={highlightColors.search}
                   isEscapeHoldPanelOpen={isEscapeRingUp}
                   onEscapeHoldPanelClose={handleEscapeHoldPanelClose}

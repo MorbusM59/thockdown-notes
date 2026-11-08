@@ -5,6 +5,7 @@ interface Window {
 	thockdownState?: import('./shared/appState').AppStateApi;
 	thockdownExternalFiles?: import('./shared/externalFiles').ExternalFilesApi;
 	thockdownTextures?: import('./shared/textures').TextureCacheApi;
+	thockdownSpellCheck?: import('./shared/spellCheck').SpellCheckApi;
 	thockdownAudioBounces?: import('./shared/audioBounceCache').AudioBounceCacheApi;
 	thockdownLoadouts?: import('@thockdown/look/loadouts').UiLoadoutApi;
 	thockdownFileSync?: import('./shared/fileSync').FileSyncApi;

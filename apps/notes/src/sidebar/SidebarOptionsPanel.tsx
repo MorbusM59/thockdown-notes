@@ -1,6 +1,7 @@
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
-import { useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { BUNDLED_DICTIONARIES, type SpellCheckDictionary } from '../shared/spellCheck'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { UnsavedPresetButton } from '@thockdown/interaction/UnsavedPresetButton'
@@ -330,7 +331,13 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
 ]
 
-const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'flowTrail', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber']
+/** A dictionary's button face: a bundled one's language code, an installed one's name up to its first `_` or `-`, at most three letters. */
+function dictionaryBadge(dictionary: SpellCheckDictionary): string {
+  const stem = dictionary.bundled ? dictionary.id : (dictionary.id.split(/[_-]/)[0] || dictionary.id)
+  return stem.slice(0, 3).toUpperCase()
+}
+
+const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'flowTrail', 'spellCheck', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber']
 const MARKDOWN_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = [
   'markdownHeadline',
   'markdownList',
@@ -357,6 +364,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   gutterBackground: 'Gutter Background',
   immersiveScrollThumb: 'Immersive Scroll Thumb',
   flowTrail: 'Typing trail color',
+  spellCheck: 'Spell Checking Outline Color',
   reviewLine: 'Review Flag Color',
   warningLine: 'Warning Flag Color',
   lineNumber: 'Line Number Color',
@@ -388,6 +396,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   gutterBackground: 'fa-solid fa-list-ol',
   immersiveScrollThumb: 'fa-solid fa-grip-vertical',
   flowTrail: 'fa-solid fa-water',
+  spellCheck: 'fa-solid fa-spell-check',
   reviewLine: 'fa-solid fa-question',
   warningLine: 'fa-solid fa-triangle-exclamation',
   lineNumber: 'fa-solid fa-hashtag',
@@ -551,6 +560,9 @@ export interface SidebarOptionsPanelProps {
   onAllowRemoteImagesChange: (value: boolean) => void
   features: FeatureToggles
   setFeatures: (updater: (previous: FeatureToggles) => FeatureToggles) => void
+  /** The spell checker's active dictionaries by id. */
+  spellCheckDictionaries: string[]
+  setSpellCheckDictionaries: (updater: (previous: string[]) => string[]) => void
   typingTrailSettings: TypingTrailSettings
   setTypingTrailSettings: (updater: (previous: TypingTrailSettings) => TypingTrailSettings) => void
   speedReadingSettings: SpeedReadingSettings
@@ -813,6 +825,8 @@ export function SidebarOptionsPanel({
   onAllowRemoteImagesChange,
   features,
   setFeatures,
+  spellCheckDictionaries,
+  setSpellCheckDictionaries,
   typingTrailSettings,
   setTypingTrailSettings,
   speedReadingSettings,
@@ -910,6 +924,27 @@ export function SidebarOptionsPanel({
   caretEffectStrengthPercent,
   setCaretEffectStrengthPercent,
 }: SidebarOptionsPanelProps) {
+  // Every dictionary the spell checker can use: the bundled four, then any
+  // the reader installed (shared/spellCheck.ts). Read when the panel opens and
+  // after an install or a removal; nothing else changes the list.
+  const [availableDictionaries, setAvailableDictionaries] = useState<SpellCheckDictionary[]>(() => [...BUNDLED_DICTIONARIES])
+  const refreshDictionaries = useCallback(async () => {
+    const listed = await window.thockdownSpellCheck?.listDictionaries().catch(() => null)
+    if (listed) setAvailableDictionaries(listed)
+  }, [])
+  useEffect(() => { void refreshDictionaries() }, [refreshDictionaries])
+  const installSpellCheckDictionary = useCallback(async () => {
+    const installed = await window.thockdownSpellCheck?.installDictionary().catch(() => null)
+    if (!installed) return
+    await refreshDictionaries()
+    setSpellCheckDictionaries((previous) => (previous.includes(installed.id) ? previous : [...previous, installed.id]))
+  }, [refreshDictionaries, setSpellCheckDictionaries])
+  const removeSpellCheckDictionary = useCallback(async (id: string) => {
+    const removed = await window.thockdownSpellCheck?.removeDictionary(id).catch(() => false)
+    if (!removed) return
+    setSpellCheckDictionaries((previous) => previous.filter((entry) => entry !== id))
+    await refreshDictionaries()
+  }, [refreshDictionaries, setSpellCheckDictionaries])
     // What a slider resets to: the visualizer is global, so one default for every layout.
     const visualizerDefaults = DEFAULT_VISUALIZER
     // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
@@ -3058,9 +3093,9 @@ export function SidebarOptionsPanel({
         heading="Spell Checking"
         iconClass="fa-spell-check"
       >
-        {/* The spell checker's one setting today is whether it runs at all
-            (the same switch as the feature bar's); its own settings join it
-            here when the app's own spell checker arrives (TODO.md). */}
+        {/* Whether it runs at all (the same switch as the feature bar's), then
+            the dictionaries: each one a toggle, a word being correct when any
+            active dictionary accepts it (spellCheck/spellCheckClient.ts). */}
         <div className="options-loadout-grid" role="group" aria-label="Spell checking">
           <button
             type="button"
@@ -3071,6 +3106,42 @@ export function SidebarOptionsPanel({
             onClick={() => setFeatures((previous) => ({ ...previous, spellCheck: !previous.spellCheck }))}
           >
             <span className="fa-solid fa-spell-check" aria-hidden="true" />
+          </button>
+        </div>
+        <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
+        <div className="options-loadout-grid" role="group" aria-label="Spell checking dictionaries">
+          {availableDictionaries.map((dictionary) => {
+            const isActive = spellCheckDictionaries.includes(dictionary.id)
+            const tooltip = `${dictionary.label}: ${isActive ? 'checking' : 'not checking'}${dictionary.bundled ? '' : '. Right-click removes this dictionary'}`
+            return (
+              <button
+                key={dictionary.id}
+                type="button"
+                className={`btn-icon options-color-swatch options-loadout-btn options-dictionary-btn${isActive ? ' is-active' : ''}`}
+                data-tooltip={tooltip}
+                aria-label={tooltip}
+                aria-pressed={isActive}
+                data-secondary-press={dictionary.bundled ? 'none' : 'action'}
+                onClick={() => setSpellCheckDictionaries((previous) => (
+                  previous.includes(dictionary.id) ? previous.filter((id) => id !== dictionary.id) : [...previous, dictionary.id]
+                ))}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  if (!dictionary.bundled) void removeSpellCheckDictionary(dictionary.id)
+                }}
+              >
+                <span aria-hidden="true">{dictionaryBadge(dictionary)}</span>
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            data-tooltip="Install a Hunspell dictionary: pick its .dic file, with the .aff file of the same name beside it"
+            aria-label="Install a Hunspell dictionary"
+            onClick={() => void installSpellCheckDictionary()}
+          >
+            <span className="fa-solid fa-file-import" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>

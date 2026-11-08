@@ -64,6 +64,8 @@ export type UiLayoutLoadout = {
     immersiveScrollThumb: string;
     /** Optional: loadouts saved before the typing trail existed lack it. */
     flowTrail?: string;
+    /** Optional: loadouts saved before spell checking's outline existed lack it. */
+    spellCheck?: string;
     reviewLine: string;
     warningLine: string;
     lineNumber: string;

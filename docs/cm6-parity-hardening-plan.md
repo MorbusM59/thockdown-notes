@@ -2752,10 +2752,9 @@ that dispatches `readOnlyCompartmentRef.current.reconfigure(EditorView.editable.
 against `viewRef.current` whenever the prop changes. Placed right after the mount-once effect so
 `viewRef.current` is already populated by the time this effect's own first run happens.
 
-**Note**: `spellCheckEnabled` has the exact same mount-once-only gap one line below `editorReadOnly` in
-`extensions` (`EditorView.contentAttributes.of({ spellcheck: ... })`, no compartment either) and was
-**not** fixed here -- out of scope for this change, left as a separate, pre-existing finding for
-whoever picks it up next rather than folded in speculatively.
+**Note (superseded)**: this once recorded the same gap for `spellCheckEnabled`. Spell checking has
+since become the app's own (`src/spellCheck/`), in its own compartment reconfigured by an effect, so
+the gap no longer exists.
 
 **Verification**: live Playwright check (`apps/notes/scripts/perf/` throwaway script, not committed) driving a
 real note switch into and out of a read-only note, confirming `contenteditable` flips both directions;

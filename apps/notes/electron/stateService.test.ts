@@ -64,6 +64,20 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.doubleSizeVisualizerFontSize).toBe(23)
   })
 
+  it('persists the spell checker\'s active dictionaries and spell-check colour across a restart', async () => {
+    const menu = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.spellCheckDictionaries).toBeUndefined()
+
+    await new StateService(dataRoot).saveAppState({
+      selectedNoteId: null,
+      menu: { ...menu, spellCheckDictionaries: ['de', 'it_IT', 'de'], highlightSpellCheckColor: 'rgba(1, 2, 3, 1)' },
+    })
+    const loaded = await new StateService(dataRoot).loadAppState()
+    expect(loaded.menu?.spellCheckDictionaries).toEqual(['de', 'it_IT'])
+    expect(loaded.menu?.highlightSpellCheckColor).toBe('rgba(1, 2, 3, 1)')
+  })
+
   it('round-trips soundscape layer settings and named custom presets through real sanitization', async () => {
     // A factory soundscape with at least one field of every kind moved, the
     // space and the weather moved, and a channel soloed.
