@@ -775,14 +775,14 @@ ${shortcutTable()}
 
 *The home for every appearance, sound, sync, and performance control in the app, in six sections: General, Layouts, Music, Soundscapes, Tools and Miscellaneous.*
 
-- The row of six buttons below the feature switches picks the section; the panel reopens on the one you left. Each section holds collapsible subsections, and only Layouts belongs to the layout: everything else is the same for every layout. A search looks through every section.
+- The row of six buttons at the top picks the section; the panel reopens on the one you left. Each section holds collapsible subsections, and only Layouts belongs to the layout: everything else is the same for every layout. A search looks through every section.
 - Most controls apply live. Every subsection is shown, whichever mode you are in: where editor and reader differ, the editor's controls are headed "Editor" and the reader's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
 - Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
 
 ### [Editor Font](#editor-font)
 
 > **Where?**
-> Settings panel → General, followed by Reader Font.
+> Settings panel → General, below Quick Toggles, followed by Reader Font.
 
 *Font family, size, spacing, and padding: Editor Font for editor (font family, size, glyph padding, line height), Reader Font for the reader (font family, size, letter spacing, line height).*
 
@@ -791,7 +791,7 @@ ${shortcutTable()}
 ### [Presets](#presets)
 
 > **Where?**
-> Settings panel, at the very top.
+> Settings panel → Layouts → Factory Presets.
 
 *A row of built-in light and dark theme presets.*
 
@@ -800,7 +800,7 @@ ${shortcutTable()}
 ### [Features](#features)
 
 > **Where?**
-> Settings panel, the row below the theme presets.
+> Settings panel → General → Quick Toggles.
 
 *Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), [Grid Beat](${guideLink('NOTES-EDITING', 'visualizer')}), Caret Beat and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}).*
 

@@ -2,6 +2,7 @@ import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { FontControls, FontSection } from './FontSection'
@@ -1220,44 +1221,14 @@ export function SidebarOptionsPanel({
       aria-label="Settings panel"
     >
       <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
-        <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
-          {factoryPresetEntriesForCurrentMode.map((entry) => {
-            const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
-            const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
-            const icon = presetIcons[Math.abs(entry.id) - 1] ?? 'fa-solid fa-circle'
-            const theme = presetThemes[Math.abs(entry.id) - 1] ?? 'None'
-            return (
-              <button
-                key={`preset-${entry.id}`}
-                type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
-                data-tooltip={theme}
-                aria-label={theme}
-                onClick={() => void selectLoadoutPreset(entry.id)}
-              >
-                <span className={icon} aria-hidden="true" />
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' is-active' : ''}`}
-            data-tooltip="Custom"
-            aria-label="Custom Layout"
-            onClick={selectDynamicCustomPreset}
-          >
-            <span className="fa-solid fa-marker" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-      <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
-        <FeatureToggleBar features={features} setFeatures={setFeatures} caretBeat={caretBeat} />
-      </div>
-      <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
         <OptionsSectionBar selected={optionsSection} onSelect={setOptionsSection} />
       </div>
       <AccordionGroup filter={searchQuery}>
       {showsSection('general') ? (<>
+      <OptionsFixedSection className="sidebar-options-section-quick-toggles" heading="Quick Toggles" iconClass="fa-toggle-on" hiddenWhileSearching={isSearching}>
+        <FeatureToggleBar features={features} setFeatures={setFeatures} caretBeat={caretBeat} />
+      </OptionsFixedSection>
+
       <FontSection
         className="sidebar-options-section-editor-font"
         heading="Editor Font"
@@ -1557,6 +1528,38 @@ export function SidebarOptionsPanel({
       </>) : null}
 
       {showsSection('layouts') ? (<>
+      <OptionsFixedSection className="sidebar-options-section-factory-presets" heading="Factory Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+        <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
+          {factoryPresetEntriesForCurrentMode.map((entry) => {
+            const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
+            const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
+            const icon = presetIcons[Math.abs(entry.id) - 1] ?? 'fa-solid fa-circle'
+            const theme = presetThemes[Math.abs(entry.id) - 1] ?? 'None'
+            return (
+              <button
+                key={`preset-${entry.id}`}
+                type="button"
+                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
+                data-tooltip={theme}
+                aria-label={theme}
+                onClick={() => void selectLoadoutPreset(entry.id)}
+              >
+                <span className={icon} aria-hidden="true" />
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' is-active' : ''}`}
+            data-tooltip="Custom"
+            aria-label="Custom Layout"
+            onClick={selectDynamicCustomPreset}
+          >
+            <span className="fa-solid fa-marker" aria-hidden="true" />
+          </button>
+        </div>
+      </OptionsFixedSection>
+
       <AccordionSection
         className="sidebar-options-section-layouts"
         ariaLabel="Save & Restore"

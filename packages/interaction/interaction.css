@@ -350,6 +350,11 @@
   padding-right: var(--spacing-regular);
 }
 
+/* A subsection that is always open (OptionsFixedSection) has no fold arrow. */
+.sidebar-options-section-heading.is-fixed::after {
+  content: none;
+}
+
 .sidebar-options-accordion:not([open]) > .sidebar-options-section-heading::after {
   transform: rotate(90deg);
 }
