@@ -396,7 +396,7 @@ export interface SoundscapePreferences {
    * Every edit writes it (`SoundscapeOptions.tsx`'s `withSettings`) and
    * selecting a preset leaves it alone, so the plus after the presets brings
    * it back. The plus is shown exactly while this equals no preset
-   * (`isUnsavedSoundscapeShown`), as layouts and soundstages do.
+   * (`SoundscapeOptions.tsx`), as layouts and soundstages do.
    */
   unsaved: SoundscapeSettings;
 }
@@ -760,13 +760,6 @@ export const DEFAULT_SOUNDSCAPE_PREFERENCES: SoundscapePreferences = {
   customPresets: [],
   unsaved: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
 };
-
-/** Whether the unsaved soundscape differs from every factory and custom preset: its plus is shown. */
-export function isUnsavedSoundscapeShown(preferences: Pick<SoundscapePreferences, 'unsaved' | 'customPresets'>): boolean {
-  const signature = soundscapeSettingsSignature(preferences.unsaved);
-  return ![...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets]
-    .some((preset) => soundscapeSettingsSignature(preset.settings) === signature);
-}
 
 export function cloneSettings(settings: SoundscapeSettings): SoundscapeSettings {
   return {

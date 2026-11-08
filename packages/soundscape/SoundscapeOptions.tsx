@@ -34,7 +34,6 @@ import {
   DEFAULT_SOUNDSCAPE_SPACE,
   DEFAULT_SOUNDSCAPE_WEATHER,
   MAX_SOUNDSCAPE_CUSTOM_PRESETS,
-  isUnsavedSoundscapeShown,
   soundscapeFaderDb,
   soundscapePartDb,
   soundscapeSettingsSignature,
@@ -678,13 +677,17 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   const selectedChannel = channels.find((channel) => channel.id === selectedId) ?? null
   const allPresets = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets]
   const currentSignature = soundscapeSettingsSignature(preferences.settings)
-  const matchingPresets = allPresets.filter((preset) => soundscapeSettingsSignature(preset.settings) === currentSignature)
+  // Each preset's signature once per render: both the active preset and the
+  // plus are read off them.
+  const presetSignatures = allPresets.map((preset) => soundscapeSettingsSignature(preset.settings))
+  const matchingPresets = allPresets.filter((_, index) => presetSignatures[index] === currentSignature)
   const selectedPresetId = matchingPresets.find((preset) => preset.id === preferences.activePresetId)?.id
     ?? matchingPresets[0]?.id
     ?? null
   // The unsaved soundscape's plus: shown while it equals no preset, pressed
   // while it is what plays.
-  const isUnsavedShown = isUnsavedSoundscapeShown(preferences) && soundscapeSettingsSignature(preferences.unsaved) !== RESET_SIGNATURE
+  const unsavedSignature = soundscapeSettingsSignature(preferences.unsaved)
+  const isUnsavedShown = unsavedSignature !== RESET_SIGNATURE && !presetSignatures.includes(unsavedSignature)
   const isUnsavedActive = matchingPresets.length === 0 && currentSignature !== RESET_SIGNATURE
   const canSave = isUnsavedShown && preferences.customPresets.length < MAX_SOUNDSCAPE_CUSTOM_PRESETS
 
