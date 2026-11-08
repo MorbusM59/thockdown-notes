@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { installedDictionaryId, SpellCheckDictionaries } from './spellCheckDictionaries'
+import { dictionaryIdForFile, installedDictionaryId, SpellCheckDictionaries } from './spellCheckDictionaries'
 
 describe('SpellCheckDictionaries', () => {
   it('serves the four bundled dictionaries', async () => {
@@ -41,5 +41,7 @@ describe('SpellCheckDictionaries', () => {
     expect(await service.read('../escape')).toBeNull()
     expect(await service.remove('en')).toBe(false)
     expect(installedDictionaryId('/a/b/../c.dic')).toBe('c')
+    expect(dictionaryIdForFile('/x/dictionaries/en-GB/index.dic')).toBe('en-GB')
+    expect(dictionaryIdForFile('/x/de_AT.dic')).toBe('de_AT')
   })
 })

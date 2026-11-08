@@ -26,6 +26,16 @@ export function installedDictionaryId(dicFileName: string): string | null {
   return base.length > 0 && base.length <= 64 ? base : null
 }
 
+/**
+ * The id a dictionary file installs under: its name, or, when the name says
+ * nothing (`index.dic`, how wooorm/dictionaries names every one), the folder
+ * it sits in, which there is the locale (`dictionaries/en-GB/index.dic`).
+ */
+export function dictionaryIdForFile(dicPath: string): string | null {
+  const name = path.basename(dicPath, path.extname(dicPath))
+  return installedDictionaryId(name.toLowerCase() === 'index' ? path.basename(path.dirname(dicPath)) : name)
+}
+
 function bundledFolder(id: string): string | null {
   if (!BUNDLED_DICTIONARIES.some((entry) => entry.id === id)) return null
   try {
@@ -71,7 +81,7 @@ export class SpellCheckDictionaries {
 
   /** Copies `<name>.dic` and the `<name>.aff` beside it in. Null when the pair is incomplete or the name clashes with a bundled one. */
   async install(dicPath: string): Promise<SpellCheckDictionary | null> {
-    const id = installedDictionaryId(dicPath)
+    const id = dictionaryIdForFile(dicPath)
     if (!id || BUNDLED_DICTIONARIES.some((entry) => entry.id === id)) return null
     const affPath = path.join(path.dirname(dicPath), `${path.basename(dicPath, path.extname(dicPath))}.aff`)
     let aff: Buffer

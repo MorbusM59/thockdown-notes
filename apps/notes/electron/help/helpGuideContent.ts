@@ -246,7 +246,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 - One switch for the whole app. It checks the editor of the slot you are typing in, never the reader.
 - English, Spanish, French and German come with the app; switch each on or off under Spell Checking. A word counts as correct when any active dictionary knows it, so a note can mix languages.
-- To add another language, install a Hunspell dictionary: pick its .dic file, with the .aff file of the same name beside it. Right-click an installed dictionary to remove it.
+- To add another language, install a Hunspell dictionary: pick its .dic file, with the .aff file of the same name beside it. An index.dic is named after its folder. Right-click an installed dictionary to remove it.
 - Code, links, web addresses and #tags are not checked. The word you are still typing is not marked until you move on.
 - The outline color is Spell Checking Outline Color, among the editor box colors.
 
