@@ -19,7 +19,9 @@ export const SCROLL_TRACK_EDGE_GAP_PX = 3
  * the same distance from its edges.
  */
 export const SCROLL_THICKNESS_BASE_PX = 16
-export const SCROLL_HANDLE_GAP_BASE_PX = 4
+// 5 leaves a thumb (handle + 2px, offset gap - 2px) 3px from the track's
+// long sides, the same as SCROLL_TRACK_EDGE_GAP_PX leaves at its ends.
+export const SCROLL_HANDLE_GAP_BASE_PX = 5
 
 export interface ScrollTrackSize {
   thicknessPx: number

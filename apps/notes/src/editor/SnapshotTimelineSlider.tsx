@@ -1,3 +1,4 @@
+import { SCROLL_HANDLE_GAP_BASE_PX } from '@thockdown/interaction/scrollTrackGeometry'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlacedSnapshot } from './SnapshotTimelineCurve'
 import { clusterPlacements } from './SnapshotTimelineCurve'
@@ -36,12 +37,10 @@ export type SnapshotTimelineSliderProps = {
 }
 
 // A mark is as large as a slider thumb (--canonical-scroll-handle-thickness:
-// the rail's thickness less the thumb's 4px gap on each side), and both follow
+// the rail's thickness less the thumb's gap on each side), and both follow
 // the UI font scale. A mark's centre is pulled in from each rail end by half
-// its width plus 6px, so the end marks sit as far in as a thumb at the end of
-// its travel; 10px at scale 1. Measured as the rail's height / 2 + 2, the
-// same quantity.
-const MARK_INSET_CSS = 'calc(var(--canonical-scroll-handle-thickness) / 2 + 6px)'
+// the rail's height plus 2px, which keeps the end marks clear of the ends.
+const MARK_INSET_CSS = 'calc(var(--canonical-scroll-thickness) / 2 + 2px)'
 
 function markInsetPx(railHeightPx: number): number {
   return (railHeightPx / 2) + 2
@@ -186,7 +185,7 @@ export function SnapshotTimelineSlider({
     const MARK_INSET_PX = markInsetPx(railHeightPx)
     const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
     // Half a mark's width, plus the manual mark's heavier outline.
-    const markHalf = (railHeightPx / 2) - 4
+    const markHalf = (railHeightPx / 2) - SCROLL_HANDLE_GAP_BASE_PX
     const outerHalves = marks.map((mark) => (mark.isManual ? markHalf + 1 : markHalf))
     const minGapBetween = (i: number) => outerHalves[i] + outerHalves[i + 1] + 2
     const renderedCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)

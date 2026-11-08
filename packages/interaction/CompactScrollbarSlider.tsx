@@ -118,12 +118,12 @@ export function CompactScrollbarSlider({
     // The thumb's own laid-out width and offset from the rail's top edge,
     // rather than the CSS tokens: a token declared as calc() (as it is in the
     // colour picker's sliders) reads back as text, not a number. The thumb
-    // sits as far in from the rail's ends as from its top edge plus 1px
-    // (interaction.css: top is gap - 2px, the end inset gap - 1px).
+    // sits as far in from the rail's ends as from its top edge
+    // (interaction.css: top is gap - 2px, and so is the end inset).
     const thumb = rail.querySelector<HTMLElement>('.utility-setting-scrollbar-thumb')
     if (!thumb) return
     const thumbSize = thumb.offsetWidth
-    const thumbInset = thumb.offsetTop + 1
+    const thumbInset = thumb.offsetTop
     const startX = rect.left + thumbInset + (thumbSize / 2)
     const travel = Math.max(1, rect.width - (thumbInset * 2) - thumbSize)
     const nextRatio = clamp((clientX - startX) / travel, 0, 1)
@@ -264,7 +264,7 @@ export function CompactScrollbarSlider({
         <div
           className="utility-setting-scrollbar-thumb"
           style={{
-            left: `calc((var(--canonical-scroll-handle-gap) - 1px) + (${ratio} * (100% - ((var(--canonical-scroll-handle-gap) - 1px) * 2) - (var(--canonical-scroll-handle-thickness) + 2px))))`,
+            left: `calc((var(--canonical-scroll-handle-gap) - 2px) + (${ratio} * (100% - ((var(--canonical-scroll-handle-gap) - 2px) * 2) - (var(--canonical-scroll-handle-thickness) + 2px))))`,
           }}
         />
       </div>
