@@ -391,6 +391,14 @@ export interface SoundscapePreferences {
   settings: SoundscapeSettings;
   activePresetId: string | null;
   customPresets: SoundscapePreset[];
+  /**
+   * The UNSAVED soundscape: the settings as the listener last edited them.
+   * Every edit writes it (`SoundscapeOptions.tsx`'s `withSettings`) and
+   * selecting a preset leaves it alone, so the plus after the presets brings
+   * it back. The plus is shown exactly while this equals no preset
+   * (`isUnsavedSoundscapeShown`), as layouts and soundstages do.
+   */
+  unsaved: SoundscapeSettings;
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +436,8 @@ export const SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC = 0.05;
 export const SOUNDSCAPE_CHIME_RATE_MAX_PER_SEC = 4;
 export const SOUNDSCAPE_WEATHER_PACE_MIN_SEC = 2;
 export const SOUNDSCAPE_WEATHER_PACE_MAX_SEC = 60;
-export const MAX_SOUNDSCAPE_CUSTOM_PRESETS = 12;
+/** Not a design limit, only a bound on a list nobody should reach. */
+export const MAX_SOUNDSCAPE_CUSTOM_PRESETS = 100;
 export const SOUNDSCAPE_DEFAULT_MASTER_VOLUME = 1;
 
 /**
@@ -749,7 +758,15 @@ export const DEFAULT_SOUNDSCAPE_PREFERENCES: SoundscapePreferences = {
   settings: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
   activePresetId: SOUNDSCAPE_FACTORY_PRESETS[0].id,
   customPresets: [],
+  unsaved: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
 };
+
+/** Whether the unsaved soundscape differs from every factory and custom preset: its plus is shown. */
+export function isUnsavedSoundscapeShown(preferences: Pick<SoundscapePreferences, 'unsaved' | 'customPresets'>): boolean {
+  const signature = soundscapeSettingsSignature(preferences.unsaved);
+  return ![...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets]
+    .some((preset) => soundscapeSettingsSignature(preset.settings) === signature);
+}
 
 export function cloneSettings(settings: SoundscapeSettings): SoundscapeSettings {
   return {
@@ -922,12 +939,14 @@ export function sanitizeSoundscapePreferences(input: unknown): SoundscapePrefere
     ? source.activePresetId
     : null;
 
+  const settings = sanitizeSoundscapeSettings(source.settings);
   return {
     enabled: source.enabled === true,
     masterVolume: finiteRange(source.masterVolume, 0, 1, SOUNDSCAPE_DEFAULT_MASTER_VOLUME),
-    settings: sanitizeSoundscapeSettings(source.settings),
+    settings,
     activePresetId,
     customPresets,
+    unsaved: source.unsaved === undefined ? cloneSettings(settings) : sanitizeSoundscapeSettings(source.unsaved),
   };
 }
 

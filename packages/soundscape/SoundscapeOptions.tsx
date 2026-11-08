@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
+import { UnsavedPresetButton } from '@thockdown/interaction/UnsavedPresetButton'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import {
   SOUNDSCAPE_CHANNEL_ROSTER,
@@ -33,6 +34,7 @@ import {
   DEFAULT_SOUNDSCAPE_SPACE,
   DEFAULT_SOUNDSCAPE_WEATHER,
   MAX_SOUNDSCAPE_CUSTOM_PRESETS,
+  isUnsavedSoundscapeShown,
   soundscapeFaderDb,
   soundscapePartDb,
   soundscapeSettingsSignature,
@@ -444,6 +446,9 @@ export function SubsectionHelp({ paragraphs }: { paragraphs: readonly string[] }
   )
 }
 
+/** The reset soundscape's signature (`neutralSoundscape`), which is pure: computed once. */
+const RESET_SIGNATURE = soundscapeSettingsSignature(neutralSoundscape())
+
 /**
  * New settings, with the active preset re-derived from them: the preset stays
  * selected exactly while the settings still match it. Every edit goes
@@ -454,7 +459,7 @@ function withSettings(preferences: SoundscapePreferences, settings: SoundscapeSe
   const matchingPreset = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets].find((preset) => (
     soundscapeSettingsSignature(preset.settings) === signature
   ))
-  return { ...preferences, settings, activePresetId: matchingPreset?.id ?? null }
+  return { ...preferences, settings, unsaved: cloneSettings(settings), activePresetId: matchingPreset?.id ?? null }
 }
 
 function toPosition(spec: ControlSpec, value: number): number {
@@ -535,7 +540,7 @@ export function SoundscapeOptions({ isSearching, ...props }: SoundscapeOptionsPr
       arrangement="subsections"
       arrange={({ presets, environment, channels }) => (
         <>
-          <OptionsFixedSection className="sidebar-options-section-soundscape-presets" heading="Soundscape Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+          <OptionsFixedSection className="sidebar-options-section-soundscape-presets" heading="Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
             {presets}
           </OptionsFixedSection>
           <AccordionSection className="sidebar-options-section-soundscape-environment" ariaLabel="Environment" heading="Environment" iconClass="fa-torii-gate">
@@ -608,7 +613,6 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   // click), never by the contextmenu event, which Chromium fires on the press
   // on some platforms and on the release on others.
   const presetExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
-  const resetHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   // TOUCH has one button where a mouse has two, so each right-button gesture
   // above has a touch equivalent instead (`pointerType === 'touch'`, so a
   // desktop touch screen gets them too):
@@ -640,7 +644,6 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   useEffect(() => () => {
     channelHoldRef.current?.cancel()
     presetExportHoldRef.current?.cancel()
-    resetHoldRef.current?.cancel()
     touchHoldRef.current?.cancel()
   }, [])
 
@@ -679,8 +682,11 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   const selectedPresetId = matchingPresets.find((preset) => preset.id === preferences.activePresetId)?.id
     ?? matchingPresets[0]?.id
     ?? null
-  const hasPendingChanges = matchingPresets.length === 0
-  const canSave = hasPendingChanges && preferences.customPresets.length < MAX_SOUNDSCAPE_CUSTOM_PRESETS
+  // The unsaved soundscape's plus: shown while it equals no preset, pressed
+  // while it is what plays.
+  const isUnsavedShown = isUnsavedSoundscapeShown(preferences) && soundscapeSettingsSignature(preferences.unsaved) !== RESET_SIGNATURE
+  const isUnsavedActive = matchingPresets.length === 0 && currentSignature !== RESET_SIGNATURE
+  const canSave = isUnsavedShown && preferences.customPresets.length < MAX_SOUNDSCAPE_CUSTOM_PRESETS
 
   const commitSettings = (settings: SoundscapeSettings) => {
     onChange(withSettings(preferences, settings))
@@ -773,25 +779,40 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   const savePreset = () => {
     if (!canSave) return
     const id = newSoundscapeId()
-    const settings = cloneSettings(preferences.settings)
+    const settings = cloneSettings(preferences.unsaved)
     const saved: SoundscapePreset = {
       id,
       name: `Soundscape ${preferences.customPresets.length + 1}`,
       settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) },
     }
-    onChange({ ...preferences, activePresetId: id, customPresets: [...preferences.customPresets, saved] })
+    onChange({ ...preferences, activePresetId: isUnsavedActive ? id : preferences.activePresetId, customPresets: [...preferences.customPresets, saved] })
   }
 
-  /** Every channel back to its defaults, and off; the space and the weather are left as they are. */
-  const resetChannels = () => {
-    commitSettings({ ...preferences.settings, channels: neutralSoundscape().channels })
+  /** Play the unsaved soundscape again. Not an edit, so it goes round `withSettings`. */
+  const selectUnsaved = () => {
+    onChange({ ...preferences, settings: cloneSettings(preferences.unsaved), activePresetId: null })
+  }
+
+  // The RESET soundscape: every channel at its defaults and off, the space
+  // and weather at theirs. Selectable like a preset (and lit while it is
+  // what plays), but not one of the presets: next/previous, the schedule
+  // and the music bar never step onto it.
+  const isResetActive = currentSignature === RESET_SIGNATURE
+  const selectReset = () => {
+    setPendingDeletePresetId(null)
+    onChange({ ...preferences, settings: neutralSoundscape(), activePresetId: null })
   }
 
   const deletePreset = (presetId: string) => {
+    // Deleting the soundscape that plays keeps it playing: it becomes the
+    // unsaved soundscape, which a hold on the plus saves again.
+    const deleted = preferences.customPresets.find((preset) => preset.id === presetId)
+    const wasPlaying = deleted !== undefined && selectedPresetId === presetId
     onChange({
       ...preferences,
       activePresetId: preferences.activePresetId === presetId ? null : preferences.activePresetId,
       customPresets: preferences.customPresets.filter((preset) => preset.id !== presetId),
+      unsaved: wasPlaying ? cloneSettings(deleted.settings) : preferences.unsaved,
     })
     setPendingDeletePresetId(null)
   }
@@ -846,6 +867,18 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
               <span className={`fa-solid ${FACTORY_SOUNDSCAPE_ICONS[preset.id]}`} aria-hidden="true" />
             </button>
           ))}
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn soundscape-reset-btn${isResetActive ? ' is-active' : ''}`}
+            aria-label="Reset: every channel at its defaults and off"
+            aria-pressed={isResetActive}
+            data-tooltip="Reset\nEvery channel at its defaults and off."
+            data-secondary-press="none"
+            onClick={() => { if (!swallowsClick()) selectReset() }}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <span className="fa-solid fa-rotate-left" aria-hidden="true" />
+          </button>
           {preferences.customPresets.map((preset, index) => {
             const number = index + 1
             const isPrimed = pendingDeletePresetId === preset.id
@@ -917,56 +950,15 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
             >
               <span className="options-loadout-plus-glyph fa-solid fa-trash" aria-hidden="true" />
             </button>
-          ) : (
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus soundscape-custom-preset-plus${hasPendingChanges ? ' is-active' : ''}`}
-            aria-label="Save current soundscape as a custom preset"
-            data-tooltip={`${preferences.customPresets.length >= MAX_SOUNDSCAPE_CUSTOM_PRESETS
-              ? 'Custom soundscape limit reached'
-              : hasPendingChanges ? 'Save current soundscape as a custom preset' : 'No unsaved soundscape changes'}\nHold right-click to reset every channel to its defaults and turn it off.`}
-            // Not `disabled`: a disabled button receives no pointer events,
-            // and the hold-to-reset below must work whether or not there is
-            // anything to save.
-            aria-disabled={!canSave}
-            data-secondary-press="action"
-            onClick={() => { if (!swallowsClick() && canSave) savePreset() }}
-            onPointerDown={(event) => {
-              if (event.pointerType === 'touch') {
-                startTouchHold(event.pointerId, HOLD_COMMIT_MS, resetChannels)
-                return
-              }
-              if (event.button !== 2) return
-              resetHoldRef.current?.cancel()
-              const cancel = armHold(() => {
-                resetHoldRef.current = null
-                resetChannels()
-              }, HOLD_COMMIT_MS)
-              resetHoldRef.current = { pointerId: event.pointerId, cancel }
-            }}
-            onPointerUp={(event) => {
-              endTouchHold(event.pointerId)
-              if (resetHoldRef.current?.pointerId !== event.pointerId) return
-              resetHoldRef.current.cancel()
-              resetHoldRef.current = null
-            }}
-            onPointerCancel={(event) => {
-              endTouchHold(event.pointerId)
-              resetHoldRef.current?.cancel()
-              resetHoldRef.current = null
-            }}
-            onMouseLeave={() => {
-              resetHoldRef.current?.cancel()
-              resetHoldRef.current = null
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-          >
-            <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
-          </button>
-          )}
+          ) : isUnsavedShown ? (
+            <UnsavedPresetButton
+              active={isUnsavedActive}
+              noun="soundscape"
+              canSave={canSave}
+              onSelect={selectUnsaved}
+              onSave={savePreset}
+            />
+          ) : null}
         </div>
         </>)}
     </>),

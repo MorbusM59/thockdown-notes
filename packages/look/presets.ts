@@ -1,13 +1,10 @@
-// Factory presets and default-custom loadouts for the Presets / Custom
-// Presets system. Every value here is a complete, valid UiLayoutLoadout so
+// Factory presets for the layout Presets list. Every value here is a complete, valid UiLayoutLoadout so
 // the UI is fully functional immediately — content is placeholder and
 // expected to be redesigned later.
 //
 // Naming maps directly onto the loadout ID scheme in loadouts.ts:
 //   LIGHT_FACTORY_PRESETS[0..4]  -> light ids +1..+5
 //   DARK_FACTORY_PRESETS[0..4]   -> dark ids  -1..-5
-//   DEFAULT_CUSTOM_LIGHT         -> light id  +6
-//   DEFAULT_CUSTOM_DARK          -> dark id   -6
 
 import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from './textureTypes';
 import { DEFAULT_GLAZE_SETTINGS } from './glaze';
@@ -104,8 +101,8 @@ function buildPreset(overrides: UiLayoutLoadoutOverrides): UiLayoutLoadout {
   });
 }
 
-// A neutral, untextured, unfiltered baseline shared by both default-custom
-// loadouts. Dark mode's default-custom is this base with filterInvert = 1.
+// A neutral, untextured, unfiltered baseline: what a .tdl file's lines are
+// diffs against (NEUTRAL_LOADOUT is it with its colours derived).
 export const NEUTRAL_BASE: UiLayoutLoadout = {
   borderRadiusRegularPx: 6,
   spacingRegularPx: 4,
@@ -201,13 +198,8 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
   visualizerColors: defaultVisualizerColors(false),
 };
 
-export const DEFAULT_CUSTOM_LIGHT: UiLayoutLoadout = withDerivedColors({
+export const NEUTRAL_LOADOUT: UiLayoutLoadout = withDerivedColors({
   ...NEUTRAL_BASE,
-});
-
-export const DEFAULT_CUSTOM_DARK: UiLayoutLoadout = withDerivedColors({
-  ...NEUTRAL_BASE,
-  filterInvert: 1,
 });
 
 // How each factory preset is shown on its button: an icon and a name, in the

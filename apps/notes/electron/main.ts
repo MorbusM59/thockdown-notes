@@ -1145,9 +1145,6 @@ function registerIpcHandlers() {
     deleteCustom: async (_event, id) => {
       return databaseService!.deleteCustomUiLoadout(id);
     },
-    resetCustom: async (_event, mode) => {
-      return databaseService!.resetCustomUiLoadout(mode);
-    },
     exportTdl: async () => {
       const content = databaseService!.buildTdlContent();
       const { filePath, canceled } = await dialog.showSaveDialog({

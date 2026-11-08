@@ -24,7 +24,7 @@ import {
   idKind,
   idMode,
   modeSign,
-  LOADOUT_DEFAULT_CUSTOM_ID_ABS,
+  LOADOUT_FACTORY_PRESET_COUNT,
   LOADOUT_PENDING_ID_ABS,
   LOADOUT_FIRST_CUSTOM_ID_ABS,
   LOADOUT_MAX_CUSTOM_SLOTS,
@@ -33,8 +33,7 @@ import {
   LIGHT_FACTORY_PRESETS,
   DARK_FACTORY_PRESETS,
   NEUTRAL_BASE,
-  DEFAULT_CUSTOM_LIGHT,
-  DEFAULT_CUSTOM_DARK,
+  NEUTRAL_LOADOUT,
 } from '@thockdown/look/presets';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel } from '@thockdown/look/boxBevel';
@@ -636,7 +635,7 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when
-// they differ from NEUTRAL_BASE (DEFAULT_CUSTOM_LIGHT).
+// they differ from NEUTRAL_BASE (NEUTRAL_LOADOUT).
 const TDL_OBJECT_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'glaze', 'boxBevel', 'highlightColors', 'editorTextColors', 'textureMaterials', 'visualizerColors',
 ];
@@ -1634,9 +1633,8 @@ export class DatabaseService {
   /**
    * Resets the user-visible session state back to a fresh-install baseline:
    * the default editor section is preserved, every other open section and its
-   * tabs are discarded, the default custom UI loadout is reactivated for both
-   * modes, and any previous pending scratch edits are cleared back to their
-   * factory default state. This is the database-backed counterpart to
+   * tabs are discarded, each mode's first preset is reactivated and its unsaved
+   * changes are cleared. This is the database-backed counterpart to
    * StateService.clearAppState(), which resets the app-state JSON file.
    */
   resetToFactoryDefaults(): void {
@@ -1672,7 +1670,9 @@ export class DatabaseService {
         SET isActive = 1, signature = ?, payloadJson = ?, updatedAt = ?
         WHERE id = ?
       `).run(signature, payloadJson, timestamp, id);
-      this.writeLoadoutMeta(`lastCustomId:${mode}`, LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign);
+      // The unsaved changes go with everything else: equal to the preset.
+      db.prepare(`UPDATE ui_loadout_entries SET signature = ?, payloadJson = ?, updatedAt = ? WHERE id = ?`)
+        .run(signature, payloadJson, timestamp, LOADOUT_PENDING_ID_ABS * sign);
     };
 
     activateFactoryPreset('light', LIGHT_FACTORY_PRESETS[0], 1);
@@ -3035,16 +3035,11 @@ export class DatabaseService {
       LIGHT_FACTORY_PRESETS.forEach((preset, index) => seedRow(index + 1, preset, index === 0));
       DARK_FACTORY_PRESETS.forEach((preset, index) => seedRow(-(index + 1), preset, index === 0));
 
-      seedRow(LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_LIGHT, false);
-      seedRow(-LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_DARK, false);
-
-      // Pending rows start as inert copies of the default-custom rows.
-      seedRow(LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_LIGHT, false);
-      seedRow(-LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_DARK, false);
-
-      const metaStmt = db.prepare(`INSERT OR REPLACE INTO ui_loadout_meta (key, value) VALUES (?, ?)`);
-      metaStmt.run('lastCustomId:light', String(LOADOUT_DEFAULT_CUSTOM_ID_ABS));
-      metaStmt.run('lastCustomId:dark', String(-LOADOUT_DEFAULT_CUSTOM_ID_ABS));
+      // The unsaved row starts as a copy of the first preset, which it
+      // therefore matches: no unsaved changes are shown until something
+      // differs from every row (see loadouts.ts, "unsaved").
+      seedRow(LOADOUT_PENDING_ID_ABS, LIGHT_FACTORY_PRESETS[0], false);
+      seedRow(-LOADOUT_PENDING_ID_ABS, DARK_FACTORY_PRESETS[0], false);
     });
 
     tx();
@@ -3056,8 +3051,8 @@ export class DatabaseService {
     const rows = db.prepare(`
       SELECT id, signature, payloadJson
       FROM ui_loadout_entries
-      WHERE ABS(id) < ?
-    `).all(LOADOUT_DEFAULT_CUSTOM_ID_ABS) as Array<{ id: number; signature: string; payloadJson: string }>;
+      WHERE ABS(id) <= ?
+    `).all(LOADOUT_FACTORY_PRESET_COUNT) as Array<{ id: number; signature: string; payloadJson: string }>;
 
     const existing = new Map<number, { signature: string; payloadJson: string }>();
     for (const row of rows) {
@@ -3079,8 +3074,6 @@ export class DatabaseService {
 
     LIGHT_FACTORY_PRESETS.forEach((preset, index) => seedRows.push({ id: index + 1, payload: preset }));
     DARK_FACTORY_PRESETS.forEach((preset, index) => seedRows.push({ id: -(index + 1), payload: preset }));
-    seedRows.push({ id: LOADOUT_DEFAULT_CUSTOM_ID_ABS, payload: DEFAULT_CUSTOM_LIGHT });
-    seedRows.push({ id: -LOADOUT_DEFAULT_CUSTOM_ID_ABS, payload: DEFAULT_CUSTOM_DARK });
 
     const upsert = db.transaction(() => {
       for (const { id, payload } of seedRows) {
@@ -3101,6 +3094,37 @@ export class DatabaseService {
     });
 
     upsert();
+    this.retireDefaultCustomRows();
+  }
+
+  /**
+   * Rows +/-6 held the read-only "default custom" layout the old Custom
+   * button fell back to; that button is gone. A database that still has
+   * them loses them here, an active one handing its look to the unsaved
+   * row so the screen does not change.
+   */
+  private retireDefaultCustomRows(): void {
+    const db = this.requireDb();
+    const retired = db.prepare(`SELECT id, isActive, payloadJson FROM ui_loadout_entries WHERE ABS(id) = 6`)
+      .all() as Array<{ id: number; isActive: number; payloadJson: string }>;
+    if (retired.length === 0) return;
+    const tx = db.transaction(() => {
+      for (const row of retired) {
+        if (row.isActive === 1) {
+          const sign = row.id > 0 ? 1 : -1;
+          let normalized: UiLayoutLoadout;
+          try {
+            normalized = normalizeUiLayoutLoadout(JSON.parse(row.payloadJson)) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+          } catch {
+            normalized = DEFAULT_UI_LAYOUT_LOADOUT;
+          }
+          db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, signature = ?, payloadJson = ? WHERE id = ?`)
+            .run(stableStringify(normalized), JSON.stringify(normalized), LOADOUT_PENDING_ID_ABS * sign);
+        }
+        db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(row.id);
+      }
+    });
+    tx();
   }
 
   private normalizeStoredLoadoutRows(): void {
@@ -3138,19 +3162,6 @@ export class DatabaseService {
     });
 
     tx();
-  }
-
-  private readLoadoutMeta(key: string, fallback: number): number {
-    const db = this.requireDb();
-    const row = db.prepare('SELECT value FROM ui_loadout_meta WHERE key = ?').get(key) as { value: string } | undefined;
-    if (!row) return fallback;
-    const parsed = Number.parseInt(row.value, 10);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-
-  private writeLoadoutMeta(key: string, value: number): void {
-    const db = this.requireDb();
-    db.prepare(`INSERT OR REPLACE INTO ui_loadout_meta (key, value) VALUES (?, ?)`).run(key, String(value));
   }
 
   /**
@@ -3218,10 +3229,6 @@ export class DatabaseService {
 
     return {
       entries: rows.map((row) => this.rowToEntry(row)),
-      lastCustomIdByMode: {
-        light: this.readLoadoutMeta('lastCustomId:light', LOADOUT_DEFAULT_CUSTOM_ID_ABS),
-        dark: this.readLoadoutMeta('lastCustomId:dark', -LOADOUT_DEFAULT_CUSTOM_ID_ABS),
-      },
     };
   }
 
@@ -3245,33 +3252,13 @@ export class DatabaseService {
 
     const tx = db.transaction(() => {
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+      // The unsaved row is left as it is: its button stays, so the reader
+      // can go back to those changes.
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, targetId);
-
-      const kind = idKind(targetId);
-      if (kind === 'default-custom' || kind === 'custom') {
-        this.writeLoadoutMeta(`lastCustomId:${mode}`, targetId);
-      }
-      // Selecting any other entry discards the unsaved changes: there is no
-      // way back to them, so keeping them would only leave a hidden copy.
-      if (kind !== 'pending') this.discardPendingUiLoadout(sign, timestamp);
     });
 
     tx();
     return this.buildListResult();
-  }
-
-  /**
-   * Resets a mode's unsaved-changes row to an inert copy of its default
-   * custom layout. Run inside the caller's transaction.
-   */
-  private discardPendingUiLoadout(sign: 1 | -1, timestamp: number): void {
-    const defaultCustomRow = this.readLoadoutRow(LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign);
-    if (!defaultCustomRow) return;
-    this.requireDb().prepare(`
-      UPDATE ui_loadout_entries
-      SET isActive = 0, signature = ?, payloadJson = ?, updatedAt = ?
-      WHERE id = ?
-    `).run(defaultCustomRow.signature, JSON.stringify(defaultCustomRow.payload), timestamp, LOADOUT_PENDING_ID_ABS * sign);
   }
 
   updatePendingUiLoadout(mode: unknown, loadout: unknown): UiLoadoutListResult {
@@ -3292,27 +3279,22 @@ export class DatabaseService {
       // collapse into that match instead of treating it as new pending data.
       const match = db.prepare(`
         SELECT id FROM ui_loadout_entries
-        WHERE signature = ? AND id * ? > 0
+        WHERE signature = ? AND id * ? > 0 AND ABS(id) != ?
         ORDER BY ABS(id) ASC
         LIMIT 1
-      `).get(signature, sign) as { id: number } | undefined;
+      `).get(signature, sign, LOADOUT_PENDING_ID_ABS) as { id: number } | undefined;
 
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
 
-      if (match) {
-        db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, match.id);
-        const kind = idKind(match.id);
-        if (kind === 'default-custom' || kind === 'custom') {
-          this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, match.id);
-        }
-        return;
-      }
-
+      // The live settings always become the unsaved row; where they match
+      // another row, that row is the active one and the unsaved row, being
+      // equal to it, is not shown.
       db.prepare(`
         UPDATE ui_loadout_entries
-        SET isActive = 1, signature = ?, payloadJson = ?, updatedAt = ?
+        SET signature = ?, payloadJson = ?, updatedAt = ?
         WHERE id = ?
       `).run(signature, payloadJson, timestamp, pendingId);
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, match?.id ?? pendingId);
     });
 
     tx();
@@ -3327,10 +3309,12 @@ export class DatabaseService {
     const pendingId = LOADOUT_PENDING_ID_ABS * sign;
 
     const pendingRow = this.readLoadoutRow(pendingId);
-    if (!pendingRow || !pendingRow.isActive) {
-      // Nothing pending to save for this mode.
-      return this.buildListResult();
-    }
+    if (!pendingRow) return this.buildListResult();
+    const duplicate = db.prepare(`
+      SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 AND ABS(id) != ? LIMIT 1
+    `).get(pendingRow.signature, sign, LOADOUT_PENDING_ID_ABS);
+    // No unsaved changes (the row equals another), or the list is full.
+    if (duplicate) return this.buildListResult();
 
     const timestamp = Date.now();
     const tx = db.transaction(() => {
@@ -3338,22 +3322,21 @@ export class DatabaseService {
         SELECT id FROM ui_loadout_entries WHERE id * ? > 0 AND ABS(id) >= ?
       `).all(sign, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number }[]).map((r) => Math.abs(r.id));
 
+      if (existingCustomIds.length >= LOADOUT_MAX_CUSTOM_SLOTS) return;
       let nextAbs = LOADOUT_FIRST_CUSTOM_ID_ABS;
-      while (existingCustomIds.includes(nextAbs) && nextAbs < LOADOUT_FIRST_CUSTOM_ID_ABS + LOADOUT_MAX_CUSTOM_SLOTS + 16) {
-        nextAbs += 1;
-      }
+      while (existingCustomIds.includes(nextAbs)) nextAbs += 1;
       const newId = nextAbs * sign;
 
-      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
-
+      // The new row takes the unsaved row's place, active if it was. The
+      // unsaved row keeps its payload, now equal to the new row, so it is
+      // no longer shown.
+      if (pendingRow.isActive) {
+        db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+      }
       db.prepare(`
         INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
-        VALUES (?, 1, ?, ?, ?)
-      `).run(newId, pendingRow.signature, JSON.stringify(pendingRow.payload), timestamp);
-
-      this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, newId);
-
-      this.discardPendingUiLoadout(sign, timestamp);
+        VALUES (?, ?, ?, ?, ?)
+      `).run(newId, pendingRow.isActive ? 1 : 0, pendingRow.signature, JSON.stringify(pendingRow.payload), timestamp);
     });
 
     tx();
@@ -3371,7 +3354,6 @@ export class DatabaseService {
 
     const mode: UiLoadoutMode = idMode(targetId);
     const sign = modeSign(mode);
-    const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
     const timestamp = Date.now();
 
     const targetAbs = Math.abs(targetId);
@@ -3379,9 +3361,12 @@ export class DatabaseService {
     const tx = db.transaction(() => {
       db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(targetId);
 
+      // Deleting the layout on screen keeps the screen as it is: its look
+      // becomes the unsaved changes, which a hold on the plus saves again.
       if (existing.isActive) {
-        db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
-        db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, defaultCustomId);
+        db.prepare(`
+          UPDATE ui_loadout_entries SET isActive = 1, signature = ?, payloadJson = ?, updatedAt = ? WHERE id = ?
+        `).run(existing.signature, JSON.stringify(existing.payload), timestamp, LOADOUT_PENDING_ID_ABS * sign);
       }
 
       // Close the gap: every remaining custom slot with a higher number in
@@ -3396,42 +3381,6 @@ export class DatabaseService {
         db.prepare(`UPDATE ui_loadout_entries SET id = ? WHERE id = ?`).run(row.id - sign, row.id);
       }
 
-      let lastCustomId = this.readLoadoutMeta(`lastCustomId:${mode}`, defaultCustomId);
-      if (lastCustomId === targetId) {
-        lastCustomId = defaultCustomId;
-      } else if (Math.abs(lastCustomId) > targetAbs) {
-        lastCustomId -= sign;
-      }
-      this.writeLoadoutMeta(`lastCustomId:${mode}`, lastCustomId);
-    });
-
-    tx();
-    return this.buildListResult();
-  }
-
-  resetCustomUiLoadout(mode: unknown): UiLoadoutListResult {
-    this.ensureLoadoutsSeeded();
-    const db = this.requireDb();
-    const normalizedMode: UiLoadoutMode = mode === 'dark' ? 'dark' : 'light';
-    const sign = modeSign(normalizedMode);
-    const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign;
-    const timestamp = Date.now();
-    const defaultPayload = normalizedMode === 'dark' ? DEFAULT_CUSTOM_DARK : DEFAULT_CUSTOM_LIGHT;
-    const normalized = normalizeUiLayoutLoadout(defaultPayload) ?? DEFAULT_UI_LAYOUT_LOADOUT;
-    const signature = stableStringify(normalized);
-    const payloadJson = JSON.stringify(normalized);
-
-    const tx = db.transaction(() => {
-      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
-      db.prepare(`
-        UPDATE ui_loadout_entries
-        SET isActive = 1,
-            signature = ?,
-            payloadJson = ?,
-            updatedAt = ?
-        WHERE id = ?
-      `).run(signature, payloadJson, timestamp, defaultCustomId);
-      this.writeLoadoutMeta(`lastCustomId:${normalizedMode}`, defaultCustomId);
     });
 
     tx();
@@ -3440,7 +3389,7 @@ export class DatabaseService {
 
   /**
    * Build the string content of a .tdl file containing all user custom and
-   * active pending loadouts (abs id >= 7), expressed as NEUTRAL_BASE diffs.
+   * saved loadouts (abs id >= 8), expressed as NEUTRAL_BASE diffs.
    */
   buildTdlContent(): string {
     this.ensureLoadoutsSeeded();
@@ -3449,7 +3398,7 @@ export class DatabaseService {
     const rows = db.prepare(`
       SELECT id, payloadJson FROM ui_loadout_entries
       WHERE ABS(id) >= ? ORDER BY id ASC
-    `).all(LOADOUT_PENDING_ID_ABS) as Array<{ id: number; payloadJson: string }>;
+    `).all(LOADOUT_FIRST_CUSTOM_ID_ABS) as Array<{ id: number; payloadJson: string }>;
 
     const lines: string[] = [
       '// Thockdown Layout file',
@@ -3481,7 +3430,7 @@ export class DatabaseService {
       SELECT id, payloadJson FROM ui_loadout_entries
       WHERE id = ? AND ABS(id) >= ?
       LIMIT 1
-    `).get(id, LOADOUT_PENDING_ID_ABS) as { id: number; payloadJson: string } | undefined;
+    `).get(id, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number; payloadJson: string } | undefined;
 
     if (!row) {
       throw new Error(`Loadout entry ${id} cannot be exported because it does not exist or is not a saved custom slot.`);
@@ -3528,7 +3477,7 @@ export class DatabaseService {
         const sign = modeSign(mode);
 
         // Merge overrides onto NEUTRAL_BASE and normalize
-        const fullPayload = { ...DEFAULT_CUSTOM_LIGHT, ...overrides };
+        const fullPayload = { ...NEUTRAL_LOADOUT, ...overrides };
         const normalized = normalizeUiLayoutLoadout(fullPayload);
         if (!normalized) continue;
 
@@ -3536,8 +3485,8 @@ export class DatabaseService {
 
         // Skip if this exact signature already exists for this mode
         const existing = db.prepare(`
-          SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 LIMIT 1
-        `).get(signature, sign) as { id: number } | undefined;
+          SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 AND ABS(id) != ? LIMIT 1
+        `).get(signature, sign, LOADOUT_PENDING_ID_ABS) as { id: number } | undefined;
         if (existing) continue;
 
         // Find the next free custom slot ID for this mode
@@ -3945,15 +3894,11 @@ export class DatabaseService {
 
       CREATE INDEX IF NOT EXISTS idx_ui_loadout_entries_signature ON ui_loadout_entries(signature);
 
-      CREATE TABLE IF NOT EXISTS ui_loadout_meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
+      -- ui_loadout_meta held the old Custom button's target; gone with it.
+      DROP TABLE IF EXISTS ui_loadout_meta;
 
       -- Generic app-level key/value store -- small, cross-cutting flags that
-      -- don't belong to any one feature's own table (ui_loadout_meta above
-      -- is the loadout system's own, narrowly-typed equivalent; this one is
-      -- for everything else). First user: helpGuideNote.ts's content-hash
+      -- don't belong to any one feature's own table. First user: helpGuideNote.ts's content-hash
       -- gate, so a startup with an unchanged guide can skip reseeding it
       -- entirely instead of unconditionally rewriting it every launch.
       CREATE TABLE IF NOT EXISTS app_meta (

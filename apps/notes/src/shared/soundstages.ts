@@ -5,15 +5,17 @@ import { FLAT_EQ_CURVE, sameEqCurve, sanitizeEqCurve, type EqPoint } from './mus
  * but the volume, which is global). Pure, and shared with the main process's
  * state sanitizer.
  *
- * They work the way layouts do:
+ * They work the way layouts and soundscapes do (one flat Presets list):
  * - five FACTORY stages, one per Platonic solid in the visualizer's cutout
  *   (tetrahedron, cube, octahedron, dodecahedron, icosahedron), stepped
  *   through by pressing the solid;
- * - the CUSTOM stage: whatever the reader last had that was not a factory
- *   stage. It is kept up to date from the live settings
- *   (`customAfterLiveChange`), so leaving it for a factory stage and coming
- *   back restores it exactly;
- * - SAVED stages: copies of the live settings kept under a number.
+ * - SAVED stages: copies of the live settings kept under a number;
+ * - the UNSAVED stage: the reader's last edit of the live settings
+ *   (`unsavedAfterEdit`), shown as the plus after the saved stages exactly
+ *   while it equals no other stage (`isUnsavedShown`), so trying another
+ *   stage and coming back restores it exactly. A hold on the plus saves it.
+ *   The visualizer's solid and the music bar call anything that is not a
+ *   factory stage "custom", and their custom button plays this stage.
  *
  * Which stage is ACTIVE is never stored: it is derived from the live
  * settings (`matchingSoundstage`), so it cannot disagree with what is heard.
@@ -57,7 +59,7 @@ export const FACTORY_SOUNDSTAGE_IDS = ['muted', 'neutral', 'wide', 'amped', 'tho
 export type FactorySoundstageId = (typeof FACTORY_SOUNDSTAGE_IDS)[number]
 export const DEFAULT_FACTORY_SOUNDSTAGE: FactorySoundstageId = 'neutral'
 
-/** The custom stage's button: the marker the custom layout button wears, since it works the same way. */
+/** The music bar's button for the unsaved stage (anything that is not a factory stage). */
 export const CUSTOM_SOUNDSTAGE_ICON = 'fa-solid fa-marker'
 
 export interface FactorySoundstage {
@@ -86,21 +88,21 @@ export interface SavedSoundstage {
   settings: SoundstageSettings
 }
 
-/** A stage row holds at most this many saved stages: two rows of the six-wide grid, less the save and reset buttons. */
-export const MAX_SAVED_SOUNDSTAGES = 10
+/** Not a design limit, only a bound on a list nobody should reach. */
+export const MAX_SAVED_SOUNDSTAGES = 100
 
 /** What is persisted (`musicSoundstages`); the live settings themselves are persisted as the music's own fields. */
 export interface SoundstagePreferences {
   /** The last factory stage chosen: the solid shown, and where its steps count from. */
   factory: FactorySoundstageId
-  /** The custom stage: the last live settings that were not a factory stage. */
-  custom: SoundstageSettings
+  /** The unsaved stage: the live settings as the reader last edited them. */
+  unsaved: SoundstageSettings
   saved: SavedSoundstage[]
 }
 
 export const DEFAULT_SOUNDSTAGE_PREFERENCES: SoundstagePreferences = {
   factory: DEFAULT_FACTORY_SOUNDSTAGE,
-  custom: { ...NEUTRAL_SOUNDSTAGE },
+  unsaved: { ...NEUTRAL_SOUNDSTAGE },
   saved: [],
 }
 
@@ -113,30 +115,36 @@ export function sameSoundstage(a: SoundstageSettings, b: SoundstageSettings): bo
   return sameEqCurve(a.eq, b.eq) && SOUNDSTAGE_KEYS.every((key) => Math.abs(a[key] - b[key]) < 0.0005)
 }
 
-/** What the live settings are: a factory stage, else a saved one, else the custom stage. */
+/** What the live settings are: a factory stage, else a saved one, else the unsaved stage. */
 export type ActiveSoundstage =
   | { kind: 'factory'; id: FactorySoundstageId }
   | { kind: 'saved'; id: string }
-  | { kind: 'custom' }
+  | { kind: 'unsaved' }
 
 export function matchingSoundstage(live: SoundstageSettings, preferences: SoundstagePreferences): ActiveSoundstage {
   const factory = FACTORY_SOUNDSTAGES.find((stage) => sameSoundstage(stage.settings, live))
   if (factory) return { kind: 'factory', id: factory.id }
   const saved = preferences.saved.find((stage) => sameSoundstage(stage.settings, live))
   if (saved) return { kind: 'saved', id: saved.id }
-  return { kind: 'custom' }
+  return { kind: 'unsaved' }
+}
+
+/** Whether the unsaved stage differs from every factory and saved stage: its plus is shown. */
+export function isUnsavedShown(preferences: SoundstagePreferences): boolean {
+  return matchingSoundstage(preferences.unsaved, preferences).kind === 'unsaved'
 }
 
 /**
- * The preferences after the live settings changed: anything that is not a
- * factory stage becomes the custom stage, so the custom button brings back
- * exactly what was last played outside the factory stages. Returns the same
- * object when nothing changes, so a caller can skip a state update.
+ * The preferences after the reader EDITED the live settings: the edit is the
+ * unsaved stage, also when it lands on another stage (which then reads as
+ * active, and the plus goes). Selecting a stage is not an edit and leaves the
+ * unsaved stage alone; telling the two apart is the caller's (App.tsx).
+ * Returns the same object when nothing changes, so a caller can skip a state
+ * update.
  */
-export function customAfterLiveChange(live: SoundstageSettings, preferences: SoundstagePreferences): SoundstagePreferences {
-  if (FACTORY_SOUNDSTAGES.some((stage) => sameSoundstage(stage.settings, live))) return preferences
-  if (sameSoundstage(preferences.custom, live)) return preferences
-  return { ...preferences, custom: { ...live, eq: live.eq.map((point) => ({ ...point })) } }
+export function unsavedAfterEdit(live: SoundstageSettings, preferences: SoundstagePreferences): SoundstagePreferences {
+  if (sameSoundstage(preferences.unsaved, live)) return preferences
+  return { ...preferences, unsaved: { ...live, eq: live.eq.map((point) => ({ ...point })) } }
 }
 
 /** The factory stage `direction` places from the last one chosen, stopping at either end. */
@@ -169,5 +177,5 @@ export function sanitizeSoundstagePreferences(value: unknown): SoundstagePrefere
       saved.push({ id: record.id, settings: sanitizeSettings(record.settings, NEUTRAL_SOUNDSTAGE) })
     }
   }
-  return { factory, custom: sanitizeSettings(input.custom, NEUTRAL_SOUNDSTAGE), saved }
+  return { factory, unsaved: sanitizeSettings(input.unsaved, NEUTRAL_SOUNDSTAGE), saved }
 }

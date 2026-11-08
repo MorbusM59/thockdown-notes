@@ -5,15 +5,12 @@ import {
   idKind,
   idMode,
   modeSign,
-  LOADOUT_DEFAULT_CUSTOM_ID_ABS,
   LOADOUT_PENDING_ID_ABS,
   LOADOUT_FIRST_CUSTOM_ID_ABS,
 } from '@thockdown/look/loadouts'
 import {
   LIGHT_FACTORY_PRESETS,
   DARK_FACTORY_PRESETS,
-  DEFAULT_CUSTOM_LIGHT,
-  DEFAULT_CUSTOM_DARK,
 } from '@thockdown/look/presets'
 import type { TextureCacheApi, TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../shared/textures'
 import type { FileSyncApi } from '../shared/fileSync'
@@ -62,7 +59,6 @@ type BrowserMockStore = {
   appState: AppState
   windowState: WindowState
   uiLoadoutEntries: UiLoadoutEntry[]
-  lastCustomIdByMode: { light: number; dark: number }
   textureCache: Record<string, { mimeType: string; dataBase64: string; createdAt: number }>
   noteTabs: NoteTabEntry[]
   editorSections: EditorSectionEntry[]
@@ -307,7 +303,7 @@ function seedHelpGuideNotes(): MockNote[] {
   return [root, first, ordinary]
 }
 
-function seedUiLoadoutEntries(): { entries: UiLoadoutEntry[]; lastCustomIdByMode: { light: number; dark: number } } {
+function seedUiLoadoutEntries(): { entries: UiLoadoutEntry[] } {
   const now = Date.now()
   const entries: UiLoadoutEntry[] = []
 
@@ -315,19 +311,13 @@ function seedUiLoadoutEntries(): { entries: UiLoadoutEntry[]; lastCustomIdByMode
     entries.push({ id, isActive, signature: stableStringify(payload), payload: clone(payload), updatedAt: now })
   }
 
-  LIGHT_FACTORY_PRESETS.forEach((preset, index) => push(index + 1, preset, false))
-  DARK_FACTORY_PRESETS.forEach((preset, index) => push(-(index + 1), preset, false))
+  LIGHT_FACTORY_PRESETS.forEach((preset, index) => push(index + 1, preset, index === 0))
+  DARK_FACTORY_PRESETS.forEach((preset, index) => push(-(index + 1), preset, index === 0))
 
-  push(LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_LIGHT, true)
-  push(-LOADOUT_DEFAULT_CUSTOM_ID_ABS, DEFAULT_CUSTOM_DARK, true)
+  push(LOADOUT_PENDING_ID_ABS, LIGHT_FACTORY_PRESETS[0], false)
+  push(-LOADOUT_PENDING_ID_ABS, DARK_FACTORY_PRESETS[0], false)
 
-  push(LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_LIGHT, false)
-  push(-LOADOUT_PENDING_ID_ABS, DEFAULT_CUSTOM_DARK, false)
-
-  return {
-    entries,
-    lastCustomIdByMode: { light: LOADOUT_DEFAULT_CUSTOM_ID_ABS, dark: -LOADOUT_DEFAULT_CUSTOM_ID_ABS },
-  }
+  return { entries }
 }
 
 function loadStore(): BrowserMockStore {
@@ -342,7 +332,6 @@ function loadStore(): BrowserMockStore {
         appState: clone(DEFAULT_APP_STATE),
         windowState: clone(DEFAULT_WINDOW_STATE),
         uiLoadoutEntries: seeded.entries,
-        lastCustomIdByMode: seeded.lastCustomIdByMode,
         textureCache: {},
         noteTabs: [],
         editorSections: createDefaultEditorSections(),
@@ -394,9 +383,6 @@ function loadStore(): BrowserMockStore {
       uiLoadoutEntries: Array.isArray(parsed.uiLoadoutEntries) && parsed.uiLoadoutEntries.length > 0
         ? clone(parsed.uiLoadoutEntries as UiLoadoutEntry[])
         : seedUiLoadoutEntries().entries,
-      lastCustomIdByMode: parsed.lastCustomIdByMode && typeof parsed.lastCustomIdByMode === 'object'
-        ? clone(parsed.lastCustomIdByMode as { light: number; dark: number })
-        : seedUiLoadoutEntries().lastCustomIdByMode,
       textureCache: parsed.textureCache && typeof parsed.textureCache === 'object'
         ? Object.entries(parsed.textureCache as Record<string, { mimeType: string; dataBase64: string; createdAt?: number }>).reduce((acc, [key, value]) => {
             if (!value || typeof value !== 'object') return acc
@@ -494,7 +480,6 @@ function loadStore(): BrowserMockStore {
       appState: clone(DEFAULT_APP_STATE),
       windowState: clone(DEFAULT_WINDOW_STATE),
       uiLoadoutEntries: seeded.entries,
-      lastCustomIdByMode: seeded.lastCustomIdByMode,
       textureCache: {},
       noteTabs: [],
       editorSections: createDefaultEditorSections(),
@@ -989,7 +974,6 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
 
   const snapshot = (store: BrowserMockStore): UiLoadoutListResult => ({
     entries: clone(store.uiLoadoutEntries),
-    lastCustomIdByMode: clone(store.lastCustomIdByMode),
   })
 
   const findEntry = (store: BrowserMockStore, id: number) =>
@@ -1017,11 +1001,6 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
         target.isActive = true
         target.updatedAt = Date.now()
 
-        const kind = idKind(id)
-        if (kind === 'default-custom' || kind === 'custom') {
-          store.lastCustomIdByMode[mode] = id
-        }
-
         return snapshot(store)
       })
     },
@@ -1033,28 +1012,19 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
         const signature = stableStringify(loadout)
 
         const match = store.uiLoadoutEntries.find(
-          (entry) => entry.id * sign > 0 && entry.signature === signature,
+          (entry) => entry.id * sign > 0 && entry.id !== pendingId && entry.signature === signature,
         )
 
         deactivateMode(store, sign)
 
-        if (match) {
-          match.isActive = true
-          match.updatedAt = Date.now()
-          const kind = idKind(match.id)
-          if (kind === 'default-custom' || kind === 'custom') {
-            store.lastCustomIdByMode[mode] = match.id
-          }
-          return snapshot(store)
-        }
-
         const pending = findEntry(store, pendingId)
         if (pending) {
-          pending.isActive = true
           pending.signature = signature
           pending.payload = clone(loadout)
           pending.updatedAt = Date.now()
         }
+        const active = match ?? pending
+        if (active) active.isActive = true
 
         return snapshot(store)
       })
@@ -1065,7 +1035,10 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
         const sign = modeSign(mode)
         const pendingId = LOADOUT_PENDING_ID_ABS * sign
         const pending = findEntry(store, pendingId)
-        if (!pending || !pending.isActive) return snapshot(store)
+        if (!pending) return snapshot(store)
+        if (store.uiLoadoutEntries.some((entry) => entry.id * sign > 0 && entry.id !== pendingId && entry.signature === pending.signature)) {
+          return snapshot(store)
+        }
 
         const existingAbs = store.uiLoadoutEntries
           .filter((entry) => entry.id * sign > 0 && Math.abs(entry.id) >= LOADOUT_FIRST_CUSTOM_ID_ABS)
@@ -1075,26 +1048,17 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
         while (existingAbs.includes(nextAbs)) nextAbs += 1
         const newId = nextAbs * sign
 
-        deactivateMode(store, sign)
+        const wasActive = pending.isActive
+        if (wasActive) deactivateMode(store, sign)
 
         store.uiLoadoutEntries.push({
           id: newId,
-          isActive: true,
+          isActive: wasActive,
           signature: pending.signature,
           payload: clone(pending.payload),
           updatedAt: Date.now(),
         })
 
-        store.lastCustomIdByMode[mode] = newId
-
-        const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign
-        const defaultCustom = findEntry(store, defaultCustomId)
-        if (defaultCustom) {
-          pending.isActive = false
-          pending.signature = defaultCustom.signature
-          pending.payload = clone(defaultCustom.payload)
-          pending.updatedAt = Date.now()
-        }
 
         return snapshot(store)
       })
@@ -1110,40 +1074,23 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
         const [removed] = store.uiLoadoutEntries.splice(index, 1)
         const mode: UiLoadoutMode = idMode(id)
         const sign = modeSign(mode)
-        const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign
-
         if (removed?.isActive) {
-          deactivateMode(store, sign)
-          const fallback = findEntry(store, defaultCustomId)
-          if (fallback) {
-            fallback.isActive = true
-            fallback.updatedAt = Date.now()
+          const pending = findEntry(store, LOADOUT_PENDING_ID_ABS * sign)
+          if (pending) {
+            pending.isActive = true
+            pending.signature = removed.signature
+            pending.payload = clone(removed.payload)
           }
         }
-
-        if (store.lastCustomIdByMode[mode] === id) {
-          store.lastCustomIdByMode[mode] = defaultCustomId
+        // Close the gap, as the database does.
+        for (const entry of store.uiLoadoutEntries) {
+          if (entry.id * sign > 0 && Math.abs(entry.id) > Math.abs(id)) entry.id -= sign
         }
 
         return snapshot(store)
       })
     },
 
-    async resetCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult> {
-      return mutate((store) => {
-        const sign = modeSign(mode)
-        const defaultCustomId = LOADOUT_DEFAULT_CUSTOM_ID_ABS * sign
-        const target = findEntry(store, defaultCustomId)
-        if (!target) return snapshot(store)
-
-        deactivateMode(store, sign)
-        target.isActive = true
-        target.updatedAt = Date.now()
-        store.lastCustomIdByMode[mode] = defaultCustomId
-
-        return snapshot(store)
-      })
-    },
     async exportTdl(): Promise<void> {
       // No-op in browser dev mode
     },

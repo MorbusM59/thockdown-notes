@@ -85,6 +85,7 @@ describe('StateService app-state field round-trip', () => {
       enabled: true,
       masterVolume: 0.37,
       settings,
+      unsaved: settings,
       activePresetId: 'night-rain',
       customPresets: [{
         id: 'night-rain',
@@ -409,7 +410,7 @@ describe('StateService app-state field round-trip', () => {
         musicReverbFoliage: 0.4,
         musicStereoWidth: 1.3,
         musicEqCurve: [{ hz: 20, db: 1, handle: 0 }, { hz: 300, db: -2, handle: 0.5 }, { hz: 20000, db: 0, handle: 0.2 }],
-        musicSoundstages: { factory: 'wide', custom: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
+        musicSoundstages: { factory: 'wide', unsaved: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
         musicMuted: true,
         musicReverbBypassed: true,
         musicSoundOptionsOpen: true,
@@ -429,7 +430,7 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicStereoWidth).toBe(1.3)
     expect(loaded.menu?.musicEqCurve).toEqual([{ hz: 20, db: 1, handle: 0 }, { hz: 300, db: -2, handle: 0.5 }, { hz: 20000, db: 0, handle: 0.2 }])
     expect(loaded.menu?.musicSoundstages?.factory).toBe('wide')
-    expect(loaded.menu?.musicSoundstages?.custom.room).toBe(0.3)
+    expect(loaded.menu?.musicSoundstages?.unsaved.room).toBe(0.3)
     expect(loaded.menu?.musicSoundstages?.saved[0]?.settings.room).toBe(0.7)
   })
 

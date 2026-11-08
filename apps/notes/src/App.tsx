@@ -15,7 +15,7 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
-import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, customAfterLiveChange, factorySoundstage, matchingSoundstage, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, factorySoundstage, matchingSoundstage, sameSoundstage, unsavedAfterEdit, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
@@ -51,8 +51,9 @@ import {
   idKind,
   idMode,
   modeSign,
-  LOADOUT_DEFAULT_CUSTOM_ID_ABS,
+  unsavedLoadoutEntry,
   LOADOUT_FACTORY_PRESET_COUNT,
+  LOADOUT_PENDING_ID_ABS,
 } from '@thockdown/look/loadouts'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
@@ -2197,10 +2198,6 @@ function App() {
   const [wheelStepLines, setWheelStepLinesState] = useState(() => getWheelStepLines())
   const [uiMode, setUiMode] = useState<UiLoadoutMode>('light')
   const [uiLoadoutEntries, setUiLoadoutEntries] = useState<UiLoadoutEntry[]>([])
-  const [lastCustomIdByMode, setLastCustomIdByMode] = useState<{ light: number; dark: number }>({
-    light: LOADOUT_DEFAULT_CUSTOM_ID_ABS,
-    dark: -LOADOUT_DEFAULT_CUSTOM_ID_ABS,
-  })
   const [highlightColors, setHighlightColors] = useState<HighlightColors>(DEFAULT_HIGHLIGHT_COLORS)
   const [editorTextColors, setEditorTextColors] = useState<Record<EditorTextColorTargetKey, string>>(() => ({
     editorEditText: DEFAULT_EDITOR_TEXT_COLORS.editorEditText,
@@ -2965,17 +2962,14 @@ function App() {
     [entriesForCurrentMode],
   )
 
-  // The id the dynamic "Custom" preset button targets: whichever custom-ish
-  // id (abs >= 6) was last activated for this mode, defaulting to the
-  // default-custom id.
-  const dynamicCustomPresetId = lastCustomIdByMode[uiMode]
-
-  const isDynamicCustomPresetActive = useMemo(() => {
-    if (!activeEntryForCurrentMode) return false
-    const kind = idKind(activeEntryForCurrentMode.id)
-    if (kind === 'pending') return true
-    return activeEntryForCurrentMode.id === dynamicCustomPresetId
-  }, [activeEntryForCurrentMode, dynamicCustomPresetId])
+  // The unsaved changes' button (the plus after the saved layouts): shown
+  // while the unsaved row differs from every other row, or while the live
+  // settings have drifted and are about to be written to it.
+  const unsavedEntryForCurrentMode = useMemo(
+    () => unsavedLoadoutEntry(uiLoadoutEntries, uiMode),
+    [uiLoadoutEntries, uiMode],
+  )
+  const isUnsavedLoadoutShown = unsavedEntryForCurrentMode !== null || hasUnsavedUiLoadoutChanges
 
   // --- Loadout actions --------------------------------------------------
 
@@ -2988,7 +2982,6 @@ function App() {
     try {
       const result = await window.thockdownLoadouts.setActive(id)
       setUiLoadoutEntries(result.entries)
-      setLastCustomIdByMode(result.lastCustomIdByMode)
       const sign = modeSign(idMode(id))
       const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
       if (active) applyEntryToLiveState(active)
@@ -2997,46 +2990,28 @@ function App() {
     }
   }, [applyEntryToLiveState])
 
-  const selectDynamicCustomPreset = useCallback(() => {
-    void selectLoadoutPreset(dynamicCustomPresetId)
-  }, [selectLoadoutPreset, dynamicCustomPresetId])
+  const selectUnsavedLoadout = useCallback(() => {
+    void selectLoadoutPreset(LOADOUT_PENDING_ID_ABS * modeSign(uiMode))
+  }, [selectLoadoutPreset, uiMode])
 
   const saveCustomLoadout = useCallback(async () => {
     if (!window.thockdownLoadouts) return
     try {
+      // Live settings not yet written to the unsaved row (the debounce below)
+      // are written first, so what is saved is what is on screen.
+      if (hasUnsavedUiLoadoutChanges) {
+        if (pendingUpdateDebounceRef.current !== null) {
+          window.clearTimeout(pendingUpdateDebounceRef.current)
+          pendingUpdateDebounceRef.current = null
+        }
+        await window.thockdownLoadouts.updatePending(uiMode, capturedUiLayoutLoadout)
+      }
       const result = await window.thockdownLoadouts.saveCustom(uiMode)
       setUiLoadoutEntries(result.entries)
-      setLastCustomIdByMode(result.lastCustomIdByMode)
     } catch (error) {
       console.error('Failed to save custom UI loadout', error)
     }
-  }, [uiMode])
-
-  const [resetCustomLayoutPrimed, setResetCustomLayoutPrimed] = useState(false)
-
-  useEffect(() => {
-    setResetCustomLayoutPrimed(false)
-  }, [uiMode])
-
-  const resetCustomLoadout = useCallback(async () => {
-    if (!resetCustomLayoutPrimed) {
-      setResetCustomLayoutPrimed(true)
-      return
-    }
-
-    setResetCustomLayoutPrimed(false)
-    if (!window.thockdownLoadouts) return
-    try {
-      const result = await window.thockdownLoadouts.resetCustom(uiMode)
-      setUiLoadoutEntries(result.entries)
-      setLastCustomIdByMode(result.lastCustomIdByMode)
-      const sign = modeSign(uiMode)
-      const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
-      if (active) applyEntryToLiveState(active)
-    } catch (error) {
-      console.error('Failed to reset custom UI loadout', error)
-    }
-  }, [resetCustomLayoutPrimed, uiMode, applyEntryToLiveState])
+  }, [uiMode, hasUnsavedUiLoadoutChanges, capturedUiLayoutLoadout])
 
   const [primedCustomLayoutId, setPrimedCustomLayoutId] = useState<number | null>(null)
   // Holding right-click on a custom layout exports it; a short right-click
@@ -3068,7 +3043,6 @@ function App() {
     try {
       const result = await window.thockdownLoadouts.deleteCustom(entryId)
       setUiLoadoutEntries(result.entries)
-      setLastCustomIdByMode(result.lastCustomIdByMode)
       setPrimedCustomLayoutId(null)
     } catch (error) {
       console.error('Failed to delete custom UI loadout', error)
@@ -3131,7 +3105,6 @@ function App() {
       const result = await window.thockdownLoadouts.importTdl()
       if (result) {
         setUiLoadoutEntries(result.entries)
-        setLastCustomIdByMode(result.lastCustomIdByMode)
       }
     } catch (error) {
       console.error('Failed to import layouts', error)
@@ -3152,21 +3125,24 @@ function App() {
   /**
    * Steps the current mode's layout to the next (+1) or previous (-1) preset,
    * wrapping, in the order the options panel lists them: the factory presets,
-   * then the saved custom slots. From an entry outside that list (unsaved
-   * changes, or the default custom layout) the step starts from before the
-   * first preset, so +1 lands on the first and -1 on the last. Selecting goes
+   * then the saved custom slots, then the unsaved changes while they are
+   * shown. Selecting goes
    * through `selectLoadoutPreset`, the same path as pressing the preset's
    * button, so the choice is persisted the same way.
    */
   const stepLayoutPreset = useCallback((direction: 1 | -1) => {
-    const cycle = [...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode]
+    const cycle = [
+      ...factoryPresetEntriesForCurrentMode,
+      ...customSlotEntriesForCurrentMode,
+      ...(unsavedEntryForCurrentMode ? [unsavedEntryForCurrentMode] : []),
+    ]
     if (cycle.length === 0) return
     const current = cycle.findIndex((entry) => entry.id === activeEntryForCurrentMode?.id)
     const next = current < 0
       ? (direction > 0 ? 0 : cycle.length - 1)
       : (current + direction + cycle.length) % cycle.length
     void selectLoadoutPreset(cycle[next].id)
-  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
+  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, unsavedEntryForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
 
   // Runs once persistence has fully restored appState (including uiMode,
   // set deep inside the bootstrap effect further below). Firing this on
@@ -3189,7 +3165,6 @@ function App() {
       .then((result) => {
         if (cancelled) return
         setUiLoadoutEntries(result.entries)
-        setLastCustomIdByMode(result.lastCustomIdByMode)
         const sign = modeSign(uiMode)
         const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
         if (active) applyEntryToLiveState(active)
@@ -3224,8 +3199,7 @@ function App() {
         .then((result) => {
           if (!result) return
           setUiLoadoutEntries(result.entries)
-          setLastCustomIdByMode(result.lastCustomIdByMode)
-        })
+          })
         .catch((error) => {
           console.error('Failed to update pending UI loadout', error)
         })
@@ -6500,12 +6474,32 @@ ${markdownHtml}
     size: musicReverbRoom,
     room: musicReverbFoliage,
   }), [musicEqCurve, musicStereoWidth, musicReverbAmount, musicReverbRoom, musicReverbFoliage])
-  // Anything played that is not a factory stage becomes the custom stage.
+  // An EDIT of the live settings is the unsaved stage; SELECTING a stage is
+  // not an edit and leaves it alone. A selection is told apart by what it
+  // set out to play (`soundstageSelectionRef`, written by applySoundstage):
+  // its settings arrive over several state updates, none of them an edit,
+  // until the live settings equal it. The first run after the app state is
+  // restored is the restore, not an edit.
+  const liveSoundstageRef = useRef(liveSoundstage)
+  liveSoundstageRef.current = liveSoundstage
+  const soundstageSelectionRef = useRef<SoundstageSettings | null>(null)
+  const soundstageRestoredRef = useRef(false)
   useEffect(() => {
-    setSoundstagePreferences((previous) => customAfterLiveChange(liveSoundstage, previous))
-  }, [liveSoundstage])
+    if (!persistenceReady) return
+    if (!soundstageRestoredRef.current) {
+      soundstageRestoredRef.current = true
+      return
+    }
+    const selection = soundstageSelectionRef.current
+    if (selection) {
+      if (sameSoundstage(selection, liveSoundstage)) soundstageSelectionRef.current = null
+      return
+    }
+    setSoundstagePreferences((previous) => unsavedAfterEdit(liveSoundstage, previous))
+  }, [liveSoundstage, persistenceReady])
   /** Play a stage: every setting at once. Reverb and size go through the music bar's own rule (a bypassed reverb turns back on). */
   const applySoundstage = useCallback((settings: SoundstageSettings) => {
+    soundstageSelectionRef.current = sameSoundstage(settings, liveSoundstageRef.current) ? null : settings
     setMusicEqCurve(settings.eq.map((point) => ({ ...point })))
     setMusicStereoWidth(settings.width)
     setMusicReverbFoliage(settings.room)
@@ -6523,25 +6517,25 @@ ${markdownHtml}
   useEffect(() => {
     publishSoundstageControls({
       solid: visualizerSolid,
-      // The custom stage sits after the last factory stage: forward from it
-      // goes to custom, and back from custom returns to the last factory stage.
+      // Custom (the unsaved stage) sits after the last factory stage: forward
+      // from it goes to custom, and back from custom returns to the last factory stage.
       step: (direction) => {
         if (visualizerSolid === 'custom') {
           if (direction === -1) selectFactorySoundstage(soundstagePreferences.factory)
           return
         }
         if (direction === 1 && visualizerSolid === FACTORY_SOUNDSTAGE_IDS[FACTORY_SOUNDSTAGE_IDS.length - 1]) {
-          applySoundstage(soundstagePreferences.custom)
+          applySoundstage(soundstagePreferences.unsaved)
           return
         }
         selectFactorySoundstage(steppedFactorySoundstage(visualizerSolid, direction))
       },
       select: (stage) => {
-        if (stage === 'custom') applySoundstage(soundstagePreferences.custom)
+        if (stage === 'custom') applySoundstage(soundstagePreferences.unsaved)
         else selectFactorySoundstage(stage)
       },
     })
-  }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.custom, selectFactorySoundstage, applySoundstage])
+  }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.unsaved, selectFactorySoundstage, applySoundstage])
 
   useEffect(() => {
     typingSoundManager.setPitchJitterAmount(pitchJitterAmount)
@@ -8862,8 +8856,6 @@ ${markdownHtml}
                         factoryPresetEntriesForCurrentMode={factoryPresetEntriesForCurrentMode}
                         activeEntryForCurrentMode={activeEntryForCurrentMode}
                         selectLoadoutPreset={selectLoadoutPreset}
-                        isDynamicCustomPresetActive={isDynamicCustomPresetActive}
-                        selectDynamicCustomPreset={selectDynamicCustomPreset}
                         customSlotEntriesForCurrentMode={customSlotEntriesForCurrentMode}
                         primedCustomLayoutId={primedCustomLayoutId}
                         handleCustomLoadoutSlotClick={handleCustomLoadoutSlotClick}
@@ -8873,8 +8865,8 @@ ${markdownHtml}
                         handleCustomLoadoutSlotContextMenu={handleCustomLoadoutSlotContextMenu}
                         hasUnsavedUiLoadoutChanges={hasUnsavedUiLoadoutChanges}
                         saveCustomLoadout={saveCustomLoadout}
-                        resetCustomLoadout={resetCustomLoadout}
-                        resetCustomLayoutPrimed={resetCustomLayoutPrimed}
+                        isUnsavedLoadoutShown={isUnsavedLoadoutShown}
+                        selectUnsavedLoadout={selectUnsavedLoadout}
                         setHighlightColorCss={setHighlightColorCss}
                         setEditorTextColorCss={setEditorTextColorCss}
                         setTextureMaterial={setTextureMaterial}
@@ -8970,7 +8962,6 @@ ${markdownHtml}
                         setMusicEqCurve={setMusicEqCurve}
                         soundstagePreferences={soundstagePreferences}
                         setSoundstagePreferences={setSoundstagePreferences}
-                        liveSoundstage={liveSoundstage}
                         activeSoundstage={activeSoundstage}
                         applySoundstage={applySoundstage}
                         selectFactorySoundstage={selectFactorySoundstage}

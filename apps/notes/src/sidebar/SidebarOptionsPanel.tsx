@@ -3,6 +3,7 @@ import { IS_LINUX_DESKTOP } from '../shared/platform'
 import { useRef } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
+import { UnsavedPresetButton } from '@thockdown/interaction/UnsavedPresetButton'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { FontControls, FontSection } from './FontSection'
@@ -233,7 +234,7 @@ import {
   DEFAULT_GLAZE_SETTINGS,
   type GlazeSettings,
 } from '@thockdown/look/glaze'
-import { LOADOUT_FACTORY_PRESET_COUNT, type UiLoadoutEntry } from '@thockdown/look/loadouts'
+import { LOADOUT_FIRST_CUSTOM_ID_ABS, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
 import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { useOutputDevice } from '../sound/outputDevice'
@@ -437,8 +438,6 @@ export interface SidebarOptionsPanelProps {
   factoryPresetEntriesForCurrentMode: UiLoadoutEntry[]
   activeEntryForCurrentMode: UiLoadoutEntry | null
   selectLoadoutPreset: (id: number) => Promise<void>
-  isDynamicCustomPresetActive: boolean
-  selectDynamicCustomPreset: () => void
   customSlotEntriesForCurrentMode: UiLoadoutEntry[]
   primedCustomLayoutId: number | null
   handleCustomLoadoutSlotClick: (id: number) => void
@@ -448,8 +447,8 @@ export interface SidebarOptionsPanelProps {
   handleCustomLoadoutSlotContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
   hasUnsavedUiLoadoutChanges: boolean
   saveCustomLoadout: () => Promise<void>
-  resetCustomLoadout: () => Promise<void>
-  resetCustomLayoutPrimed: boolean
+  isUnsavedLoadoutShown: boolean
+  selectUnsavedLoadout: () => void
 
   highlightColors: HighlightColors
   setHighlightColorCss: (key: HighlightColorKey, css: string) => void
@@ -541,7 +540,6 @@ export interface SidebarOptionsPanelProps {
   setMusicEqCurve: (value: EqPoint[]) => void
   soundstagePreferences: SoundstagePreferences
   setSoundstagePreferences: (update: (previous: SoundstagePreferences) => SoundstagePreferences) => void
-  liveSoundstage: SoundstageSettings
   activeSoundstage: ActiveSoundstage
   applySoundstage: (settings: SoundstageSettings) => void
   selectFactorySoundstage: (id: FactorySoundstageId) => void
@@ -710,8 +708,6 @@ export function SidebarOptionsPanel({
   factoryPresetEntriesForCurrentMode,
   activeEntryForCurrentMode,
   selectLoadoutPreset,
-  isDynamicCustomPresetActive,
-  selectDynamicCustomPreset,
   customSlotEntriesForCurrentMode,
   primedCustomLayoutId,
   handleCustomLoadoutSlotClick,
@@ -721,8 +717,8 @@ export function SidebarOptionsPanel({
   handleCustomLoadoutSlotContextMenu,
   hasUnsavedUiLoadoutChanges,
   saveCustomLoadout,
-  resetCustomLoadout,
-  resetCustomLayoutPrimed,
+  isUnsavedLoadoutShown,
+  selectUnsavedLoadout,
   highlightColors,
   setHighlightColorCss,
   setEditorTextColorCss,
@@ -808,7 +804,6 @@ export function SidebarOptionsPanel({
   setMusicEqCurve,
   soundstagePreferences,
   setSoundstagePreferences,
-  liveSoundstage,
   activeSoundstage,
   applySoundstage,
   selectFactorySoundstage,
@@ -1528,8 +1523,10 @@ export function SidebarOptionsPanel({
       </>) : null}
 
       {showsSection('layouts') ? (<>
-      <OptionsFixedSection className="sidebar-options-section-layout-presets" heading="Layout Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
-        <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
+      {/* One flat list, as Music and Soundscapes have: the factory presets,
+          the saved layouts, then the unsaved changes while there are any. */}
+      <OptionsFixedSection className="sidebar-options-section-layout-presets" heading="Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+        <div className="options-loadout-grid" role="group" aria-label="Layout presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
             const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
             const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
@@ -1539,7 +1536,7 @@ export function SidebarOptionsPanel({
               <button
                 key={`preset-${entry.id}`}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
+                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id && !hasUnsavedUiLoadoutChanges ? ' is-active' : ''}`}
                 data-tooltip={theme}
                 aria-label={theme}
                 onClick={() => void selectLoadoutPreset(entry.id)}
@@ -1548,71 +1545,44 @@ export function SidebarOptionsPanel({
               </button>
             )
           })}
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${isDynamicCustomPresetActive ? ' is-active' : ''}`}
-            data-tooltip="Custom"
-            aria-label="Custom Layout"
-            onClick={selectDynamicCustomPreset}
-          >
-            <span className="fa-solid fa-marker" aria-hidden="true" />
-          </button>
+          {customSlotEntriesForCurrentMode.map((entry) => {
+            const number = Math.abs(entry.id) - LOADOUT_FIRST_CUSTOM_ID_ABS + 1
+            return (
+              <button
+                key={`custom-${entry.id}`}
+                type="button"
+                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id && !hasUnsavedUiLoadoutChanges ? ' is-active' : ''}${primedCustomLayoutId === entry.id ? ' primed' : ''}`}
+                aria-label={primedCustomLayoutId === entry.id ? `Delete Layout ${number}` : `Layout ${number}`}
+                data-tooltip={primedCustomLayoutId === entry.id ? `Click to delete Layout ${number}` : `Layout ${number}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
+                onClick={() => {
+                  handleCustomLoadoutSlotClick(entry.id)
+                }}
+                onPointerDown={(event) => {
+                  handleCustomLoadoutSlotRightPointerDown(event, entry.id)
+                }}
+                onPointerUp={(event) => {
+                  handleCustomLoadoutSlotRightPointerUp(event, entry.id)
+                }}
+                onPointerCancel={handleCustomLoadoutSlotPointerLeave}
+                onPointerLeave={handleCustomLoadoutSlotPointerLeave}
+                data-secondary-press="action"
+                onContextMenu={handleCustomLoadoutSlotContextMenu}
+              >
+                <span className="options-loadout-index">{number}</span>
+              </button>
+            )
+          })}
+          {isUnsavedLoadoutShown ? (
+            <UnsavedPresetButton
+              active={hasUnsavedUiLoadoutChanges}
+              noun="layout"
+              canSave={customSlotEntriesForCurrentMode.length < LOADOUT_MAX_CUSTOM_SLOTS}
+              onSelect={selectUnsavedLoadout}
+              onSave={() => void saveCustomLoadout()}
+            />
+          ) : null}
         </div>
       </OptionsFixedSection>
-
-      <AccordionSection
-        className="sidebar-options-section-layouts"
-        ariaLabel="Save & Restore"
-        heading="Save & Restore"
-        iconClass="fa-floppy-disk"
-      >
-        <div className="options-loadout-grid" role="group" aria-label="Custom UI Layouts">
-          {customSlotEntriesForCurrentMode.map((entry) => (
-            <button
-              key={`custom-${entry.id}`}
-              type="button"
-              className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}${primedCustomLayoutId === entry.id ? ' primed' : ''}`}
-              data-tooltip={`Custom Layout ${Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}\nClick RMB to mark for deletion. \nHold RMB to export.`}
-              onClick={() => {
-                handleCustomLoadoutSlotClick(entry.id)
-              }}
-              onPointerDown={(event) => {
-                handleCustomLoadoutSlotRightPointerDown(event, entry.id)
-              }}
-              onPointerUp={(event) => {
-                handleCustomLoadoutSlotRightPointerUp(event, entry.id)
-              }}
-              onPointerCancel={handleCustomLoadoutSlotPointerLeave}
-              onPointerLeave={handleCustomLoadoutSlotPointerLeave}
-              data-secondary-press="action"
-              onContextMenu={handleCustomLoadoutSlotContextMenu}
-            >
-              <span className="options-loadout-index">{Math.abs(entry.id) - LOADOUT_FACTORY_PRESET_COUNT - 2}</span>
-            </button>
-          ))}
-
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn options-loadout-plus${hasUnsavedUiLoadoutChanges ? ' is-active' : ''}`}
-            data-tooltip="Save current settings as a new custom layout"
-            aria-label="Save current settings as a new custom layout"
-            onClick={() => void saveCustomLoadout()}
-          >
-            <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${resetCustomLayoutPrimed ? ' primed' : ''}`}
-            data-tooltip={resetCustomLayoutPrimed ? 'Click again to reset custom layout to defaults' : 'Reset custom layout to defaults'}
-            aria-label={resetCustomLayoutPrimed ? 'Confirm reset custom layout to defaults' : 'Reset custom layout to defaults'}
-            onClick={() => void resetCustomLoadout()}
-            data-secondary-press="none"
-            onContextMenu={(event) => event.preventDefault()}
-          >
-            <span className="fa-solid fa-rotate-left" aria-hidden="true" />
-          </button>
-        </div>
-      </AccordionSection>
 
       <AccordionSection
         className="sidebar-options-section-colors"
@@ -2694,15 +2664,11 @@ export function SidebarOptionsPanel({
       </>) : null}
 
       {showsSection('music') ? (<>
-      {/* The music's sound beyond the music bar's volume, reverb and room:
-          app-wide like the rest of the music's settings, not the layout's. */}
-      <AccordionSection
-        className="sidebar-options-section-music"
-        ariaLabel="Soundstages"
-        heading="Soundstages"
-        iconClass="fa-headphones"
-      >
-        <div className="utility-setting-slider-stack" aria-label="Music controls">
+      {/* The music's sound: app-wide like the rest of the music's settings,
+          not the layout's. Presets (the soundstages) first, then what a
+          soundstage is made of: the EQ, and the room. */}
+      <OptionsFixedSection className="sidebar-options-section-music-presets" heading="Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+        <div className="utility-setting-slider-stack" aria-label="Music volume and soundstages">
           {/* Volume, reverb and room are the music bar's levels: set through the
               same rule its controls use (adjusting a muted volume or a bypassed
               reverb turns it back on), so the two places cannot disagree. */}
@@ -2722,13 +2688,29 @@ export function SidebarOptionsPanel({
           <SoundstageOptions
             preferences={soundstagePreferences}
             setPreferences={setSoundstagePreferences}
-            live={liveSoundstage}
             active={activeSoundstage}
             apply={applySoundstage}
             selectFactory={selectFactorySoundstage}
           />
-          <OptionsSubsectionLabel>Stage settings</OptionsSubsectionLabel>
-          <EqCurveEditor curve={musicEqCurve} onChange={setMusicEqCurve} />
+        </div>
+      </OptionsFixedSection>
+
+      <AccordionSection
+        className="sidebar-options-section-music-eq"
+        ariaLabel="Equalization"
+        heading="Equalization"
+        iconClass="fa-wave-square"
+      >
+        <EqCurveEditor curve={musicEqCurve} onChange={setMusicEqCurve} />
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-music-room"
+        ariaLabel="Room Parameters"
+        heading="Room Parameters"
+        iconClass="fa-door-open"
+      >
+        <div className="utility-setting-slider-stack" aria-label="Music room parameters">
           <OptionsSliderRows rows={[2, 2]}>
             <CompactScrollbarSlider
               id="music-stereo-width"
@@ -2769,8 +2751,8 @@ export function SidebarOptionsPanel({
               max={1}
               step={0.01}
               value={musicReverbFoliage}
-              trackLabel="room"
-              ariaLabel="Music room: bare and bright to dense and dark"
+              trackLabel="softening"
+              ariaLabel="Music room softening: bare and bright to dense and dark"
               defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage}
               onCommit={(value) => setMusicReverbFoliage(clamp(value, 0, 1))}
             />

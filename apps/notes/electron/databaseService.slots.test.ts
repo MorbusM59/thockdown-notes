@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
 import { DEFAULT_EDITOR_SECTION_ID } from '../src/shared/sections'
-import { DEFAULT_CUSTOM_LIGHT, DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
+import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
+import { unsavedLoadoutEntry } from '@thockdown/look/loadouts'
 
 /**
  * Slot geometry (docs/user-workflow-design.md §1.4): a slot is the
@@ -157,7 +158,7 @@ describe('DatabaseService editor slots', () => {
   it('factory reset clears extra sections and restores the first factory presets', () => {
     db.createEditorSection('extra')
     db.updatePendingUiLoadout('light', {
-      ...db.listUiLoadouts().entries.find((entry) => entry.id === 6)!.payload,
+      ...LIGHT_FACTORY_PRESETS[0],
       borderRadiusRegularPx: 99,
       spacingRegularPx: 99,
     })
@@ -171,27 +172,46 @@ describe('DatabaseService editor slots', () => {
     const loadouts = db.listUiLoadouts()
     expect(loadouts.entries.find((entry) => entry.id === 1)?.isActive).toBe(true)
     expect(loadouts.entries.find((entry) => entry.id === 1)?.payload).toEqual(LIGHT_FACTORY_PRESETS[0])
-    expect(loadouts.entries.find((entry) => entry.id === 6)?.isActive).toBe(false)
+    expect(loadouts.entries.some((entry) => Math.abs(entry.id) === 6)).toBe(false)
+    expect(unsavedLoadoutEntry(loadouts.entries, 'light')).toBeNull()
     expect(loadouts.entries.find((entry) => entry.id === 7)?.isActive).toBe(false)
     expect(loadouts.entries.find((entry) => entry.id === -1)?.isActive).toBe(true)
     expect(loadouts.entries.find((entry) => entry.id === -1)?.payload).toEqual(DARK_FACTORY_PRESETS[0])
   })
 
-  it('reset custom layout repopulates the complete default-custom payload from code defaults', () => {
-    const defaultRow = db.listUiLoadouts().entries.find((entry) => entry.id === 6)!
+  it('keeps the unsaved changes as their own preset until they are saved', () => {
+    const edited = { ...LIGHT_FACTORY_PRESETS[0], borderRadiusRegularPx: 19, filterContrast: 1.9 }
+    const shown = () => unsavedLoadoutEntry(db.listUiLoadouts().entries, 'light')
+    const active = () => db.listUiLoadouts().entries.find((entry) => entry.id > 0 && entry.isActive)!.id
 
-    db.updatePendingUiLoadout('light', {
-      ...defaultRow.payload,
-      borderRadiusRegularPx: 19,
-      spacingRegularPx: 8,
-      filterContrast: 1.9,
-    })
+    expect(shown()).toBeNull()
+    db.updatePendingUiLoadout('light', edited)
+    expect(shown()?.payload).toEqual(edited)
+    expect(active()).toBe(7)
+
+    // Trying another preset keeps them, and they can be selected again.
+    db.setActiveUiLoadout(2)
+    expect(shown()?.payload).toEqual(edited)
+    db.setActiveUiLoadout(7)
+    expect(active()).toBe(7)
+
+    // Editing back to a preset: that preset is active and nothing is unsaved.
+    db.updatePendingUiLoadout('light', LIGHT_FACTORY_PRESETS[2])
+    expect(active()).toBe(3)
+    expect(shown()).toBeNull()
+
+    // Saving takes the plus's place, active, and the plus goes.
+    db.updatePendingUiLoadout('light', edited)
     db.saveCustomUiLoadout('light')
+    expect(active()).toBe(8)
+    expect(shown()).toBeNull()
+    // Nothing unsaved: a second save adds nothing.
+    db.saveCustomUiLoadout('light')
+    expect(db.listUiLoadouts().entries.filter((entry) => entry.id >= 8)).toHaveLength(1)
 
-    db.resetCustomUiLoadout('light')
-
-    const reloaded = db.listUiLoadouts().entries.find((entry) => entry.id === 6)!
-    expect(reloaded.payload).toEqual(DEFAULT_CUSTOM_LIGHT)
-    expect(reloaded.isActive).toBe(true)
+    // Deleting the layout on screen keeps the screen: it becomes unsaved.
+    db.deleteCustomUiLoadout(8)
+    expect(active()).toBe(7)
+    expect(shown()?.payload).toEqual(edited)
   })
 })

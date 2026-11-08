@@ -791,11 +791,14 @@ ${shortcutTable()}
 ### [Presets](#presets)
 
 > **Where?**
-> Settings panel → Layouts → Layout Presets.
+> Settings panel → Layouts → Presets.
 
-*A row of built-in light and dark theme presets.*
+*The built-in light and dark presets, then your own saved layouts, in one list.*
 
-- A "Custom" marker preset activates automatically once you've changed anything away from a built-in preset.
+- Change anything and a **plus** appears at the end of the list: that is your unsaved layout. You can try another preset and click the plus to come back to it.
+- Hold the plus to save it as a new numbered layout, which takes its place.
+- Right-click a saved layout to arm it for deletion, then click it to delete; hold right-click to export it. Deleting the layout you are using keeps it on screen as unsaved changes.
+- Music and Soundscapes have Presets that work the same way.
 
 ### [Features](#features)
 
@@ -806,16 +809,6 @@ ${shortcutTable()}
 
 - A feature that is off is gone, not just hidden: its settings leave the panel and it costs nothing while it is off. Switch it back on and everything is as you left it.
 - These switches are the same for every layout, except Caret Beat, which belongs to the layout and needs Grid Beat on. A layout still decides how a feature looks and sounds, and can have silent keys of its own.
-
-### [Save & Restore](#custom-layouts)
-
-> **Where?**
-> Settings panel → Layouts → Save & Restore.
-
-*Saves your entire current configuration as a reusable, numbered preset slot.*
-
-- Right-click a slot to arm it for deletion, or hold right-click to export it.
-- Use the reset button to restore the active custom layout back to its defaults.
 
 ### [Colors](#colors-and-textures)
 
@@ -952,7 +945,7 @@ ${shortcutTable()}
 *Generated sound — wind, surf, rain, thunder, running water, fire and wind chimes — that can play alongside the music player, all in one shared space and under one sky.*
 
 - **Overall volume** — hover the Soundscapes button in the music player and scroll; hold Shift to move by ten. Scrolling turns soundscapes on if they were off. **Right-click** it to step to the next soundscape — through every factory one, then your own saved ones. The volume belongs to you rather than to a soundscape: switching soundscapes keeps it, and saving one does not store it.
-- Choose one of eight soundscapes under **Presets**, then choose a channel under **Channels** to show its controls below. There are eighteen channels, each marked by the icon of its kind: six **wind** (a gust), three **rain** (a cloud), three **thunder** (a lightning bolt), two **stream** (a drop), two **fire** (a flame) and two **chimes** (a bell). Click a channel to view it; hold left-click on a disabled channel to enable it, or hold right-click on an enabled channel to disable it — a disabled channel costs nothing to play. A short right-click solos a channel and shows its controls; right-click it again to clear solo, or right-click another channel to switch solo. The soloed button is highlighted. Disabled channels keep their settings, and their controls remain visible but cannot be changed. While hovering over an enabled channel button, scroll the mouse wheel to adjust its volume in 5% steps. On a touch screen, press and hold a channel to enable or disable it, double-tap it to solo it, and drag up or down out of an enabled channel to change its volume.
+- Choose one of eight soundscapes under **Presets**, or the **reset** soundscape (the arrow turning back), where every channel is at its defaults and off; next and previous never step onto it. Change anything and a plus appears for your unsaved soundscape, as with layouts: click it to come back to it, hold it to save it. Then choose a channel under **Channels** to show its controls below. There are eighteen channels, each marked by the icon of its kind: six **wind** (a gust), three **rain** (a cloud), three **thunder** (a lightning bolt), two **stream** (a drop), two **fire** (a flame) and two **chimes** (a bell). Click a channel to view it; hold left-click on a disabled channel to enable it, or hold right-click on an enabled channel to disable it — a disabled channel costs nothing to play. A short right-click solos a channel and shows its controls; right-click it again to clear solo, or right-click another channel to switch solo. The soloed button is highlighted. Disabled channels keep their settings, and their controls remain visible but cannot be changed. While hovering over an enabled channel button, scroll the mouse wheel to adjust its volume in 5% steps. On a touch screen, press and hold a channel to enable or disable it, double-tap it to solo it, and drag up or down out of an enabled channel to change its volume.
 - **Every channel's volume is in decibels**: each step of the slider changes the loudness by the same amount, and a channel keeps its level whatever else is playing — turning on another channel never makes this one quieter.
 - **Every channel has a distance**, one rule for all of them: near is direct and clear, far is darker, quieter and more of it heard in the space. Channels that sit somewhere have a **pan** as well, which also sets their width: in the centre they fill the whole stereo field, and panned toward a side they narrow onto it, to a single point at the edge. Layering the same kind near, in the middle and far away is what gives a soundscape depth.
 - The **environment**, the sliders between the presets and the channels, acts across every channel at once. It is still part of the soundscape: choosing one sets it, and saving one keeps it. Its first slider is the soundscape's own **volume**: when the loudest moments of a soundscape make the rest of it duck for a moment, lower this one rather than the channels. Four of its sliders shape the **space**. Two of them make the place and are best read together: **size** is how big it is (how long sound takes to come back, how far apart its echoes are, how long it rings) and **foliage** is what fills it, from bare, hard surfaces that return clear echoes and a bright ring to dense, soft ones that scatter every echo into a dark, gentle wash and muffle distant sounds. Small and bare is a closed room, small and dense a room lined with foam, large and bare a mountain valley, large and dense a forest. Echoes are heard on sounds with a clear start, such as drops, chimes and thunder. **Brilliance** is how sharply you hear it all, from soft and warm through neutral in the middle to crisp and sparkling with fuller bass; it changes the character, not the volume. **Amount** is how much of the space you hear at all. The other two are the **weather**, one slow rhythm of gusts and lulls for the whole scene: **gusts** is how strong they are, **pace** how often they come. A channel's own **weather** slider decides how closely it follows them — wind grows louder and brighter in a gust, rain gets heavier, a fire is fanned, chimes are struck more often and harder, and thunder comes sooner. At zero a channel ignores the weather entirely.
@@ -974,7 +967,7 @@ ${shortcutTable()}
 
 - [Import](${guideLink('IMPORT-BACKUP', 'import')}) notes and [Back Up All Notes](${guideLink('IMPORT-BACKUP', 'back-up-all-notes')}).
 - Export or import your custom appearance presets as a \`.tdl\` file, so you can carry your look between machines.
-- Export or import your custom soundscapes as a \`.tds\` file the same way. Importing adds them after your own, skipping any you already have, up to twelve.
+- Export or import your custom soundscapes as a \`.tds\` file the same way. Importing adds them after your own, skipping any you already have.
 
 ### [Debugging](#debugging)
 
@@ -1002,7 +995,7 @@ ${shortcutTable()}
 - **Going back** — the player remembers the last hundred songs it played, so right-clicking rewind can step back through them one at a time, not just to the one before this. Fast-forward is deliberately not the mirror of that: right-clicking it always picks a fresh song, exactly as if the current one had reached its end. Once a song you went back to finishes, play carries on as normal.
 - **Media keys and the system player** — your keyboard's play/pause, next and previous keys, and the media controls your system shows (on Windows, the flyout beside the volume), drive this player and show the current song. Previous steps back through what you have heard; next picks a fresh song, as right-clicking fast-forward does.
 - **Mini mode** — the expand button on the player's right leaves mini mode and maximizes the window (its arrows point that way). Your previous window size isn't lost: un-maximizing returns to it.
-- **Soundstages** — the headphones button swaps the row of five music slots and the Soundscapes switch for the six soundstages (the same buttons as in the settings panel's Music → Soundstages), and swaps back. Click one to play the music through it.
+- **Soundstages** — the headphones button swaps the row of five music slots and the Soundscapes switch for the six soundstages (the factory soundstages from the settings panel's Music → Presets, and your own unsaved or saved one last), and swaps back. Click one to play the music through it.
 - Scroll over the headphones button to adjust sound: plain scroll for volume, \`Shift\` for reverb, \`Ctrl\` for room size. Right-click it to mute or unmute; turning the volume up by scrolling also unmutes.
 - **Resuming across restarts** — if music was playing when the app was last closed, it resumes on launch (same song and position), fading in over 10 seconds from silence and full reverb up to your usual volume/reverb settings.
 `,
