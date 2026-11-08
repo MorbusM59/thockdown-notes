@@ -595,7 +595,13 @@
     + 2 * var(--spacing-small)
     + 4px
   );
-  --note-list-row-content-height: var(--btn-square-regular-size);
+  /* Follows the UI font scale (the title and meta lines are set in it), never
+     below a square button (the hover actions). Mirrored by App.tsx's
+     noteListRowContentHeightPx. */
+  --note-list-row-content-height: max(
+    var(--btn-square-regular-size),
+    round(calc(var(--btn-square-regular-size) * var(--ui-font-scale)), 1px)
+  );
 }
 
 /* ---------------------------------------------------------------------------

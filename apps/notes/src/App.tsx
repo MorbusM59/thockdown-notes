@@ -314,7 +314,12 @@ const DISPLAY_MODES_BORDER_PX = 2
 // (tokens.css), plus how many Date-view cards the window's minimum height is
 // meant to leave room for -- see appShellMinHeightPx. The mini control height
 // covers both the date-filter chips and the pagination bar's buttons.
-const NOTE_LIST_ROW_CONTENT_HEIGHT_PX = BTN_SQUARE_REGULAR_SIZE_PX
+// The row's content follows the UI font scale (its title and meta lines are
+// set in it), and never falls below a square button, which its hover
+// actions are.
+function noteListRowContentHeightPx(uiFontScale: number): number {
+  return Math.max(BTN_SQUARE_REGULAR_SIZE_PX, Math.round(BTN_SQUARE_REGULAR_SIZE_PX * uiFontScale))
+}
 const SIDEBAR_MINI_CONTROL_HEIGHT_PX = 20
 const SIDEBAR_MIN_VISIBLE_NOTE_CARDS = 4
 // Chrome lays out in 1/64px units and rounds to them, so a requirement derived
@@ -1693,13 +1698,13 @@ function App() {
       + dateFilterRailPx
       + paginationPx
 
-    const noteCardPx = NOTE_LIST_ROW_CONTENT_HEIGHT_PX + 2 * largeGapPx
+    const noteCardPx = noteListRowContentHeightPx(uiFontScale) + 2 * largeGapPx
     const fourCardsPx = 2 * largeGapPx /* .notes-list padding */
       + SIDEBAR_MIN_VISIBLE_NOTE_CARDS * noteCardPx
       + (SIDEBAR_MIN_VISIBLE_NOTE_CARDS - 1) * largeGapPx
 
     return Math.ceil(computedChromePx + fourCardsPx + SUB_PIXEL_QUANTUM_PX)
-  }, [measuredMinHeightPx, sidebarWidthPx, spacingRegularPx])
+  }, [measuredMinHeightPx, sidebarWidthPx, spacingRegularPx, uiFontScale])
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
   // Whether the date/category/archive/trash views list stored images
