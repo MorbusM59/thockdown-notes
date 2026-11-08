@@ -183,12 +183,20 @@
   box-shadow:    var(--box-shadow-inverted-light);
 }
 
+/* One line, centred, cut with an ellipsis where it does not fit: a label
+   that wrapped or overflowed took the track's shape with it. A block (not a
+   flex box) because text-overflow applies to a block's own line, and the
+   line box is the rail's height so the text centres without flex. */
 .utility-setting-scrollbar-track-label {
   position:        absolute;
   inset:           0;
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
+  display:         block;
+  padding:         0 var(--canonical-scroll-handle-gap);
+  line-height:     calc(var(--canonical-scroll-thickness) - 2px);
+  text-align:      center;
+  white-space:     nowrap;
+  overflow:        hidden;
+  text-overflow:   ellipsis;
   pointer-events:  none;
   user-select:     none;
   font-size:       calc(10px * var(--ui-font-scale));
