@@ -7,7 +7,7 @@ import { startSpeedReadingSession, type SpeedReadingSession } from './speedReadi
  * section handle so App's F9, the slot's toggle button and the escape menu
  * can switch it in whichever slot they speak for.
  *
- * The mode belongs to the slot, not to a view: switching views keeps it and
+ * The mode belongs to the slot, not to a view: switching modes keeps it and
  * reads on in the other one, and so does a different note arriving. A
  * SESSION is the mode running in one view over one note, so the session is
  * derived -- one runs exactly while the mode is on, the slot holds the

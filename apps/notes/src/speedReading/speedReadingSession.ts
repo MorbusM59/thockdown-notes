@@ -24,12 +24,12 @@
  * the session runs (`useSpeedReading.ts`), because the note under the reading
  * row is hidden and an edit there would be made blind; plain typing keys are
  * swallowed besides, so they do not move the hidden caret. Everything else passes through and does
- * what it does anywhere: Escape switches views (and the mode reads on in the
+ * what it does anywhere: Escape switches modes (and the mode reads on in the
  * other one), F9 switches the mode off, a shortcut with a modifier is that
  * shortcut, and a click is a click.
  *
  * Escape's press is also the edit view's moment to hand its position over
- * (`onLeave`): App switches views on Escape's RELEASE, and the caret has to
+ * (`onLeave`): App switches modes on Escape's RELEASE, and the caret has to
  * be where reading got to before then for the switch to carry it across.
  *
  * One `requestAnimationFrame` loop drives everything that moves, and it runs
