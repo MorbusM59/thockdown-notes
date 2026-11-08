@@ -331,17 +331,30 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'bubblerone', label: 'Bubbler One', family: "'Bubbler One', 'Segoe UI', sans-serif" },
 ]
 
-/** A dictionary's button face: a bundled one's language code, an installed one's name up to its first `_` or `-`, at most three letters. */
-/**
- * A dictionary button's two lines: the language, and under it the region
- * when there is one. An installed dictionary's id is its file name, which
- * Hunspell names `<language>_<REGION>` (`en_GB`, `pt-BR`), so `en_GB` and
- * `en_US` read apart.
- */
-function dictionaryBadge(dictionary: SpellCheckDictionary): { language: string; region: string } {
-  if (dictionary.bundled) return { language: dictionary.id.toUpperCase(), region: dictionary.region ?? '' }
-  const [language, region = ''] = dictionary.id.split(/[_-]/)
-  return { language: (language || dictionary.id).slice(0, 3).toUpperCase(), region: region.slice(0, 3).toUpperCase() }
+/** A dictionary's name, typed over in place: committed on Enter or leaving the field, put back on Escape or when left empty. */
+function DictionaryNameField({ label, onRename }: { label: string; onRename: (label: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    if (draft !== null && draft.trim() && draft.trim() !== label) onRename(draft.trim())
+    setDraft(null)
+  }
+  return (
+    <input
+      className="options-eq-cell options-eq-field options-dictionary-name"
+      aria-label={`Name of dictionary ${label}`}
+      spellCheck={false}
+      maxLength={64}
+      value={draft ?? label}
+      onFocus={(event) => { setDraft(label); const field = event.target; requestAnimationFrame(() => field.select()) }}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        event.stopPropagation()
+        if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() }
+        if (event.key === 'Escape') { event.preventDefault(); setDraft(null); requestAnimationFrame(() => (event.target as HTMLInputElement).blur()) }
+      }}
+    />
+  )
 }
 
 const BOX_HIGHLIGHT_COLOR_ORDER: HighlightColorKey[] = ['background', 'grid', 'gridOutline', 'topBackground', 'bottomBackground', 'flowTrail', 'spellCheck', 'gutterBackground', 'immersiveScrollThumb', 'reviewLine', 'warningLine', 'lineNumber']
@@ -942,10 +955,16 @@ export function SidebarOptionsPanel({
   useEffect(() => { void refreshDictionaries() }, [refreshDictionaries])
   const installSpellCheckDictionary = useCallback(async () => {
     const installed = await window.thockdownSpellCheck?.installDictionary().catch(() => null)
-    if (!installed) return
+    if (!installed || installed.length === 0) return
     await refreshDictionaries()
-    setSpellCheckDictionaries((previous) => (previous.includes(installed.id) ? previous : [...previous, installed.id]))
+    // A dictionary is installed to be used, so it starts out checking.
+    setSpellCheckDictionaries((previous) => [...previous, ...installed.map((entry) => entry.id).filter((id) => !previous.includes(id))])
   }, [refreshDictionaries, setSpellCheckDictionaries])
+  const renameSpellCheckDictionary = useCallback(async (id: string, label: string) => {
+    setAvailableDictionaries((previous) => previous.map((entry) => (entry.id === id ? { ...entry, label } : entry)))
+    await window.thockdownSpellCheck?.renameDictionary(id, label).catch(() => false)
+    await refreshDictionaries()
+  }, [refreshDictionaries])
   const removeSpellCheckDictionary = useCallback(async (id: string) => {
     const removed = await window.thockdownSpellCheck?.removeDictionary(id).catch(() => false)
     if (!removed) return
@@ -3116,44 +3135,46 @@ export function SidebarOptionsPanel({
           </button>
         </div>
         <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
-        <div className="options-loadout-grid" role="group" aria-label="Spell checking dictionaries">
+        <div className="options-eq-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
           {availableDictionaries.map((dictionary) => {
             const isActive = spellCheckDictionaries.includes(dictionary.id)
-            const badge = dictionaryBadge(dictionary)
-            const tooltip = `${dictionary.label}: ${isActive ? 'checking' : 'not checking'}${dictionary.bundled ? '' : '. Right-click removes this dictionary'}`
             return (
-              <button
-                key={dictionary.id}
-                type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn options-dictionary-btn${isActive ? ' is-active' : ''}`}
-                data-tooltip={tooltip}
-                aria-label={tooltip}
-                aria-pressed={isActive}
-                data-secondary-press={dictionary.bundled ? 'none' : 'action'}
-                onClick={() => setSpellCheckDictionaries((previous) => (
-                  previous.includes(dictionary.id) ? previous.filter((id) => id !== dictionary.id) : [...previous, dictionary.id]
-                ))}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  if (!dictionary.bundled) void removeSpellCheckDictionary(dictionary.id)
-                }}
-              >
-                <span className="options-dictionary-badge" aria-hidden="true">
-                  <span className="options-dictionary-language">{badge.language}</span>
-                  {badge.region && <span className="options-dictionary-region">{badge.region}</span>}
-                </span>
-              </button>
+              <div key={dictionary.id} className="options-eq-row options-dictionary-row">
+                <button
+                  type="button"
+                  className={`options-eq-cell options-eq-button options-dictionary-toggle${isActive ? ' is-active' : ''}`}
+                  data-tooltip={isActive ? 'Checking with this dictionary' : 'Not checking with this dictionary'}
+                  aria-label={`Check with ${dictionary.label}`}
+                  aria-pressed={isActive}
+                  onClick={() => setSpellCheckDictionaries((previous) => (
+                    previous.includes(dictionary.id) ? previous.filter((id) => id !== dictionary.id) : [...previous, dictionary.id]
+                  ))}
+                >
+                  {isActive && <span className="fa-solid fa-check" aria-hidden="true" />}
+                </button>
+                <DictionaryNameField label={dictionary.label} onRename={(label) => void renameSpellCheckDictionary(dictionary.id, label)} />
+                <button
+                  type="button"
+                  className={`options-eq-cell options-eq-button${dictionary.bundled ? ' is-disabled' : ''}`}
+                  data-tooltip={dictionary.bundled ? 'Dictionaries that come with the app cannot be removed' : `Remove ${dictionary.label}`}
+                  aria-label={`Remove ${dictionary.label}`}
+                  aria-disabled={dictionary.bundled}
+                  onClick={() => { if (!dictionary.bundled) void removeSpellCheckDictionary(dictionary.id) }}
+                >
+                  <span className="fa-solid fa-xmark" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="options-eq-cell options-eq-button"
+                  data-tooltip="Install dictionaries: a .dic with its .aff, or an .oxt, .xpi or .zip holding them"
+                  aria-label="Install dictionaries"
+                  onClick={() => void installSpellCheckDictionary()}
+                >
+                  <span className="fa-solid fa-plus" aria-hidden="true" />
+                </button>
+              </div>
             )
           })}
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            data-tooltip="Install a Hunspell dictionary: pick its .dic file, with the .aff file of the same name beside it"
-            aria-label="Install a Hunspell dictionary"
-            onClick={() => void installSpellCheckDictionary()}
-          >
-            <span className="fa-solid fa-file-import" aria-hidden="true" />
-          </button>
         </div>
       </AccordionSection>
 
