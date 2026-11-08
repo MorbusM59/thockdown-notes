@@ -2331,7 +2331,7 @@ export function SidebarOptionsPanel({
               aria-disabled={caretBeat.unavailable}
               onClick={() => caretBeat.unavailable || caretBeat.toggle()}
             >
-              <span className="fa-solid fa-heart-pulse" aria-hidden="true" />
+              <span className="fa-solid fa-music" aria-hidden="true" />
             </button>
           </div>
 
