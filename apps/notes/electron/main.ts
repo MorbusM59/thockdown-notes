@@ -21,7 +21,7 @@ import { migrateVisualizerTuning } from './visualizerTuningMigration'
 import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS, type ExternalFileEvents, type ExternalFilesApi } from '../src/shared/externalFiles'
 import { TEXTURE_CHANNELS, type TextureCacheApi } from '../src/shared/textures'
 import { SPELL_CHECK_CHANNELS, type SpellCheckApi } from '../src/shared/spellCheck'
-import { SpellCheckDictionaries } from './spellCheckDictionaries'
+import { DICTIONARY_FILE_EXTENSIONS, SpellCheckDictionaries } from './spellCheckDictionaries'
 import { AUDIO_BOUNCE_CHANNELS, type AudioBounceCacheApi } from '../src/shared/audioBounceCache'
 import { LOADOUT_CHANNELS, type UiLoadoutApi } from '@thockdown/look/loadouts'
 import { AUDIO_PLAYER_CHANNELS, type AudioPlayerApi, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
@@ -1077,14 +1077,15 @@ function registerIpcHandlers() {
     installDictionary: async (event) => {
       const owner = BrowserWindow.fromWebContents(event.sender) ?? win
       const options = {
-        title: 'Install a Hunspell dictionary (its .aff file must be in the same folder)',
-        filters: [{ name: 'Hunspell dictionary', extensions: ['dic'] }],
-        properties: ['openFile' as const],
+        title: 'Install Hunspell dictionaries: a .dic with its .aff, or an .oxt, .xpi or .zip holding them',
+        filters: [{ name: 'Hunspell dictionary', extensions: DICTIONARY_FILE_EXTENSIONS }],
+        properties: ['openFile' as const, 'multiSelections' as const],
       }
       const { filePaths, canceled } = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
-      if (canceled || filePaths.length === 0) return null
-      return spellCheckDictionaries.install(filePaths[0])
+      if (canceled || filePaths.length === 0) return []
+      return spellCheckDictionaries.install(filePaths)
     },
+    renameDictionary: async (_event, id, label) => spellCheckDictionaries.rename(id, label),
     removeDictionary: async (_event, id) => spellCheckDictionaries.remove(id),
   }, handleTracked);
 

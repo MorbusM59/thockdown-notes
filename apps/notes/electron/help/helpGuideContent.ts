@@ -245,8 +245,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Outlines misspelled words, using dictionaries that ship with the app, so it works offline and the same on every computer.*
 
 - One switch for the whole app. It checks the editor of the slot you are typing in, never the reader.
-- English, Spanish, French and German come with the app; switch each on or off under Spell Checking. A word counts as correct when any active dictionary knows it, so a note can mix languages.
-- To add another language, install a Hunspell dictionary: pick its .dic file, with the .aff file of the same name beside it. An index.dic is named after its folder. Right-click an installed dictionary to remove it.
+- English, Spanish, French and German come with the app; each is a row under Spell Checking, with a box to switch it on or off and a name you can type over. A word counts as correct when any active dictionary knows it, so a note can mix languages.
+- To add another language, press + and pick a Hunspell dictionary: an .oxt from LibreOffice's extensions site, a Firefox .xpi, a .zip, or a .dic with its .aff. The x removes an added dictionary.
 - Code, links, web addresses and #tags are not checked. The word you are still typing is not marked until you move on.
 - The outline color is Spell Checking Outline Color, among the editor box colors.
 
