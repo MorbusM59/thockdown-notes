@@ -75,7 +75,7 @@ import { ColorPickerRow } from '../colorPicker/ColorPickerRow'
 import { ColorTargetButton } from '../colorPicker/ColorTargetButton'
 import { SurfaceTexturePicker } from '../colorPicker/SurfaceTexturePicker'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
-import type { SoundscapePreferences } from '@thockdown/soundscape/soundscape'
+import { SOUNDSCAPE_DEFAULT_MASTER_VOLUME, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
 import type { FeatureToggles } from '../shared/features'
@@ -921,16 +921,14 @@ export function SidebarOptionsPanel({
     // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
     const caretFollowUnavailable = !features.visualizer
     const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && caretEffectStrengthPercent === 0)
-    // The feature bar's Caret Beat switch: the layout's caretFollowsMusic. The
-    // blink selected under Caret stays selected and is what the caret falls
-    // back to whenever there is no beat to follow.
+    // The Caret Beat switch beside the blink shapes (Layouts > Caret).
     const caretBeat = {
       on: caretFollowsMusic,
       unavailable: caretFollowUnavailable,
       tooltip: caretFollowUnavailable
-        ? 'Caret Beat needs Grid Beat: switch it on (the drum) beside this. Until then the caret blinks as selected'
+        ? 'Caret Beat needs Grid Beat: switch it on (the drum) under Quick Access. Until then the caret blinks as selected'
         : caretFollowWaits
-        ? "Caret Beat is on but not in effect: the caret's effect (Layouts > Caret) is at its centre. Until then the caret holds still"
+        ? "Caret Beat is on but not in effect: the caret's effect is at its centre. Until then the caret holds still"
         : `Caret Beat: ${caretFollowsMusic ? 'on' : 'off'}. While music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as its effect. Kept per layout`,
       dimmed: caretFollowWaits,
       toggle: () => setCaretFollowsMusic((prev) => !prev),
@@ -1220,8 +1218,38 @@ export function SidebarOptionsPanel({
       </div>
       <AccordionGroup filter={searchQuery}>
       {showsSection('general') ? (<>
-      <OptionsFixedSection className="sidebar-options-section-quick-toggles" heading="Quick Toggles" iconClass="fa-toggle-on" hiddenWhileSearching={isSearching}>
-        <FeatureToggleBar features={features} setFeatures={setFeatures} caretBeat={caretBeat} />
+      <OptionsFixedSection className="sidebar-options-section-quick-toggles" heading="Quick Access" iconClass="fa-toggle-on" hiddenWhileSearching={isSearching}>
+        <FeatureToggleBar features={features} setFeatures={setFeatures} />
+        {/* The two volumes. Music goes through the music bar's own rule
+            (adjusting a muted volume unmutes it), so the two places cannot
+            disagree; the soundscape's is its master volume, which the music
+            bar's soundscape button otherwise reaches only by the wheel. */}
+        <div className="utility-setting-slider-stack" aria-label="Volumes">
+          <OptionsSliderRows rows={[2]}>
+            <CompactScrollbarSlider
+              id="music-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={musicVolume}
+              trackLabel="Music"
+              ariaLabel="Music volume"
+              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.volume}
+              onCommit={(value) => readNowPlaying().setLevel('volume', value)}
+            />
+            <CompactScrollbarSlider
+              id="soundscape-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={soundscapePreferences.masterVolume}
+              trackLabel="Soundscape"
+              ariaLabel="Soundscape volume"
+              defaultValue={SOUNDSCAPE_DEFAULT_MASTER_VOLUME}
+              onCommit={(value) => onSoundscapePreferencesChange({ ...soundscapePreferences, masterVolume: clamp(value, 0, 1) })}
+            />
+          </OptionsSliderRows>
+        </div>
       </OptionsFixedSection>
 
       <FontSection
@@ -1361,164 +1389,6 @@ export function SidebarOptionsPanel({
         ]}
       />
 
-      <AccordionSection
-        className="sidebar-options-section-animations"
-        ariaLabel="Animations"
-        heading="Animations"
-        iconClass="fa-spinner"
-      >
-<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
-          <OptionsSliderRows>
-            <CompactScrollbarSlider
-              id="render-scroll-dynamic"
-              min={0.1}
-              max={5}
-              step={0.05}
-              value={renderScrollDynamic}
-              trackLabel="ramp"
-              ariaLabel="Curve dynamic parameter a"
-              defaultValue={5 / 3}
-              onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
-            />
-            <CompactScrollbarSlider
-              id="render-scroll-skew"
-              min={RENDER_SCROLL_SKEW_MIN}
-              max={RENDER_SCROLL_SKEW_MAX}
-              step={0.01}
-              value={renderScrollSkew}
-              trackLabel="shape"
-              ariaLabel="Curve skew (apex bias)"
-              defaultValue={0.5}
-              onCommit={(value) => setRenderScrollSkew(
-                Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
-              )}
-            />
-            <CompactScrollbarSlider
-              id="render-scroll-total-time"
-              min={0}
-              max={2}
-              step={0.05}
-              value={renderScrollTotalTimeSec}
-              trackLabel="speed"
-              ariaLabel="Total time parameter t in seconds"
-              reverseScale
-              defaultValue={0.4}
-              onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
-            />
-            <CompactScrollbarSlider
-              id="render-scroll-max-speed"
-              min={1000}
-              max={100000}
-              step={1000}
-              value={renderScrollMaxSpeedPxPerSec}
-              trackLabel="max speed"
-              ariaLabel="Maximum scroll speed in pixels per second"
-              defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
-              onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
-            />
-          </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-
-      {/* Scrolling is its own section because it answers a different
-          question from Animations. Those four sliders shape a journey the
-          APP decides to make -- a search jump, a page key, a chapter change.
-          These describe what the reader's own hand does to the page: what a
-          notch is worth, and whether a spin may outlive the hand that made
-          it. They were one section while there were only three of them, and
-          the split is what stops the reader hunting for a wheel setting
-          among curve parameters. */}
-      <AccordionSection
-        className="sidebar-options-section-scrolling"
-        ariaLabel="Scrolling"
-        heading="Scrolling"
-        iconClass="fa-up-down"
-      >
-<div className="utility-setting-slider-stack" aria-label="Wheel scrolling settings">
-          <OptionsSliderRows rows={[3, 2]}>
-            {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a
-                spin, `dampen` what happens after one, so they read in that
-                order. */}
-            <CompactScrollbarSlider
-              id="wheel-spin-threshold"
-              min={WHEEL_SPIN_THRESHOLD_OFF}
-              max={WHEEL_SPIN_THRESHOLD_MAX_MS}
-              step={WHEEL_SPIN_THRESHOLD_STEP_MS}
-              value={wheelSpinThresholdMs}
-              trackLabel="auto scroll"
-              formatValue={formatWheelSpinThreshold}
-              ariaLabel="Spin the wheel to keep scrolling: how close together nudges must be, in milliseconds. All the way left turns it off."
-              defaultValue={DEFAULT_WHEEL_SPIN_THRESHOLD_MS}
-              onCommit={(value) => setWheelSpinThresholdMs(
-                clamp(value, WHEEL_SPIN_THRESHOLD_OFF, WHEEL_SPIN_THRESHOLD_MAX_MS),
-              )}
-            />
-            {/* Reversed: the stored number is the divisor c, which gets
-                SMALLER as damping gets stronger, and a control whose right-hand
-                end damps less than its left would read backwards. */}
-            <CompactScrollbarSlider
-              id="wheel-spin-dampen"
-              min={WHEEL_SPIN_DAMPEN_ENDLESS}
-              max={WHEEL_SPIN_DAMPEN_DIVISOR_MAX}
-              step={WHEEL_SPIN_DAMPEN_DIVISOR_STEP}
-              value={wheelSpinDampenDivisor}
-              trackLabel="dampen"
-              ariaLabel="How quickly a wheel spin coasts to a stop. All the way left, it never stops on its own."
-              defaultValue={DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR}
-              onCommit={(value) => setWheelSpinDampenDivisor(
-                clamp(value, WHEEL_SPIN_DAMPEN_ENDLESS, WHEEL_SPIN_DAMPEN_DIVISOR_MAX),
-              )}
-            />
-            <CompactScrollbarSlider
-              id="wheel-spin-cutoff"
-              min={WHEEL_SPIN_CUTOFF_MIN_MS}
-              max={WHEEL_SPIN_CUTOFF_MAX_MS}
-              step={WHEEL_SPIN_CUTOFF_STEP_MS}
-              value={wheelSpinCutoffMs}
-              trackLabel="cut off"
-              ariaLabel="How slow a free scroll may get, in milliseconds between rows, before it stops."
-              defaultValue={DEFAULT_WHEEL_SPIN_CUTOFF_MS}
-              onCommit={(value) => setWheelSpinCutoffMs(
-                clamp(value, WHEEL_SPIN_CUTOFF_MIN_MS, WHEEL_SPIN_CUTOFF_MAX_MS),
-              )}
-            />
-            {/* What one notch is worth, per pane. Two controls rather than one
-                because the panes count in different units and always have: the
-                editor lands on row boundaries, so its step can only be a
-                whole number of rows, while the reader has no grid to land
-                on and can take a fraction of a line. A single shared number
-                would have to be one or the other, and would be lying to one of
-                the panes. */}
-            <CompactScrollbarSlider
-              id="wheel-step-rows"
-              min={WHEEL_STEP_ROWS_MIN}
-              max={WHEEL_STEP_ROWS_MAX}
-              step={WHEEL_STEP_ROWS_STEP}
-              value={wheelStepRows}
-              trackLabel="editor step"
-              ariaLabel="How many rows one notch of the wheel scrolls in the editor."
-              defaultValue={DEFAULT_WHEEL_STEP_ROWS}
-              onCommit={(value) => setWheelStepRows(
-                clamp(Math.round(value), WHEEL_STEP_ROWS_MIN, WHEEL_STEP_ROWS_MAX),
-              )}
-            />
-            <CompactScrollbarSlider
-              id="wheel-step-lines"
-              min={WHEEL_STEP_LINES_MIN}
-              max={WHEEL_STEP_LINES_MAX}
-              step={WHEEL_STEP_LINES_STEP}
-              value={wheelStepLines}
-              trackLabel="reader step"
-              formatValue={formatWheelStepLines}
-              ariaLabel="How many lines of text one notch of the wheel scrolls in the reader."
-              defaultValue={DEFAULT_WHEEL_STEP_LINES}
-              onCommit={(value) => setWheelStepLines(
-                clamp(value, WHEEL_STEP_LINES_MIN, WHEEL_STEP_LINES_MAX),
-              )}
-            />
-          </OptionsSliderRows>
-        </div>
-      </AccordionSection>
 
       </>) : null}
 
@@ -2448,6 +2318,21 @@ export function SidebarOptionsPanel({
                 </button>
               )
             })}
+            {/* Caret Beat: the layout's caretFollowsMusic. The shape selected
+                beside it stays selected and is what the caret falls back to
+                whenever there is no beat to follow. */}
+            <button
+              type="button"
+              className={`btn-icon options-color-swatch options-caret-preset-btn${caretBeat.on ? ' is-active' : ''}${caretBeat.dimmed ? ' is-dimmed' : ''}`}
+              data-tooltip={caretBeat.tooltip}
+              aria-label="Caret Beat"
+              aria-pressed={caretBeat.on}
+              // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
+              aria-disabled={caretBeat.unavailable}
+              onClick={() => caretBeat.unavailable || caretBeat.toggle()}
+            >
+              <span className="fa-solid fa-heart-pulse" aria-hidden="true" />
+            </button>
           </div>
 
           {features.caretBlink ? (<>
@@ -2668,23 +2553,7 @@ export function SidebarOptionsPanel({
           not the layout's. Presets (the soundstages) first, then what a
           soundstage is made of: the EQ, and the room. */}
       <OptionsFixedSection className="sidebar-options-section-music-presets" heading="Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
-        <div className="utility-setting-slider-stack" aria-label="Music volume and soundstages">
-          {/* Volume, reverb and room are the music bar's levels: set through the
-              same rule its controls use (adjusting a muted volume or a bypassed
-              reverb turns it back on), so the two places cannot disagree. */}
-          <OptionsSliderRows rows={[1]}>
-            <CompactScrollbarSlider
-              id="music-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={musicVolume}
-              trackLabel="volume"
-              ariaLabel="Music volume"
-              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.volume}
-              onCommit={(value) => readNowPlaying().setLevel('volume', value)}
-            />
-          </OptionsSliderRows>
+        <div className="utility-setting-slider-stack" aria-label="Soundstages">
           <SoundstageOptions
             preferences={soundstagePreferences}
             setPreferences={setSoundstagePreferences}
@@ -2759,61 +2628,6 @@ export function SidebarOptionsPanel({
           </OptionsSliderRows>
         </div>
       </AccordionSection>
-
-      {features.visualizer ? (
-      <AccordionSection
-        className="sidebar-options-section-beat-detection"
-        ariaLabel="Beat Detection"
-        heading="Beat Detection"
-        iconClass="fa-drum"
-      >
-          <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
-          <div className="utility-setting-slider-stack" aria-label="Beat timing">
-            <OptionsSliderRows rows={[2]}>
-              <CompactScrollbarSlider
-                id="beat-delay"
-                min={BEAT_DELAY_MIN_MS}
-                max={BEAT_DELAY_MAX_MS}
-                step={5}
-                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
-                trackLabel="delay"
-                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
-                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
-                defaultValue={0}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
-              />
-              <CompactScrollbarSlider
-                id="beat-response"
-                min={BEAT_RESPONSE_MIN_DB}
-                max={BEAT_RESPONSE_MAX_DB}
-                step={1}
-                value={beatSettings.responseDb}
-                trackLabel="response"
-                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
-                ariaLabel="Beat pulse: dB below full scale that still gives a full response"
-                defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
-              />
-            </OptionsSliderRows>
-          </div>
-          {renderTrackers()}
-      </AccordionSection>
-      ) : null}
-
-      {features.visualizer ? (
-      <AccordionSection
-        className="sidebar-options-section-grid-beat"
-        ariaLabel="Grid Beat"
-        heading="Grid Beat"
-        iconClass="fa-table-cells"
-      >
-          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
-          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
-          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
-      </AccordionSection>
-      ) : null}
 
       {features.visualizer ? (
       <AccordionSection
@@ -3107,7 +2921,20 @@ export function SidebarOptionsPanel({
 
       </>) : null}
 
-      {showsSection('tools') ? (<>
+      {showsSection('modules') ? (<>
+      {features.visualizer ? (
+      <AccordionSection
+        className="sidebar-options-section-grid-beat"
+        ariaLabel="Grid Beat"
+        heading="Grid Beat"
+        iconClass="fa-table-cells"
+      >
+          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
+          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
+          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
+      </AccordionSection>
+      ) : null}
+
       {/* Speed reading (Alt+<): the two views' paces, the editor's row,
           and the one curve both views ease with -- the same three numbers as
           Animations above, kept apart from them because a reading pace's ease
@@ -3306,7 +3133,208 @@ export function SidebarOptionsPanel({
 
       </>) : null}
 
-      {showsSection('misc') ? (<>
+      {showsSection('advanced') ? (<>
+      <AccordionSection
+        className="sidebar-options-section-animations"
+        ariaLabel="Animations"
+        heading="Animations"
+        iconClass="fa-spinner"
+      >
+<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+          <OptionsSliderRows>
+            <CompactScrollbarSlider
+              id="render-scroll-dynamic"
+              min={0.1}
+              max={5}
+              step={0.05}
+              value={renderScrollDynamic}
+              trackLabel="ramp"
+              ariaLabel="Curve dynamic parameter a"
+              defaultValue={5 / 3}
+              onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-skew"
+              min={RENDER_SCROLL_SKEW_MIN}
+              max={RENDER_SCROLL_SKEW_MAX}
+              step={0.01}
+              value={renderScrollSkew}
+              trackLabel="shape"
+              ariaLabel="Curve skew (apex bias)"
+              defaultValue={0.5}
+              onCommit={(value) => setRenderScrollSkew(
+                Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-total-time"
+              min={0}
+              max={2}
+              step={0.05}
+              value={renderScrollTotalTimeSec}
+              trackLabel="speed"
+              ariaLabel="Total time parameter t in seconds"
+              reverseScale
+              defaultValue={0.4}
+              onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-max-speed"
+              min={1000}
+              max={100000}
+              step={1000}
+              value={renderScrollMaxSpeedPxPerSec}
+              trackLabel="max speed"
+              ariaLabel="Maximum scroll speed in pixels per second"
+              defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
+              onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
+
+      {/* Scrolling is its own section because it answers a different
+          question from Animations. Those four sliders shape a journey the
+          APP decides to make -- a search jump, a page key, a chapter change.
+          These describe what the reader's own hand does to the page: what a
+          notch is worth, and whether a spin may outlive the hand that made
+          it. They were one section while there were only three of them, and
+          the split is what stops the reader hunting for a wheel setting
+          among curve parameters. */}
+      <AccordionSection
+        className="sidebar-options-section-scrolling"
+        ariaLabel="Scrolling"
+        heading="Scrolling"
+        iconClass="fa-up-down"
+      >
+<div className="utility-setting-slider-stack" aria-label="Wheel scrolling settings">
+          <OptionsSliderRows rows={[3, 2]}>
+            {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a
+                spin, `dampen` what happens after one, so they read in that
+                order. */}
+            <CompactScrollbarSlider
+              id="wheel-spin-threshold"
+              min={WHEEL_SPIN_THRESHOLD_OFF}
+              max={WHEEL_SPIN_THRESHOLD_MAX_MS}
+              step={WHEEL_SPIN_THRESHOLD_STEP_MS}
+              value={wheelSpinThresholdMs}
+              trackLabel="auto scroll"
+              formatValue={formatWheelSpinThreshold}
+              ariaLabel="Spin the wheel to keep scrolling: how close together nudges must be, in milliseconds. All the way left turns it off."
+              defaultValue={DEFAULT_WHEEL_SPIN_THRESHOLD_MS}
+              onCommit={(value) => setWheelSpinThresholdMs(
+                clamp(value, WHEEL_SPIN_THRESHOLD_OFF, WHEEL_SPIN_THRESHOLD_MAX_MS),
+              )}
+            />
+            {/* Reversed: the stored number is the divisor c, which gets
+                SMALLER as damping gets stronger, and a control whose right-hand
+                end damps less than its left would read backwards. */}
+            <CompactScrollbarSlider
+              id="wheel-spin-dampen"
+              min={WHEEL_SPIN_DAMPEN_ENDLESS}
+              max={WHEEL_SPIN_DAMPEN_DIVISOR_MAX}
+              step={WHEEL_SPIN_DAMPEN_DIVISOR_STEP}
+              value={wheelSpinDampenDivisor}
+              trackLabel="dampen"
+              ariaLabel="How quickly a wheel spin coasts to a stop. All the way left, it never stops on its own."
+              defaultValue={DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR}
+              onCommit={(value) => setWheelSpinDampenDivisor(
+                clamp(value, WHEEL_SPIN_DAMPEN_ENDLESS, WHEEL_SPIN_DAMPEN_DIVISOR_MAX),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="wheel-spin-cutoff"
+              min={WHEEL_SPIN_CUTOFF_MIN_MS}
+              max={WHEEL_SPIN_CUTOFF_MAX_MS}
+              step={WHEEL_SPIN_CUTOFF_STEP_MS}
+              value={wheelSpinCutoffMs}
+              trackLabel="cut off"
+              ariaLabel="How slow a free scroll may get, in milliseconds between rows, before it stops."
+              defaultValue={DEFAULT_WHEEL_SPIN_CUTOFF_MS}
+              onCommit={(value) => setWheelSpinCutoffMs(
+                clamp(value, WHEEL_SPIN_CUTOFF_MIN_MS, WHEEL_SPIN_CUTOFF_MAX_MS),
+              )}
+            />
+            {/* What one notch is worth, per pane. Two controls rather than one
+                because the panes count in different units and always have: the
+                editor lands on row boundaries, so its step can only be a
+                whole number of rows, while the reader has no grid to land
+                on and can take a fraction of a line. A single shared number
+                would have to be one or the other, and would be lying to one of
+                the panes. */}
+            <CompactScrollbarSlider
+              id="wheel-step-rows"
+              min={WHEEL_STEP_ROWS_MIN}
+              max={WHEEL_STEP_ROWS_MAX}
+              step={WHEEL_STEP_ROWS_STEP}
+              value={wheelStepRows}
+              trackLabel="editor step"
+              ariaLabel="How many rows one notch of the wheel scrolls in the editor."
+              defaultValue={DEFAULT_WHEEL_STEP_ROWS}
+              onCommit={(value) => setWheelStepRows(
+                clamp(Math.round(value), WHEEL_STEP_ROWS_MIN, WHEEL_STEP_ROWS_MAX),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="wheel-step-lines"
+              min={WHEEL_STEP_LINES_MIN}
+              max={WHEEL_STEP_LINES_MAX}
+              step={WHEEL_STEP_LINES_STEP}
+              value={wheelStepLines}
+              trackLabel="reader step"
+              formatValue={formatWheelStepLines}
+              ariaLabel="How many lines of text one notch of the wheel scrolls in the reader."
+              defaultValue={DEFAULT_WHEEL_STEP_LINES}
+              onCommit={(value) => setWheelStepLines(
+                clamp(value, WHEEL_STEP_LINES_MIN, WHEEL_STEP_LINES_MAX),
+              )}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
+
+      {features.visualizer ? (
+      <AccordionSection
+        className="sidebar-options-section-beat-detection"
+        ariaLabel="Beat Detection"
+        heading="Beat Detection"
+        iconClass="fa-drum"
+      >
+          <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
+          <div className="utility-setting-slider-stack" aria-label="Beat timing">
+            <OptionsSliderRows rows={[2]}>
+              <CompactScrollbarSlider
+                id="beat-delay"
+                min={BEAT_DELAY_MIN_MS}
+                max={BEAT_DELAY_MAX_MS}
+                step={5}
+                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
+                trackLabel="delay"
+                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
+                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
+                defaultValue={0}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="beat-response"
+                min={BEAT_RESPONSE_MIN_DB}
+                max={BEAT_RESPONSE_MAX_DB}
+                step={1}
+                value={beatSettings.responseDb}
+                trackLabel="response"
+                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
+                ariaLabel="Beat pulse: dB below full scale that still gives a full response"
+                defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
+              />
+            </OptionsSliderRows>
+          </div>
+          {renderTrackers()}
+      </AccordionSection>
+      ) : null}
+
       <AccordionSection
         className="sidebar-options-section-notes"
         ariaLabel="Notes and Import"

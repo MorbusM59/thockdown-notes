@@ -10,7 +10,7 @@
  * main process's `sanitizeMenu` can use it.
  */
 
-export const OPTIONS_SECTION_IDS = ['general', 'layouts', 'music', 'soundscapes', 'tools', 'misc'] as const
+export const OPTIONS_SECTION_IDS = ['general', 'layouts', 'music', 'soundscapes', 'modules', 'advanced'] as const
 
 export type OptionsSectionId = typeof OPTIONS_SECTION_IDS[number]
 
@@ -21,8 +21,8 @@ export const OPTIONS_SECTIONS: ReadonlyArray<{ id: OptionsSectionId; label: stri
   { id: 'layouts', label: 'Layouts', icon: 'fa-solid fa-rectangle-list' },
   { id: 'music', label: 'Music', icon: 'fa-solid fa-music' },
   { id: 'soundscapes', label: 'Soundscapes', icon: 'fa-solid fa-vihara' },
-  { id: 'tools', label: 'Tools', icon: 'fa-solid fa-highlighter' },
-  { id: 'misc', label: 'Miscellaneous', icon: 'fa-solid fa-clipboard' },
+  { id: 'modules', label: 'Modules', icon: 'fa-solid fa-highlighter' },
+  { id: 'advanced', label: 'Advanced', icon: 'fa-solid fa-screwdriver-wrench' },
 ]
 
 export function sanitizeOptionsSection(value: unknown): OptionsSectionId {
