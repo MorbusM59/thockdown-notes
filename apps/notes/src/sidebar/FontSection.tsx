@@ -17,6 +17,8 @@ export type FontSectionSlider = {
 export type FontSectionProps<Key extends string> = {
   /** The section's heading, also its accessible name and the options search's text. */
   heading: string
+  /** The heading's icon (AccordionSection's `iconClass`). */
+  icon: string
   className: string
   /** The accessible name of the font picker's button group. */
   pickerLabel: string
@@ -31,9 +33,9 @@ export type FontSectionProps<Key extends string> = {
  * own. Every font setting (editor, reader, UI, visualizer) is this one layout,
  * differing only in its fonts and sliders.
  */
-export function FontSection<Key extends string>({ heading, className, ...controls }: FontSectionProps<Key>) {
+export function FontSection<Key extends string>({ heading, icon, className, ...controls }: FontSectionProps<Key>) {
   return (
-    <AccordionSection className={className} ariaLabel={heading} heading={heading}>
+    <AccordionSection className={className} ariaLabel={heading} heading={heading} iconClass={icon}>
       <FontControls {...controls} />
     </AccordionSection>
   )
@@ -50,7 +52,7 @@ export function FontControls<Key extends string>({
   activeKey,
   onSelect,
   sliders,
-}: Omit<FontSectionProps<Key>, 'heading' | 'className'>) {
+}: Omit<FontSectionProps<Key>, 'heading' | 'icon' | 'className'>) {
   return (
     <>
       <div className="typography-grid" role="group" aria-label={pickerLabel}>

@@ -143,6 +143,7 @@ import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedRead
 import { useBeatFeedback } from './beat/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
+import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId } from './shared/optionsSections'
 import { DEFAULT_CARET_FOLLOWS_MUSIC, DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeCaretFollowsMusic, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -1442,6 +1443,7 @@ function App() {
   // The options panel's own search term, kept apart from the note search so
   // that leaving the options for a note list (and coming back) costs neither.
   const [optionsSearchQuery, setOptionsSearchQuery] = useState('')
+  const [optionsSection, setOptionsSection] = useState<OptionsSectionId>(DEFAULT_OPTIONS_SECTION)
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
   // Mirrors useDocumentFind's isDocumentFindCaseSensitive so
   // buildMenuStateSnapshot (defined earlier than the hook call can be) can
@@ -2396,7 +2398,6 @@ function App() {
     filterSaturate,
     filterColorize,
   }, {
-    glaze: features.glaze,
     isPreviewMode: activeSectionSnapshot?.isPreviewMode ?? false,
   }), [
     borderRadiusRegularPx,
@@ -2413,7 +2414,6 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-    features.glaze,
     activeSectionSnapshot?.isPreviewMode,
   ])
 
@@ -3310,6 +3310,7 @@ function App() {
       selectedYears: [...selectedYears],
       searchQuery,
       optionsSearchQuery,
+      optionsSection,
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
       isPreviewMode: getActiveSection()?.isPreviewMode,
@@ -3531,6 +3532,7 @@ function App() {
     isSearchQueryCaseSensitive,
     searchQuery,
     optionsSearchQuery,
+    optionsSection,
     selectedMonths,
     selectedYears,
     sidebarMode,
@@ -5227,6 +5229,7 @@ ${markdownHtml}
             setSelectedYears(new Set(appState.menu.selectedYears))
             setSearchQuery(appState.menu.searchQuery)
             setOptionsSearchQuery(appState.menu.optionsSearchQuery ?? '')
+            setOptionsSection(sanitizeOptionsSection(appState.menu.optionsSection))
             setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
@@ -8822,6 +8825,8 @@ ${markdownHtml}
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
+                        optionsSection={optionsSection}
+                        setOptionsSection={setOptionsSection}
                         uiMode={uiMode}
                         optionsContentRef={optionsContentRef}
                         viewStyle={viewStyle}

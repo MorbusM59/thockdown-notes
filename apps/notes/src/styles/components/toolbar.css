@@ -427,10 +427,10 @@
   filter: var(--filter-primed-delete);
 }
 
-/* The caret's follow-the-music switch while it is on but cannot act (the
-   Visualizer's drum button is off, or the caret block's effect is at its
-   centre): visibly not in effect, as a dimmed audio level is. */
-.options-caret-preset-btn.is-dimmed {
+/* The feature bar's Caret Beat switch while it is on but cannot act (Grid
+   Beat, the drum beside it, is off, or the caret's effect is at its centre):
+   visibly not in effect, as a dimmed audio level is. */
+.options-loadout-btn.is-dimmed {
   opacity: 0.45;
 }
 

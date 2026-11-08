@@ -22,6 +22,7 @@ import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSe
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
+import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection } from '../src/shared/optionsSections';
 import { sanitizeBoxBevel } from '@thockdown/look/boxBevel';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';
 import { sanitizeSoundscapePreferences } from '@thockdown/soundscape/soundscape';
@@ -39,6 +40,7 @@ const DEFAULT_APP_STATE: AppState = {
     selectedYears: [],
     searchQuery: '',
     optionsSearchQuery: '',
+    optionsSection: DEFAULT_OPTIONS_SECTION,
     searchQueryCaseSensitive: false,
     isPreviewMode: false,
     viewStyle: 'modern',
@@ -453,6 +455,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     selectedYears,
     searchQuery: typeof input?.searchQuery === 'string' ? input.searchQuery : '',
     optionsSearchQuery: typeof input?.optionsSearchQuery === 'string' ? input.optionsSearchQuery : '',
+    optionsSection: sanitizeOptionsSection(input?.optionsSection),
     searchQueryCaseSensitive: Boolean(input?.searchQueryCaseSensitive),
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
     isPreviewMode: Boolean(input?.isPreviewMode),

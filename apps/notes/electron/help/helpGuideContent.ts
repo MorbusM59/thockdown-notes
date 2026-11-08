@@ -240,7 +240,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Spell Check](#spell-check)
 
 > **Where?**
-> Settings panel → [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}).
+> Settings panel → [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}), or Tools → Spell Checking.
 
 *Underlines misspelled words using your OS's native spell checker.*
 
@@ -249,7 +249,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Typing Trail](#typing-trail)
 
 > **Where?**
-> Switched on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}), tuned in Settings panel → Typing Trail.
+> Switched on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}), tuned in Settings panel → Tools → Typing Trail.
 
 *A faint trail along the line you are typing in, so your eye always finds it.*
 
@@ -260,13 +260,13 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Visualizer](#visualizer)
 
 > **Where?**
-> Settings panel → Beat detection, Grid Beat and Visualizer.
+> Settings panel → Music → Beat Detection, Grid Beat and Visualizer.
 
 *The caret, the active editor's edge and its pane follow the music you are playing.*
 
 - Its switch in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) turns it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
-- Its settings are the same for every layout. Its colours belong to the layout: Settings panel → Colors → Visualizer.
-- Caret, edge and pane are separate blocks. The edge is a soft inner shadow along the editor's border. **Grid Beat** sets the edge, the **editor pane** (drawn over the box grid in the edit view) and the **reader pane** (an even wash of its colour over the whole editor in any view without a grid); the full-screen scene has its own edge and pane under **Visualizer**. The caret takes part only while the music note at the end of its blink buttons (Settings panel → Caret) is on: then, while music plays and a beat is found, it stops blinking and holds steady, and the music moves it on the beat, as far as the caret's **effect** says, in the opposite direction to the blink; its **shape** and **fall** are under Visualizer in the caret's settings. Without a beat it blinks as selected.
+- Its settings are the same for every layout. Its colours belong to the layout: Settings panel → Layouts → Colors → Visualizer.
+- Caret, edge and pane are separate blocks. The edge is a soft inner shadow along the editor's border. **Grid Beat** sets the edge, the **editor pane** (drawn over the box grid in the edit view) and the **reader pane** (an even wash of its colour over the whole editor in any view without a grid); the full-screen scene has its own edge and pane under **Visualizer**. The caret takes part only while **Caret Beat** is on in [Features](${guideLink('APPEARANCE-SETTINGS', 'features')}) (a layout setting): then, while music plays and a beat is found, it stops blinking and holds steady, and the music moves it on the beat, as far as the caret's **effect** says, in the opposite direction to the blink; its **shape** and **fall** are under Caret Beat in the caret's settings. Without a beat it blinks as selected.
 - What the music is listened for is set once, under **Beat detection**, in three groups: **Thump** (the low end jumping: a kick, a bass stab), **Pierce** (a sharp sound cutting through: a snare, a clap) and **Tick** (the busy top: hats, shakers). One sound can be a little of two (a snare with some punch is a pierce with a slight thump). Each has a **contrast**: how strong a hit must be against the others around it before it responds, so raising it keeps only the strongest, and only what is mostly that group. Each block then has three sliders for how much the thump, the pierce and the tick drive it; they add up, capped at full. Then its **effect**: right of centre a hit adds the block, left of centre it is inverted, resting at full strength while music plays with a hit taking it away, and the centre turns it off; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
 - In the visualizer scene (F5), the last row of the top strip fills with chromatic semitone boxes, lit in the accent colour. Their brightness follows the estimated strength of each note, and multiple notes can light together. The estimate uses each note's fundamental and partials together, so energy explained by one note's overtones is not automatically shown as extra notes. This is a visual estimate rather than a transcription; closely related notes and unusual instrument timbres can still be ambiguous. A3 sits in the middle (in the right-center box when the row has an even number of boxes). After enough tonal material, the row estimates and holds the track's tuning; until then it uses A=440. To avoid brief broadband hits flashing many boxes, already-lit keys carry through a thump or pierce, and a new key revealed by one is admitted only when its decoded-track energy remains in the short look-ahead. Changes follow the audio, without waiting for a beat-grid boundary.
 - Left of the centre, the scene lists every song in the active playlists, in the order they will play, starting with the current one, highlighted, at the top. Scroll it with the wheel; when the mouse leaves, it returns to the top. Clicking a song plays it, and the songs after it follow in the same order. Right of the centre are your playlists; the highlighted ones are playing, and clicking one switches it on or off. Below them, the **artist**, **album** and **title** fields narrow the songs to those containing what you type, ignoring case; the list follows as you type, and once you leave the field (**Enter**, **Tab** to the next field, or a click elsewhere) the first song left on the list plays. Just start typing to search titles: the panels come up with every field emptied and the title field ready. **Esc** empties the field you are in; with no field in use it shows or hides the panels. **F5** leaves the visualizer. Under the centre, the long bar is the music's volume and the two above it its reverb (left) and room (right); each is named above it; the gap in each marks the level, and clicking a box sets it there.
@@ -276,7 +276,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Speed Reading](#speed-reading)
 
 > **Where?**
-> \`F9\`, the book button beside a slot's view button, or the \`Esc\` menu. Settings panel → Speed reading.
+> \`F9\`, the book button beside a slot's view button, or the \`Esc\` menu. Settings panel → Tools → Speed Reading.
 
 *Reads a note to you at a pace you set, from where you are.*
 
@@ -698,7 +698,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Import](#import)
 
 > **Where?**
-> Settings → Data → the import icon.
+> Settings → Miscellaneous → Data → the import icon.
 
 *Brings Markdown files from anywhere on your computer into Thockdown as regular notes.*
 
@@ -708,7 +708,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Back Up All Notes](#back-up-all-notes)
 
 > **Where?**
-> Settings → Data → the database icon.
+> Settings → Miscellaneous → Data → the database icon.
 
 *Saves a copy of the database, which holds every note, its chapters, tags and history, and shows it in your file explorer.*
 
@@ -773,15 +773,16 @@ ${shortcutTable()}
 > **Where?**
 > The cogwheel, the last of the sidebar's view icons.
 
-*The home for every appearance, sound, sync, and performance control in the app, organized into collapsible sections.*
+*The home for every appearance, sound, sync, and performance control in the app, in six sections: General, Layouts, Music, Soundscapes, Tools and Miscellaneous.*
 
-- Most controls apply live. Every section is always shown, whichever view you are in: where edit mode and render view differ, the editor's controls are headed "Editor" and the render view's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
+- The row of six buttons below the feature switches picks the section; the panel reopens on the one you left. Each section holds collapsible subsections, and only Layouts belongs to the layout: everything else is the same for every layout. A search looks through every section.
+- Most controls apply live. Every subsection is shown, whichever view you are in: where edit mode and render view differ, the editor's controls are headed "Editor" and the render view's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
 - Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
 
 ### [Editor Font](#editor-font)
 
 > **Where?**
-> Settings panel, directly below the feature switches, followed by Reader Font.
+> Settings panel → General, followed by Reader Font.
 
 *Font family, size, spacing, and padding: Editor Font for edit mode (font family, size, glyph padding, line height), Reader Font for the render view (font family, size, letter spacing, line height).*
 
@@ -801,15 +802,15 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel, the row below the theme presets.
 
-*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), the [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}), [Glaze]($#glaze) and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}).*
+*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), [Grid Beat](${guideLink('NOTES-EDITING', 'visualizer')}), Caret Beat and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}).*
 
 - A feature that is off is gone, not just hidden: its settings leave the panel and it costs nothing while it is off. Switch it back on and everything is as you left it.
-- These switches are the same for every layout. A layout still decides how a feature looks and sounds, and can have silent keys or no glaze of its own.
+- These switches are the same for every layout, except Caret Beat, which belongs to the layout and needs Grid Beat on. A layout still decides how a feature looks and sounds, and can have silent keys of its own.
 
-### [Custom Layouts](#custom-layouts)
+### [Save & Restore](#custom-layouts)
 
 > **Where?**
-> Settings panel → Custom Layouts.
+> Settings panel → Layouts → Save & Restore.
 
 *Saves your entire current configuration as a reusable, numbered preset slot.*
 
@@ -819,7 +820,7 @@ ${shortcutTable()}
 ### [Colors](#colors-and-textures)
 
 > **Where?**
-> Settings panel → Colors.
+> Settings panel → Layouts → Colors.
 
 *One staged colour, shown at the top of every section that has colours.*
 
@@ -832,14 +833,14 @@ ${shortcutTable()}
 ### [Borders](#borders-and-spacing)
 
 > **Where?**
-> Settings panel → Borders.
+> Settings panel → Layouts → Borders.
 
 *Fine control over border widths, corner radii, and layout spacing throughout the UI.*
 
 ### [UI Font](#ui-font)
 
 > **Where?**
-> Settings panel → UI Font.
+> Settings panel → General → UI Font.
 
 *Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the note fonts under [Editor Font]($#editor-font).*
 
@@ -849,17 +850,17 @@ ${shortcutTable()}
 ### [Glaze](#glaze)
 
 > **Where?**
-> Settings panel → Glaze.
+> Settings panel → Layouts → Glaze.
 
 *A decorative multi-layer light overlay on top of the UI — purely cosmetic.*
 
 - Independent linear ("glare") and radial ("flair") gradient layers, plus dark and light gradient accents ("gloom" and "sheen"), each with its own position, shape, opacity, and randomizable seed.
-- Safe to leave at defaults, or turn off entirely in [Features]($#features).
+- Safe to leave at defaults; a layout without glaze sets its opacities to zero.
 
 ### [Filters](#filters)
 
 > **Where?**
-> Settings panel → Filters.
+> Settings panel → Layouts → Filters.
 
 *Global CSS filters applied over the whole app.*
 
@@ -868,7 +869,7 @@ ${shortcutTable()}
 ### [Animations](#animations)
 
 > **Where?**
-> Settings panel → Animations.
+> Settings panel → General → Animations.
 
 *Tunes the custom easing curve used for scroll animations the app makes on your behalf — a search jump, a page key, a chapter change. For what the wheel itself does, see [Scrolling]($#scrolling).*
 
@@ -879,7 +880,7 @@ ${shortcutTable()}
 ### [Speed Reading Settings](#speed-reading-settings)
 
 > **Where?**
-> Settings panel → Speed reading.
+> Settings panel → Tools → Speed Reading.
 
 *The pace of [Speed Reading]($#speed-reading) and how it eases.*
 
@@ -890,7 +891,7 @@ ${shortcutTable()}
 ### [Scrolling](#scrolling)
 
 > **Where?**
-> Settings panel → Scrolling.
+> Settings panel → General → Scrolling.
 
 *What your own hand does to the page: how far one turn of the wheel goes, and whether a spin of it keeps going after you let go.*
 
@@ -905,7 +906,7 @@ ${shortcutTable()}
 ### [Cursor](#mouse-options)
 
 > **Where?**
-> Settings panel → Cursor.
+> Settings panel → Layouts → Cursor.
 
 *An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Features]($#features); while it is on, the native cursor is hidden everywhere in the app, not just the editor.*
 
@@ -917,7 +918,7 @@ ${shortcutTable()}
 ### [Caret](#caret)
 
 > **Where?**
-> Settings panel → Caret.
+> Settings panel → Layouts → Caret.
 
 *Shape, glow and blink rhythm for the block caret in the editor. Its fill color lives with the rest of your theming in [Colors and Textures]($#colors-and-textures); everything else about it is here.*
 
@@ -936,7 +937,7 @@ ${shortcutTable()}
 ### [Sounds](#keystroke-sounds)
 
 > **Where?**
-> Settings panel → Sounds.
+> Settings panel → Layouts → Sounds.
 
 *Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
 
@@ -967,7 +968,7 @@ ${shortcutTable()}
 ### [Data](#data-synchronization-settings)
 
 > **Where?**
-> Settings panel → Data.
+> Settings panel → Miscellaneous → Data.
 
 *Note import and backup, and exporting or importing your whole appearance setup.*
 
@@ -978,7 +979,7 @@ ${shortcutTable()}
 ### [Debugging](#debugging)
 
 > **Where?**
-> Settings panel → Debugging.
+> Settings panel → Miscellaneous → Debugging.
 
 *Tools for diagnosing problems, not intended for everyday use.*
 
@@ -1001,7 +1002,7 @@ ${shortcutTable()}
 - **Going back** — the player remembers the last hundred songs it played, so right-clicking rewind can step back through them one at a time, not just to the one before this. Fast-forward is deliberately not the mirror of that: right-clicking it always picks a fresh song, exactly as if the current one had reached its end. Once a song you went back to finishes, play carries on as normal.
 - **Media keys and the system player** — your keyboard's play/pause, next and previous keys, and the media controls your system shows (on Windows, the flyout beside the volume), drive this player and show the current song. Previous steps back through what you have heard; next picks a fresh song, as right-clicking fast-forward does.
 - **Mini mode** — the expand button on the player's right leaves mini mode and maximizes the window (its arrows point that way). Your previous window size isn't lost: un-maximizing returns to it.
-- **Soundstages** — the headphones button swaps the row of five music slots and the Soundscapes switch for the six soundstages (the same buttons as in the settings panel's Music section), and swaps back. Click one to play the music through it.
+- **Soundstages** — the headphones button swaps the row of five music slots and the Soundscapes switch for the six soundstages (the same buttons as in the settings panel's Music → Soundstages), and swaps back. Click one to play the music through it.
 - Scroll over the headphones button to adjust sound: plain scroll for volume, \`Shift\` for reverb, \`Ctrl\` for room size. Right-click it to mute or unmute; turning the volume up by scrolling also unmutes.
 - **Resuming across restarts** — if music was playing when the app was last closed, it resumes on launch (same song and position), fading in over 10 seconds from silence and full reverb up to your usual volume/reverb settings.
 `,

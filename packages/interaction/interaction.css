@@ -322,6 +322,18 @@
   gap:       var(--spacing-regular);
 }
 
+/* A heading's icon says what the subsection is about. Icons differ in width,
+   so each gets the same box and the headings' names line up. */
+.sidebar-options-section-heading > .fa-solid {
+  width:      1.25em;
+  text-align: center;
+}
+
+/* An icon drawn taller than its glyph: the Caret subsection's block. */
+.sidebar-options-section-heading > .options-heading-icon-tall {
+  transform: scaleY(1.5);
+}
+
 .sidebar-options-section-heading::after {
   content:     '▾';
   font-size:   calc(20px * var(--ui-font-scale));

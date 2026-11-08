@@ -154,14 +154,9 @@ interface AccordionSectionProps {
   className?: string
   headingClassName?: string
   ariaLabel?: string
-  /** fa-solid icon class for the heading, e.g. "fa-rectangle-list". Defaults to the global-scope icon. */
-  iconClass?: string
-  /** Tooltip shown when hovering the icon. Pass '' to suppress the tooltip attribute entirely. */
-  iconTooltip?: string
+  /** fa-solid icon class(es) for the heading, saying what the subsection is about, e.g. "fa-paint-roller". */
+  iconClass: string
 }
-
-const DEFAULT_ICON_CLASS   = 'fa-globe-americas'
-const DEFAULT_ICON_TOOLTIP = 'These settings are global and persist across layouts.'
 
 interface AnimState {
   rafId: number
@@ -176,8 +171,7 @@ export function AccordionSection({
   className,
   headingClassName,
   ariaLabel,
-  iconClass = DEFAULT_ICON_CLASS,
-  iconTooltip = DEFAULT_ICON_TOOLTIP,
+  iconClass,
 }: AccordionSectionProps) {
   const id = useId()
   const group = useContext(AccordionGroupContext)
@@ -311,10 +305,7 @@ export function AccordionSection({
           data-secondary-press="action"
           onContextMenu={handleContextMenu}
         >
-          <span
-            className={`fa-solid ${iconClass}`}
-            data-tooltip={iconTooltip || undefined}
-          />
+          <span className={`fa-solid ${iconClass}`} aria-hidden="true" />
           {heading}
         </summary>
         <div ref={contentRef} className="sidebar-options-accordion-body">

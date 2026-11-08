@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import {
@@ -470,6 +470,8 @@ function fromPosition(spec: ControlSpec, position: number): number {
 }
 
 interface ControlGroupsProps {
+  /** Leave out the group's own label: the host already names it (the desktop's Environment subsection). */
+  unlabelled?: boolean
   help?: (heading: string) => readonly string[] | null
   idPrefix: string
   groups: ControlGroup[]
@@ -480,14 +482,14 @@ interface ControlGroupsProps {
   onCommit: (key: string, value: number) => void
 }
 
-function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onCommit, help }: ControlGroupsProps) {
+function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onCommit, help, unlabelled = false }: ControlGroupsProps) {
   return (
     <>
       {groups.map((group) => {
         const helpText = help?.(group.label) ?? null
         return (
         <div className="soundscape-control-group" role="group" aria-label={`${name} ${group.label.toLowerCase()}`} key={group.label}>
-          <OptionsSubsectionLabel>{group.label}</OptionsSubsectionLabel>
+          {unlabelled ? null : <OptionsSubsectionLabel>{group.label}</OptionsSubsectionLabel>}
           {helpText !== null ? <SubsectionHelp paragraphs={helpText} /> : (
           <OptionsSliderRows rows={group.rows}>
           {group.controls.map((spec) => (
@@ -516,25 +518,73 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
   )
 }
 
-/** The soundscape section of the options panel. */
+/**
+ * The soundscape's controls in the desktop options panel's Soundscapes
+ * section: the presets at the top with no heading, then the environment and
+ * the channels as collapsible subsections, the channel's own groups as
+ * dividers inside the latter.
+ */
 export function SoundscapeOptions(props: SoundscapeOptionsProps) {
   return (
-    <AccordionSection
-      className="sidebar-options-section-soundscape"
-      ariaLabel="Soundscapes"
-      heading="Soundscapes"
-    >
-      <SoundscapeControls {...props} />
-    </AccordionSection>
+    <SoundscapeParts
+      {...props}
+      arrangement="subsections"
+      arrange={({ presets, environment, channels }) => (
+        <>
+          <div className="utility-setting-slider-stack" aria-label="Soundscape presets">{presets}</div>
+          <AccordionSection className="sidebar-options-section-soundscape-environment" ariaLabel="Environment" heading="Environment" iconClass="fa-torii-gate">
+            {environment}
+          </AccordionSection>
+          <AccordionSection className="sidebar-options-section-soundscape-channels" ariaLabel="Channels" heading="Channels" iconClass="fa-chart-simple">
+            {channels}
+          </AccordionSection>
+        </>
+      )}
+    />
   )
 }
 
 /**
- * Everything inside that section, without the accordion around it: the
- * mobile app (apps/soundscapes/) shows these controls as its whole interface, where a
- * collapsible section heading would have nothing to collapse against.
+ * The same controls in one column, each part under a divider, with no
+ * collapsible subsections: the mobile app (apps/soundscapes/) shows these
+ * controls as its whole interface, where a heading would have nothing to
+ * collapse against.
  */
-export function SoundscapeControls({ preferences, onChange, pickedPresetId = null, onPickPreset, help }: SoundscapeControlsProps) {
+export function SoundscapeControls(props: SoundscapeControlsProps) {
+  return (
+    <SoundscapeParts
+      {...props}
+      arrangement="labelled"
+      arrange={({ presets, environment, channels, presetsLabel, channelsLabel }) => (
+        <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
+          {presetsLabel}
+          {presets}
+          {environment}
+          {channelsLabel}
+          {channels}
+        </div>
+      )}
+    />
+  )
+}
+
+/** What a host lays out: the three parts, and the labels the labelled arrangement puts above two of them. */
+interface SoundscapePartNodes {
+  presets: ReactNode
+  environment: ReactNode
+  channels: ReactNode
+  presetsLabel: ReactNode
+  channelsLabel: ReactNode
+}
+
+interface SoundscapePartsProps extends SoundscapeControlsProps {
+  /** `labelled`: one column, each part under its own divider (the mobile app). `subsections`: the host names the environment and the channels itself. */
+  arrangement: 'labelled' | 'subsections'
+  arrange: (parts: SoundscapePartNodes) => ReactNode
+}
+
+/** The soundscape's controls and their state, laid out by the host (`arrange`). */
+function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickPreset, help, arrangement, arrange }: SoundscapePartsProps) {
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
@@ -760,9 +810,10 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
   const rosterEntry = SOUNDSCAPE_CHANNEL_ROSTER.find((entry) => entry.id === selectedChannel?.id)
   const layerName = rosterEntry ? `${KIND_LOOK[rosterEntry.kind].label} layer ${rosterEntry.number}` : ''
 
-  return (
-      <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
-        <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>
+  return arrange({
+    presetsLabel: <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>,
+    channelsLabel: <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>,
+    presets: (<>
         {presetsHelp !== null ? <SubsectionHelp paragraphs={presetsHelp} /> : (<>
         {/* One grid: the factory soundscapes, then the reader's own, then the
             save button, flowing on from wherever the last of them ends. */}
@@ -912,7 +963,8 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
           )}
         </div>
         </>)}
-
+    </>),
+    environment: (<>
         {/* The volume, space and weather belong to the whole soundscape
             rather than to a channel, so they stand above the channels, always
             shown, rather than behind a channel-like button. */}
@@ -926,10 +978,11 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
             name="Environment"
             onCommit={updateEnvironment}
             help={help}
+            unlabelled={arrangement === 'subsections'}
           />
         </div>
-
-        <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
+    </>),
+    channels: (<>
         {channelsHelp !== null ? <SubsectionHelp paragraphs={channelsHelp} /> : (
         <div className="options-loadout-grid soundscape-channel-selector" role="group" aria-label="Soundscape channels" ref={channelSelectorRef}>
           {SOUNDSCAPE_CHANNEL_ROSTER.map((entry) => {
@@ -1050,6 +1103,6 @@ export function SoundscapeControls({ preferences, onChange, pickedPresetId = nul
             />
           </div>
         )}
-      </div>
-  )
+    </>),
+  })
 }

@@ -5,6 +5,8 @@ import { AccordionGroup, AccordionSection } from '@thockdown/interaction/Accordi
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { FontControls, FontSection } from './FontSection'
+import { OptionsSectionBar } from './OptionsSectionBar'
+import type { OptionsSectionId } from '../shared/optionsSections'
 import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
@@ -405,6 +407,9 @@ export interface SidebarOptionsPanelProps {
   optionsContentRef: MutableRefObject<HTMLDivElement | null>
   /** The options search term; while it is non-empty only what it appears in is shown (AccordionGroup's `filter`). */
   searchQuery: string
+  /** The section the selector bar shows (shared/optionsSections.ts); a search looks through all of them. */
+  optionsSection: OptionsSectionId
+  setOptionsSection: (section: OptionsSectionId) => void
 
   viewStyle: ViewStyleKey
   setViewStyle: (key: ViewStyleKey) => void
@@ -679,6 +684,8 @@ export function SidebarOptionsPanel({
   uiMode,
   optionsContentRef,
   searchQuery,
+  optionsSection,
+  setOptionsSection,
   viewStyle,
   setViewStyle,
   viewFontSize,
@@ -916,10 +923,24 @@ export function SidebarOptionsPanel({
     // What a slider resets to: the visualizer is global, so one default for every layout.
     const visualizerDefaults = DEFAULT_VISUALIZER
     // The follow-the-music switch is on but cannot act, so it is drawn dimmed and its tooltip says why.
-    // With the Visualizer off it cannot be used at all, so it is disabled (and
+    // With Grid Beat off it cannot be used at all, so it is disabled (and
     // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
     const caretFollowUnavailable = !features.visualizer
     const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && caretEffectStrengthPercent === 0)
+    // The feature bar's Caret Beat switch: the layout's caretFollowsMusic. The
+    // blink selected under Caret stays selected and is what the caret falls
+    // back to whenever there is no beat to follow.
+    const caretBeat = {
+      on: caretFollowsMusic,
+      unavailable: caretFollowUnavailable,
+      tooltip: caretFollowUnavailable
+        ? 'Caret Beat needs Grid Beat: switch it on (the drum) beside this. Until then the caret blinks as selected'
+        : caretFollowWaits
+        ? "Caret Beat is on but not in effect: the caret's effect (Layouts > Caret) is at its centre. Until then the caret holds still"
+        : `Caret Beat: ${caretFollowsMusic ? 'on' : 'off'}. While music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as its effect. Kept per layout`,
+      dimmed: caretFollowWaits,
+      toggle: () => setCaretFollowsMusic((prev) => !prev),
+    }
     // The caret's Visualizer subsection: the beat's fall, while the caret follows the music.
     const beatCaretShown = features.visualizer && caretFollowsMusic
     const outputDevice = useOutputDevice(features.visualizer)
@@ -965,7 +986,7 @@ export function SidebarOptionsPanel({
       const caret = visualizer.caret
       return (
         <>
-          <OptionsSubsectionLabel>Visualizer</OptionsSubsectionLabel>
+          <OptionsSubsectionLabel>Caret Beat</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Caret on the beat">
             <OptionsSliderRows rows={[2]}>
               {renderFallSliders('beat-caret', 'Caret', caret, visualizerDefaults.caret, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
@@ -1189,13 +1210,18 @@ export function SidebarOptionsPanel({
       )
     }
 
+    // One section at a time, except while searching: a search answers from
+    // every section, so the selector bar steps aside like the bars above it.
+    const isSearching = searchQuery.trim() !== ''
+    const showsSection = (section: OptionsSectionId) => isSearching || optionsSection === section
+
     return (
     <div
       ref={optionsContentRef}
       className="options-content sidebar-options-content"
       aria-label="Settings panel"
     >
-      <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
+      <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
         <div className="options-loadout-grid" role="group" aria-label="UI mode presets">
           {factoryPresetEntriesForCurrentMode.map((entry) => {
             const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
@@ -1226,13 +1252,18 @@ export function SidebarOptionsPanel({
           </button>
         </div>
       </div>
-      <div className="preset-section" data-options-search-hidden={searchQuery.trim() !== '' ? '' : undefined}>
-        <FeatureToggleBar features={features} setFeatures={setFeatures} />
+      <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
+        <FeatureToggleBar features={features} setFeatures={setFeatures} caretBeat={caretBeat} />
+      </div>
+      <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
+        <OptionsSectionBar selected={optionsSection} onSelect={setOptionsSection} />
       </div>
       <AccordionGroup filter={searchQuery}>
+      {showsSection('general') ? (<>
       <FontSection
         className="sidebar-options-section-editor-font"
         heading="Editor Font"
+        icon="fa-keyboard"
         pickerLabel="Editor typography"
         options={EDITOR_STYLE_OPTIONS}
         activeKey={editorStyle}
@@ -1293,6 +1324,7 @@ export function SidebarOptionsPanel({
       <FontSection
         className="sidebar-options-section-reader-font"
         heading="Reader Font"
+        icon="fa-book-open"
         pickerLabel="Render typography"
         options={VIEW_STYLE_OPTIONS}
         activeKey={viewStyle}
@@ -1343,6 +1375,7 @@ export function SidebarOptionsPanel({
       <FontSection
         className="sidebar-options-section-ui-font"
         heading="UI Font"
+        icon="fa-table-list"
         pickerLabel="UI font family"
         options={UI_FONT_OPTIONS}
         activeKey={uiFontStyle}
@@ -1365,11 +1398,172 @@ export function SidebarOptionsPanel({
       />
 
       <AccordionSection
+        className="sidebar-options-section-animations"
+        ariaLabel="Animations"
+        heading="Animations"
+        iconClass="fa-spinner"
+      >
+<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+          <OptionsSliderRows>
+            <CompactScrollbarSlider
+              id="render-scroll-dynamic"
+              min={0.1}
+              max={5}
+              step={0.05}
+              value={renderScrollDynamic}
+              trackLabel="ramp"
+              ariaLabel="Curve dynamic parameter a"
+              defaultValue={5 / 3}
+              onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-skew"
+              min={RENDER_SCROLL_SKEW_MIN}
+              max={RENDER_SCROLL_SKEW_MAX}
+              step={0.01}
+              value={renderScrollSkew}
+              trackLabel="shape"
+              ariaLabel="Curve skew (apex bias)"
+              defaultValue={0.5}
+              onCommit={(value) => setRenderScrollSkew(
+                Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-total-time"
+              min={0}
+              max={2}
+              step={0.05}
+              value={renderScrollTotalTimeSec}
+              trackLabel="speed"
+              ariaLabel="Total time parameter t in seconds"
+              reverseScale
+              defaultValue={0.4}
+              onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
+            />
+            <CompactScrollbarSlider
+              id="render-scroll-max-speed"
+              min={1000}
+              max={100000}
+              step={1000}
+              value={renderScrollMaxSpeedPxPerSec}
+              trackLabel="max speed"
+              ariaLabel="Maximum scroll speed in pixels per second"
+              defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
+              onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
+
+      {/* Scrolling is its own section because it answers a different
+          question from Animations. Those four sliders shape a journey the
+          APP decides to make -- a search jump, a page key, a chapter change.
+          These describe what the reader's own hand does to the page: what a
+          notch is worth, and whether a spin may outlive the hand that made
+          it. They were one section while there were only three of them, and
+          the split is what stops the reader hunting for a wheel setting
+          among curve parameters. */}
+      <AccordionSection
+        className="sidebar-options-section-scrolling"
+        ariaLabel="Scrolling"
+        heading="Scrolling"
+        iconClass="fa-up-down"
+      >
+<div className="utility-setting-slider-stack" aria-label="Wheel scrolling settings">
+          <OptionsSliderRows rows={[3, 2]}>
+            {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a
+                spin, `dampen` what happens after one, so they read in that
+                order. */}
+            <CompactScrollbarSlider
+              id="wheel-spin-threshold"
+              min={WHEEL_SPIN_THRESHOLD_OFF}
+              max={WHEEL_SPIN_THRESHOLD_MAX_MS}
+              step={WHEEL_SPIN_THRESHOLD_STEP_MS}
+              value={wheelSpinThresholdMs}
+              trackLabel="auto scroll"
+              formatValue={formatWheelSpinThreshold}
+              ariaLabel="Spin the wheel to keep scrolling: how close together nudges must be, in milliseconds. All the way left turns it off."
+              defaultValue={DEFAULT_WHEEL_SPIN_THRESHOLD_MS}
+              onCommit={(value) => setWheelSpinThresholdMs(
+                clamp(value, WHEEL_SPIN_THRESHOLD_OFF, WHEEL_SPIN_THRESHOLD_MAX_MS),
+              )}
+            />
+            {/* Reversed: the stored number is the divisor c, which gets
+                SMALLER as damping gets stronger, and a control whose right-hand
+                end damps less than its left would read backwards. */}
+            <CompactScrollbarSlider
+              id="wheel-spin-dampen"
+              min={WHEEL_SPIN_DAMPEN_ENDLESS}
+              max={WHEEL_SPIN_DAMPEN_DIVISOR_MAX}
+              step={WHEEL_SPIN_DAMPEN_DIVISOR_STEP}
+              value={wheelSpinDampenDivisor}
+              trackLabel="dampen"
+              ariaLabel="How quickly a wheel spin coasts to a stop. All the way left, it never stops on its own."
+              defaultValue={DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR}
+              onCommit={(value) => setWheelSpinDampenDivisor(
+                clamp(value, WHEEL_SPIN_DAMPEN_ENDLESS, WHEEL_SPIN_DAMPEN_DIVISOR_MAX),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="wheel-spin-cutoff"
+              min={WHEEL_SPIN_CUTOFF_MIN_MS}
+              max={WHEEL_SPIN_CUTOFF_MAX_MS}
+              step={WHEEL_SPIN_CUTOFF_STEP_MS}
+              value={wheelSpinCutoffMs}
+              trackLabel="cut off"
+              ariaLabel="How slow a free scroll may get, in milliseconds between rows, before it stops."
+              defaultValue={DEFAULT_WHEEL_SPIN_CUTOFF_MS}
+              onCommit={(value) => setWheelSpinCutoffMs(
+                clamp(value, WHEEL_SPIN_CUTOFF_MIN_MS, WHEEL_SPIN_CUTOFF_MAX_MS),
+              )}
+            />
+            {/* What one notch is worth, per pane. Two controls rather than one
+                because the panes count in different units and always have: the
+                edit view lands on row boundaries, so its step can only be a
+                whole number of rows, while the render view has no grid to land
+                on and can take a fraction of a line. A single shared number
+                would have to be one or the other, and would be lying to one of
+                the panes. */}
+            <CompactScrollbarSlider
+              id="wheel-step-rows"
+              min={WHEEL_STEP_ROWS_MIN}
+              max={WHEEL_STEP_ROWS_MAX}
+              step={WHEEL_STEP_ROWS_STEP}
+              value={wheelStepRows}
+              trackLabel="edit step"
+              ariaLabel="How many rows one notch of the wheel scrolls in edit mode."
+              defaultValue={DEFAULT_WHEEL_STEP_ROWS}
+              onCommit={(value) => setWheelStepRows(
+                clamp(Math.round(value), WHEEL_STEP_ROWS_MIN, WHEEL_STEP_ROWS_MAX),
+              )}
+            />
+            <CompactScrollbarSlider
+              id="wheel-step-lines"
+              min={WHEEL_STEP_LINES_MIN}
+              max={WHEEL_STEP_LINES_MAX}
+              step={WHEEL_STEP_LINES_STEP}
+              value={wheelStepLines}
+              trackLabel="view step"
+              formatValue={formatWheelStepLines}
+              ariaLabel="How many lines of text one notch of the wheel scrolls in render view."
+              defaultValue={DEFAULT_WHEEL_STEP_LINES}
+              onCommit={(value) => setWheelStepLines(
+                clamp(value, WHEEL_STEP_LINES_MIN, WHEEL_STEP_LINES_MAX),
+              )}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
+
+      </>) : null}
+
+      {showsSection('layouts') ? (<>
+      <AccordionSection
         className="sidebar-options-section-layouts"
-        ariaLabel="Custom Layouts"
-        heading="Custom Layouts"
+        ariaLabel="Save & Restore"
+        heading="Save & Restore"
         iconClass="fa-floppy-disk"
-        iconTooltip=""
       >
         <div className="options-loadout-grid" role="group" aria-label="Custom UI Layouts">
           {customSlotEntriesForCurrentMode.map((entry) => (
@@ -1419,13 +1613,11 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
-
       <AccordionSection
         className="sidebar-options-section-colors"
         ariaLabel="Colors"
         heading="Colors"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+        iconClass="fa-paint-roller"
       >
         <ColorPickerRow />
 
@@ -1501,12 +1693,10 @@ export function SidebarOptionsPanel({
         </>) : null}
       </AccordionSection>
 
-      {features.glaze ? (
       <AccordionSection
         ariaLabel="Glaze"
         heading="Glaze"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+        iconClass="fa-spray-can-sparkles"
       >
         <div className="options-glaze-settings-grid" role="group" aria-label="Glaze overlay controls">
           <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-left">
@@ -1835,13 +2025,11 @@ export function SidebarOptionsPanel({
           </div>
         </div>
       </AccordionSection>
-      ) : null}
 
       <AccordionSection
         ariaLabel="Filters"
         heading="Filters"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+        iconClass="fa-swatch-book"
       >
 <div className="utility-setting-slider-stack" aria-label="CSS filter controls">
           {/* Colour, then light, then the whole-image effects. */}
@@ -1861,8 +2049,7 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-misc"
         ariaLabel="Borders"
         heading="Borders"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+        iconClass="fa-border-top-left"
       >
 <div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
           <OptionsSliderRows>
@@ -1944,8 +2131,7 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-mouse"
         ariaLabel="Cursor"
         heading="Cursor"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+        iconClass="fa-computer-mouse"
       >
         <ColorPickerRow />
         <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
@@ -2194,8 +2380,7 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-caret"
         ariaLabel="Caret"
         heading="Caret"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+        iconClass="fa-square options-heading-icon-tall"
       >
         <ColorPickerRow />
         <div className="options-caret-settings-grid" role="group" aria-label="Caret appearance controls">
@@ -2292,25 +2477,6 @@ export function SidebarOptionsPanel({
                 </button>
               )
             })}
-            {/* Not a blink but a switch beside them: the blink selected above
-                stays selected and is what the caret falls back to whenever
-                there is no beat to follow (the layout's caretFollowsMusic). */}
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-caret-preset-btn${caretFollowsMusic ? ' is-active' : ''}${caretFollowWaits ? ' is-dimmed' : ''}`}
-              data-tooltip={caretFollowUnavailable
-                ? 'Follow the music needs the Visualizer: switch it on (the drum) in the feature bar. Until then the caret blinks as selected'
-                : caretFollowWaits
-                ? "Follow the music is on but not in effect: the caret's effect is at its centre. Until then the caret holds still"
-                : 'Follow the music: while music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as its effect (its fall under Visualizer below). Otherwise it blinks as selected'}
-              aria-label="Caret follows the music"
-              aria-pressed={caretFollowsMusic}
-              // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
-              aria-disabled={caretFollowUnavailable}
-              onClick={() => caretFollowUnavailable || setCaretFollowsMusic((prev) => !prev)}
-            >
-              <span className="fa-solid fa-music" aria-hidden="true" />
-            </button>
           </div>
 
           {features.caretBlink ? (<>
@@ -2366,8 +2532,7 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-audio"
         ariaLabel="Sounds"
         heading="Sounds"
-        iconClass="fa-rectangle-list"
-        iconTooltip="These settings are layout specific and will be lost when changing layouts. You can store them by creating a custom layout."
+        iconClass="fa-keyboard"
       >
 <div className="utility-setting-slider-stack" aria-label="Sounds controls">
           <OptionsSubsectionLabel>Keys</OptionsSubsectionLabel>
@@ -2525,13 +2690,16 @@ export function SidebarOptionsPanel({
       </AccordionSection>
       ) : null}
 
+      </>) : null}
+
+      {showsSection('music') ? (<>
       {/* The music's sound beyond the music bar's volume, reverb and room:
           app-wide like the rest of the music's settings, not the layout's. */}
       <AccordionSection
         className="sidebar-options-section-music"
-        ariaLabel="Music"
-        heading="Music"
-        iconClass="fa-music"
+        ariaLabel="Soundstages"
+        heading="Soundstages"
+        iconClass="fa-headphones"
       >
         <div className="utility-setting-slider-stack" aria-label="Music controls">
           {/* Volume, reverb and room are the music bar's levels: set through the
@@ -2613,7 +2781,8 @@ export function SidebarOptionsPanel({
       <AccordionSection
         className="sidebar-options-section-beat-detection"
         ariaLabel="Beat detection"
-        heading="Beat detection"
+        heading="Beat Detection"
+        iconClass="fa-drum"
       >
           <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
@@ -2655,6 +2824,7 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-grid-beat"
         ariaLabel="Grid Beat"
         heading="Grid Beat"
+        iconClass="fa-table-cells"
       >
           {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
           {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the edit view', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
@@ -2667,6 +2837,7 @@ export function SidebarOptionsPanel({
         className="sidebar-options-section-visualizer"
         ariaLabel="Visualizer"
         heading="Visualizer"
+        iconClass="fa-eye"
       >
           <FontControls
             pickerLabel="Visualizer typography"
@@ -2942,122 +3113,17 @@ export function SidebarOptionsPanel({
       </AccordionSection>
       ) : null}
 
+      </>) : null}
+
+      {showsSection('soundscapes') ? (<>
       <SoundscapeOptions
         preferences={soundscapePreferences}
         onChange={onSoundscapePreferencesChange}
       />
 
-      {features.typingTrail ? (
-      <AccordionSection
-        className="sidebar-options-section-typing-trail"
-        ariaLabel="Typing Trail"
-        heading="Typing Trail"
-      >
-          <div className="utility-setting-slider-stack" aria-label="Typing trail settings">
-            {/* How a trail mark fades (fade, shape) and how many characters the trail takes to reach full strength (gain); typingTrail/typingTrail.ts. */}
-            <OptionsSliderRows rows={[3]}>
-              <CompactScrollbarSlider
-                id="typing-trail-fade-time"
-                min={TRAIL_FADE_MAX_TIME_MIN}
-                max={TRAIL_FADE_MAX_TIME_MAX}
-                step={0.1}
-                value={typingTrailSettings.fadeMaxTime}
-                trackLabel="fade"
-                tooltipLabel="Seconds a trail mark, and the caret's hold after a typed letter, take to fade out"
-                ariaLabel="How long a typing trail mark takes to fade out, in seconds"
-                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeMaxTime}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeMaxTime: value }))}
-              />
-              <CompactScrollbarSlider
-                id="typing-trail-fade-shape"
-                min={TRAIL_FADE_SHAPE_MIN}
-                max={TRAIL_FADE_SHAPE_MAX}
-                step={0.1}
-                value={typingTrailSettings.fadeShape}
-                trackLabel="shape"
-                tooltipLabel="Fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
-                ariaLabel="Shape of the typing trail's fade"
-                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeShape}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeShape: value }))}
-              />
-              <CompactScrollbarSlider
-                id="typing-trail-gain"
-                min={TRAIL_GAIN_PERCENT_MIN}
-                max={TRAIL_GAIN_PERCENT_MAX}
-                step={1}
-                value={typingTrailSettings.gainPercent}
-                trackLabel="gain"
-                tooltipLabel="Percent of the trail's full colour each typed letter adds on top of what the last mark has faded to (the colour is in Colors, Boxes)"
-                ariaLabel="Percent of the typing trail's full strength each letter adds"
-                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gainPercent}
-                formatValue={(value) => String(Math.round(value))}
-                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, gainPercent: Math.round(value) }))}
-              />
-            </OptionsSliderRows>
-          </div>
-      </AccordionSection>
-      ) : null}
+      </>) : null}
 
-      <AccordionSection
-        className="sidebar-options-section-animations"
-        ariaLabel="Animations"
-        heading="Animations"
-      >
-<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
-          <OptionsSliderRows>
-            <CompactScrollbarSlider
-              id="render-scroll-dynamic"
-              min={0.1}
-              max={5}
-              step={0.05}
-              value={renderScrollDynamic}
-              trackLabel="ramp"
-              ariaLabel="Curve dynamic parameter a"
-              defaultValue={5 / 3}
-              onCommit={(value) => setRenderScrollDynamic(clamp(value, 0.1, 5))}
-            />
-            <CompactScrollbarSlider
-              id="render-scroll-skew"
-              min={RENDER_SCROLL_SKEW_MIN}
-              max={RENDER_SCROLL_SKEW_MAX}
-              step={0.01}
-              value={renderScrollSkew}
-              trackLabel="shape"
-              ariaLabel="Curve skew (apex bias)"
-              defaultValue={0.5}
-              onCommit={(value) => setRenderScrollSkew(
-                Math.max(RENDER_SCROLL_SKEW_MIN, Math.min(RENDER_SCROLL_SKEW_MAX, value)),
-              )}
-            />
-            <CompactScrollbarSlider
-              id="render-scroll-total-time"
-              min={0}
-              max={2}
-              step={0.05}
-              value={renderScrollTotalTimeSec}
-              trackLabel="speed"
-              ariaLabel="Total time parameter t in seconds"
-              reverseScale
-              defaultValue={0.4}
-              onCommit={(value) => setRenderScrollTotalTimeSec(clamp(value, 0, 2))}
-            />
-            <CompactScrollbarSlider
-              id="render-scroll-max-speed"
-              min={1000}
-              max={100000}
-              step={1000}
-              value={renderScrollMaxSpeedPxPerSec}
-              trackLabel="max speed"
-              ariaLabel="Maximum scroll speed in pixels per second"
-              defaultValue={DEFAULT_RENDER_SCROLL_MAX_SPEED_PX_PER_SEC}
-              onCommit={(value) => setRenderScrollMaxSpeedPxPerSec(clamp(value, 1000, 100000))}
-            />
-          </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-
+      {showsSection('tools') ? (<>
       {/* Speed reading (Alt+<): the two views' paces, the edit view's row,
           and the one curve both views ease with -- the same three numbers as
           Animations above, kept apart from them because a reading pace's ease
@@ -3068,7 +3134,8 @@ export function SidebarOptionsPanel({
       <AccordionSection
         className="sidebar-options-section-speed-reading"
         ariaLabel="Speed reading"
-        heading="Speed reading"
+        heading="Speed Reading"
+        iconClass="fa-glasses"
       >
         <OptionsSubsectionLabel>Edit</OptionsSubsectionLabel>
         <div className="utility-setting-slider-stack" aria-label="Speed reading, edit">
@@ -3176,109 +3243,91 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
-      {/* Scrolling is its own section because it answers a different
-          question from Animations. Those four sliders shape a journey the
-          APP decides to make -- a search jump, a page key, a chapter change.
-          These describe what the reader's own hand does to the page: what a
-          notch is worth, and whether a spin may outlive the hand that made
-          it. They were one section while there were only three of them, and
-          the split is what stops the reader hunting for a wheel setting
-          among curve parameters. */}
       <AccordionSection
-        className="sidebar-options-section-scrolling"
-        ariaLabel="Scrolling"
-        heading="Scrolling"
+        className="sidebar-options-section-spell-check"
+        ariaLabel="Spell Checking"
+        heading="Spell Checking"
+        iconClass="fa-spell-check"
       >
-<div className="utility-setting-slider-stack" aria-label="Wheel scrolling settings">
-          <OptionsSliderRows rows={[3, 2]}>
-            {/* Spin-to-keep-scrolling: `auto scroll` sets what counts as a
-                spin, `dampen` what happens after one, so they read in that
-                order. */}
-            <CompactScrollbarSlider
-              id="wheel-spin-threshold"
-              min={WHEEL_SPIN_THRESHOLD_OFF}
-              max={WHEEL_SPIN_THRESHOLD_MAX_MS}
-              step={WHEEL_SPIN_THRESHOLD_STEP_MS}
-              value={wheelSpinThresholdMs}
-              trackLabel="auto scroll"
-              formatValue={formatWheelSpinThreshold}
-              ariaLabel="Spin the wheel to keep scrolling: how close together nudges must be, in milliseconds. All the way left turns it off."
-              defaultValue={DEFAULT_WHEEL_SPIN_THRESHOLD_MS}
-              onCommit={(value) => setWheelSpinThresholdMs(
-                clamp(value, WHEEL_SPIN_THRESHOLD_OFF, WHEEL_SPIN_THRESHOLD_MAX_MS),
-              )}
-            />
-            {/* Reversed: the stored number is the divisor c, which gets
-                SMALLER as damping gets stronger, and a control whose right-hand
-                end damps less than its left would read backwards. */}
-            <CompactScrollbarSlider
-              id="wheel-spin-dampen"
-              min={WHEEL_SPIN_DAMPEN_ENDLESS}
-              max={WHEEL_SPIN_DAMPEN_DIVISOR_MAX}
-              step={WHEEL_SPIN_DAMPEN_DIVISOR_STEP}
-              value={wheelSpinDampenDivisor}
-              trackLabel="dampen"
-              ariaLabel="How quickly a wheel spin coasts to a stop. All the way left, it never stops on its own."
-              defaultValue={DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR}
-              onCommit={(value) => setWheelSpinDampenDivisor(
-                clamp(value, WHEEL_SPIN_DAMPEN_ENDLESS, WHEEL_SPIN_DAMPEN_DIVISOR_MAX),
-              )}
-            />
-            <CompactScrollbarSlider
-              id="wheel-spin-cutoff"
-              min={WHEEL_SPIN_CUTOFF_MIN_MS}
-              max={WHEEL_SPIN_CUTOFF_MAX_MS}
-              step={WHEEL_SPIN_CUTOFF_STEP_MS}
-              value={wheelSpinCutoffMs}
-              trackLabel="cut off"
-              ariaLabel="How slow a free scroll may get, in milliseconds between rows, before it stops."
-              defaultValue={DEFAULT_WHEEL_SPIN_CUTOFF_MS}
-              onCommit={(value) => setWheelSpinCutoffMs(
-                clamp(value, WHEEL_SPIN_CUTOFF_MIN_MS, WHEEL_SPIN_CUTOFF_MAX_MS),
-              )}
-            />
-            {/* What one notch is worth, per pane. Two controls rather than one
-                because the panes count in different units and always have: the
-                edit view lands on row boundaries, so its step can only be a
-                whole number of rows, while the render view has no grid to land
-                on and can take a fraction of a line. A single shared number
-                would have to be one or the other, and would be lying to one of
-                the panes. */}
-            <CompactScrollbarSlider
-              id="wheel-step-rows"
-              min={WHEEL_STEP_ROWS_MIN}
-              max={WHEEL_STEP_ROWS_MAX}
-              step={WHEEL_STEP_ROWS_STEP}
-              value={wheelStepRows}
-              trackLabel="edit step"
-              ariaLabel="How many rows one notch of the wheel scrolls in edit mode."
-              defaultValue={DEFAULT_WHEEL_STEP_ROWS}
-              onCommit={(value) => setWheelStepRows(
-                clamp(Math.round(value), WHEEL_STEP_ROWS_MIN, WHEEL_STEP_ROWS_MAX),
-              )}
-            />
-            <CompactScrollbarSlider
-              id="wheel-step-lines"
-              min={WHEEL_STEP_LINES_MIN}
-              max={WHEEL_STEP_LINES_MAX}
-              step={WHEEL_STEP_LINES_STEP}
-              value={wheelStepLines}
-              trackLabel="view step"
-              formatValue={formatWheelStepLines}
-              ariaLabel="How many lines of text one notch of the wheel scrolls in render view."
-              defaultValue={DEFAULT_WHEEL_STEP_LINES}
-              onCommit={(value) => setWheelStepLines(
-                clamp(value, WHEEL_STEP_LINES_MIN, WHEEL_STEP_LINES_MAX),
-              )}
-            />
-          </OptionsSliderRows>
+        {/* The spell checker's one setting today is whether it runs at all
+            (the same switch as the feature bar's); its own settings join it
+            here when the app's own spell checker arrives (TODO.md). */}
+        <div className="options-loadout-grid" role="group" aria-label="Spell checking">
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${features.spellCheck ? ' is-active' : ''}`}
+            data-tooltip={`Spell check: ${features.spellCheck ? 'on' : 'off'}`}
+            aria-label={`Spell check: ${features.spellCheck ? 'on' : 'off'}`}
+            aria-pressed={features.spellCheck}
+            onClick={() => setFeatures((previous) => ({ ...previous, spellCheck: !previous.spellCheck }))}
+          >
+            <span className="fa-solid fa-spell-check" aria-hidden="true" />
+          </button>
         </div>
       </AccordionSection>
 
+      {features.typingTrail ? (
+      <AccordionSection
+        className="sidebar-options-section-typing-trail"
+        ariaLabel="Typing Trail"
+        heading="Typing Trail"
+        iconClass="fa-wand-sparkles"
+      >
+          <div className="utility-setting-slider-stack" aria-label="Typing trail settings">
+            {/* How a trail mark fades (fade, shape) and how many characters the trail takes to reach full strength (gain); typingTrail/typingTrail.ts. */}
+            <OptionsSliderRows rows={[3]}>
+              <CompactScrollbarSlider
+                id="typing-trail-fade-time"
+                min={TRAIL_FADE_MAX_TIME_MIN}
+                max={TRAIL_FADE_MAX_TIME_MAX}
+                step={0.1}
+                value={typingTrailSettings.fadeMaxTime}
+                trackLabel="fade"
+                tooltipLabel="Seconds a trail mark, and the caret's hold after a typed letter, take to fade out"
+                ariaLabel="How long a typing trail mark takes to fade out, in seconds"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeMaxTime}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeMaxTime: value }))}
+              />
+              <CompactScrollbarSlider
+                id="typing-trail-fade-shape"
+                min={TRAIL_FADE_SHAPE_MIN}
+                max={TRAIL_FADE_SHAPE_MAX}
+                step={0.1}
+                value={typingTrailSettings.fadeShape}
+                trackLabel="shape"
+                tooltipLabel="Fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
+                ariaLabel="Shape of the typing trail's fade"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeShape}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeShape: value }))}
+              />
+              <CompactScrollbarSlider
+                id="typing-trail-gain"
+                min={TRAIL_GAIN_PERCENT_MIN}
+                max={TRAIL_GAIN_PERCENT_MAX}
+                step={1}
+                value={typingTrailSettings.gainPercent}
+                trackLabel="gain"
+                tooltipLabel="Percent of the trail's full colour each typed letter adds on top of what the last mark has faded to (the colour is in Colors, Boxes)"
+                ariaLabel="Percent of the typing trail's full strength each letter adds"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gainPercent}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, gainPercent: Math.round(value) }))}
+              />
+            </OptionsSliderRows>
+          </div>
+      </AccordionSection>
+      ) : null}
+
+      </>) : null}
+
+      {showsSection('misc') ? (<>
       <AccordionSection
         className="sidebar-options-section-notes"
         ariaLabel="Notes and Import"
         heading="Data"
+        iconClass="fa-database"
       >
         <OptionsSubsectionLabel>Notes</OptionsSubsectionLabel>
 <div className="options-loadout-grid" role="group" aria-label="Note import and backup">
@@ -3402,6 +3451,34 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
+      <AccordionSection
+        className="sidebar-options-section-debug"
+        ariaLabel="Debugging"
+        heading="Debugging"
+        iconClass="fa-bug"
+      >
+<div className="options-loadout-grid" role="group" aria-label="Debug tools">
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => window.windowControls?.toggleDevTools()}
+            data-tooltip="Open DevTools (detached window)"
+            aria-label="Open DevTools (detached window)"
+          >
+            <span className="fa-solid fa-code" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${clearAppStatePrimed ? ' primed' : ''}`}
+            onClick={clearAppState}
+            data-tooltip={clearAppStatePrimed ? 'Click again to clear persisted app state and reload' : 'Clear persisted app state and reload'}
+            aria-label={clearAppStatePrimed ? 'Confirm clearing persisted app state and reload' : 'Clear persisted app state and reload'}
+          >
+            <span className="fa-solid fa-trash" aria-hidden="true" />
+          </button>
+        </div>
+      </AccordionSection>
+
       {/* THOCKQUEST'S OWN SETTINGS. Four sliders in a two-by-two, then the
           toggle that says whether the tuning is an override or a commitment.
           In that order because it is the order they are read in: what kind of
@@ -3417,7 +3494,6 @@ export function SidebarOptionsPanel({
         ariaLabel="ThockQuest"
         heading="ThockQuest"
         iconClass="fa-dice-d20"
-        iconTooltip="ThockQuest, reached by right-clicking the User Guide window control."
       >
         <OptionsSubsectionLabel>Difficulty</OptionsSubsectionLabel>
         <div className="typography-sliders">
@@ -3589,32 +3665,9 @@ export function SidebarOptionsPanel({
           </button>
         </div>
       </AccordionSection>
-      <AccordionSection
-        className="sidebar-options-section-debug"
-        ariaLabel="Debugging"
-        heading="Debugging"
-      >
-<div className="options-loadout-grid" role="group" aria-label="Debug tools">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={() => window.windowControls?.toggleDevTools()}
-            data-tooltip="Open DevTools (detached window)"
-            aria-label="Open DevTools (detached window)"
-          >
-            <span className="fa-solid fa-code" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${clearAppStatePrimed ? ' primed' : ''}`}
-            onClick={clearAppState}
-            data-tooltip={clearAppStatePrimed ? 'Click again to clear persisted app state and reload' : 'Clear persisted app state and reload'}
-            aria-label={clearAppStatePrimed ? 'Confirm clearing persisted app state and reload' : 'Clear persisted app state and reload'}
-          >
-            <span className="fa-solid fa-trash" aria-hidden="true" />
-          </button>
-        </div>
-      </AccordionSection>
+
+      </>) : null}
+
       </AccordionGroup>
     </div>
     )

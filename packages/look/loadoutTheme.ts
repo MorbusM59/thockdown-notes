@@ -68,8 +68,6 @@ export type ThemeLoadout = Pick<
 >
 
 export interface ThemeOptions {
-  /** The glaze feature is on (the desktop app's feature toggle); off, no glaze layer is drawn at all. */
-  glaze: boolean
   /** Selection colour follows the active view: the render view has its own. */
   isPreviewMode: boolean
 }
@@ -371,14 +369,12 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
   const palette = derivePaletteTokensFromBaseColor(colors.base)
   const lineNumberRgba = parseCssColorToRgba(colors.lineNumber) ?? { r: 0, g: 0, b: 0, a: 0.6 }
 
-  const glaze: ThemeGlazeImages = !options.glaze
-    ? { linear: 'none', radial: 'none', gloom: 'none', sheen: 'none' }
-    : {
-        linear: buildLinearGlazeLayers(loadout.glaze).join(', ') || 'none',
-        radial: buildRadialGlazeLayers(loadout.glaze).join(', ') || 'none',
-        gloom: buildGloomGlazeLayer(loadout.glaze, inverted),
-        sheen: buildSheenGlazeLayer(loadout.glaze, inverted),
-      }
+  const glaze: ThemeGlazeImages = {
+    linear: buildLinearGlazeLayers(loadout.glaze).join(', ') || 'none',
+    radial: buildRadialGlazeLayers(loadout.glaze).join(', ') || 'none',
+    gloom: buildGloomGlazeLayer(loadout.glaze, inverted),
+    sheen: buildSheenGlazeLayer(loadout.glaze, inverted),
+  }
 
   const embossUiSecondary = embossSecondary(colors.textEmbossUi)
   const shared: Record<string, string> = {

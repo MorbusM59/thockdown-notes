@@ -1,3 +1,4 @@
+import type { OptionsSectionId } from './optionsSections';
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
 import type { FeatureToggles } from './features';
@@ -39,6 +40,8 @@ export interface PersistedMenuState {
   searchQuery: string;
   /** The options panel's search term, separate from the note search's. */
   optionsSearchQuery?: string;
+  /** The options panel's selected section (shared/optionsSections.ts). */
+  optionsSection?: OptionsSectionId;
   searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
   isPreviewMode?: boolean;

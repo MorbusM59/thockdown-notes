@@ -7,14 +7,13 @@
  * and is responsible for that teardown; this module only says which are on.
  *
  * These are app-wide, not part of a layout: a layout decides how a feature
- * looks or sounds (a layout may still choose silent keys, or a glaze at zero
- * opacity), the toggle decides whether the feature exists at all. Persisted
- * as one record on `PersistedMenuState.features`, so a new feature is one id
+ * looks or sounds (a layout may still choose silent keys), the toggle
+ * decides whether the feature exists at all. Persisted as one record on `PersistedMenuState.features`, so a new feature is one id
  * here and touches no schema. Kept free of the DOM so the main process's
  * `sanitizeMenu` can use it.
  */
 
-export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'glaze', 'typingTrail', 'caretBlink'] as const
+export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'typingTrail', 'caretBlink'] as const
 
 /**
  * The features the bar offers. The caret blink is a feature in every sense
@@ -32,7 +31,6 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
   customCursor: true,
   keySounds: true,
   visualizer: false,
-  glaze: true,
   typingTrail: false,
   caretBlink: true,
 }
