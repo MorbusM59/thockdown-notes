@@ -21,6 +21,7 @@ import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
+import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection } from '../src/shared/optionsSections';
 import { sanitizeBoxBevel } from '@thockdown/look/boxBevel';
@@ -536,6 +537,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     highlightGutterBackgroundColor: sanitizeOptionalString(input?.highlightGutterBackgroundColor),
     highlightImmersiveScrollThumbColor: sanitizeOptionalString(input?.highlightImmersiveScrollThumbColor),
     highlightFlowTrailColor: sanitizeOptionalString(input?.highlightFlowTrailColor),
+    highlightSpellCheckColor: sanitizeOptionalString(input?.highlightSpellCheckColor),
     highlightReviewColor: sanitizeOptionalString(input?.highlightReviewColor),
     highlightWarningColor: sanitizeOptionalString(input?.highlightWarningColor),
     highlightLineNumberColor: sanitizeOptionalString(input?.highlightLineNumberColor),
@@ -604,6 +606,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     sidebarViewState: sanitizeSidebarViewState(input?.sidebarViewState),
     // Reads the record, or for an older save the separate fields it replaced.
     features: sanitizeFeatureToggles(input),
+    spellCheckDictionaries: sanitizeSpellCheckDictionaries(input?.spellCheckDictionaries),
     // A save from before the typing trail had its own record keeps its fade
     // in `flow`. Only the fade is taken: the flow's `gainPercent` meant
     // something else and must not become the trail's.

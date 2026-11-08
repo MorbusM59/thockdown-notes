@@ -1828,17 +1828,6 @@ export function usePreviewScrollbar({
     syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
   }, [previewScrollRef]);
 
-  // The render view is normally plain (non-editable) rendered markdown, but
-  // Chromium's native spellchecker only underlines misspellings inside an
-  // editable region. To let spell check work in render view too, we make the
-  // preview container contentEditable when the render-view spell check
-  // toggle is on, and block every event that would actually mutate its
-  // content — so it stays visually read-only while still being "editable"
-  // enough for the OS/Chromium spellchecker to run against it.
-  const blockPreviewEditMutation = useCallback((event: { preventDefault: () => void }) => {
-    event.preventDefault()
-  }, [])
-
   return {
     previewTextureRef,
     previewScrollbarTrackRef,
@@ -1850,7 +1839,6 @@ export function usePreviewScrollbar({
     handlePreviewTrackContextMenu,
     handlePreviewThumbPointerDown,
     handlePreviewScroll,
-    blockPreviewEditMutation,
     travelPreviewToRatio,
   }
 }

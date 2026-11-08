@@ -166,6 +166,7 @@ export interface PersistedMenuState {
   highlightGutterBackgroundColor?: string;
   highlightImmersiveScrollThumbColor?: string;
   highlightFlowTrailColor?: string;
+  highlightSpellCheckColor?: string;
   highlightReviewColor?: string;
   highlightWarningColor?: string;
   highlightLineNumberColor?: string;
@@ -239,6 +240,8 @@ export interface PersistedMenuState {
   sidebarViewState?: Partial<Record<SidebarMode, PersistedSidebarViewState>>;
   /** Which features exist at all: the toggle bar at the top of Options. See shared/features.ts. */
   features?: FeatureToggles;
+  /** The spell checker's active dictionaries by id (Options > Spell Checking; on/off is `features.spellCheck`); see shared/spellCheck.ts. Absent: `DEFAULT_SPELL_CHECK_DICTIONARIES`. */
+  spellCheckDictionaries?: string[];
   /** The typing trail's tuning (Options > Typing Trail; on/off is `features.typingTrail`); see typingTrail/typingTrail.ts. Saved as `flow` before 0.7.4, read from there by `sanitizeMenu`. */
   typingTrail?: TypingTrailSettings;
   speedReading?: SpeedReadingSettings;

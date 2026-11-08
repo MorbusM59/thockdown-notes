@@ -2,8 +2,8 @@
 import { installHangLog } from './hangLog'
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, powerMonitor, protocol, shell, screen } from 'electron'
-import type { IpcMainEvent, IpcMainInvokeEvent, Session, PrintToPDFOptions } from 'electron'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import type { IpcMainEvent, IpcMainInvokeEvent, PrintToPDFOptions } from 'electron'
+import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createReadStream, existsSync, promises as fsPromises } from 'node:fs'
 import { Readable } from 'node:stream'
@@ -20,6 +20,8 @@ import { DatabaseService } from './databaseService'
 import { migrateVisualizerTuning } from './visualizerTuningMigration'
 import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS, type ExternalFileEvents, type ExternalFilesApi } from '../src/shared/externalFiles'
 import { TEXTURE_CHANNELS, type TextureCacheApi } from '../src/shared/textures'
+import { SPELL_CHECK_CHANNELS, type SpellCheckApi } from '../src/shared/spellCheck'
+import { SpellCheckDictionaries } from './spellCheckDictionaries'
 import { AUDIO_BOUNCE_CHANNELS, type AudioBounceCacheApi } from '../src/shared/audioBounceCache'
 import { LOADOUT_CHANNELS, type UiLoadoutApi } from '@thockdown/look/loadouts'
 import { AUDIO_PLAYER_CHANNELS, type AudioPlayerApi, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
@@ -101,46 +103,6 @@ export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
-
-// Chromium's built-in spellchecker (used for the contentEditable regions in
-// both edit mode and, optionally, render view) needs to be told which
-// dictionaries to load. We resolve the OS-preferred language(s) plus English
-// (deduped, and only if English isn't already one of the OS languages), and
-// match each against the dictionaries Chromium actually ships.
-function configureSpellChecker(session: Session) {
-  try {
-    // Windows and macOS spell-check through the operating system. Elsewhere
-    // Chromium uses Hunspell dictionaries, which by default it DOWNLOADS from
-    // Google on first use -- a network request made by the browser process,
-    // not by a page. Pointing it at a local folder keeps the app offline;
-    // no dictionaries are bundled yet, so on Linux spell-checking is off
-    // until they are (drop `<lang>.bdic` files into resources/dictionaries).
-    if (process.platform !== 'win32' && process.platform !== 'darwin') {
-      session.setSpellCheckerDictionaryDownloadURL(
-        pathToFileURL(path.join(app.isPackaged ? process.resourcesPath : process.env.APP_ROOT, 'dictionaries') + path.sep).toString(),
-      )
-    }
-    const available = session.availableSpellCheckerLanguages
-    if (!available || available.length === 0) return
-
-    const osLanguages = app.getPreferredSystemLanguages()
-    const wanted = [...osLanguages, 'en-US', 'en']
-
-    const resolved: string[] = []
-    for (const lang of wanted) {
-      const normalized = lang.toLowerCase()
-      const exact = available.find((code) => code.toLowerCase() === normalized)
-      const baseMatch = exact ?? available.find((code) => code.toLowerCase().startsWith(normalized.slice(0, 2)))
-      if (baseMatch && !resolved.includes(baseMatch)) {
-        resolved.push(baseMatch)
-      }
-    }
-
-    session.setSpellCheckerLanguages(resolved.length > 0 ? resolved : ['en-US'])
-  } catch (error) {
-    console.warn('Failed to configure spell checker languages', error)
-  }
-}
 
 function resolveWindowIconPath(): string {
   if (process.platform === 'win32') {
@@ -1108,6 +1070,24 @@ function registerIpcHandlers() {
     },
   }, handleTracked);
 
+  const spellCheckDictionaries = new SpellCheckDictionaries(path.join(resolveDataRoot(), 'dictionaries'))
+  registerInvokeHandlers<SpellCheckApi, IpcMainInvokeEvent>(SPELL_CHECK_CHANNELS, {
+    listDictionaries: async () => spellCheckDictionaries.list(),
+    readDictionary: async (_event, id) => spellCheckDictionaries.read(id),
+    installDictionary: async (event) => {
+      const owner = BrowserWindow.fromWebContents(event.sender) ?? win
+      const options = {
+        title: 'Install a Hunspell dictionary (its .aff file must be in the same folder)',
+        filters: [{ name: 'Hunspell dictionary', extensions: ['dic'] }],
+        properties: ['openFile' as const],
+      }
+      const { filePaths, canceled } = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
+      if (canceled || filePaths.length === 0) return null
+      return spellCheckDictionaries.install(filePaths[0])
+    },
+    removeDictionary: async (_event, id) => spellCheckDictionaries.remove(id),
+  }, handleTracked);
+
   registerInvokeHandlers<TextureCacheApi, IpcMainInvokeEvent>(TEXTURE_CHANNELS, {
     getCachedTexture: async (_event, request) => {
       return databaseService!.getTextureCache(request);
@@ -1649,10 +1629,12 @@ async function createWindow() {
   backgroundColor: currentRootBackgroundColorHex,
   webPreferences: {
     preload: path.join(__dirname, 'preload.mjs'),
+    // The app checks spelling itself (src/spellCheck/, dictionaries served
+    // below); Chromium's checker is off so it neither runs nor fetches
+    // dictionaries.
+    spellcheck: false,
   },
 })
-
-  configureSpellChecker(win.webContents.session)
 
   win.setMenuBarVisibility(false)
 

@@ -15,7 +15,6 @@ import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { ChapterEntry } from '../shared/chapters'
-import { resolveSpellCheckSurfaceState } from '../shared/spellCheckPolicy'
 import { ChapterBar } from '../chapters/ChapterBar'
 import { isSealedNoteId } from '../shared/helpGuide'
 import type { ImageStorageButton } from './useImageStorageButton'
@@ -74,7 +73,8 @@ export interface SectionEditorAreaProps {
   /** Live user-configurable corner-radius/spacing base units (options menu sliders) -- threaded through so the escape-hold ring (escapeHoldRingLayout.ts) recomputes to match .editor-empty-state's actual on-screen shape instead of drifting from a stale hardcoded mirror. */
   borderRadiusRegularPx: number
   spacingRegularPx: number
-  spellCheckEditEnabled: boolean
+  /** The spell checker's switch (Options' feature bar); it runs only in the active slot's editor. */
+  spellCheckEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
   /** Where the long-journey bridge draws -- see editor/scrollBridge.ts. */
   previewBridgeHostRef: RefObject<HTMLDivElement>
@@ -85,8 +85,6 @@ export interface SectionEditorAreaProps {
   viewSpacing: number
   viewLetterSpacingEm: number
   highlightSearchColor: string
-  spellCheckRenderEnabled: boolean
-  blockPreviewEditMutation: (event: { preventDefault: () => void }) => void
   previewMarkdownElement: ReactNode
   previewScrollbarTrackRef: RefObject<HTMLDivElement>
   handlePreviewTrackPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void
@@ -225,7 +223,7 @@ export function SectionEditorArea({
   isExportingMd,
   borderRadiusRegularPx,
   spacingRegularPx,
-  spellCheckEditEnabled,
+  spellCheckEnabled,
   previewTextureRef,
   previewBridgeHostRef,
   previewScrollRef,
@@ -235,8 +233,6 @@ export function SectionEditorArea({
   viewSpacing,
   viewLetterSpacingEm,
   highlightSearchColor,
-  spellCheckRenderEnabled,
-  blockPreviewEditMutation,
   previewMarkdownElement,
   previewScrollbarTrackRef,
   handlePreviewTrackPointerDown,
@@ -399,18 +395,9 @@ export function SectionEditorArea({
     stepScene(-1)
   }, [isEscapeHoldActive, stepScene])
 
-  const editorSpellCheckEnabled = resolveSpellCheckSurfaceState({
-    globalToggleEnabled: spellCheckEditEnabled,
-    isEditorSurface: true,
-    isActiveEditor: isSectionActive,
-    isInputField: false,
-  })
-  const previewSpellCheckEnabled = resolveSpellCheckSurfaceState({
-    globalToggleEnabled: spellCheckRenderEnabled,
-    isEditorSurface: true,
-    isActiveEditor: isSectionActive,
-    isInputField: false,
-  })
+  // Spell checking is the editor's alone (never the reader's), and only in
+  // the active slot, where the reader is writing.
+  const editorSpellCheckEnabled = spellCheckEnabled && isSectionActive && !isPreviewMode
 
   // Always shown for any active note, chapters or not -- ChapterBar's own
   // trailing "+" pill (its onCreateChapter) is how a note gets its first
@@ -532,13 +519,6 @@ export function SectionEditorArea({
                   lineHeight: viewSpacing,
                   letterSpacing: `${viewLetterSpacingEm}em`,
                 } as CSSProperties}
-                contentEditable={previewSpellCheckEnabled}
-                suppressContentEditableWarning={previewSpellCheckEnabled}
-                spellCheck={previewSpellCheckEnabled}
-                onBeforeInput={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
-                onPaste={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
-                onCut={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
-                onDrop={previewSpellCheckEnabled ? blockPreviewEditMutation : undefined}
               >
                 {activeNoteId ? previewMarkdownElement : null}
               </div>
