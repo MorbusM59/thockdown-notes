@@ -35,13 +35,20 @@ export type SnapshotTimelineSliderProps = {
   onTrackLengthChange?: (trackLength: number) => void
 }
 
-// Half the widest mark's rendered width (the manual-snapshot dot, 8px) --
-// how far a mark's center gets pulled in from each rail edge so it never
-// renders partially outside the track.
-const MARK_INSET_PX = 10
+// A mark is as large as a slider thumb (--canonical-scroll-handle-thickness:
+// the rail's thickness less the thumb's 4px gap on each side), and both follow
+// the UI font scale. A mark's centre is pulled in from each rail end by half
+// its width plus 6px, so the end marks sit as far in as a thumb at the end of
+// its travel; 10px at scale 1. Measured as the rail's height / 2 + 2, the
+// same quantity.
+const MARK_INSET_CSS = 'calc(var(--canonical-scroll-handle-thickness) / 2 + 6px)'
+
+function markInsetPx(railHeightPx: number): number {
+  return (railHeightPx / 2) + 2
+}
 
 function markLeftStyle(ratio: number): string {
-  return `calc(${MARK_INSET_PX}px + (${ratio} * (100% - ${MARK_INSET_PX * 2}px)))`
+  return `calc(${MARK_INSET_CSS} + (${ratio} * (100% - 2 * ${MARK_INSET_CSS})))`
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -122,15 +129,17 @@ export function SnapshotTimelineSlider({
 }: SnapshotTimelineSliderProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
   const [railWidthPx, setRailWidthPx] = useState(0)
+  const [railHeightPx, setRailHeightPx] = useState(0)
 
   useLayoutEffect(() => {
     const rail = railRef.current
     if (!rail) return
 
     const updateWidth = () => {
-      const width = rail.getBoundingClientRect().width
+      const { width, height } = rail.getBoundingClientRect()
       setRailWidthPx(width)
-      onTrackLengthChange?.(Math.max(0, width - MARK_INSET_PX * 2))
+      setRailHeightPx(height)
+      onTrackLengthChange?.(Math.max(0, width - markInsetPx(height) * 2))
     }
     updateWidth()
 
@@ -170,12 +179,15 @@ export function SnapshotTimelineSlider({
 
   const historyMarkLeftStyles = useMemo(() => {
     const marks = historyMarksToRender
-    if (railWidthPx <= 0 || marks.length === 0) {
+    if (railWidthPx <= 0 || railHeightPx <= 0 || marks.length === 0) {
       return marks.map(() => undefined)
     }
 
+    const MARK_INSET_PX = markInsetPx(railHeightPx)
     const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
-    const outerHalves = marks.map((mark) => (mark.isManual ? 5 : 4))
+    // Half a mark's width, plus the manual mark's heavier outline.
+    const markHalf = (railHeightPx / 2) - 4
+    const outerHalves = marks.map((mark) => (mark.isManual ? markHalf + 1 : markHalf))
     const minGapBetween = (i: number) => outerHalves[i] + outerHalves[i + 1] + 2
     const renderedCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
 
@@ -198,7 +210,7 @@ export function SnapshotTimelineSlider({
     }
 
     return renderedCenters.map((center) => `${center}px`)
-  }, [historyMarksToRender, railWidthPx])
+  }, [historyMarksToRender, railWidthPx, railHeightPx])
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     const currentIndex = orderedNavTargets.findIndex((id) => id === activeSnapshotId)
