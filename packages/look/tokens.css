@@ -496,6 +496,9 @@
      Shared by both native WebKit scrollbars and the custom JS scrollbar widget.
   --------------------------------------------------------------------------- */
 
+  /* Scale-1 fallbacks for the first paint only: the live values follow the
+     UI font scale and are written onto the root by scrollTrackGeometry.ts's
+     installScrollTrackTokens, together with --canonical-scroll-handle-thickness. */
   --canonical-scroll-thickness:       16px;
   --canonical-scroll-handle-gap:      4px;
   /* --canonical-scroll-track-edge-gap is not declared here: it is written
@@ -565,10 +568,10 @@
   /* The bottom row (toggles, word count, snapshot timeline, present-state
      circle) is one height, and it follows the UI font: its text is sized by
      --ui-font-scale, so a fixed height let the word count's figures outgrow
-     their box. 16px at scale 1, rounded to whole pixels so the row's borders
-     stay crisp. Every element of the row takes this height; the icons inside
+     their box. It is the track thickness, which scales with the UI font
+     (written by scrollTrackGeometry.ts's installScrollTrackTokens). Every element of the row takes this height; the icons inside
      the square buttons keep their own fixed glyph size. */
-  --bottom-utility-bar-content-height: round(calc(16px * var(--ui-font-scale)), 1px);
+  --bottom-utility-bar-content-height: var(--canonical-scroll-thickness);
   --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-regular) + var(--spacing-large));
 
   /* Tab bar, tag bar, and chapter bar heights are no longer separate

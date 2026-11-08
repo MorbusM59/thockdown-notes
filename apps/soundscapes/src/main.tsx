@@ -17,7 +17,7 @@ import './mobile.css'
 // (focusOwnership.ts) -- without it every tapped button kept focus.
 installPressTracking()
 installHoverTracking()
-installScrollTrackTokens()
+installScrollTrackTokens(1)
 // mouse-default: focus suppression, which only the mousedown default controls
 window.addEventListener('mousedown', keepFocusOnPress, { capture: true })
 

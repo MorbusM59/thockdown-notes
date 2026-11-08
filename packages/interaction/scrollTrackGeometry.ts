@@ -11,8 +11,42 @@
  */
 export const SCROLL_TRACK_EDGE_GAP_PX = 3
 
-export function installScrollTrackTokens(): void {
-  document.documentElement.style.setProperty('--canonical-scroll-track-edge-gap', `${SCROLL_TRACK_EDGE_GAP_PX}px`)
+/**
+ * A track's thickness (every scrollbar, slider shell and the bottom utility
+ * row) and the gap between its thumb and its long sides, at UI font scale 1.
+ * Both follow the UI font scale, so the controls grow with the text set in
+ * and beside them; each is rounded to whole pixels so borders stay crisp and
+ * the thumb stays centred.
+ */
+export const SCROLL_THICKNESS_BASE_PX = 16
+export const SCROLL_HANDLE_GAP_BASE_PX = 4
+
+export interface ScrollTrackSize {
+  thicknessPx: number
+  handleGapPx: number
+  handleThicknessPx: number
+}
+
+export function scrollTrackSizeFor(uiFontScale: number): ScrollTrackSize {
+  const thicknessPx = Math.round(SCROLL_THICKNESS_BASE_PX * uiFontScale)
+  const handleGapPx = Math.round(SCROLL_HANDLE_GAP_BASE_PX * uiFontScale)
+  return { thicknessPx, handleGapPx, handleThicknessPx: thicknessPx - (handleGapPx * 2) }
+}
+
+/**
+ * Writes the track tokens onto the root as plain pixel values. JS is the one
+ * source of these numbers: the sidebar's width is computed from the thickness
+ * in JS, and a pixel value (unlike a calc() in a custom property) reads back
+ * through getComputedStyle as a number. tokens.css carries the scale-1 values
+ * only as a fallback for the first paint.
+ */
+export function installScrollTrackTokens(uiFontScale: number): void {
+  const rootStyle = document.documentElement.style
+  const size = scrollTrackSizeFor(uiFontScale)
+  rootStyle.setProperty('--canonical-scroll-track-edge-gap', `${SCROLL_TRACK_EDGE_GAP_PX}px`)
+  rootStyle.setProperty('--canonical-scroll-thickness', `${size.thicknessPx}px`)
+  rootStyle.setProperty('--canonical-scroll-handle-gap', `${size.handleGapPx}px`)
+  rootStyle.setProperty('--canonical-scroll-handle-thickness', `${size.handleThicknessPx}px`)
 }
 
 /** Where a scrollbar's thumb sits, in px within its track; `active` is false when there is nothing to scroll. */

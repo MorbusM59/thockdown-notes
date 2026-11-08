@@ -14,7 +14,7 @@ installBrowserMockBridges()
 installTouchInput()
 installPressTracking()
 installHoverTracking()
-installScrollTrackTokens()
+installScrollTrackTokens(1)
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <App />,

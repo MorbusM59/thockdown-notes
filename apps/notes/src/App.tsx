@@ -2,7 +2,7 @@ import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisua
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
-import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
+import { installScrollTrackTokens, scrollThumbFor, scrollTopForThumb, scrollTrackSizeFor } from '@thockdown/interaction/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
@@ -302,9 +302,9 @@ const APP_STATE_SAVE_DEBOUNCE_MS = 500
 // setting. These mirror the CSS tokens of the same shape
 // (--btn-square-regular-size, --canonical-scroll-thickness feeding
 // --sidebar-scrollbar-slot-width, and .sidebar-content's own border) so the
-// two stay in sync.
+// two stay in sync. The scrollbar's thickness follows the UI font scale and
+// comes from scrollTrackSizeFor, the same function that writes the CSS token.
 const BTN_SQUARE_REGULAR_SIZE_PX = 32
-const CANONICAL_SCROLL_THICKNESS_PX = 16
 const SIDEBAR_CONTENT_BORDER_PX = 1
 // .toolbar-container / .display-modes each carry a 1px border on both sides
 // (toolbar.css) -- part of the toolbar column's content floor below.
@@ -1554,6 +1554,46 @@ function App() {
     [spacingRegularPx],
   )
 
+  // The size mode actually ON SCREEN: it follows the zoom the page really has,
+  // not the one requested. isDoubleSizeMode is the reader's choice (the
+  // button, what is saved); the zoom it asks for is applied by the main
+  // process a moment later, over IPC. Everything visual keyed to the mode --
+  // the font-size set above all -- switches on this instead, so it lands in
+  // the very frame the zoom does. Keyed to the request, the new sizes were
+  // painted at the old zoom first and the zoom caught up after: a two-step,
+  // messy transition.
+  const [isDoubleSizeApplied, setIsDoubleSizeApplied] = useState(() => readPageZoomFactor() > 1)
+  useEffect(() => {
+    // A zoom change arrives as a resize, dispatched before that frame paints.
+    // flushSync commits the switch inside the handler: an ordinary update
+    // from a native resize listener is applied after paint, which would show
+    // the new zoom with the old sizes for a frame -- the same mess the other
+    // way round. Only when it actually changes, so a window being dragged
+    // wider costs nothing.
+    let applied = readPageZoomFactor() > 1
+    const handleResize = () => {
+      const next = readPageZoomFactor() > 1
+      if (next === applied) return
+      applied = next
+      flushSync(() => setIsDoubleSizeApplied(next))
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+  // Font sizes are remembered per size mode: edit view, render view and the
+  // interface each keep one value for regular mode and one for double size,
+  // so switching modes never asks the reader to re-tune them. Spacing needs
+  // no pair -- it scales with the zoom on its own. Both sets always exist (a
+  // save from before this seeds the double-size set from the regular one --
+  // see resolvePersistedFontSizesByMode). The three names below are the values
+  // of the mode on screen (isDoubleSizeApplied), and their setters write into
+  // that mode's set only.
+  const [fontSizesByMode, setFontSizesByMode] = useState<FontSizesByMode>(() => ({
+    regular: DEFAULT_FONT_SIZE_SET,
+    double: { ...DEFAULT_FONT_SIZE_SET, visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.double },
+  }))
+  const { editorFontSize, viewFontSize, uiFontScale, visualizerFontSize } = isDoubleSizeApplied ? fontSizesByMode.double : fontSizesByMode.regular
+
   // Mirrors --sidebar-min-width in tokens.css: the sidebar has to be wide
   // enough for the options panel's always-visible top section (font
   // settings + preset buttons, a 6-column grid of square buttons) plus a
@@ -1565,7 +1605,7 @@ function App() {
   const sidebarWidthPx = useMemo(() => {
     const sidebarOptionsContentWidthPx = BTN_SQUARE_REGULAR_SIZE_PX * 6 + 7 * spacingRegularPx + 2
     const sidebarPaddingRightPx = spacingRegularPx * 2 // mirrors --spacing-large
-    const sidebarScrollbarSlotWidthPx = spacingRegularPx + CANONICAL_SCROLL_THICKNESS_PX // mirrors --sidebar-scrollbar-slot-width
+    const sidebarScrollbarSlotWidthPx = spacingRegularPx + scrollTrackSizeFor(uiFontScale).thicknessPx // mirrors --sidebar-scrollbar-slot-width
     return Math.round(
       sidebarOptionsContentWidthPx
       + spacingRegularPx * 4 // mirrors --spacing-large * 2
@@ -1573,7 +1613,7 @@ function App() {
       + sidebarScrollbarSlotWidthPx
       + sidebarPaddingRightPx,
     )
-  }, [spacingRegularPx])
+  }, [spacingRegularPx, uiFontScale])
 
   // The narrowest the toolbar column is allowed to get: exactly enough for the
   // formatting toolbar's compact layout to show three groups of three side by
@@ -1803,45 +1843,6 @@ function App() {
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
   const isDoubleSizeModeRef = useRef(isDoubleSizeMode)
   isDoubleSizeModeRef.current = isDoubleSizeMode
-  // The size mode actually ON SCREEN: it follows the zoom the page really has,
-  // not the one requested. isDoubleSizeMode is the reader's choice (the
-  // button, what is saved); the zoom it asks for is applied by the main
-  // process a moment later, over IPC. Everything visual keyed to the mode --
-  // the font-size set above all -- switches on this instead, so it lands in
-  // the very frame the zoom does. Keyed to the request, the new sizes were
-  // painted at the old zoom first and the zoom caught up after: a two-step,
-  // messy transition.
-  const [isDoubleSizeApplied, setIsDoubleSizeApplied] = useState(() => readPageZoomFactor() > 1)
-  useEffect(() => {
-    // A zoom change arrives as a resize, dispatched before that frame paints.
-    // flushSync commits the switch inside the handler: an ordinary update
-    // from a native resize listener is applied after paint, which would show
-    // the new zoom with the old sizes for a frame -- the same mess the other
-    // way round. Only when it actually changes, so a window being dragged
-    // wider costs nothing.
-    let applied = readPageZoomFactor() > 1
-    const handleResize = () => {
-      const next = readPageZoomFactor() > 1
-      if (next === applied) return
-      applied = next
-      flushSync(() => setIsDoubleSizeApplied(next))
-    }
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-  // Font sizes are remembered per size mode: edit view, render view and the
-  // interface each keep one value for regular mode and one for double size,
-  // so switching modes never asks the reader to re-tune them. Spacing needs
-  // no pair -- it scales with the zoom on its own. Both sets always exist (a
-  // save from before this seeds the double-size set from the regular one --
-  // see resolvePersistedFontSizesByMode). The three names below are the values
-  // of the mode on screen (isDoubleSizeApplied), and their setters write into
-  // that mode's set only.
-  const [fontSizesByMode, setFontSizesByMode] = useState<FontSizesByMode>(() => ({
-    regular: DEFAULT_FONT_SIZE_SET,
-    double: { ...DEFAULT_FONT_SIZE_SET, visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.double },
-  }))
-  const { editorFontSize, viewFontSize, uiFontScale, visualizerFontSize } = isDoubleSizeApplied ? fontSizesByMode.double : fontSizesByMode.regular
   const setActiveModeFontSize = useCallback((key: keyof FontSizeSet, value: number) => {
     const mode = isDoubleSizeApplied ? 'double' : 'regular'
     setFontSizesByMode((previous) => ({ ...previous, [mode]: { ...previous[mode], [key]: value } }))
@@ -4121,6 +4122,7 @@ function App() {
     const rootStyle = document.documentElement.style
     rootStyle.setProperty('--ui-font-family', resolveUiFontFamily(uiFontStyle))
     rootStyle.setProperty('--ui-font-scale', String(uiFontScale))
+    installScrollTrackTokens(uiFontScale)
     document.documentElement.dataset.uiFont = uiFontStyle
   }, [uiFontStyle, uiFontScale])
 
