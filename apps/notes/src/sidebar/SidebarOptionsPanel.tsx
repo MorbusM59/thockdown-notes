@@ -2780,7 +2780,7 @@ export function SidebarOptionsPanel({
       {features.visualizer ? (
       <AccordionSection
         className="sidebar-options-section-beat-detection"
-        ariaLabel="Beat detection"
+        ariaLabel="Beat Detection"
         heading="Beat Detection"
         iconClass="fa-drum"
       >
@@ -3133,7 +3133,7 @@ export function SidebarOptionsPanel({
           share. */}
       <AccordionSection
         className="sidebar-options-section-speed-reading"
-        ariaLabel="Speed reading"
+        ariaLabel="Speed Reading"
         heading="Speed Reading"
         iconClass="fa-glasses"
       >
