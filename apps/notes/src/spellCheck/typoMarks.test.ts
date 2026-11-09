@@ -16,10 +16,10 @@ describe('typoMarks', () => {
   });
 
   it('marks a swap as the pair, and separate typos separately', () => {
-    // A swap is a letter extra on one side and missing on the other.
-    expect(marked('Häsuer', 'Häuser')).toEqual(['sue']);
+    expect(marked('Häsuer', 'Häuser')).toEqual(['su']);
+    expect(marked('wnat', 'want')).toEqual(['na']);
     expect(marked('teh', 'the')).toEqual(['eh']);
-    expect(marked('recieve', 'receive')).toEqual(['iev']);
+    expect(marked('recieve', 'receive')).toEqual(['ie']);
     expect(marked('acomodate', 'accommodate')).toEqual(['como']);
   });
 

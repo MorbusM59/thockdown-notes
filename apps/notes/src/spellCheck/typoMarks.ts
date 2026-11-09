@@ -2,11 +2,11 @@
  * Which letters of a misspelled word to mark, given the word it was most
  * likely meant to be.
  *
- * The two are aligned on their longest common subsequence: the letters of
- * the misspelling that are part of it are the matching runs, and only what
- * lies between those runs is marked.
- *   - A letter of the misspelling that is not in the alignment (a wrong or an
- *     extra letter) is marked itself.
+ * The two are aligned by the fewest edits (a letter wrong, extra or missing,
+ * or two neighbours swapped): the letters that match form runs, and only
+ * what lies between those runs is marked.
+ *   - A wrong or an extra letter is marked itself; two swapped letters are
+ *     marked as the pair.
  *   - A letter of the intended word that is missing has no cell of its own,
  *     so the letters on either side of the gap are marked (one, at either end
  *     of the word), unless a wrong letter sits beside the gap: that is one
@@ -27,33 +27,40 @@ export type MarkRange = { from: number; to: number };
 export function typoMarks(word: string, target: string): MarkRange[] {
   const n = word.length;
   const m = target.length;
-  // lcs[i][j]: longest common subsequence of word[i..] and target[j..].
-  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
-      lcs[i][j] = word[i] === target[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  // cost[i][j]: fewest edits turning word[i..] into target[j..], where an
+  // edit is a letter wrong, extra or missing, or two neighbours swapped.
+  const cost: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n; i >= 0; i -= 1) {
+    for (let j = m; j >= 0; j -= 1) {
+      if (i === n || j === m) { cost[i][j] = (n - i) + (m - j); continue; }
+      let best = Math.min(cost[i + 1][j] + 1, cost[i][j + 1] + 1, cost[i + 1][j + 1] + (word[i] === target[j] ? 0 : 1));
+      if (isSwapAt(word, target, i, j)) best = Math.min(best, cost[i + 2][j + 2] + 1);
+      cost[i][j] = best;
     }
   }
   const marked = new Array<boolean>(n).fill(false);
   const gaps: number[] = [];
-  const markGap = (i: number) => { gaps.push(i); };
   let i = 0;
   let j = 0;
+  // Walk one cheapest alignment, preferring a match, then a swap, then a
+  // wrong letter, an extra one and a missing one.
   while (i < n || j < m) {
-    if (i < n && j < m && word[i] === target[j]) {
-      i += 1;
-      j += 1;
-    } else if (i < n && (j === m || lcs[i + 1][j] >= lcs[i][j + 1])) {
-      marked[i] = true;
-      i += 1;
+    const here = cost[i][j];
+    if (i < n && j < m && word[i] === target[j] && cost[i + 1][j + 1] === here) {
+      i += 1; j += 1;
+    } else if (isSwapAt(word, target, i, j) && cost[i + 2][j + 2] + 1 === here) {
+      marked[i] = true; marked[i + 1] = true; i += 2; j += 2;
+    } else if (i < n && j < m && cost[i + 1][j + 1] + 1 === here) {
+      marked[i] = true; i += 1; j += 1;
+    } else if (i < n && cost[i + 1][j] + 1 === here) {
+      marked[i] = true; i += 1;
     } else {
-      markGap(i);
-      j += 1;
+      gaps.push(i); j += 1;
     }
   }
-  // A missing letter before word[i]: mark its neighbours, unless one of them
-  // is already a wrong letter, in which case the gap and that letter are one
-  // substitution and the wrong letter alone says where it is.
+  // A missing letter before word[i] has no cell of its own: mark its
+  // neighbours, unless one of them is already marked, which then says where
+  // the edit is.
   const wrong = [...marked];
   for (const gap of gaps) {
     if ((gap > 0 && wrong[gap - 1]) || (gap < n && wrong[gap])) continue;
@@ -68,6 +75,11 @@ export function typoMarks(word: string, target: string): MarkRange[] {
     else ranges.push({ from: index, to: index + 1 });
   }
   return ranges;
+}
+
+function isSwapAt(word: string, target: string, i: number, j: number): boolean {
+  return i + 1 < word.length && j + 1 < target.length && word[i] !== word[i + 1]
+    && word[i] === target[j + 1] && word[i + 1] === target[j];
 }
 
 /** True when `target` is one edit from `word`: one letter wrong, extra or missing, or two neighbours swapped. */
