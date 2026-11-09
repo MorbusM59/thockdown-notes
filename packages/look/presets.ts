@@ -11,7 +11,7 @@ import { DEFAULT_GLAZE_SETTINGS } from './glaze';
 import { DARK_PRESET_BOX_BEVEL, DEFAULT_BOX_BEVEL } from './boxBevel';
 import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
 import { DEFAULT_CARET_SETTINGS } from './caretSettings';
-import type { UiLayoutLoadout } from './loadouts';
+import { FALLBACK_SPELL_CHECK_COLOR, type UiLayoutLoadout } from './loadouts';
 import { deriveTrailColor, deriveLightTrailColor } from './trailColor';
 import { sceneOf } from './scene';
 import { defaultVisualizerColors } from './visualizer';
@@ -134,6 +134,7 @@ export const NEUTRAL_BASE: UiLayoutLoadout = {
     grid: '#f9f6f3',
     gutterBackground: 'rgba(196, 187, 182, 0.49)',
     immersiveScrollThumb: 'rgba(0, 0, 0, 0.333)',
+    spellCheck: FALLBACK_SPELL_CHECK_COLOR,
     reviewLine: 'rgba(255, 230, 0, 0.6)',
     warningLine: 'rgba(255, 50, 0, 0.2)',
     lineNumber: 'rgba(0, 0, 0, 0.6)',

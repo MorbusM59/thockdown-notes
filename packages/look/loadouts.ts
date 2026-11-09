@@ -52,8 +52,7 @@ export type UiLayoutLoadout = {
     immersiveScrollThumb: string;
     /** Optional: loadouts saved before the typing trail existed lack it. */
     flowTrail?: string;
-    /** Optional: loadouts saved before spell checking's outline existed lack it. */
-    spellCheck?: string;
+    spellCheck: string;
     reviewLine: string;
     warningLine: string;
     lineNumber: string;
@@ -133,6 +132,9 @@ export type UiLayoutLoadout = {
 // other row of its mode: `unsavedLoadoutEntry`. Nothing stores whether there
 // are unsaved changes, so that cannot disagree with the rows.
 // ---------------------------------------------------------------------------
+
+/** The spell-check outline colour of a layout that does not set one. */
+export const FALLBACK_SPELL_CHECK_COLOR = 'rgba(255, 60, 120, 0.85)';
 
 export const LOADOUT_FACTORY_PRESET_COUNT = 5;
 export const LOADOUT_PENDING_ID_ABS = 7;

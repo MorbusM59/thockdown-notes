@@ -2762,7 +2762,7 @@ function App() {
       gutterBackground: loadout.highlightColors.gutterBackground,
       immersiveScrollThumb: loadout.highlightColors.immersiveScrollThumb ?? DEFAULT_HIGHLIGHT_COLORS.immersiveScrollThumb,
       flowTrail: loadout.highlightColors.flowTrail ?? DEFAULT_HIGHLIGHT_COLORS.flowTrail,
-      spellCheck: loadout.highlightColors.spellCheck ?? DEFAULT_HIGHLIGHT_COLORS.spellCheck,
+      spellCheck: loadout.highlightColors.spellCheck,
       reviewLine: loadout.highlightColors.reviewLine,
       warningLine: loadout.highlightColors.warningLine,
       lineNumber: loadout.highlightColors.lineNumber,

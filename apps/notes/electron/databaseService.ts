@@ -27,6 +27,7 @@ import {
   LOADOUT_PENDING_ID_ABS,
   LOADOUT_FIRST_CUSTOM_ID_ABS,
   LOADOUT_MAX_CUSTOM_SLOTS,
+  FALLBACK_SPELL_CHECK_COLOR,
 } from '@thockdown/look/loadouts';
 import {
   LIGHT_FACTORY_PRESETS,
@@ -143,6 +144,7 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
     grid: '#f9f6f3',
     gutterBackground: 'rgba(196, 187, 182, 0.49)',
     immersiveScrollThumb: 'rgba(0, 0, 0, 0.333)',
+    spellCheck: FALLBACK_SPELL_CHECK_COLOR,
     reviewLine: 'rgba(255, 230, 0, 0.6)',
     warningLine: 'rgba(255, 50, 0, 0.2)',
     lineNumber: 'rgba(0, 0, 0, 0.6)',
@@ -503,7 +505,7 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
       gutterBackground: sanitizeString(highlights.gutterBackground, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.gutterBackground),
       immersiveScrollThumb: sanitizeString(highlights.immersiveScrollThumb, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.immersiveScrollThumb),
       ...(typeof highlights.flowTrail === 'string' ? { flowTrail: highlights.flowTrail } : {}),
-      ...(typeof highlights.spellCheck === 'string' ? { spellCheck: highlights.spellCheck } : {}),
+      spellCheck: sanitizeString(highlights.spellCheck, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.spellCheck),
       reviewLine: sanitizeString(highlights.reviewLine, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.reviewLine),
       warningLine: sanitizeString(highlights.warningLine, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.warningLine),
       lineNumber: sanitizeString(highlights.lineNumber, DEFAULT_UI_LAYOUT_LOADOUT.highlightColors.lineNumber),

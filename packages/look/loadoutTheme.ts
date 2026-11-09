@@ -39,7 +39,7 @@ import { sceneOf } from './scene'
 import { FALLBACK_TRAIL_COLOR } from './trailColor'
 
 /** Spell checking's outline in a layout saved before it had a colour of its own. */
-export const FALLBACK_SPELL_CHECK_COLOR = 'rgba(255, 60, 120, 0.85)'
+export { FALLBACK_SPELL_CHECK_COLOR } from './loadouts'
 import {
   GLAZE_GLOOM_OPACITY_MAX,
   GLAZE_LINEAR_OPACITY_MAX,
@@ -423,7 +423,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--color-immersive-scroll-thumb': colors.immersiveScrollThumb,
     // A loadout saved before the trail existed has no colour for it: the default faint amber.
     '--color-typing-trail': colors.flowTrail ?? FALLBACK_TRAIL_COLOR,
-    '--color-spell-check': colors.spellCheck ?? FALLBACK_SPELL_CHECK_COLOR,
+    '--color-spell-check': colors.spellCheck,
     '--color-review-line': colors.reviewLine,
     '--color-warning-line': colors.warningLine,
     // Opaque, with the chosen alpha applied as opacity on the whole number:
