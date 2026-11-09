@@ -12,45 +12,80 @@ import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET
  * and the UNSAVED preset, the reader's last edit, shown as the plus exactly
  * while it equals no other preset. Which preset is active is never stored:
  * it is derived from the live settings (`matchingKeystrokeSound`). The live
- * settings themselves are persisted as the menu's own fields
- * (`audioKeyVolume`, `typingSoundSet`, ...).
+ * settings themselves are persisted as the menu's `keystrokeSound`.
  */
 
-export type KeystrokeSoundSetId = 'A' | 'B' | 'C' | 'D'
-export const KEYSTROKE_SOUND_SET_IDS: readonly KeystrokeSoundSetId[] = ['A', 'B', 'C', 'D']
+/**
+ * The CHANNELS: every sound source a keystroke can be made of. The four
+ * click sets each hold ten samples (one per key, fixed per key); bass and
+ * treble are one sample each. A keystroke plays every channel that is on,
+ * each at its own volume and with its own pitch jitter, and the sum goes
+ * through the global settings below.
+ */
+export const KEYSTROKE_CHANNEL_IDS = ['pops', 'pins', 'creamy', 'forge', 'bass', 'treble'] as const
+export type KeystrokeChannelId = (typeof KEYSTROKE_CHANNEL_IDS)[number]
+
+export const KEYSTROKE_CHANNEL_LOOK: Record<KeystrokeChannelId, { name: string; icon: string }> = {
+  pops: { name: 'Pops', icon: 'fa-solid fa-burst' },
+  pins: { name: 'Pins', icon: 'fa-solid fa-map-pin' },
+  creamy: { name: 'Creamy', icon: 'fa-solid fa-ice-cream' },
+  forge: { name: 'Forge', icon: 'fa-solid fa-hammer' },
+  bass: { name: 'Bass', icon: 'fa-solid fa-drum' },
+  treble: { name: 'Treble', icon: 'fa-solid fa-bell' },
+}
+
+export interface KeystrokeChannelSettings {
+  on: boolean
+  /** 0..1. */
+  volume: number
+  /** 0..0.5: the largest share by which each press of this channel is pitched up or down at random. */
+  jitter: number
+}
 
 export interface KeystrokeSoundSettings {
-  /** Off is the "No Key Sounds" button; the set is kept so turning back on restores it. */
-  enabled: boolean
-  set: KeystrokeSoundSetId
+  channels: Record<KeystrokeChannelId, KeystrokeChannelSettings>
+  /** 0..1, the sum of the channels. */
   volume: number
-  variance: number
+  /** -100..100, every channel. */
   pitch: number
-  jitter: number
-  bass: number
-  treble: number
+  /** 0..0.5: how far each key's pitch is set apart from the others, fixed per key. */
+  variance: number
   reverb: number
   room: number
+  /** -100..100: left of centre pans by the key's place on the keyboard, right of centre by the caret's place on the line. */
   spatial: number
 }
 
-export const KEYSTROKE_SOUND_NUMBER_KEYS = ['volume', 'variance', 'pitch', 'jitter', 'bass', 'treble', 'reverb', 'room', 'spatial'] as const satisfies readonly (keyof KeystrokeSoundSettings)[]
+export const KEYSTROKE_GLOBAL_KEYS = ['volume', 'pitch', 'variance', 'reverb', 'room', 'spatial'] as const satisfies readonly (keyof KeystrokeSoundSettings)[]
+export const KEYSTROKE_CHANNEL_NUMBER_KEYS = ['volume', 'jitter'] as const satisfies readonly (keyof KeystrokeChannelSettings)[]
 
 /** The sliders' ranges in Options. */
-export const KEYSTROKE_SOUND_RANGES: Record<(typeof KEYSTROKE_SOUND_NUMBER_KEYS)[number], readonly [number, number]> = {
+export const KEYSTROKE_SOUND_RANGES = {
   volume: [0, 1],
-  variance: [0, 0.5],
   pitch: [-100, 100],
-  jitter: [0, 0.5],
-  bass: [0, 1],
-  treble: [0, 1],
+  variance: [0, 0.5],
   reverb: [0, 1],
   room: [0, 1],
   spatial: [-100, 100],
-}
+} as const satisfies Record<(typeof KEYSTROKE_GLOBAL_KEYS)[number], readonly [number, number]>
+export const KEYSTROKE_CHANNEL_RANGES = {
+  volume: [0, 1],
+  jitter: [0, 0.5],
+} as const satisfies Record<(typeof KEYSTROKE_CHANNEL_NUMBER_KEYS)[number], readonly [number, number]>
 
-const BASE: KeystrokeSoundSettings = { enabled: true, set: 'A', volume: 0.5, variance: 0, pitch: 0, jitter: 0, bass: 0, treble: 0, reverb: 0, room: 0, spatial: -50 }
-const preset = (overrides: Partial<KeystrokeSoundSettings>): KeystrokeSoundSettings => ({ ...BASE, ...overrides })
+export const DEFAULT_KEYSTROKE_CHANNEL: Readonly<KeystrokeChannelSettings> = { on: false, volume: 0.5, jitter: 0 }
+
+type ChannelOverrides = Partial<Record<KeystrokeChannelId, Partial<KeystrokeChannelSettings>>>
+const preset = (channels: ChannelOverrides, globals: Partial<Omit<KeystrokeSoundSettings, 'channels'>> = {}): KeystrokeSoundSettings => ({
+  volume: 1,
+  pitch: 0,
+  variance: 0,
+  reverb: 0,
+  room: 0,
+  spatial: -50,
+  ...globals,
+  channels: Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, { ...DEFAULT_KEYSTROKE_CHANNEL, ...(channels[id] ? { on: true, ...channels[id] } : {}) }])) as Record<KeystrokeChannelId, KeystrokeChannelSettings>,
+})
 
 export interface FactoryKeystrokeSound {
   id: string
@@ -59,18 +94,23 @@ export interface FactoryKeystrokeSound {
   settings: Readonly<KeystrokeSoundSettings>
 }
 
-/** In the factory layouts' order, light then dark, under their names and icons. */
+/**
+ * In the factory layouts' order, light then dark, under their names and
+ * icons: the sounds those layouts carried while sounds were part of a layout,
+ * the one sound set as its channel and the bass and treble layers as theirs,
+ * each with what was then the one jitter.
+ */
 const FACTORY_SETTINGS: readonly KeystrokeSoundSettings[] = [
-  preset({ set: 'C', variance: 0.05, jitter: 0.05, bass: 0.2 }),
-  preset({ volume: 0, variance: 0.3, pitch: -50, jitter: 0.05, bass: 0.33, treble: 0.13, reverb: 0.25, room: 0.8 }),
-  preset({ volume: 0.2, treble: 0.22, reverb: 0.13, room: 0.85 }),
-  preset({ bass: 0.07, treble: 0.09 }),
-  preset({ set: 'C', bass: 0.2, reverb: 0.11, room: 1 }),
-  preset({ set: 'C', volume: 0, variance: 0.05, pitch: 20, jitter: 0.05, bass: 0.2, treble: 0.2, reverb: 0.1 }),
-  preset({ set: 'B', volume: 0.5 }),
-  preset({ set: 'C', volume: 0.5, bass: 0.07, reverb: 0.29 }),
-  preset({ volume: 0.15, bass: 0.32, treble: 0.03, reverb: 0.14 }),
-  preset({ set: 'B', volume: 0.52, bass: 0.17, treble: 0.29, reverb: 0.13 }),
+  preset({ creamy: { jitter: 0.05 }, bass: { volume: 0.2, jitter: 0.05 } }, { variance: 0.05 }),
+  preset({ bass: { volume: 0.33, jitter: 0.05 }, treble: { volume: 0.13, jitter: 0.05 } }, { variance: 0.3, pitch: -50, reverb: 0.25, room: 0.8 }),
+  preset({ pops: { volume: 0.2 }, treble: { volume: 0.22 } }, { reverb: 0.13, room: 0.85 }),
+  preset({ pops: {}, bass: { volume: 0.07 }, treble: { volume: 0.09 } }),
+  preset({ creamy: {}, bass: { volume: 0.2 } }, { reverb: 0.11, room: 1 }),
+  preset({ bass: { volume: 0.2, jitter: 0.05 }, treble: { volume: 0.2, jitter: 0.05 } }, { variance: 0.05, pitch: 20, reverb: 0.1 }),
+  preset({ pins: {} }),
+  preset({ creamy: {}, bass: { volume: 0.07 } }, { reverb: 0.29 }),
+  preset({ pops: { volume: 0.15 }, bass: { volume: 0.32 }, treble: { volume: 0.03 } }, { reverb: 0.14 }),
+  preset({ pins: { volume: 0.52 }, bass: { volume: 0.17 }, treble: { volume: 0.29 } }, { reverb: 0.13 }),
 ]
 const FACTORY_NAMES = [...LIGHT_PRESET_THEMES, ...DARK_PRESET_THEMES].map((name) => name.replace(/ \(Default\)$/, ''))
 const FACTORY_ICONS = [...LIGHT_PRESET_ICONS, ...DARK_PRESET_ICONS]
@@ -84,6 +124,10 @@ export const FACTORY_KEYSTROKE_SOUNDS: readonly FactoryKeystrokeSound[] = FACTOR
 
 /** A fresh install sounds like the default light layout did. */
 export const DEFAULT_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = FACTORY_SETTINGS[0]
+
+export function cloneKeystrokeSound(settings: KeystrokeSoundSettings): KeystrokeSoundSettings {
+  return { ...settings, channels: Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, { ...settings.channels[id] }])) as Record<KeystrokeChannelId, KeystrokeChannelSettings> }
+}
 
 export interface SavedKeystrokeSound {
   id: string
@@ -99,11 +143,14 @@ export interface KeystrokeSoundPreferences {
   saved: SavedKeystrokeSound[]
 }
 
-export const DEFAULT_KEYSTROKE_SOUND_PREFERENCES: KeystrokeSoundPreferences = { unsaved: { ...DEFAULT_KEYSTROKE_SOUND }, saved: [] }
+export const DEFAULT_KEYSTROKE_SOUND_PREFERENCES: KeystrokeSoundPreferences = { unsaved: cloneKeystrokeSound(DEFAULT_KEYSTROKE_SOUND), saved: [] }
+
+const close = (x: number, y: number) => Math.abs(x - y) < 0.0005
 
 /** Equal to a thousandth: the sliders step by hundredths at the finest. */
 export function sameKeystrokeSound(a: KeystrokeSoundSettings, b: KeystrokeSoundSettings): boolean {
-  return a.enabled === b.enabled && a.set === b.set && KEYSTROKE_SOUND_NUMBER_KEYS.every((key) => Math.abs(a[key] - b[key]) < 0.0005)
+  return KEYSTROKE_GLOBAL_KEYS.every((key) => close(a[key], b[key]))
+    && KEYSTROKE_CHANNEL_IDS.every((id) => a.channels[id].on === b.channels[id].on && KEYSTROKE_CHANNEL_NUMBER_KEYS.every((key) => close(a.channels[id][key], b.channels[id][key])))
 }
 
 export type ActiveKeystrokeSound =
@@ -126,17 +173,20 @@ export function isUnsavedKeystrokeSoundShown(preferences: KeystrokeSoundPreferen
 /** After an EDIT of the live settings (never a selection), the edit is the unsaved preset. Same object when nothing changes. */
 export function unsavedKeystrokeSoundAfterEdit(live: KeystrokeSoundSettings, preferences: KeystrokeSoundPreferences): KeystrokeSoundPreferences {
   if (sameKeystrokeSound(preferences.unsaved, live)) return preferences
-  return { ...preferences, unsaved: { ...live } }
+  return { ...preferences, unsaved: cloneKeystrokeSound(live) }
 }
+
+const clampTo = (raw: unknown, [low, high]: readonly [number, number], fallback: number) => (typeof raw === 'number' && Number.isFinite(raw) ? Math.max(low, Math.min(high, raw)) : fallback)
 
 export function sanitizeKeystrokeSoundSettings(value: unknown, fallback: KeystrokeSoundSettings = DEFAULT_KEYSTROKE_SOUND): KeystrokeSoundSettings {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const out: KeystrokeSoundSettings = { ...fallback }
-  if (typeof input.enabled === 'boolean') out.enabled = input.enabled
-  if ((KEYSTROKE_SOUND_SET_IDS as readonly unknown[]).includes(input.set)) out.set = input.set as KeystrokeSoundSetId
-  for (const key of KEYSTROKE_SOUND_NUMBER_KEYS) {
-    const raw = input[key]
-    if (typeof raw === 'number' && Number.isFinite(raw)) out[key] = Math.max(KEYSTROKE_SOUND_RANGES[key][0], Math.min(KEYSTROKE_SOUND_RANGES[key][1], raw))
+  const out = cloneKeystrokeSound(fallback)
+  for (const key of KEYSTROKE_GLOBAL_KEYS) out[key] = clampTo(input[key], KEYSTROKE_SOUND_RANGES[key], out[key])
+  const channels = (input.channels && typeof input.channels === 'object' ? input.channels : {}) as Record<string, unknown>
+  for (const id of KEYSTROKE_CHANNEL_IDS) {
+    const channel = (channels[id] && typeof channels[id] === 'object' ? channels[id] : {}) as Record<string, unknown>
+    if (typeof channel.on === 'boolean') out.channels[id].on = channel.on
+    for (const key of KEYSTROKE_CHANNEL_NUMBER_KEYS) out.channels[id][key] = clampTo(channel[key], KEYSTROKE_CHANNEL_RANGES[key], out.channels[id][key])
   }
   return out
 }

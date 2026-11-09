@@ -8,8 +8,6 @@ import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS } from '../src/shared/exte
 import type { TextureCacheApi } from '../src/shared/textures'
 import { TEXTURE_CHANNELS } from '../src/shared/textures'
 import { SPELL_CHECK_CHANNELS, type SpellCheckApi } from '../src/shared/spellCheck'
-import type { AudioBounceCacheApi } from '../src/shared/audioBounceCache'
-import { AUDIO_BOUNCE_CHANNELS } from '../src/shared/audioBounceCache'
 import type { UiLoadoutApi } from '@thockdown/look/loadouts'
 import { LOADOUT_CHANNELS } from '@thockdown/look/loadouts'
 import type { SoundscapeFileApi } from '@thockdown/soundscape/soundscapeFile'
@@ -89,10 +87,6 @@ contextBridge.exposeInMainWorld('thockdownTextures', textureCacheApi)
 
 const spellCheckApi: SpellCheckApi = invokeBridge<SpellCheckApi>(SPELL_CHECK_CHANNELS, invoke)
 contextBridge.exposeInMainWorld('thockdownSpellCheck', spellCheckApi)
-
-const audioBounceCacheApi: AudioBounceCacheApi = invokeBridge<AudioBounceCacheApi>(AUDIO_BOUNCE_CHANNELS, invoke)
-
-contextBridge.exposeInMainWorld('thockdownAudioBounces', audioBounceCacheApi)
 
 const uiLoadoutApi: UiLoadoutApi = invokeBridge<UiLoadoutApi>(LOADOUT_CHANNELS, invoke)
 

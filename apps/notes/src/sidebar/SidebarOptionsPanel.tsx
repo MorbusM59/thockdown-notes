@@ -238,6 +238,7 @@ import {
 import { LOADOUT_FIRST_CUSTOM_ID_ABS, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
 import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 import { KEYSTROKE_SOUND_RANGES, type ActiveKeystrokeSound, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
+import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
 import { KeystrokeSoundOptions } from './KeystrokeSoundOptions'
 import { useOutputDevice } from '../sound/outputDevice'
 import {
@@ -2975,105 +2976,49 @@ export function SidebarOptionsPanel({
             active={activeKeystrokeSound}
             apply={applyKeystrokeSound}
           />
-          <OptionsSubsectionLabel>Keys</OptionsSubsectionLabel>
-          <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
-            <button
-              type="button"
-              className={`btn-icon options-audio-btn${!keystrokeSound.enabled ? ' is-active' : ''}`}
-              onClick={() => setKeystrokeSound({ enabled: false })}
-              aria-pressed={!keystrokeSound.enabled}
-              data-tooltip="No Key Sounds"
-            >
-              <span className="fa-solid fa-ban" aria-hidden="true" />
-            </button>
-            {(['A', 'B', 'C', 'D'] as const).map((setId) => (
-              <button
-                key={setId}
-                type="button"
-                className={`btn-icon options-audio-btn${keystrokeSound.enabled && keystrokeSound.set === setId ? ' is-active' : ''}`}
-                onClick={() => setKeystrokeSound({ enabled: true, set: setId })}
-                aria-pressed={keystrokeSound.enabled && keystrokeSound.set === setId}
-                data-tooltip={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Forge' : ''}`}
-              >
-                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}${setId === 'D' ? 'fa-solid fa-hammer' : ''}`} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-          <OptionsSliderRows>
+          <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
+          <KeystrokeChannelOptions settings={keystrokeSound} onChange={(channels) => setKeystrokeSound({ channels })} />
+          <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
+          {/* What every channel goes through together: level and pitch, then the space. */}
+          <OptionsSliderRows rows={[3, 3]}>
             <CompactScrollbarSlider
-              id="audio-key-volume"
-              min={0}
-              max={1}
+              id="keystroke-volume"
+              min={KEYSTROKE_SOUND_RANGES.volume[0]}
+              max={KEYSTROKE_SOUND_RANGES.volume[1]}
               step={0.01}
               value={keystrokeSound.volume}
-              trackLabel="key"
-              ariaLabel="Key volume"
-              defaultValue={0.5}
+              trackLabel="volume"
+              ariaLabel="Keystroke volume, all channels"
+              defaultValue={1}
               onCommit={(value) => setKeystrokeSound({ volume: clamp(value, KEYSTROKE_SOUND_RANGES.volume[0], KEYSTROKE_SOUND_RANGES.volume[1]) })}
             />
             <CompactScrollbarSlider
-              id="audio-key-variance"
-              min={0}
-              max={0.5}
-              step={0.005}
-              value={keystrokeSound.variance}
-              trackLabel="variance"
-              ariaLabel="Key sound variance"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ variance: clamp(value, KEYSTROKE_SOUND_RANGES.variance[0], KEYSTROKE_SOUND_RANGES.variance[1]) })}
-            />
-            <CompactScrollbarSlider
-              id="audio-pitch"
-              min={-100}
-              max={100}
+              id="keystroke-pitch"
+              min={KEYSTROKE_SOUND_RANGES.pitch[0]}
+              max={KEYSTROKE_SOUND_RANGES.pitch[1]}
               step={1}
               value={keystrokeSound.pitch}
               trackLabel="pitch"
-              ariaLabel="Global pitch"
+              ariaLabel="Pitch of every channel"
               defaultValue={0}
               onCommit={(value) => setKeystrokeSound({ pitch: clamp(value, KEYSTROKE_SOUND_RANGES.pitch[0], KEYSTROKE_SOUND_RANGES.pitch[1]) })}
             />
             <CompactScrollbarSlider
-              id="audio-pitch-jitter"
-              min={0}
-              max={0.5}
-              step={0.01}
-              value={keystrokeSound.jitter}
-              trackLabel="jitter"
-              ariaLabel="Pitch jitter"
+              id="keystroke-variance"
+              min={KEYSTROKE_SOUND_RANGES.variance[0]}
+              max={KEYSTROKE_SOUND_RANGES.variance[1]}
+              step={0.005}
+              value={keystrokeSound.variance}
+              trackLabel="variance"
+              tooltipLabel="variance: how far each key is pitched apart from the others, fixed per key"
+              ariaLabel="How far each key is pitched apart from the others, fixed per key"
               defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ jitter: clamp(value, KEYSTROKE_SOUND_RANGES.jitter[0], KEYSTROKE_SOUND_RANGES.jitter[1]) })}
-            />
-          </OptionsSliderRows>
-          <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
-          {/* Tone, then the space the keys sound in. */}
-          <OptionsSliderRows rows={[2, 3]}>
-            <CompactScrollbarSlider
-              id="audio-bass-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={keystrokeSound.bass}
-              trackLabel="bass"
-              ariaLabel="Bass volume"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ bass: clamp(value, KEYSTROKE_SOUND_RANGES.bass[0], KEYSTROKE_SOUND_RANGES.bass[1]) })}
+              onCommit={(value) => setKeystrokeSound({ variance: clamp(value, KEYSTROKE_SOUND_RANGES.variance[0], KEYSTROKE_SOUND_RANGES.variance[1]) })}
             />
             <CompactScrollbarSlider
-              id="audio-treble-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={keystrokeSound.treble}
-              trackLabel="treble"
-              ariaLabel="Treble volume"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ treble: clamp(value, KEYSTROKE_SOUND_RANGES.treble[0], KEYSTROKE_SOUND_RANGES.treble[1]) })}
-            />
-            <CompactScrollbarSlider
-              id="audio-reverb-strength"
-              min={0}
-              max={1}
+              id="keystroke-reverb"
+              min={KEYSTROKE_SOUND_RANGES.reverb[0]}
+              max={KEYSTROKE_SOUND_RANGES.reverb[1]}
               step={0.01}
               value={keystrokeSound.reverb}
               trackLabel="reverb"
@@ -3082,9 +3027,9 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setKeystrokeSound({ reverb: clamp(value, KEYSTROKE_SOUND_RANGES.reverb[0], KEYSTROKE_SOUND_RANGES.reverb[1]) })}
             />
             <CompactScrollbarSlider
-              id="audio-reverb-space"
-              min={0}
-              max={1}
+              id="keystroke-room"
+              min={KEYSTROKE_SOUND_RANGES.room[0]}
+              max={KEYSTROKE_SOUND_RANGES.room[1]}
               step={0.01}
               value={keystrokeSound.room}
               trackLabel="room"
@@ -3093,9 +3038,9 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setKeystrokeSound({ room: clamp(value, KEYSTROKE_SOUND_RANGES.room[0], KEYSTROKE_SOUND_RANGES.room[1]) })}
             />
             <CompactScrollbarSlider
-              id="audio-spatial"
-              min={-100}
-              max={100}
+              id="keystroke-spatial"
+              min={KEYSTROKE_SOUND_RANGES.spatial[0]}
+              max={KEYSTROKE_SOUND_RANGES.spatial[1]}
               step={1}
               value={keystrokeSound.spatial}
               trackLabel="spatial"

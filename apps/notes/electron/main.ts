@@ -22,7 +22,6 @@ import { EXTERNAL_FILE_CHANNELS, EXTERNAL_FILE_EVENTS, type ExternalFileEvents, 
 import { TEXTURE_CHANNELS, type TextureCacheApi } from '../src/shared/textures'
 import { SPELL_CHECK_CHANNELS, type SpellCheckApi } from '../src/shared/spellCheck'
 import { DICTIONARY_FILE_EXTENSIONS, SpellCheckDictionaries } from './spellCheckDictionaries'
-import { AUDIO_BOUNCE_CHANNELS, type AudioBounceCacheApi } from '../src/shared/audioBounceCache'
 import { LOADOUT_CHANNELS, type UiLoadoutApi } from '@thockdown/look/loadouts'
 import { AUDIO_PLAYER_CHANNELS, type AudioPlayerApi, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { MusicPoolQuery, PlaylistSlot } from '../src/shared/audioPlayer'
@@ -1098,15 +1097,6 @@ function registerIpcHandlers() {
     },
     purgeCachedTextures: async (_event, request) => {
       return databaseService!.purgeTextureCache(request);
-    },
-  }, handleTracked);
-
-  registerInvokeHandlers<AudioBounceCacheApi, IpcMainInvokeEvent>(AUDIO_BOUNCE_CHANNELS, {
-    getCachedBounce: async (_event, request) => {
-      return databaseService!.getAudioBounceCache(request);
-    },
-    saveCachedBounce: async (_event, request, payload) => {
-      databaseService!.saveAudioBounceCache(request, payload);
     },
   }, handleTracked);
 

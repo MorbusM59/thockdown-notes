@@ -1,13 +1,5 @@
-import { BASS_TYPING_SOUND_ASSET, DEFAULT_TYPING_SOUND_SET, TREBLE_TYPING_SOUND_ASSET, TYPING_SOUND_ASSETS, TYPING_SOUND_SET_IDS, TypingSoundSetId } from './typingSounds'
-import type { AudioBounceCacheHit } from '../shared/audioBounceCache'
-
-// The plain-typing character set reachable via deriveTypingSoundKeyId
-// (useEditorSectionMount.ts) -- every character that produces a `key:${c}`
-// id through ordinary single-character insertion, called with no extra
-// options. See maybeStartPrewarm's doc comment for why prewarming is scoped
-// to exactly this set and not the whole keyboard.
-const PREWARM_CHARSET = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?;:\'"-_()[]{}/\\@#$%^&*+=<>~`|'
-const PREWARM_CHAR_KEY_IDS: string[] = Array.from(new Set(PREWARM_CHARSET.split(''))).map((char) => `key:${char}`)
+import { KEYSTROKE_CHANNEL_IDS, type KeystrokeChannelId, type KeystrokeChannelSettings } from '../shared/keystrokeSounds'
+import { KEYSTROKE_CHANNEL_ASSETS } from './typingSounds'
 
 // Physical left-to-right position (-1 leftmost .. 1 rightmost) of every key
 // in the standard alphanumeric block, for the spatial slider's mode A
@@ -61,80 +53,6 @@ export function resolveKeyboardPanForCode(physicalKeyCode?: string): number {
   return KEYBOARD_PAN_BY_CODE.get(physicalKeyCode) ?? 0
 }
 
-type IdleRequestWindow = Window & {
-  requestIdleCallback?: (callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void, options?: { timeout: number }) => number
-}
-
-// Runs work during idle time, chunked so it never competes with input
-// handling -- falls back to a short setTimeout on browsers/contexts without
-// requestIdleCallback (e.g. older Safari-based WebViews).
-function scheduleIdleWork(callback: () => void): void {
-  const idleWindow = window as IdleRequestWindow
-  if (typeof idleWindow.requestIdleCallback === 'function') {
-    idleWindow.requestIdleCallback(() => callback(), { timeout: 500 })
-  } else {
-    window.setTimeout(callback, 32)
-  }
-}
-
-export interface TypingSoundLayerConfig {
-  enabled: boolean
-  gain: number
-  assetIndexes: number[]
-}
-
-export interface TypingSoundEchoOptions {
-  delayMs: number
-  count: number
-  decay: number
-}
-
-export interface TypingSoundPlayOptions {
-  keyId?: string
-  assetIndex?: number
-  detune?: number
-  playbackRate?: number
-  reverse?: boolean
-  gain?: number
-  echo?: TypingSoundEchoOptions
-  frequencyScale?: number
-  flipChannels?: boolean
-  // Caller-supplied spatial-mode-B position (-1 leftmost .. 1 rightmost),
-  // e.g. from EditorAdapter.resolveCaretHorizontalWrapRatio(). Only
-  // consulted when the spatial slider is dialed towards mode B -- see
-  // resolveEffectivePan. Never baked into a bounce (like pitch jitter): it
-  // legitimately varies press to press for the same keyId.
-  pan?: number
-  // The physical key (KeyboardEvent.code) that produced this press, for
-  // spatial-mode-A (keyboard-position) panning -- see
-  // resolveKeyboardPanForCode's doc comment for why this must be the
-  // layout-independent physical code, not keyId's produced character.
-  // Optional: callers that can't easily obtain it (e.g. programmatic
-  // triggers) just get centered mode-A panning for that press, same as any
-  // other non-character key.
-  physicalKeyCode?: string
-}
-
-interface TypingSoundHistoryEntry {
-  keyId: string
-  attributes: {
-    assetIndex: number
-    detune: number
-    playbackRate: number
-    reverse: boolean
-    gain: number
-    echo?: TypingSoundEchoOptions
-    bassDetune: number
-    trebleDetune: number
-    frequencyScale: number
-    flipChannels: {
-      click: boolean
-      bass: boolean
-      treble: boolean
-    }
-  }
-}
-
 let suppressNextPlainTypingSound = false
 
 export function suppressNextPlainTypingSoundOnce(): void {
@@ -158,6 +76,86 @@ export function shouldSuppressPlainTypingSoundForInsertion(event: {
   return insertedChar === '\n' || insertedChar === '\r'
 }
 
+export interface TypingSoundEchoOptions {
+  delayMs: number
+  count: number
+  decay: number
+}
+
+export interface TypingSoundPlayOptions {
+  /**
+   * Names the key, so it always gets the same sample of each channel, the
+   * same channel swap and the same place in the variance spread. A press
+   * without one draws all of those afresh.
+   */
+  keyId?: string
+  /** A click sample chosen by the caller (modulo each click channel's sample count) in place of the key's own. */
+  assetIndex?: number
+  detune?: number
+  playbackRate?: number
+  reverse?: boolean
+  gain?: number
+  echo?: TypingSoundEchoOptions
+  // Caller-supplied spatial-mode-B position (-1 leftmost .. 1 rightmost),
+  // e.g. from EditorAdapter.resolveCaretHorizontalWrapRatio(). Only
+  // consulted when the spatial slider is dialed towards mode B -- see
+  // resolveEffectivePan.
+  pan?: number
+  // The physical key (KeyboardEvent.code) that produced this press, for
+  // spatial-mode-A (keyboard-position) panning -- see
+  // resolveKeyboardPanForCode's doc comment for why this must be the
+  // layout-independent physical code, not keyId's produced character.
+  physicalKeyCode?: string
+}
+
+/**
+ * What is fixed about a key: random draws made on its first press and kept,
+ * stored as UNITS (each -1..1 or a coin) rather than as finished values, so
+ * that the settings they are scaled by (variance, pitch, which channels are
+ * on) can change without re-rolling anything and without a cache to throw
+ * away.
+ */
+interface KeyCharacter {
+  /** -1..1, scaled by variance into the key's playback-rate offset. */
+  varianceUnit: number
+  /** -1..1 per channel, scaled by variance into that channel's detune (up to 300 cents at full variance). */
+  detuneUnits: Record<KeystrokeChannelId, number>
+  /** The sample each channel plays for this key. */
+  sample: Record<KeystrokeChannelId, number>
+  /** Whether each channel plays this key with left and right swapped: the statistical centring of a stereo sample. */
+  flip: Record<KeystrokeChannelId, boolean>
+}
+
+/** Every channel's buffers, in the four forms a press can ask for, decoded or computed once at load. */
+interface ChannelBuffers {
+  plain: AudioBuffer[]
+  flipped: AudioBuffer[]
+  reversed: AudioBuffer[]
+  reversedFlipped: AudioBuffer[]
+}
+
+const OFF_CHANNEL: KeystrokeChannelSettings = { on: false, volume: 0, jitter: 0 }
+
+/** Up to this many cents each way at full variance: the per-channel detune spread. */
+const VARIANCE_DETUNE_CENTS = 300
+
+/**
+ * The keystroke sound engine. A keystroke is one VOICE: one buffer source
+ * and one gain per channel that is on, summed into one optional stereo
+ * panner, into the shared dry path and the shared reverb send (one
+ * convolver for every voice, built once). Nothing is rendered ahead and
+ * nothing is cached but the decoded samples, which is why no setting change
+ * costs anything beyond writing a number: volume and jitter are per-press
+ * gains and rates, variance and pitch scale the key's stored units at the
+ * press, reverb and room write the shared send.
+ *
+ * Replaced a per-key BOUNCE (an OfflineAudioContext render of the summed
+ * layers per key, kept in memory and on disk, swept in the background and
+ * thrown away on every change of volume, set, variance or pitch). Summing
+ * live is a few native nodes per press, so the bounce only ever saved that
+ * summing, and with channels each mix of volumes would have been another
+ * bounce.
+ */
 export class TypingSoundManager {
   private audioContext: AudioContext | null = null
   private masterGain: GainNode | null = null
@@ -167,68 +165,21 @@ export class TypingSoundManager {
   private reverbWetGain: GainNode | null = null
   private reverbStrength = 0
   private reverbSpace = 0
-  private bufferGroups: Record<string, AudioBuffer[]> = {
-    bass: [],
-    treble: [],
-  }
-  private clickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> = {
-    A: [],
-    B: [],
-    C: [],
-    D: [],
-  }
-  private reversedBufferGroups: Record<string, AudioBuffer[]> | null = null
-  private flippedBufferGroups: Record<string, AudioBuffer[]> | null = null
-  private reversedFlippedBufferGroups: Record<string, AudioBuffer[]> | null = null
-  private reversedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
-  private flippedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> = {
-    A: [],
-    B: [],
-    C: [],
-    D: [],
-  }
-  private reversedFlippedClickBuffersBySet: Record<TypingSoundSetId, AudioBuffer[]> | null = null
-  private activeKeySet: TypingSoundSetId = DEFAULT_TYPING_SOUND_SET
+  private buffers: Partial<Record<KeystrokeChannelId, ChannelBuffers>> = {}
+  private channels: Record<KeystrokeChannelId, KeystrokeChannelSettings> = Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, OFF_CHANNEL])) as Record<KeystrokeChannelId, KeystrokeChannelSettings>
   private enabled = false
+  private volume = 1
   private keyVariance = 0
   private pitch = 0
-  private pitchJitterAmount = 0
   // -1..1. Negative dials in mode A (keyboard-position pan) by |amount|;
   // positive dials in mode B (caret-position pan, supplied per-call via
-  // TypingSoundPlayOptions.pan) by amount; 0 is the pre-existing neutral
-  // (unpanned) behavior. See resolveEffectivePan.
+  // TypingSoundPlayOptions.pan) by amount; 0 is no panning. See
+  // resolveEffectivePan.
   private spatialAmount = 0
-  private recentKeySoundHistory: TypingSoundHistoryEntry[] = []
-  // Per-key bounced (OfflineAudioContext-rendered) buffers -- see E1 in the
-  // performance review. Keyed by keyId; a hit turns playback into a single
-  // source.start() instead of rebuilding the full layer/convolver graph.
-  // Only ever populated for keyIds whose call site always passes the same
-  // fixed override options (see bounceKeySound's doc comment) -- invalidated
-  // in lockstep with recentKeySoundHistory any time a setting that affects
-  // the bounce changes.
-  private boundKeyBuffers: Map<string, AudioBuffer> = new Map()
-  private pendingBounces: Set<string> = new Set()
-  private prewarmStarted = false
-  private prewarmGeneration = 0
+  /** Per keyId, for as long as the app runs: a finite set (the keys on a keyboard plus a few named voices). */
+  private keyCharacters: Map<string, KeyCharacter> = new Map()
   private loaded = false
   private loadingPromise: Promise<void> | null = null
-  private layers: Record<string, TypingSoundLayerConfig> = {
-    click: {
-      enabled: true,
-      gain: 1,
-      assetIndexes: TYPING_SOUND_ASSETS[DEFAULT_TYPING_SOUND_SET].map((_, index) => index),
-    },
-    bass: {
-      enabled: true,
-      gain: 0.7,
-      assetIndexes: [0],
-    },
-    treble: {
-      enabled: true,
-      gain: 0.7,
-      assetIndexes: [0],
-    },
-  }
 
   async load(): Promise<void> {
     if (this.loaded) return
@@ -242,9 +193,9 @@ export class TypingSoundManager {
       const reverb = context.createConvolver()
       const reverbFilter = context.createBiquadFilter()
 
-      masterGain.gain.value = 1
-      dryGain.gain.value = 1
-      wetGain.gain.value = 0
+      masterGain.gain.value = this.volume
+      dryGain.gain.value = 1 - this.reverbStrength
+      wetGain.gain.value = this.reverbStrength
       reverbFilter.type = 'lowpass'
       reverbFilter.frequency.value = 12000
       reverbFilter.Q.value = 0.7
@@ -259,68 +210,23 @@ export class TypingSoundManager {
       this.reverbFilter = reverbFilter
       this.reverbDryGain = dryGain
       this.reverbWetGain = wetGain
+      this.applyReverbSpace()
       this.updateReverbImpulseResponse()
 
-      const clickBuffersBySet = {} as Record<TypingSoundSetId, AudioBuffer[]>
-      for (const setId of TYPING_SOUND_SET_IDS) {
-        clickBuffersBySet[setId] = await Promise.all(
-          TYPING_SOUND_ASSETS[setId].map(async (assetUrl) => {
-            const response = await fetch(assetUrl)
-            if (!response.ok) {
-              throw new Error(`Failed to load typing sound asset: ${assetUrl}`)
-            }
-            const arrayBuffer = await response.arrayBuffer()
-            return await context.decodeAudioData(arrayBuffer)
-          }),
-        )
-      }
-
-      const bassBuffer = await this.loadSingleBuffer(BASS_TYPING_SOUND_ASSET, context)
-      const trebleBuffer = await this.loadSingleBuffer(TREBLE_TYPING_SOUND_ASSET, context)
-
-      this.clickBuffersBySet = clickBuffersBySet
-      this.bufferGroups.bass = [bassBuffer]
-      this.bufferGroups.treble = [trebleBuffer]
-
-      this.reversedClickBuffersBySet = {
-        A: clickBuffersBySet.A.map((buffer) => this.createReversedBuffer(buffer, context)),
-        B: clickBuffersBySet.B.map((buffer) => this.createReversedBuffer(buffer, context)),
-        C: clickBuffersBySet.C.map((buffer) => this.createReversedBuffer(buffer, context)),
-        D: clickBuffersBySet.D.map((buffer) => this.createReversedBuffer(buffer, context)),
-      }
-
-      this.flippedClickBuffersBySet = {
-        A: clickBuffersBySet.A.map((buffer) => this.createFlippedBuffer(buffer, context)),
-        B: clickBuffersBySet.B.map((buffer) => this.createFlippedBuffer(buffer, context)),
-        C: clickBuffersBySet.C.map((buffer) => this.createFlippedBuffer(buffer, context)),
-        D: clickBuffersBySet.D.map((buffer) => this.createFlippedBuffer(buffer, context)),
-      }
-
-      this.reversedFlippedClickBuffersBySet = {
-        A: this.reversedClickBuffersBySet.A.map((buffer) => this.createFlippedBuffer(buffer, context)),
-        B: this.reversedClickBuffersBySet.B.map((buffer) => this.createFlippedBuffer(buffer, context)),
-        C: this.reversedClickBuffersBySet.C.map((buffer) => this.createFlippedBuffer(buffer, context)),
-        D: this.reversedClickBuffersBySet.D.map((buffer) => this.createFlippedBuffer(buffer, context)),
-      }
-
-      this.reversedBufferGroups = {
-        bass: [this.createReversedBuffer(bassBuffer, context)],
-        treble: [this.createReversedBuffer(trebleBuffer, context)],
-      }
-
-      this.flippedBufferGroups = {
-        bass: [this.createFlippedBuffer(bassBuffer, context)],
-        treble: [this.createFlippedBuffer(trebleBuffer, context)],
-      }
-
-      this.reversedFlippedBufferGroups = {
-        bass: [this.createFlippedBuffer(this.reversedBufferGroups.bass[0], context)],
-        treble: [this.createFlippedBuffer(this.reversedBufferGroups.treble[0], context)],
-      }
-
+      const decoded = await Promise.all(KEYSTROKE_CHANNEL_IDS.map(async (id) => {
+        const plain = await Promise.all(KEYSTROKE_CHANNEL_ASSETS[id].map((url) => this.loadSingleBuffer(url, context)))
+        const reversed = plain.map((buffer) => this.createReversedBuffer(buffer, context))
+        const channel: ChannelBuffers = {
+          plain,
+          flipped: plain.map((buffer) => this.createFlippedBuffer(buffer, context)),
+          reversed,
+          reversedFlipped: reversed.map((buffer) => this.createFlippedBuffer(buffer, context)),
+        }
+        return [id, channel] as const
+      }))
+      this.buffers = Object.fromEntries(decoded)
       this.loaded = true
       this.applyContextState()
-      this.maybeStartPrewarm()
     })()
 
     return this.loadingPromise
@@ -334,195 +240,109 @@ export class TypingSoundManager {
     void this.ensureContextRunning()
   }
 
-  setLayerEnabled(layerId: string, enabled: boolean): void {
-    const layer = this.layers[layerId]
-    if (layer && layer.enabled !== enabled) {
-      layer.enabled = enabled
-      this.invalidateKeySoundCaches()
-    }
+  /** A channel's switch, volume and jitter. Nothing is invalidated: the next press reads them. */
+  setChannel(id: KeystrokeChannelId, settings: KeystrokeChannelSettings): void {
+    this.channels = { ...this.channels, [id]: { ...settings } }
   }
 
-  setLayerGain(layerId: string, gain: number): void {
-    const layer = this.layers[layerId]
-    if (layer && layer.gain !== gain) {
-      layer.gain = gain
-      this.invalidateKeySoundCaches()
-    }
+  /** The sum of the channels, 0..1. */
+  setVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, volume))
+    if (this.masterGain) this.masterGain.gain.value = this.volume
   }
 
-  // Whether *any* layer (click/bass/treble) is currently capable of
-  // producing audible output at all, purely from the persistent slider/
-  // toggle settings (layer.enabled, layer.gain) -- never the ephemeral
-  // per-call `options.gain` multiplier passed into playLayer, which this
-  // codebase only ever uses as a shaping factor (0.3-1), never a literal
-  // mute. Used to skip the whole per-keystroke sound pipeline in one check
-  // when the answer is already "no" (bass/treble volume both 0, or the
-  // click layer off with bass/treble also silent) instead of discovering
-  // that three separate times, once per layer, after doing real work.
-  private isAnyLayerAudible(): boolean {
-    return Object.values(this.layers).some(
-      (layer) => layer.enabled && layer.gain > 0 && layer.assetIndexes.length > 0,
-    )
+  // Whether anything could be heard: checked first on every press, so a
+  // keystroke with every channel off or silent costs a few comparisons.
+  private isAnyChannelAudible(): boolean {
+    if (this.volume <= 0) return false
+    return KEYSTROKE_CHANNEL_IDS.some((id) => this.channels[id].on && this.channels[id].volume > 0)
   }
 
-  // recentKeySoundHistory (per-key attributes) and boundKeyBuffers (per-key
-  // bounced audio, see E1) must always invalidate together -- a bounce is
-  // only correct for the attributes/settings it was rendered from.
-  private invalidateKeySoundCaches(): void {
-    this.recentKeySoundHistory = []
-    this.boundKeyBuffers.clear()
-    this.pendingBounces.clear()
-    // Settings that invalidate the cache (reverb, layer gains, key set...)
-    // are exactly the settings a bounce depends on -- rebuild the common
-    // charset in the background again rather than waiting for each key to
-    // be pressed once more before it's fast again. Bumping the generation
-    // makes any in-flight sweep from before this change stop at its next
-    // step instead of racing the new one.
-    this.prewarmGeneration += 1
-    this.prewarmStarted = false
-    this.maybeStartPrewarm()
-  }
-
-  private getSoundAttributes(options?: TypingSoundPlayOptions) {
-    const keyId = options?.keyId
-    const existingIndex = keyId
-      ? this.recentKeySoundHistory.findIndex((entry) => entry.keyId === keyId)
-      : -1
-
-    if (existingIndex !== -1) {
-      const existing = this.recentKeySoundHistory[existingIndex]
-
-      // Fill in any missing consistent attributes if they didn't exist in the history entry
-      // (e.g. from an older version of the sound history)
-      if (existing.attributes.frequencyScale === undefined) {
-        const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
-        const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
-        const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
-        existing.attributes.frequencyScale = varianceScale * pitchScale
-      }
-
-      if (!existing.attributes.flipChannels) {
-        existing.attributes.flipChannels = {
-          click: Math.random() < 0.5,
-          bass: Math.random() < 0.5,
-          treble: Math.random() < 0.5,
-        }
-      }
-
-      // Promote the existing key to recent usage
-      this.recentKeySoundHistory.splice(existingIndex, 1)
-      this.recentKeySoundHistory.unshift(existing)
-
-      // Return the cached attributes, but allow explicit overrides from options
-      return {
-        ...existing.attributes,
-        assetIndex: options?.assetIndex !== undefined ? options.assetIndex : existing.attributes.assetIndex,
-        detune: options?.detune !== undefined ? options.detune : existing.attributes.detune,
-        playbackRate: options?.playbackRate !== undefined ? options.playbackRate : existing.attributes.playbackRate,
-        reverse: options?.reverse !== undefined ? options.reverse : existing.attributes.reverse,
-        gain: options?.gain !== undefined ? options.gain : existing.attributes.gain,
-        echo: options?.echo !== undefined ? options.echo : existing.attributes.echo,
-      }
+  private characterOf(keyId: string | undefined): KeyCharacter {
+    const existing = keyId ? this.keyCharacters.get(keyId) : undefined
+    if (existing) return existing
+    const unit = () => Math.random() * 2 - 1
+    const perChannel = <T,>(draw: (id: KeystrokeChannelId) => T) => Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, draw(id)])) as Record<KeystrokeChannelId, T>
+    const character: KeyCharacter = {
+      varianceUnit: unit(),
+      detuneUnits: perChannel(() => unit()),
+      sample: perChannel((id) => Math.floor(Math.random() * KEYSTROKE_CHANNEL_ASSETS[id].length)),
+      flip: perChannel(() => Math.random() < 0.5),
     }
-
-    // Base detune is only applied when either an explicit `detune` is
-    // provided in options or when `keyVariance` is non-zero. Previously
-    // getRandomLayerDetune() could produce large random detunes even with
-    // `keyVariance === 0`, which made key sounds noticeably pitch-shifted
-    // at the default variance. Scale the random detune by keyVariance so
-    // zero variance yields no detune.
-    const baseDetune = options?.detune ?? (this.keyVariance > 0 ? Math.round(this.getRandomLayerDetune() * this.keyVariance) : 0)
-    const randomVariance = this.keyVariance > 0 ? (Math.random() * 2 - 1) * this.keyVariance : 0
-    const varianceScale = randomVariance >= 0 ? 1 + randomVariance : 1 / (1 - randomVariance)
-    const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
-    const flipChannels = {
-      click: Math.random() < 0.5,
-      bass: Math.random() < 0.5,
-      treble: Math.random() < 0.5,
-    }
-
-    const attributes = {
-      assetIndex: options?.assetIndex ?? Math.floor(Math.random() * TYPING_SOUND_ASSETS[this.activeKeySet].length),
-      detune: options?.detune ?? baseDetune,
-      playbackRate: options?.playbackRate ?? 1,
-      reverse: options?.reverse ?? false,
-      gain: options?.gain ?? 1,
-      echo: options?.echo ? { ...options.echo } : undefined,
-      // Additional layer detune offsets are likewise scaled by keyVariance
-      // so they don't introduce audible pitch shifts when variance is 0.
-      bassDetune: baseDetune + (this.keyVariance > 0 ? Math.round(this.getRandomLayerDetune() * this.keyVariance) : 0),
-      trebleDetune: baseDetune + (this.keyVariance > 0 ? Math.round(this.getRandomLayerDetune() * this.keyVariance) : 0),
-      frequencyScale: varianceScale * pitchScale,
-      flipChannels,
-    }
-
-    if (keyId) {
-      this.recentKeySoundHistory.unshift({ keyId, attributes })
-      if (this.recentKeySoundHistory.length > 10) {
-        this.recentKeySoundHistory.pop()
-      }
-    }
-
-    return attributes
+    if (keyId) this.keyCharacters.set(keyId, character)
+    return character
   }
 
   async playRandomClick(options?: TypingSoundPlayOptions): Promise<void> {
-    if (!this.enabled) return
-    // Bypasses the entire pipeline -- tryPlayBoundBuffer, getSoundAttributes
-    // (both real per-keystroke synchronous work), all three playLayer calls,
-    // and the background bounce scheduling -- when every layer is either
-    // toggled off or has its volume slider at 0 (e.g. bass/treble volume
-    // both 0, or the global key-click volume 0 with bass/treble also 0):
-    // none of that work can ever produce audible output, so there is
-    // nothing here worth doing on the keystroke's own call stack.
-    if (!this.isAnyLayerAudible()) return
+    if (!this.enabled || !this.isAnyChannelAudible()) return
+    if (!this.loaded || !this.audioContext) return
+    await this.ensureContextRunning()
+    const context = this.audioContext
+    const character = this.characterOf(options?.keyId)
 
-    const keyId = options?.keyId
-    if (keyId && (await this.tryPlayBoundBuffer(keyId, options))) {
-      return
+    // The key's place in the variance spread and the global pitch, shared
+    // by every channel so a key keeps one character across its layers.
+    const varianceOffset = character.varianceUnit * this.keyVariance
+    const varianceScale = varianceOffset >= 0 ? 1 + varianceOffset : 1 / (1 - varianceOffset)
+    const pitchScale = this.pitch >= 0 ? (100 + this.pitch) / 100 : 100 / (100 - this.pitch)
+    const baseRate = (options?.playbackRate ?? 1) * varianceScale * pitchScale
+    const gainScale = options?.gain ?? 1
+    const reverse = options?.reverse ?? false
+    const echo = options?.echo
+    const pan = this.resolveEffectivePan(options?.physicalKeyCode, options?.pan)
+
+    // One panner per voice, and only when there is somewhere to pan to.
+    let output: AudioNode | null = null
+    if (pan !== 0) {
+      const panner = context.createStereoPanner()
+      panner.pan.value = Math.max(-1, Math.min(1, pan))
+      this.connectToOutput(panner)
+      output = panner
+    }
+    const nodes: AudioNode[] = []
+    let longestSec = 0
+
+    for (const id of KEYSTROKE_CHANNEL_IDS) {
+      const channel = this.channels[id]
+      if (!channel.on || channel.volume <= 0) continue
+      const set = this.buffers[id]
+      if (!set) continue
+      const count = set.plain.length
+      const index = options?.assetIndex !== undefined && count > 1 ? ((options.assetIndex % count) + count) % count : character.sample[id] % count
+      const flip = character.flip[id]
+      const buffer = (reverse ? (flip ? set.reversedFlipped : set.reversed) : (flip ? set.flipped : set.plain))[index]
+      if (!buffer) continue
+
+      // A fresh draw per press and per channel: the layers drift against
+      // each other, which is much of what makes a layered key sound alive.
+      const rate = channel.jitter > 0 ? baseRate * (1 + (Math.random() * 2 - 1) * channel.jitter) : baseRate
+      const detune = (options?.detune ?? 0) + Math.round(character.detuneUnits[id] * this.keyVariance * VARIANCE_DETUNE_CENTS)
+      const strikes = echo ? echo.count + 1 : 1
+      for (let strike = 0; strike < strikes; strike += 1) {
+        const source = context.createBufferSource()
+        source.buffer = buffer
+        if (rate !== 1) source.playbackRate.value = rate
+        if (detune !== 0) source.detune.value = detune
+        const gain = context.createGain()
+        gain.gain.value = channel.volume * gainScale * (strike === 0 ? 1 : Math.pow(echo!.decay, strike))
+        source.connect(gain)
+        if (output) gain.connect(output)
+        else this.connectToOutput(gain)
+        const at = strike === 0 ? 0 : context.currentTime + (echo!.delayMs * strike) / 1000
+        source.start(at)
+        nodes.push(source, gain)
+      }
+      const playedSec = buffer.duration / Math.max(0.01, rate * Math.pow(2, detune / 1200)) + (echo ? (echo.delayMs * echo.count) / 1000 : 0)
+      if (playedSec > longestSec) longestSec = playedSec
     }
 
-    const soundAttributes = this.getSoundAttributes(options)
-
-    await this.playLayer('click', {
-      ...options,
-      assetIndex: soundAttributes.assetIndex,
-      detune: soundAttributes.detune,
-      playbackRate: soundAttributes.playbackRate,
-      reverse: soundAttributes.reverse,
-      gain: soundAttributes.gain,
-      echo: soundAttributes.echo,
-      frequencyScale: soundAttributes.frequencyScale,
-      flipChannels: soundAttributes.flipChannels.click,
-    })
-
-    void this.playLayer('bass', {
-      ...options,
-      detune: soundAttributes.bassDetune,
-      playbackRate: soundAttributes.playbackRate,
-      reverse: soundAttributes.reverse,
-      gain: soundAttributes.gain,
-      echo: soundAttributes.echo,
-      frequencyScale: soundAttributes.frequencyScale,
-      flipChannels: soundAttributes.flipChannels.bass,
-    })
-    void this.playLayer('treble', {
-      ...options,
-      detune: soundAttributes.trebleDetune,
-      playbackRate: soundAttributes.playbackRate,
-      reverse: soundAttributes.reverse,
-      gain: soundAttributes.gain,
-      echo: soundAttributes.echo,
-      frequencyScale: soundAttributes.frequencyScale,
-      flipChannels: soundAttributes.flipChannels.treble,
-    })
-
-    // First press of this key this "generation" -- bounce it in the
-    // background so every later press (the ones that matter for sustained
-    // key-repeat) hits the fast single-buffer path instead.
-    if (keyId) {
-      this.scheduleBounce(keyId)
-    }
+    if (output) nodes.push(output)
+    if (nodes.length === 0) return
+    // Every node of the voice goes once its longest strike has played out:
+    // one timer per voice rather than an onended per source.
+    window.setTimeout(() => {
+      for (const node of nodes) this.safeDisconnect(node)
+    }, Math.ceil(longestSec * 1000) + 50)
   }
 
   // Off, nothing here may cost anything: the samples are not loaded until
@@ -532,12 +352,7 @@ export class TypingSoundManager {
   // keystroke -- Electron's autoplay policy needs no gesture, and a typed
   // first action would otherwise take the ~100-300ms hardware spin-up.
   setTypingSoundEnabled(enabled: boolean): void {
-    if (this.enabled !== enabled) {
-      this.enabled = enabled
-      // invalidateKeySoundCaches() also (re)starts prewarming when enabled
-      // is now true, since maybeStartPrewarm() checks this.enabled.
-      this.invalidateKeySoundCaches()
-    }
+    this.enabled = enabled
     if (enabled) void this.load()
     this.applyContextState()
   }
@@ -554,27 +369,14 @@ export class TypingSoundManager {
 
   setTypingSoundVariance(amount: number): void {
     this.keyVariance = Math.max(0, Math.min(0.5, amount))
-    this.invalidateKeySoundCaches()
   }
 
   setTypingSoundPitch(amount: number): void {
     this.pitch = Math.max(-100, Math.min(100, amount))
-    this.invalidateKeySoundCaches()
   }
 
-  // Unlike the other setters, this doesn't clear recentKeySoundHistory:
-  // jitter must vary per press even for a key that's been pressed before,
-  // so it's never baked into the cached per-key attributes -- it's applied
-  // live in playLayer instead.
-  setPitchJitterAmount(amount: number): void {
-    this.pitchJitterAmount = Math.max(0, Math.min(0.5, amount))
-  }
-
-  // Takes the same -100..100 UI range as setTypingSoundPitch (the slider
-  // this sits next to); stored internally as -1..1 to multiply directly
-  // against pan values. Never baked/invalidates no caches -- like pitch
-  // jitter, pan is applied live at playback time (see resolveEffectivePan),
-  // never into a bounce. The sign still selects the mode (negative = mode A,
+  // Takes the -100..100 UI range; stored as -1..1 to multiply directly
+  // against pan values. The sign selects the mode (negative = mode A,
   // positive = mode B) but the output uses its magnitude so the same
   // intensity is heard for +50 and -50 in the explicit-pan paths (such as
   // the escape menu's ring-burst sounds).
@@ -590,43 +392,35 @@ export class TypingSoundManager {
     return this.spatialAmount
   }
 
-  setTypingSoundSet(setId: TypingSoundSetId): void {
-    if (this.activeKeySet !== setId) {
-      this.invalidateKeySoundCaches()
-      this.activeKeySet = setId
-    }
-  }
-
   setReverbStrength(amount: number): void {
     const next = Math.max(0, Math.min(1, amount))
-    if (this.reverbStrength !== next) {
-      this.reverbStrength = next
-      this.invalidateKeySoundCaches()
-      if (this.reverbDryGain && this.reverbWetGain) {
-        this.reverbDryGain.gain.value = 1 - this.reverbStrength
-        this.reverbWetGain.gain.value = this.reverbStrength
-      }
-      this.updateReverbImpulseResponse()
+    if (this.reverbStrength === next) return
+    this.reverbStrength = next
+    if (this.reverbDryGain && this.reverbWetGain) {
+      this.reverbDryGain.gain.value = 1 - this.reverbStrength
+      this.reverbWetGain.gain.value = this.reverbStrength
     }
+    this.updateReverbImpulseResponse()
   }
 
   setReverbSpace(amount: number): void {
     const next = Math.max(0, Math.min(1, amount))
-    if (this.reverbSpace !== next) {
-      this.reverbSpace = next
-      this.invalidateKeySoundCaches()
-      if (this.reverbFilter) {
-        const minFreq = 2000
-        const maxFreq = 12000
-        this.reverbFilter.frequency.value = minFreq + (maxFreq - minFreq) * (1 - this.reverbSpace)
-        this.reverbFilter.Q.value = 0.7 + this.reverbSpace * 0.8
-      }
-      this.updateReverbImpulseResponse()
-    }
+    if (this.reverbSpace === next) return
+    this.reverbSpace = next
+    this.applyReverbSpace()
+    this.updateReverbImpulseResponse()
   }
 
-  // The one place a voice reaches the speakers: the reader's reverb (dry and
-  // wet) or the bare master before the graph is built.
+  private applyReverbSpace(): void {
+    if (!this.reverbFilter) return
+    const minFreq = 2000
+    const maxFreq = 12000
+    this.reverbFilter.frequency.value = minFreq + (maxFreq - minFreq) * (1 - this.reverbSpace)
+    this.reverbFilter.Q.value = 0.7 + this.reverbSpace * 0.8
+  }
+
+  // The one place a voice reaches the speakers: the dry path and the reverb
+  // send.
   private connectToOutput(node: AudioNode): void {
     if (this.reverbDryGain && this.reverbNode) {
       node.connect(this.reverbDryGain)
@@ -636,18 +430,12 @@ export class TypingSoundManager {
     }
   }
 
-  private getRandomLayerDetune(): number {
-    return Math.floor(Math.random() * 601) - 300
-  }
-
-  // Single source of truth for both the live-synthesis path (playLayer) and
-  // the bounced fast-path (tryPlayBoundBuffer) so they always agree. An
-  // explicit pan from the caller (a caret position in mode B, or a sound
+  // An explicit pan from the caller (a caret position in mode B, or a sound
   // with a position of its own, such as the escape ring's cells) wins in
   // either mode, scaled by the slider's distance from centre. Without one,
   // mode A pans by the key's place on the keyboard and mode B does not pan.
-  // Returns 0 (no panner node needed at all -- see panIfNeeded) whenever the
-  // slider is neutral or nothing gives a position.
+  // Returns 0 (no panner node at all) whenever the slider is neutral or
+  // nothing gives a position.
   private resolveEffectivePan(physicalKeyCode: string | undefined, explicitPan: number | undefined): number {
     const magnitude = Math.abs(this.spatialAmount)
     if (magnitude === 0) return 0
@@ -661,475 +449,12 @@ export class TypingSoundManager {
     return 0
   }
 
-  // Skips creating a StereoPannerNode entirely when pan is 0 (the default,
-  // and the common case whenever the spatial slider is neutral or a
-  // non-character key is pressed) -- same "skip work that wouldn't change
-  // the output" philosophy as effectiveGain's early-return above. Applied
-  // strictly downstream of the flip-channels buffer choice (see
-  // getLayerBuffer/bounceKeySound): flip is the statistical L/R centering
-  // baked per key, pan is the deliberate live positioning layered on top.
-  private panIfNeeded(input: GainNode, pan: number): AudioNode {
-    if (pan === 0 || !this.audioContext) return input
-    const panner = this.audioContext.createStereoPanner()
-    panner.pan.value = Math.max(-1, Math.min(1, pan))
-    input.connect(panner)
-    return panner
-  }
-
-  private async playLayer(layerId: string, options?: TypingSoundPlayOptions): Promise<void> {
-    if (!this.loaded || !this.audioContext || !this.masterGain) return
-
-    const layer = this.layers[layerId]
-    if (!layer || !layer.enabled || layer.assetIndexes.length === 0) return
-
-    // Skip the entire node-creation/connection/echo chain -- including the
-    // AudioContext resume check below -- when this layer's own volume is 0:
-    // every createBufferSource/createGain/connect/start() call further down
-    // would run for zero audible output. options?.gain is only ever a
-    // shaping multiplier in this codebase (0.3-1), never a literal mute, so
-    // layer.gain alone (the user-controlled slider) is the real signal here.
-    const effectiveGain = (options?.gain !== undefined ? options.gain : 1) * layer.gain
-    if (effectiveGain <= 0) return
-
-    await this.ensureContextRunning()
-
-    const buffers = layerId === 'click'
-      ? this.clickBuffersBySet[this.activeKeySet]
-      : this.bufferGroups[layerId]
-    if (!buffers || buffers.length === 0) return
-
-    const assetIndex = options?.assetIndex !== undefined && layer.assetIndexes.includes(options.assetIndex)
-      ? options.assetIndex
-      : layer.assetIndexes[Math.floor(Math.random() * layer.assetIndexes.length)]
-    const buffer = buffers[assetIndex]
-    if (!buffer) return
-
-    const source = this.audioContext.createBufferSource()
-    const selectedBuffer = this.getLayerBuffer(layerId, assetIndex, options?.reverse ?? false, options?.flipChannels ?? false)
-    if (!selectedBuffer) return
-    source.buffer = selectedBuffer
-
-    // A fresh multiplier per press (not baked into the per-key attributes,
-    // unlike frequencyScale) -- see setPitchJitterAmount. Skipped entirely
-    // at the default 0 so there's no Math.random() call or playbackRate
-    // write when the feature is off.
-    const jitterMultiplier = this.pitchJitterAmount > 0
-      ? 1 + (Math.random() * 2 - 1) * this.pitchJitterAmount
-      : 1
-
-    const basePlaybackRate = options?.frequencyScale !== undefined
-      ? (options?.playbackRate ?? 1) * options.frequencyScale
-      : options?.playbackRate
-    if (basePlaybackRate !== undefined || jitterMultiplier !== 1) {
-      source.playbackRate.value = (basePlaybackRate ?? 1) * jitterMultiplier
-    }
-    if (options?.detune !== undefined) {
-      source.detune.value = options.detune
-    }
-
-    const pan = this.resolveEffectivePan(options?.physicalKeyCode, options?.pan)
-
-    const gainNode = this.audioContext.createGain()
-    gainNode.gain.value = effectiveGain
-    source.connect(gainNode)
-    const panNode = this.panIfNeeded(gainNode, pan)
-
-    this.connectToOutput(panNode)
-
-    source.onended = () => {
-      this.safeDisconnect(source)
-      this.safeDisconnect(gainNode)
-      if (panNode !== gainNode) this.safeDisconnect(panNode)
-    }
-
-    const echoSources: Array<{ source: AudioBufferSourceNode; gainNode: GainNode; delayMs: number }> = []
-    if (options?.echo && this.masterGain) {
-      const { count, delayMs, decay } = options.echo
-      for (let i = 1; i <= count; i += 1) {
-        const echoSource = this.audioContext.createBufferSource()
-        echoSource.buffer = source.buffer
-        const echoPlaybackRate = options?.frequencyScale !== undefined
-          ? (options?.playbackRate ?? 1) * options.frequencyScale
-          : options?.playbackRate ?? 1
-        echoSource.playbackRate.value = echoPlaybackRate * jitterMultiplier
-        if (options?.detune !== undefined) {
-          echoSource.detune.value = options.detune
-        }
-
-        const echoGainNode = this.audioContext.createGain()
-        echoGainNode.gain.value = effectiveGain * Math.pow(decay, i)
-        const echoPanNode = this.panIfNeeded(echoGainNode, pan)
-        echoSource.connect(echoGainNode)
-        this.connectToOutput(echoPanNode)
-        echoSource.onended = () => {
-          this.safeDisconnect(echoSource)
-          this.safeDisconnect(echoGainNode)
-          if (echoPanNode !== echoGainNode) this.safeDisconnect(echoPanNode)
-        }
-        echoSources.push({ source: echoSource, gainNode: echoGainNode, delayMs: delayMs * i })
-      }
-    }
-
-    source.start()
-    for (let i = 0; i < echoSources.length; i += 1) {
-      const echo = echoSources[i]
-      echo.source.start(this.audioContext.currentTime + (options?.echo!.delayMs ?? 0) * (i + 1) / 1000)
-    }
-  }
-
   private safeDisconnect(node: AudioNode): void {
     try {
       node.disconnect()
     } catch {
       // best effort cleanup
     }
-  }
-
-  private getReversedBuffer(layerId: string, assetIndex: number): AudioBuffer | null {
-    if (layerId === 'click') {
-      return this.reversedClickBuffersBySet?.[this.activeKeySet]?.[assetIndex] ?? null
-    }
-
-    if (!this.reversedBufferGroups) return null
-    const layerBuffers = this.reversedBufferGroups[layerId]
-    return layerBuffers?.[assetIndex] ?? null
-  }
-
-  private getFlippedBuffer(layerId: string, assetIndex: number): AudioBuffer | null {
-    if (layerId === 'click') {
-      return this.flippedClickBuffersBySet[this.activeKeySet]?.[assetIndex] ?? null
-    }
-
-    if (!this.flippedBufferGroups) return null
-    const layerBuffers = this.flippedBufferGroups[layerId]
-    return layerBuffers?.[assetIndex] ?? null
-  }
-
-  private getReversedFlippedBuffer(layerId: string, assetIndex: number): AudioBuffer | null {
-    if (layerId === 'click') {
-      return this.reversedFlippedClickBuffersBySet?.[this.activeKeySet]?.[assetIndex] ?? null
-    }
-
-    if (!this.reversedFlippedBufferGroups) return null
-    const layerBuffers = this.reversedFlippedBufferGroups[layerId]
-    return layerBuffers?.[assetIndex] ?? null
-  }
-
-  private getLayerBuffer(layerId: string, assetIndex: number, reverse: boolean, flipChannels: boolean): AudioBuffer | null {
-    if (layerId === 'click') {
-      if (reverse && flipChannels) {
-        return this.getReversedFlippedBuffer(layerId, assetIndex)
-      }
-      if (reverse) {
-        return this.getReversedBuffer(layerId, assetIndex)
-      }
-      if (flipChannels) {
-        return this.getFlippedBuffer(layerId, assetIndex)
-      }
-      return this.clickBuffersBySet[this.activeKeySet]?.[assetIndex] ?? null
-    }
-
-    const baseLayer = this.bufferGroups[layerId]
-    if (!baseLayer) return null
-
-    if (reverse && flipChannels) {
-      return this.getReversedFlippedBuffer(layerId, assetIndex)
-    }
-    if (reverse) {
-      return this.getReversedBuffer(layerId, assetIndex)
-    }
-    if (flipChannels) {
-      return this.getFlippedBuffer(layerId, assetIndex)
-    }
-    return baseLayer[assetIndex]
-  }
-
-  // Plays a previously-bounced (OfflineAudioContext-rendered) buffer for
-  // this key, if one exists -- a single source.start() instead of rebuilding
-  // the full layer/gain/convolver graph. Returns false (no-op) on a cache
-  // miss so the caller can fall back to live synthesis.
-  private async tryPlayBoundBuffer(keyId: string, options?: TypingSoundPlayOptions): Promise<boolean> {
-    const buffer = this.boundKeyBuffers.get(keyId)
-    if (!buffer || !this.audioContext || !this.masterGain) return false
-
-    await this.ensureContextRunning()
-
-    const source = this.audioContext.createBufferSource()
-    source.buffer = buffer
-
-    // Jitter is never baked into the bounce (see setPitchJitterAmount) --
-    // applied live here instead, same as the live-synthesis path.
-    if (this.pitchJitterAmount > 0) {
-      source.playbackRate.value = 1 + (Math.random() * 2 - 1) * this.pitchJitterAmount
-    }
-
-    const gainNode = this.audioContext.createGain()
-    gainNode.gain.value = 1
-    source.connect(gainNode)
-    // Pan is likewise never baked (see resolveEffectivePan/panIfNeeded) --
-    // the bounced buffer already has flip-channels baked in from its
-    // original press; pan is layered on live, on every press, same as the
-    // live-synthesis path in playLayer.
-    const panNode = this.panIfNeeded(gainNode, this.resolveEffectivePan(options?.physicalKeyCode, options?.pan))
-
-    this.connectToOutput(panNode)
-
-    source.onended = () => {
-      this.safeDisconnect(source)
-      this.safeDisconnect(gainNode)
-      if (panNode !== gainNode) this.safeDisconnect(panNode)
-    }
-    source.start()
-    return true
-  }
-
-  // Idle-schedules a background bounce for a key that was just played live,
-  // so the NEXT press of that key (the ones that matter for sustained
-  // key-repeat) hits tryPlayBoundBuffer instead. No-op if already cached or
-  // already in flight.
-  private scheduleBounce(keyId: string): void {
-    if (this.boundKeyBuffers.has(keyId) || this.pendingBounces.has(keyId)) return
-    this.pendingBounces.add(keyId)
-    scheduleIdleWork(() => {
-      void this.bounceKeySound(keyId).finally(() => {
-        this.pendingBounces.delete(keyId)
-      })
-    })
-  }
-
-  // Only meant to run once per "generation" (see invalidateKeySoundCaches):
-  // idle-prewarms the plain typing charset (the keys reachable via
-  // playRandomClick({ keyId }) with no other options -- see
-  // deriveTypingSoundKeyId) so the FIRST press of an ordinary character
-  // already hits the fast path, not just the second. Keys whose call site
-  // always passes extra fixed options (arrows, backspace, tab, undo/redo --
-  // see bounceKeySound) are intentionally excluded: prewarming them would
-  // mean guessing those options, and guessing wrong would bake a wrong
-  // detune/gain/echo into the cached bounce. Those still get bounced
-  // reactively via scheduleBounce after their own first real press.
-  private maybeStartPrewarm(): void {
-    if (this.prewarmStarted || !this.loaded || !this.enabled) return
-    this.prewarmStarted = true
-    this.schedulePrewarm(this.prewarmGeneration)
-  }
-
-  private schedulePrewarm(generation: number): void {
-    const keyIds = PREWARM_CHAR_KEY_IDS
-    let index = 0
-
-    const step = () => {
-      if (generation !== this.prewarmGeneration) return
-      if (index >= keyIds.length) return
-      const keyId = keyIds[index]
-      index += 1
-
-      if (this.boundKeyBuffers.has(keyId) || this.pendingBounces.has(keyId)) {
-        scheduleIdleWork(step)
-        return
-      }
-
-      this.pendingBounces.add(keyId)
-      // Seeds attributes exactly as a real plain-typing press would
-      // (playRandomClick({ keyId }), no other options) so the bounce
-      // matches what that press will actually sound like.
-      this.getSoundAttributes({ keyId })
-      void this.bounceKeySound(keyId).finally(() => {
-        this.pendingBounces.delete(keyId)
-        scheduleIdleWork(step)
-      })
-    }
-
-    scheduleIdleWork(step)
-  }
-
-  // Renders one key's full sound (click + bass/treble layers, reverb, and
-  // (for the few keyIds that use it) echo) to a single AudioBuffer via
-  // OfflineAudioContext, using the attributes already assigned to that key
-  // in recentKeySoundHistory. This is only correct because every call site
-  // that passes a given keyId always passes the exact same detune/reverse/
-  // gain/echo overrides for that keyId (verified against every
-  // playRandomClick call site in the app) -- getSoundAttributes' override
-  // merge means the cached attributes already reflect those fixed overrides
-  // after the first real press, so re-reading them here is equivalent to
-  // replaying that press.
-  private async bounceKeySound(keyId: string): Promise<void> {
-    if (!this.audioContext) return
-
-    // E4: a disk hit for this exact (keyId, settingsSignature) skips the
-    // OfflineAudioContext render entirely -- this is what makes a relaunch
-    // (not just the rest of one session) skip the render, mirroring
-    // useTextureSurface's persistent cache pattern.
-    const signature = this.computeAudioBounceSignature()
-    const diskBuffer = await this.tryLoadDiskBounce(keyId, signature)
-    if (diskBuffer) {
-      this.boundKeyBuffers.set(keyId, diskBuffer)
-      return
-    }
-
-    const entry = this.recentKeySoundHistory.find((historyEntry) => historyEntry.keyId === keyId)
-    if (!entry) return
-    const attrs = entry.attributes
-
-    type LayerBouncePlan = { buffer: AudioBuffer; detune: number; gainMultiplier: number }
-    const layerPlans: LayerBouncePlan[] = []
-
-    if (this.layers.click.enabled && this.layers.click.gain > 0) {
-      const buffer = this.getLayerBuffer('click', attrs.assetIndex, attrs.reverse, attrs.flipChannels.click)
-      if (buffer) layerPlans.push({ buffer, detune: attrs.detune, gainMultiplier: this.layers.click.gain })
-    }
-    // E3: mirrors A3's "skip zero-gain layers" guard, moved from the live
-    // path (where it no longer applies -- see E1) to render time.
-    if (this.layers.bass.enabled && this.layers.bass.gain > 0) {
-      const buffer = this.getLayerBuffer('bass', 0, attrs.reverse, attrs.flipChannels.bass)
-      if (buffer) layerPlans.push({ buffer, detune: attrs.bassDetune, gainMultiplier: this.layers.bass.gain })
-    }
-    if (this.layers.treble.enabled && this.layers.treble.gain > 0) {
-      const buffer = this.getLayerBuffer('treble', 0, attrs.reverse, attrs.flipChannels.treble)
-      if (buffer) layerPlans.push({ buffer, detune: attrs.trebleDetune, gainMultiplier: this.layers.treble.gain })
-    }
-    if (layerPlans.length === 0) return
-
-    const effectiveRate = Math.max(0.01, attrs.playbackRate * attrs.frequencyScale)
-    const echo = attrs.echo
-    const echoTailSec = echo ? (echo.delayMs * echo.count) / 1000 : 0
-    const maxRawDurationSec = Math.max(...layerPlans.map((plan) => plan.buffer.duration))
-    const totalDurationSec = maxRawDurationSec / effectiveRate + echoTailSec + 0.1
-    const sampleRate = this.audioContext.sampleRate
-    const length = Math.max(1, Math.ceil(totalDurationSec * sampleRate))
-
-    let offlineContext: OfflineAudioContext
-    try {
-      offlineContext = new OfflineAudioContext(2, length, sampleRate)
-    } catch {
-      return
-    }
-
-    const offlineMasterGain = offlineContext.createGain()
-    offlineMasterGain.gain.value = 1
-    offlineMasterGain.connect(offlineContext.destination)
-
-    // Keep the transient dry and cheap: the reverb tail remains in the shared
-    // live convolver so each cached key hit doesn't duplicate a long-tail
-    // impulse response per sample. This preserves a single composite onset
-    // while keeping memory/CPU usage low on slower machines.
-    const connectToDestination = (gainNode: GainNode) => {
-      gainNode.connect(offlineMasterGain)
-    }
-
-    const scheduleLayerSources = (startTimeSec: number, decayMultiplier: number) => {
-      for (const plan of layerPlans) {
-        const source = offlineContext.createBufferSource()
-        source.buffer = plan.buffer
-        source.playbackRate.value = effectiveRate
-        source.detune.value = plan.detune
-        const gainNode = offlineContext.createGain()
-        gainNode.gain.value = (attrs.gain ?? 1) * plan.gainMultiplier * decayMultiplier
-        source.connect(gainNode)
-        connectToDestination(gainNode)
-        source.start(startTimeSec)
-      }
-    }
-
-    scheduleLayerSources(0, 1)
-    if (echo) {
-      for (let i = 1; i <= echo.count; i += 1) {
-        scheduleLayerSources((echo.delayMs * i) / 1000, Math.pow(echo.decay, i))
-      }
-    }
-
-    try {
-      const renderedBuffer = await offlineContext.startRendering()
-      this.boundKeyBuffers.set(keyId, renderedBuffer)
-      this.saveDiskBounce(keyId, signature, renderedBuffer)
-    } catch {
-      // Offline render failed -- leave this key uncached; the live-synthesis
-      // fallback in playRandomClick keeps working on every future press,
-      // and scheduleBounce will simply be tried again next press.
-    }
-  }
-
-  // Everything that affects a bounce's rendered PCM -- a disk-cached entry
-  // is only valid for the exact signature it was rendered under. Per-key
-  // randomized attributes (frequencyScale, detune, flipChannels...) are
-  // deliberately NOT part of this: once a key has been bounced (this
-  // session or a previous one), its sound stays whatever it first rolled
-  // until a signature-affecting setting changes -- the same "deterministic
-  // per key" contract recentKeySoundHistory already has in-session,
-  // extended across relaunches.
-  private computeAudioBounceSignature(): string {
-    return [
-      this.activeKeySet,
-      this.layers.click.enabled ? 1 : 0,
-      this.layers.click.gain.toFixed(3),
-      this.layers.bass.enabled ? 1 : 0,
-      this.layers.bass.gain.toFixed(3),
-      this.layers.treble.enabled ? 1 : 0,
-      this.layers.treble.gain.toFixed(3),
-      this.keyVariance.toFixed(3),
-      this.pitch.toFixed(3),
-    ].join('|')
-  }
-
-  // window.thockdownAudioBounces only exists in the packaged Electron app
-  // (see electron/preload.ts) -- absent in plain browser-dev mode, where E4
-  // simply degrades to E1's in-memory-only, per-session cache.
-  private async tryLoadDiskBounce(keyId: string, signature: string): Promise<AudioBuffer | null> {
-    const api = window.thockdownAudioBounces
-    if (!api) return null
-    try {
-      const hit = await api.getCachedBounce({ keyId, settingsSignature: signature })
-      if (!hit) return null
-      return this.deserializeAudioBuffer(hit)
-    } catch {
-      return null
-    }
-  }
-
-  private saveDiskBounce(keyId: string, signature: string, buffer: AudioBuffer): void {
-    const api = window.thockdownAudioBounces
-    if (!api) return
-    try {
-      void api.saveCachedBounce({ keyId, settingsSignature: signature }, this.serializeAudioBuffer(buffer))
-    } catch {
-      // Best effort -- the in-memory cache (already populated by the
-      // caller) keeps this session fast regardless of disk persistence.
-    }
-  }
-
-  private serializeAudioBuffer(buffer: AudioBuffer): AudioBounceCacheHit {
-    const numberOfChannels = buffer.numberOfChannels
-    const length = buffer.length
-    const combined = new Float32Array(numberOfChannels * length)
-    for (let channel = 0; channel < numberOfChannels; channel += 1) {
-      combined.set(buffer.getChannelData(channel), channel * length)
-    }
-    return {
-      data: new Uint8Array(combined.buffer, combined.byteOffset, combined.byteLength),
-      sampleRate: buffer.sampleRate,
-      numberOfChannels,
-      length,
-    }
-  }
-
-  private deserializeAudioBuffer(hit: AudioBounceCacheHit): AudioBuffer | null {
-    if (hit.numberOfChannels <= 0 || hit.length <= 0) return null
-    if (hit.data.byteLength !== hit.numberOfChannels * hit.length * Float32Array.BYTES_PER_ELEMENT) return null
-
-    const buffer = new AudioBuffer({
-      numberOfChannels: hit.numberOfChannels,
-      length: hit.length,
-      sampleRate: hit.sampleRate,
-    })
-    // Rebuilt into a fresh, guaranteed-ArrayBuffer-backed Float32Array
-    // rather than viewing hit.data.buffer directly -- that buffer's type is
-    // the broader ArrayBufferLike (it could in principle be a
-    // SharedArrayBuffer), which copyToChannel's stricter typing rejects.
-    const floatView = new Float32Array(hit.numberOfChannels * hit.length)
-    new Uint8Array(floatView.buffer).set(hit.data)
-    for (let channel = 0; channel < hit.numberOfChannels; channel += 1) {
-      buffer.copyToChannel(floatView.subarray(channel * hit.length, (channel + 1) * hit.length), channel)
-    }
-    return buffer
   }
 
   private createFlippedBuffer(buffer: AudioBuffer, context: AudioContext): AudioBuffer {
@@ -1226,4 +551,3 @@ export class TypingSoundManager {
 }
 
 export const typingSoundManager = new TypingSoundManager()
-export { DEFAULT_TYPING_SOUND_SET }

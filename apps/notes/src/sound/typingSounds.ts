@@ -1,8 +1,9 @@
-export const TYPING_SOUND_SET_IDS = ['A', 'B', 'C', 'D'] as const
-export type TypingSoundSetId = (typeof TYPING_SOUND_SET_IDS)[number]
-export const DEFAULT_TYPING_SOUND_SET: TypingSoundSetId = 'A'
+import type { KeystrokeChannelId } from '../shared/keystrokeSounds'
 
-export const TYPING_SOUND_ASSETS: Record<TypingSoundSetId, readonly string[]> = {
+const TYPING_SOUND_SET_IDS = ['A', 'B', 'C', 'D'] as const
+type TypingSoundSetId = (typeof TYPING_SOUND_SET_IDS)[number]
+
+const TYPING_SOUND_ASSETS: Record<TypingSoundSetId, readonly string[]> = {
   A: [
     new URL('../assets/sounds/keys/seta/akey01.wav', import.meta.url).href,
     new URL('../assets/sounds/keys/seta/akey02.wav', import.meta.url).href,
@@ -53,8 +54,15 @@ export const TYPING_SOUND_ASSETS: Record<TypingSoundSetId, readonly string[]> = 
   ],
 } as const;
 
-export const BASS_TYPING_SOUND_ASSET = new URL('../assets/sounds/bass.wav', import.meta.url).href
-export const TREBLE_TYPING_SOUND_ASSET = new URL('../assets/sounds/treble.wav', import.meta.url).href
+/** Every channel's samples: the four click sets and the one-sample bass and treble layers. */
+export const KEYSTROKE_CHANNEL_ASSETS: Record<KeystrokeChannelId, readonly string[]> = {
+  pops: TYPING_SOUND_ASSETS.A,
+  pins: TYPING_SOUND_ASSETS.B,
+  creamy: TYPING_SOUND_ASSETS.C,
+  forge: TYPING_SOUND_ASSETS.D,
+  bass: [new URL('../assets/sounds/bass.wav', import.meta.url).href],
+  treble: [new URL('../assets/sounds/treble.wav', import.meta.url).href],
+}
 
 /**
  * How many samples a set has, taken from the data rather than typed as a
@@ -62,8 +70,9 @@ export const TREBLE_TYPING_SOUND_ASSET = new URL('../assets/sounds/treble.wav', 
  *
  * The MINIMUM across the sets, because callers that want "N different
  * samples" (escapeMenu/menuSounds.ts's screen-arrival burst) plan the draw
- * before knowing which set is active, and planning against the largest set
- * would ask a smaller one for an index it does not have.
+ * before knowing which click channels are on, and each channel takes the
+ * index modulo its own count, so planning within the smallest keeps the
+ * notes distinct on every channel.
  */
 export const TYPING_SOUND_SAMPLES_PER_SET = Math.min(
   ...TYPING_SOUND_SET_IDS.map((id) => TYPING_SOUND_ASSETS[id].length),

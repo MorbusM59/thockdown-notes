@@ -14,12 +14,6 @@
 // the other does not, and nothing says so.
 //
 // So the voices are DATA, in one place, and every caller plays a named one.
-// This is the same argument `TypingSoundManager` already makes against
-// itself and loses: its prewarm deliberately skips arrows, backspace, tab
-// and undo/redo because "prewarming them would mean guessing those options,
-// and guessing wrong would bake a wrong detune/gain/echo into the cached
-// bounce". The options were unguessable because they were unwritten. They
-// are written now.
 //
 // NOT a registry of every key. Only the keys whose sound is a FIXED
 // decision somebody made. Ordinary characters are not here: their voice is

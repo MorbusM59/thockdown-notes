@@ -372,8 +372,10 @@ describe('StateService app-state field round-trip', () => {
 
   it('persists the live keystroke sounds and their presets across a save -> fresh-instance load', async () => {
     const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
-    const keystrokeSound = { enabled: true, set: 'D' as const, volume: 0.3, variance: 0.1, pitch: -20, jitter: 0.05, bass: 0.4, treble: 0.2, reverb: 0.3, room: 0.6, spatial: 40 }
-    const keystrokeSoundPresets = { unsaved: keystrokeSound, saved: [{ id: 'k1', settings: { ...keystrokeSound, set: 'B' as const } }] }
+    const channel = (on: boolean, volume: number, jitter: number) => ({ on, volume, jitter })
+    const channels = { pops: channel(false, 0.5, 0), pins: channel(true, 0.4, 0.1), creamy: channel(false, 0.5, 0), forge: channel(true, 0.8, 0.02), bass: channel(true, 0.3, 0.05), treble: channel(false, 0.2, 0) }
+    const keystrokeSound = { channels, volume: 0.7, variance: 0.1, pitch: -20, reverb: 0.3, room: 0.6, spatial: 40 }
+    const keystrokeSoundPresets = { unsaved: keystrokeSound, saved: [{ id: 'k1', settings: { ...keystrokeSound, channels: { ...channels, pops: channel(true, 0.9, 0.3) } } }] }
     await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, keystrokeSound, keystrokeSoundPresets } })
     const menu = (await new StateService(dataRoot).loadAppState()).menu
     expect(menu?.keystrokeSound).toEqual(keystrokeSound)

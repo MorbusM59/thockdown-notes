@@ -29,7 +29,6 @@ interface Window {
   thockdownExternalFiles?: import('../src/shared/externalFiles').ExternalFilesApi
   thockdownTextures?: import('../src/shared/textures').TextureCacheApi
   thockdownSpellCheck?: import('../src/shared/spellCheck').SpellCheckApi
-  thockdownAudioBounces?: import('../src/shared/audioBounceCache').AudioBounceCacheApi
   thockdownLoadouts?: import('@thockdown/look/loadouts').UiLoadoutApi
   thockdownAudioPlayer?: import('../src/shared/audioPlayer').AudioPlayerApi
   thockdownTabs?: import('../src/shared/tabs').NoteTabsApi

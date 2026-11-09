@@ -15,7 +15,7 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
-import { DEFAULT_KEYSTROKE_SOUND, DEFAULT_KEYSTROKE_SOUND_PREFERENCES, matchingKeystrokeSound, sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings, unsavedKeystrokeSoundAfterEdit, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
+import { DEFAULT_KEYSTROKE_SOUND, DEFAULT_KEYSTROKE_SOUND_PREFERENCES, KEYSTROKE_CHANNEL_IDS, cloneKeystrokeSound, matchingKeystrokeSound, sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings, unsavedKeystrokeSoundAfterEdit, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
 import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, factorySoundstage, matchingSoundstage, sameSoundstage, unsavedAfterEdit, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
@@ -2226,7 +2226,7 @@ function App() {
   const [filterSaturate, setFilterSaturate] = useState(1)
   const [filterColorize, setFilterColorize] = useState(0)
   // Keystroke sounds: app-wide, with presets of their own (shared/keystrokeSounds.ts).
-  const [keystrokeSound, setKeystrokeSound] = useState<KeystrokeSoundSettings>(DEFAULT_KEYSTROKE_SOUND)
+  const [keystrokeSound, setKeystrokeSound] = useState<KeystrokeSoundSettings>(() => cloneKeystrokeSound(DEFAULT_KEYSTROKE_SOUND))
   const [keystrokeSoundPreferences, setKeystrokeSoundPreferences] = useState<KeystrokeSoundPreferences>(DEFAULT_KEYSTROKE_SOUND_PREFERENCES)
   useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, beatSettings.caretFollows, caretEffectStrengthPercent / 100, isVisualizerMode, uiMode)
   // The setting lives in a module store (the preview's img component and the
@@ -6361,41 +6361,27 @@ ${markdownHtml}
     }
   }, [])
 
+  // The keystroke sound engine reads every setting at the press, so pushing
+  // them all on any change costs a few assignments (the reverb setters return
+  // early when their value did not move).
   useEffect(() => {
-    typingSoundManager.setLayerGain('click', keystrokeSound.volume)
-  }, [keystrokeSound.volume])
-
-  useEffect(() => {
+    for (const id of KEYSTROKE_CHANNEL_IDS) typingSoundManager.setChannel(id, keystrokeSound.channels[id])
+    typingSoundManager.setVolume(keystrokeSound.volume)
     typingSoundManager.setTypingSoundVariance(keystrokeSound.variance)
-  }, [keystrokeSound.variance])
-
-  useEffect(() => {
     typingSoundManager.setTypingSoundPitch(keystrokeSound.pitch)
-  }, [keystrokeSound.pitch])
+    typingSoundManager.setReverbStrength(keystrokeSound.reverb)
+    typingSoundManager.setReverbSpace(keystrokeSound.room)
+    typingSoundManager.setSpatialAmount(keystrokeSound.spatial)
+  }, [keystrokeSound])
 
-  useEffect(() => {
-    typingSoundManager.setLayerGain('bass', keystrokeSound.bass)
-  }, [keystrokeSound.bass])
-
-  useEffect(() => {
-    typingSoundManager.setTypingSoundSet(keystrokeSound.set)
-  }, [keystrokeSound.set])
-
-  // Sounding keys needs both the keystroke-sounds feature (shared/features.ts)
-  // and the layout's own choice of a sound set. Off either way, the manager
-  // suspends its AudioContext; it loads and primes it the first time it is on.
-  const keySoundsAudible = features.keySounds && keystrokeSound.enabled
+  // Sounding keys needs the keystroke-sounds feature (shared/features.ts) and
+  // something to hear. Off either way, the manager suspends its AudioContext;
+  // it loads and primes it the first time it is on.
+  const keySoundsAudible = features.keySounds && keystrokeSound.volume > 0
+    && KEYSTROKE_CHANNEL_IDS.some((id) => keystrokeSound.channels[id].on && keystrokeSound.channels[id].volume > 0)
   useEffect(() => {
     typingSoundManager.setTypingSoundEnabled(keySoundsAudible)
   }, [keySoundsAudible])
-
-  useEffect(() => {
-    typingSoundManager.setReverbStrength(keystrokeSound.reverb)
-  }, [keystrokeSound.reverb])
-
-  useEffect(() => {
-    typingSoundManager.setReverbSpace(keystrokeSound.room)
-  }, [keystrokeSound.room])
 
   // The music's room foliage, stereo width and EQ curve: Options > Music.
   // Volume, reverb and room size are written by the music bar (AudioControls),
@@ -6465,8 +6451,9 @@ ${markdownHtml}
     setKeystrokeSoundPreferences((previous) => unsavedKeystrokeSoundAfterEdit(next, previous))
   }, [])
   const applyKeystrokeSound = useCallback((settings: KeystrokeSoundSettings) => {
-    keystrokeSoundRef.current = { ...settings }
-    setKeystrokeSound({ ...settings })
+    const next = cloneKeystrokeSound(settings)
+    keystrokeSoundRef.current = next
+    setKeystrokeSound(next)
   }, [])
   const activeKeystrokeSound = useMemo(() => matchingKeystrokeSound(keystrokeSound, keystrokeSoundPreferences), [keystrokeSound, keystrokeSoundPreferences])
   const activeSoundstage = useMemo(() => matchingSoundstage(liveSoundstage, soundstagePreferences), [liveSoundstage, soundstagePreferences])
@@ -6497,14 +6484,6 @@ ${markdownHtml}
   }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.unsaved, selectFactorySoundstage, applySoundstage])
 
   useEffect(() => {
-    typingSoundManager.setPitchJitterAmount(keystrokeSound.jitter)
-  }, [keystrokeSound.jitter])
-
-  useEffect(() => {
-    typingSoundManager.setSpatialAmount(keystrokeSound.spatial)
-  }, [keystrokeSound.spatial])
-
-  useEffect(() => {
     // The caret blink feature (shared/features.ts). The blink animation keeps
     // the compositor busy indefinitely while the caret is idle, not just while
     // typing, so switching it off removes the animation outright -- a body
@@ -6515,10 +6494,6 @@ ${markdownHtml}
       document.body.classList.remove('thockdown-caret-blink-off')
     }
   }, [features.caretBlink])
-
-  useEffect(() => {
-    typingSoundManager.setLayerGain('treble', keystrokeSound.treble)
-  }, [keystrokeSound.treble])
 
   const handleExportPdf = useCallback(async (scope: ExportScope) => {
     const activeNoteId = getActiveSection()?.activeNoteId
