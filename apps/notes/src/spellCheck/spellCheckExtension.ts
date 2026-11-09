@@ -191,12 +191,17 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
       const ticket = ++this.suggestTicket;
       const { doc } = this.view.state;
       const caret = this.view.state.selection.main.head;
-      const before = [...this.visibleWords()].filter((word) => word.from < caret).reverse();
-      // Only a word that is outlined: never the one being typed, which is not
-      // marked yet, nor one whose answer has not arrived.
-      for (const candidate of before) {
-        const beingTyped = caret >= candidate.from && caret <= candidate.to && this.editedAt >= candidate.from && this.editedAt <= candidate.to;
-        if (beingTyped || spellCheckClient.lookup(candidate.word) !== true) continue;
+      // Only the caret's paragraph: back to the nearest blank line above it.
+      let paragraph = doc.lineAt(caret);
+      while (paragraph.number > 1 && doc.line(paragraph.number - 1).text.trim() !== '') paragraph = doc.line(paragraph.number - 1);
+      const before = [...this.visibleWords()].filter((word) => word.from < caret && word.from >= paragraph.from).reverse();
+      // An outlined word first, never the one being typed, which is not
+      // marked yet; only with no outlined word before it is the word being
+      // typed taken instead, as an autocomplete.
+      const isTyped = (word: VisibleWord) => caret >= word.from && caret <= word.to && this.editedAt >= word.from && this.editedAt <= word.to;
+      const typed = before.find(isTyped);
+      const outlined = before.filter((word) => !isTyped(word) && spellCheckClient.lookup(word.word) === true);
+      for (const candidate of typed ? [...outlined, typed] : outlined) {
         const answer = await spellCheckClient.suggestionsFor(candidate.word);
         // Anything the reader did meanwhile wins over a late answer.
         if (ticket !== this.suggestTicket || this.view.state.doc !== doc) return;
