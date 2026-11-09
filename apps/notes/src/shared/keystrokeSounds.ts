@@ -40,6 +40,8 @@ export interface KeystrokeChannelSettings {
   volume: number
   /** 0..0.5: the largest share by which each press of this channel is pitched up or down at random. */
   jitter: number
+  /** -100..100: this channel's own pitch, on the same scale as the mix's (100 is an octave up). */
+  pitch: number
 }
 
 export interface KeystrokeSoundSettings {
@@ -57,7 +59,7 @@ export interface KeystrokeSoundSettings {
 }
 
 export const KEYSTROKE_GLOBAL_KEYS = ['volume', 'pitch', 'variance', 'reverb', 'room', 'spatial'] as const satisfies readonly (keyof KeystrokeSoundSettings)[]
-export const KEYSTROKE_CHANNEL_NUMBER_KEYS = ['volume', 'jitter'] as const satisfies readonly (keyof KeystrokeChannelSettings)[]
+export const KEYSTROKE_CHANNEL_NUMBER_KEYS = ['volume', 'jitter', 'pitch'] as const satisfies readonly (keyof KeystrokeChannelSettings)[]
 
 /** The sliders' ranges in Options. */
 export const KEYSTROKE_SOUND_RANGES = {
@@ -71,9 +73,10 @@ export const KEYSTROKE_SOUND_RANGES = {
 export const KEYSTROKE_CHANNEL_RANGES = {
   volume: [0, 1],
   jitter: [0, 0.5],
+  pitch: [-100, 100],
 } as const satisfies Record<(typeof KEYSTROKE_CHANNEL_NUMBER_KEYS)[number], readonly [number, number]>
 
-export const DEFAULT_KEYSTROKE_CHANNEL: Readonly<KeystrokeChannelSettings> = { on: false, volume: 0.5, jitter: 0 }
+export const DEFAULT_KEYSTROKE_CHANNEL: Readonly<KeystrokeChannelSettings> = { on: false, volume: 0.5, jitter: 0, pitch: 0 }
 
 type ChannelOverrides = Partial<Record<KeystrokeChannelId, Partial<KeystrokeChannelSettings>>>
 const preset = (channels: ChannelOverrides, globals: Partial<Omit<KeystrokeSoundSettings, 'channels'>> = {}): KeystrokeSoundSettings => ({

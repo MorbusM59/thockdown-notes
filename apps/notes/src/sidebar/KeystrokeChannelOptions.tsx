@@ -124,7 +124,7 @@ export function KeystrokeChannelOptions({ settings, onChange }: KeystrokeChannel
         )
       })}
     </div>
-    <OptionsSliderRows rows={[2]}>
+    <OptionsSliderRows rows={[3]}>
       <CompactScrollbarSlider
         id="keystroke-channel-volume"
         min={KEYSTROKE_CHANNEL_RANGES.volume[0]}
@@ -150,6 +150,19 @@ export function KeystrokeChannelOptions({ settings, onChange }: KeystrokeChannel
         defaultValue={DEFAULT_KEYSTROKE_CHANNEL.jitter}
         disabled={!selected.on}
         onCommit={(value) => update(selectedId, { jitter: clampTo(value, KEYSTROKE_CHANNEL_RANGES.jitter) })}
+      />
+      <CompactScrollbarSlider
+        id="keystroke-channel-pitch"
+        min={KEYSTROKE_CHANNEL_RANGES.pitch[0]}
+        max={KEYSTROKE_CHANNEL_RANGES.pitch[1]}
+        step={1}
+        value={selected.pitch}
+        trackLabel="pitch"
+        tooltipLabel={`${selectedName} pitch: 100 is an octave up, -100 an octave down`}
+        ariaLabel={`${selectedName} pitch`}
+        defaultValue={DEFAULT_KEYSTROKE_CHANNEL.pitch}
+        disabled={!selected.on}
+        onCommit={(value) => update(selectedId, { pitch: clampTo(Math.round(value), KEYSTROKE_CHANNEL_RANGES.pitch) })}
       />
     </OptionsSliderRows>
   </>)

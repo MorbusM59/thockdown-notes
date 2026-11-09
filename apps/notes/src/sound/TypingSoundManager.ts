@@ -134,7 +134,7 @@ interface ChannelBuffers {
   reversedFlipped: AudioBuffer[]
 }
 
-const OFF_CHANNEL: KeystrokeChannelSettings = { on: false, volume: 0, jitter: 0 }
+const OFF_CHANNEL: KeystrokeChannelSettings = { on: false, volume: 0, jitter: 0, pitch: 0 }
 
 /** Up to this many cents each way at full variance: the per-channel detune spread. */
 const VARIANCE_DETUNE_CENTS = 300
@@ -315,7 +315,8 @@ export class TypingSoundManager {
 
       // A fresh draw per press and per channel: the layers drift against
       // each other, which is much of what makes a layered key sound alive.
-      const rate = channel.jitter > 0 ? baseRate * (1 + (Math.random() * 2 - 1) * channel.jitter) : baseRate
+      const channelRate = baseRate * (channel.pitch >= 0 ? (100 + channel.pitch) / 100 : 100 / (100 - channel.pitch))
+      const rate = channel.jitter > 0 ? channelRate * (1 + (Math.random() * 2 - 1) * channel.jitter) : channelRate
       const detune = (options?.detune ?? 0) + Math.round(character.detuneUnits[id] * this.keyVariance * VARIANCE_DETUNE_CENTS)
       const strikes = echo ? echo.count + 1 : 1
       for (let strike = 0; strike < strikes; strike += 1) {

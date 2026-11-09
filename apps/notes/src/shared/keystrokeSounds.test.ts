@@ -35,7 +35,7 @@ describe('keystroke sound presets', () => {
     const prefs = { unsaved: { ...FACTORY_KEYSTROKE_SOUNDS[1].settings, pitch: 900, channels: { ...FACTORY_KEYSTROKE_SOUNDS[1].settings.channels, forge: { on: 'yes', volume: -3, jitter: 2 } } }, saved: [{ id: 'a', settings: FACTORY_KEYSTROKE_SOUNDS[2].settings }, { id: 'a' }, null] }
     const out = sanitizeKeystrokeSoundPreferences(JSON.parse(JSON.stringify(prefs)))
     expect(out.unsaved.pitch).toBe(100)
-    expect(out.unsaved.channels.forge).toEqual({ on: DEFAULT_KEYSTROKE_SOUND.channels.forge.on, volume: 0, jitter: 0.5 })
+    expect(out.unsaved.channels.forge).toEqual({ on: DEFAULT_KEYSTROKE_SOUND.channels.forge.on, volume: 0, jitter: 0.5, pitch: 0 })
     expect(out.saved).toHaveLength(1)
     expect(sameKeystrokeSound(out.saved[0].settings, FACTORY_KEYSTROKE_SOUNDS[2].settings)).toBe(true)
   })
