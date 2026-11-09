@@ -1972,7 +1972,6 @@ export function SidebarOptionsPanel({
       >
         <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor controls">
           <OptionsSubsectionLabel>Element Size</OptionsSubsectionLabel>
-          <div className="options-mouse-center-grid options-mouse-center-grid-wide" aria-hidden="true">
             <div className="options-glaze-cell options-glaze-cell-span-2">
               <CompactScrollbarSlider
                 id="cursor-trail-thickness"
@@ -2012,7 +2011,6 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setCustomCursorCenterSizePx(clamp(value, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX))}
               />
             </div>
-          </div>
 
           <OptionsSubsectionLabel>Trail</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-3">
