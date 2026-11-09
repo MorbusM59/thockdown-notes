@@ -5,6 +5,18 @@ same commit that sets the version (docs/release-protocol.md). Entries up to 0.7.
 were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
+
+## 0.8.1 (2026-11-09)
+
+A patch for the 0.8.0 prerelease. Pressing Enter at the start of a list item now opens a blank line above it, selecting a factory preset no longer leaves the layout looking modified, and the Visualizer's beat detection is independent of Grid Beat (the beat delay now starts at 0). The Quick Access switches now only disable, and the render view's restore landing no longer disturbs scrolling.
+
+#### Changes
+
+- Factory presets carry the spell-check colour, so selecting one is clean
+- Quick Access switches only disable; Visualizer beat independent of Grid Beat; beat delay starts at 0
+- Enter at the start of a list item opens a blank line above it
+- Hold the render view's restore landing as a scroll-behavior borrow
+
 ## 0.8.0 (2026-11-09)
 
 The biggest release yet: a full-screen **Visualizer** for your music, the app's own **offline spell checker**, **speed reading**, the **Typing Trail**, drawable **music soundstages**, an **image library**, **touch screen** support, and a reorganised **Options** panel. Notes also follow their files on disk, the same note can be open in several slots, and the app is safe to switch off at any moment.
