@@ -370,6 +370,16 @@ describe('StateService app-state field round-trip', () => {
     expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual(features)
   })
 
+  it('persists the live keystroke sounds and their presets across a save -> fresh-instance load', async () => {
+    const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
+    const keystrokeSound = { enabled: true, set: 'D' as const, volume: 0.3, variance: 0.1, pitch: -20, jitter: 0.05, bass: 0.4, treble: 0.2, reverb: 0.3, room: 0.6, spatial: 40 }
+    const keystrokeSoundPresets = { unsaved: keystrokeSound, saved: [{ id: 'k1', settings: { ...keystrokeSound, set: 'B' as const } }] }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, keystrokeSound, keystrokeSoundPresets } })
+    const menu = (await new StateService(dataRoot).loadAppState()).menu
+    expect(menu?.keystrokeSound).toEqual(keystrokeSound)
+    expect(menu?.keystrokeSoundPresets).toEqual(keystrokeSoundPresets)
+  })
+
   it('persists the options panel\'s selected section, and reads anything else as General', async () => {
     const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
     await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, optionsSection: 'music' } })

@@ -804,7 +804,7 @@ ${shortcutTable()}
 - Change anything and a **plus** appears at the end of the list: that is your unsaved layout. You can try another preset and click the plus to come back to it.
 - Hold the plus to save it as a new numbered layout, which takes its place.
 - Right-click a saved layout to arm it for deletion, then click it to delete; hold right-click to export it. Deleting the layout you are using keeps it on screen as unsaved changes.
-- Music and Soundscapes have Presets that work the same way.
+- Music, Soundscapes and Keystroke Sounds have Presets that work the same way.
 
 ### [Quick Access](#quick-access)
 
@@ -933,13 +933,14 @@ ${shortcutTable()}
 - **Effect** (0–100%) is how much of the chosen shape actually reaches the caret. At 100 you get the blink at full strength; at 0 the caret is simply static, sitting at whatever colors you gave it; in between is a straight blend of the two, so you can keep a rhythm you like and just take the edge off it.
 - All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, press the selected shape again; pressing any shape brings it back.
 
-### [Sounds](#keystroke-sounds)
+### [Keystroke Sounds](#keystroke-sounds)
 
 > **Where?**
-> Settings panel → Layouts → Sounds.
+> Settings panel → Modules → Keystroke Sounds.
 
 *Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
 
+- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (one per factory layout, then your saved ones) work like [layout presets]($#presets), without export.
 - Four sound sets — Pops, Pins, Creamy, Forge — plus volume, per-key pitch variance, global pitch, bass/treble mix, reverb, and pitch jitter controls.
 - **Spatial** slider adds stereo panning, centered (off) by default. Left of center pans by keyboard key position (left-hand keys sound from the left, right-hand keys from the right, non-character keys like arrows/Tab/Backspace stay centered); right of center pans by where the caret sits on the current line (line start sounds left, the far edge before an automatic wrap sounds right). The two modes don't blend — the slider picks one or the other by which side of center it's on, with distance from center setting how strong the effect is.
 

@@ -15,6 +15,7 @@ import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetter
 import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
+import { sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings } from '../src/shared/keystrokeSounds';
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
@@ -376,12 +377,6 @@ function sanitizeDarkMode(input: unknown): (typeof VALID_DARK_MODE_KEYS)[number]
   return (VALID_DARK_MODE_KEYS as readonly unknown[]).includes(input) ? input as (typeof VALID_DARK_MODE_KEYS)[number] : undefined;
 }
 
-const VALID_TYPING_SOUND_SETS = ['A', 'B', 'C', 'D'] as const;
-
-function sanitizeTypingSoundSet(input: unknown): (typeof VALID_TYPING_SOUND_SETS)[number] | undefined {
-  return (VALID_TYPING_SOUND_SETS as readonly unknown[]).includes(input) ? input as (typeof VALID_TYPING_SOUND_SETS)[number] : undefined;
-}
-
 function sanitizeChapterBarMode(input: unknown): 'tags' | 'tabs' | undefined {
   return input === 'tags' || input === 'tabs' ? input : undefined;
 }
@@ -568,21 +563,11 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     uiMode: sanitizeUiMode(input?.uiMode),
     textureActiveSurface: sanitizeTextureSurface(input?.textureActiveSurface),
     textureMaterials: sanitizeTextureMaterials(input?.textureMaterials),
-    audioKeyVolume: sanitizeOptionalNumber(input?.audioKeyVolume),
-    audioBassVolume: sanitizeOptionalNumber(input?.audioBassVolume),
-    audioTrebleVolume: sanitizeOptionalNumber(input?.audioTrebleVolume),
-    audioKeyVariance: sanitizeOptionalNumber(input?.audioKeyVariance),
-    audioPitch: sanitizeOptionalNumber(input?.audioPitch),
-    audioReverbStrength: sanitizeOptionalNumber(input?.audioReverbStrength),
-    audioReverbSpace: sanitizeOptionalNumber(input?.audioReverbSpace),
-    audioReverbAmount: sanitizeOptionalNumber(input?.audioReverbAmount),
-    pitchJitterAmount: sanitizeOptionalNumber(input?.pitchJitterAmount),
-    audioSpatial: sanitizeOptionalNumber(input?.audioSpatial),
     // Strictly true: anything else, absence included, keeps the app local.
     allowRemoteImages: input?.allowRemoteImages === true,
     sidebarShowsImages: input?.sidebarShowsImages === true,
-    typingSoundEnabled: Boolean(input?.typingSoundEnabled),
-    typingSoundSet: sanitizeTypingSoundSet(input?.typingSoundSet),
+    keystrokeSound: input?.keystrokeSound === undefined ? undefined : sanitizeKeystrokeSoundSettings(input.keystrokeSound),
+    keystrokeSoundPresets: input?.keystrokeSoundPresets === undefined ? undefined : sanitizeKeystrokeSoundPreferences(input.keystrokeSoundPresets),
     musicVolume: sanitizeOptionalNumber(input?.musicVolume),
     musicReverbAmount: sanitizeOptionalNumber(input?.musicReverbAmount),
     musicReverbRoom: sanitizeOptionalNumber(input?.musicReverbRoom),

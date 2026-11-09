@@ -1,3 +1,4 @@
+import type { KeystrokeSoundPreferences, KeystrokeSoundSettings } from './keystrokeSounds';
 import type { OptionsSectionId } from './optionsSections';
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
@@ -182,22 +183,14 @@ export interface PersistedMenuState {
   textureEnabled?: boolean;
   textureActiveSurface?: TextureSurfaceKey;
   textureMaterials?: TextureMaterialsBySurface;
-  audioKeyVolume?: number;
-  audioBassVolume?: number;
-  audioTrebleVolume?: number;
-  audioKeyVariance?: number;
-  audioPitch?: number;
-  audioReverbStrength?: number;
-  audioReverbSpace?: number;
-  audioReverbAmount?: number;
-  pitchJitterAmount?: number;
-  audioSpatial?: number;
   /** The sidebar's date/category/archive/trash views list stored images instead of notes (imageLibrary/). */
   sidebarShowsImages?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;
-  typingSoundEnabled?: boolean;
-  typingSoundSet?: 'A' | 'B' | 'C' | 'D';
+  /** The live keystroke sound settings (shared/keystrokeSounds.ts). */
+  keystrokeSound?: KeystrokeSoundSettings;
+  /** Saved keystroke sound presets and the unsaved one. */
+  keystrokeSoundPresets?: KeystrokeSoundPreferences;
   /**
    * Music LEVELS, always 0–1 and always the value the user set — never zeroed
    * to represent "off". Audibility is carried separately by the two flags

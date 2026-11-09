@@ -15,6 +15,7 @@ import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type Music
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
+import { DEFAULT_KEYSTROKE_SOUND, DEFAULT_KEYSTROKE_SOUND_PREFERENCES, matchingKeystrokeSound, sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings, unsavedKeystrokeSoundAfterEdit, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
 import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, factorySoundstage, matchingSoundstage, sameSoundstage, unsavedAfterEdit, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
@@ -33,7 +34,6 @@ import { useWindowDragRegion } from './window/useWindowDragRegion'
 import './App.css'
 import { buildExportCss, type ExportViewStyle } from './exportStyles'
 import {
-  DEFAULT_TYPING_SOUND_SET,
   typingSoundManager,
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
@@ -799,19 +799,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
       BOX_SHADOW_ALPHA_PERCENT_MIN,
       BOX_SHADOW_ALPHA_PERCENT_MAX,
     ),
-    audioKeyVolume: clamp(toFiniteNumber(source.audioKeyVolume, 1), 0, 1),
-    audioKeyVariance: clamp(toFiniteNumber(source.audioKeyVariance, 0), 0, 0.5),
-    audioPitch: clamp(toFiniteNumber(source.audioPitch, 0), -100, 100),
-    audioBassVolume: clamp(toFiniteNumber(source.audioBassVolume, 0), 0, 1),
-    audioTrebleVolume: clamp(toFiniteNumber(source.audioTrebleVolume, 0), 0, 1),
-    audioReverbStrength: clamp(toFiniteNumber(source.audioReverbStrength ?? source.audioReverbAmount, 0), 0, 1),
-    audioReverbSpace: clamp(toFiniteNumber(source.audioReverbSpace, 0), 0, 1),
-    pitchJitterAmount: clamp(toFiniteNumber(source.pitchJitterAmount, 0), 0, 0.5),
-    audioSpatial: clamp(toFiniteNumber(source.audioSpatial, 0), -100, 100),
-    typingSoundEnabled: source.typingSoundEnabled === true,
-    typingSoundSet: source.typingSoundSet === 'A' || source.typingSoundSet === 'B' || source.typingSoundSet === 'C' || source.typingSoundSet === 'D'
-      ? source.typingSoundSet
-      : DEFAULT_TYPING_SOUND_SET,
     glaze: sanitizeGlazeSettings(source.glaze, DEFAULT_GLAZE_SETTINGS),
     boxBevel: sanitizeBoxBevel(source.boxBevel),
     darkMode,
@@ -2238,15 +2225,9 @@ function App() {
   const [filterContrast, setFilterContrast] = useState(1)
   const [filterSaturate, setFilterSaturate] = useState(1)
   const [filterColorize, setFilterColorize] = useState(0)
-  const [audioKeyVolume, setAudioKeyVolume] = useState(0.5)
-  const [audioKeyVariance, setAudioKeyVariance] = useState(0)
-  const [audioPitch, setAudioPitch] = useState(0)
-  const [audioBassVolume, setAudioBassVolume] = useState(0)
-  const [audioTrebleVolume, setAudioTrebleVolume] = useState(0)
-  const [audioReverbStrength, setAudioReverbStrength] = useState(0)
-  const [audioReverbSpace, setAudioReverbSpace] = useState(0)
-  const [pitchJitterAmount, setPitchJitterAmount] = useState(0)
-  const [audioSpatial, setAudioSpatial] = useState(0)
+  // Keystroke sounds: app-wide, with presets of their own (shared/keystrokeSounds.ts).
+  const [keystrokeSound, setKeystrokeSound] = useState<KeystrokeSoundSettings>(DEFAULT_KEYSTROKE_SOUND)
+  const [keystrokeSoundPreferences, setKeystrokeSoundPreferences] = useState<KeystrokeSoundPreferences>(DEFAULT_KEYSTROKE_SOUND_PREFERENCES)
   useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, beatSettings.caretFollows, caretEffectStrengthPercent / 100, isVisualizerMode, uiMode)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
@@ -2257,8 +2238,6 @@ function App() {
   // largest threshold; they stay props so the line can be tuned here.
   const noteSizeThresholdBlocks = DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS
   const forceCharacterScrollbarThumb = false
-  const [typingSoundEnabled, setTypingSoundEnabled] = useState(false)
-  const [typingSoundSet, setTypingSoundSet] = useState<'A' | 'B' | 'C' | 'D'>(DEFAULT_TYPING_SOUND_SET)
   const [musicVolume, setMusicVolume] = useState(0.8)
   const [musicReverbAmount, setMusicReverbAmount] = useState(0)
   const [musicReverbRoom, setMusicReverbRoom] = useState(DEFAULT_MUSIC_PLAYER_CONFIG.reverbRoom)
@@ -2565,17 +2544,6 @@ function App() {
       spacingRegularPx,
       borderAlphaPercent,
       boxShadowAlphaPercent,
-      audioKeyVolume,
-      audioKeyVariance,
-      audioPitch,
-      audioBassVolume,
-      audioTrebleVolume,
-      audioReverbStrength,
-      audioReverbSpace,
-      pitchJitterAmount,
-      audioSpatial,
-      typingSoundEnabled,
-      typingSoundSet,
       glaze: glazeSettings,
       boxBevel,
       darkMode,
@@ -2670,17 +2638,6 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-    audioKeyVolume,
-    audioKeyVariance,
-    audioPitch,
-    audioBassVolume,
-    audioTrebleVolume,
-    audioReverbStrength,
-    audioReverbSpace,
-    pitchJitterAmount,
-    audioSpatial,
-    typingSoundEnabled,
-    typingSoundSet,
     textureMaterials,
     highlightColors,
     editorTextColors,
@@ -2748,17 +2705,6 @@ function App() {
         BOX_SHADOW_ALPHA_PERCENT_MAX,
       ),
     )
-    setAudioKeyVolume(clamp(loadout.audioKeyVolume, 0, 1))
-    setAudioKeyVariance(clamp(loadout.audioKeyVariance, 0, 0.5))
-    setAudioPitch(clamp(loadout.audioPitch, -100, 100))
-    setAudioBassVolume(clamp(loadout.audioBassVolume, 0, 1))
-    setAudioTrebleVolume(clamp(loadout.audioTrebleVolume, 0, 1))
-    setAudioReverbStrength(clamp(loadout.audioReverbStrength, 0, 1))
-    setAudioReverbSpace(clamp(loadout.audioReverbSpace, 0, 1))
-    setPitchJitterAmount(clamp(loadout.pitchJitterAmount, 0, 0.5))
-    setAudioSpatial(clamp(loadout.audioSpatial, -100, 100))
-    setTypingSoundEnabled(loadout.typingSoundEnabled)
-    setTypingSoundSet(loadout.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
     setGlazeSettings(sanitizeGlazeSettings(loadout.glaze, DEFAULT_GLAZE_SETTINGS))
     setBoxBevel(sanitizeBoxBevel(loadout.boxBevel))
     // Apply darkMode preset to sliders; individual filter values from the
@@ -3348,12 +3294,8 @@ function App() {
       filterContrast,
       filterSaturate,
       filterColorize,
-      audioKeyVolume,
-      audioKeyVariance,
-      audioPitch,
-      audioBassVolume,
-      audioTrebleVolume,
-      typingSoundSet,
+      keystrokeSound,
+      keystrokeSoundPresets: keystrokeSoundPreferences,
       musicVolume,
       musicReverbAmount,
       musicReverbRoom,
@@ -3487,11 +3429,8 @@ function App() {
     wheelSpinCutoffMs,
     wheelStepRows,
     wheelStepLines,
-    audioKeyVolume,
-    audioKeyVariance,
-    audioPitch,
-    audioBassVolume,
-    audioTrebleVolume,
+    keystrokeSound,
+    keystrokeSoundPreferences,
     textureEnabled,
     glazeSettings,
     boxBevel,
@@ -3517,7 +3456,6 @@ function App() {
     filterContrast,
     filterSaturate,
     filterColorize,
-    typingSoundSet,
     textureMaterials,
     highlightColors,
     editorTextColors,
@@ -5335,19 +5273,10 @@ ${markdownHtml}
             setFilterContrast(appState.menu.filterContrast ?? 1)
             setFilterSaturate(appState.menu.filterSaturate ?? 0.5)
             setFilterColorize(appState.menu.filterColorize ?? 0)
-            setAudioKeyVolume(appState.menu.audioKeyVolume ?? 0.5)
-            setAudioKeyVariance(appState.menu.audioKeyVariance ?? 0)
-            setAudioPitch(appState.menu.audioPitch ?? 0)
-            setAudioBassVolume(appState.menu.audioBassVolume ?? 0)
-            setAudioTrebleVolume(appState.menu.audioTrebleVolume ?? 0)
-            setAudioReverbStrength(appState.menu.audioReverbStrength ?? appState.menu.audioReverbAmount ?? 0)
-            setAudioReverbSpace(appState.menu.audioReverbSpace ?? 0)
-            setPitchJitterAmount(appState.menu.pitchJitterAmount ?? 0)
-            setAudioSpatial(appState.menu.audioSpatial ?? 0)
+            setKeystrokeSound(sanitizeKeystrokeSoundSettings(appState.menu.keystrokeSound))
+            setKeystrokeSoundPreferences(sanitizeKeystrokeSoundPreferences(appState.menu.keystrokeSoundPresets))
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
-            setTypingSoundEnabled(appState.menu.typingSoundEnabled ?? false)
-            setTypingSoundSet(appState.menu.typingSoundSet ?? DEFAULT_TYPING_SOUND_SET)
             if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
             if (typeof appState.menu.musicReverbAmount === 'number') setMusicReverbAmount(appState.menu.musicReverbAmount)
             if (typeof appState.menu.musicReverbRoom === 'number') setMusicReverbRoom(appState.menu.musicReverbRoom)
@@ -6433,40 +6362,40 @@ ${markdownHtml}
   }, [])
 
   useEffect(() => {
-    typingSoundManager.setLayerGain('click', audioKeyVolume)
-  }, [audioKeyVolume])
+    typingSoundManager.setLayerGain('click', keystrokeSound.volume)
+  }, [keystrokeSound.volume])
 
   useEffect(() => {
-    typingSoundManager.setTypingSoundVariance(audioKeyVariance)
-  }, [audioKeyVariance])
+    typingSoundManager.setTypingSoundVariance(keystrokeSound.variance)
+  }, [keystrokeSound.variance])
 
   useEffect(() => {
-    typingSoundManager.setTypingSoundPitch(audioPitch)
-  }, [audioPitch])
+    typingSoundManager.setTypingSoundPitch(keystrokeSound.pitch)
+  }, [keystrokeSound.pitch])
 
   useEffect(() => {
-    typingSoundManager.setLayerGain('bass', audioBassVolume)
-  }, [audioBassVolume])
+    typingSoundManager.setLayerGain('bass', keystrokeSound.bass)
+  }, [keystrokeSound.bass])
 
   useEffect(() => {
-    typingSoundManager.setTypingSoundSet(typingSoundSet)
-  }, [typingSoundSet])
+    typingSoundManager.setTypingSoundSet(keystrokeSound.set)
+  }, [keystrokeSound.set])
 
   // Sounding keys needs both the keystroke-sounds feature (shared/features.ts)
   // and the layout's own choice of a sound set. Off either way, the manager
   // suspends its AudioContext; it loads and primes it the first time it is on.
-  const keySoundsAudible = features.keySounds && typingSoundEnabled
+  const keySoundsAudible = features.keySounds && keystrokeSound.enabled
   useEffect(() => {
     typingSoundManager.setTypingSoundEnabled(keySoundsAudible)
   }, [keySoundsAudible])
 
   useEffect(() => {
-    typingSoundManager.setReverbStrength(audioReverbStrength)
-  }, [audioReverbStrength])
+    typingSoundManager.setReverbStrength(keystrokeSound.reverb)
+  }, [keystrokeSound.reverb])
 
   useEffect(() => {
-    typingSoundManager.setReverbSpace(audioReverbSpace)
-  }, [audioReverbSpace])
+    typingSoundManager.setReverbSpace(keystrokeSound.room)
+  }, [keystrokeSound.room])
 
   // The music's room foliage, stereo width and EQ curve: Options > Music.
   // Volume, reverb and room size are written by the music bar (AudioControls),
@@ -6523,6 +6452,23 @@ ${markdownHtml}
     setSoundstagePreferences((previous) => (previous.factory === id ? previous : { ...previous, factory: id }))
     applySoundstage(factorySoundstage(id).settings)
   }, [applySoundstage])
+  // Keystroke sounds: an EDIT (a slider or a sound set in Options) is the
+  // unsaved preset; SELECTING a preset only sets the live settings. Both are
+  // synchronous, so unlike the soundstage no selection has to be told apart
+  // after the fact.
+  const keystrokeSoundRef = useRef(keystrokeSound)
+  keystrokeSoundRef.current = keystrokeSound
+  const editKeystrokeSound = useCallback((patch: Partial<KeystrokeSoundSettings>) => {
+    const next = { ...keystrokeSoundRef.current, ...patch }
+    keystrokeSoundRef.current = next
+    setKeystrokeSound(next)
+    setKeystrokeSoundPreferences((previous) => unsavedKeystrokeSoundAfterEdit(next, previous))
+  }, [])
+  const applyKeystrokeSound = useCallback((settings: KeystrokeSoundSettings) => {
+    keystrokeSoundRef.current = { ...settings }
+    setKeystrokeSound({ ...settings })
+  }, [])
+  const activeKeystrokeSound = useMemo(() => matchingKeystrokeSound(keystrokeSound, keystrokeSoundPreferences), [keystrokeSound, keystrokeSoundPreferences])
   const activeSoundstage = useMemo(() => matchingSoundstage(liveSoundstage, soundstagePreferences), [liveSoundstage, soundstagePreferences])
   // The visualizer's solid: the factory stage playing, or the custom shape for
   // anything else; pressing it steps from the last factory stage chosen.
@@ -6551,12 +6497,12 @@ ${markdownHtml}
   }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.unsaved, selectFactorySoundstage, applySoundstage])
 
   useEffect(() => {
-    typingSoundManager.setPitchJitterAmount(pitchJitterAmount)
-  }, [pitchJitterAmount])
+    typingSoundManager.setPitchJitterAmount(keystrokeSound.jitter)
+  }, [keystrokeSound.jitter])
 
   useEffect(() => {
-    typingSoundManager.setSpatialAmount(audioSpatial)
-  }, [audioSpatial])
+    typingSoundManager.setSpatialAmount(keystrokeSound.spatial)
+  }, [keystrokeSound.spatial])
 
   useEffect(() => {
     // The caret blink feature (shared/features.ts). The blink animation keeps
@@ -6571,8 +6517,8 @@ ${markdownHtml}
   }, [features.caretBlink])
 
   useEffect(() => {
-    typingSoundManager.setLayerGain('treble', audioTrebleVolume)
-  }, [audioTrebleVolume])
+    typingSoundManager.setLayerGain('treble', keystrokeSound.treble)
+  }, [keystrokeSound.treble])
 
   const handleExportPdf = useCallback(async (scope: ExportScope) => {
     const activeNoteId = getActiveSection()?.activeNoteId
@@ -8944,26 +8890,14 @@ ${markdownHtml}
                         wheelSpinCutoffMs={wheelSpinCutoffMs}
                         setWheelSpinCutoffMs={setWheelSpinCutoffMsState}
                         setRenderScrollSkew={setRenderScrollSkew}
-                        typingSoundEnabled={typingSoundEnabled}
-                        setTypingSoundEnabled={setTypingSoundEnabled}
-                        typingSoundSet={typingSoundSet}
-                        setTypingSoundSet={setTypingSoundSet}
+                        keystrokeSound={keystrokeSound}
+                        setKeystrokeSound={editKeystrokeSound}
+                        keystrokeSoundPreferences={keystrokeSoundPreferences}
+                        setKeystrokeSoundPreferences={setKeystrokeSoundPreferences}
+                        activeKeystrokeSound={activeKeystrokeSound}
+                        applyKeystrokeSound={applyKeystrokeSound}
                         soundscapePreferences={soundscapePreferences}
                         onSoundscapePreferencesChange={setSoundscapePreferences}
-                        audioKeyVolume={audioKeyVolume}
-                        setAudioKeyVolume={setAudioKeyVolume}
-                        audioKeyVariance={audioKeyVariance}
-                        setAudioKeyVariance={setAudioKeyVariance}
-                        audioPitch={audioPitch}
-                        setAudioPitch={setAudioPitch}
-                        audioBassVolume={audioBassVolume}
-                        setAudioBassVolume={setAudioBassVolume}
-                        audioTrebleVolume={audioTrebleVolume}
-                        setAudioTrebleVolume={setAudioTrebleVolume}
-                        audioReverbStrength={audioReverbStrength}
-                        setAudioReverbStrength={setAudioReverbStrength}
-                        audioReverbSpace={audioReverbSpace}
-                        setAudioReverbSpace={setAudioReverbSpace}
                         musicReverbFoliage={musicReverbFoliage}
                         setMusicReverbFoliage={setMusicReverbFoliage}
                         musicStereoWidth={musicStereoWidth}
@@ -8978,10 +8912,6 @@ ${markdownHtml}
                         activeSoundstage={activeSoundstage}
                         applySoundstage={applySoundstage}
                         selectFactorySoundstage={selectFactorySoundstage}
-                        pitchJitterAmount={pitchJitterAmount}
-                        setPitchJitterAmount={setPitchJitterAmount}
-                        audioSpatial={audioSpatial}
-                        setAudioSpatial={setAudioSpatial}
                         allowRemoteImages={allowRemoteImages}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
                         features={features}

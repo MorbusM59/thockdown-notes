@@ -237,7 +237,8 @@ import {
 } from '@thockdown/look/glaze'
 import { LOADOUT_FIRST_CUSTOM_ID_ABS, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
 import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
-import { typingSoundManager } from '../sound/TypingSoundManager'
+import { KEYSTROKE_SOUND_RANGES, type ActiveKeystrokeSound, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
+import { KeystrokeSoundOptions } from './KeystrokeSoundOptions'
 import { useOutputDevice } from '../sound/outputDevice'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
@@ -538,26 +539,15 @@ export interface SidebarOptionsPanelProps {
   renderScrollSkew: number
   setRenderScrollSkew: (value: number) => void
 
-  typingSoundEnabled: boolean
-  setTypingSoundEnabled: (value: boolean) => void
-  typingSoundSet: 'A' | 'B' | 'C' | 'D'
-  setTypingSoundSet: (value: 'A' | 'B' | 'C' | 'D') => void
+  /** The live keystroke sound settings; setting one is an edit (it becomes the unsaved preset). */
+  keystrokeSound: KeystrokeSoundSettings
+  setKeystrokeSound: (patch: Partial<KeystrokeSoundSettings>) => void
+  keystrokeSoundPreferences: KeystrokeSoundPreferences
+  setKeystrokeSoundPreferences: (update: (previous: KeystrokeSoundPreferences) => KeystrokeSoundPreferences) => void
+  activeKeystrokeSound: ActiveKeystrokeSound
+  applyKeystrokeSound: (settings: KeystrokeSoundSettings) => void
   soundscapePreferences: SoundscapePreferences
   onSoundscapePreferencesChange: (preferences: SoundscapePreferences) => void
-  audioKeyVolume: number
-  setAudioKeyVolume: (value: number) => void
-  audioKeyVariance: number
-  setAudioKeyVariance: (value: number) => void
-  audioPitch: number
-  setAudioPitch: (value: number) => void
-  audioBassVolume: number
-  setAudioBassVolume: (value: number) => void
-  audioTrebleVolume: number
-  setAudioTrebleVolume: (value: number) => void
-  audioReverbStrength: number
-  setAudioReverbStrength: (value: number) => void
-  audioReverbSpace: number
-  setAudioReverbSpace: (value: number) => void
   musicReverbFoliage: number
   setMusicReverbFoliage: (value: number) => void
   musicStereoWidth: number
@@ -572,10 +562,6 @@ export interface SidebarOptionsPanelProps {
   activeSoundstage: ActiveSoundstage
   applySoundstage: (settings: SoundstageSettings) => void
   selectFactorySoundstage: (id: FactorySoundstageId) => void
-  pitchJitterAmount: number
-  setPitchJitterAmount: (value: number) => void
-  audioSpatial: number
-  setAudioSpatial: (value: number) => void
   allowRemoteImages: boolean
   onAllowRemoteImagesChange: (value: boolean) => void
   features: FeatureToggles
@@ -803,26 +789,14 @@ export function SidebarOptionsPanel({
   setRenderScrollMaxSpeedPxPerSec,
   renderScrollSkew,
   setRenderScrollSkew,
-  typingSoundEnabled,
-  setTypingSoundEnabled,
-  typingSoundSet,
-  setTypingSoundSet,
+  keystrokeSound,
+  setKeystrokeSound,
+  keystrokeSoundPreferences,
+  setKeystrokeSoundPreferences,
+  activeKeystrokeSound,
+  applyKeystrokeSound,
   soundscapePreferences,
   onSoundscapePreferencesChange,
-  audioKeyVolume,
-  setAudioKeyVolume,
-  audioKeyVariance,
-  setAudioKeyVariance,
-  audioPitch,
-  setAudioPitch,
-  audioBassVolume,
-  setAudioBassVolume,
-  audioTrebleVolume,
-  setAudioTrebleVolume,
-  audioReverbStrength,
-  setAudioReverbStrength,
-  audioReverbSpace,
-  setAudioReverbSpace,
   musicReverbFoliage,
   setMusicReverbFoliage,
   musicStereoWidth,
@@ -837,10 +811,6 @@ export function SidebarOptionsPanel({
   activeSoundstage,
   applySoundstage,
   selectFactorySoundstage,
-  pitchJitterAmount,
-  setPitchJitterAmount,
-  audioSpatial,
-  setAudioSpatial,
   allowRemoteImages,
   onAllowRemoteImagesChange,
   features,
@@ -2442,168 +2412,6 @@ export function SidebarOptionsPanel({
         {beatCaretShown && renderBeatCaret()}
       </AccordionSection>
 
-      {features.keySounds ? (
-      <AccordionSection
-        className="sidebar-options-section-audio"
-        ariaLabel="Sounds"
-        heading="Sounds"
-        iconClass="fa-keyboard"
-      >
-<div className="utility-setting-slider-stack" aria-label="Sounds controls">
-          <OptionsSubsectionLabel>Keys</OptionsSubsectionLabel>
-          <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
-            <button
-              type="button"
-              className={`btn-icon options-audio-btn${!typingSoundEnabled ? ' is-active' : ''}`}
-              onClick={() => {
-                setTypingSoundEnabled(false)
-              }}
-              aria-pressed={!typingSoundEnabled}
-              data-tooltip="No Key Sounds"
-            >
-              <span className="fa-solid fa-ban" aria-hidden="true" />
-            </button>
-            {(['A', 'B', 'C', 'D'] as const).map((setId) => (
-              <button
-                key={setId}
-                type="button"
-                className={`btn-icon options-audio-btn${typingSoundEnabled && typingSoundSet === setId ? ' is-active' : ''}`}
-                onClick={() => {
-                  setTypingSoundEnabled(true)
-                  setTypingSoundSet(setId)
-                  typingSoundManager.setTypingSoundSet(setId)
-                }}
-                aria-pressed={typingSoundEnabled && typingSoundSet === setId}
-                data-tooltip={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Forge' : ''}`}
-              >
-                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}${setId === 'D' ? 'fa-solid fa-hammer' : ''}`} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
-          <OptionsSliderRows>
-            <CompactScrollbarSlider
-              id="audio-key-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={audioKeyVolume}
-              trackLabel="key"
-              ariaLabel="Key volume"
-              defaultValue={0.5}
-              onCommit={(value) => setAudioKeyVolume(clamp(value, 0, 1))}
-            />
-            <CompactScrollbarSlider
-              id="audio-key-variance"
-              min={0}
-              max={0.5}
-              step={0.005}
-              value={audioKeyVariance}
-              trackLabel="variance"
-              ariaLabel="Key sound variance"
-              defaultValue={0}
-              onCommit={(value) => {
-                const nextValue = clamp(value, 0, 0.5)
-                setAudioKeyVariance(nextValue)
-                typingSoundManager.setTypingSoundVariance(nextValue)
-              }}
-            />
-            <CompactScrollbarSlider
-              id="audio-pitch"
-              min={-100}
-              max={100}
-              step={1}
-              value={audioPitch}
-              trackLabel="pitch"
-              ariaLabel="Global pitch"
-              defaultValue={0}
-              onCommit={(value) => {
-                const nextValue = clamp(value, -100, 100)
-                setAudioPitch(nextValue)
-                typingSoundManager.setTypingSoundPitch(nextValue)
-              }}
-            />
-            <CompactScrollbarSlider
-              id="audio-pitch-jitter"
-              min={0}
-              max={0.5}
-              step={0.01}
-              value={pitchJitterAmount}
-              trackLabel="jitter"
-              ariaLabel="Pitch jitter"
-              defaultValue={0}
-              onCommit={(value) => {
-                const nextValue = clamp(value, 0, 0.5)
-                setPitchJitterAmount(nextValue)
-                typingSoundManager.setPitchJitterAmount(nextValue)
-              }}
-            />
-          </OptionsSliderRows>
-          <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
-          {/* Tone, then the space the keys sound in. */}
-          <OptionsSliderRows rows={[2, 3]}>
-            <CompactScrollbarSlider
-              id="audio-bass-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={audioBassVolume}
-              trackLabel="bass"
-              ariaLabel="Bass volume"
-              defaultValue={0}
-              onCommit={(value) => setAudioBassVolume(clamp(value, 0, 1))}
-            />
-            <CompactScrollbarSlider
-              id="audio-treble-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={audioTrebleVolume}
-              trackLabel="treble"
-              ariaLabel="Treble volume"
-              defaultValue={0}
-              onCommit={(value) => setAudioTrebleVolume(clamp(value, 0, 1))}
-            />
-            <CompactScrollbarSlider
-              id="audio-reverb-strength"
-              min={0}
-              max={1}
-              step={0.01}
-              value={audioReverbStrength}
-              trackLabel="reverb"
-              ariaLabel="Reverb strength"
-              defaultValue={0}
-              onCommit={(value) => setAudioReverbStrength(clamp(value, 0, 1))}
-            />
-            <CompactScrollbarSlider
-              id="audio-reverb-space"
-              min={0}
-              max={1}
-              step={0.01}
-              value={audioReverbSpace}
-              trackLabel="room"
-              ariaLabel="Reverb space"
-              defaultValue={0}
-              onCommit={(value) => setAudioReverbSpace(clamp(value, 0, 1))}
-            />
-            <CompactScrollbarSlider
-              id="audio-spatial"
-              min={-100}
-              max={100}
-              step={1}
-              value={audioSpatial}
-              trackLabel="spatial"
-              ariaLabel="Stereo spatial mode: left of center pans by keyboard key position, right of center pans by caret position on the line"
-              defaultValue={0}
-              onCommit={(value) => {
-                const nextValue = clamp(value, -100, 100)
-                setAudioSpatial(nextValue)
-                typingSoundManager.setSpatialAmount(nextValue)
-              }}
-            />
-          </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-      ) : null}
 
       </>) : null}
 
@@ -2991,6 +2799,153 @@ export function SidebarOptionsPanel({
           {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
           {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
           {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
+      </AccordionSection>
+      ) : null}
+
+      {features.keySounds ? (
+      <AccordionSection
+        className="sidebar-options-section-audio"
+        ariaLabel="Keystroke Sounds"
+        heading="Keystroke Sounds"
+        iconClass="fa-keyboard"
+      >
+        <div className="utility-setting-slider-stack" aria-label="Keystroke sound controls">
+          <KeystrokeSoundOptions
+            preferences={keystrokeSoundPreferences}
+            setPreferences={setKeystrokeSoundPreferences}
+            active={activeKeystrokeSound}
+            apply={applyKeystrokeSound}
+          />
+          <OptionsSubsectionLabel>Keys</OptionsSubsectionLabel>
+          <div className="utility-setting-button-row" role="group" aria-label="Typing sound controls">
+            <button
+              type="button"
+              className={`btn-icon options-audio-btn${!keystrokeSound.enabled ? ' is-active' : ''}`}
+              onClick={() => setKeystrokeSound({ enabled: false })}
+              aria-pressed={!keystrokeSound.enabled}
+              data-tooltip="No Key Sounds"
+            >
+              <span className="fa-solid fa-ban" aria-hidden="true" />
+            </button>
+            {(['A', 'B', 'C', 'D'] as const).map((setId) => (
+              <button
+                key={setId}
+                type="button"
+                className={`btn-icon options-audio-btn${keystrokeSound.enabled && keystrokeSound.set === setId ? ' is-active' : ''}`}
+                onClick={() => setKeystrokeSound({ enabled: true, set: setId })}
+                aria-pressed={keystrokeSound.enabled && keystrokeSound.set === setId}
+                data-tooltip={`${setId === 'A' ? 'Pops' : ''}${setId === 'B' ? 'Pins' : ''}${setId === 'C' ? 'Creamy' : ''}${setId === 'D' ? 'Forge' : ''}`}
+              >
+                <span className={`${setId === 'A' ? 'fa-solid fa-burst' : ''}${setId === 'B' ? 'fa-solid fa-map-pin' : ''}${setId === 'C' ? 'fa-solid fa-ice-cream' : ''}${setId === 'D' ? 'fa-solid fa-hammer' : ''}`} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+          <OptionsSliderRows>
+            <CompactScrollbarSlider
+              id="audio-key-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={keystrokeSound.volume}
+              trackLabel="key"
+              ariaLabel="Key volume"
+              defaultValue={0.5}
+              onCommit={(value) => setKeystrokeSound({ volume: clamp(value, KEYSTROKE_SOUND_RANGES.volume[0], KEYSTROKE_SOUND_RANGES.volume[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="audio-key-variance"
+              min={0}
+              max={0.5}
+              step={0.005}
+              value={keystrokeSound.variance}
+              trackLabel="variance"
+              ariaLabel="Key sound variance"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ variance: clamp(value, KEYSTROKE_SOUND_RANGES.variance[0], KEYSTROKE_SOUND_RANGES.variance[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="audio-pitch"
+              min={-100}
+              max={100}
+              step={1}
+              value={keystrokeSound.pitch}
+              trackLabel="pitch"
+              ariaLabel="Global pitch"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ pitch: clamp(value, KEYSTROKE_SOUND_RANGES.pitch[0], KEYSTROKE_SOUND_RANGES.pitch[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="audio-pitch-jitter"
+              min={0}
+              max={0.5}
+              step={0.01}
+              value={keystrokeSound.jitter}
+              trackLabel="jitter"
+              ariaLabel="Pitch jitter"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ jitter: clamp(value, KEYSTROKE_SOUND_RANGES.jitter[0], KEYSTROKE_SOUND_RANGES.jitter[1]) })}
+            />
+          </OptionsSliderRows>
+          <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
+          {/* Tone, then the space the keys sound in. */}
+          <OptionsSliderRows rows={[2, 3]}>
+            <CompactScrollbarSlider
+              id="audio-bass-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={keystrokeSound.bass}
+              trackLabel="bass"
+              ariaLabel="Bass volume"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ bass: clamp(value, KEYSTROKE_SOUND_RANGES.bass[0], KEYSTROKE_SOUND_RANGES.bass[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="audio-treble-volume"
+              min={0}
+              max={1}
+              step={0.01}
+              value={keystrokeSound.treble}
+              trackLabel="treble"
+              ariaLabel="Treble volume"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ treble: clamp(value, KEYSTROKE_SOUND_RANGES.treble[0], KEYSTROKE_SOUND_RANGES.treble[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="audio-reverb-strength"
+              min={0}
+              max={1}
+              step={0.01}
+              value={keystrokeSound.reverb}
+              trackLabel="reverb"
+              ariaLabel="Reverb strength"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ reverb: clamp(value, KEYSTROKE_SOUND_RANGES.reverb[0], KEYSTROKE_SOUND_RANGES.reverb[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="audio-reverb-space"
+              min={0}
+              max={1}
+              step={0.01}
+              value={keystrokeSound.room}
+              trackLabel="room"
+              ariaLabel="Reverb space"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ room: clamp(value, KEYSTROKE_SOUND_RANGES.room[0], KEYSTROKE_SOUND_RANGES.room[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="audio-spatial"
+              min={-100}
+              max={100}
+              step={1}
+              value={keystrokeSound.spatial}
+              trackLabel="spatial"
+              ariaLabel="Stereo spatial mode: left of center pans by keyboard key position, right of center pans by caret position on the line"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ spatial: clamp(value, KEYSTROKE_SOUND_RANGES.spatial[0], KEYSTROKE_SOUND_RANGES.spatial[1]) })}
+            />
+          </OptionsSliderRows>
+        </div>
       </AccordionSection>
       ) : null}
 

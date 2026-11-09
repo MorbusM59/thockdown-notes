@@ -20,17 +20,6 @@ export type UiLayoutLoadout = {
   spacingRegularPx: number;
   borderAlphaPercent: number;
   boxShadowAlphaPercent: number;
-  audioKeyVolume: number;
-  audioBassVolume: number;
-  audioTrebleVolume: number;
-  audioKeyVariance: number;
-  audioPitch: number;
-  audioReverbStrength: number;
-  audioReverbSpace: number;
-  pitchJitterAmount: number;
-  audioSpatial: number;
-  typingSoundEnabled: boolean;
-  typingSoundSet: 'A' | 'B' | 'C' | 'D';
   // Scroll curve tuning (Options > Scrolling Behavior) is deliberately NOT
   // here -- it lives in PersistedMenuState instead so it persists across
   // layout switches independent of whichever layout is active. See
