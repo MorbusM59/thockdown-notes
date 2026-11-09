@@ -5,6 +5,45 @@ same commit that sets the version (docs/release-protocol.md). Entries up to 0.7.
 were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
+## 0.8.0 (2026-11-09)
+
+The biggest release yet: a full-screen **Visualizer** for your music, the app's own **offline spell checker**, **speed reading**, the **Typing Trail**, drawable **music soundstages**, an **image library**, **touch screen** support, and a reorganised **Options** panel. Notes also follow their files on disk, the same note can be open in several slots, and the app is safe to switch off at any moment.
+
+#### New
+
+- **Visualizer (F5).** A full-screen music scene on the editor's box grid: spectrum, progress and volume bars, song list, bucket list and a pool filter by artist, album and title. A centre solid picks the music's soundstage, and a grid wave, centre pulse and swaying glaze follow the beat. Song title, artist and album are read from the files' tags.
+- **Music soundstages.** Five factory stages (Muted, Neutral, Wide, Amped, Thocky) plus your own, stepped from the music bar or the Visualizer. Each stage is an EQ curve you draw in Options > Music, with stereo width, reverb, room size and foliage. Right-click the headphones button to mute.
+- **Spell checking is the app's own and fully offline.** Misspelled words in view are outlined on the grid, with English, Spanish, French and German included. You can install more dictionaries (.dic/.aff, .oxt, .xpi, .zip). **Shift+Space** swaps in a suggestion, and pressing it again cycles through the others.
+- **Speed reading (F9).** The reader scrolls at a set pace, and the editor shows the note chunk by chunk. The time left is shown beside the pace.
+- **Typing Trail.** An optional trail of fading boxes along the line you are typing.
+- **Keystroke sounds** have their own presets and six mixable channels, each with its own volume, jitter and pitch.
+- **Image library.** Images get cards, trees by tag, and an image mode per note. Ctrl+drag an image's edges to crop it.
+- **Touch screens.** Two fingers act as a right press, a resting finger acts as Ctrl, and a pinch scales an image. One finger scrolls the editor in whole rows.
+- **One note in several slots.** Every slot edits the same live text, and undo stays per slot.
+- **External notes follow their file.** A change on disk shows up in the open note, and an edit on both sides is kept as a conflict instead of being lost.
+- **Ctrl+A** selects the whole note in the editor and the reader alike.
+
+#### Changed
+
+- **Options** has six sections behind a selector bar (General, Layouts, ..., Modules, Advanced), a search, Quick Access volume sliders, and one preset model shared by layouts, soundstages, soundscapes and keystroke sounds. Blink and Caret Beat are global settings under Advanced > Animations > Flashing.
+- **Function keys:** F1 help, F2 double size, F3 light/dark, F4 next layout, F5 Visualizer, F9 speed reading.
+- **The whole UI scales with the UI font**, including tracks, thumbs, the bottom row and date cards. The range is now 0.8 to 1.5.
+- **Editor and reader** replace "edit view" and "render view" in everything you read.
+- **Box bevel**, texture smoothness and a redesigned colour picker (a click links a target, a right click paints it).
+- **A press is a click until it moves 5px,** so a slightly shaky click no longer picks up a tab or row.
+
+#### Fixes
+
+- **Nothing is lost on a power cut.** Everything is saved within a second of a change, and quitting by any route goes through one orderly shutdown.
+- The keyboard always returns to the active slot. A pressed button no longer takes it, and neither does the menu ring.
+- The window never opens off screen. On Linux it can be moved again, and a portable AppImage keeps its data beside it.
+- Music streams from disk instead of loading whole files into memory.
+
+#### Removed
+
+- The typing flow meter, replaced by the Typing Trail.
+- Chromium's built-in spell checker.
+
 ## 0.7.3 (2026-10-11)
 
 A fix-and-polish release: **music plays again**, the music player answers your **media keys**, **Ctrl+wheel** changes a note's typography right where you read it, and the **F1 shortcut reference** is redrawn. Supersedes 0.7.2, whose music player stayed silent.
