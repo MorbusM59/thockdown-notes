@@ -240,7 +240,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Spell Check](#spell-check)
 
 > **Where?**
-> Settings panel → [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}), or Modules → Spell Checking.
+> Settings panel → [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}); dictionaries under Modules → Spell Checking.
 
 *Outlines misspelled words, using dictionaries that ship with the app, so it works offline and the same on every computer.*
 

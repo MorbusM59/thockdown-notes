@@ -3119,21 +3119,9 @@ export function SidebarOptionsPanel({
         heading="Spell Checking"
         iconClass="fa-spell-check"
       >
-        {/* Whether it runs at all (the same switch as the feature bar's), then
-            the dictionaries: each one a toggle, a word being correct when any
-            active dictionary accepts it (spellCheck/spellCheckClient.ts). */}
-        <div className="options-loadout-grid" role="group" aria-label="Spell checking">
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn${features.spellCheck ? ' is-active' : ''}`}
-            data-tooltip={`Spell check: ${features.spellCheck ? 'on' : 'off'}`}
-            aria-label={`Spell check: ${features.spellCheck ? 'on' : 'off'}`}
-            aria-pressed={features.spellCheck}
-            onClick={() => setFeatures((previous) => ({ ...previous, spellCheck: !previous.spellCheck }))}
-          >
-            <span className="fa-solid fa-spell-check" aria-hidden="true" />
-          </button>
-        </div>
+        {/* The dictionaries, each one a toggle: a word is correct when any
+            active dictionary accepts it (spellCheck/spellCheckClient.ts). The
+            checker itself is switched in Quick Access. */}
         <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
         <div className="options-eq-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
           {availableDictionaries.map((dictionary) => {
