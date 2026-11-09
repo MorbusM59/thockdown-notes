@@ -33,7 +33,7 @@
  * (`typoMarks.ts`), so a typo is pinpointed rather than its word.
  *
  * TAKING A SUGGESTION (Shift+Space, `spellSuggest`) swaps the nearest
- * misspelled word before the caret, among the words on screen, for its best
+ * OUTLINED word (never the one being typed) before the caret, among the words on screen, for its best
  * suggestion, and enters SUGGESTION MODE: the word and the space on either
  * side of it are outlined (`is-suggestion`), and each further Shift+Space
  * puts the next suggestion in its place, the original coming back after the
@@ -66,8 +66,6 @@ type Suggesting = { from: number; to: number; original: string; suggestions: rea
 
 /** Marks the transactions that swap a suggestion in, which do not end suggestion mode. */
 const suggestionSwap = Annotation.define<true>();
-/** How many words not yet checked are asked about, nearest first, before giving up. */
-const MAX_UNKNOWN_ASKED = 6;
 
 const quantizeToPhase = (value: number, unit: number, phase: number) => phase + Math.round((value - phase) / unit) * unit;
 
@@ -194,11 +192,11 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
       const { doc } = this.view.state;
       const caret = this.view.state.selection.main.head;
       const before = [...this.visibleWords()].filter((word) => word.from < caret).reverse();
-      let unknownAsked = 0;
+      // Only a word that is outlined: never the one being typed, which is not
+      // marked yet, nor one whose answer has not arrived.
       for (const candidate of before) {
-        const known = spellCheckClient.lookup(candidate.word);
-        if (known === false) continue;
-        if (known === undefined && ++unknownAsked > MAX_UNKNOWN_ASKED) return;
+        const beingTyped = caret >= candidate.from && caret <= candidate.to && this.editedAt >= candidate.from && this.editedAt <= candidate.to;
+        if (beingTyped || spellCheckClient.lookup(candidate.word) !== true) continue;
         const answer = await spellCheckClient.suggestionsFor(candidate.word);
         // Anything the reader did meanwhile wins over a late answer.
         if (ticket !== this.suggestTicket || this.view.state.doc !== doc) return;
