@@ -500,7 +500,7 @@
      UI font scale and are written onto the root by scrollTrackGeometry.ts's
      installScrollTrackTokens, together with --canonical-scroll-handle-thickness. */
   --canonical-scroll-thickness:       16px;
-  --canonical-scroll-handle-gap:      5px;
+  --canonical-scroll-handle-gap:      4px;
   /* --canonical-scroll-track-edge-gap is not declared here: it is written
      onto the root at startup from SCROLL_TRACK_EDGE_GAP_PX
      (shared/scrollTrackGeometry.ts), the one place the number lives. */

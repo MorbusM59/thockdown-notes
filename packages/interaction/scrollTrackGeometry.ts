@@ -9,7 +9,7 @@
  * `installScrollTrackTokens`, for what is drawn in a track by CSS alone (the
  * adventure's rail gauges) -- so both kinds of handle stop at the same line.
  */
-export const SCROLL_TRACK_EDGE_GAP_PX = 3
+export const SCROLL_TRACK_EDGE_GAP_PX = 2
 
 /**
  * A track's thickness (every scrollbar, slider shell and the bottom utility
@@ -19,9 +19,9 @@ export const SCROLL_TRACK_EDGE_GAP_PX = 3
  * the same distance from its edges.
  */
 export const SCROLL_THICKNESS_BASE_PX = 16
-// 5 leaves a thumb (handle + 2px, offset gap - 2px) 3px from the track's
+// 4 leaves a thumb (handle + 2px, offset gap - 2px) 2px from the track's
 // long sides, the same as SCROLL_TRACK_EDGE_GAP_PX leaves at its ends.
-export const SCROLL_HANDLE_GAP_BASE_PX = 5
+export const SCROLL_HANDLE_GAP_BASE_PX = 4
 
 export interface ScrollTrackSize {
   thicknessPx: number
