@@ -71,6 +71,7 @@ import type { NoteUiStatePayload } from '../shared/noteLifecycle'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
 import type { NoteDocumentChange } from './noteDocumentStore'
 import { selectWholePane } from './wholePaneSelection'
+import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
 
 /**
  * Throwaway checkpoint logger for the commit-to-paint input-lag
@@ -2698,10 +2699,19 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       previewSettleGateRef.current?.markRestoreApplied(settleGeneration)
     }
 
-    const setPreviewScrollBehavior = (behavior: '' | 'auto') => {
-      const container = previewScrollRef.current
-      if (!container) return
-      container.style.scrollBehavior = behavior
+    // The landing's hold on `scroll-behavior: auto`, from the ask until it
+    // lands (or this effect is torn down). A BORROW, never a save-set-restore
+    // of the inline value: the landing outlives a frame, and other borrowers
+    // overlap it -- a speed reading session restarts on the same note switch
+    // and holds `auto` for its whole run. Restoring by hand handed that
+    // session's `auto` back as '' the moment the landing finished (and every
+    // teardown of this effect did the same), so every frame it wrote was
+    // natively smooth-scrolled and the page juddered until something else
+    // re-borrowed the pane. See scrollBehaviorLock.ts.
+    let releaseLandingScrollBehavior: (() => void) | null = null
+    const releasePreviewScrollBehavior = () => {
+      releaseLandingScrollBehavior?.()
+      releaseLandingScrollBehavior = null
     }
 
     /**
@@ -2735,8 +2745,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         previewRestoreCompletedForNoteIdRef.current.delete(`${activeNoteId}:live`)
       }
 
-      const previousScrollBehavior = container.style.scrollBehavior
-      container.style.scrollBehavior = 'auto'
+      releasePreviewScrollBehavior()
+      releaseLandingScrollBehavior = borrowAutoScrollBehavior(container)
       const clampedSourceLine = Math.max(0, sourceLine)
 
       // The block we intend to land on. The scroll listener below compares
@@ -2770,7 +2780,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
           + ` scrollTop=${container.scrollTop.toFixed(1)}`
           + ` offset=${(RESTORE_OFFSET_LINES * readPreviewLineHeightPx(container)).toFixed(1)}`
           + ` edgePadding=${readPreviewEdgePaddingPx(container).toFixed(1)}`)
-        container.style.scrollBehavior = previousScrollBehavior
+        releasePreviewScrollBehavior()
         previewScrollTransitionControllerRef.current.forceComplete(previewTransitionId)
         if (settleGeneration !== null) {
           previewSettleGateRef.current?.markRestoreApplied(settleGeneration)
@@ -2812,7 +2822,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         cancelled = true
         landingAbort.abort()
         releaseSettleGate()
-        setPreviewScrollBehavior('')
+        releasePreviewScrollBehavior()
       }
     }
 
@@ -2832,7 +2842,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       return () => {
         cancelled = true
         landingAbort.abort()
-        setPreviewScrollBehavior('')
+        releasePreviewScrollBehavior()
       }
     }
 
@@ -2887,7 +2897,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
       cancelled = true
       landingAbort.abort()
       releaseSettleGate()
-      setPreviewScrollBehavior('')
+      releasePreviewScrollBehavior()
     }
     // editorTextVersion is not read. It is listed because the text itself
     // always was, so this effect has always re-run on every commit; after the
