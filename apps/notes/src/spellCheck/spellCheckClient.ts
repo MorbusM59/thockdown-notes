@@ -34,6 +34,10 @@ let answers = new Map<string, boolean>();
 /** misspelled word -> the letters to mark, when a suggestion one edit away locates the typo. */
 let marks = new Map<string, MarkRange[]>();
 const pending = new Set<string>();
+export type SuggestionAnswer = { misspelled: boolean; suggestions: readonly string[] };
+/** word -> its suggestions, asked for when the reader takes one (Shift+Space). */
+let suggestionAnswers = new Map<string, Promise<SuggestionAnswer>>();
+const suggestionWaiters = new Map<string, (answer: SuggestionAnswer) => void>();
 let queued: string[] = [];
 let flushScheduled = false;
 const listeners = new Set<Listener>();
@@ -54,8 +58,16 @@ function ensureWorker(): Worker {
   worker.onmessage = (event: MessageEvent<
     | { type: 'checked'; generation: number; misspelled: string[]; words: string[] }
     | { type: 'suggested'; generation: number; targets: Array<[string, string]> }
+    | { type: 'suggestions'; generation: number; word: string; misspelled: boolean; suggestions: string[] }
   >) => {
     const message = event.data;
+    if (message.type === 'suggestions') {
+      const key = `${message.generation}\n${message.word}`;
+      suggestionWaiters.get(key)?.({ misspelled: message.misspelled, suggestions: message.suggestions });
+      suggestionWaiters.delete(key);
+      if (message.generation === generation) answers.set(message.word, message.misspelled);
+      return;
+    }
     if (message.type === 'suggested') {
       if (message.generation !== generation) return;
       for (const [word, target] of message.targets) marks.set(word, typoMarks(word, target));
@@ -83,6 +95,7 @@ function configure(): void {
   const myGeneration = ++generation;
   answers = new Map();
   marks = new Map();
+  suggestionAnswers = new Map();
   pending.clear();
   queued = [];
   configureChain = configureChain.then(async () => {
@@ -155,6 +168,22 @@ export const spellCheckClient = {
   /** The letters of a misspelled word to mark (offsets in it), or undefined to mark the whole word. */
   marksFor(word: string): readonly MarkRange[] | undefined {
     return marks.get(word);
+  },
+
+  /**
+   * Whether `word` is misspelled and its suggestions, best first. Kept per
+   * set of dictionaries, so cycling through a word's suggestions asks once.
+   */
+  suggestionsFor(word: string): Promise<SuggestionAnswer> {
+    const cached = suggestionAnswers.get(word);
+    if (cached) return cached;
+    const myGeneration = generation;
+    const answer = new Promise<SuggestionAnswer>((resolve) => {
+      suggestionWaiters.set(`${myGeneration}\n${word}`, resolve);
+      void configureChain.then(() => ensureWorker().postMessage({ type: 'suggest', generation: myGeneration, word }));
+    });
+    suggestionAnswers.set(word, answer);
+    return answer;
   },
 
   /** Called whenever an answer could change what is drawn. Returns the unsubscribe. */

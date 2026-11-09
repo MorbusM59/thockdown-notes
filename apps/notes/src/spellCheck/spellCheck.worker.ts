@@ -18,6 +18,10 @@
  *     suggestion whatever its distance, since with one candidate there is no
  *     doubt which word was meant. Separate because suggesting costs 10-140ms a word where
  *     checking costs microseconds, so the outlines never wait for it.
+ *   { type: 'suggestions', generation, word, misspelled, suggestions: string[] }
+ *     The answer to { type: 'suggest', generation, word }, asked when the
+ *     reader takes a suggestion (Shift+Space): whether the word is misspelled
+ *     and every suggestion for it, best first (`ranked`).
  *
  * A word is correct when ANY active dictionary accepts it, so a note may mix
  * languages. With no dictionary active every word is correct. `generation`
@@ -40,6 +44,7 @@ type ConfigureMessage = {
   dictionaries: Array<{ id: string; aff?: Uint8Array; dic?: Uint8Array }>;
 };
 type CheckMessage = { type: 'check'; generation: number; words: string[] };
+type SuggestMessage = { type: 'suggest'; generation: number; word: string };
 
 type Loaded = { hunspell: Hunspell; affPath: string; dicPath: string };
 
@@ -70,41 +75,62 @@ function configure(factory: HunspellFactory, message: ConfigureMessage): void {
   }
 }
 
+const isKnown = (word: string) => [...loaded.values()].some((entry) => entry.hunspell.spell(word));
+
+/**
+ * Every active dictionary's suggestions for `word`, and the one that locates
+ * its typo (`target`, see the 'suggested' message). `ranked` lists the target
+ * first, then the dictionaries' suggestions rank by rank (every first choice,
+ * then every second), so no one dictionary's long tail comes before
+ * another's best.
+ */
+function suggestionsFor(word: string): { target: string | undefined; ranked: string[] } {
+  const lists: string[][] = [];
+  let target: string | undefined;
+  for (const entry of loaded.values()) {
+    // Each dictionary ranks its own suggestions, so "the top one" is asked of
+    // each: a German top suggestion for an English typo says nothing.
+    const ranked = entry.hunspell.suggest(word);
+    lists.push(ranked);
+    if (target === undefined && ranked.length > 0 && isNearMiss(word, ranked[0])) target = ranked[0];
+  }
+  const all = new Set<string>();
+  for (let rank = 0; lists.some((list) => rank < list.length); rank += 1) {
+    for (const list of lists) if (rank < list.length) all.add(list[rank]);
+  }
+  if (target === undefined && all.size === 1) [target] = all;
+  return { target, ranked: target === undefined ? [...all] : [target, ...[...all].filter((entry) => entry !== target)] };
+}
+
 function check(message: CheckMessage): void {
   const misspelled: string[] = [];
   if (loaded.size > 0) {
     for (const word of message.words) {
-      let known = false;
-      for (const entry of loaded.values()) {
-        if (entry.hunspell.spell(word)) { known = true; break; }
-      }
-      if (!known) misspelled.push(word);
+      if (!isKnown(word)) misspelled.push(word);
     }
   }
   postMessage({ type: 'checked', generation: message.generation, misspelled, words: message.words });
   if (misspelled.length === 0) return;
   const targets: Array<[string, string]> = [];
   for (const word of misspelled) {
-    // Each dictionary ranks its own suggestions, so "the top one" is asked of
-    // each: a German top suggestion for an English typo says nothing.
-    const suggestions = new Set<string>();
-    let target: string | undefined;
-    for (const entry of loaded.values()) {
-      const ranked = entry.hunspell.suggest(word);
-      for (const suggestion of ranked) suggestions.add(suggestion);
-      if (target === undefined && ranked.length > 0 && isNearMiss(word, ranked[0])) target = ranked[0];
-    }
-    if (target === undefined && suggestions.size === 1) [target] = suggestions;
+    const { target } = suggestionsFor(word);
     if (target !== undefined) targets.push([word, target]);
   }
   if (targets.length > 0) postMessage({ type: 'suggested', generation: message.generation, targets });
 }
 
-self.onmessage = (event: MessageEvent<ConfigureMessage | CheckMessage>) => {
+function suggest(message: SuggestMessage): void {
+  const misspelled = loaded.size > 0 && !isKnown(message.word);
+  const suggestions = misspelled ? suggestionsFor(message.word).ranked : [];
+  postMessage({ type: 'suggestions', generation: message.generation, word: message.word, misspelled, suggestions });
+}
+
+self.onmessage = (event: MessageEvent<ConfigureMessage | CheckMessage | SuggestMessage>) => {
   const message = event.data;
   queue = queue.then(async () => {
     const factory = await factoryPromise;
     if (message.type === 'configure') configure(factory, message);
-    else check(message);
+    else if (message.type === 'check') check(message);
+    else suggest(message);
   }).catch((error) => console.warn('Spell check worker failed', error));
 };

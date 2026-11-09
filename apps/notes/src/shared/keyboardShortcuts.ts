@@ -223,6 +223,8 @@ export const SHORTCUTS = {
     macChords: [{ key: 'Backspace', alt: true }],
     label: 'Delete previous word',
   },
+  // Matched by the spell checker's own key handler (spellCheckExtension.ts).
+  spellSuggest: { section: 'native', chords: [{ code: 'Space', shift: true }], label: 'Fix the last misspelled word, again for the next suggestion' },
 
   // One direction per declaration: a declaration's further chords are
   // ALTERNATIVES for the same action, and Shift+Tab is not another Tab.
