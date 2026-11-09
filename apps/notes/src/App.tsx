@@ -114,15 +114,13 @@ import {
 import {
   DEFAULT_CARET_SETTINGS,
   buildCaretBlinkKeyframesCss,
-  isCaretAnimationPresetKey,
+  DEFAULT_FLASHING_SETTINGS,
+  sanitizeFlashingSettings,
   CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
   CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
   CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
-  CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
-  CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
-  CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
-  type CaretAnimationPresetKey,
+  type FlashingSettings,
 } from '@thockdown/look/caretSettings'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
@@ -851,10 +849,6 @@ function normalizeUiLoadoutForSignature(loadout: unknown): UiLayoutLoadout {
     caretHaloSpreadPx: clamp(Math.round(toFiniteNumber(source.caretHaloSpreadPx, DEFAULT_CARET_SETTINGS.haloSpreadPx)), CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX),
     caretHaloBlurPx: clamp(Math.round(toFiniteNumber(source.caretHaloBlurPx, DEFAULT_CARET_SETTINGS.haloBlurPx)), CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX),
     caretHaloColor: typeof source.caretHaloColor === 'string' ? source.caretHaloColor : DEFAULT_CARET_SETTINGS.haloColor,
-    caretAnimationPreset: isCaretAnimationPresetKey(source.caretAnimationPreset) ? source.caretAnimationPreset : DEFAULT_CARET_SETTINGS.animationPreset,
-    caretAnimationDurationMs: clamp(Math.round(toFiniteNumber(source.caretAnimationDurationMs, DEFAULT_CARET_SETTINGS.animationDurationMs)), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS),
-    caretFrameDurationMs: clamp(Math.round(toFiniteNumber(source.caretFrameDurationMs, DEFAULT_CARET_SETTINGS.frameDurationMs)), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS),
-    caretEffectStrengthPercent: clamp(Math.round(toFiniteNumber(source.caretEffectStrengthPercent, DEFAULT_CARET_SETTINGS.effectStrengthPercent)), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT),
     visualizerColors: sanitizeVisualizerColors(source.visualizerColors, toFiniteNumber(source.filterInvert, 0) > 0.5, source.visualizer),
   }
 }
@@ -1473,6 +1467,8 @@ function App() {
   // persistMenuStateNowRef). An effect rather than a call in the setter, so
   // the snapshot is built from the render that already holds the new value.
   const [beatSettings, setBeatSettings] = useState<BeatSettings>(DEFAULT_BEAT_SETTINGS)
+  // Global, not the layout's: how flashing elements (the caret's blink) flash. Options > Advanced > Animations > Flashing.
+  const [flashing, setFlashing] = useState<FlashingSettings>(DEFAULT_FLASHING_SETTINGS)
   // Speed reading's settings: pushed to the session's store on every change,
   // and a session's own change (its words per minute, from the arrow keys)
   // handed back once when it ends.
@@ -1483,7 +1479,7 @@ function App() {
   useEffect(() => onSpeedReadingSettingsCommit(setSpeedReadingSettings), [])
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [typingTrailSettings, beatSettings, speedReadingSettings, features])
+  }, [typingTrailSettings, beatSettings, speedReadingSettings, flashing, features])
   const customCursorEnabled = features.customCursor
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
@@ -1515,10 +1511,6 @@ function App() {
   const [caretHaloSpreadPx, setCaretHaloSpreadPx] = useState(DEFAULT_CARET_SETTINGS.haloSpreadPx)
   const [caretHaloBlurPx, setCaretHaloBlurPx] = useState(DEFAULT_CARET_SETTINGS.haloBlurPx)
   const [caretHaloColor, setCaretHaloColor] = useState(DEFAULT_CARET_SETTINGS.haloColor)
-  const [caretAnimationPreset, setCaretAnimationPreset] = useState<CaretAnimationPresetKey>(DEFAULT_CARET_SETTINGS.animationPreset)
-  const [caretAnimationDurationMs, setCaretAnimationDurationMs] = useState(DEFAULT_CARET_SETTINGS.animationDurationMs)
-  const [caretFrameDurationMs, setCaretFrameDurationMs] = useState(DEFAULT_CARET_SETTINGS.frameDurationMs)
-  const [caretEffectStrengthPercent, setCaretEffectStrengthPercent] = useState(DEFAULT_CARET_SETTINGS.effectStrengthPercent)
   // How the visualizer follows the music, global (Options > Visualizer, saved in the app state).
   const [visualizer, setVisualizer] = useState<VisualizerSettings>(DEFAULT_VISUALIZER)
   // The layout's part of it: whether the caret follows the music, and the colours.
@@ -2228,7 +2220,7 @@ function App() {
   // Keystroke sounds: app-wide, with presets of their own (shared/keystrokeSounds.ts).
   const [keystrokeSound, setKeystrokeSound] = useState<KeystrokeSoundSettings>(() => cloneKeystrokeSound(DEFAULT_KEYSTROKE_SOUND))
   const [keystrokeSoundPreferences, setKeystrokeSoundPreferences] = useState<KeystrokeSoundPreferences>(DEFAULT_KEYSTROKE_SOUND_PREFERENCES)
-  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, beatSettings.caretFollows, caretEffectStrengthPercent / 100, isVisualizerMode, uiMode)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, beatSettings.caretFollows, flashing.effectPercent / 100, isVisualizerMode, uiMode)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
@@ -2617,10 +2609,6 @@ function App() {
       caretHaloSpreadPx,
       caretHaloBlurPx,
       caretHaloColor,
-      caretAnimationPreset,
-      caretAnimationDurationMs,
-      caretFrameDurationMs,
-      caretEffectStrengthPercent,
       visualizerColors,
     }
   }, [
@@ -2668,10 +2656,6 @@ function App() {
     caretHaloSpreadPx,
     caretHaloBlurPx,
     caretHaloColor,
-    caretAnimationPreset,
-    caretAnimationDurationMs,
-    caretFrameDurationMs,
-    caretEffectStrengthPercent,
     visualizerColors,
   ])
 
@@ -2847,23 +2831,6 @@ function App() {
       CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
     ))
     setCaretHaloColor(loadout.caretHaloColor ?? DEFAULT_CARET_SETTINGS.haloColor)
-    setCaretAnimationPreset(
-      isCaretAnimationPresetKey(loadout.caretAnimationPreset)
-        ? loadout.caretAnimationPreset
-        : DEFAULT_CARET_SETTINGS.animationPreset,
-    )
-    setCaretAnimationDurationMs(clamp(
-      Math.round(loadout.caretAnimationDurationMs ?? DEFAULT_CARET_SETTINGS.animationDurationMs),
-      CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
-    ))
-    setCaretFrameDurationMs(clamp(
-      Math.round(loadout.caretFrameDurationMs ?? DEFAULT_CARET_SETTINGS.frameDurationMs),
-      CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
-    ))
-    setCaretEffectStrengthPercent(clamp(
-      Math.round(loadout.caretEffectStrengthPercent ?? DEFAULT_CARET_SETTINGS.effectStrengthPercent),
-      CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
-    ))
     setVisualizerColors(loadout.visualizerColors)
   }, [applyDarkModePreset])
 
@@ -3367,6 +3334,7 @@ function App() {
       spellCheckDictionaries,
       typingTrail: typingTrailSettings,
       beat: beatSettings,
+      flashing,
       speedReading: speedReadingSettings,
       chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
@@ -3403,6 +3371,7 @@ function App() {
     spellCheckDictionaries,
     typingTrailSettings,
     beatSettings,
+    flashing,
     speedReadingSettings,
     allowRemoteImages,
     sidebarShowsImages,
@@ -3970,7 +3939,7 @@ function App() {
       '--caret-halo-spread': `${caretHaloSpreadPx}px`,
       '--caret-halo-blur': `${caretHaloBlurPx}px`,
       '--caret-halo-color': caretHaloColor,
-      '--caret-animation-duration': `${caretAnimationDurationMs}ms`,
+      '--caret-animation-duration': `${flashing.cycleMs}ms`,
       '--texture-app-grid': appGridTextureCss,
       '--texture-sidebar-content': sidebarTextureCss,
       '--texture-editor-edit': editorEditTextTextureCss,
@@ -3994,7 +3963,7 @@ function App() {
     caretHaloSpreadPx,
     caretHaloBlurPx,
     caretHaloColor,
-    caretAnimationDurationMs,
+    flashing.cycleMs,
     layout.gridTemplateColumns,
     sidebarTextureCss,
     sidebarTextureTintCss,
@@ -4007,9 +3976,9 @@ function App() {
   // shadowed by -- this is the only definition.
   const caretBlinkKeyframesCss = useMemo(
     () => buildCaretBlinkKeyframesCss({
-      presetKey: caretAnimationPreset,
-      animationDurationMs: caretAnimationDurationMs,
-      frameDurationMs: caretFrameDurationMs,
+      presetKey: flashing.shape,
+      animationDurationMs: flashing.cycleMs,
+      frameDurationMs: flashing.frameMs,
       // Resolved here and baked into the rule as concrete rgba() rather than
       // referenced as var()/color-mix(): those are not interpolable in every
       // engine this ships on -- see scaledRgba's comment in caretSettings.ts.
@@ -4018,18 +3987,18 @@ function App() {
       haloColor: caretHaloColor,
       haloSpreadPx: caretHaloSpreadPx,
       haloBlurPx: caretHaloBlurPx,
-      effectStrengthPercent: caretEffectStrengthPercent,
+      effectStrengthPercent: flashing.effectPercent,
     }),
     [
-      caretAnimationPreset,
-      caretAnimationDurationMs,
-      caretFrameDurationMs,
+      flashing.shape,
+      flashing.cycleMs,
+      flashing.frameMs,
       highlightColors.caret,
       caretOutlineColor,
       caretHaloColor,
       caretHaloSpreadPx,
       caretHaloBlurPx,
-      caretEffectStrengthPercent,
+      flashing.effectPercent,
     ],
   )
 
@@ -5363,6 +5332,7 @@ ${markdownHtml}
             setTypingTrailSettings(sanitizeTypingTrailSettings(appState.menu.typingTrail))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
+            setFlashing(sanitizeFlashingSettings(appState.menu.flashing))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
@@ -8971,14 +8941,8 @@ ${markdownHtml}
                         caretHaloBlurPx={caretHaloBlurPx}
                         setCaretHaloBlurPx={setCaretHaloBlurPx}
                         caretHaloColor={caretHaloColor}
-                        caretAnimationPreset={caretAnimationPreset}
-                        setCaretAnimationPreset={setCaretAnimationPreset}
-                        caretAnimationDurationMs={caretAnimationDurationMs}
-                        setCaretAnimationDurationMs={setCaretAnimationDurationMs}
-                        caretFrameDurationMs={caretFrameDurationMs}
-                        setCaretFrameDurationMs={setCaretFrameDurationMs}
-                        caretEffectStrengthPercent={caretEffectStrengthPercent}
-                        setCaretEffectStrengthPercent={setCaretEffectStrengthPercent}
+                        flashing={flashing}
+                        setFlashing={setFlashing}
                       />
                     ) : (
                       <div

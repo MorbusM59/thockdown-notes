@@ -8,6 +8,7 @@ import type { VisualizerFont } from './visualizerFont';
 import type { VisualizerSettings } from '@thockdown/look/visualizer';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
+import type { FlashingSettings } from '@thockdown/look/caretSettings';
 import type { InvokeChannels } from './ipcContract';
 import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
@@ -240,6 +241,8 @@ export interface PersistedMenuState {
   speedReading?: SpeedReadingSettings;
   /** The visualizer's per-device delay (Options > Visualizer; on/off is `features.visualizer`); see sound/musicBeat.ts. */
   beat?: BeatSettings;
+  /** How flashing elements flash (Options > Advanced > Animations > Flashing): global, the caret's blink being the one reader today. */
+  flashing?: FlashingSettings;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   chapterBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */

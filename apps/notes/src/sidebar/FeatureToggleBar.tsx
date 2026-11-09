@@ -6,8 +6,8 @@ import { IS_LINUX_DESKTOP } from '../shared/platform'
  * features (shared/features.ts). A feature switched off leaves the panel --
  * its subsection is not rendered -- and stops costing anything; the tooltip
  * names the switch, since the bar carries icons only. Caret Beat, which is
- * a global beat setting and not a feature, sits beside the caret's
- * blink shapes instead.
+ * a global beat setting and not a feature, sits beside the flashing
+ * shapes instead (Advanced > Animations > Flashing).
  */
 const FEATURE_PRESENTATION: Record<Exclude<FeatureId, 'caretBlink'>, { icon: string; label: string }> = {
   spellCheck: { icon: 'fa-solid fa-spell-check', label: 'Spell check' },

@@ -1,7 +1,6 @@
 import type { TextureMaterialsBySurface } from './textureTypes';
 import type { GlazeSettings } from './glaze';
 import type { BoxBevelSettings } from './boxBevel';
-import type { CaretAnimationPresetKey } from './caretSettings';
 import type { VisualizerColors } from './visualizer';
 
 export const LOADOUT_CHANNELS = {
@@ -111,10 +110,6 @@ export type UiLayoutLoadout = {
   caretHaloSpreadPx: number;
   caretHaloBlurPx: number;
   caretHaloColor: string;
-  caretAnimationPreset: CaretAnimationPresetKey;
-  caretAnimationDurationMs: number;
-  caretFrameDurationMs: number;
-  caretEffectStrengthPercent: number;
   // Whether the caret follows the music (Options > Caret, the blink row's
   // last button) and the visualizer's colours (Options > Colors). How the
   // visualizer follows the music is NOT here: it is global, in

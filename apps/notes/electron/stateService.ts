@@ -21,6 +21,7 @@ import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
+import { DEFAULT_FLASHING_SETTINGS, sanitizeFlashingSettings } from '@thockdown/look/caretSettings';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
@@ -76,6 +77,7 @@ const DEFAULT_APP_STATE: AppState = {
     features: DEFAULT_FEATURE_TOGGLES,
     typingTrail: DEFAULT_TYPING_TRAIL_SETTINGS,
     beat: DEFAULT_BEAT_SETTINGS,
+    flashing: DEFAULT_FLASHING_SETTINGS,
   },
 };
 
@@ -601,6 +603,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     visualizer: input?.visualizer === undefined ? undefined : sanitizeVisualizer(input.visualizer),
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
+    flashing: sanitizeFlashingSettings(input?.flashing),
     chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
     // Content-blind on purpose: this side of the bridge can only check that

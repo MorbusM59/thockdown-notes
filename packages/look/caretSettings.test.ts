@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_FLASHING_SETTINGS,
+  sanitizeFlashingSettings,
   CARET_ANIMATION_PRESETS,
   CARET_ANIMATION_PRESET_KEYS,
-  CARET_FRAME_DURATION_MIN_MS,
-  CARET_FRAME_DURATION_MAX_MS,
-  CARET_FRAME_DURATION_SMOOTH_MAX_MS,
+  FLASH_FRAME_MIN_MS,
+  FLASH_FRAME_MAX_MS,
+  FLASH_FRAME_SMOOTH_MAX_MS,
   CARET_MAX_BAKED_STEPS,
-  CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
+  FLASH_EFFECT_DEFAULT_PERCENT,
   buildCaretBlinkKeyframesCss,
   isCaretAnimationPresetKey,
   resolveCaretSegmentStepCount,
@@ -16,13 +18,13 @@ import {
 const baseOptions: CaretBlinkKeyframeOptions = {
   presetKey: 'heartbeat',
   animationDurationMs: 1200,
-  frameDurationMs: CARET_FRAME_DURATION_MIN_MS,
+  frameDurationMs: FLASH_FRAME_MIN_MS,
   caretColor: 'rgba(0, 0, 0, 0.3)',
   outlineColor: 'rgba(10, 20, 30, 0.8)',
   haloColor: 'rgba(200, 100, 50, 0.5)',
   haloSpreadPx: 6,
   haloBlurPx: 0,
-  effectStrengthPercent: CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
+  effectStrengthPercent: FLASH_EFFECT_DEFAULT_PERCENT,
 }
 
 const build = (overrides: Partial<CaretBlinkKeyframeOptions> = {}) =>
@@ -73,7 +75,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
    */
   it('emits plain rgba colour stops, never color-mix() or var() in a colour', () => {
     for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
-      for (const frameDurationMs of [CARET_FRAME_DURATION_MIN_MS, 100, CARET_FRAME_DURATION_MAX_MS]) {
+      for (const frameDurationMs of [FLASH_FRAME_MIN_MS, 100, FLASH_FRAME_MAX_MS]) {
         const css = build({ presetKey, frameDurationMs })
         expect(css).not.toContain('color-mix')
         // The two holds (typing and music) are the only var()s.
@@ -91,7 +93,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
   })
 
   it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
-    for (const frameDurationMs of [CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_SMOOTH_MAX_MS]) {
+    for (const frameDurationMs of [FLASH_FRAME_MIN_MS, FLASH_FRAME_SMOOTH_MAX_MS]) {
       const css = build({ frameDurationMs })
       expect(percentsOf(css)).toEqual([0, 10, 65, 85, 100])
       expect(fillAlphasOf(css)).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
@@ -144,7 +146,7 @@ describe('buildCaretBlinkKeyframesCss', () => {
 
   it('keeps stops ordered and inside 0..100% for every preset and frame duration', () => {
     for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
-      for (const frameDurationMs of [5, 20, 45, 100, 250, CARET_FRAME_DURATION_MAX_MS]) {
+      for (const frameDurationMs of [5, 20, 45, 100, 250, FLASH_FRAME_MAX_MS]) {
         for (const animationDurationMs of [100, 1200, 5000]) {
           const percents = percentsOf(build({ presetKey, frameDurationMs, animationDurationMs }))
           expect(percents[0]).toBe(0)
@@ -261,5 +263,20 @@ describe('caret animation presets', () => {
         expect(stop.alpha).toBeLessThanOrEqual(1)
       }
     }
+  })
+})
+
+describe('sanitizeFlashingSettings', () => {
+  it('clamps out-of-range values and refuses an unknown shape', () => {
+    expect(sanitizeFlashingSettings({
+      cycleMs: 1,
+      frameMs: 100000,
+      effectPercent: -250,
+      // A value that is not a known preset key must not reach the stylesheet as an animation name.
+      shape: 'heartbeat; } body { display: none } @keyframes x {',
+    })).toEqual({ shape: DEFAULT_FLASHING_SETTINGS.shape, cycleMs: 100, frameMs: 500, effectPercent: -100 })
+  })
+  it('reads anything that is not an object as the defaults', () => {
+    expect(sanitizeFlashingSettings(undefined)).toEqual(DEFAULT_FLASHING_SETTINGS)
   })
 })

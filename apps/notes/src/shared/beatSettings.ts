@@ -24,9 +24,9 @@ export interface BeatSettings {
   responseDb: number
   /**
    * Caret Beat: while music plays and a beat is found, the caret pulses on
-   * the beat instead of blinking. A global setting, although its switch sits
-   * in a layout's Caret subsection beside the blink shapes; the blink and the
-   * caret's effect it is drawn with stay the layout's.
+   * the beat instead of blinking. Its switch sits beside the flashing shapes
+   * (Advanced > Animations > Flashing), and it is drawn as deep as their
+   * effect (`FlashingSettings.effectPercent`).
    */
   caretFollows: boolean
 }

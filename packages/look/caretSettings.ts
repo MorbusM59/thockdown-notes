@@ -35,22 +35,34 @@ export interface CaretSettings {
   haloBlurPx: number
   outlineColor: string
   haloColor: string
-  animationPreset: CaretAnimationPresetKey
-  /** Length of one full blink cycle. */
-  animationDurationMs: number
+}
+
+/**
+ * How a FLASHING element flashes: one global setting (Options > Advanced >
+ * Animations > Flashing), the same for every layout, read by everything that
+ * flashes. The caret is the only one today; a new flashing element reads these
+ * rather than growing settings of its own. Whether anything flashes at all is
+ * the `caretBlink` feature (shared/features.ts), and whether the caret follows
+ * the music instead is `BeatSettings.caretFollows`.
+ */
+export interface FlashingSettings {
+  /** The curve one flash follows, by key into CARET_ANIMATION_PRESETS. */
+  shape: CaretAnimationPresetKey
+  /** Length of one full flash cycle. */
+  cycleMs: number
   /**
-   * Quantization: how long the caret holds each animation frame. At the
-   * minimum the animation is left continuous (a step finer than one display
-   * frame is not a step anyone can see) -- see buildCaretBlinkKeyframesCss.
+   * Quantization: how long each animation frame is held. At the minimum the
+   * animation is left continuous (a step finer than one display frame is not
+   * a step anyone can see) -- see buildCaretBlinkKeyframesCss.
    */
-  frameDurationMs: number
+  frameMs: number
   /**
-   * How much of the chosen shape actually reaches the caret, as a percentage.
-   * 100 is the shape at full strength; 0 is a static caret sitting at its own
-   * colours. In between is a straight linear blend of the two -- see
-   * resolveEffectiveAlpha.
+   * How much of the shape reaches the element, signed percent: 100 is the
+   * shape at full strength, 0 holds the element still at its own colours,
+   * negative inverts (see resolveEffectiveAlpha). Also the depth of each beat
+   * while the caret follows the music.
    */
-  effectStrengthPercent: number
+  effectPercent: number
 }
 
 // Deliberately symmetric around 0 so the slider's centre detent is the
@@ -78,18 +90,18 @@ export const CARET_HALO_BLUR_MAX_PX = 20
 export const CARET_HALO_BLUR_STEP_PX = 1
 export const CARET_HALO_BLUR_DEFAULT_PX = 0
 
-export const CARET_ANIMATION_DURATION_MIN_MS = 100
-export const CARET_ANIMATION_DURATION_MAX_MS = 5000
-export const CARET_ANIMATION_DURATION_STEP_MS = 100
+export const FLASH_CYCLE_MIN_MS = 100
+export const FLASH_CYCLE_MAX_MS = 5000
+export const FLASH_CYCLE_STEP_MS = 100
 // 1200ms is the rhythm the caret has always blinked at.
-export const CARET_ANIMATION_DURATION_DEFAULT_MS = 1200
+export const FLASH_CYCLE_DEFAULT_MS = 1200
 
-export const CARET_FRAME_DURATION_MIN_MS = 5
-export const CARET_FRAME_DURATION_MAX_MS = 500
-export const CARET_FRAME_DURATION_STEP_MS = 5
+export const FLASH_FRAME_MIN_MS = 5
+export const FLASH_FRAME_MAX_MS = 500
+export const FLASH_FRAME_STEP_MS = 5
 // The minimum is the "don't quantize at all" setting -- see
 // buildCaretBlinkKeyframesCss.
-export const CARET_FRAME_DURATION_DEFAULT_MS = CARET_FRAME_DURATION_MIN_MS
+export const FLASH_FRAME_DEFAULT_MS = FLASH_FRAME_MIN_MS
 
 // The caret's EFFECT, signed: 0 is a static caret; right of centre the blink
 // (and, while the caret follows the music, each beat) takes the caret away
@@ -98,10 +110,10 @@ export const CARET_FRAME_DURATION_DEFAULT_MS = CARET_FRAME_DURATION_MIN_MS
 // ordinary blink: anything less would quietly damp the heartbeat everyone
 // already has. One value for the blink and the beat (the visualizer's caret
 // block reads it as its effect, -1..1).
-export const CARET_EFFECT_STRENGTH_MIN_PERCENT = -100
-export const CARET_EFFECT_STRENGTH_MAX_PERCENT = 100
-export const CARET_EFFECT_STRENGTH_STEP_PERCENT = 1
-export const CARET_EFFECT_STRENGTH_DEFAULT_PERCENT = 100
+export const FLASH_EFFECT_MIN_PERCENT = -100
+export const FLASH_EFFECT_MAX_PERCENT = 100
+export const FLASH_EFFECT_STEP_PERCENT = 1
+export const FLASH_EFFECT_DEFAULT_PERCENT = 100
 
 /** Last-resort fill colour if `highlightColors.caret` cannot be parsed. */
 export const DEFAULT_CARET_FILL_COLOR = 'rgba(0, 0, 0, 0.3)'
@@ -115,10 +127,26 @@ export const DEFAULT_CARET_SETTINGS: CaretSettings = {
   haloBlurPx: CARET_HALO_BLUR_DEFAULT_PX,
   outlineColor: DEFAULT_CARET_OUTLINE_COLOR,
   haloColor: DEFAULT_CARET_HALO_COLOR,
-  animationPreset: 'heartbeat',
-  animationDurationMs: CARET_ANIMATION_DURATION_DEFAULT_MS,
-  frameDurationMs: CARET_FRAME_DURATION_DEFAULT_MS,
-  effectStrengthPercent: CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
+}
+
+export const DEFAULT_FLASHING_SETTINGS: FlashingSettings = {
+  shape: 'heartbeat',
+  cycleMs: FLASH_CYCLE_DEFAULT_MS,
+  frameMs: FLASH_FRAME_DEFAULT_MS,
+  effectPercent: FLASH_EFFECT_DEFAULT_PERCENT,
+}
+
+/** Free of the DOM, so the main process's `sanitizeMenu` uses it too. */
+export function sanitizeFlashingSettings(input: unknown): FlashingSettings {
+  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof FlashingSettings, unknown>>
+  const integer = (value: unknown, min: number, max: number, fallback: number) =>
+    typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback
+  return {
+    shape: isCaretAnimationPresetKey(source.shape) ? source.shape : DEFAULT_FLASHING_SETTINGS.shape,
+    cycleMs: integer(source.cycleMs, FLASH_CYCLE_MIN_MS, FLASH_CYCLE_MAX_MS, DEFAULT_FLASHING_SETTINGS.cycleMs),
+    frameMs: integer(source.frameMs, FLASH_FRAME_MIN_MS, FLASH_FRAME_MAX_MS, DEFAULT_FLASHING_SETTINGS.frameMs),
+    effectPercent: integer(source.effectPercent, FLASH_EFFECT_MIN_PERCENT, FLASH_EFFECT_MAX_PERCENT, DEFAULT_FLASHING_SETTINGS.effectPercent),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +259,7 @@ export function resolveCaretSegmentStepCount(segmentMs: number, frameDurationMs:
  * blink is left continuous and the animation-level easing does the work. It
  * also bounds how many keyframe stops the baked path below can emit.
  */
-export const CARET_FRAME_DURATION_SMOOTH_MAX_MS = 15
+export const FLASH_FRAME_SMOOTH_MAX_MS = 15
 
 /**
  * Ceiling on baked steps per cycle. Only bites where each step would already
@@ -369,7 +397,7 @@ function resolveEmittedStops(
   frameDurationMs: number,
 ): CaretAnimationStop[] {
   const stops = preset.stops
-  if (frameDurationMs <= CARET_FRAME_DURATION_SMOOTH_MAX_MS) return [...stops]
+  if (frameDurationMs <= FLASH_FRAME_SMOOTH_MAX_MS) return [...stops]
 
   const [x1, y1, x2, y2] = CARET_BLINK_EASING_CONTROL_POINTS
   const segmentMsAt = (index: number) =>

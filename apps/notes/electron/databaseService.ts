@@ -59,14 +59,10 @@ import {
 } from '@thockdown/look/cursorSettings';
 import {
   DEFAULT_CARET_SETTINGS,
-  isCaretAnimationPresetKey,
   CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
   CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
   CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
-  CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS,
-  CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS,
-  CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT,
 } from '@thockdown/look/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes';
 import type { MusicPoolQuery, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
@@ -192,10 +188,6 @@ const DEFAULT_UI_LAYOUT_LOADOUT: UiLayoutLoadout = {
   caretHaloSpreadPx: DEFAULT_CARET_SETTINGS.haloSpreadPx,
   caretHaloBlurPx: DEFAULT_CARET_SETTINGS.haloBlurPx,
   caretHaloColor: DEFAULT_CARET_SETTINGS.haloColor,
-  caretAnimationPreset: DEFAULT_CARET_SETTINGS.animationPreset,
-  caretAnimationDurationMs: DEFAULT_CARET_SETTINGS.animationDurationMs,
-  caretFrameDurationMs: DEFAULT_CARET_SETTINGS.frameDurationMs,
-  caretEffectStrengthPercent: DEFAULT_CARET_SETTINGS.effectStrengthPercent,
   visualizerColors: defaultVisualizerColors(false),
 };
 
@@ -563,12 +555,6 @@ export function normalizeUiLayoutLoadout(input: unknown): UiLayoutLoadout | null
     caretHaloColor: sanitizeString(source.caretHaloColor, DEFAULT_UI_LAYOUT_LOADOUT.caretHaloColor),
     // A free-form string here would reach the stylesheet as an animation name;
     // only the known preset keys are accepted, anything else falls back.
-    caretAnimationPreset: isCaretAnimationPresetKey(source.caretAnimationPreset)
-      ? source.caretAnimationPreset
-      : DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationPreset,
-    caretAnimationDurationMs: clampInteger(source.caretAnimationDurationMs, CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretAnimationDurationMs),
-    caretFrameDurationMs: clampInteger(source.caretFrameDurationMs, CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS, DEFAULT_UI_LAYOUT_LOADOUT.caretFrameDurationMs),
-    caretEffectStrengthPercent: clampInteger(source.caretEffectStrengthPercent, CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT, DEFAULT_UI_LAYOUT_LOADOUT.caretEffectStrengthPercent),
     // A layout saved while the visualizer was part of it (before 2026-11-07)
     // reads its colours from there; one saved before the
     // visualizer existed gets the defaults for its own inversion (its colours
@@ -597,8 +583,6 @@ const TDL_SCALAR_KEYS: ReadonlyArray<keyof UiLayoutLoadout> = [
   'cursorClickMinHoldMs', 'cursorClickBalance',
   'caretSizeDeviationPx', 'caretOutlineWidthPx', 'caretOutlineColor',
   'caretHaloSpreadPx', 'caretHaloBlurPx', 'caretHaloColor',
-  'caretAnimationPreset', 'caretAnimationDurationMs', 'caretFrameDurationMs',
-  'caretEffectStrengthPercent',
 ];
 
 // Keys whose values are nested objects; they're emitted as inline JSON when

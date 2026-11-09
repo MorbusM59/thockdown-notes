@@ -1,4 +1,4 @@
-import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
+import type { Dispatch, MouseEvent, MutableRefObject, PointerEvent, SetStateAction } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BUNDLED_DICTIONARIES, type SpellCheckDictionary } from '../shared/spellCheck'
@@ -112,21 +112,21 @@ import {
   CARET_HALO_BLUR_MAX_PX,
   CARET_HALO_BLUR_STEP_PX,
   CARET_HALO_BLUR_DEFAULT_PX,
-  CARET_ANIMATION_DURATION_MIN_MS,
-  CARET_ANIMATION_DURATION_MAX_MS,
-  CARET_ANIMATION_DURATION_STEP_MS,
-  CARET_ANIMATION_DURATION_DEFAULT_MS,
-  CARET_FRAME_DURATION_MIN_MS,
-  CARET_FRAME_DURATION_MAX_MS,
-  CARET_FRAME_DURATION_STEP_MS,
-  CARET_FRAME_DURATION_DEFAULT_MS,
-  CARET_EFFECT_STRENGTH_MIN_PERCENT,
-  CARET_EFFECT_STRENGTH_MAX_PERCENT,
-  CARET_EFFECT_STRENGTH_STEP_PERCENT,
-  CARET_EFFECT_STRENGTH_DEFAULT_PERCENT,
+  FLASH_CYCLE_MIN_MS,
+  FLASH_CYCLE_MAX_MS,
+  FLASH_CYCLE_STEP_MS,
+  FLASH_CYCLE_DEFAULT_MS,
+  FLASH_FRAME_MIN_MS,
+  FLASH_FRAME_MAX_MS,
+  FLASH_FRAME_STEP_MS,
+  FLASH_FRAME_DEFAULT_MS,
+  FLASH_EFFECT_MIN_PERCENT,
+  FLASH_EFFECT_MAX_PERCENT,
+  FLASH_EFFECT_STEP_PERCENT,
+  FLASH_EFFECT_DEFAULT_PERCENT,
   CARET_ANIMATION_PRESETS,
   CARET_ANIMATION_PRESET_KEYS,
-  type CaretAnimationPresetKey,
+  type FlashingSettings,
 } from '@thockdown/look/caretSettings'
 import {
   type TextureSurfaceKey,
@@ -668,10 +668,8 @@ export interface SidebarOptionsPanelProps {
   caretHaloBlurPx: number
   setCaretHaloBlurPx: (value: number) => void
   caretHaloColor: string
-  caretAnimationPreset: CaretAnimationPresetKey
-  setCaretAnimationPreset: (value: CaretAnimationPresetKey) => void
-  caretAnimationDurationMs: number
-  setCaretAnimationDurationMs: (value: number) => void
+  flashing: FlashingSettings
+  setFlashing: Dispatch<SetStateAction<FlashingSettings>>
   wheelSpinThresholdMs: number
   setWheelSpinThresholdMs: (value: number) => void
   wheelSpinDampenDivisor: number
@@ -682,10 +680,6 @@ export interface SidebarOptionsPanelProps {
   setWheelStepRows: (value: number) => void
   wheelStepLines: number
   setWheelStepLines: (value: number) => void
-  caretFrameDurationMs: number
-  setCaretFrameDurationMs: (value: number) => void
-  caretEffectStrengthPercent: number
-  setCaretEffectStrengthPercent: (value: number) => void
 }
 
 /**
@@ -896,10 +890,8 @@ export function SidebarOptionsPanel({
   caretHaloBlurPx,
   setCaretHaloBlurPx,
   caretHaloColor,
-  caretAnimationPreset,
-  setCaretAnimationPreset,
-  caretAnimationDurationMs,
-  setCaretAnimationDurationMs,
+  flashing,
+  setFlashing,
   wheelSpinThresholdMs,
   setWheelSpinThresholdMs,
   wheelSpinDampenDivisor,
@@ -910,10 +902,6 @@ export function SidebarOptionsPanel({
   setWheelStepRows,
   wheelStepLines,
   setWheelStepLines,
-  caretFrameDurationMs,
-  setCaretFrameDurationMs,
-  caretEffectStrengthPercent,
-  setCaretEffectStrengthPercent,
 }: SidebarOptionsPanelProps) {
   // Every dictionary the spell checker can use: the bundled four, then any
   // the reader installed (shared/spellCheck.ts). Read when the panel opens and
@@ -949,8 +937,8 @@ export function SidebarOptionsPanel({
     // faded in whichever state it holds); on with the caret's effect at its centre it is only dimmed.
     const caretFollowsMusic = beatSettings.caretFollows
     const caretFollowUnavailable = !features.visualizer
-    const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && caretEffectStrengthPercent === 0)
-    // The Caret Beat switch beside the blink shapes (Layouts > Caret).
+    const caretFollowWaits = caretFollowUnavailable || (caretFollowsMusic && flashing.effectPercent === 0)
+    // The Caret Beat switch beside the flashing shapes (Advanced > Animations > Flashing).
     const caretBeat = {
       on: caretFollowsMusic,
       unavailable: caretFollowUnavailable,
@@ -958,7 +946,7 @@ export function SidebarOptionsPanel({
         ? 'Caret Beat needs Grid Beat: switch it on (the drum) under Quick Access. Until then the caret blinks as selected'
         : caretFollowWaits
         ? "Caret Beat is on but not in effect: the caret's effect is at its centre. Until then the caret holds still"
-        : `Caret Beat: ${caretFollowsMusic ? 'on' : 'off'}. While music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as the layout's effect. The same for every layout`,
+        : `Caret Beat: ${caretFollowsMusic ? 'on' : 'off'}. While music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as the flashing effect`,
       dimmed: caretFollowWaits,
       toggle: () => setBeatSettings((prev) => ({ ...prev, caretFollows: !prev.caretFollows })),
     }
@@ -1006,14 +994,11 @@ export function SidebarOptionsPanel({
     const renderBeatCaret = () => {
       const caret = visualizer.caret
       return (
-        <>
-          <OptionsSubsectionLabel>Caret Beat</OptionsSubsectionLabel>
-          <div className="utility-setting-slider-stack" aria-label="Caret on the beat">
-            <OptionsSliderRows rows={[2]}>
-              {renderFallSliders('beat-caret', 'Caret', caret, visualizerDefaults.caret, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
-            </OptionsSliderRows>
-          </div>
-        </>
+        <div className="utility-setting-slider-stack" aria-label="Caret on the beat">
+          <OptionsSliderRows rows={[2]}>
+            {renderFallSliders('beat-caret', 'Caret', caret, visualizerDefaults.caret, 'each beat', (patch) => setVisualizer((prev) => ({ ...prev, caret: { ...prev.caret, ...patch } })))}
+          </OptionsSliderRows>
+        </div>
       )
     }
 
@@ -2315,102 +2300,7 @@ export function SidebarOptionsPanel({
             />
           </div>
 
-          <OptionsSubsectionLabel>Blink</OptionsSubsectionLabel>
-          {/* Animation shape. One button per curve, same visual language as the
-              custom-layout slots -- the selected one carries .is-active.
-              Pressing the active one switches the blink off altogether (the
-              caretBlink feature, shared/features.ts): the caret holds steady,
-              no animation runs, and the sliders below leave the panel.
-              Pressing any shape switches it back on. */}
-          <div className="options-caret-preset-row" role="group" aria-label="Caret blink animation">
-            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => {
-              const isActive = features.caretBlink && caretAnimationPreset === presetKey
-              const label = CARET_ANIMATION_PRESETS[presetKey].label
-              return (
-                <button
-                  key={presetKey}
-                  type="button"
-                  className={`btn-icon options-color-swatch options-caret-preset-btn${isActive ? ' is-active' : ''}`}
-                  data-tooltip={isActive ? `${label}: press again to stop the blink` : label}
-                  aria-label={label}
-                  aria-pressed={isActive}
-                  onClick={() => {
-                    if (isActive) {
-                      setFeatures((prev) => ({ ...prev, caretBlink: false }))
-                      return
-                    }
-                    setCaretAnimationPreset(presetKey)
-                    if (!features.caretBlink) setFeatures((prev) => ({ ...prev, caretBlink: true }))
-                  }}
-                >
-                  <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
-                </button>
-              )
-            })}
-            {/* Caret Beat: a GLOBAL setting (beatSettings.caretFollows) whose
-                switch sits among this layout's blink shapes. The shape selected
-                beside it stays selected and is what the caret falls back to
-                whenever there is no beat to follow. */}
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-caret-preset-btn${caretBeat.on ? ' is-active' : ''}${caretBeat.dimmed ? ' is-dimmed' : ''}`}
-              data-tooltip={caretBeat.tooltip}
-              aria-label="Caret Beat"
-              aria-pressed={caretBeat.on}
-              // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
-              aria-disabled={caretBeat.unavailable}
-              onClick={() => caretBeat.unavailable || caretBeat.toggle()}
-            >
-              <span className="fa-solid fa-music" aria-hidden="true" />
-            </button>
-          </div>
-
-          {features.caretBlink ? (<>
-          <div className="options-glaze-cell options-glaze-cell-span-2">
-            <CompactScrollbarSlider
-              id="caret-animation-duration"
-              min={CARET_ANIMATION_DURATION_MIN_MS}
-              max={CARET_ANIMATION_DURATION_MAX_MS}
-              step={CARET_ANIMATION_DURATION_STEP_MS}
-              value={caretAnimationDurationMs}
-              trackLabel="cycle"
-              ariaLabel="Length of one full caret blink cycle in milliseconds"
-              defaultValue={CARET_ANIMATION_DURATION_DEFAULT_MS}
-              onCommit={(value) => setCaretAnimationDurationMs(clamp(Math.round(value), CARET_ANIMATION_DURATION_MIN_MS, CARET_ANIMATION_DURATION_MAX_MS))}
-            />
-          </div>
-          <div className="options-glaze-cell options-glaze-cell-span-2">
-            <CompactScrollbarSlider
-              id="caret-frame-duration"
-              min={CARET_FRAME_DURATION_MIN_MS}
-              max={CARET_FRAME_DURATION_MAX_MS}
-              step={CARET_FRAME_DURATION_STEP_MS}
-              value={caretFrameDurationMs}
-              trackLabel="frame"
-              ariaLabel="How long the caret holds each animation frame in milliseconds -- the lowest setting leaves the blink smooth"
-              defaultValue={CARET_FRAME_DURATION_DEFAULT_MS}
-              onCommit={(value) => setCaretFrameDurationMs(clamp(Math.round(value), CARET_FRAME_DURATION_MIN_MS, CARET_FRAME_DURATION_MAX_MS))}
-            />
-          </div>
-          </>) : null}
-          {features.caretBlink || beatCaretShown ? (
-          <div className="options-glaze-cell options-glaze-cell-span-2">
-            <CompactScrollbarSlider
-              id="caret-effect-strength"
-              min={CARET_EFFECT_STRENGTH_MIN_PERCENT}
-              max={CARET_EFFECT_STRENGTH_MAX_PERCENT}
-              step={CARET_EFFECT_STRENGTH_STEP_PERCENT}
-              value={caretEffectStrengthPercent}
-              trackLabel="effect"
-              tooltipLabel="How far the blink, and each beat while the caret follows the music, takes the caret from its colour. Right of centre it takes it away; left of centre it is inverted, resting that far away and brought back; the centre holds the caret still"
-              ariaLabel="Caret effect as a percentage, negative inverts -- 100 is the blink at full strength, 0 is a still caret"
-              defaultValue={CARET_EFFECT_STRENGTH_DEFAULT_PERCENT}
-              onCommit={(value) => setCaretEffectStrengthPercent(clamp(Math.round(value), CARET_EFFECT_STRENGTH_MIN_PERCENT, CARET_EFFECT_STRENGTH_MAX_PERCENT))}
-            />
-          </div>
-          ) : null}
         </div>
-        {beatCaretShown && renderBeatCaret()}
       </AccordionSection>
 
 
@@ -3129,7 +3019,8 @@ export function SidebarOptionsPanel({
         heading="Animations"
         iconClass="fa-spinner"
       >
-<div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
+        <OptionsSubsectionLabel>Movement</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
           <OptionsSliderRows>
             <CompactScrollbarSlider
               id="render-scroll-dynamic"
@@ -3180,6 +3071,106 @@ export function SidebarOptionsPanel({
             />
           </OptionsSliderRows>
         </div>
+
+        {/* Flashing: global, the same for every layout (FlashingSettings in
+            caretSettings.ts). The caret's blink is the only reader today; a
+            new flashing element reads these rather than growing its own. */}
+        <OptionsSubsectionLabel>Flashing</OptionsSubsectionLabel>
+        <div className="options-caret-settings-grid" role="group" aria-label="Flashing controls">
+          {/* Animation shape. One button per curve, same visual language as the
+              custom-layout slots -- the selected one carries .is-active.
+              Pressing the active one switches the blink off altogether (the
+              caretBlink feature, shared/features.ts): the caret holds steady,
+              no animation runs, and the sliders below leave the panel.
+              Pressing any shape switches it back on. */}
+          <div className="options-caret-preset-row" role="group" aria-label="Flashing shape">
+            {CARET_ANIMATION_PRESET_KEYS.map((presetKey) => {
+              const isActive = features.caretBlink && flashing.shape === presetKey
+              const label = CARET_ANIMATION_PRESETS[presetKey].label
+              return (
+                <button
+                  key={presetKey}
+                  type="button"
+                  className={`btn-icon options-color-swatch options-caret-preset-btn${isActive ? ' is-active' : ''}`}
+                  data-tooltip={isActive ? `${label}: press again to stop the blink` : label}
+                  aria-label={label}
+                  aria-pressed={isActive}
+                  onClick={() => {
+                    if (isActive) {
+                      setFeatures((prev) => ({ ...prev, caretBlink: false }))
+                      return
+                    }
+                    setFlashing((prev) => ({ ...prev, shape: presetKey }))
+                    if (!features.caretBlink) setFeatures((prev) => ({ ...prev, caretBlink: true }))
+                  }}
+                >
+                  <span className={`fa-solid ${CARET_ANIMATION_PRESETS[presetKey].iconClass}`} aria-hidden="true" />
+                </button>
+              )
+            })}
+            {/* Caret Beat (beatSettings.caretFollows), beside the shapes: the
+                shape selected beside it stays selected and is what the caret
+                falls back to whenever there is no beat to follow. */}
+            <button
+              type="button"
+              className={`btn-icon options-color-swatch options-caret-preset-btn${caretBeat.on ? ' is-active' : ''}${caretBeat.dimmed ? ' is-dimmed' : ''}`}
+              data-tooltip={caretBeat.tooltip}
+              aria-label="Caret Beat"
+              aria-pressed={caretBeat.on}
+              // aria-disabled rather than disabled, so the tooltip saying why still shows on hover.
+              aria-disabled={caretBeat.unavailable}
+              onClick={() => caretBeat.unavailable || caretBeat.toggle()}
+            >
+              <span className="fa-solid fa-music" aria-hidden="true" />
+            </button>
+          </div>
+
+          {features.caretBlink ? (<>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="caret-animation-duration"
+              min={FLASH_CYCLE_MIN_MS}
+              max={FLASH_CYCLE_MAX_MS}
+              step={FLASH_CYCLE_STEP_MS}
+              value={flashing.cycleMs}
+              trackLabel="cycle"
+              ariaLabel="Length of one full caret blink cycle in milliseconds"
+              defaultValue={FLASH_CYCLE_DEFAULT_MS}
+              onCommit={(value) => setFlashing((prev) => ({ ...prev, cycleMs: clamp(Math.round(value), FLASH_CYCLE_MIN_MS, FLASH_CYCLE_MAX_MS) }))}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="caret-frame-duration"
+              min={FLASH_FRAME_MIN_MS}
+              max={FLASH_FRAME_MAX_MS}
+              step={FLASH_FRAME_STEP_MS}
+              value={flashing.frameMs}
+              trackLabel="frame"
+              ariaLabel="How long the caret holds each animation frame in milliseconds -- the lowest setting leaves the blink smooth"
+              defaultValue={FLASH_FRAME_DEFAULT_MS}
+              onCommit={(value) => setFlashing((prev) => ({ ...prev, frameMs: clamp(Math.round(value), FLASH_FRAME_MIN_MS, FLASH_FRAME_MAX_MS) }))}
+            />
+          </div>
+          </>) : null}
+          {features.caretBlink || beatCaretShown ? (
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="caret-effect-strength"
+              min={FLASH_EFFECT_MIN_PERCENT}
+              max={FLASH_EFFECT_MAX_PERCENT}
+              step={FLASH_EFFECT_STEP_PERCENT}
+              value={flashing.effectPercent}
+              trackLabel="effect"
+              tooltipLabel="How far the blink, and each beat while the caret follows the music, takes the caret from its colour. Right of centre it takes it away; left of centre it is inverted, resting that far away and brought back; the centre holds the caret still"
+              ariaLabel="Caret effect as a percentage, negative inverts -- 100 is the blink at full strength, 0 is a still caret"
+              defaultValue={FLASH_EFFECT_DEFAULT_PERCENT}
+              onCommit={(value) => setFlashing((prev) => ({ ...prev, effectPercent: clamp(Math.round(value), FLASH_EFFECT_MIN_PERCENT, FLASH_EFFECT_MAX_PERCENT) }))}
+            />
+          </div>
+          ) : null}
+        </div>
+        {beatCaretShown && renderBeatCaret()}
       </AccordionSection>
 
       {/* Scrolling is its own section because it answers a different

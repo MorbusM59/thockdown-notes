@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService, normalizeUiLayoutLoadout } from './databaseService'
 import { LIGHT_FACTORY_PRESETS, NEUTRAL_BASE } from '@thockdown/look/presets'
-import { DEFAULT_CARET_SETTINGS } from '@thockdown/look/caretSettings'
 import type { UiLayoutLoadout } from '@thockdown/look/loadouts'
 
 /**
@@ -37,10 +36,6 @@ describe('DatabaseService caret loadout fields', () => {
     caretHaloSpreadPx: 17,
     caretHaloBlurPx: 11,
     caretHaloColor: 'rgba(210, 120, 30, 0.4)',
-    caretAnimationPreset: 'fadeLate',
-    caretAnimationDurationMs: 2600,
-    caretFrameDurationMs: 85,
-    caretEffectStrengthPercent: 42,
   } as const satisfies Partial<UiLayoutLoadout>
 
   const pendingLightPayload = (): UiLayoutLoadout => ({ ...NEUTRAL_BASE, ...caretOverrides })
@@ -94,12 +89,6 @@ describe('DatabaseService caret loadout fields', () => {
       caretOutlineWidthPx: -12,
       caretHaloSpreadPx: 5000,
       caretHaloBlurPx: -4,
-      caretAnimationDurationMs: 1,
-      caretFrameDurationMs: 100000,
-      caretEffectStrengthPercent: -250,
-      // A value that is not a known preset key must not reach the stylesheet
-      // as an animation name.
-      caretAnimationPreset: 'heartbeat; } body { display: none } @keyframes x {',
     })
     db.saveCustomUiLoadout('light')
 
@@ -108,10 +97,6 @@ describe('DatabaseService caret loadout fields', () => {
     expect(stored.caretOutlineWidthPx).toBe(0)
     expect(stored.caretHaloSpreadPx).toBe(20)
     expect(stored.caretHaloBlurPx).toBe(0)
-    expect(stored.caretAnimationDurationMs).toBe(100)
-    expect(stored.caretFrameDurationMs).toBe(500)
-    expect(stored.caretEffectStrengthPercent).toBe(-100)
-    expect(stored.caretAnimationPreset).toBe(DEFAULT_CARET_SETTINGS.animationPreset)
   })
 
   it('normalizes new floating-point cursor and caret settings before signing a preset', () => {

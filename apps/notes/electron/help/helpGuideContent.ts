@@ -870,11 +870,22 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Advanced → Animations.
 
-*Tunes the custom easing curve used for scroll animations the app makes on your behalf — a search jump, a page key, a chapter change. For what the wheel itself does, see [Scrolling]($#scrolling).*
+*How things move and how things flash. For what the wheel itself does, see [Scrolling]($#scrolling).*
+
+**Movement** tunes the easing curve of the scroll animations the app makes on your behalf — a search jump, a page key, a chapter change.
 
 - Controls for ramp, speed, maximum speed, and overall curve shape. Response is auto-derived from ramp.
 - **Maximum speed** does two jobs at once. It caps how fast a scroll animation travels, and it also caps how *long* one may take: the longest any scroll can run is the time it would take to cover 200,000 pixels at the speed you've set — 2 seconds at the top of the slider, 2.5 at the default. Wind the speed up and long journeys get shorter as well as quicker; wind it down and a trip across a very large note becomes a proper voyage. A journey that can't fit under both limits keeps the time one and exceeds the speed one, so you're never left waiting.
 - These settings aren't part of a layout — they stay as you left them across layout switches and app restarts, the same way the custom cursor toggle does.
+
+**Flashing** sets how anything that flashes does it; today that is the caret's blink.
+
+- Six blink shapes to pick from: the classic heartbeat, its big beat on its own, a plain fade in/out peaking halfway through, the same fade peaking early (15%) or late (85%), and a bouncing-ball rhythm that drops in ever-smaller hops before starting over. The fill, outline and halo all fade together, so the caret always reads as one object.
+- **Cycle** (100–5000ms) is how long one full blink takes.
+- **Frame** (5–500ms) is how long the caret holds each step of the blink. At its lowest the blink is smooth; wind it up and the caret animates in visible chunks, like a machine that only redraws itself so often. Steps never cross a shape's own turning points — a step longer than the stretch it lands in just holds that whole stretch, and one that would split a stretch unevenly is spread evenly across it instead.
+- **Effect** (-100 to 100%) is how much of the chosen shape actually reaches the caret; below 0 it is inverted, the caret resting faded and the blink bringing it back. At 100 you get the blink at full strength; at 0 the caret is simply static, sitting at whatever colors you gave it; in between is a straight blend of the two, so you can keep a rhythm you like and just take the edge off it.
+- To stop the blink entirely, press the selected shape again; pressing any shape brings it back.
+- The music note beside the shapes is **Caret Beat**: while music plays and a beat is found, the caret pulses on the beat instead of blinking, as deep as **Effect**. Its **shape** and **fall** set how each beat fades.
 
 ### [Speed Reading Settings](#speed-reading-settings)
 
@@ -919,7 +930,7 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Layouts → Caret.
 
-*Shape, glow and blink rhythm for the block caret in the editor. Its fill color lives with the rest of your theming in [Colors and Textures]($#colors-and-textures); everything else about it is here.*
+*Shape and glow of the block caret in the editor. Its fill color lives with the rest of your theming in [Colors and Textures]($#colors-and-textures), and its blink in [Animations]($#animations).*
 
 - The caret sits above the box grid and below your text, so the grid never draws lines across it and the caret never hides the character it's on — however big you make it, whatever color you give it.
 - Top row: an outline color swatch and a halo color swatch. The 4 buttons beside them (H, S, V, A) stage a color by dragging up/down or scrolling on each — left-click a swatch to paint it onto that part of the caret; hold right-click on a swatch to load its current color back into H/S/V/A. Same widget as [Cursor]($#mouse-options), independent of it.
@@ -927,11 +938,6 @@ ${shortcutTable()}
 - **Outline** (0–5px) draws a border around the caret rectangle, in the outline color. 0 hides it.
 - **Halo** (0–20px) reaches a glow outward from the caret, in the halo color. 0 hides it.
 - **Blur** (0–20px) softens that glow's edge. At 0 the halo is a hard square ring that reads as part of the grid; wind it up and it feathers into a soft glow without reaching any further. Blur works on its own too — with halo at 0 it feathers the caret's own edge outward.
-- Six blink shapes to pick from: the classic heartbeat, its big beat on its own, a plain fade in/out peaking halfway through, the same fade peaking early (15%) or late (85%), and a bouncing-ball rhythm that drops in ever-smaller hops before starting over. The fill, outline and halo all fade together, so the caret always reads as one object.
-- **Cycle** (100–5000ms) is how long one full blink takes.
-- **Frame** (5–500ms) is how long the caret holds each step of the blink. At its lowest the blink is smooth; wind it up and the caret animates in visible chunks, like a machine that only redraws itself so often. Steps never cross a shape's own turning points — a step longer than the stretch it lands in just holds that whole stretch, and one that would split a stretch unevenly is spread evenly across it instead.
-- **Effect** (0–100%) is how much of the chosen shape actually reaches the caret. At 100 you get the blink at full strength; at 0 the caret is simply static, sitting at whatever colors you gave it; in between is a straight blend of the two, so you can keep a rhythm you like and just take the edge off it.
-- All of these are saved per layout, same as the rest of your theming. To stop the blink entirely, press the selected shape again; pressing any shape brings it back.
 
 ### [Keystroke Sounds](#keystroke-sounds)
 

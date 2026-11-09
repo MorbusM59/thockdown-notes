@@ -237,7 +237,7 @@ The fix removes both exotic dependencies from the animation:
 Consequences to keep in mind: the emitted rule is now colour-dependent, so it
 regenerates when the caret/outline/halo colour or halo spread changes, not just
 on animation settings; frame durations at or below one display frame
-(`CARET_FRAME_DURATION_SMOOTH_MAX_MS`) deliberately skip quantization; and
+(`FLASH_FRAME_SMOOTH_MAX_MS`) deliberately skip quantization; and
 `CARET_MAX_BAKED_STEPS` bounds the rule's size where steps would be
 imperceptible anyway. `caretSettings.test.ts` asserts no `color-mix`/`var(` ever
 appears in the output, and that the baked easing matches the `cubic-bezier` in
