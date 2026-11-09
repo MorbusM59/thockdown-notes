@@ -4,15 +4,14 @@
  * reads it (`shared/liveStyle.ts`, never `<html>`), already scaled by the block's
  * effect and turned over when that effect is negative, so CSS only reads it:
  *
- * - `--beat-caret`, the caret's DIP: while the caret follows the music its
- *   own blink is held at its peak (`html[data-beat-caret]` eases
- *   `--beat-caret-hold` to 1) and the value takes that share off its
- *   opacity. Unlike the other two it follows no band and no detected hit: it
- *   dips on every beat of a steady clock that follows the music's tempo
- *   (`subscribeMusicClock`), each dip falling on its own shape and length.
- *   It runs only while the Caret Beat switch is on (`beatSettings.caretFollows`),
- *   and the attribute is set only while that clock HAS a beat (music
- *   playing, a tempo found): at any other moment the caret blinks.
+ * - `--beat-caret`, the caret's DIP: while the flashing is matched to the
+ *   music its own free cycle is held at its peak (`html[data-beat-caret]`
+ *   eases `--beat-caret-hold` to 1) and the value takes that share off its
+ *   opacity. It follows no band and no detected hit: it is the flashing
+ *   curve run on the music's counted beat (`subscribeMusicClock`), one minus
+ *   the curve. It runs only while the matching is not off, and the attribute
+ *   is set only while that clock HAS a beat (music playing, a tempo found):
+ *   at any other moment the caret runs its own cycle.
  * - `--beat-edge`, the opacity of the active editor's beat edge
  *   (`.editor-beat-edge`, shown and promoted under `html[data-beat-edge]`).
  * - `--beat-pane`, the opacity of the editor pane (the box outlines' copy, `.editor-beat-pane.has-grid`
@@ -24,7 +23,7 @@
  * inside it, the mode's own edge and pane.
  *
  * An inverted block (a negative effect) rests at its full effect while music plays and a hit
- * (or, for the caret, a beat) takes it away; with nothing playing every block is off either way, so an
+ * takes it away; with nothing playing every block is off either way, so an
  * inverted one does not sit over the editor in silence. A block with no
  * effect subscribes nothing and keeps its ordinary look; the `<html>`
  * attributes change once when a block is switched, never per frame. The
@@ -33,35 +32,30 @@
  */
 
 import { setGridWaveSettings } from '../visualizer/gridWaveTurn'
-import { useEffect, useMemo, useRef } from 'react'
-import type { VisualizerCaret, VisualizerChannel, VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
+import { useEffect, useRef } from 'react'
+import type { VisualizerChannel, VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
-import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix } from '../sound/musicBeat'
+import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix, type FlashClock, type MusicClockSubscription } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
 import { setLiveStyle } from '../shared/liveStyle'
 
-type BlockName = 'caret' | 'edge' | 'pane' | 'wash'
+type BlockName = 'edge' | 'pane' | 'wash'
 
-/** What a block subscribes with: a mix for the edge and pane, the caret's two fields for the caret's clock. */
-/** The caret's block as it plays: its fall, and the layout's caret effect as its depth. */
-type CaretBlock = VisualizerCaret & Pick<VisualizerChannel, 'effect'>
-type BlockSettings = VisualizerChannel | CaretBlock
+type BlockSettings = VisualizerChannel
 
 interface BlockSubscription<T> {
   update: (settings: T) => void
   unsubscribe: () => void
 }
 
-/** `present` says whether the block is showing (its `<html>` attribute); a band's is from the start, the caret's only while its clock has a beat. */
+/** `present` says whether the block is showing (its `<html>` attribute); a band's is from the start. */
 type Subscribe<T> = (settings: T, listener: (response: number) => void, present: (present: boolean) => void) => BlockSubscription<T>
 
 const subscribeMix: Subscribe<VisualizerChannel> = (channel, listener, present) => {
   present(true)
   return subscribeMusicMix(channel, listener)
 }
-
-const subscribeClock: Subscribe<CaretBlock> = (caret, listener, present) => subscribeMusicClock(caret, listener, present)
 
 function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: boolean, subscribeTo: Subscribe<T>): void {
   const active = on && channel.effect !== 0
@@ -102,16 +96,43 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
 /** A block that shows nothing: the reader pane while the visualizer mode is up, where there is no reader view. */
 const OFF_CHANNEL: VisualizerChannel = { effect: 0, mix: { thump: 0, pierce: 0, tick: 0 }, shape: 0, fallSec: 1 }
 
-export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, caretFollowsMusic: boolean, caretEffect: number, isVisualizerMode: boolean, uiMode: 'light' | 'dark'): void {
+/**
+ * The caret's matched flashing (`--beat-caret`, see the header): `flash` is
+ * null while the matching is off. One subscription for as long as it is on;
+ * a new curve or matching retunes it in place.
+ */
+function useFlashBeat(on: boolean, flash: FlashClock | null): void {
+  const flashRef = useRef(flash)
+  flashRef.current = flash
+  const subscriptionRef = useRef<MusicClockSubscription | null>(null)
+  const active = on && flash !== null
+  useEffect(() => {
+    if (!active || !flashRef.current) return
+    const root = document.documentElement
+    const subscription = subscribeMusicClock(flashRef.current, (response) => {
+      // Quantized to the 1/255 an 8-bit colour channel resolves (as `useBeatBlock`).
+      const steps = Math.round((musicPlayerService.isPlaying ? response : 0) * 255)
+      setLiveStyle('--beat-caret', steps <= 0 ? null : (steps / 255).toFixed(4))
+    }, (present) => root.toggleAttribute('data-beat-caret', present))
+    subscriptionRef.current = subscription
+    return () => {
+      subscriptionRef.current = null
+      subscription.unsubscribe()
+      setLiveStyle('--beat-caret', null)
+      root.removeAttribute('data-beat-caret')
+    }
+  }, [active])
+  useEffect(() => {
+    if (flash) subscriptionRef.current?.update(flash)
+  }, [flash])
+}
+
+export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visualizer: VisualizerSettings, colors: VisualizerColors, flash: FlashClock | null, isVisualizerMode: boolean, uiMode: 'light' | 'dark'): void {
   // Set before the blocks subscribe (effects run in order), so the first
   // analysis already listens to the trackers.
   const { trackers } = visualizer
   useEffect(() => setVisualizerTrackers(trackers), [trackers])
-  // The beat's depth is the layout's caret effect, the blink's own slider
-  // (-1..1), read inverted: the slider says what the blink does to the caret
-  // at rest, and the beat moves it the opposite way.
-  const caretBlock = useMemo(() => ({ ...visualizer.caret, effect: -caretEffect }), [visualizer.caret, caretEffect])
-  useBeatBlock('caret', caretBlock, enabled && caretFollowsMusic, subscribeClock)
+  useFlashBeat(enabled, flash)
   // The same two elements show the grid beat on the editor and the visualizer
   // mode's own edge and pane over its scene, each set of settings in its turn.
   const grid = visualizer.grid[uiMode]

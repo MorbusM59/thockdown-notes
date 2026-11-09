@@ -654,6 +654,23 @@ export class BeatMap {
     return { phase: caret - Math.floor(caret), period: period / scale }
   }
 
+  /**
+   * The beat COUNTED at media time `time`, for the flashing's matched cycle
+   * (`shared/flashing.ts`): beats and the share of one since a bar's one,
+   * modulo FLASH_BEATS_REPEAT (12), and the map's own beat period (never
+   * folded, unlike `caretAt`); NaN where there is no beat. The count is the
+   * place in the bar plus four times the bar's number modulo three, which
+   * keeps it on the bar (a multiple of four at every one) and continuous over
+   * three bars, so a cycle of a third of a beat runs on across the bar line.
+   */
+  barBeatAt(time: number): { beat: number; period: number } {
+    const { previous, next, index, position } = this.beatsAround(time)
+    if (Number.isNaN(previous)) return { beat: NaN, period: NaN }
+    const period = next - previous
+    const bar = (((index - position) % 3) + 3) % 3
+    return { beat: position + 4 * bar + (time - previous) / period, period }
+  }
+
   /** The onset features, read in place (`OnsetFeatures`); valid until the next `feed`. */
   readonly onsets: OnsetFeatures = {
     frames: () => [Math.max(0, this.spectra - this.capacity + 1), this.normalised],

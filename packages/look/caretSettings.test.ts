@@ -1,30 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import {
-  DEFAULT_FLASHING_SETTINGS,
-  sanitizeFlashingSettings,
-  CARET_ANIMATION_PRESETS,
-  CARET_ANIMATION_PRESET_KEYS,
-  FLASH_FRAME_MIN_MS,
-  FLASH_FRAME_MAX_MS,
-  FLASH_FRAME_SMOOTH_MAX_MS,
-  CARET_MAX_BAKED_STEPS,
-  FLASH_EFFECT_DEFAULT_PERCENT,
-  buildCaretBlinkKeyframesCss,
-  isCaretAnimationPresetKey,
-  resolveCaretSegmentStepCount,
-  type CaretBlinkKeyframeOptions,
-} from './caretSettings'
+import { buildCaretBlinkKeyframesCss, type CaretBlinkKeyframeOptions } from './caretSettings'
 
 const baseOptions: CaretBlinkKeyframeOptions = {
-  presetKey: 'heartbeat',
-  animationDurationMs: 1200,
-  frameDurationMs: FLASH_FRAME_MIN_MS,
+  levels: [0.6, 0.1, 0.9, 0.3, 0.6],
   caretColor: 'rgba(0, 0, 0, 0.3)',
   outlineColor: 'rgba(10, 20, 30, 0.8)',
   haloColor: 'rgba(200, 100, 50, 0.5)',
   haloSpreadPx: 6,
   haloBlurPx: 0,
-  effectStrengthPercent: FLASH_EFFECT_DEFAULT_PERCENT,
 }
 
 const build = (overrides: Partial<CaretBlinkKeyframeOptions> = {}) =>
@@ -36,247 +19,47 @@ const stopsOf = (css: string) => css.trim().split('\n').slice(1, -1)
 const percentsOf = (css: string) =>
   stopsOf(css).map((line) => Number(line.trim().match(/^([\d.]+)%/)![1]))
 
-const fillAlphaExpressionsOf = (css: string) =>
-  [...css.matchAll(/background-color: rgba\([^,]+,\s*[^,]+,\s*[^,]+,\s*(.*?)\);/g)].map((match) => match[1])
-
 const fillAlphasOf = (css: string) =>
-  fillAlphaExpressionsOf(css).map((alpha) => Number(alpha.match(/^calc\(([\d.]+)/)?.[1]))
-
-describe('resolveCaretSegmentStepCount', () => {
-  it('honours the keyframe when a frame is longer than the segment', () => {
-    expect(resolveCaretSegmentStepCount(80, 100)).toBe(1)
-    expect(resolveCaretSegmentStepCount(100, 100)).toBe(1)
-  })
-
-  it('splits a segment evenly across the sections the frame duration would have made', () => {
-    // The worked example from the spec: a 150ms segment at 100ms per frame
-    // "would create two sections of 100ms and 50ms", so it becomes two of 75ms.
-    expect(resolveCaretSegmentStepCount(150, 100)).toBe(2)
-    expect(resolveCaretSegmentStepCount(300, 100)).toBe(3)
-    expect(resolveCaretSegmentStepCount(301, 100)).toBe(4)
-  })
-
-  it('never returns a step count below 1, whatever it is handed', () => {
-    expect(resolveCaretSegmentStepCount(0, 100)).toBe(1)
-    expect(resolveCaretSegmentStepCount(-50, 100)).toBe(1)
-    expect(resolveCaretSegmentStepCount(150, 0)).toBe(1)
-    expect(resolveCaretSegmentStepCount(Number.NaN, 100)).toBe(1)
-    expect(resolveCaretSegmentStepCount(150, Number.NaN)).toBe(1)
-  })
-})
+  [...css.matchAll(/background-color: rgba\([^,]+,\s*[^,]+,\s*[^,]+,\s*calc\(([\d.]+)/g)].map((match) => Number(match[1]))
 
 describe('buildCaretBlinkKeyframesCss', () => {
   /**
    * The regression that sent this back once: `color-mix()` and `var()` inside
    * an animated property are not interpolable in Chromium 124 (Electron 30),
-   * which animated the blink discretely -- four hard brightness flips instead
-   * of the heartbeat. Newer Chromium interpolates them, so only a real build
-   * showed it.
+   * which animated the blink discretely. Only the two holds may be var()s.
    */
   it('emits plain rgba colour stops, never color-mix() or var() in a colour', () => {
-    for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
-      for (const frameDurationMs of [FLASH_FRAME_MIN_MS, 100, FLASH_FRAME_MAX_MS]) {
-        const css = build({ presetKey, frameDurationMs })
-        expect(css).not.toContain('color-mix')
-        // The two holds (typing and music) are the only var()s.
-        expect(css.replace(/var\(--(caret-typing-hold|beat-caret-hold), 0\)/g, '')).not.toContain('var(')
-      }
-    }
+    const css = build()
+    expect(css).not.toContain('color-mix')
+    expect(css.replace(/var\(--(caret-typing-hold|beat-caret-hold), 0\)/g, '')).not.toContain('var(')
   })
 
-  it('resolves each surface off its own colour, scaling only alpha', () => {
-    const css = build({ presetKey: 'bigBeat' })
-    // The 65% apex scales every surface's own alpha by 0.9.
+  it('puts one stop per level, evenly spaced from 0 to 100%', () => {
+    const css = build()
+    expect(percentsOf(css)).toEqual([0, 25, 50, 75, 100])
+    expect(fillAlphasOf(css)).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
+  })
+
+  it('resolves each surface off its own colour, scaling only alpha, held toward its own alpha', () => {
+    const css = build({ levels: [0.9, 0.9] })
     expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.27 + (0.3 - 0.27) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0))))')
     expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.72 + (0.8 - 0.72) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0))))')
     expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, calc(0.45 + (0.5 - 0.45) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0))))')
   })
 
-  it('leaves the animation unquantized at frame durations shorter than a display frame', () => {
-    for (const frameDurationMs of [FLASH_FRAME_MIN_MS, FLASH_FRAME_SMOOTH_MAX_MS]) {
-      const css = build({ frameDurationMs })
-      expect(percentsOf(css)).toEqual([0, 10, 65, 85, 100])
-      expect(fillAlphasOf(css)).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
-    }
-  })
-
-  it('bakes one hold pair per step, sized from that segment’s own length', () => {
-    // heartbeat stops sit at 0/10/65/85/100%, so at a 1000ms cycle the
-    // segments are 100 / 550 / 200 / 150 ms. At 100ms per frame that is
-    // 1 / 6 / 2 / 2 steps -- the last being the spec's worked example.
-    const css = build({ animationDurationMs: 1000, frameDurationMs: 100 })
-    const expectedSteps = 1 + 6 + 2 + 2
-    // Two stops per step (the step's start and the hold that closes it), plus
-    // the final stop that lands the cycle back on its closing value.
-    expect(stopsOf(css)).toHaveLength((expectedSteps * 2) + 1)
-  })
-
-  it('holds each step flat, then jumps', () => {
-    const css = build({ presetKey: 'fadeMid', animationDurationMs: 1000, frameDurationMs: 250 })
-    const percents = percentsOf(css)
-    const alphas = fillAlphasOf(css)
-    // 0->50% and 50->100% are 500ms each, so two steps apiece.
-    expect(alphas).toHaveLength(9)
-    for (let index = 0; index < 8; index += 2) {
-      // Each pair shares one value, and the second lands just short of the
-      // next step's start -- that is what makes it a hold rather than a ramp.
-      expect(alphas[index]).toBe(alphas[index + 1])
-      expect(percents[index + 1]).toBeGreaterThan(percents[index])
-      if (index + 2 < percents.length) {
-        expect(percents[index + 1]).toBeLessThan(percents[index + 2])
-      }
-    }
-  })
-
-  it('samples the real eased curve rather than a linear ramp', () => {
-    const css = build({ presetKey: 'fadeMid', animationDurationMs: 1000, frameDurationMs: 100 })
-    const alphas = fillAlphasOf(css)
-    // fadeMid runs 0 -> 1 over the first half in 5 steps. cubic-bezier(.4,0,.2,1)
-    // is ease-in-out, so the middle step must sit below the linear midpoint of
-    // its own span -- a linear ramp would put step 2 of 5 at exactly 0.4.
-    const risingSteps = alphas.slice(0, 10).filter((_value, index) => index % 2 === 0)
-    expect(risingSteps[0]).toBe(0)
-    expect(risingSteps[2]).toBeGreaterThan(0)
-    expect(risingSteps[2]).toBeLessThan(0.4)
-    // ...and still climbing monotonically.
-    for (let index = 1; index < risingSteps.length; index += 1) {
-      expect(risingSteps[index]).toBeGreaterThan(risingSteps[index - 1])
-    }
-  })
-
-  it('keeps stops ordered and inside 0..100% for every preset and frame duration', () => {
-    for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
-      for (const frameDurationMs of [5, 20, 45, 100, 250, FLASH_FRAME_MAX_MS]) {
-        for (const animationDurationMs of [100, 1200, 5000]) {
-          const percents = percentsOf(build({ presetKey, frameDurationMs, animationDurationMs }))
-          expect(percents[0]).toBe(0)
-          expect(percents[percents.length - 1]).toBe(100)
-          for (let index = 1; index < percents.length; index += 1) {
-            expect(percents[index]).toBeGreaterThan(percents[index - 1])
-          }
-        }
-      }
-    }
-  })
-
-  it('caps how many steps it will bake, however extreme the settings', () => {
-    const css = build({ presetKey: 'heartbeat', animationDurationMs: 5000, frameDurationMs: 20 })
-    expect(stopsOf(css).length).toBeLessThanOrEqual((CARET_MAX_BAKED_STEPS * 2) + 1)
-  })
-
-  it('falls back to the heartbeat rather than emitting an empty rule for an unknown preset', () => {
-    // @ts-expect-error -- deliberately outside the union, standing in for a
-    // stale value read back from a loadout written by a future version.
-    const css = build({ presetKey: 'nope' })
-    expect(percentsOf(css)).toEqual([0, 10, 65, 85, 100])
-  })
-
   it('carries blur and spread independently into the halo shadow', () => {
-    // Blur without spread is a legitimate look (it feathers the caret's own
-    // edge outward), so neither value may be folded into the other.
     expect(build({ haloBlurPx: 4 })).toContain('box-shadow: 0 0 4px 6px rgba(200, 100, 50,')
     expect(build({ haloSpreadPx: 0, haloBlurPx: 9 })).toContain('box-shadow: 0 0 9px 0px rgba(200, 100, 50,')
     expect(build({ haloBlurPx: -3 })).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50,')
   })
 
-  it('blends the shape toward a static caret as effect strength drops', () => {
-    // The fill is rgba(0, 0, 0, 0.3), so a multiplier of 1 -- a static caret at
-    // its own colour -- is alpha 0.3. Full strength keeps the heartbeat's own
-    // multipliers; zero collapses every stop onto that static value.
-    expect(fillAlphasOf(build())).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
-    expect(fillAlphasOf(build({ effectStrengthPercent: 0 }))).toEqual([0.3, 0.3, 0.3, 0.3, 0.3])
-    // Halfway is a straight linear blend of the two: 0.6 -> 0.8, 0.1 -> 0.55,
-    // 0.9 -> 0.95, 0.3 -> 0.65, each times the colour's own 0.3.
-    expect(fillAlphasOf(build({ effectStrengthPercent: 50 }))).toEqual([0.24, 0.165, 0.285, 0.195, 0.24])
-  })
-
-  it('blends every surface by the same amount', () => {
-    const css = build({ presetKey: 'bigBeat', effectStrengthPercent: 0 })
-    // Each surface lands on its own colour's own alpha, untouched.
-    expect(css).toContain('background-color: rgba(0, 0, 0, calc(0.3 + (0.3 - 0.3) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0))))')
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.8 + (0.8 - 0.8) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0))))')
-    expect(css).toContain('box-shadow: 0 0 0px 6px rgba(200, 100, 50, calc(0.5 + (0.5 - 0.5) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0))))')
-  })
-
-  it('holds the blink at its peak while typing without changing the saved strength', () => {
-    const css = build()
-    expect(fillAlphaExpressionsOf(css)).toEqual([
-      'calc(0.18 + (0.3 - 0.18) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0)))',
-      'calc(0.03 + (0.3 - 0.03) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0)))',
-      'calc(0.27 + (0.3 - 0.27) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0)))',
-      'calc(0.09 + (0.3 - 0.09) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0)))',
-      'calc(0.18 + (0.3 - 0.18) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0)))',
-    ])
-    expect(css).toContain('outline-color: rgba(10, 20, 30, calc(0.48 + (0.8 - 0.48) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0)))')
-    expect(css).toContain('rgba(200, 100, 50, calc(0.3 + (0.5 - 0.3) * max(var(--caret-typing-hold, 0), var(--beat-caret-hold, 0))')
-  })
-
-  it('leaves a zero-strength blink with nothing to repaint', () => {
-    // Every stop identical means the computed style never changes, so the
-    // animation costs no invalidation even though it is still running.
-    const stops = stopsOf(build({ presetKey: 'heartbeat', effectStrengthPercent: 0, frameDurationMs: 100 }))
-    const declarations = stops.map((line) => line.slice(line.indexOf('{')))
-    expect(new Set(declarations).size).toBe(1)
-  })
-
-  it('inverts the blink left of centre and clamps past either end', () => {
-    expect(fillAlphasOf(build({ effectStrengthPercent: -50 }))).toEqual([0.21, 0.285, 0.165, 0.255, 0.21])
-    expect(fillAlphasOf(build({ effectStrengthPercent: -400 }))).toEqual([0.12, 0.27, 0.03, 0.21, 0.12])
-    expect(fillAlphasOf(build({ effectStrengthPercent: 400 }))).toEqual([0.18, 0.03, 0.27, 0.09, 0.18])
+  it('clamps a level outside 0..1', () => {
+    expect(fillAlphasOf(build({ levels: [-1, 2] }))).toEqual([0, 0.3])
   })
 
   it('falls back to a visible colour when one cannot be parsed', () => {
     const css = build({ caretColor: 'not-a-colour' })
     expect(css).toContain('background-color: rgba(0, 0, 0,')
     expect(css).not.toContain('not-a-colour')
-  })
-})
-
-describe('isCaretAnimationPresetKey', () => {
-  it('accepts every shipped key and nothing else', () => {
-    for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
-      expect(isCaretAnimationPresetKey(presetKey)).toBe(true)
-    }
-    expect(isCaretAnimationPresetKey('heartbeat; }')).toBe(false)
-    expect(isCaretAnimationPresetKey('')).toBe(false)
-    expect(isCaretAnimationPresetKey(undefined)).toBe(false)
-    expect(isCaretAnimationPresetKey(7)).toBe(false)
-  })
-})
-
-describe('caret animation presets', () => {
-  it('starts at 0% and ends at 100% with monotonically increasing stops', () => {
-    for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
-      const stops = CARET_ANIMATION_PRESETS[presetKey].stops
-      expect(stops[0].atPercent).toBe(0)
-      expect(stops[stops.length - 1].atPercent).toBe(100)
-      for (let index = 1; index < stops.length; index += 1) {
-        expect(stops[index].atPercent).toBeGreaterThan(stops[index - 1].atPercent)
-      }
-    }
-  })
-
-  it('keeps every alpha inside 0..1', () => {
-    for (const presetKey of CARET_ANIMATION_PRESET_KEYS) {
-      for (const stop of CARET_ANIMATION_PRESETS[presetKey].stops) {
-        expect(stop.alpha).toBeGreaterThanOrEqual(0)
-        expect(stop.alpha).toBeLessThanOrEqual(1)
-      }
-    }
-  })
-})
-
-describe('sanitizeFlashingSettings', () => {
-  it('clamps out-of-range values and refuses an unknown shape', () => {
-    expect(sanitizeFlashingSettings({
-      cycleMs: 1,
-      frameMs: 100000,
-      effectPercent: -250,
-      // A value that is not a known preset key must not reach the stylesheet as an animation name.
-      shape: 'heartbeat; } body { display: none } @keyframes x {',
-    })).toEqual({ shape: DEFAULT_FLASHING_SETTINGS.shape, cycleMs: 100, frameMs: 500, effectPercent: -100 })
-  })
-  it('reads anything that is not an object as the defaults', () => {
-    expect(sanitizeFlashingSettings(undefined)).toEqual(DEFAULT_FLASHING_SETTINGS)
   })
 })

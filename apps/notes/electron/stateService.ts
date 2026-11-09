@@ -21,7 +21,7 @@ import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
-import { DEFAULT_FLASHING_SETTINGS, sanitizeFlashingSettings } from '@thockdown/look/caretSettings';
+import { DEFAULT_FLASHING_SETTINGS, sanitizeFlashShapePreferences, sanitizeFlashingSettings } from '../src/shared/flashing';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
@@ -604,6 +604,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
     flashing: sanitizeFlashingSettings(input?.flashing),
+    flashingPresets: sanitizeFlashShapePreferences(input?.flashingPresets),
     chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,
     // Content-blind on purpose: this side of the bridge can only check that

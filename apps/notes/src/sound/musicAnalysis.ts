@@ -113,6 +113,9 @@ export interface AnalysisAnswer {
   /** The caret's beat at `heardTime` (`BeatMap.caretAt`): how far into it, 0..1, and its period (s); NaN where there is none. */
   caretPhase: number
   caretPeriod: number
+  /** The beat counted at `heardTime` (`BeatMap.barBeatAt`): from a bar's one, modulo 12, and the beat's period (s); NaN where there is none. */
+  barBeat: number
+  beatPeriod: number
   /** The decoded-track semitone levels at `heardTime` and after the lookahead confirmation window. */
   semitones?: { at: Float32Array; after: Float32Array } | null
   traceLines: string[]
@@ -369,6 +372,7 @@ export class MusicAnalysis {
       if (this.readers.size > 0) this.writeScore(heardTime)
     }
     const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
+    const counted = this.map ? this.map.barBeatAt(heardTime) : { beat: NaN, period: NaN }
     let semitones: AnalysisAnswer['semitones']
     if (this.semitoneScore && this.semitoneBands > 0) {
       const atFrame = this.semitoneScore.frameIndexAt(heardTime)
@@ -417,6 +421,8 @@ export class MusicAnalysis {
       peak: this.peaks.isEmpty ? NaN : this.peaks.peakSince(heardTime - LEAD_SEC),
       caretPhase: caret.phase,
       caretPeriod: caret.period,
+      barBeat: counted.beat,
+      beatPeriod: counted.period,
       traceLines,
     }
     if (semitones !== undefined) answer.semitones = semitones

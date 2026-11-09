@@ -31,6 +31,20 @@
  * while the music plays.
  */
 
+import {
+  curvePointXRange,
+  curveSegment,
+  curveYAt,
+  editCurvePoint,
+  insertCurvePoint,
+  insertCurvePointAfter,
+  removeCurvePoint,
+  sanitizeCurve,
+  setCurvePointX,
+  type CurvePlane,
+  type CurvePoint,
+} from './drawnCurve'
+
 export interface EqPoint {
   /** EQ_LOW_HZ..EQ_HIGH_HZ. */
   hz: number
@@ -79,46 +93,44 @@ export const FLAT_EQ_CURVE: EqCurve = [
   { hz: EQ_HIGH_HZ, db: 0, handle: 0 },
 ]
 
-function clamp(value: number, low: number, high: number): number {
-  return Math.max(low, Math.min(high, value))
+/** The EQ's plane for the shared curve model (`drawnCurve.ts`): semitones above EQ_LOW_HZ by dB. */
+export const EQ_PLANE: CurvePlane = {
+  xMax: EQ_SPAN_SEMITONES,
+  yMin: -EQ_DB_MAX,
+  yMax: EQ_DB_MAX,
+  minGap: EQ_MIN_GAP_SEMITONES,
+  maxPoints: EQ_MAX_POINTS,
+  handleMax: EQ_HANDLE_MAX,
+  wrap: false,
 }
 
-function finite(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+/** The curve on its plane: semitones and dB. */
+export function eqToPlane(curve: EqCurve): CurvePoint[] {
+  return curve.map((point) => ({ x: semitonesOf(point.hz), y: point.db, handle: point.handle }))
 }
 
-function sanitizePoint(value: unknown, hz: number): EqPoint {
-  const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  return {
-    hz,
-    db: clamp(finite(input.db, 0), -EQ_DB_MAX, EQ_DB_MAX),
-    handle: clamp(finite(input.handle, 0), 0, EQ_HANDLE_MAX),
-  }
+/** Back from the plane, the ends exactly on the axis's frequencies and the rest to a millionth of a hertz, so a frequency's round trip through semitones comes back as it went. */
+export function eqFromPlane(points: readonly CurvePoint[]): EqPoint[] {
+  return points.map((point, index) => ({
+    hz: index === 0 ? EQ_LOW_HZ : index === points.length - 1 ? EQ_HIGH_HZ : Math.round(hzAtSemitones(point.x) * 1e6) / 1e6,
+    db: point.y,
+    handle: point.handle,
+  }))
 }
 
 /**
- * Any stored value into a valid curve: the ends pinned to the axis, the
- * points between in order, each at least EQ_MIN_GAP_SEMITONES from the last
- * one kept and from the top end, at most EQ_MAX_POINTS in all. Anything that
- * is not a list (a curve stored in an older form) is the flat curve.
+ * Any stored value into a valid curve (`sanitizeCurve`): the ends pinned to
+ * the axis, the points between in order and apart, at most EQ_MAX_POINTS.
+ * Anything that is not a list (a curve stored in an older form) is the flat curve.
  */
 export function sanitizeEqCurve(value: unknown): EqPoint[] {
-  if (!Array.isArray(value) || value.length < 2) return FLAT_EQ_CURVE.map((point) => ({ ...point }))
-  const first = sanitizePoint(value[0], EQ_LOW_HZ)
-  const last = sanitizePoint(value[value.length - 1], EQ_HIGH_HZ)
-  const middle: EqPoint[] = []
-  let previous = 0
-  for (const entry of value.slice(1, -1)) {
-    if (middle.length >= EQ_MAX_POINTS - 2) break
+  if (!Array.isArray(value)) return eqFromPlane(eqToPlane(FLAT_EQ_CURVE))
+  const onPlane = value.map((entry) => {
     const record = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
-    const hz = finite(record.hz, NaN)
-    if (!Number.isFinite(hz)) continue
-    const at = semitonesOf(hz)
-    if (at < previous + EQ_MIN_GAP_SEMITONES || at > EQ_SPAN_SEMITONES - EQ_MIN_GAP_SEMITONES) continue
-    middle.push(sanitizePoint(record, hz))
-    previous = at
-  }
-  return [first, ...middle, last]
+    const hz = typeof record.hz === 'number' && record.hz > 0 ? record.hz : NaN
+    return { x: semitonesOf(hz), y: record.db, handle: record.handle }
+  })
+  return eqFromPlane(sanitizeCurve(EQ_PLANE, onPlane, eqToPlane(FLAT_EQ_CURVE)))
 }
 
 /** Two curves are one when they have the same points, each value agreeing to a thousandth (frequency relatively). */
@@ -134,86 +146,14 @@ export function isEqFlat(curve: EqCurve): boolean {
   return curve.every((point) => point.db === 0)
 }
 
-/** How far along the frequency axis a point's handles reach, in semitones (see the header). */
-function handleReach(curve: EqCurve, index: number): number {
-  const at = semitonesOf(curve[index].hz)
-  const before = index > 0 ? at - semitonesOf(curve[index - 1].hz) : Infinity
-  const after = index < curve.length - 1 ? semitonesOf(curve[index + 1].hz) - at : Infinity
-  return curve[index].handle * 0.5 * Math.min(before, after)
-}
-
-/**
- * The slope (dB per semitone) the handles of a point lie along.
- *
- * An end point has one neighbour and aims at it. An inner point that is a
- * peak, a dip or level with a neighbour gets level handles, so the curve turns
- * at the point itself. Between those, the slope is shaped by where the point
- * sits in the rectangle its two neighbours span:
- * - horizontally, the neighbours' rise is taken over twice the gap to the
- *   NEARER neighbour, so a point off-centre steepens; centred, that is
- *   exactly the straight line between the neighbours;
- * - vertically, that slope is scaled by a triangle that is 1 at the
- *   rectangle's vertical middle and falls linearly to 0 at either
- *   neighbour's gain, so the handles flatten gradually towards the edges.
- */
-function handleSlope(curve: EqCurve, index: number): number {
-  if (index === 0 || index === curve.length - 1) {
-    const from = curve[Math.max(0, index - 1)]
-    const to = curve[Math.min(curve.length - 1, index + 1)]
-    const run = semitonesOf(to.hz) - semitonesOf(from.hz)
-    return run > 0 ? (to.db - from.db) / run : 0
-  }
-  const prev = curve[index - 1]
-  const next = curve[index + 1]
-  const { db } = curve[index]
-  const lo = Math.min(prev.db, next.db)
-  const hi = Math.max(prev.db, next.db)
-  if (db <= lo || db >= hi) return 0
-  const at = semitonesOf(curve[index].hz)
-  const nearer = Math.min(at - semitonesOf(prev.hz), semitonesOf(next.hz) - at)
-  const vertical = 1 - Math.abs((2 * (db - lo)) / (hi - lo) - 1)
-  return ((next.db - prev.db) / (2 * nearer)) * vertical
-}
-
 /** One segment's four control points, as [semitones, dB] pairs. */
 export function eqSegment(curve: EqCurve, index: number): [number, number][] {
-  const a = curve[index]
-  const b = curve[index + 1]
-  const ax = semitonesOf(a.hz)
-  const bx = semitonesOf(b.hz)
-  // Facing handles that would cross are shortened together until they meet.
-  const wanted = handleReach(curve, index) + handleReach(curve, index + 1)
-  const fit = wanted > bx - ax ? (bx - ax) / wanted : 1
-  const outReach = handleReach(curve, index) * fit
-  const inReach = handleReach(curve, index + 1) * fit
-  return [
-    [ax, a.db],
-    [ax + outReach, a.db + (handleSlope(curve, index) * outReach)],
-    [bx - inReach, b.db - (handleSlope(curve, index + 1) * inReach)],
-    [bx, b.db],
-  ]
-}
-
-function bezier(p0: number, p1: number, p2: number, p3: number, t: number): number {
-  const u = 1 - t
-  return (u * u * u * p0) + (3 * u * u * t * p1) + (3 * u * t * t * p2) + (t * t * t * p3)
+  return curveSegment(EQ_PLANE, eqToPlane(curve), index)
 }
 
 /** The curve's gain in dB at `semitones`, clamped to the plane. */
 export function eqCurveDbAt(curve: EqCurve, semitones: number): number {
-  let index = 0
-  while (index < curve.length - 2 && semitonesOf(curve[index + 1].hz) < semitones) index += 1
-  const [p0, p1, p2, p3] = eqSegment(curve, index)
-  // x(t) rises monotonically (the control points are in frequency order), so bisection finds t.
-  let low = 0
-  let high = 1
-  for (let iteration = 0; iteration < 40; iteration += 1) {
-    const mid = (low + high) / 2
-    if (bezier(p0[0], p1[0], p2[0], p3[0], mid) < semitones) low = mid
-    else high = mid
-  }
-  const t = (low + high) / 2
-  return clamp(bezier(p0[1], p1[1], p2[1], p3[1], t), -EQ_DB_MAX, EQ_DB_MAX)
+  return curveYAt(EQ_PLANE, eqToPlane(curve), semitones)
 }
 
 /** Where the curve is sampled for fitting and drawing: evenly on the log axis. */
@@ -224,7 +164,8 @@ const GRID: readonly number[] = Array.from({ length: EQ_GRID_POINTS }, (_, k) =>
 export function eqCurveGainsDb(curve: EqCurve): Float64Array {
   const out = new Float64Array(EQ_GRID_POINTS)
   if (isEqFlat(curve)) return out
-  for (let k = 0; k < EQ_GRID_POINTS; k += 1) out[k] = eqCurveDbAt(curve, GRID[k] * EQ_SPAN_SEMITONES)
+  const points = eqToPlane(curve)
+  for (let k = 0; k < EQ_GRID_POINTS; k += 1) out[k] = curveYAt(EQ_PLANE, points, GRID[k] * EQ_SPAN_SEMITONES)
   return out
 }
 
@@ -357,76 +298,37 @@ export function fitEqBandGains(curve: EqCurve): Float64Array {
 }
 
 // ── Editing ─────────────────────────────────────────────────────────────────
-// The editor's operations, pure so their rules hold wherever they are used:
-// each returns a valid curve, or the same curve when the edit is not allowed.
+// The shared model's operations (`drawnCurve.ts`) in the EQ's units.
 
 /** The range of frequency, in semitones, a point may move in: fixed for the ends, between its neighbours' gaps otherwise. */
 export function eqPointSemitoneRange(curve: EqCurve, index: number): [number, number] {
-  if (index === 0) return [0, 0]
-  if (index === curve.length - 1) return [EQ_SPAN_SEMITONES, EQ_SPAN_SEMITONES]
-  return [
-    semitonesOf(curve[index - 1].hz) + EQ_MIN_GAP_SEMITONES,
-    semitonesOf(curve[index + 1].hz) - EQ_MIN_GAP_SEMITONES,
-  ]
+  return curvePointXRange(EQ_PLANE, eqToPlane(curve), index)
 }
 
 /** One point changed, each value clamped to what the point may take. */
 export function editEqPoint(curve: EqCurve, index: number, change: { semitones?: number; db?: number; handle?: number }): EqPoint[] {
-  const next = curve.map((point) => ({ ...point }))
-  const point = next[index]
-  if (!point) return next
-  if (change.semitones !== undefined && index > 0 && index < curve.length - 1) {
-    const [low, high] = eqPointSemitoneRange(curve, index)
-    point.hz = hzAtSemitones(clamp(change.semitones, low, high))
-  }
-  if (change.db !== undefined) point.db = clamp(change.db, -EQ_DB_MAX, EQ_DB_MAX)
-  if (change.handle !== undefined) point.handle = clamp(change.handle, 0, EQ_HANDLE_MAX)
-  return next
+  return eqFromPlane(editCurvePoint(EQ_PLANE, eqToPlane(curve), index, { x: change.semitones, y: change.db, handle: change.handle }))
 }
 
-/**
- * A new point at `semitones` and `db`, or null when it cannot go there: the
- * curve is full, or it would sit closer than EQ_MIN_GAP_SEMITONES to a
- * neighbour. Returns the curve and the new point's index.
- */
+const placed = (result: { curve: CurvePoint[]; index: number } | null) => (result ? { curve: eqFromPlane(result.curve), index: result.index } : null)
+
+/** A new point at `semitones` and `db`, or null when it cannot go there (the curve is full, or a neighbour is too close). */
 export function insertEqPoint(curve: EqCurve, semitones: number, db: number, handle = EQ_DEFAULT_HANDLE): { curve: EqPoint[]; index: number } | null {
-  if (curve.length >= EQ_MAX_POINTS) return null
-  const index = curve.findIndex((point) => semitonesOf(point.hz) > semitones)
-  if (index <= 0) return null
-  if (semitones - semitonesOf(curve[index - 1].hz) < EQ_MIN_GAP_SEMITONES) return null
-  if (semitonesOf(curve[index].hz) - semitones < EQ_MIN_GAP_SEMITONES) return null
-  const next = curve.map((point) => ({ ...point }))
-  next.splice(index, 0, { hz: hzAtSemitones(semitones), db: clamp(db, -EQ_DB_MAX, EQ_DB_MAX), handle: clamp(handle, 0, EQ_HANDLE_MAX) })
-  return { curve: next, index }
+  return placed(insertCurvePoint(EQ_PLANE, eqToPlane(curve), semitones, db, handle))
 }
 
 /** A point halfway (in frequency) between point `index` and the next one, on the curve; for the last point, between it and the one before. */
 export function insertEqPointAfter(curve: EqCurve, index: number): { curve: EqPoint[]; index: number } | null {
-  const from = Math.min(index, curve.length - 2)
-  const semitones = (semitonesOf(curve[from].hz) + semitonesOf(curve[from + 1].hz)) / 2
-  const snapped = Math.round(semitones / EQ_SEMITONE_STEP) * EQ_SEMITONE_STEP
-  const db = Math.round(eqCurveDbAt(curve, snapped) / EQ_DB_STEP) * EQ_DB_STEP
-  return insertEqPoint(curve, snapped, db)
+  return placed(insertCurvePointAfter(EQ_PLANE, eqToPlane(curve), index, EQ_SEMITONE_STEP, EQ_DB_STEP, EQ_DEFAULT_HANDLE))
 }
 
 /** The curve without point `index`; the ends cannot be removed. */
 export function removeEqPoint(curve: EqCurve, index: number): EqPoint[] {
-  if (index <= 0 || index >= curve.length - 1) return curve.map((point) => ({ ...point }))
-  return curve.filter((_, i) => i !== index).map((point) => ({ ...point }))
+  return eqFromPlane(removeCurvePoint(eqToPlane(curve), index))
 }
 
-/**
- * A typed frequency: unlike a drag, it may land past a neighbour, and the
- * point moves to its place in the order. It stays inside the axis, at least
- * EQ_MIN_GAP_SEMITONES from the ends; a frequency that close to another point
- * is refused (null). The ends' frequencies are fixed. Returns the curve and
- * the point's new index.
- */
+/** A typed frequency, which may land past a neighbour (`setCurvePointX`); null where it is refused. */
 export function setEqPointFrequency(curve: EqCurve, index: number, hz: number): { curve: EqPoint[]; index: number } | null {
-  if (index <= 0 || index >= curve.length - 1 || !(hz > 0)) return null
-  const semitones = clamp(semitonesOf(hz), EQ_MIN_GAP_SEMITONES, EQ_SPAN_SEMITONES - EQ_MIN_GAP_SEMITONES)
-  const point = curve[index]
-  const others = curve.filter((_, i) => i !== index)
-  const placed = insertEqPoint(others, semitones, point.db, point.handle)
-  return placed
+  if (!(hz > 0)) return null
+  return placed(setCurvePointX(EQ_PLANE, eqToPlane(curve), index, semitonesOf(hz)))
 }

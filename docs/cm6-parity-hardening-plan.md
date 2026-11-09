@@ -195,7 +195,8 @@ section of its own, sitting under Mouse Options and built on the same widgets.
   **If anything ever re-promotes the caret, the black pane comes back.** The
   three things that would are named in `.thockdown-block-caret`'s comment.
 - **New module** `packages/look/caretSettings.ts`: bounds/defaults (mirroring
-  `cursorSettings.ts`), the six blink shapes, and `buildCaretBlinkKeyframesCss`,
+  `cursorSettings.ts`) and `buildCaretBlinkKeyframesCss` (the blink's shape is
+  now the global flashing curve, `apps/notes/src/shared/flashing.ts`),
   which generates `@keyframes thockdown-blink` at runtime. index.css no longer
   defines that rule at all -- App.tsx mounts the generated one, so there is
   exactly one definition and no stylesheet-order coin flip.
@@ -234,14 +235,12 @@ The fix removes both exotic dependencies from the animation:
   eased curve, where `steps()` could only ever quantize a linear ramp (a
   keyframe's own timing function replaces the animation-level easing).
 
-Consequences to keep in mind: the emitted rule is now colour-dependent, so it
+Consequences to keep in mind: the emitted rule is colour-dependent, so it
 regenerates when the caret/outline/halo colour or halo spread changes, not just
-on animation settings; frame durations at or below one display frame
-(`FLASH_FRAME_SMOOTH_MAX_MS`) deliberately skip quantization; and
-`CARET_MAX_BAKED_STEPS` bounds the rule's size where steps would be
-imperceptible anyway. `caretSettings.test.ts` asserts no `color-mix`/`var(` ever
-appears in the output, and that the baked easing matches the `cubic-bezier` in
-index.css so the two paths cannot drift.
+when the flashing curve does. *(Superseded 2026-11-09: the frame quantization
+and the baked easing are gone; the rule is the flashing curve sampled at 97
+stops with `linear` timing.)* `caretSettings.test.ts` asserts no
+`color-mix`/`var(` other than the two holds ever appears in the output.
 
 **Later additions.** A halo *blur* slider (independent of spread -- blur alone
 feathers the caret's own edge without reaching further), and an *effect

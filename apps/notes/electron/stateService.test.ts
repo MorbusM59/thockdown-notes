@@ -365,7 +365,7 @@ describe('StateService app-state field round-trip', () => {
 
   it('persists the feature toggles across a save -> fresh-instance load', async () => {
     const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
-    const features = { spellCheck: true, customCursor: false, keySounds: false, visualizer: true, typingTrail: true, caretBlink: false }
+    const features = { spellCheck: true, customCursor: false, keySounds: false, visualizer: true, typingTrail: true }
     await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, features } })
     expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual(features)
   })
@@ -393,11 +393,11 @@ describe('StateService app-state field round-trip', () => {
   it('reads an older save\'s separate flags into the feature toggles', async () => {
     const legacy = {
       sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '',
-      spellCheckEnabled: true, customCursorEnabled: false, reducedCaretAnimation: true, beat: { enabled: true }, flow: { enabled: true },
+      spellCheckEnabled: true, customCursorEnabled: false, beat: { enabled: true }, flow: { enabled: true },
     }
     await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: legacy as unknown as PersistedMenuState })
     expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual({
-      spellCheck: true, customCursor: false, keySounds: true, visualizer: true, typingTrail: true, caretBlink: false,
+      spellCheck: true, customCursor: false, keySounds: true, visualizer: true, typingTrail: true,
     })
   })
 

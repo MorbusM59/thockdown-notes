@@ -1,7 +1,7 @@
 /**
- * The visualizer: elements of the look that follow the playing music. Three
- * independent BLOCKS, each following the trackers through its own mix with
- * its own timing: the caret, which dips; the active editor's EDGE (an inner shadow); and the
+ * The visualizer: elements of the look that follow the playing music.
+ * Independent BLOCKS, each following the trackers through its own mix with
+ * its own timing: the active editor's EDGE (an inner shadow); and the
  * PANE (the box outlines in the edit view, a flat wash of colour anywhere else);
  * plus the visualizer mode's own scene (`VisualizerImmersive`).
  *
@@ -10,8 +10,8 @@
  * is one setting for every layout, saved in the app state; its COLOURS
  * (`VisualizerColors`, Options > Colors) are part of the layout, picked like
  * any other layout colour (so a theme's invert applies to them as to the
- * rest). Whether the caret follows the music is global
- * (`beatSettings.caretFollows`), though its switch sits in the caret's blink row.
+ * rest). The caret following the music is not here: it is the app's
+ * flashing curve, matched to the beat (`apps/notes/src/shared/flashing.ts`).
  *
  * Whether the visualizer is on, the per-device visual delay and the
  * response are not here either (`apps/notes/src/shared/beatSettings.ts`).
@@ -96,21 +96,6 @@ export interface VisualizerChannel {
 }
 
 /**
- * The caret's block: it ticks on a steady beat that follows the music's
- * tempo (the notes app's beat map, `sound/beatMap.ts`) rather than a tracker,
- * so it has only the fall each beat makes (`shape` and `fallSec`, cut at the
- * next beat). The depth of each beat is the layout's caret EFFECT, one slider
- * for the blink and the beat (`caretSettings.ts`, `effectStrengthPercent`).
- *
- * Whether the caret follows at all is global (`beatSettings.caretFollows`,
- * switched from Options > Caret, the last button of the blink row): while it is on, music
- * is playing and a beat has been found, the caret follows the beat; at any
- * other moment it blinks with its own blink, which the switch leaves
- * selected. The block's sliders are shown only while it is on.
- */
-export type VisualizerCaret = Pick<VisualizerChannel, 'shape' | 'fallSec'>
-
-/**
  * The edge's geometry, which does not follow the music: only its opacity
  * does. It is drawn as two inset shadows (editor.css's `.editor-beat-edge`),
  * a narrow edge (an eighth of the blur) and a soft body.
@@ -130,8 +115,6 @@ export const DEFAULT_EDGE_BLUR_PX = 100
 export interface VisualizerSettings {
   /** What is detected in the music, read by every block below through its own mix. */
   trackers: VisualizerTrackers
-  /** The caret, held at its peak while it follows the music and dipped on a steady beat that follows its tempo. */
-  caret: VisualizerCaret
   /**
    * GRID BEAT: the blocks on the editor while the visualizer mode is NOT up
    * (Options > Grid Beat), one set per light/dark mode: the same response
@@ -337,11 +320,6 @@ export const DEFAULT_VISUALIZER_CHANNEL: VisualizerChannel = {
   fallSec: 0.25,
 }
 
-export const DEFAULT_VISUALIZER_CARET: VisualizerCaret = {
-  shape: -1,
-  fallSec: 1.515,
-}
-
 export const DEFAULT_VISUALIZER_EDGE: VisualizerEdgeChannel = {
   ...DEFAULT_VISUALIZER_CHANNEL,
   effect: 0.2,
@@ -368,7 +346,6 @@ const DEFAULT_SAVED_PANE: VisualizerChannel = { ...DEFAULT_VISUALIZER_PANE, effe
 
 export const DEFAULT_VISUALIZER: VisualizerSettings = {
   trackers: DEFAULT_VISUALIZER_TRACKERS,
-  caret: { ...DEFAULT_VISUALIZER_CARET, fallSec: 1.5 },
   grid: {
     dark: {
       edge: { ...DEFAULT_SAVED_EDGE, effect: 0.3, spreadPx: 0, blurPx: 100 },
@@ -551,11 +528,6 @@ function sanitizeFall(source: Fields, d: Pick<VisualizerChannel, 'shape' | 'fall
   }
 }
 
-/** The caret's fall; anything else an older save had on it (a source, a band, its switch, its effect) is dropped. */
-function sanitizeCaret(input: unknown, d: VisualizerCaret): VisualizerCaret {
-  return sanitizeFall(fieldsOf(input), d)
-}
-
 function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): VisualizerEdgeChannel {
   const source = fieldsOf(input)
   return {
@@ -623,7 +595,6 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
     : soleMix(edge.mix.pierce > 0 ? 'pierce' : 'thump')
   return {
     trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
-    caret: sanitizeCaret(source.caret, d.caret),
     // A save from before the grid beat was separated from the visualizer
     // mode's (2026-11-07) had one edge and one pane for both: each copy
     // starts from them.

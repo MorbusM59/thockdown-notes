@@ -22,13 +22,6 @@ export interface BeatSettings {
    * every layout like the delay.
    */
   responseDb: number
-  /**
-   * Caret Beat: while music plays and a beat is found, the caret pulses on
-   * the beat instead of blinking. Its switch sits beside the flashing shapes
-   * (Advanced > Animations > Flashing), and it is drawn as deep as their
-   * effect (`FlashingSettings.effectPercent`).
-   */
-  caretFollows: boolean
 }
 
 export const BEAT_DELAY_MIN_MS = -200
@@ -40,7 +33,6 @@ export const BEAT_RESPONSE_MAX_DB = 30
 export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
   delayMsByDevice: {},
   responseDb: 5,
-  caretFollows: true,
 }
 
 export function sanitizeBeatSettings(input: unknown): BeatSettings {
@@ -50,7 +42,6 @@ export function sanitizeBeatSettings(input: unknown): BeatSettings {
     responseDb: typeof source.responseDb === 'number' && Number.isFinite(source.responseDb)
       ? Math.max(BEAT_RESPONSE_MIN_DB, Math.min(BEAT_RESPONSE_MAX_DB, source.responseDb))
       : DEFAULT_BEAT_SETTINGS.responseDb,
-    caretFollows: typeof source.caretFollows === 'boolean' ? source.caretFollows : DEFAULT_BEAT_SETTINGS.caretFollows,
   }
 }
 

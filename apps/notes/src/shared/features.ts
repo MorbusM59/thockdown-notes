@@ -13,14 +13,7 @@
  * `sanitizeMenu` can use it.
  */
 
-export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'typingTrail', 'caretBlink'] as const
-
-/**
- * The features the bar offers. The caret blink is a feature in every sense
- * but this one: it is switched off and on where its shapes are chosen, by
- * pressing the active one (Options > Caret, Blink).
- */
-export const BAR_FEATURE_IDS: readonly FeatureId[] = FEATURE_IDS.filter((id) => id !== 'caretBlink')
+export const FEATURE_IDS = ['spellCheck', 'customCursor', 'keySounds', 'visualizer', 'typingTrail'] as const
 
 export type FeatureId = typeof FEATURE_IDS[number]
 
@@ -32,14 +25,13 @@ export const DEFAULT_FEATURE_TOGGLES: FeatureToggles = {
   keySounds: true,
   visualizer: false,
   typingTrail: false,
-  caretBlink: true,
 }
 
 /**
  * Reads the persisted record, falling back for a save written before it
- * existed to the separate fields that held five of these flags then
- * (`spellCheckEnabled`, `customCursorEnabled`, `beat.enabled`, `flow.enabled`
- * and `reducedCaretAnimation`, which is the inverse of `caretBlink`), so an
+ * existed to the separate fields that held four of these flags then
+ * (`spellCheckEnabled`, `customCursorEnabled`, `beat.enabled` and
+ * `flow.enabled`), so an
  * upgrade keeps what the reader had chosen. A record saved before a feature
  * joined it takes that feature's old field too.
  */
@@ -54,7 +46,6 @@ export function sanitizeFeatureToggles(menu: unknown): FeatureToggles {
     visualizer: beat.enabled,
     // Saved as `flow` in the record before the typing flow became the typing trail.
     typingTrail: stored && 'flow' in stored ? stored.flow : flow.enabled,
-    caretBlink: typeof source.reducedCaretAnimation === 'boolean' ? !source.reducedCaretAnimation : undefined,
   }
   const result = { ...DEFAULT_FEATURE_TOGGLES }
   for (const id of FEATURE_IDS) {

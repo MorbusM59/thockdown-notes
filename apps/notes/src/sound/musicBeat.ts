@@ -24,12 +24,12 @@
  * and as it could only be heard in real time, every new start left the
  * pulse absent for the whole of the look-ahead.
  *
- * A CLOCK channel (the caret's, `subscribeMusicClock`) follows no tracker: it pulses on the beat map's caret (`beatMap.ts`, planned in the
- * worker `MAP_AHEAD_SEC` ahead), which lands on every beat through tempo changes and
- * carries across a gap, and is held here through a missing beat for up to
- * `MAP_BEAT_LOSS_SEC`. Its pulse is the same fall a
- * hit makes (`pulseCurve`), restarted on every beat and never longer than
- * one.
+ * A CLOCK channel (the caret's, `subscribeMusicClock`) follows no tracker: it
+ * runs the flashing curve (`shared/flashing.ts`) on the beat map's counted beat
+ * (`BeatMap.barBeatAt`, planned in the worker `MAP_AHEAD_SEC` ahead), which
+ * lands on every beat through tempo changes and carries across a gap, and is
+ * held here through a missing beat for up to `MAP_BEAT_LOSS_SEC`. The map's
+ * folded caret beat (`caretAt`) is what the TEMPO subscribers read.
  *
  * The trackers detect nothing: they read the DRUM SCORE (`drumScore.ts`),
  * every onset of the music written ahead of the listener with its strength
@@ -55,12 +55,13 @@
  */
 
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
-import type { VisualizerCaret, VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
+import type { VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicPlayerService } from './MusicPlayerService'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
 import { loudnessGain } from './peakWindow'
+import { flashLevelAt, flashPhaseAt, FLASH_BEATS_REPEAT } from '../shared/flashing'
 
 /** A listener this far from where its clock put it has jumped (a seek, a stall), and the analysis starts over. */
 const RESYNC_SEC = 0.75
@@ -131,9 +132,15 @@ interface Band {
 
 const bands = new Set<Band>()
 
-/** A CLOCK subscriber (the caret's): a steady beat and the fall each beat makes. */
+/** What a CLOCK follows: the flashing curve over one cycle (`flashLevels`) and how many cycles run per beat. */
+export interface FlashClock {
+  levels: ArrayLike<number>
+  cyclesPerBeat: number
+}
+
+/** A CLOCK subscriber (the caret's): the flashing curve run at the music's beat. */
 interface Clock {
-  caret: VisualizerCaret
+  flash: FlashClock
   listener: BeatListener
   published: number
   /** Told whenever the clock gains or loses a beat (`locked`). */
@@ -221,6 +228,18 @@ let mapTime = NaN
 let mapPhase = NaN
 let mapPeriod = NaN
 
+/** The map's counted beat as last answered (`BeatMap.barBeatAt`): the beat at media time `barBeatTime` and the beat's period. */
+let barBeatTime = NaN
+let barBeat = NaN
+let barBeatPeriod = NaN
+
+/** The counted beat at `time`, run on from the last answer at its period; NaN where there is no beat. */
+function mapBarBeatAt(time: number): number {
+  if (Number.isNaN(barBeat) || !(barBeatPeriod > 0)) return NaN
+  const at = barBeat + (time - barBeatTime) / barBeatPeriod
+  return at - FLASH_BEATS_REPEAT * Math.floor(at / FLASH_BEATS_REPEAT)
+}
+
 /** The map's caret at `time`, run on from the last answer at its period; NaN where there is no beat. */
 function mapCaretAt(time: number): { phase: number; period: number } {
   if (Number.isNaN(mapPhase) || !(mapPeriod > 0)) return { phase: NaN, period: NaN }
@@ -275,6 +294,13 @@ function receive(answer: AnalysisAnswer): void {
     mapPeriod = answer.caretPeriod
   } else if (!(answer.heardTime - mapTime < MAP_BEAT_LOSS_SEC)) {
     mapTime = mapPhase = mapPeriod = NaN
+  }
+  if (!Number.isNaN(answer.barBeat) && answer.beatPeriod > 0) {
+    barBeatTime = answer.heardTime
+    barBeat = answer.barBeat
+    barBeatPeriod = answer.beatPeriod
+  } else if (!(answer.heardTime - barBeatTime < MAP_BEAT_LOSS_SEC)) {
+    barBeatTime = barBeat = barBeatPeriod = NaN
   }
   // Until the decoding has reached the listener there is no peak to read:
   // the last gain holds rather than reading as silence.
@@ -410,13 +436,13 @@ function respond(band: Band, raw: number, listenerTime: number, gain: number): n
   return gain * held
 }
 
-/** A clock's response: its fall, restarted on each of its beats and cut at the next. */
+/** A clock's response: how far the flashing curve dips below full, at the cycle's phase on the counted beat. */
 function pulse(subscriber: Clock, listenerTime: number): number {
-  const { phase, period } = mapCaretAt(listenerTime)
-  setLocked(subscriber, !Number.isNaN(phase))
-  if (Number.isNaN(phase)) return 0
-  const { fallSec, shape } = subscriber.caret
-  return pulseCurve((phase * period) / Math.min(fallSec, period), shape)
+  const beat = mapBarBeatAt(listenerTime)
+  setLocked(subscriber, !Number.isNaN(beat))
+  if (Number.isNaN(beat)) return 0
+  const { levels, cyclesPerBeat } = subscriber.flash
+  return 1 - flashLevelAt(levels, flashPhaseAt(beat, cyclesPerBeat))
 }
 
 /** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
@@ -591,8 +617,8 @@ export interface MusicMixSubscription {
 }
 
 export interface MusicClockSubscription {
-  /** Follows a new fall (and effect, which the clock does not read); nothing starts over, as the beat does not depend on either. */
-  update: (caret: VisualizerCaret) => void
+  /** Follows a new curve or matching; nothing starts over, as the beat does not depend on either. */
+  update: (flash: FlashClock) => void
   unsubscribe: () => void
 }
 
@@ -670,16 +696,17 @@ export function subscribeMusicMix(
 }
 
 /**
- * Pulses on a steady beat that follows the music's tempo (the header's CLOCK); of `caret` only the fall is read.
- * `lockListener` is told when the clock gains a beat (music playing and a
- * tempo found since the track started; a break is carried through on the
+ * Runs the flashing curve on the music's counted beat (the header's CLOCK),
+ * `flash.cyclesPerBeat` cycles a beat, and publishes how far it dips below
+ * full. `lockListener` is told when the clock gains a beat (music playing and
+ * a tempo found since the track started; a break is carried through on the
  * beat it had) and when it loses it (paused, hidden, a new track not yet
- * read), so the caret can blink whenever there is no beat to follow.
+ * read), so the caret can run its own cycle whenever there is no beat.
  */
-export function subscribeMusicClock(caret: VisualizerCaret, listener: BeatListener, lockListener: LockListener): MusicClockSubscription {
-  const subscriber: Clock = { caret, listener, published: 0, lockListener, locked: false }
-  const update = (next: VisualizerCaret) => {
-    subscriber.caret = next
+export function subscribeMusicClock(flash: FlashClock, listener: BeatListener, lockListener: LockListener): MusicClockSubscription {
+  const subscriber: Clock = { flash, listener, published: 0, lockListener, locked: false }
+  const update = (next: FlashClock) => {
+    subscriber.flash = next
   }
   clocks.add(subscriber)
   added()

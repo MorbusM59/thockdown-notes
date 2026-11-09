@@ -114,14 +114,25 @@ import {
 import {
   DEFAULT_CARET_SETTINGS,
   buildCaretBlinkKeyframesCss,
-  DEFAULT_FLASHING_SETTINGS,
-  sanitizeFlashingSettings,
   CARET_SIZE_DEVIATION_MIN_PX, CARET_SIZE_DEVIATION_MAX_PX,
   CARET_OUTLINE_WIDTH_MIN_PX, CARET_OUTLINE_WIDTH_MAX_PX,
   CARET_HALO_SPREAD_MIN_PX, CARET_HALO_SPREAD_MAX_PX,
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
-  type FlashingSettings,
 } from '@thockdown/look/caretSettings'
+import {
+  DEFAULT_FLASHING_SETTINGS,
+  DEFAULT_FLASH_SHAPE_PREFERENCES,
+  FLASH_MATCHINGS,
+  cloneFlashShape,
+  flashLevels,
+  matchingFlashShape,
+  sanitizeFlashShapePreferences,
+  sanitizeFlashingSettings,
+  unsavedFlashShapeAfterEdit,
+  type FlashShape,
+  type FlashShapePreferences,
+  type FlashingSettings,
+} from './shared/flashing'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
@@ -1467,8 +1478,38 @@ function App() {
   // persistMenuStateNowRef). An effect rather than a call in the setter, so
   // the snapshot is built from the render that already holds the new value.
   const [beatSettings, setBeatSettings] = useState<BeatSettings>(DEFAULT_BEAT_SETTINGS)
-  // Global, not the layout's: how flashing elements (the caret's blink) flash. Options > Advanced > Animations > Flashing.
+  // Global, not the layout's: how flashing elements (the caret's blink) flash,
+  // and the presets of its shape (shared/flashing.ts). Options > Advanced >
+  // Animations > Flashing.
   const [flashing, setFlashing] = useState<FlashingSettings>(DEFAULT_FLASHING_SETTINGS)
+  const [flashShapePreferences, setFlashShapePreferences] = useState<FlashShapePreferences>(DEFAULT_FLASH_SHAPE_PREFERENCES)
+  const flashingRef = useRef(flashing)
+  flashingRef.current = flashing
+  // An EDIT of the shape (the curve or the cycle) becomes the unsaved preset; a selection does not.
+  const editFlashShape = useCallback((patch: Partial<FlashShape>) => {
+    const next = { ...flashingRef.current, ...patch }
+    flashingRef.current = next
+    setFlashing(next)
+    setFlashShapePreferences((previous) => unsavedFlashShapeAfterEdit(next, previous))
+  }, [])
+  const applyFlashShape = useCallback((shape: FlashShape) => {
+    const next = { ...flashingRef.current, ...cloneFlashShape(shape) }
+    flashingRef.current = next
+    setFlashing(next)
+  }, [])
+  const setFlashMatching = useCallback((matching: number) => {
+    const next = { ...flashingRef.current, matching }
+    flashingRef.current = next
+    setFlashing(next)
+  }, [])
+  const activeFlashShape = useMemo(() => matchingFlashShape(flashing, flashShapePreferences), [flashing, flashShapePreferences])
+  // One cycle sampled once per change of the curve: the free cycle's keyframes and the matched clock both read it.
+  const flashCycleLevels = useMemo(() => flashLevels(flashing.curve), [flashing.curve])
+  const flashCyclesPerBeat = FLASH_MATCHINGS[flashing.matching].cyclesPerBeat
+  const flashClock = useMemo(
+    () => (flashCyclesPerBeat > 0 ? { levels: flashCycleLevels, cyclesPerBeat: flashCyclesPerBeat } : null),
+    [flashCycleLevels, flashCyclesPerBeat],
+  )
   // Speed reading's settings: pushed to the session's store on every change,
   // and a session's own change (its words per minute, from the arrow keys)
   // handed back once when it ends.
@@ -1479,7 +1520,7 @@ function App() {
   useEffect(() => onSpeedReadingSettingsCommit(setSpeedReadingSettings), [])
   useEffect(() => {
     void persistMenuStateNowRef.current()
-  }, [typingTrailSettings, beatSettings, speedReadingSettings, flashing, features])
+  }, [typingTrailSettings, beatSettings, speedReadingSettings, features])
   const customCursorEnabled = features.customCursor
   const [customCursorDotColor, setCustomCursorDotColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.dotColor)
   const [customCursorCenterColor, setCustomCursorCenterColor] = useState(DEFAULT_CUSTOM_CURSOR_SETTINGS.centerColor)
@@ -2220,7 +2261,7 @@ function App() {
   // Keystroke sounds: app-wide, with presets of their own (shared/keystrokeSounds.ts).
   const [keystrokeSound, setKeystrokeSound] = useState<KeystrokeSoundSettings>(() => cloneKeystrokeSound(DEFAULT_KEYSTROKE_SOUND))
   const [keystrokeSoundPreferences, setKeystrokeSoundPreferences] = useState<KeystrokeSoundPreferences>(DEFAULT_KEYSTROKE_SOUND_PREFERENCES)
-  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, beatSettings.caretFollows, flashing.effectPercent / 100, isVisualizerMode, uiMode)
+  useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, flashClock, isVisualizerMode, uiMode)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
   const allowRemoteImages = useRemoteImagesAllowed()
@@ -3335,6 +3376,7 @@ function App() {
       typingTrail: typingTrailSettings,
       beat: beatSettings,
       flashing,
+      flashingPresets: flashShapePreferences,
       speedReading: speedReadingSettings,
       chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
@@ -3372,6 +3414,7 @@ function App() {
     typingTrailSettings,
     beatSettings,
     flashing,
+    flashShapePreferences,
     speedReadingSettings,
     allowRemoteImages,
     sidebarShowsImages,
@@ -3939,7 +3982,7 @@ function App() {
       '--caret-halo-spread': `${caretHaloSpreadPx}px`,
       '--caret-halo-blur': `${caretHaloBlurPx}px`,
       '--caret-halo-color': caretHaloColor,
-      '--caret-animation-duration': `${flashing.cycleMs}ms`,
+      '--flash-cycle': `${flashing.cycleMs}ms`,
       '--texture-app-grid': appGridTextureCss,
       '--texture-sidebar-content': sidebarTextureCss,
       '--texture-editor-edit': editorEditTextTextureCss,
@@ -3970,36 +4013,22 @@ function App() {
   ])
 
   // The caret's blink keyframes are generated rather than shipped statically:
-  // every part of the rule (stop positions, per-segment step counts, how many
-  // stops there even are) depends on the Options > Caret settings. There is
-  // deliberately no `@keyframes thockdown-blink` in index.css to shadow or be
-  // shadowed by -- this is the only definition.
+  // the stops are the flashing curve's samples and the colours the Options >
+  // Caret settings. There is deliberately no `@keyframes thockdown-blink` in
+  // index.css to shadow or be shadowed by -- this is the only definition.
   const caretBlinkKeyframesCss = useMemo(
     () => buildCaretBlinkKeyframesCss({
-      presetKey: flashing.shape,
-      animationDurationMs: flashing.cycleMs,
-      frameDurationMs: flashing.frameMs,
+      levels: flashCycleLevels,
       // Resolved here and baked into the rule as concrete rgba() rather than
       // referenced as var()/color-mix(): those are not interpolable in every
-      // engine this ships on -- see scaledRgba's comment in caretSettings.ts.
+      // engine this ships on -- see holdAdjustedRgba's comment in caretSettings.ts.
       caretColor: highlightColors.caret,
       outlineColor: caretOutlineColor,
       haloColor: caretHaloColor,
       haloSpreadPx: caretHaloSpreadPx,
       haloBlurPx: caretHaloBlurPx,
-      effectStrengthPercent: flashing.effectPercent,
     }),
-    [
-      flashing.shape,
-      flashing.cycleMs,
-      flashing.frameMs,
-      highlightColors.caret,
-      caretOutlineColor,
-      caretHaloColor,
-      caretHaloSpreadPx,
-      caretHaloBlurPx,
-      flashing.effectPercent,
-    ],
+    [flashCycleLevels, highlightColors.caret, caretOutlineColor, caretHaloColor, caretHaloSpreadPx, caretHaloBlurPx],
   )
 
   const appRootStyle = useMemo(
@@ -5333,6 +5362,7 @@ ${markdownHtml}
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
             setFlashing(sanitizeFlashingSettings(appState.menu.flashing))
+            setFlashShapePreferences(sanitizeFlashShapePreferences(appState.menu.flashingPresets))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
@@ -6453,17 +6483,6 @@ ${markdownHtml}
     })
   }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.unsaved, selectFactorySoundstage, applySoundstage])
 
-  useEffect(() => {
-    // The caret blink feature (shared/features.ts). The blink animation keeps
-    // the compositor busy indefinitely while the caret is idle, not just while
-    // typing, so switching it off removes the animation outright -- a body
-    // class rather than a prop threaded through the editor's caret layer.
-    const blinkOff = !features.caretBlink
-    document.body.classList.toggle('thockdown-caret-blink-off', blinkOff)
-    return () => {
-      document.body.classList.remove('thockdown-caret-blink-off')
-    }
-  }, [features.caretBlink])
 
   const handleExportPdf = useCallback(async (scope: ExportScope) => {
     const activeNoteId = getActiveSection()?.activeNoteId
@@ -8942,7 +8961,12 @@ ${markdownHtml}
                         setCaretHaloBlurPx={setCaretHaloBlurPx}
                         caretHaloColor={caretHaloColor}
                         flashing={flashing}
-                        setFlashing={setFlashing}
+                        editFlashShape={editFlashShape}
+                        applyFlashShape={applyFlashShape}
+                        setFlashMatching={setFlashMatching}
+                        flashShapePreferences={flashShapePreferences}
+                        setFlashShapePreferences={setFlashShapePreferences}
+                        activeFlashShape={activeFlashShape}
                       />
                     ) : (
                       <div

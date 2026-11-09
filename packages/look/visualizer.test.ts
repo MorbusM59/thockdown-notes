@@ -18,12 +18,10 @@ describe('sanitizeVisualizer', () => {
     expect(v.immersive).not.toHaveProperty('waveColor')
     expect(v.pane.mix).toEqual(DEFAULT_VISUALIZER.pane.mix)
     expect(v.immersive.pulseMix).toEqual({ thump: 0.5, pierce: DEFAULT_VISUALIZER.immersive.pulseMix.pierce, tick: 1 })
-    expect(v.caret).toEqual(DEFAULT_VISUALIZER.caret)
   })
 
-  it('keeps only what the caret reads, so an older save with a source or its switch loads without it', () => {
-    const v = sanitizeVisualizer({ caret: { followsMusic: false, effect: 0.3, shape: 0.2, fallSec: 0.5, source: 'snare', frequencyHz: 300, contrast: 0.2 } })
-    expect(v.caret).toEqual({ shape: 0.2, fallSec: 0.5 })
+  it('drops a caret block an older save carried: the caret follows the flashing curve now', () => {
+    expect(sanitizeVisualizer({ caret: { shape: 0.2, fallSec: 0.5 } })).not.toHaveProperty('caret')
   })
 })
 
@@ -160,12 +158,10 @@ it('reads an old saved scale as gone, and gives the glaze the wave\'s mix when i
 it('turns a saved amount and invert into a signed effect', () => {
   const v = sanitizeVisualizer({ caret: { amount: 0.4, invert: true }, edge: { amount: 0.3 } })
   expect(v.edge.effect).toBe(0.3)
-  expect(v.caret).not.toHaveProperty('invert')
 })
 
 it('reads the fall of a layout saved with one mass slider, or with the first fall shape', () => {
-  const v = sanitizeVisualizer({ caret: { mass: 0 }, edge: { mass: 1 }, pane: { fallSec: 99, fallShape: 3 } })
-  expect(v.caret).toMatchObject({ shape: 1, fallSec: FALL_MIN_SEC })
+  const v = sanitizeVisualizer({ edge: { mass: 1 }, pane: { fallSec: 99, fallShape: 3 } })
   expect(v.edge.shape).toBe(-1)
   expect(v.edge.fallSec).toBeCloseTo(1.6, 6)
   expect(v.pane).toMatchObject({ shape: 1, fallSec: FALL_MAX_SEC })
@@ -238,7 +234,7 @@ it('reads a layout saved under the old block names, shade and outline, as the ed
 // `snapValue`), so it must land back on the default, for every block.
 it('every block\'s default fall survives the fall slider\'s reset', () => {
   const v = DEFAULT_VISUALIZER
-  for (const fall of [v.caret.fallSec, v.edge.fallSec, v.pane.fallSec]) {
+  for (const fall of [v.edge.fallSec, v.pane.fallSec]) {
     const min = Math.log(FALL_MIN_SEC)
     const step = Math.log(fall / FALL_MIN_SEC) / 90
     const snapped = Math.exp(min + Math.round((Math.log(fall) - min) / step) * step)

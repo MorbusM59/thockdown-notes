@@ -133,7 +133,8 @@
   outline: var(--caret-outline-width, 0px) solid var(--caret-outline-color, transparent);
   outline-offset: 0;
   box-shadow: 0 0 var(--caret-halo-blur, 0px) var(--caret-halo-spread, 0px) var(--caret-halo-color, transparent);
-  animation: thockdown-blink var(--caret-animation-duration, 1200ms) infinite cubic-bezier(0.4, 0, 0.2, 1);
+  /* Linear: the flashing curve's own shape is baked into the keyframes' stops. */
+  animation: thockdown-blink var(--flash-cycle, 1200ms) infinite linear;
 }
 
 /* The typing trail: one segment per character typed, tracing the grid lines
@@ -184,17 +185,17 @@
   margin: -1px 0 0 -1px;
 }
 
-/* Low-power toggle: the blink otherwise repaints the caret indefinitely while
-   idle, not just while typing. */
-/* The beat pulse on the caret (Options > Caret's follow-the-music switch;
-   beat/useBeatFeedback.ts): while the caret follows a beat its blink is held
-   at its peak (--beat-caret-hold, read by the blink keyframes) and the
-   music's response dips it (--beat-caret, set on the caret alone). The hold
-   is a registered number so it can TRANSITION: it eases in over one blink
-   cycle when a beat is found and back out when it is lost (a pause, a new
-   track, no tempo), so the blink and the beat hand over without a jump, and
-   the dip fades with it. A plain opacity on a leaf, never promoted, so a
-   frame's change repaints the caret's own few pixels. */
+/* The caret following the music (Options > Advanced > Animations > Flashing,
+   the matching slider; beat/useFlashBeat.ts): while a beat is found its own
+   free-running blink is held at its peak (--beat-caret-hold, read by the blink
+   keyframes) and the flashing curve, run at the music's tempo, dips it
+   (--beat-caret, 1 minus the curve, set on the caret alone). The hold is a
+   registered number so it can TRANSITION: it eases in over one cycle when a
+   beat is found and back out when it is lost (a pause, a new track, no
+   tempo), so the free cycle and the matched one hand over without a jump, and
+   the dip fades with it. Typing holds the caret steady over the dip as it does
+   over the blink. A plain opacity on a leaf, never promoted, so a frame's
+   change repaints the caret's own few pixels. */
 @property --beat-caret-hold {
   syntax: '<number>';
   inherits: false;
@@ -202,8 +203,8 @@
 }
 
 .thockdown-block-caret {
-  opacity: calc(1 - var(--beat-caret, 0) * var(--beat-caret-hold));
-  transition: --beat-caret-hold var(--caret-animation-duration, 1200ms) ease-in-out;
+  opacity: calc(1 - var(--beat-caret, 0) * var(--beat-caret-hold) * (1 - var(--caret-typing-hold, 0)));
+  transition: --beat-caret-hold var(--flash-cycle, 1200ms) ease-in-out;
 }
 
 html[data-beat-caret] .thockdown-block-caret {
@@ -211,15 +212,8 @@ html[data-beat-caret] .thockdown-block-caret {
   /* The blink is paused, not stopped, while the beat drives the caret: at a
      full hold every stop reads as the peak, so a paused blink costs no frame
      and looks the same, and the blink resumes from where it paused, eased
-     back in as the hold falls. Paused during the ease-in it still converges,
-     since the hold carries whatever stop it froze on to the peak. */
+     back in as the hold falls. */
   animation-play-state: paused;
-}
-
-.thockdown-caret-blink-off .thockdown-block-caret {
-  animation: none;
-  /* The beat's dip is kept: it was chosen in its own right. */
-  opacity: calc(0.8 * (1 - var(--beat-caret, 0) * var(--beat-caret-hold)));
 }
 
 /* Custom selection highlight overlay (drawn by CM6Editor.tsx) -- see the
@@ -230,8 +224,8 @@ html[data-beat-caret] .thockdown-block-caret {
 }
 
 /* `@keyframes thockdown-blink` is NOT defined here. It is generated at runtime
-   from the Options > Caret settings and mounted by App.tsx -- see
-   buildCaretBlinkKeyframesCss in shared/caretSettings.ts, which also explains
+   from the flashing curve and the Options > Caret colours and mounted by
+   App.tsx -- see buildCaretBlinkKeyframesCss in caretSettings.ts, which also explains
    why the blink drives colours rather than opacity. Defining a static fallback
    here would silently shadow (or be shadowed by) that one depending on
    stylesheet order, so there is deliberately exactly one definition. */

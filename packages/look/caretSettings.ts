@@ -5,19 +5,12 @@
 // the persistence types -- same split as cursorSettings.ts, which this file
 // deliberately mirrors.
 //
-// These are LAYOUT-scoped settings (they live in UiLayoutLoadout, next to
-// highlightColors.caret which supplies the caret's fill colour), not
-// PersistedMenuState -- switching layouts switches the caret's whole look with
-// everything else it belongs to.
+// The caret's LOOK is layout-scoped (it lives in UiLayoutLoadout, next to
+// highlightColors.caret which supplies the caret's fill colour). How it
+// flashes is not: that is the app's global flashing curve (shared/flashing.ts
+// in the app), which reaches the keyframe builder below as sampled levels.
 
 import { clampAlphaChannel, clampColorChannel, parseCssColorToRgba, type RgbaColor } from './colorMath'
-
-export type CaretAnimationPresetKey =
-  | 'heartbeat'
-  | 'bigBeat'
-  | 'fadeMid'
-  | 'fadeEarly'
-  | 'fadeLate'
 
 export interface CaretSettings {
   /**
@@ -37,33 +30,6 @@ export interface CaretSettings {
   haloColor: string
 }
 
-/**
- * How a FLASHING element flashes: one global setting (Options > Advanced >
- * Animations > Flashing), the same for every layout, read by everything that
- * flashes. The caret is the only one today; a new flashing element reads these
- * rather than growing settings of its own. Whether anything flashes at all is
- * the `caretBlink` feature (shared/features.ts), and whether the caret follows
- * the music instead is `BeatSettings.caretFollows`.
- */
-export interface FlashingSettings {
-  /** The curve one flash follows, by key into CARET_ANIMATION_PRESETS. */
-  shape: CaretAnimationPresetKey
-  /** Length of one full flash cycle. */
-  cycleMs: number
-  /**
-   * Quantization: how long each animation frame is held. At the minimum the
-   * animation is left continuous (a step finer than one display frame is not
-   * a step anyone can see) -- see buildCaretBlinkKeyframesCss.
-   */
-  frameMs: number
-  /**
-   * How much of the shape reaches the element, signed percent: 100 is the
-   * shape at full strength, 0 holds the element still at its own colours,
-   * negative inverts (see resolveEffectiveAlpha). Also the depth of each beat
-   * while the caret follows the music.
-   */
-  effectPercent: number
-}
 
 // Deliberately symmetric around 0 so the slider's centre detent is the
 // historical look; see CaretSettings.sizeDeviationPx.
@@ -90,30 +56,6 @@ export const CARET_HALO_BLUR_MAX_PX = 20
 export const CARET_HALO_BLUR_STEP_PX = 1
 export const CARET_HALO_BLUR_DEFAULT_PX = 0
 
-export const FLASH_CYCLE_MIN_MS = 100
-export const FLASH_CYCLE_MAX_MS = 5000
-export const FLASH_CYCLE_STEP_MS = 100
-// 1200ms is the rhythm the caret has always blinked at.
-export const FLASH_CYCLE_DEFAULT_MS = 1200
-
-export const FLASH_FRAME_MIN_MS = 5
-export const FLASH_FRAME_MAX_MS = 500
-export const FLASH_FRAME_STEP_MS = 5
-// The minimum is the "don't quantize at all" setting -- see
-// buildCaretBlinkKeyframesCss.
-export const FLASH_FRAME_DEFAULT_MS = FLASH_FRAME_MIN_MS
-
-// The caret's EFFECT, signed: 0 is a static caret; right of centre the blink
-// (and, while the caret follows the music, each beat) takes the caret away
-// from its colour; left of centre it is inverted, the caret resting that far
-// away and the blink (or beat) bringing it back. The default is the full
-// ordinary blink: anything less would quietly damp the heartbeat everyone
-// already has. One value for the blink and the beat (the visualizer's caret
-// block reads it as its effect, -1..1).
-export const FLASH_EFFECT_MIN_PERCENT = -100
-export const FLASH_EFFECT_MAX_PERCENT = 100
-export const FLASH_EFFECT_STEP_PERCENT = 1
-export const FLASH_EFFECT_DEFAULT_PERCENT = 100
 
 /** Last-resort fill colour if `highlightColors.caret` cannot be parsed. */
 export const DEFAULT_CARET_FILL_COLOR = 'rgba(0, 0, 0, 0.3)'
@@ -129,189 +71,22 @@ export const DEFAULT_CARET_SETTINGS: CaretSettings = {
   haloColor: DEFAULT_CARET_HALO_COLOR,
 }
 
-export const DEFAULT_FLASHING_SETTINGS: FlashingSettings = {
-  shape: 'heartbeat',
-  cycleMs: FLASH_CYCLE_DEFAULT_MS,
-  frameMs: FLASH_FRAME_DEFAULT_MS,
-  effectPercent: FLASH_EFFECT_DEFAULT_PERCENT,
-}
-
-/** Free of the DOM, so the main process's `sanitizeMenu` uses it too. */
-export function sanitizeFlashingSettings(input: unknown): FlashingSettings {
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof FlashingSettings, unknown>>
-  const integer = (value: unknown, min: number, max: number, fallback: number) =>
-    typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback
-  return {
-    shape: isCaretAnimationPresetKey(source.shape) ? source.shape : DEFAULT_FLASHING_SETTINGS.shape,
-    cycleMs: integer(source.cycleMs, FLASH_CYCLE_MIN_MS, FLASH_CYCLE_MAX_MS, DEFAULT_FLASHING_SETTINGS.cycleMs),
-    frameMs: integer(source.frameMs, FLASH_FRAME_MIN_MS, FLASH_FRAME_MAX_MS, DEFAULT_FLASHING_SETTINGS.frameMs),
-    effectPercent: integer(source.effectPercent, FLASH_EFFECT_MIN_PERCENT, FLASH_EFFECT_MAX_PERCENT, DEFAULT_FLASHING_SETTINGS.effectPercent),
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Animation shapes
-// ---------------------------------------------------------------------------
-
-/** One stop on a blink curve: `alpha` scales the caret colours' own alpha. */
-export interface CaretAnimationStop {
-  atPercent: number
-  alpha: number
-}
-
-export interface CaretAnimationPreset {
-  /** Shown on the preset button's tooltip. */
-  label: string
-  /** Font Awesome glyph class for the preset button. */
-  iconClass: string
-  stops: readonly CaretAnimationStop[]
-}
-
-export const CARET_ANIMATION_PRESETS: Record<CaretAnimationPresetKey, CaretAnimationPreset> = {
-  // The beloved ff-caret-heartbeat rhythm -- these are the exact numbers the
-  // caret's opacity keyframes carried before any of this was configurable.
-  heartbeat: {
-    label: 'Heartbeat',
-    iconClass: 'fa-heart-pulse',
-    stops: [
-      { atPercent: 0, alpha: 0.6 },
-      { atPercent: 10, alpha: 0.1 },
-      { atPercent: 65, alpha: 0.9 },
-      { atPercent: 85, alpha: 0.3 },
-      { atPercent: 100, alpha: 0.6 },
-    ],
-  },
-  // The heartbeat with its trailing half-beat removed: one rise to the same
-  // 65% apex, one fall, nothing else.
-  bigBeat: {
-    label: 'Big beat only',
-    iconClass: 'fa-heart',
-    stops: [
-      { atPercent: 0, alpha: 0.1 },
-      { atPercent: 65, alpha: 0.9 },
-      { atPercent: 100, alpha: 0.1 },
-    ],
-  },
-  fadeMid: {
-    label: 'Fade in/out, peak at 50%',
-    iconClass: 'fa-caret-up',
-    stops: [
-      { atPercent: 0, alpha: 0 },
-      { atPercent: 50, alpha: 1 },
-      { atPercent: 100, alpha: 0 },
-    ],
-  },
-  fadeEarly: {
-    label: 'Fade in/out, peak at 15%',
-    iconClass: 'fa-caret-right',
-    stops: [
-      { atPercent: 0, alpha: 0 },
-      { atPercent: 15, alpha: 1 },
-      { atPercent: 100, alpha: 0 },
-    ],
-  },
-  fadeLate: {
-    label: 'Fade in/out, peak at 85%',
-    iconClass: 'fa-caret-left',
-    stops: [
-      { atPercent: 0, alpha: 0 },
-      { atPercent: 85, alpha: 1 },
-      { atPercent: 100, alpha: 0 },
-    ],
-  },
-}
-
-export const CARET_ANIMATION_PRESET_KEYS: readonly CaretAnimationPresetKey[] = [
-  'heartbeat', 'bigBeat', 'fadeMid', 'fadeEarly', 'fadeLate',
-]
-
-export function isCaretAnimationPresetKey(value: unknown): value is CaretAnimationPresetKey {
-  return typeof value === 'string'
-    && (CARET_ANIMATION_PRESET_KEYS as readonly string[]).includes(value)
-}
-
-/**
- * How many equal sub-steps one keyframe segment is split into for a given
- * frame duration.
- *
- * The user-facing rule, verbatim: a frame duration longer than the segment
- * honours the segment (one step, the caret simply holds that keyframe's
- * value); a frame duration that would split the segment unevenly is spread
- * evenly across however many sections it would have produced. A 150ms segment
- * at 100ms per frame "would create two sections of 100ms and 50ms", so it
- * becomes two of 75ms -- i.e. ceil(segment / frame) equal steps.
- */
-export function resolveCaretSegmentStepCount(segmentMs: number, frameDurationMs: number): number {
-  if (!Number.isFinite(segmentMs) || segmentMs <= 0) return 1
-  if (!Number.isFinite(frameDurationMs) || frameDurationMs <= 0) return 1
-  if (frameDurationMs >= segmentMs) return 1
-  return Math.max(1, Math.ceil(segmentMs / frameDurationMs))
-}
-
-
 // ---------------------------------------------------------------------------
 // Keyframe generation
 // ---------------------------------------------------------------------------
 
-/**
- * A frame duration at or below this is treated as "don't quantize at all": a
- * step shorter than one display frame is not a step anyone can see, so the
- * blink is left continuous and the animation-level easing does the work. It
- * also bounds how many keyframe stops the baked path below can emit.
- */
-export const FLASH_FRAME_SMOOTH_MAX_MS = 15
-
-/**
- * Ceiling on baked steps per cycle. Only bites where each step would already
- * be shorter than a display frame (240 steps across the longest 5000ms cycle
- * is ~21ms each), so it costs nothing visible and keeps the generated rule
- * from growing without bound.
- */
-export const CARET_MAX_BAKED_STEPS = 240
-
-/**
- * The easing the caret's `animation` shorthand carries in index.css. Mirrored
- * here because the baked path samples this curve itself rather than leaving it
- * to the browser -- caretSettings.test.ts asserts the two never drift apart.
- */
-export const CARET_BLINK_EASING_CONTROL_POINTS = [0.4, 0, 0.2, 1] as const
-
-/** Solves a CSS cubic-bezier timing function for its output at progress `x`. */
-function evaluateCubicBezier(x1: number, y1: number, x2: number, y2: number, x: number): number {
-  if (x <= 0) return 0
-  if (x >= 1) return 1
-
-  const axis = (t: number, a: number, b: number): number => {
-    const inverse = 1 - t
-    return (3 * inverse * inverse * t * a) + (3 * inverse * t * t * b) + (t * t * t)
-  }
-
-  // Bisection rather than Newton-Raphson: this runs a few hundred times per
-  // rebuild at most, and bisection cannot diverge on the flat-derivative
-  // stretches these curves have at their ends.
-  let low = 0
-  let high = 1
-  let mid = x
-  for (let iteration = 0; iteration < 32; iteration += 1) {
-    mid = (low + high) / 2
-    if (axis(mid, x1, x2) < x) low = mid
-    else high = mid
-  }
-
-  return axis(mid, y1, y2)
-}
-
 export interface CaretBlinkKeyframeOptions {
-  presetKey: CaretAnimationPresetKey
-  animationDurationMs: number
-  frameDurationMs: number
+  /**
+   * The opacity, 0..1, at evenly spaced moments of one cycle, both ends
+   * included (`flashLevels` in the app's `shared/flashing.ts`).
+   */
+  levels: ArrayLike<number>
   /** The caret's fill colour -- `highlightColors.caret`, not a caret setting. */
   caretColor: string
   outlineColor: string
   haloColor: string
   haloSpreadPx: number
   haloBlurPx: number
-  effectStrengthPercent: number
 }
 
 /** Trims trailing zeroes so the generated CSS stays readable when inspected. */
@@ -353,25 +128,6 @@ function holdAdjustedRgba(color: RgbaColor, alphaScale: number): string {
   return `rgba(${clampColorChannel(color.r)}, ${clampColorChannel(color.g)}, ${clampColorChannel(color.b)}, ${alpha})`
 }
 
-/**
- * Blends a stop's alpha multiplier toward 1 -- a caret sitting at its own
- * colours, i.e. no effect at all -- by the effect-strength slider. A
- * negative strength inverts the stop: the caret then rests at `1 - |s|`
- * where the blink peaks, and comes back to its colour where the blink dips.
- *
- * Applied here, at emit time, rather than to the preset's stops up front. The
- * blend is linear and so is the step interpolation in resolveEmittedStops, so
- * `blend(lerp(a, b))` and `lerp(blend(a), blend(b))` are the same number;
- * doing it last keeps the quantization maths reading in the preset's own
- * units. At 0% every stop collapses to the same value, which means the
- * computed style never changes and the animation stops costing a repaint --
- * a static caret in the way that matters, not just the way it looks.
- */
-function resolveEffectiveAlpha(stopAlpha: number, effectStrengthPercent: number): number {
-  const strength = Math.max(-1, Math.min(1, effectStrengthPercent / 100))
-  return strength >= 0 ? 1 + ((stopAlpha - 1) * strength) : 1 + (stopAlpha * strength)
-}
-
 function parseColorOrFallback(color: string, fallback: string): RgbaColor {
   return parseCssColorToRgba(color)
     ?? parseCssColorToRgba(fallback)
@@ -379,78 +135,10 @@ function parseColorOrFallback(color: string, fallback: string): RgbaColor {
 }
 
 /**
- * Expands a preset's stops into the stops actually emitted, quantizing each
- * segment into equal steps when the frame duration calls for it.
- *
- * Stepping is baked into explicit stops -- a stop at the step's start and
- * another a hair before the next one, both carrying the step's value -- rather
- * than expressed as a per-keyframe `steps()` timing function. Two reasons, one
- * defensive and one substantive: it removes the last piece of exotic CSS from
- * a path that already broke once on an older engine, and it lets each step
- * sample the REAL eased curve. A `steps()` timing function replaces the
- * animation-level easing for its segment, so the browser-side version could
- * only ever quantize a linear ramp; this quantizes the actual heartbeat.
- */
-function resolveEmittedStops(
-  preset: CaretAnimationPreset,
-  animationDurationMs: number,
-  frameDurationMs: number,
-): CaretAnimationStop[] {
-  const stops = preset.stops
-  if (frameDurationMs <= FLASH_FRAME_SMOOTH_MAX_MS) return [...stops]
-
-  const [x1, y1, x2, y2] = CARET_BLINK_EASING_CONTROL_POINTS
-  const segmentMsAt = (index: number) =>
-    ((stops[index + 1].atPercent - stops[index].atPercent) / 100) * animationDurationMs
-
-  const countStepsAt = (frameMs: number) => {
-    let total = 0
-    for (let index = 0; index < stops.length - 1; index += 1) {
-      total += resolveCaretSegmentStepCount(segmentMsAt(index), frameMs)
-    }
-    return total
-  }
-
-  // Size the whole cycle first, so the cap scales every segment together
-  // instead of truncating whichever ones happen to come last. Each segment
-  // rounds its own step count up, so one division can still land over the cap;
-  // stretch and re-measure until it genuinely fits (converges in a pass or
-  // two -- the loop bound is only there so this can never spin).
-  let effectiveFrameMs = frameDurationMs
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const totalSteps = countStepsAt(effectiveFrameMs)
-    if (totalSteps <= CARET_MAX_BAKED_STEPS) break
-    effectiveFrameMs *= totalSteps / CARET_MAX_BAKED_STEPS
-  }
-
-  const emitted: CaretAnimationStop[] = []
-  for (let index = 0; index < stops.length - 1; index += 1) {
-    const from = stops[index]
-    const to = stops[index + 1]
-    const stepCount = resolveCaretSegmentStepCount(segmentMsAt(index), effectiveFrameMs)
-    const stepPercent = (to.atPercent - from.atPercent) / stepCount
-    // Small enough to read as an instant jump at any cycle length, and always
-    // a small fraction of the step it closes.
-    const holdEpsilon = Math.min(0.01, stepPercent / 8)
-
-    for (let step = 0; step < stepCount; step += 1) {
-      const eased = evaluateCubicBezier(x1, y1, x2, y2, step / stepCount)
-      const alpha = from.alpha + ((to.alpha - from.alpha) * eased)
-      const startPercent = from.atPercent + (step * stepPercent)
-      emitted.push({ atPercent: startPercent, alpha })
-      emitted.push({ atPercent: startPercent + stepPercent - holdEpsilon, alpha })
-    }
-  }
-
-  emitted.push({ ...stops[stops.length - 1] })
-  return emitted
-}
-
-/**
- * Builds the `@keyframes thockdown-blink` rule for the current caret settings.
- * Generated at runtime rather than shipped statically because every part of it
- * -- the stop positions, the step counts, the resolved colours -- depends on
- * user settings.
+ * Builds the `@keyframes thockdown-blink` rule for one cycle of the flashing
+ * curve: a stop per level, run straight between (the caret's animation is
+ * `linear` in index.css; the curve's own shape is in the levels). Generated at
+ * runtime because every part of it depends on user settings.
  *
  * All three animatable caret surfaces (fill, outline, halo) are faded together
  * from the same alpha so the caret reads as one object rather than a solid
@@ -459,36 +147,22 @@ function resolveEmittedStops(
  * for the black edit pane that causes.
  */
 export function buildCaretBlinkKeyframesCss(options: CaretBlinkKeyframeOptions): string {
-  const {
-    presetKey,
-    animationDurationMs,
-    frameDurationMs,
-    caretColor,
-    outlineColor,
-    haloColor,
-    haloSpreadPx,
-    haloBlurPx,
-    effectStrengthPercent,
-  } = options
-
-  const preset = CARET_ANIMATION_PRESETS[presetKey] ?? CARET_ANIMATION_PRESETS.heartbeat
+  const { levels, caretColor, outlineColor, haloColor, haloSpreadPx, haloBlurPx } = options
   const fill = parseColorOrFallback(caretColor, DEFAULT_CARET_FILL_COLOR)
   const outline = parseColorOrFallback(outlineColor, DEFAULT_CARET_OUTLINE_COLOR)
   const halo = parseColorOrFallback(haloColor, DEFAULT_CARET_HALO_COLOR)
   const spread = formatNumber(Math.max(0, haloSpreadPx))
   const blur = formatNumber(Math.max(0, haloBlurPx))
-
-  const blocks = resolveEmittedStops(preset, animationDurationMs, frameDurationMs).map((stop) => {
-    // One alpha drives all three surfaces, so the caret dims and brightens as
-    // one object rather than a ring around a blinking centre.
-    const alpha = resolveEffectiveAlpha(stop.alpha, effectStrengthPercent)
+  const last = Math.max(1, levels.length - 1)
+  const blocks: string[] = []
+  for (let i = 0; i < levels.length; i += 1) {
+    const alpha = levels[i]
     const declarations = [
       `background-color: ${holdAdjustedRgba(fill, alpha)};`,
       `outline-color: ${holdAdjustedRgba(outline, alpha)};`,
       `box-shadow: 0 0 ${blur}px ${spread}px ${holdAdjustedRgba(halo, alpha)};`,
     ]
-    return `  ${formatNumber(stop.atPercent, 4)}% { ${declarations.join(' ')} }`
-  })
-
+    blocks.push(`  ${formatNumber((i / last) * 100, 4)}% { ${declarations.join(' ')} }`)
+  }
   return `@keyframes thockdown-blink {\n${blocks.join('\n')}\n}\n`
 }

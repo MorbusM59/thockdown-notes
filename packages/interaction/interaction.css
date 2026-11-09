@@ -543,19 +543,6 @@
   gap: var(--color-grid-gap);
 }
 
-/* The six animation-shape buttons -- one full row of the grid above, split
-   evenly so each button keeps the same footprint as a colour swatch. */
-.options-caret-preset-row {
-  grid-column: span 6;
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: var(--color-grid-gap);
-}
-
-.options-caret-preset-btn {
-  width: 100%;
-}
-
 .options-mouse-target-grid {
   grid-column:           span 2;
   grid-row:              span 2;
