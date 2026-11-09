@@ -418,7 +418,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Opening a Slot](#opening-a-slot)
 
 > **Where?**
-> The \`+\` button at the very right edge of any tab bar (not the leading \`+\` pill inside the tab strip itself — that one creates a note instead, see [Pinned and Temporary Tabs](#pinned-and-temporary-tabs)).
+> The \`+\` button at the very right edge of any tab bar.
 
 *Splits the editor into an additional side-by-side slot.*
 

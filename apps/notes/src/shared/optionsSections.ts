@@ -21,7 +21,7 @@ export const OPTIONS_SECTIONS: ReadonlyArray<{ id: OptionsSectionId; label: stri
   { id: 'layouts', label: 'Layouts', icon: 'fa-solid fa-rectangle-list' },
   { id: 'music', label: 'Music', icon: 'fa-solid fa-music' },
   { id: 'soundscapes', label: 'Soundscapes', icon: 'fa-solid fa-vihara' },
-  { id: 'modules', label: 'Modules', icon: 'fa-solid fa-icons' },
+  { id: 'modules', label: 'Modules', icon: 'fa-solid fa-cubes' },
   { id: 'advanced', label: 'Advanced', icon: 'fa-solid fa-screwdriver-wrench' },
 ]
 
