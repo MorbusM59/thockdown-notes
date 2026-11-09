@@ -2062,6 +2062,7 @@ export function SidebarOptionsPanel({
               onCommit={(value) => setCustomCursorTrailFadeMs(clamp(value, CURSOR_TRAIL_FADE_MIN_MS, CURSOR_TRAIL_FADE_MAX_MS))}
             />
           </div>
+          <OptionsSubsectionLabel>Halo</OptionsSubsectionLabel>
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="cursor-halo-radius"
@@ -2069,7 +2070,7 @@ export function SidebarOptionsPanel({
               max={CURSOR_HALO_RADIUS_MAX_PX}
               step={1}
               value={customCursorHaloRadiusPx}
-              trackLabel="halo"
+              trackLabel="radius"
               ariaLabel="Halo radius in pixels -- 0 disables the halo"
               defaultValue={CURSOR_HALO_RADIUS_DEFAULT_PX}
               onCommit={(value) => setCustomCursorHaloRadiusPx(clamp(value, CURSOR_HALO_RADIUS_MIN_PX, CURSOR_HALO_RADIUS_MAX_PX))}
