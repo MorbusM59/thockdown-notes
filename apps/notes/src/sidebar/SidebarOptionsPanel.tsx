@@ -388,7 +388,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
 }
 
 const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
-  caret: 'fa-solid fa-i',
+  caret: 'fa-solid fa-square',
   search: 'fa-solid fa-magnifying-glass',
   selectionEdit: 'fa-solid fa-expand',
   selectionRender: 'fa-solid fa-expand',
@@ -1166,7 +1166,7 @@ export function SidebarOptionsPanel({
     // a colour that belongs to one view only sits under an "Editor" or
     // "Reader" heading instead of being swapped in and out with the mode.
     const interfaceHighlightKeys: HighlightColorKey[] = ['base', 'inputFields', 'appButtons', 'textBase', 'textEmbossUi']
-    const editorTextHighlightKeys: HighlightColorKey[] = ['textEmbossEdit', 'caret', 'selectionEdit']
+    const editorTextHighlightKeys: HighlightColorKey[] = ['textEmbossEdit', 'selectionEdit']
     const readerTextHighlightKeys: HighlightColorKey[] = ['textEmbossRender', 'search', 'selectionRender']
     const renderHighlightSwatchButton = (key: HighlightColorKey) => {
       const isSearchHighlightControl = key === 'search'
@@ -1492,17 +1492,21 @@ export function SidebarOptionsPanel({
             <ColorTargetButton color={visualizerColors.letterbox || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, letterbox: css }))} />
           </div>
         </>) : null}
-        <OptionsSubsectionLabel>Cursor &amp; Caret</OptionsSubsectionLabel>
-        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Cursor and caret colors">
-          {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
-          {features.customCursor && !IS_LINUX_DESKTOP ? (<>
+        {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
+        {features.customCursor && !IS_LINUX_DESKTOP ? (<>
+          <OptionsSubsectionLabel>Cursor</OptionsSubsectionLabel>
+          <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Cursor colors">
             <ColorTargetButton color={customCursorCenterColor} glyph="fa-regular fa-circle-dot" tooltip="Cursor central dot color" onApply={setCustomCursorCenterColor} />
             <ColorTargetButton color={customCursorHaloColor} glyph="fa-solid fa-circle" tooltip="Cursor halo color" onApply={setCustomCursorHaloColor} />
             <ColorTargetButton color={customCursorDotColor} glyph="fa-solid fa-spinner" tooltip="Cursor orbital dots color" onApply={setCustomCursorDotColor} />
             <ColorTargetButton color={customCursorTrailColor} glyph="fa-solid fa-cancer" tooltip="Cursor trail color" onApply={setCustomCursorTrailColor} />
-          </>) : null}
+          </div>
+        </>) : null}
+        <OptionsSubsectionLabel>Caret</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Caret colors">
+          {renderHighlightSwatchButton('caret')}
           <ColorTargetButton color={caretOutlineColor} glyph="fa-regular fa-square" tooltip="Caret outline color" onApply={setCaretOutlineColor} />
-          <ColorTargetButton color={caretHaloColor} glyph="fa-solid fa-square" tooltip="Caret halo color" onApply={setCaretHaloColor} />
+          <ColorTargetButton color={caretHaloColor} glyph="fa-solid fa-square-full options-color-swatch-glyph-faint" tooltip="Caret halo color" onApply={setCaretHaloColor} />
         </div>
       </AccordionSection>
 

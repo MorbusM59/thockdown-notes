@@ -309,7 +309,12 @@
   padding-top: var(--toolbar-options-gap);
 }
 
-.sidebar-options-accordion.is-headerless .options-color-picker-row {
+.sidebar-options-accordion.is-headerless /* A swatch glyph drawn at half strength: the caret's halo, a softened square. */
+.options-color-swatch-glyph.options-color-swatch-glyph-faint {
+  opacity: 0.5;
+}
+
+.options-color-picker-row {
   margin-bottom: 0;
 }
 
