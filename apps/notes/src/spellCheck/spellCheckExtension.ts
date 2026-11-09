@@ -10,10 +10,10 @@
  * over a screenful of text plus a Map read per word. A word not yet known is
  * queued to the worker and drawn once its answer arrives. The word being
  * TYPED is left alone: the caret is in or touching it and the latest edit
- * was made there (`editedAt`), since it would be wrong after every letter
- * but the last. Moving the caret back into a word changes nothing, so an
- * outlined word stays outlined until it is edited, and is checked again
- * once the caret leaves it.
+ * was made there by the reader's own typing (`editedAt`), since it would be
+ * wrong after every letter but the last. The caret leaving that word ends
+ * it, so coming back into a word later changes nothing: an outlined word
+ * stays outlined until it is edited, and is checked again once left.
  *
  * Fenced code blocks: whether the first visible line is inside one depends on
  * everything above it, so that answer is cached per visible range start
@@ -77,10 +77,28 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
           if (lineFrom >= firstChange) this.fenceAt.delete(lineFrom);
         }
       }
-      if (update.docChanged) this.editedAt = update.state.selection.main.head;
+      // Only the reader's own typing makes a word "being typed"; any other
+      // change (another slot's edit, a transform) just moves the mark along.
+      if (update.docChanged) {
+        const typed = update.transactions.some((tr) => tr.isUserEvent('input') || tr.isUserEvent('delete'));
+        this.editedAt = typed ? update.state.selection.main.head
+          : this.editedAt < 0 ? -1 : update.changes.mapPos(this.editedAt);
+      }
+      // Leaving the word ends its exemption, so coming back to it later is a
+      // revisit and not more typing.
+      if (this.editedAt >= 0 && update.selectionSet && !this.inSameWord(update.state.selection.main.head, this.editedAt)) {
+        this.editedAt = -1;
+      }
       const moved = update.docChanged || update.viewportChanged || update.geometryChanged;
       // A caret move alone changes only which word is exempt as being typed.
       if (moved || update.selectionSet) this.recompute(moved);
+    }
+
+    /** True when nothing but letters and inner apostrophes lies between the two positions. */
+    inSameWord(a: number, b: number): boolean {
+      const { doc } = this.view.state;
+      if (doc.lineAt(a).number !== doc.lineAt(b).number) return false;
+      return /^[\p{L}\p{M}'’]*$/u.test(doc.sliceString(Math.min(a, b), Math.max(a, b)));
     }
 
     /**
