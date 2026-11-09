@@ -14,7 +14,7 @@ const FEATURE_PRESENTATION: Record<Exclude<FeatureId, 'caretBlink'>, { icon: str
   customCursor: { icon: 'fa-solid fa-computer-mouse', label: 'Custom cursor' },
   keySounds: { icon: 'fa-solid fa-keyboard', label: 'Keystroke sounds' },
   visualizer: { icon: 'fa-solid fa-drum', label: 'Grid Beat' },
-  typingTrail: { icon: 'fa-solid fa-water', label: 'Typing trail' },
+  typingTrail: { icon: 'fa-solid fa-wand-sparkles', label: 'Typing trail' },
 }
 
 /** The custom cursor does not exist on Linux (shared/platform.ts), so neither does its switch. */
