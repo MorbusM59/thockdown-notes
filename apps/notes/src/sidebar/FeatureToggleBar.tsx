@@ -3,8 +3,9 @@ import { IS_LINUX_DESKTOP } from '../shared/platform'
 
 /**
  * The row of quick switches at the top of Options (Quick Access): the
- * features (shared/features.ts). A feature switched off leaves the panel --
- * its subsection is not rendered -- and stops costing anything; the tooltip
+ * features (shared/features.ts). A feature switched off stops running, and so
+ * stops costing anything, and that is all: its Options subsection stays, so it
+ * can be tuned while off; the tooltip
  * names the switch, since the bar carries icons only.
  */
 const FEATURE_PRESENTATION: Record<FeatureId, { icon: string; label: string }> = {

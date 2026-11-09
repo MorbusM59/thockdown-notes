@@ -136,10 +136,13 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   // The same two elements show the grid beat on the editor and the visualizer
   // mode's own edge and pane over its scene, each set of settings in its turn.
   const grid = visualizer.grid[uiMode]
+  // `enabled` is the Grid Beat switch, which governs the editor's beat only:
+  // the visualizer mode's edge and pane are its own and run there regardless.
+  const blocksOn = enabled || isVisualizerMode
   const shownEdge = isVisualizerMode ? visualizer.edge : grid.edge
-  useBeatBlock('edge', shownEdge, enabled, subscribeMix)
-  useBeatBlock('pane', isVisualizerMode ? visualizer.pane : grid.editorPane, enabled, subscribeMix)
-  useBeatBlock('wash', isVisualizerMode ? OFF_CHANNEL : grid.readerPane, enabled, subscribeMix)
+  useBeatBlock('edge', shownEdge, blocksOn, subscribeMix)
+  useBeatBlock('pane', isVisualizerMode ? visualizer.pane : grid.editorPane, blocksOn, subscribeMix)
+  useBeatBlock('wash', isVisualizerMode ? OFF_CHANNEL : grid.readerPane, blocksOn, subscribeMix)
   const edgeSpreadPx = shownEdge.spreadPx
   const edgeBlurPx = shownEdge.blurPx
   const { edge: edgeColor, pane: paneColor, wave: waveColor, pulse: pulseColor, accent: accentColor, letterbox: letterboxColor } = colors
@@ -162,7 +165,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     if (letterboxColor) root.setProperty('--visualizer-letterbox-color', letterboxColor)
     else root.removeProperty('--visualizer-letterbox-color')
   }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, pulseColor, accentColor, letterboxColor])
-  const device = useOutputDevice(enabled)
+  const device = useOutputDevice(blocksOn)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
   useEffect(() => setBeatResponseHeadroomDb(settings.responseDb), [settings.responseDb])

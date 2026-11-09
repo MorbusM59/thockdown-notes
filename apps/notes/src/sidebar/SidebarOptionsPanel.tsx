@@ -931,7 +931,7 @@ export function SidebarOptionsPanel({
   }, [refreshDictionaries, setSpellCheckDictionaries])
     // What a slider resets to: the visualizer is global, so one default for every layout.
     const visualizerDefaults = DEFAULT_VISUALIZER
-    const outputDevice = useOutputDevice(features.visualizer)
+    const outputDevice = useOutputDevice(true)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
     // length, the length on a log track so each step of it feels the same.
     // An array, not a fragment: OptionsSliderRows counts its children.
@@ -1481,7 +1481,6 @@ export function SidebarOptionsPanel({
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Editor markdown colors">
           {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
         </div>
-        {features.visualizer ? (<>
           <OptionsSubsectionLabel>Visualizer</OptionsSubsectionLabel>
           <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Visualizer colors">
             <ColorTargetButton color={visualizerColors.edge} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, edge: css }))} />
@@ -1491,9 +1490,8 @@ export function SidebarOptionsPanel({
             <ColorTargetButton color={visualizerColors.accent || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum, the progress track and the song text in the visualizer mode (F5). Until picked it follows the caret colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, accent: css }))} />
             <ColorTargetButton color={visualizerColors.letterbox || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, letterbox: css }))} />
           </div>
-        </>) : null}
         {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
-        {features.customCursor && !IS_LINUX_DESKTOP ? (<>
+        {!IS_LINUX_DESKTOP ? (<>
           <OptionsSubsectionLabel>Cursor</OptionsSubsectionLabel>
           <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Cursor colors">
             <ColorTargetButton color={customCursorCenterColor} glyph="fa-regular fa-circle-dot" tooltip="Cursor central dot color" onApply={setCustomCursorCenterColor} />
@@ -1963,7 +1961,7 @@ export function SidebarOptionsPanel({
       </AccordionSection>
 
       {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
-      {features.customCursor && !IS_LINUX_DESKTOP ? (
+      {!IS_LINUX_DESKTOP ? (
       <AccordionSection
         className="sidebar-options-section-mouse"
         ariaLabel="Cursor"
@@ -2352,7 +2350,6 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
-      {features.visualizer ? (
       <AccordionSection
         className="sidebar-options-section-visualizer"
         ariaLabel="Visualizer"
@@ -2631,7 +2628,6 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
       </AccordionSection>
-      ) : null}
 
       </>) : null}
 
@@ -2817,7 +2813,6 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
-      {features.keySounds ? (
       <AccordionSection
         className="sidebar-options-section-audio"
         ariaLabel="Keystroke Sounds"
@@ -2906,9 +2901,7 @@ export function SidebarOptionsPanel({
           </OptionsSliderRows>
         </div>
       </AccordionSection>
-      ) : null}
 
-      {features.typingTrail ? (
       <AccordionSection
         className="sidebar-options-section-typing-trail"
         ariaLabel="Typing Trail"
@@ -2960,9 +2953,7 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
       </AccordionSection>
-      ) : null}
 
-      {features.visualizer ? (
       <AccordionSection
         className="sidebar-options-section-grid-beat"
         ariaLabel="Grid Beat"
@@ -2973,7 +2964,6 @@ export function SidebarOptionsPanel({
           {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
           {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
       </AccordionSection>
-      ) : null}
 
       </>) : null}
 
@@ -3153,7 +3143,6 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
-      {features.visualizer ? (
       <AccordionSection
         className="sidebar-options-section-beat-detection"
         ariaLabel="Beat Detection"
@@ -3193,7 +3182,6 @@ export function SidebarOptionsPanel({
           </div>
           {renderTrackers()}
       </AccordionSection>
-      ) : null}
 
       <AccordionSection
         className="sidebar-options-section-notes"

@@ -1,7 +1,7 @@
 /**
  * The features a reader can switch off entirely from the toggle bar at the
- * top of Options (`sidebar/FeatureToggleBar.tsx`). A feature that is off is
- * not merely hidden: its options leave the panel, and whatever it runs --
+ * top of Options (`sidebar/FeatureToggleBar.tsx`). The switch is an override
+ * and nothing else: its options stay in the panel, but whatever it runs --
  * listeners, an audio graph, an analysis, an overlay, an animation -- is not
  * started, so it costs nothing. Each feature's consumer reads its flag here
  * and is responsible for that teardown; this module only says which are on.

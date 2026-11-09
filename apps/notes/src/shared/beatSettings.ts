@@ -24,7 +24,7 @@ export interface BeatSettings {
   responseDb: number
 }
 
-export const BEAT_DELAY_MIN_MS = -200
+export const BEAT_DELAY_MIN_MS = 0
 export const BEAT_DELAY_MAX_MS = 500
 
 export const BEAT_RESPONSE_MIN_DB = 0

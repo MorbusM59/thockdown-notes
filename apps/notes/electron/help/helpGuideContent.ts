@@ -270,7 +270,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *The caret, the active editor's edge and its pane follow the music you are playing.*
 
-- Its switch in [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}) turns it on for every layout, and **delay** draws it later (or, below 0, earlier) if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
+- Its switch in [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}) turns it on for every layout, and **delay** draws it later if it runs ahead of what you hear, as wireless headphones often make it. The delay is remembered for each output device.
 - Its settings are the same for every layout. Its colours belong to the layout: Settings panel → Layouts → Colors → Visualizer.
 - Caret, edge and pane are separate blocks. The edge is a soft inner shadow along the editor's border. **Grid Beat** sets the edge, the **editor pane** (drawn over the box grid in the editor) and the **reader pane** (an even wash of its colour over the whole editor in the reader); the full-screen scene has its own edge and pane under **Visualizer**. The caret follows the music through its flashing: see **Matching** in [Animations]($#animations).
 - What the music is listened for is set once, under **Beat detection**, in three groups: **Thump** (the low end jumping: a kick, a bass stab), **Pierce** (a sharp sound cutting through: a snare, a clap) and **Tick** (the busy top: hats, shakers). One sound can be a little of two (a snare with some punch is a pierce with a slight thump). Each has a **contrast**: how strong a hit must be against the others around it before it responds, so raising it keeps only the strongest, and only what is mostly that group. Each block then has three sliders for how much the thump, the pierce and the tick drive it; they add up, capped at full. Then its **effect**: right of centre a hit adds the block, left of centre it is inverted, resting at full strength while music plays with a hit taking it away, and the centre turns it off; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
@@ -813,7 +813,7 @@ ${shortcutTable()}
 
 *Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), [Grid Beat](${guideLink('NOTES-EDITING', 'visualizer')}) and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}), and the **Music** and **Soundscape** volumes.*
 
-- A feature that is off is gone, not just hidden: its settings leave the panel and it costs nothing while it is off. Switch it back on and everything is as you left it.
+- A feature that is off does not run and costs nothing, but its settings stay in the panel, so you can tune it while it is off. Grid Beat only governs the beat in the editor and reader; the Visualizer keeps its own.
 - These switches are the same for every layout. A layout still decides how a feature looks and sounds, and can have silent keys of its own.
 
 ### [Colors](#colors-and-textures)
