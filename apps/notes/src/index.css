@@ -388,3 +388,10 @@ html[data-beat-caret] .thockdown-block-caret {
   background-repeat: repeat-y;
 }
 
+
+/* The word in spell-check suggestion mode (Shift+Space): its boxes filled in
+   the warning flag's line colour rather than outlined. */
+.thockdown-spell-outline.is-suggestion {
+  border: none;
+  background: var(--color-warning-line);
+}

@@ -34,8 +34,8 @@
  *
  * TAKING A SUGGESTION (Shift+Space, `spellSuggest`) swaps the nearest
  * OUTLINED word (never the one being typed) before the caret, among the words on screen, for its best
- * suggestion, and enters SUGGESTION MODE: the word and the space on either
- * side of it are outlined (`is-suggestion`), and each further Shift+Space
+ * suggestion, and enters SUGGESTION MODE: the word's boxes are filled in the
+ * warning flag's line colour (`is-suggestion`), and each further Shift+Space
  * puts the next suggestion in its place, the original coming back after the
  * last. Any other key, any press of a mouse button anywhere, and any change
  * to the note or the caret that is not a swap ends the mode, leaving the
@@ -255,14 +255,7 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
         if (!letters) misspelled.push({ from: wordFrom, to: wordTo });
         else for (const mark of letters) misspelled.push({ from: wordFrom + mark.from, to: wordFrom + mark.to });
       }
-      if (this.suggesting) {
-        const line = state.doc.lineAt(this.suggesting.from);
-        misspelled.push({
-          from: Math.max(line.from, this.suggesting.from - 1),
-          to: Math.min(line.to, this.suggesting.to + 1),
-          suggestion: true,
-        });
-      }
+      if (this.suggesting) misspelled.push({ from: this.suggesting.from, to: this.suggesting.to, suggestion: true });
       const unchanged = misspelled.length === this.misspelled.length
         && misspelled.every((range, index) => range.from === this.misspelled[index].from && range.to === this.misspelled[index].to
           && range.suggestion === this.misspelled[index].suggestion);

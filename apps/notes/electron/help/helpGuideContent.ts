@@ -249,7 +249,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - To add another language, press + and pick a Hunspell dictionary: an .oxt from LibreOffice's extensions site, a Firefox .xpi, a .zip, or a .dic with its .aff. The x removes an added dictionary.
 - Code, links, web addresses and #tags are not checked. The word you are still typing is not marked until you move on; a marked word stays marked until you change it.
 - When the intended word is clear, only the letters in question are outlined (a missing letter outlines its two neighbours).
-- Shift+Space replaces the nearest outlined word before the caret in the same paragraph, even while you are typing the next one, with its best suggestion (with none before it, the word you are typing is completed) and outlines it with a space either side. Press Shift+Space again for the next suggestion; after the last, your own spelling comes back. Any other key or click keeps the word as it is.
+- Shift+Space replaces the nearest outlined word before the caret in the same paragraph, even while you are typing the next one, with its best suggestion (with none before it, the word you are typing is completed) and tints the word in the warning flag colour. Press Shift+Space again for the next suggestion; after the last, your own spelling comes back. Any other key or click keeps the word as it is.
 - The outline color is Spell Checking Outline Color, among the editor box colors.
 
 ### [Typing Trail](#typing-trail)
