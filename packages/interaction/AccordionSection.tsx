@@ -156,6 +156,12 @@ interface AccordionSectionProps {
   ariaLabel?: string
   /** fa-solid icon class(es) for the heading, saying what the subsection is about, e.g. "fa-paint-roller". */
   iconClass: string
+  /**
+   * Told when the section opens (as its unfold starts) and when it closes (as
+   * its fold ends), and told `false` when it unmounts open, so a listener
+   * never holds an open state for a section that is gone.
+   */
+  onOpenChange?: (open: boolean) => void
 }
 
 interface AnimState {
@@ -172,6 +178,7 @@ export function AccordionSection({
   headingClassName,
   ariaLabel,
   iconClass,
+  onOpenChange,
 }: AccordionSectionProps) {
   const id = useId()
   const group = useContext(AccordionGroupContext)
@@ -274,6 +281,14 @@ export function AccordionSection({
   }, [group, id])
 
   useEffect(() => () => cancelAnim(), [cancelAnim])
+
+  const onOpenChangeRef = useRef(onOpenChange)
+  onOpenChangeRef.current = onOpenChange
+  useEffect(() => {
+    if (!isOpen) return
+    onOpenChangeRef.current?.(true)
+    return () => onOpenChangeRef.current?.(false)
+  }, [isOpen])
 
   const handleClick = useCallback((e: MouseEvent<HTMLElement>) => {
     e.preventDefault()

@@ -72,7 +72,6 @@ import {
   type VisualizerColors,
   DEFAULT_VISUALIZER,
 } from '@thockdown/look/visualizer'
-import { ColorPickerRow } from '../colorPicker/ColorPickerRow'
 import { ColorTargetButton } from '../colorPicker/ColorTargetButton'
 import { SurfaceTexturePicker } from '../colorPicker/SurfaceTexturePicker'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
@@ -423,6 +422,8 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
 export interface SidebarOptionsPanelProps {
   uiMode: 'light' | 'dark'
   optionsContentRef: MutableRefObject<HTMLDivElement | null>
+  /** Told whether the Colors section is open: the colour picker it edits with is docked below the sidebar (App.tsx) while it is. */
+  onColorsOpenChange: (open: boolean) => void
   /** The options search term; while it is non-empty only what it appears in is shown (AccordionGroup's `filter`). */
   searchQuery: string
   /** The section the selector bar shows (shared/optionsSections.ts); a search looks through all of them. */
@@ -683,6 +684,7 @@ export interface SidebarOptionsPanelProps {
 export function SidebarOptionsPanel({
   uiMode,
   optionsContentRef,
+  onColorsOpenChange,
   searchQuery,
   optionsSection,
   setOptionsSection,
@@ -1437,9 +1439,8 @@ export function SidebarOptionsPanel({
         ariaLabel="Colors"
         heading="Colors"
         iconClass="fa-paint-roller"
+        onOpenChange={onColorsOpenChange}
       >
-        <ColorPickerRow />
-
         <OptionsSubsectionLabel>Interface</OptionsSubsectionLabel>
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-top" role="group" aria-label="Interface colors">
           {interfaceHighlightKeys.map((key) => renderHighlightSwatchButton(key))}

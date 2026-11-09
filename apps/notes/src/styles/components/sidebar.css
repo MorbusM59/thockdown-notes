@@ -20,13 +20,33 @@
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
 }
 
-.sidebar-content {
+/* The sidebar's list and, while the options panel's Colors section is open,
+ * the colour picker docked below it (.sidebar-color-picker-dock): a column
+ * beside the scrollbar slot, which runs the height of both. The dock is
+ * content-sized and the list takes what is left. */
+.sidebar-content-column {
+  flex:           1 1 auto;
+  min-width:      0;
+  min-height:     0;
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-regular);
+}
+
+.sidebar-content-column > .sidebar-wrapper {
+  height: auto;
+}
+
+/* The picker never squeezes the list to nothing on a short window. */
+.sidebar-content-column:has(> .sidebar-color-picker-dock) > .sidebar-wrapper {
+  min-height: calc(var(--color-grid-cell) * 3);
+}
+
+/* The box both share: one rule, so the dock cannot drift from the list. */
+.sidebar-content,
+.sidebar-color-picker-dock {
   position:   relative;
   isolation:  isolate;
-  flex:       1 1 auto;
-  min-height: 0;
-  min-width:  0;
-  overflow-y: auto;
   margin:     0;
   padding:    0;
   border:          1px solid var(--color-border-light-70);
@@ -34,6 +54,28 @@
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
   box-shadow:      var(--box-shadow-inverted);
   background-color: var(--palette-parchment-lightest);
+}
+
+.sidebar-color-picker-dock {
+  flex: 0 0 auto;
+}
+
+.sidebar-color-picker-dock > .sidebar-content-texture {
+  position: absolute;
+}
+
+/* .sidebar-options-content's gutter, so the section lines up with the ones above. */
+.sidebar-color-picker-dock-content {
+  position: relative;
+  z-index:  2;
+  padding:  var(--spacing-large);
+}
+
+.sidebar-content {
+  flex:       1 1 auto;
+  min-height: 0;
+  min-width:  0;
+  overflow-y: auto;
 }
 
 /* Only ever matches .sidebar-options-content (the options panel is the one

@@ -7,6 +7,7 @@ import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { ColorPickerRow } from './colorPicker/ColorPickerRow'
 import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
@@ -1448,6 +1449,8 @@ function App() {
   // that leaving the options for a note list (and coming back) costs neither.
   const [optionsSearchQuery, setOptionsSearchQuery] = useState('')
   const [optionsSection, setOptionsSection] = useState<OptionsSectionId>(DEFAULT_OPTIONS_SECTION)
+  // Whether the options panel's Colors section is open, which docks its colour picker below the sidebar.
+  const [isColorsSectionOpen, setIsColorsSectionOpen] = useState(false)
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
   // Mirrors useDocumentFind's isDocumentFindCaseSensitive so
   // buildMenuStateSnapshot (defined earlier than the hook call can be) can
@@ -6910,6 +6913,7 @@ ${markdownHtml}
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode || isImageLibraryShown
   const isSidebarScrollbarMode = isSidebarCustomScrollbarMode || sidebarMode === 'options'
+  const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 
   // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
   // state updates that re-render the entire App component (heavy for long
@@ -8597,6 +8601,7 @@ ${markdownHtml}
               </div>
 
               <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
+                <div className="sidebar-content-column">
                 <div className="sidebar-wrapper">
                   <div
                     className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') && !isImageLibraryShown ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
@@ -8754,6 +8759,7 @@ ${markdownHtml}
                         setOptionsSection={setOptionsSection}
                         uiMode={uiMode}
                         optionsContentRef={optionsContentRef}
+                        onColorsOpenChange={setIsColorsSectionOpen}
                         viewStyle={viewStyle}
                         setViewStyle={setViewStyle}
                         viewFontSize={viewFontSize}
@@ -8992,6 +8998,26 @@ ${markdownHtml}
                     )}
                   </div>
                 </div>
+                  {isColorPickerDocked ? (
+                    // The Colors section's picker, docked below the list in a
+                    // box styled like it, so it stays in reach however far
+                    // down the section the reader is setting colours. A
+                    // headerless options section, so its insets are a
+                    // section's.
+                    <div className="sidebar-color-picker-dock">
+                      <div className="sidebar-content-texture" />
+                      <div className="sidebar-color-picker-dock-content">
+                        <section className="options-section sidebar-options-section" aria-label="Colour picker">
+                          <div className="sidebar-options-accordion is-headerless">
+                            <div className="sidebar-options-accordion-body">
+                              <ColorPickerRow />
+                            </div>
+                          </div>
+                        </section>
+                      </div>
+                    </div>
+                  ) : null}
+                  </div>
 
                 {isSidebarScrollbarMode ? (
                   <aside

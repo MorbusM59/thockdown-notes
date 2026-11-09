@@ -7,8 +7,9 @@
  *   3-4  hue over saturation
  *   5-6  value over alpha
  *
- * Every section with colour targets draws this row at its top, and all of
- * them show the one staging, so the reader never scrolls to reach it.
+ * Drawn once, docked below the sidebar while the Colors section is open
+ * (App.tsx's .sidebar-color-picker-dock), so it stays in reach however far
+ * down the section the reader is setting colours.
  *
  * A slider edits its channel whether or not the channel is in the mask; a
  * channel outside the mask is only dimmed, because editing a value must not

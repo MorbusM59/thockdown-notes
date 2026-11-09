@@ -302,6 +302,17 @@
   padding-bottom: var(--toolbar-options-gap);
 }
 
+/* A section with no heading (the docked colour picker, App.tsx): the gap a
+   heading would leave above the body is the body's own bottom padding, so
+   the content sits evenly in its box. */
+.sidebar-options-accordion.is-headerless {
+  padding-top: var(--toolbar-options-gap);
+}
+
+.sidebar-options-accordion.is-headerless .options-color-picker-row {
+  margin-bottom: 0;
+}
+
 .sidebar-options-accordion > summary {
   list-style: none;
   user-select: none;
