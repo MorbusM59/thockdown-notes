@@ -1491,6 +1491,18 @@ export function SidebarOptionsPanel({
             <ColorTargetButton color={visualizerColors.letterbox || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, letterbox: css }))} />
           </div>
         </>) : null}
+        <OptionsSubsectionLabel>Cursor &amp; Caret</OptionsSubsectionLabel>
+        <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Cursor and caret colors">
+          {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
+          {features.customCursor && !IS_LINUX_DESKTOP ? (<>
+            <ColorTargetButton color={customCursorCenterColor} glyph="fa-regular fa-circle-dot" tooltip="Cursor central dot color" onApply={setCustomCursorCenterColor} />
+            <ColorTargetButton color={customCursorHaloColor} glyph="fa-solid fa-circle" tooltip="Cursor halo color" onApply={setCustomCursorHaloColor} />
+            <ColorTargetButton color={customCursorDotColor} glyph="fa-solid fa-spinner" tooltip="Cursor orbital dots color" onApply={setCustomCursorDotColor} />
+            <ColorTargetButton color={customCursorTrailColor} glyph="fa-solid fa-cancer" tooltip="Cursor trail color" onApply={setCustomCursorTrailColor} />
+          </>) : null}
+          <ColorTargetButton color={caretOutlineColor} glyph="fa-regular fa-square" tooltip="Caret outline color" onApply={setCaretOutlineColor} />
+          <ColorTargetButton color={caretHaloColor} glyph="fa-solid fa-square" tooltip="Caret halo color" onApply={setCaretHaloColor} />
+        </div>
       </AccordionSection>
 
       <AccordionSection
@@ -1953,15 +1965,8 @@ export function SidebarOptionsPanel({
         heading="Cursor"
         iconClass="fa-computer-mouse"
       >
-        <ColorPickerRow />
-        <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor color controls">
-          <div className="options-mouse-target-grid">
-            <ColorTargetButton color={customCursorCenterColor} glyph="fa-regular fa-circle-dot" tooltip="Center dot color" onApply={setCustomCursorCenterColor} />
-            <ColorTargetButton color={customCursorHaloColor} glyph="fa-solid fa-circle" tooltip="Halo color" onApply={setCustomCursorHaloColor} />
-            <ColorTargetButton color={customCursorDotColor} glyph="fa-solid fa-spinner" tooltip="Circling dots color" onApply={setCustomCursorDotColor} />
-            <ColorTargetButton color={customCursorTrailColor} glyph="fa-solid fa-cancer" tooltip="Trail color" onApply={setCustomCursorTrailColor} />
-          </div>
-
+        <div className="options-mouse-settings-grid" role="group" aria-label="Custom cursor controls">
+          <OptionsSubsectionLabel>Element Size</OptionsSubsectionLabel>
           <div className="options-mouse-center-grid options-mouse-center-grid-wide" aria-hidden="true">
             <div className="options-glaze-cell options-glaze-cell-span-2">
               <CompactScrollbarSlider
@@ -1970,8 +1975,8 @@ export function SidebarOptionsPanel({
                 max={CURSOR_TRAIL_THICKNESS_MAX_PX}
                 step={1}
                 value={customCursorTrailThicknessPx}
-                trackLabel="trail"
-                ariaLabel="Trail thickness in pixels"
+                trackLabel="trail width"
+                ariaLabel="Trail width in pixels"
                 defaultValue={CURSOR_TRAIL_THICKNESS_DEFAULT_PX}
                 onCommit={(value) => setCustomCursorTrailThicknessPx(clamp(value, CURSOR_TRAIL_THICKNESS_MIN_PX, CURSOR_TRAIL_THICKNESS_MAX_PX))}
               />
@@ -1983,8 +1988,8 @@ export function SidebarOptionsPanel({
                 max={CURSOR_DOT_SIZE_MAX_PX}
                 step={1}
                 value={customCursorDotSizePx}
-                trackLabel="dot size"
-                ariaLabel="Circling dot size in pixels"
+                trackLabel="orbital dot"
+                ariaLabel="Orbital dot size in pixels"
                 defaultValue={CURSOR_DOT_SIZE_DEFAULT_PX}
                 onCommit={(value) => setCustomCursorDotSizePx(clamp(value, CURSOR_DOT_SIZE_MIN_PX, CURSOR_DOT_SIZE_MAX_PX))}
               />
@@ -1996,8 +2001,8 @@ export function SidebarOptionsPanel({
                 max={CURSOR_CENTER_SIZE_MAX_PX}
                 step={1}
                 value={customCursorCenterSizePx}
-                trackLabel="center"
-                ariaLabel="Center dot size in pixels"
+                trackLabel="central dot"
+                ariaLabel="Central dot size in pixels"
                 defaultValue={CURSOR_CENTER_SIZE_DEFAULT_PX}
                 onCommit={(value) => setCustomCursorCenterSizePx(clamp(value, CURSOR_CENTER_SIZE_MIN_PX, CURSOR_CENTER_SIZE_MAX_PX))}
               />
@@ -2202,16 +2207,7 @@ export function SidebarOptionsPanel({
         heading="Caret"
         iconClass="fa-square options-heading-icon-tall"
       >
-        <ColorPickerRow />
         <div className="options-caret-settings-grid" role="group" aria-label="Caret appearance controls">
-          {/* The two colour targets this section owns. The caret's FILL
-              colour is not here on purpose -- it is highlightColors.caret,
-              edited in Colors with every other highlight colour;
-              duplicating it here would be a second control for one value. */}
-          <ColorTargetButton color={caretOutlineColor} glyph="fa-regular fa-square" tooltip="Caret outline color" onApply={setCaretOutlineColor} />
-          <ColorTargetButton color={caretHaloColor} glyph="fa-solid fa-square" tooltip="Caret halo color" onApply={setCaretHaloColor} />
-          <div className="options-caret-target-spacer" aria-hidden="true" />
-
           <div className="options-glaze-cell options-glaze-cell-span-3">
             <CompactScrollbarSlider
               id="caret-size-deviation"
