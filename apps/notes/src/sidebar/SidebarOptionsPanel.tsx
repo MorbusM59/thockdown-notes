@@ -2789,18 +2789,177 @@ export function SidebarOptionsPanel({
       </>) : null}
 
       {showsSection('modules') ? (<>
-      {features.visualizer ? (
       <AccordionSection
-        className="sidebar-options-section-grid-beat"
-        ariaLabel="Grid Beat"
-        heading="Grid Beat"
-        iconClass="fa-table-cells"
+        className="sidebar-options-section-spell-check"
+        ariaLabel="Spell Checking"
+        heading="Spell Checking"
+        iconClass="fa-spell-check"
       >
-          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
-          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
-          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
+        {/* The dictionaries, each one a toggle: a word is correct when any
+            active dictionary accepts it (spellCheck/spellCheckClient.ts). The
+            checker itself is switched in Quick Access. */}
+        <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
+        <div className="options-eq-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
+          {availableDictionaries.map((dictionary) => {
+            const isActive = spellCheckDictionaries.includes(dictionary.id)
+            return (
+              <div key={dictionary.id} className="options-eq-row options-dictionary-row">
+                <button
+                  type="button"
+                  className={`options-eq-cell options-eq-button options-dictionary-toggle${isActive ? ' is-active' : ''}`}
+                  data-tooltip={isActive ? 'Checking with this dictionary' : 'Not checking with this dictionary'}
+                  aria-label={`Check with ${dictionary.label}`}
+                  aria-pressed={isActive}
+                  onClick={() => setSpellCheckDictionaries((previous) => (
+                    previous.includes(dictionary.id) ? previous.filter((id) => id !== dictionary.id) : [...previous, dictionary.id]
+                  ))}
+                >
+                  {isActive && <span className="fa-solid fa-check" aria-hidden="true" />}
+                </button>
+                <DictionaryNameField label={dictionary.label} onRename={(label) => void renameSpellCheckDictionary(dictionary.id, label)} />
+                <button
+                  type="button"
+                  className={`options-eq-cell options-eq-button${dictionary.bundled ? ' is-disabled' : ''}`}
+                  data-tooltip={dictionary.bundled ? 'Dictionaries that come with the app cannot be removed' : `Remove ${dictionary.label}`}
+                  aria-label={`Remove ${dictionary.label}`}
+                  aria-disabled={dictionary.bundled}
+                  onClick={() => { if (!dictionary.bundled) void removeSpellCheckDictionary(dictionary.id) }}
+                >
+                  <span className="fa-solid fa-xmark" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className="options-eq-cell options-eq-button"
+                  data-tooltip="Install dictionaries: a .dic with its .aff, or an .oxt, .xpi or .zip holding them"
+                  aria-label="Install dictionaries"
+                  onClick={() => void installSpellCheckDictionary()}
+                >
+                  <span className="fa-solid fa-plus" aria-hidden="true" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
       </AccordionSection>
-      ) : null}
+
+      {/* Speed reading (Alt+<): the two views' paces, the editor's row,
+          and the one curve both views ease with -- the same three numbers as
+          Animations above, kept apart from them because a reading pace's ease
+          is seconds long where a page key's journey is a fraction of one
+          (speedReading/speedReadingSettings.ts). Grouped by where
+          each applies: the editor's, the reader's, and the curve both
+          share. */}
+      <AccordionSection
+        className="sidebar-options-section-speed-reading"
+        ariaLabel="Speed Reading"
+        heading="Speed Reading"
+        iconClass="fa-glasses"
+      >
+        <OptionsSubsectionLabel>Editor</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, editor">
+          <OptionsSliderRows rows={[3]}>
+            <CompactScrollbarSlider
+              id="speed-reading-edit-wpm"
+              min={SPEED_READING_WPM_MIN}
+              max={SPEED_READING_WPM_MAX}
+              step={SPEED_READING_WPM_STEP}
+              value={speedReadingSettings.editWpm}
+              trackLabel="editor"
+              tooltipLabel="Editor: words per minute a held Space reads on at (Left / Right while reading)"
+              ariaLabel="Editor speed reading pace in words per minute"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.editWpm}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, editWpm: Math.round(value) }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-row-width"
+              min={SPEED_READING_ROW_WIDTH_MIN}
+              max={SPEED_READING_ROW_WIDTH_MAX}
+              step={1}
+              value={speedReadingSettings.rowWidth}
+              trackLabel="row"
+              tooltipLabel="Editor: the reading row's width in boxes; each chunk is as many words as fit"
+              ariaLabel="Width of the editor's reading row in boxes"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.rowWidth}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, rowWidth: Math.round(value) }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-fixation"
+              min={0}
+              max={SPEED_READING_FIXATION_MAX_MS}
+              step={10}
+              value={speedReadingSettings.fixationMs}
+              trackLabel="fixation"
+              tooltipLabel="Editor: milliseconds every chunk stays before its letters count, and the shortest a chunk can be; a sentence's end adds one fixation, a comma half of one"
+              ariaLabel="Editor fixation time per chunk in milliseconds"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.fixationMs}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, fixationMs: Math.round(value) }))}
+            />
+          </OptionsSliderRows>
+        </div>
+        <OptionsSubsectionLabel>Reader</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, reader">
+          <OptionsSliderRows rows={[1]}>
+            <CompactScrollbarSlider
+              id="speed-reading-render-wpm"
+              min={SPEED_READING_WPM_MIN}
+              max={SPEED_READING_WPM_MAX}
+              step={SPEED_READING_WPM_STEP}
+              value={speedReadingSettings.renderWpm}
+              trackLabel="reader"
+              tooltipLabel="Reader: words per minute the page scrolls at (Left / Right while reading)"
+              ariaLabel="Reader speed reading pace in words per minute"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.renderWpm}
+              formatValue={(value) => String(Math.round(value))}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, renderWpm: Math.round(value) }))}
+            />
+          </OptionsSliderRows>
+        </div>
+        <OptionsSubsectionLabel>Curve</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Speed reading, curve">
+          <OptionsSliderRows rows={[3]}>
+            <CompactScrollbarSlider
+              id="speed-reading-curve-ramp"
+              min={SPEED_READING_CURVE_RAMP_MIN}
+              max={SPEED_READING_CURVE_RAMP_MAX}
+              step={0.05}
+              value={speedReadingSettings.curveRamp}
+              trackLabel="ramp"
+              tooltipLabel="Speed curve ramp, as in Animations: how a held Space eases into the pace (editor) or a pause eases out of it and back (reader)"
+              ariaLabel="Speed reading curve dynamic"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveRamp}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveRamp: value }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-curve-shape"
+              min={SPEED_READING_CURVE_SHAPE_MIN}
+              max={SPEED_READING_CURVE_SHAPE_MAX}
+              step={0.01}
+              value={speedReadingSettings.curveShape}
+              trackLabel="shape"
+              tooltipLabel="Speed curve shape, as in Animations: the share of the curve spent speeding up, the rest slowing down"
+              ariaLabel="Speed reading curve skew"
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveShape}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveShape: value }))}
+            />
+            <CompactScrollbarSlider
+              id="speed-reading-curve-speed"
+              min={0}
+              max={SPEED_READING_CURVE_SPEED_MAX_SEC}
+              step={0.05}
+              value={speedReadingSettings.curveSpeedSec}
+              trackLabel="speed"
+              tooltipLabel="Speed curve time in seconds, as in Animations: speeding up and slowing down together"
+              ariaLabel="Speed reading curve total time in seconds"
+              reverseScale
+              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveSpeedSec}
+              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveSpeedSec: value }))}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
 
       {features.keySounds ? (
       <AccordionSection
@@ -2949,178 +3108,6 @@ export function SidebarOptionsPanel({
       </AccordionSection>
       ) : null}
 
-      {/* Speed reading (Alt+<): the two views' paces, the editor's row,
-          and the one curve both views ease with -- the same three numbers as
-          Animations above, kept apart from them because a reading pace's ease
-          is seconds long where a page key's journey is a fraction of one
-          (speedReading/speedReadingSettings.ts). Grouped by where
-          each applies: the editor's, the reader's, and the curve both
-          share. */}
-      <AccordionSection
-        className="sidebar-options-section-speed-reading"
-        ariaLabel="Speed Reading"
-        heading="Speed Reading"
-        iconClass="fa-glasses"
-      >
-        <OptionsSubsectionLabel>Editor</OptionsSubsectionLabel>
-        <div className="utility-setting-slider-stack" aria-label="Speed reading, editor">
-          <OptionsSliderRows rows={[3]}>
-            <CompactScrollbarSlider
-              id="speed-reading-edit-wpm"
-              min={SPEED_READING_WPM_MIN}
-              max={SPEED_READING_WPM_MAX}
-              step={SPEED_READING_WPM_STEP}
-              value={speedReadingSettings.editWpm}
-              trackLabel="editor"
-              tooltipLabel="Editor: words per minute a held Space reads on at (Left / Right while reading)"
-              ariaLabel="Editor speed reading pace in words per minute"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.editWpm}
-              formatValue={(value) => String(Math.round(value))}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, editWpm: Math.round(value) }))}
-            />
-            <CompactScrollbarSlider
-              id="speed-reading-row-width"
-              min={SPEED_READING_ROW_WIDTH_MIN}
-              max={SPEED_READING_ROW_WIDTH_MAX}
-              step={1}
-              value={speedReadingSettings.rowWidth}
-              trackLabel="row"
-              tooltipLabel="Editor: the reading row's width in boxes; each chunk is as many words as fit"
-              ariaLabel="Width of the editor's reading row in boxes"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.rowWidth}
-              formatValue={(value) => String(Math.round(value))}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, rowWidth: Math.round(value) }))}
-            />
-            <CompactScrollbarSlider
-              id="speed-reading-fixation"
-              min={0}
-              max={SPEED_READING_FIXATION_MAX_MS}
-              step={10}
-              value={speedReadingSettings.fixationMs}
-              trackLabel="fixation"
-              tooltipLabel="Editor: milliseconds every chunk stays before its letters count, and the shortest a chunk can be; a sentence's end adds one fixation, a comma half of one"
-              ariaLabel="Editor fixation time per chunk in milliseconds"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.fixationMs}
-              formatValue={(value) => String(Math.round(value))}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, fixationMs: Math.round(value) }))}
-            />
-          </OptionsSliderRows>
-        </div>
-        <OptionsSubsectionLabel>Reader</OptionsSubsectionLabel>
-        <div className="utility-setting-slider-stack" aria-label="Speed reading, reader">
-          <OptionsSliderRows rows={[1]}>
-            <CompactScrollbarSlider
-              id="speed-reading-render-wpm"
-              min={SPEED_READING_WPM_MIN}
-              max={SPEED_READING_WPM_MAX}
-              step={SPEED_READING_WPM_STEP}
-              value={speedReadingSettings.renderWpm}
-              trackLabel="reader"
-              tooltipLabel="Reader: words per minute the page scrolls at (Left / Right while reading)"
-              ariaLabel="Reader speed reading pace in words per minute"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.renderWpm}
-              formatValue={(value) => String(Math.round(value))}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, renderWpm: Math.round(value) }))}
-            />
-          </OptionsSliderRows>
-        </div>
-        <OptionsSubsectionLabel>Curve</OptionsSubsectionLabel>
-        <div className="utility-setting-slider-stack" aria-label="Speed reading, curve">
-          <OptionsSliderRows rows={[3]}>
-            <CompactScrollbarSlider
-              id="speed-reading-curve-ramp"
-              min={SPEED_READING_CURVE_RAMP_MIN}
-              max={SPEED_READING_CURVE_RAMP_MAX}
-              step={0.05}
-              value={speedReadingSettings.curveRamp}
-              trackLabel="ramp"
-              tooltipLabel="Speed curve ramp, as in Animations: how a held Space eases into the pace (editor) or a pause eases out of it and back (reader)"
-              ariaLabel="Speed reading curve dynamic"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveRamp}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveRamp: value }))}
-            />
-            <CompactScrollbarSlider
-              id="speed-reading-curve-shape"
-              min={SPEED_READING_CURVE_SHAPE_MIN}
-              max={SPEED_READING_CURVE_SHAPE_MAX}
-              step={0.01}
-              value={speedReadingSettings.curveShape}
-              trackLabel="shape"
-              tooltipLabel="Speed curve shape, as in Animations: the share of the curve spent speeding up, the rest slowing down"
-              ariaLabel="Speed reading curve skew"
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveShape}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveShape: value }))}
-            />
-            <CompactScrollbarSlider
-              id="speed-reading-curve-speed"
-              min={0}
-              max={SPEED_READING_CURVE_SPEED_MAX_SEC}
-              step={0.05}
-              value={speedReadingSettings.curveSpeedSec}
-              trackLabel="speed"
-              tooltipLabel="Speed curve time in seconds, as in Animations: speeding up and slowing down together"
-              ariaLabel="Speed reading curve total time in seconds"
-              reverseScale
-              defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveSpeedSec}
-              onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveSpeedSec: value }))}
-            />
-          </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-spell-check"
-        ariaLabel="Spell Checking"
-        heading="Spell Checking"
-        iconClass="fa-spell-check"
-      >
-        {/* The dictionaries, each one a toggle: a word is correct when any
-            active dictionary accepts it (spellCheck/spellCheckClient.ts). The
-            checker itself is switched in Quick Access. */}
-        <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
-        <div className="options-eq-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
-          {availableDictionaries.map((dictionary) => {
-            const isActive = spellCheckDictionaries.includes(dictionary.id)
-            return (
-              <div key={dictionary.id} className="options-eq-row options-dictionary-row">
-                <button
-                  type="button"
-                  className={`options-eq-cell options-eq-button options-dictionary-toggle${isActive ? ' is-active' : ''}`}
-                  data-tooltip={isActive ? 'Checking with this dictionary' : 'Not checking with this dictionary'}
-                  aria-label={`Check with ${dictionary.label}`}
-                  aria-pressed={isActive}
-                  onClick={() => setSpellCheckDictionaries((previous) => (
-                    previous.includes(dictionary.id) ? previous.filter((id) => id !== dictionary.id) : [...previous, dictionary.id]
-                  ))}
-                >
-                  {isActive && <span className="fa-solid fa-check" aria-hidden="true" />}
-                </button>
-                <DictionaryNameField label={dictionary.label} onRename={(label) => void renameSpellCheckDictionary(dictionary.id, label)} />
-                <button
-                  type="button"
-                  className={`options-eq-cell options-eq-button${dictionary.bundled ? ' is-disabled' : ''}`}
-                  data-tooltip={dictionary.bundled ? 'Dictionaries that come with the app cannot be removed' : `Remove ${dictionary.label}`}
-                  aria-label={`Remove ${dictionary.label}`}
-                  aria-disabled={dictionary.bundled}
-                  onClick={() => { if (!dictionary.bundled) void removeSpellCheckDictionary(dictionary.id) }}
-                >
-                  <span className="fa-solid fa-xmark" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="options-eq-cell options-eq-button"
-                  data-tooltip="Install dictionaries: a .dic with its .aff, or an .oxt, .xpi or .zip holding them"
-                  aria-label="Install dictionaries"
-                  onClick={() => void installSpellCheckDictionary()}
-                >
-                  <span className="fa-solid fa-plus" aria-hidden="true" />
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </AccordionSection>
-
       {features.typingTrail ? (
       <AccordionSection
         className="sidebar-options-section-typing-trail"
@@ -3172,6 +3159,19 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
+      </AccordionSection>
+      ) : null}
+
+      {features.visualizer ? (
+      <AccordionSection
+        className="sidebar-options-section-grid-beat"
+        ariaLabel="Grid Beat"
+        heading="Grid Beat"
+        iconClass="fa-table-cells"
+      >
+          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
+          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
+          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
       </AccordionSection>
       ) : null}
 
