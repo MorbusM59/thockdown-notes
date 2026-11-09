@@ -8,9 +8,12 @@
  * layout change). Words come from `spellCheckWords.ts`; answers from the
  * shared cache in `spellCheckClient.ts`, so a recompute is a tokenizer pass
  * over a screenful of text plus a Map read per word. A word not yet known is
- * queued to the worker and drawn once its answer arrives. The word the caret
- * is in or touching is left alone while it is being typed: it would be wrong
- * after every letter but the last.
+ * queued to the worker and drawn once its answer arrives. The word being
+ * TYPED is left alone: the caret is in or touching it and the latest edit
+ * was made there (`editedAt`), since it would be wrong after every letter
+ * but the last. Moving the caret back into a word changes nothing, so an
+ * outlined word stays outlined until it is edited, and is checked again
+ * once the caret leaves it.
  *
  * Fenced code blocks: whether the first visible line is inside one depends on
  * everything above it, so that answer is cached per visible range start
@@ -52,6 +55,8 @@ const quantizeToPhase = (value: number, unit: number, phase: number) => phase + 
 export function spellCheckExtension(options: SpellCheckExtensionOptions): Extension {
   return ViewPlugin.fromClass(class {
     misspelled: Range[] = [];
+    /** Where the latest edit left the caret: the word around it is the one being typed. */
+    editedAt = -1;
     /** Visible range start -> whether that line is inside a fenced code block. */
     fenceAt = new Map<number, boolean>();
     unsubscribe: () => void;
@@ -72,6 +77,7 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
           if (lineFrom >= firstChange) this.fenceAt.delete(lineFrom);
         }
       }
+      if (update.docChanged) this.editedAt = update.state.selection.main.head;
       const moved = update.docChanged || update.viewportChanged || update.geometryChanged;
       // A caret move alone changes only which word is exempt as being typed.
       if (moved || update.selectionSet) this.recompute(moved);
@@ -122,7 +128,7 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
             for (const word of wordsOnLine(line.text)) {
               const wordFrom = line.from + word.from;
               const wordTo = line.from + word.to;
-              if (caret >= wordFrom && caret <= wordTo) continue;
+              if (caret >= wordFrom && caret <= wordTo && this.editedAt >= wordFrom && this.editedAt <= wordTo) continue;
               if (spellCheckClient.lookup(word.word) !== true) continue;
               const letters = spellCheckClient.marksFor(word.word);
               if (!letters) misspelled.push({ from: wordFrom, to: wordTo });
