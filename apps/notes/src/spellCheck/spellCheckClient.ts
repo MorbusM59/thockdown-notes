@@ -20,6 +20,7 @@
  * checking off, neither the worker nor any dictionary exists.
  */
 import type { SpellCheckApi } from '../shared/spellCheck';
+import { typoMarks, type MarkRange } from './typoMarks';
 
 type Listener = () => void;
 
@@ -30,6 +31,8 @@ let activeIds: string[] = [];
 const sentToWorker = new Set<string>();
 /** word -> true when misspelled, false when correct. */
 let answers = new Map<string, boolean>();
+/** misspelled word -> the letters to mark, when a suggestion one edit away locates the typo. */
+let marks = new Map<string, MarkRange[]>();
 const pending = new Set<string>();
 let queued: string[] = [];
 let flushScheduled = false;
@@ -48,9 +51,17 @@ function notify(): void {
 function ensureWorker(): Worker {
   if (worker) return worker;
   worker = new Worker(new URL('./spellCheck.worker.ts', import.meta.url), { type: 'module' });
-  worker.onmessage = (event: MessageEvent<{ type: 'checked'; generation: number; misspelled: string[]; words: string[] }>) => {
+  worker.onmessage = (event: MessageEvent<
+    | { type: 'checked'; generation: number; misspelled: string[]; words: string[] }
+    | { type: 'suggested'; generation: number; targets: Array<[string, string]> }
+  >) => {
     const message = event.data;
-    if (message.type !== 'checked') return;
+    if (message.type === 'suggested') {
+      if (message.generation !== generation) return;
+      for (const [word, target] of message.targets) marks.set(word, typoMarks(word, target));
+      notify();
+      return;
+    }
     for (const word of message.words) pending.delete(word);
     if (message.generation !== generation) return;
     const misspelled = new Set(message.misspelled);
@@ -71,6 +82,7 @@ function configure(): void {
   const ids = [...activeIds];
   const myGeneration = ++generation;
   answers = new Map();
+  marks = new Map();
   pending.clear();
   queued = [];
   configureChain = configureChain.then(async () => {
@@ -138,6 +150,11 @@ export const spellCheckClient = {
       }
     }
     return undefined;
+  },
+
+  /** The letters of a misspelled word to mark (offsets in it), or undefined to mark the whole word. */
+  marksFor(word: string): readonly MarkRange[] | undefined {
+    return marks.get(word);
   },
 
   /** Called whenever an answer could change what is drawn. Returns the unsubscribe. */

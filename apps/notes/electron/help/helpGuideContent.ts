@@ -248,6 +248,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - English, Spanish, French and German come with the app; each is a row under Spell Checking, with a box to switch it on or off and a name you can type over. A word counts as correct when any active dictionary knows it, so a note can mix languages.
 - To add another language, press + and pick a Hunspell dictionary: an .oxt from LibreOffice's extensions site, a Firefox .xpi, a .zip, or a .dic with its .aff. The x removes an added dictionary.
 - Code, links, web addresses and #tags are not checked. The word you are still typing is not marked until you move on.
+- When the intended word is clear, only the letters in question are outlined (a missing letter outlines its two neighbours).
 - The outline color is Spell Checking Outline Color, among the editor box colors.
 
 ### [Typing Trail](#typing-trail)

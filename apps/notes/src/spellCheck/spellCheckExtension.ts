@@ -22,7 +22,12 @@
  * would sit under the grid lines the editor paints above its text. The
  * outlines are boxes in the scroll-following overlay layer the typing trail
  * lives in (`host`), placed with the same grid quantization as the caret and
- * the trail, one element per misspelled word, reused between draws.
+ * the trail, one element per marked range, reused between draws.
+ *
+ * WHAT IS OUTLINED is the whole misspelled word, or, once the worker has
+ * a suggestion that locates the typo (the top one when it is one edit away,
+ * or the only one), only the letters that differ from it
+ * (`typoMarks.ts`), so a typo is pinpointed rather than its word.
  */
 import type { Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
@@ -118,7 +123,10 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
               const wordFrom = line.from + word.from;
               const wordTo = line.from + word.to;
               if (caret >= wordFrom && caret <= wordTo) continue;
-              if (spellCheckClient.lookup(word.word) === true) misspelled.push({ from: wordFrom, to: wordTo });
+              if (spellCheckClient.lookup(word.word) !== true) continue;
+              const letters = spellCheckClient.marksFor(word.word);
+              if (!letters) misspelled.push({ from: wordFrom, to: wordTo });
+              else for (const mark of letters) misspelled.push({ from: wordFrom + mark.from, to: wordFrom + mark.to });
             }
           }
           pos = line.to + 1;
