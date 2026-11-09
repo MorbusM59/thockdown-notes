@@ -99,7 +99,7 @@ export function FlashingOptions({ flashing, editShape, applyShape, setMatching, 
   const matching = FLASH_MATCHINGS[flashing.matching]
   const matchingTooltip = !beatAvailable
     ? 'Matching to the music needs Grid Beat: switch it on (the drum) under Quick Access. Until then the cycle runs on its own'
-    : "How the cycle follows the music's beat, in bar notation: 4/4 is one cycle a beat, 1/4 one a bar, 2/1 two a beat. Off runs the cycle on its own. Whenever no beat is found the cycle runs on its own"
+    : "How the cycle follows the music's beat, in bar notation: 4/4 is one cycle a beat, 1/4 one a bar. Off runs the cycle on its own. Whenever no beat is found the cycle runs on its own"
 
   return (
     <>

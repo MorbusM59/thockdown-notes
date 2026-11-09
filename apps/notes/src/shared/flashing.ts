@@ -15,8 +15,8 @@ import { flatCurve, sameCurve, sampleCurve, sanitizeCurve, type CurvePlane, type
  *
  * How long a cycle lasts is either the reader's own (`cycleMs`) or the music's
  * (`matching`): one of FLASH_MATCHINGS, read in bar notation -- 4/4 is four
- * cycles over a bar of four beats, one a beat; 1/4 one a bar; past 4/4 the
- * plain reverse fractions, 2/1 two a beat. Counted from the bar's one, so 1/4
+ * cycles over a bar of four beats, one a beat, the fastest; 1/4 one a bar.
+ * Counted from the bar's one, so 1/4
  * lands on every one; the thirds run on across the bar line as a polyrhythm,
  * which is intended. Matched, the cycle follows the music's tempo whenever a
  * beat is found (Grid Beat on, music playing) and falls back to `cycleMs`
@@ -63,13 +63,9 @@ export const FLASH_MATCHINGS = [
   { label: '2/3', cyclesPerBeat: 2 / 3 },
   { label: '3/4', cyclesPerBeat: 3 / 4 },
   { label: '4/4', cyclesPerBeat: 1 },
-  { label: '4/3', cyclesPerBeat: 4 / 3 },
-  { label: '3/2', cyclesPerBeat: 3 / 2 },
-  { label: '2/1', cyclesPerBeat: 2 },
-  { label: '3/1', cyclesPerBeat: 3 },
-  { label: '4/1', cyclesPerBeat: 4 },
 ] as const
-export const FLASH_MATCHING_ONE_TO_ONE = 6
+/** The default stop: 2/4, a cycle every two beats. */
+export const FLASH_MATCHING_DEFAULT = 3
 
 /**
  * Every matching's cycle starts again on the same beat every BEATS_REPEAT
@@ -122,7 +118,7 @@ export const FACTORY_FLASH_SHAPES: readonly FactoryFlashShape[] = [
 
 export const DEFAULT_FLASHING_SETTINGS: FlashingSettings = {
   ...cloneFlashShape(FACTORY_FLASH_SHAPES[0].shape),
-  matching: FLASH_MATCHING_ONE_TO_ONE,
+  matching: FLASH_MATCHING_DEFAULT,
 }
 
 export function cloneFlashShape(shape: Readonly<FlashShape>): FlashShape {

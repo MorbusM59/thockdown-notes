@@ -69,12 +69,11 @@ describe('matching the beat', () => {
     }
   })
 
-  it('reads in bar notation: 4/4 a cycle a beat, 1/4 a cycle a bar starting on the one, 2/1 two a beat', () => {
+  it('reads in bar notation: 4/4 a cycle a beat, 1/4 a cycle a bar starting on the one', () => {
     const at = (label: string) => FLASH_MATCHINGS.find((m) => m.label === label)!.cyclesPerBeat
     expect(flashPhaseAt(2.25, at('4/4'))).toBeCloseTo(0.25, 12)
     expect(flashPhaseAt(4, at('1/4'))).toBe(0)
     expect(flashPhaseAt(2, at('1/4'))).toBeCloseTo(0.5, 12)
-    expect(flashPhaseAt(0.25, at('2/1'))).toBeCloseTo(0.5, 12)
   })
 })
 

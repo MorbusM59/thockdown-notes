@@ -883,7 +883,7 @@ ${shortcutTable()}
 - **Presets** at the top work like [layout presets]($#presets), without export. They hold the curve and the cycle; **Steady** does not flash at all.
 - The **curve** is the caret's opacity over one cycle,: click to add a point, drag it, right-drag up or down to round it (a handle of 0 makes a sharp corner, for a hard blink), right-click to remove it. The graph is a bar of twelve, dashed on the beats. The end runs on into the start, so the first and last points move together.
 - **Cycle** (100–5000ms) is how long one cycle takes.
-- **Matching** makes the cycle follow the music's beat instead, while Grid Beat is on, music plays and a beat is found; otherwise the cycle above runs. It reads in bar notation: **4/4** is one cycle a beat, **1/4** one a bar, **2/1** two a beat. The thirds run across the bar line on purpose.
+- **Matching** makes the cycle follow the music's beat instead, while Grid Beat is on, music plays and a beat is found; otherwise the cycle above runs. It reads in bar notation: **4/4** is one cycle a beat, **1/4** one a bar. The thirds run across the bar line on purpose.
 
 ### [Speed Reading Settings](#speed-reading-settings)
 
