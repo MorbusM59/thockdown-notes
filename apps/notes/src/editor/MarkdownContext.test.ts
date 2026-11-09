@@ -285,6 +285,21 @@ describe('indentSelectionByStep', () => {
 })
 
 describe('applyMarkdownEnter', () => {
+  it('opens a blank line above a numbered item when the caret is at its start, without renumbering', () => {
+    const text = 'intro\n1. first\n2. second'
+    for (const column of [0, 1, 3]) {
+      const caret = 6 + column
+      const result = applyMarkdownEnter(text, collapsedSelection(caret))
+      expect(result?.text).toBe('intro\n\n1. first\n2. second')
+      expect(result?.selection.focus).toBe(caret + 1)
+    }
+  })
+
+  it('still splits a numbered item when the caret is inside its content', () => {
+    const result = applyMarkdownEnter('1. first', collapsedSelection(4))
+    expect(result?.text).toBe('1. f\n2. irst')
+  })
+
   it('continues unordered list item indentation', () => {
     const text = '- item'
     const selection = collapsedSelection(text.length)

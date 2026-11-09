@@ -894,6 +894,21 @@ export function applyMarkdownEnter(
     )
   }
 
+  // Enter with the caret at the start of a list item -- anywhere from the
+  // line's start up to the first character of the item's content -- opens a
+  // blank line ABOVE the item and leaves the item exactly as it was. Splitting
+  // there would put an empty item on the caret's side and a continuation
+  // marker (an incremented number, for an ordered list) in front of the
+  // item's whole prefix, which is never what a press at the front means.
+  const contentStart = context.line.lineEndExclusive - lineStructure.contentAfterPrefixes.length
+  if (lineStructure.listKind !== null && caretOffset <= contentStart) {
+    return buildTransformResult(
+      sourceText,
+      { from: context.line.lineStart, to: context.line.lineStart, insert: '\n' },
+      collapsedSelectionAt(caretOffset + 1),
+    )
+  }
+
   let inserted = '\n'
   let isListContinuation = false
 
