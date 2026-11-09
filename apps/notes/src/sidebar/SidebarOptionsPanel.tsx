@@ -1476,25 +1476,6 @@ export function SidebarOptionsPanel({
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-bottom" role="group" aria-label="Editor box colors">
           {BOX_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
         </div>
-        <OptionsSubsectionLabel>Box Bevel</OptionsSubsectionLabel>
-        <div className="utility-setting-slider-stack" aria-label="Box bevel">
-          <OptionsSliderRows rows={[1, 2, 2]}>
-            {BOX_BEVEL_SLIDERS.map(({ field, min, max, step, trackLabel, ariaLabel }) => (
-              <CompactScrollbarSlider
-                key={field}
-                id={`box-bevel-${field}`}
-                min={min}
-                max={max}
-                step={step}
-                value={boxBevel[field]}
-                trackLabel={trackLabel}
-                ariaLabel={ariaLabel}
-                defaultValue={0}
-                onCommit={(value) => setBoxBevel((previous) => sanitizeBoxBevel({ ...previous, [field]: value }, previous))}
-              />
-            ))}
-          </OptionsSliderRows>
-        </div>
         <OptionsSubsectionLabel>Editor Markdown</OptionsSubsectionLabel>
         <div className="options-color-grid options-element-grid options-row-grid options-row-grid-edit-markdown" role="group" aria-label="Editor markdown colors">
           {MARKDOWN_HIGHLIGHT_COLOR_ORDER.map((key) => renderHighlightSwatchButton(key))}
@@ -1870,7 +1851,8 @@ export function SidebarOptionsPanel({
         heading="Borders"
         iconClass="fa-border-top-left"
       >
-<div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
+        <OptionsSubsectionLabel>Panels</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Borders and spacing controls">
           <OptionsSliderRows>
             <CompactScrollbarSlider
               id="ui-border-radius"
@@ -1940,6 +1922,25 @@ export function SidebarOptionsPanel({
                 ),
               )}
             />
+          </OptionsSliderRows>
+        </div>
+        <OptionsSubsectionLabel>Boxes</OptionsSubsectionLabel>
+        <div className="utility-setting-slider-stack" aria-label="Box bevel">
+          <OptionsSliderRows rows={[1, 2, 2]}>
+            {BOX_BEVEL_SLIDERS.map(({ field, min, max, step, trackLabel, ariaLabel }) => (
+              <CompactScrollbarSlider
+                key={field}
+                id={`box-bevel-${field}`}
+                min={min}
+                max={max}
+                step={step}
+                value={boxBevel[field]}
+                trackLabel={trackLabel}
+                ariaLabel={ariaLabel}
+                defaultValue={0}
+                onCommit={(value) => setBoxBevel((previous) => sanitizeBoxBevel({ ...previous, [field]: value }, previous))}
+              />
+            ))}
           </OptionsSliderRows>
         </div>
       </AccordionSection>
