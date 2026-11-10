@@ -491,7 +491,7 @@
   border-color: rgba(81, 73, 66, 0.8);
 }
 
-/* One row of six track-styled cells per point, under the graph. */
+/* Track-styled rows shared by the curve editor and dictionary list. */
 .options-curve-rows {
   display:        flex;
   flex-direction: column;

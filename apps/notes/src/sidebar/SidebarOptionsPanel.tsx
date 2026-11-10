@@ -328,7 +328,7 @@ function DictionaryNameField({ label, onRename }: { label: string; onRename: (la
   }
   return (
     <input
-      className="options-eq-cell options-eq-field options-dictionary-name"
+      className="options-curve-cell options-curve-field options-dictionary-name"
       aria-label={`Name of dictionary ${label}`}
       spellCheck={false}
       maxLength={64}
@@ -2651,14 +2651,14 @@ export function SidebarOptionsPanel({
             active dictionary accepts it (spellCheck/spellCheckClient.ts). The
             checker itself is switched in Quick Access. */}
         <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
-        <div className="options-eq-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
+        <div className="options-curve-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
           {availableDictionaries.map((dictionary) => {
             const isActive = spellCheckDictionaries.includes(dictionary.id)
             return (
-              <div key={dictionary.id} className="options-eq-row options-dictionary-row">
+              <div key={dictionary.id} className="options-curve-row options-dictionary-row">
                 <button
                   type="button"
-                  className={`options-eq-cell options-eq-button options-dictionary-toggle${isActive ? ' is-active' : ''}`}
+                  className={`options-curve-cell options-curve-button options-dictionary-toggle${isActive ? ' is-active' : ''}`}
                   data-tooltip={isActive ? 'Checking with this dictionary' : 'Not checking with this dictionary'}
                   aria-label={`Check with ${dictionary.label}`}
                   aria-pressed={isActive}
@@ -2671,7 +2671,7 @@ export function SidebarOptionsPanel({
                 <DictionaryNameField label={dictionary.label} onRename={(label) => void renameSpellCheckDictionary(dictionary.id, label)} />
                 <button
                   type="button"
-                  className={`options-eq-cell options-eq-button${dictionary.bundled ? ' is-disabled' : ''}`}
+                  className={`options-curve-cell options-curve-button${dictionary.bundled ? ' is-disabled' : ''}`}
                   data-tooltip={dictionary.bundled ? 'Dictionaries that come with the app cannot be removed' : `Remove ${dictionary.label}`}
                   aria-label={`Remove ${dictionary.label}`}
                   aria-disabled={dictionary.bundled}
@@ -2681,7 +2681,7 @@ export function SidebarOptionsPanel({
                 </button>
                 <button
                   type="button"
-                  className="options-eq-cell options-eq-button"
+                  className="options-curve-cell options-curve-button"
                   data-tooltip="Install dictionaries: a .dic with its .aff, or an .oxt, .xpi or .zip holding them"
                   aria-label="Install dictionaries"
                   onClick={() => void installSpellCheckDictionary()}
