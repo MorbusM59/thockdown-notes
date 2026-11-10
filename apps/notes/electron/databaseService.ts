@@ -66,7 +66,7 @@ import {
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
 } from '@thockdown/look/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes';
-import type { MusicPoolQuery, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
+import type { IndexedMusicFile, MusicPoolQuery, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
 import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult, type ImageRenameResult, type StoredImageSummary, renameImageReferences } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
@@ -3388,10 +3388,9 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   /**
-   * A song row as the renderer sees it. A song added before tags were read
-   * (`tagsRead` 0: its title and artist are the old filename guess) has its
-   * tags read here and stored, once -- lazily, one song at a time as songs
-   * are played or touched, so an existing library is never read in one go.
+   * Legacy song rows whose tags were not read on import have their tags read
+   * here and stored once, lazily, one song at a time as they are played or
+   * touched, so an existing library is never read in one go.
    * `getMusicPlaylist` passes `readTags: false`: listing a whole bucket must
    * not open every file in it.
    */
@@ -3430,7 +3429,7 @@ export class DatabaseService {
     return row ? this.rowToSongEntry(row) : null;
   }
 
-  addMusicSongs(slot: PlaylistSlot, filePaths: string[]): MusicSongEntry[] {
+  addMusicSongs(slot: PlaylistSlot, indexedFiles: IndexedMusicFile[]): MusicSongEntry[] {
     const db = this.requireDb();
     const insert = db.prepare(`
       INSERT INTO music_songs (filePath, playlistSlot, title, artist, album, tagsRead)
@@ -3438,12 +3437,13 @@ export class DatabaseService {
       ON CONFLICT(filePath) DO NOTHING
     `);
 
-    // Read before the transaction, so the write lock is not held across file reads.
-    const songs = filePaths
-      .filter((fp) => AUDIO_EXTENSIONS.has(path.extname(fp).toLowerCase()))
-      .map((fp) => ({ fp, tags: readAudioTags(fp) }));
+    const songs = indexedFiles.filter(({ filePath }) =>
+      AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase()),
+    );
     const tx = db.transaction(() => {
-      for (const { fp, tags } of songs) insert.run(fp, slot, tags.title, tags.artist, tags.album);
+      for (const song of songs) {
+        insert.run(song.filePath, slot, song.title, song.artist, song.album);
+      }
     });
     tx();
     return this.getMusicPlaylist(slot);

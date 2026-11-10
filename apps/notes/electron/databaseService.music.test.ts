@@ -7,6 +7,8 @@ import BetterSqlite3 from 'better-sqlite3'
 import { DatabaseService } from './databaseService'
 import { MAX_PLAYLIST_SLOT, PLAYLIST_SLOTS } from '../src/shared/audioPlayer'
 
+const indexedFile = (filePath: string) => ({ filePath, title: '', artist: '', album: '' })
+
 /**
  * The playlist buckets grew from five to six ("Lounge"). `music_songs`
  * constrains its slot column with a CHECK, and SQLite cannot ALTER one --
@@ -36,13 +38,31 @@ describe('DatabaseService music playlist slots', () => {
     await db.initialize()
 
     for (const slot of PLAYLIST_SLOTS) {
-      db.addMusicSongs(slot, [`/music/slot-${slot}.mp3`])
+      db.addMusicSongs(slot, [indexedFile(`/music/slot-${slot}.mp3`)])
     }
 
     const counts = db.getMusicPlaylistCounts()
     for (const slot of PLAYLIST_SLOTS) {
       expect(counts[slot]).toBe(1)
     }
+  })
+
+  it('stores the tags returned by the background indexer', async () => {
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    db.addMusicSongs(2, [{
+      filePath: '/music/song.mp3',
+      title: 'Title',
+      artist: 'Artist',
+      album: 'Album',
+    }])
+
+    expect(db.getMusicPlaylist(2)[0]).toMatchObject({
+      filePath: '/music/song.mp3',
+      title: 'Title',
+      artist: 'Artist',
+      album: 'Album',
+    })
   })
 
   it('widens the slot CHECK on a database written by a five-slot build, keeping its songs', async () => {
@@ -75,7 +95,7 @@ describe('DatabaseService music playlist slots', () => {
     await db.initialize()
 
     // The new bucket now takes files...
-    db.addMusicSongs(MAX_PLAYLIST_SLOT, ['/music/new.mp3'])
+    db.addMusicSongs(MAX_PLAYLIST_SLOT, [indexedFile('/music/new.mp3')])
     expect(db.getMusicPlaylistCounts()[MAX_PLAYLIST_SLOT]).toBe(1)
 
     // ...and the rebuild carried the existing library over rather than
@@ -89,7 +109,7 @@ describe('DatabaseService music playlist slots', () => {
   it('is a no-op on a database already carrying the current range', async () => {
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    db.addMusicSongs(MAX_PLAYLIST_SLOT, ['/music/keep.mp3'])
+    db.addMusicSongs(MAX_PLAYLIST_SLOT, [indexedFile('/music/keep.mp3')])
     const idBefore = db.getMusicPlaylist(MAX_PLAYLIST_SLOT)[0].id
     db.close()
 

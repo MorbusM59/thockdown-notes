@@ -5,11 +5,11 @@ import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songT
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
-  getNextActiveSlotsForToggle,
+  getNextActiveSlotsForSelection,
   PLAYLIST_BUTTON_SLOTS,
   PLAYLIST_SLOT_ICONS,
   PLAYLIST_SLOT_THEMES,
-  shouldStopCurrentSongOnSlotToggle,
+  shouldStopCurrentSongAfterSlotSelection,
 } from '../shared/audioPlayer'
 import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -38,6 +38,7 @@ import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
+import { beginBackgroundWork } from '../shared/backgroundWork'
 
 // Purging a song from the library and clearing a playlist slot are both
 // "I know this is not undoable" -- the app's COMMIT threshold
@@ -51,6 +52,15 @@ const SEEK_HOLD_STEP = 0.05
 const SEEK_CLICK_STEP = 0.2
 
 type SeekDirection = 1 | -1
+
+async function withMusicIndex<T>(index: () => Promise<T>): Promise<T> {
+  const work = beginBackgroundWork('music-index')
+  try {
+    return await index()
+  } finally {
+    work.done()
+  }
+}
 
 
 
@@ -152,6 +162,9 @@ export const AudioControls = memo(function AudioControls({
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentSong, setCurrentSong] = useState<MusicSongEntry | null>(null)
   const [counts, setCounts] = useState<PlaylistCountsResult>(emptyPlaylistCounts)
+  const activeSlotsRef = useRef(activeSlots)
+  activeSlotsRef.current = activeSlots
+  const bucketSelectionVersionRef = useRef(0)
   // Slot button that is currently "primed" for clearing (held right-click)
   const [primedSlot, setPrimedSlot] = useState<PlaylistSlot | null>(null)
   // Position to seek to once the restored song's first playback begins.
@@ -711,41 +724,39 @@ export const AudioControls = memo(function AudioControls({
 
   // ---------------------------------------------------------------- playlist buttons
 
-  /** Take a bucket in or out of the pool; a song from a bucket taken out stops and the next is picked. */
-  const toggleSlot = useCallback(async (slot: PlaylistSlot) => {
-    const next = getNextActiveSlotsForToggle(activeSlots, slot)
-    const isDeactivating = activeSlots.includes(slot) && !next.includes(slot)
-
+  /** Change the selected buckets; a song whose bucket leaves the pool stops and the next is picked. */
+  const selectSlot = useCallback(async (slot: PlaylistSlot, additive: boolean) => {
+    const next = getNextActiveSlotsForSelection(activeSlotsRef.current, slot, additive)
+    bucketSelectionVersionRef.current += 1
+    activeSlotsRef.current = next
     onActiveSlotsChange(next)
 
-    if (isDeactivating && shouldStopCurrentSongOnSlotToggle({
+    if (shouldStopCurrentSongAfterSlotSelection({
       currentSongSlot: currentSong?.playlistSlot,
-      activeSlots,
-      toggledSlot: slot,
+      nextActiveSlots: next,
     })) {
       musicPlayerService.stop()
       setIsPlaying(false)
       setCurrentSong(null)
       await advanceToNextSong(next)
     }
-  }, [activeSlots, currentSong, onActiveSlotsChange, advanceToNextSong])
+  }, [currentSong, onActiveSlotsChange, advanceToNextSong])
 
-  const handleSlotLeftClick = useCallback(async (slot: PlaylistSlot) => {
+  const handleSlotLeftClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
+    const additive = event.shiftKey
     if (counts[slot] === 0) {
       // Empty playlist: open file picker.
       const files = await window.thockdownAudioPlayer?.pickFiles()
       if (files && files.length > 0) {
-        await window.thockdownAudioPlayer?.addSongs(slot, files)
+        const selectionVersion = bucketSelectionVersionRef.current
+        await withMusicIndex(async () => window.thockdownAudioPlayer?.addSongs(slot, files))
         await refreshCounts()
-        // Auto-toggle the slot on after first add.
-        if (!activeSlots.includes(slot)) {
-          onActiveSlotsChange([...activeSlots, slot])
-        }
+        if (selectionVersion === bucketSelectionVersionRef.current) await selectSlot(slot, additive)
       }
       return
     }
-    await toggleSlot(slot)
-  }, [counts, activeSlots, onActiveSlotsChange, refreshCounts, toggleSlot])
+    await selectSlot(slot, additive)
+  }, [counts, refreshCounts, selectSlot])
 
 
   const handleSlotRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
@@ -754,7 +765,7 @@ export const AudioControls = memo(function AudioControls({
     // Normal right-click = add more files.
     const files = await window.thockdownAudioPlayer?.pickFiles()
     if (files && files.length > 0) {
-      await window.thockdownAudioPlayer?.addSongs(slot, files)
+      await withMusicIndex(async () => window.thockdownAudioPlayer?.addSongs(slot, files))
       await refreshCounts()
     }
   }, [primedSlot, refreshCounts])
@@ -803,15 +814,12 @@ export const AudioControls = memo(function AudioControls({
     event.preventDefault()
     const folder = await window.thockdownAudioPlayer?.pickFolder()
     if (!folder) return
-    const files = await window.thockdownAudioPlayer?.scanFolderForAudio(folder)
-    if (files && files.length > 0) {
-      await window.thockdownAudioPlayer?.addSongs(slot, files)
-      await refreshCounts()
-      if (!activeSlots.includes(slot)) {
-        onActiveSlotsChange([...activeSlots, slot])
-      }
-    }
-  }, [activeSlots, onActiveSlotsChange, refreshCounts])
+    const selectionVersion = bucketSelectionVersionRef.current
+    const indexedCount = await withMusicIndex(async () => window.thockdownAudioPlayer?.addFolder(slot, folder))
+    if (!indexedCount) return
+    await refreshCounts()
+    if (selectionVersion === bucketSelectionVersionRef.current) await selectSlot(slot, true)
+  }, [refreshCounts, selectSlot])
 
   // Combine shift+right-click vs plain right-click on slot buttons.
   const handleSlotContextMenu = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
@@ -843,8 +851,8 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [isMuted, onMutedChange, isReverbBypassed, onReverbBypassedChange, onVolumeChange, onReverbAmountChange, onReverbRoomChange])
 
-  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, playFromPool, toggleSlot, setLevel, isPlaying })
-  mediaActionsRef.current = { handlePlayToggle, jumpSong, playFromPool, toggleSlot, setLevel, isPlaying }
+  const mediaActionsRef = useRef({ handlePlayToggle, jumpSong, playFromPool, selectSlot, setLevel, isPlaying })
+  mediaActionsRef.current = { handlePlayToggle, jumpSong, playFromPool, selectSlot, setLevel, isPlaying }
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -874,7 +882,9 @@ export const AudioControls = memo(function AudioControls({
   // published once stays current.
   const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
   const publishedPlayFromPool = useCallback((id: number) => { void mediaActionsRef.current.playFromPool(id) }, [])
-  const publishedToggleSlot = useCallback((slot: PlaylistSlot) => { void mediaActionsRef.current.toggleSlot(slot) }, [])
+  const publishedSelectSlot = useCallback((slot: PlaylistSlot, additive: boolean) => {
+    void mediaActionsRef.current.selectSlot(slot, additive)
+  }, [])
   // A new filter applies from the next pick: the song playing plays on.
   const setPoolFilter = useCallback((filter: MusicPoolFilter) => {
     if (samePoolFilter(filter, filterRef.current)) return
@@ -886,8 +896,8 @@ export const AudioControls = memo(function AudioControls({
   const publishedLevels = useMemo(() => ({ volume, reverb: reverbAmount, room: reverbRoom }), [volume, reverbAmount, reverbRoom])
   const publishedSetLevel = useCallback((level: keyof SoundLevels, fraction: number) => { mediaActionsRef.current.setLevel(level, fraction) }, [])
   useEffect(() => {
-    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, toggleSlot: publishedToggleSlot, setPoolFilter, levels: publishedLevels, setLevel: publishedSetLevel })
-  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedToggleSlot, setPoolFilter, publishedLevels, publishedSetLevel])
+    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, selectSlot: publishedSelectSlot, setPoolFilter, levels: publishedLevels, setLevel: publishedSetLevel })
+  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedSelectSlot, setPoolFilter, publishedLevels, publishedSetLevel])
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -1196,7 +1206,7 @@ export const AudioControls = memo(function AudioControls({
                 }
                 aria-label={PLAYLIST_SLOT_THEMES[slot]}
                 aria-pressed={isActive}
-                onClick={() => { void handleSlotLeftClick(slot) }}
+                onClick={(event) => { void handleSlotLeftClick(event, slot) }}
                 data-secondary-press="action"
                 onContextMenu={(e) => { void handleSlotContextMenu(e, slot) }}
                 onPointerDown={(e) => handleSlotPointerDown(e, slot)}

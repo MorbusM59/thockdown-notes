@@ -41,6 +41,7 @@ export type BackgroundWorkKind =
   | 'document-images'
   | 'image-store'
   | 'texture'
+  | 'music-index'
 
 export interface BackgroundWorkState {
   /** How many pieces of work are in flight. Zero means the app is idle. */

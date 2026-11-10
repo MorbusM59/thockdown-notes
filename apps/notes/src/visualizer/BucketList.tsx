@@ -4,10 +4,10 @@
  * gives, mirroring the song list: one entry on every other row from the top,
  * right-aligned, framed the way a song is (accent, gap, name, gap, accent).
  * An active bucket sits on the letterbox colour, cut out of the middle strip
- * (`middleHoles.ts`); the rest on the middle's. A press takes a bucket in or
- * out of the pool (`NowPlaying.toggleSlot`), and the song list follows the
- * pool it publishes. An empty bucket is shown and takes no press: filling
- * one is the music bar's (it opens a file dialog).
+ * (`middleHoles.ts`); the rest on the middle's. A press selects that bucket
+ * alone; Shift-press adds it to the selection (`NowPlaying.selectSlot`), and
+ * the song list follows the pool it publishes. An empty bucket is shown and
+ * takes no press: filling one is the music bar's (it opens a file dialog).
  *
  * Five entries, re-rendered only when the pool changes.
  */
@@ -77,7 +77,7 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
           className="visualizer-bucket-hit"
           style={cell(entry.left, entry.top, entry.width)}
           onPointerDown={(event) => {
-            if (event.button === 0 && !entry.empty) readNowPlaying().toggleSlot(entry.slot)
+            if (event.button === 0 && !entry.empty) readNowPlaying().selectSlot(entry.slot, event.shiftKey)
           }}
         />
       ))}

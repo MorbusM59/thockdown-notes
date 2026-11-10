@@ -5,7 +5,7 @@ import { sanitizeDocumentText } from './textSanitization';
 export const AUDIO_PLAYER_CHANNELS = {
   pickFiles:            'audio-player:pick-files',
   pickFolder:           'audio-player:pick-folder',
-  scanFolderForAudio:   'audio-player:scan-folder-for-audio',
+  addFolder:            'audio-player:add-folder',
   getPlaylist:          'audio-player:get-playlist',
   addSongs:             'audio-player:add-songs',
   clearPlaylist:        'audio-player:clear-playlist',
@@ -93,6 +93,8 @@ export type MusicSongEntry = {
   durationSec: number;
 };
 
+export type IndexedMusicFile = Pick<MusicSongEntry, 'filePath' | 'title' | 'artist' | 'album'>;
+
 export type PickNextSongResult = MusicSongEntry | null;
 
 export type PlaylistCountsResult = Record<PlaylistSlot, number>;
@@ -102,8 +104,8 @@ export type AudioPlayerApi = {
   pickFiles(): Promise<string[]>;
   /** Open a folder dialog; returns the chosen folder path or null. */
   pickFolder(): Promise<string | null>;
-  /** Recursively scan a folder and return all audio file paths. */
-  scanFolderForAudio(folderPath: string): Promise<string[]>;
+  /** Recursively index a folder and add its audio files; returns the number found. */
+  addFolder(slot: PlaylistSlot, folderPath: string): Promise<number>;
   /** Return all songs for the given playlist slot. */
   getPlaylist(slot: PlaylistSlot): Promise<MusicSongEntry[]>;
   /** Add files to the given playlist slot. */
@@ -156,22 +158,23 @@ export type AudioPlayerApi = {
   getSongById(id: number): Promise<MusicSongEntry | null>;
 };
 
-export function getNextActiveSlotsForToggle(activeSlots: PlaylistSlot[], toggledSlot: PlaylistSlot): PlaylistSlot[] {
-  return activeSlots.includes(toggledSlot)
-    ? activeSlots.filter((slot) => slot !== toggledSlot)
-    : [...activeSlots, toggledSlot];
+export function getNextActiveSlotsForSelection(
+  activeSlots: PlaylistSlot[],
+  selectedSlot: PlaylistSlot,
+  additive: boolean,
+): PlaylistSlot[] {
+  if (!additive) return [selectedSlot]
+  return activeSlots.includes(selectedSlot) ? activeSlots : [...activeSlots, selectedSlot]
 }
 
-export function shouldStopCurrentSongOnSlotToggle({
+export function shouldStopCurrentSongAfterSlotSelection({
   currentSongSlot,
-  activeSlots,
-  toggledSlot,
+  nextActiveSlots,
 }: {
   currentSongSlot: PlaylistSlot | undefined;
-  activeSlots: PlaylistSlot[];
-  toggledSlot: PlaylistSlot;
+  nextActiveSlots: readonly PlaylistSlot[];
 }): boolean {
-  return activeSlots.includes(toggledSlot) && currentSongSlot === toggledSlot;
+  return currentSongSlot !== undefined && !nextActiveSlots.includes(currentSongSlot)
 }
 
 /** Supported audio file extensions that can be added to playlists. */

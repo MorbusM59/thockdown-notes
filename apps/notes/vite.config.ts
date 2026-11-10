@@ -100,8 +100,10 @@ export default defineConfig(({ mode }) => {
         : [
             electron({
               main: {
-                // Shortcut of `build.lib.entry`.
-                entry: 'electron/main.ts',
+                entry: {
+                  main: 'electron/main.ts',
+                  musicIndexWorker: 'electron/musicIndexWorker.ts',
+                },
                 vite: {
                   build: {
                     rollupOptions: {

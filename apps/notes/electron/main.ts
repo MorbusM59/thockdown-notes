@@ -39,6 +39,7 @@ import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags
 import { ensureHelpGuide } from './help/helpGuideNote'
 import { installedUserDataPath } from './installedUserData'
 import { installNetworkIsolation, openExternalIfAllowed, setRemoteImagesAllowed } from './networkIsolation'
+import { indexMusicFiles, indexMusicFolder } from './musicIndexing'
 
 // Typed senders for the events the main process pushes to the window.
 const emitWindowEvent = eventEmitter<WindowEvents>(WINDOW_EVENT_CHANNELS)
@@ -1198,35 +1199,18 @@ function registerIpcHandlers() {
       });
       return canceled || filePaths.length === 0 ? null : filePaths[0];
     },
-    scanFolderForAudio: async (_event, folderPath: string) => {
-      const results: string[] = [];
-      const scan = async (dir: string): Promise<void> => {
-        let entries;
-        try {
-          entries = await fsPromises.readdir(dir, { withFileTypes: true });
-        } catch {
-          return;
-        }
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            await scan(fullPath);
-          } else if (entry.isFile()) {
-            const ext = path.extname(entry.name).toLowerCase();
-            if (AUDIO_EXTENSIONS.has(ext)) {
-              results.push(fullPath);
-            }
-          }
-        }
-      };
-      await scan(folderPath);
-      return results;
+    addFolder: async (_event, slot: PlaylistSlot, folderPath: string) => {
+      const indexedFiles = await indexMusicFolder(folderPath)
+      if (indexedFiles.length === 0) return 0
+      databaseService!.addMusicSongs(slot, indexedFiles)
+      return indexedFiles.length
     },
     getPlaylist: async (_event, slot: PlaylistSlot) => {
       return databaseService!.getMusicPlaylist(slot);
     },
     addSongs: async (_event, slot: PlaylistSlot, filePaths: string[]) => {
-      return databaseService!.addMusicSongs(slot, filePaths);
+      const indexedFiles = await indexMusicFiles(filePaths)
+      return databaseService!.addMusicSongs(slot, indexedFiles)
     },
     clearPlaylist: async (_event, slot: PlaylistSlot) => {
       databaseService!.clearMusicPlaylist(slot);
