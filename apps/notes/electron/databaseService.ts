@@ -1584,18 +1584,63 @@ export class DatabaseService {
   }
 
   /**
-   * Resets the user-visible session state back to a fresh-install baseline:
-   * the default editor section is preserved, every other open section and its
-   * tabs are discarded, each mode's first preset is reactivated and its unsaved
-   * changes are cleared. This is the database-backed counterpart to
-   * StateService.clearAppState(), which resets the app-state JSON file.
+   * Resets the visible workspace and active layouts without deleting the
+   * user's named collections or pinned notes. Transient sections are folded
+   * into the default collection; named collections are parked with their tabs.
    */
   resetToFactoryDefaults(): void {
     const db = this.requireDb();
     const tx = db.transaction(() => {
-      db.prepare('DELETE FROM note_tabs').run();
+      const defaultNoteIds = new Set(
+        (db.prepare('SELECT noteId FROM note_tabs WHERE sectionId = ?')
+          .all(DEFAULT_EDITOR_SECTION_ID) as Array<{ noteId: string }>)
+          .map(({ noteId }) => noteId),
+      );
+      // Older note_tabs tables predate the explicit id column; rowid preserves
+      // the same insertion order in both those tables and the current schema.
+      const transientTabs = db.prepare(`
+        SELECT nt.noteId, nt.addedAt, nt.lastActiveChapterNoteId
+        FROM note_tabs nt
+        JOIN editor_sections s ON s.id = nt.sectionId
+        WHERE s.id != ? AND s.name IS NULL
+        ORDER BY s.position IS NULL, s.position, nt.position, nt.rowid
+      `).all(DEFAULT_EDITOR_SECTION_ID) as Array<{
+        noteId: string;
+        addedAt: number;
+        lastActiveChapterNoteId: string | null;
+      }>;
+      const insertTab = db.prepare(`
+        INSERT INTO note_tabs (sectionId, noteId, position, addedAt, lastActiveChapterNoteId)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      let nextDefaultTabPosition = (db.prepare(
+        'SELECT COALESCE(MAX(position), -1) + 1 AS nextPosition FROM note_tabs WHERE sectionId = ?',
+      ).get(DEFAULT_EDITOR_SECTION_ID) as { nextPosition: number }).nextPosition;
+      for (const tab of transientTabs) {
+        if (defaultNoteIds.has(tab.noteId)) continue;
+        insertTab.run(
+          DEFAULT_EDITOR_SECTION_ID,
+          tab.noteId,
+          nextDefaultTabPosition++,
+          tab.addedAt,
+          tab.lastActiveChapterNoteId,
+        );
+        defaultNoteIds.add(tab.noteId);
+      }
+
+      const defaultTabs = db.prepare(
+        'SELECT rowid FROM note_tabs WHERE sectionId = ? ORDER BY position, rowid',
+      ).all(DEFAULT_EDITOR_SECTION_ID) as Array<{ rowid: number }>;
+      const setTabPosition = db.prepare('UPDATE note_tabs SET position = ? WHERE rowid = ?');
+      defaultTabs.forEach(({ rowid }, index) => setTabPosition.run(index, rowid));
+
       db.prepare('DELETE FROM editor_slots').run();
-      db.prepare('DELETE FROM editor_sections WHERE id != ?').run(DEFAULT_EDITOR_SECTION_ID);
+      db.prepare(`
+        UPDATE editor_sections
+        SET position = NULL, widthFraction = NULL, fixedWidthPx = NULL
+        WHERE id != ? AND name IS NOT NULL
+      `).run(DEFAULT_EDITOR_SECTION_ID);
+      db.prepare('DELETE FROM editor_sections WHERE id != ? AND name IS NULL').run(DEFAULT_EDITOR_SECTION_ID);
       db.prepare(`
         UPDATE editor_sections
         SET name = NULL,

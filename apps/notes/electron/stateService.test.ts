@@ -10,7 +10,10 @@ import { THOCKQUEST } from '../src/adventure/content'
 import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/core/director'
 import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
-import { SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '@thockdown/soundscape/soundscape'
+import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '@thockdown/soundscape/soundscape'
+import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES } from '../src/shared/keystrokeSounds'
+import { DEFAULT_SOUNDSTAGE_PREFERENCES } from '../src/shared/soundstages'
+import { DEFAULT_FLASH_SHAPE_PREFERENCES, DEFAULT_FLASHING_SETTINGS } from '../src/shared/flashing'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
@@ -480,8 +483,13 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicActiveSlots).toEqual([1, 6])
   })
 
-  it('clearAppState resets persisted app state back to the default baseline', async () => {
+  it('clearAppState restores factory preferences while preserving user-created presets', async () => {
     const writer = new StateService(dataRoot)
+    const savedSoundscape = {
+      id: 'my-soundscape',
+      name: 'My soundscape',
+      settings: cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[0].settings),
+    }
     await writer.saveAppState({
       selectedNoteId: 'note-123',
       menu: {
@@ -490,6 +498,32 @@ describe('StateService app-state field round-trip', () => {
         selectedYears: [2024],
         searchQuery: 'stale query',
         slotOverlay: { kind: 'guide', sectionId: 'section-1', previousNoteId: 'note-2' },
+        editorStyle: 'vt323',
+        viewStyle: 'narrow',
+        editorFontSize: 24,
+        viewFontSize: 25,
+        uiFontStyle: 'vt323',
+        uiFontScale: 1.4,
+        renderScrollTotalTimeSec: 3,
+        keystrokeSoundPresets: {
+          ...DEFAULT_KEYSTROKE_SOUND_PREFERENCES,
+          saved: [{ id: 'my-keystrokes', settings: DEFAULT_KEYSTROKE_SOUND_PREFERENCES.unsaved }],
+        },
+        musicSoundstages: {
+          ...DEFAULT_SOUNDSTAGE_PREFERENCES,
+          factory: 'wide',
+          saved: [{ id: 'my-stage', settings: DEFAULT_SOUNDSTAGE_PREFERENCES.unsaved }],
+        },
+        soundscapes: {
+          ...DEFAULT_SOUNDSCAPE_PREFERENCES,
+          enabled: true,
+          customPresets: [savedSoundscape],
+        },
+        flashing: { ...DEFAULT_FLASHING_SETTINGS, cycleMs: 2500 },
+        flashingPresets: {
+          ...DEFAULT_FLASH_SHAPE_PREFERENCES,
+          saved: [{ id: 'my-flash', shape: DEFAULT_FLASH_SHAPE_PREFERENCES.unsaved }],
+        },
       },
     })
 
@@ -501,6 +535,41 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.sidebarMode).toBe('date')
     expect(loaded.menu?.searchQuery).toBe('')
     expect(loaded.menu?.slotOverlay).toBeUndefined()
+    expect(loaded.menu?.editorStyle).toBe('syne')
+    expect(loaded.menu?.viewStyle).toBe('modern')
+    expect(loaded.menu?.editorFontSize).toBe(16)
+    expect(loaded.menu?.viewFontSize).toBe(16)
+    expect(loaded.menu?.uiFontStyle).not.toBe('vt323')
+    expect(loaded.menu?.renderScrollTotalTimeSec).toBeUndefined()
+    expect(loaded.menu?.soundscapes?.enabled).toBe(false)
+    expect(loaded.menu?.soundscapes?.customPresets.map((preset) => preset.id)).toEqual(['my-soundscape'])
+    expect(loaded.menu?.musicSoundstages?.factory).toBe('neutral')
+    expect(loaded.menu?.musicSoundstages?.saved.map((stage) => stage.id)).toEqual(['my-stage'])
+    expect(loaded.menu?.keystrokeSoundPresets?.saved.map((preset) => preset.id)).toEqual(['my-keystrokes'])
+    expect(loaded.menu?.flashing).toEqual(DEFAULT_FLASHING_SETTINGS)
+    expect(loaded.menu?.flashingPresets?.saved.map((preset) => preset.id)).toEqual(['my-flash'])
+  })
+
+  it('clearAppState preserves saved presets from the live menu snapshot', async () => {
+    const writer = new StateService(dataRoot)
+    await writer.clearAppState({
+      sidebarMode: 'date',
+      selectedMonths: [],
+      selectedYears: [],
+      searchQuery: '',
+      soundscapes: {
+        ...DEFAULT_SOUNDSCAPE_PREFERENCES,
+        customPresets: [{
+          id: 'unsaved-to-disk',
+          name: 'Current session preset',
+          settings: cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[0].settings),
+        }],
+      },
+    })
+
+    const loaded = await new StateService(dataRoot).loadAppState()
+    expect(loaded.menu?.soundscapes?.enabled).toBe(false)
+    expect(loaded.menu?.soundscapes?.customPresets.map((preset) => preset.id)).toEqual(['unsaved-to-disk'])
   })
 })
 

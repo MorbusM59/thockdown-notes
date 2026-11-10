@@ -48,6 +48,7 @@ import {
 import { buildNextAutoAssignedId, normalizeAssignedIdInput } from '../shared/assignedIds'
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../shared/openItemsText'
 import { stableStringify } from '../shared/stableStringify'
+import { resetMenuWithPreservedPresets } from '../shared/appStateReset'
 
 const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
 
@@ -497,6 +498,77 @@ function persistStore(store: BrowserMockStore): void {
   window.localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(store))
 }
 
+function resetBrowserMockWorkspaceToFactoryDefaults(store: BrowserMockStore): void {
+  const defaultSection = store.editorSections.find((section) => section.id === DEFAULT_EDITOR_SECTION_ID)
+    ?? createDefaultEditorSections()[0]
+  const transientSections = store.editorSections.filter((section) => (
+    section.id !== DEFAULT_EDITOR_SECTION_ID && section.name === null
+  ))
+  const transientIds = new Set(transientSections.map((section) => section.id))
+  const sectionOrder = new Map(store.editorSections.map((section) => [section.id, section.position]))
+  const compareTabs = (a: NoteTabEntry, b: NoteTabEntry) => (
+    (sectionOrder.get(a.sectionId) ?? Number.MAX_SAFE_INTEGER)
+      - (sectionOrder.get(b.sectionId) ?? Number.MAX_SAFE_INTEGER)
+    || a.position - b.position
+    || a.addedAtMs - b.addedAtMs
+  )
+  const tabsToKeepInDefault = [
+    ...store.noteTabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID).sort(compareTabs),
+    ...store.noteTabs.filter((tab) => transientIds.has(tab.sectionId)).sort(compareTabs),
+  ]
+  const seenNotes = new Set<string>()
+  const defaultTabs = tabsToKeepInDefault.flatMap((tab, position) => {
+    if (seenNotes.has(tab.noteId)) return []
+    seenNotes.add(tab.noteId)
+    return [{ ...tab, sectionId: DEFAULT_EDITOR_SECTION_ID, position }]
+  })
+
+  store.noteTabs = [
+    ...store.noteTabs.filter((tab) => (
+      tab.sectionId !== DEFAULT_EDITOR_SECTION_ID && !transientIds.has(tab.sectionId)
+    )),
+    ...defaultTabs,
+  ]
+  store.editorSections = [
+    {
+      ...defaultSection,
+      name: null,
+      position: 0,
+      widthFraction: null,
+      fixedWidthPx: null,
+      lastActiveNoteId: null,
+      noteSlotInitialized: false,
+    },
+    ...store.editorSections
+      .filter((section) => section.id !== DEFAULT_EDITOR_SECTION_ID && section.name !== null)
+      .map((section) => ({
+        ...section,
+        position: null,
+        widthFraction: null,
+        fixedWidthPx: null,
+      })),
+  ]
+  store.editorSlots = createDefaultEditorSlots()
+
+  const now = Date.now()
+  store.uiLoadoutEntries = store.uiLoadoutEntries.map((entry) => {
+    const preset = entry.id === 1
+      ? LIGHT_FACTORY_PRESETS[0]
+      : entry.id === -1
+        ? DARK_FACTORY_PRESETS[0]
+        : entry.id === LOADOUT_PENDING_ID_ABS
+          ? LIGHT_FACTORY_PRESETS[0]
+          : entry.id === -LOADOUT_PENDING_ID_ABS
+            ? DARK_FACTORY_PRESETS[0]
+            : undefined
+    return {
+      ...entry,
+      isActive: entry.id === 1 || entry.id === -1,
+      ...(preset ? { signature: stableStringify(preset), payload: clone(preset), updatedAt: now } : {}),
+    }
+  })
+}
+
 function buildNotesBridge(storeRef: { current: BrowserMockStore }): NoteLifecycleApi {
   /** External notes' from-disk baselines, in memory only (see saveNoteSnapshot below). */
   const fromDiskBaselineById = new Map<string, { content: string; timestamp: string }>()
@@ -882,9 +954,13 @@ function buildStateBridge(storeRef: { current: BrowserMockStore }): AppStateApi 
       })
     },
 
-    async clearAppState(): Promise<void> {
+    async clearAppState(currentMenu): Promise<void> {
       mutate((store) => {
-        store.appState = clone(DEFAULT_APP_STATE)
+        store.appState = {
+          selectedNoteId: null,
+          menu: resetMenuWithPreservedPresets(undefined, currentMenu ?? store.appState.menu),
+        }
+        resetBrowserMockWorkspaceToFactoryDefaults(store)
       })
     },
 

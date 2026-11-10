@@ -16,6 +16,7 @@ import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
 import { sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings } from '../src/shared/keystrokeSounds';
+import { resetMenuWithPreservedPresets } from '../src/shared/appStateReset';
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
@@ -711,11 +712,13 @@ export class StateService {
     await this.writeJson(this.appStatePath, payload);
   }
 
-  async clearAppState(): Promise<void> {
+  async clearAppState(currentMenu?: PersistedMenuState): Promise<void> {
+    const previousMenu = currentMenu ?? (await this.loadAppState()).menu;
+    const defaultMenu = sanitizeMenu(DEFAULT_APP_STATE.menu);
     const payload: AppState = {
       selectedNoteId: null,
       viewport: undefined,
-      menu: sanitizeMenu(DEFAULT_APP_STATE.menu),
+      menu: resetMenuWithPreservedPresets(defaultMenu, previousMenu),
     };
     await this.writeJson(this.appStatePath, payload);
   }

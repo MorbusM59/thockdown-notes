@@ -3331,8 +3331,8 @@ export function SidebarOptionsPanel({
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn${clearAppStatePrimed ? ' primed' : ''}`}
             onClick={clearAppState}
-            data-tooltip={clearAppStatePrimed ? 'Click again to clear persisted app state and reload' : 'Clear persisted app state and reload'}
-            aria-label={clearAppStatePrimed ? 'Confirm clearing persisted app state and reload' : 'Clear persisted app state and reload'}
+            data-tooltip={clearAppStatePrimed ? 'Click again to reset UI settings to factory defaults and reload' : 'Reset UI settings to factory defaults and reload'}
+            aria-label={clearAppStatePrimed ? 'Confirm resetting UI settings to factory defaults and reload' : 'Reset UI settings to factory defaults and reload'}
           >
             <span className="fa-solid fa-trash" aria-hidden="true" />
           </button>

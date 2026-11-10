@@ -325,7 +325,7 @@ export interface WindowState {
 export interface AppStateApi {
   loadAppState(): Promise<AppState>;
   saveAppState(state: AppState): Promise<void>;
-  clearAppState(): Promise<void>;
+  clearAppState(currentMenu: PersistedMenuState): Promise<void>;
   loadWindowState(): Promise<WindowState>;
   saveWindowState(state: WindowState): Promise<void>;
 }

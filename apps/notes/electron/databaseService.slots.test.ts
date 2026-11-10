@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import BetterSqlite3 from 'better-sqlite3'
 import { DatabaseService } from './databaseService'
 import { DEFAULT_EDITOR_SECTION_ID } from '../src/shared/sections'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
@@ -155,19 +156,79 @@ describe('DatabaseService editor slots', () => {
     }
   })
 
-  it('factory reset clears extra sections and restores the first factory presets', () => {
-    db.createEditorSection('extra')
-    db.updatePendingUiLoadout('light', {
-      ...LIGHT_FACTORY_PRESETS[0],
-      borderRadiusRegularPx: 99,
-      spacingRegularPx: 99,
-    })
+  it('factory reset supports legacy tab schemas while preserving collections and pinned notes', async () => {
+    const now = Date.now()
+    for (const id of ['default-note', 'named-note', 'transient-note']) {
+      db.upsertNoteContent({
+        id,
+        title: id,
+        text: `# ${id}`,
+        createdAtMs: now,
+        updatedAtMs: now,
+      })
+    }
 
+    db.createEditorSection('extra')
+    const namedSection = db.listEditorSections().find((entry) => entry.name === 'extra')!
+    const transientSection = db.createEditorSection().find((entry) => (
+      entry.id !== DEFAULT_EDITOR_SECTION_ID && entry.name === null
+    ))!
+    db.addNoteTab(DEFAULT_EDITOR_SECTION_ID, 'default-note')
+    db.addNoteTab(namedSection.id, 'named-note')
+    db.addNoteTab(transientSection.id, 'transient-note')
+    db.addNoteTab(transientSection.id, 'default-note')
+    db.updatePendingUiLoadout('light', { ...LIGHT_FACTORY_PRESETS[0], borderRadiusRegularPx: 19 })
+
+    db.close()
+    const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
+    rawDb.pragma('foreign_keys = OFF')
+    rawDb.exec(`
+      DROP INDEX IF EXISTS idx_note_tabs_section_position;
+      ALTER TABLE note_tabs RENAME TO note_tabs_with_id;
+      CREATE TABLE note_tabs (
+        sectionId TEXT NOT NULL,
+        noteId TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        addedAt INTEGER NOT NULL,
+        lastActiveChapterNoteId TEXT REFERENCES notes(id) ON DELETE SET NULL,
+        UNIQUE (sectionId, noteId),
+        FOREIGN KEY (sectionId) REFERENCES editor_sections(id) ON DELETE CASCADE,
+        FOREIGN KEY (noteId) REFERENCES notes(id) ON DELETE CASCADE
+      );
+      INSERT INTO note_tabs (sectionId, noteId, position, addedAt, lastActiveChapterNoteId)
+      SELECT sectionId, noteId, position, addedAt, lastActiveChapterNoteId
+      FROM note_tabs_with_id
+      ORDER BY id;
+      DROP TABLE note_tabs_with_id;
+      CREATE INDEX idx_note_tabs_section_position ON note_tabs(sectionId, position);
+    `)
+    rawDb.close()
+
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
     db.resetToFactoryDefaults()
 
     const sections = db.listEditorSections()
-    expect(sections).toHaveLength(1)
-    expect(sections[0]).toMatchObject({ id: DEFAULT_EDITOR_SECTION_ID, name: null, position: 0 })
+    expect(sections.find((entry) => entry.id === DEFAULT_EDITOR_SECTION_ID)).toMatchObject({
+      name: null,
+      position: 0,
+      widthFraction: null,
+      fixedWidthPx: null,
+      lastActiveNoteId: null,
+    })
+    expect(sections.find((entry) => entry.id === namedSection.id)).toMatchObject({
+      name: 'extra',
+      position: null,
+      widthFraction: null,
+      fixedWidthPx: null,
+      lastActiveNoteId: null,
+    })
+    expect(sections.some((entry) => entry.id === transientSection.id)).toBe(false)
+
+    const tabs = db.listNoteTabs()
+    expect(tabs.filter((tab) => tab.sectionId === DEFAULT_EDITOR_SECTION_ID).map((tab) => tab.noteId))
+      .toEqual(['default-note', 'transient-note'])
+    expect(tabs.find((tab) => tab.sectionId === namedSection.id)?.noteId).toBe('named-note')
 
     const loadouts = db.listUiLoadouts()
     expect(loadouts.entries.find((entry) => entry.id === 1)?.isActive).toBe(true)

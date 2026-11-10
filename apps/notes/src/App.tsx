@@ -39,7 +39,6 @@ import {
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
-import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
 import {
   DEFAULT_GLAZE_SETTINGS,
   sanitizeGlazeSettings,
@@ -2311,6 +2310,7 @@ function App() {
   })
   const pendingUpdateDebounceRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
+  const resettingAppStateRef = useRef(false)
   const noteTransitionLockRef = useRef(false)
   // Mirrors useSectionTabs' chapterBarMode so buildMenuStateSnapshot (defined
   // earlier than the hook call, since it depends on things the hook itself
@@ -4067,16 +4067,14 @@ function App() {
     setClearAppStatePrimed(false)
 
     if (!window.thockdownState) return
-    await window.thockdownState.clearAppState()
-    applyUiLayoutLoadout(uiMode === 'dark' ? DARK_FACTORY_PRESETS[0] : LIGHT_FACTORY_PRESETS[0])
-    const refreshedMenuState = buildMenuStateSnapshot()
-    await window.thockdownState.saveAppState({
-      selectedNoteId: null,
-      viewport: undefined,
-      menu: refreshedMenuState,
-    })
+    if (appStateSaveTimerRef.current !== null) {
+      window.clearTimeout(appStateSaveTimerRef.current)
+      appStateSaveTimerRef.current = null
+    }
+    await window.thockdownState.clearAppState(buildMenuStateSnapshot())
+    resettingAppStateRef.current = true
     window.location.reload()
-  }, [applyUiLayoutLoadout, buildMenuStateSnapshot, clearAppStatePrimed, uiMode])
+  }, [buildMenuStateSnapshot, clearAppStatePrimed])
 
   // The debounced save builds its snapshot when it FIRES, from the state as
   // it is then: a snapshot kept from earlier is a copy that goes stale, and
@@ -8285,12 +8283,13 @@ ${markdownHtml}
   // What App holds and saves later, settled when the app quits
   // (src/shared/quitParticipants.ts).
   useEffect(() => registerQuitParticipant('note text', () => noteDocuments.flushAll()), [noteDocuments])
-  useEffect(() => registerQuitParticipant('slots', () => Promise.all(
+  useEffect(() => registerQuitParticipant('slots', () => resettingAppStateRef.current ? undefined : Promise.all(
     // Every open slot, not just the active one: each has its own note's
     // caret and scroll position.
     [...sectionRegistryRef.current.values()].map((section) => section.persistActiveNoteEditModeStateNow()),
   )), [])
   useEffect(() => registerQuitParticipant('app state', () => {
+    if (resettingAppStateRef.current) return
     // The debounced save is superseded by this one, which carries the same
     // snapshot as of now.
     if (appStateSaveTimerRef.current !== null) {

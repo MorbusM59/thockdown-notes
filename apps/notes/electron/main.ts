@@ -615,9 +615,9 @@ function registerIpcHandlers() {
       const saved = await stateService!.loadAppState().catch(() => null)
       setRemoteImagesAllowed(saved?.menu?.allowRemoteImages === true)
     },
-    clearAppState: async () => {
+    clearAppState: async (_event, currentMenu) => {
       databaseService?.resetToFactoryDefaults();
-      await stateService!.clearAppState();
+      await stateService!.clearAppState(currentMenu);
       setRemoteImagesAllowed(false);
     },
     loadWindowState: async () => stateService!.loadWindowState(),
