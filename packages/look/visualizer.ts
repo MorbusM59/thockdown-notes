@@ -399,12 +399,12 @@ export interface VisualizerColors {
 }
 
 const LIGHT_VISUALIZER_COLORS: VisualizerColors = {
-  edge: 'rgba(0, 0, 0, 0.451)', pane: 'rgba(255, 255, 255, 1)',
+  edge: 'rgba(0, 0, 0, 0.5)', pane: 'rgba(255, 255, 255, 1)',
   wave: 'rgba(255, 255, 255, 0.314)', pulse: 'rgba(255, 255, 255, 0.392)', accent: 'rgba(0, 0, 0, 0.235)', letterbox: 'rgba(255, 255, 255, 1)',
 }
 
 const DARK_VISUALIZER_COLORS: VisualizerColors = {
-  edge: 'rgba(0, 0, 0, 0.784)', pane: 'rgba(0, 0, 0, 0.275)',
+  edge: 'rgba(0, 0, 0, 1)', pane: 'rgba(0, 0, 0, 0.5)',
   wave: 'rgba(255, 255, 255, 1)', pulse: 'rgba(0, 0, 0, 0.137)', accent: '', letterbox: '',
 }
 
