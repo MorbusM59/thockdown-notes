@@ -1,4 +1,6 @@
 import { Worker } from 'node:worker_threads'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { IndexedMusicFile } from '../src/shared/audioPlayer'
 import type { MusicIndexRequest } from './musicIndexCore'
 
@@ -11,7 +13,8 @@ export function indexMusicFolder(folderPath: string): Promise<IndexedMusicFile[]
 }
 
 function runMusicIndex(request: MusicIndexRequest): Promise<IndexedMusicFile[]> {
-  const worker = new Worker(new URL('./musicIndexWorker.js', import.meta.url), {
+  const workerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'musicIndexWorker.js')
+  const worker = new Worker(workerPath, {
     workerData: request,
   })
 
