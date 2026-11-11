@@ -16,7 +16,7 @@
  * written texture is regenerated on the surface itself; a pending change is
  * written at once when the link moves or the panel closes, so none is lost.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { hsvaToRgba, parseCssColorToRgba, rgbaToCssColor, rgbaToHsva } from '@thockdown/look/colorMath'
 import {
@@ -46,40 +46,6 @@ const SURFACES: ReadonlyArray<{ surface: TextureSurfaceKey; glyph: string; name:
 
 const linkIdOf = (surface: TextureSurfaceKey) => `texture:${surface}`
 
-/** The element each surface's texture layer sits in (the layer is drawn over that element's own background). */
-const SURFACE_LAYERS: Record<TextureSurfaceKey, string> = {
-  appGrid: '.app-grid',
-  sidebarContent: '.sidebar-content-texture',
-  editorEditText: '.markdown-editor-texture',
-  editorRenderText: '.markdown-preview-texture',
-}
-
-/**
- * What a surface's texture is drawn over: the backgrounds at and above the
- * element holding its layer, down to the first solid colour, read from the live DOM so the preview
- * matches the surface whatever the theme put there. Null when the surface is
- * not on screen (the reader while editing), and the preview then shows
- * the texture over the panel's own background.
- */
-function surfaceBackground(surface: TextureSurfaceKey): string | null {
-  const layer = document.querySelector(SURFACE_LAYERS[surface])
-  let element: Element | null = surface === 'appGrid' ? layer : layer?.parentElement ?? null
-  // Every background image down to the first opaque colour, nearest on top:
-  // a surface's own background is often a translucent gradient over the
-  // colour of what holds it.
-  const images: string[] = []
-  while (element) {
-    const style = getComputedStyle(element)
-    if (style.backgroundImage !== 'none') images.push(style.backgroundImage)
-    const color = parseCssColorToRgba(style.backgroundColor)
-    if (color && color.a >= 1) return [...images, style.backgroundColor].join(', ')
-    // A translucent colour is one more layer, not the bottom.
-    if (color && color.a > 0) images.push(`linear-gradient(${style.backgroundColor}, ${style.backgroundColor})`)
-    element = element.parentElement
-  }
-  return images.length > 0 ? images.join(', ') : null
-}
-
 export function SurfaceTexturePicker({ materials, onWrite }: {
   materials: TextureMaterialsBySurface
   onWrite: (surface: TextureSurfaceKey, material: TextureMaterialSettings) => void
@@ -92,12 +58,6 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
   // While linked, the picker paints the surface's colour; the preview follows
   // it at once, as the linked swatch does, rather than after the write.
   const liveColor = useLinkedColor(active ? linkIdOf(active) : '')
-  const [base, setBase] = useState<string | null>(null)
-  // Before paint, so a switch of surface never shows the new colour over the old background for a frame.
-  useLayoutEffect(() => {
-    setBase(active ? surfaceBackground(active) : null)
-  }, [active, materials])
-
   // The pending write, kept in a ref so a flush can run from a press, a
   // timer or an unmount with the same value in hand.
   const pendingRef = useRef<{ surface: TextureSurfaceKey; material: TextureMaterialSettings; timer: number } | null>(null)
@@ -198,7 +158,6 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
         data-tooltip={shown ? (shown.enabled ? 'Texture on: click for colour only' : 'Colour only: click to turn the texture on') : 'Select a surface'}
         style={shown ? {
           '--texture-preview-color': liveColor ?? rgbaToCssColor(hsvaToRgba(shown.color)),
-          ...(base ? { background: base } : null),
           '--texture-preview-mask': shown.enabled ? previewCss : 'none',
         } as CSSProperties : undefined}
         onClick={() => {

@@ -748,7 +748,7 @@
   overflow:   hidden;
   border:     1px solid var(--btn-border-default);
   box-shadow:   none;
-  background: none;
+  background: #fff;
 }
 
 .options-texture-preview.is-active {
@@ -756,6 +756,7 @@
   box-shadow:   none;
 }
 
+/* Preview order: white button background, app base, then the masked tint. */
 .options-texture-preview::before,
 .options-texture-preview::after {
   content:        '';
@@ -765,7 +766,13 @@
   pointer-events: none;
 }
 
+.options-texture-preview::after {
+  z-index:    1;
+  background: var(--palette-parchment-lightest);
+}
+
 .options-texture-preview::before {
+  z-index:           2;
   background-color: var(--texture-preview-color, transparent);
   -webkit-mask-image:    var(--texture-preview-mask);
   -webkit-mask-repeat:   repeat;
