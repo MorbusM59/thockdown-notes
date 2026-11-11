@@ -199,10 +199,14 @@
   text-overflow:   ellipsis;
   pointer-events:  none;
   user-select:     none;
-  font-size:       calc(10px * var(--ui-font-scale));
   letter-spacing:  0.03em;
   text-transform:  lowercase;
   color:           var(--color-text-40);
+}
+
+.utility-setting-scrollbar-track-label,
+.options-surface-texture-seed .options-seed-btn {
+  font-size: calc(10px * var(--ui-font-scale));
 }
 
 .utility-setting-scrollbar-thumb {
@@ -662,7 +666,7 @@
 /* Two sliders stacked in one grid row: the slider's thickness is set at its
    source, so the shell, the thumb and the pointer arithmetic all follow it. */
 .options-color-picker-sliders,
-.options-surface-texture-sliders {
+.options-surface-texture-controls {
   --canonical-scroll-thickness: calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
@@ -671,7 +675,7 @@
 
 /* Surface textures (apps/notes/src/colorPicker/SurfaceTexturePicker.tsx):
    two rows of the six-column grid -- the four surfaces in a 2x2, the 2x2
-   preview, then the seed over the granularity/smoothness stack. */
+   preview, then four equal controls in the remaining two-column area. */
 .options-surface-textures {
   display:               grid;
   grid-template-columns: repeat(6, var(--color-grid-cell));
@@ -686,19 +690,31 @@
   height:      100%;
 }
 
-.options-surface-texture-seed {
-  position:       relative;
+.options-surface-texture-controls {
   grid-column:    5 / span 2;
-  grid-row:       1;
-}
-
-.options-surface-texture-sliders {
-  grid-column:    5 / span 2;
-  grid-row:       2;
-  display:        flex;
-  flex-direction: column;
+  grid-row:       1 / span 2;
+  display:        grid;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
   gap:            var(--color-grid-gap);
   min-width:      0;
+}
+
+.options-surface-texture-seed {
+  position:       relative;
+  min-width:      0;
+  min-height:     0;
+}
+
+.options-surface-texture-seed .options-seed-btn {
+  justify-content: flex-start;
+  gap:             var(--spacing-regular);
+  padding-block:   0;
+  line-height:     calc(var(--canonical-scroll-thickness) - 2px);
+}
+
+.options-surface-texture-controls > [role="slider"] {
+  min-height: 0;
+  min-width:  0;
 }
 
 /* Seed buttons (the texture's and the glaze's) and the texture preview */

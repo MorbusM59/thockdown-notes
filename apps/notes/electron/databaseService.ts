@@ -356,6 +356,7 @@ type NormalizedTextureCacheRequest = {
   width: number;
   height: number;
   seed: number;
+  textureStrength: number;
   granularity: number;
   vSteps: number;
   algorithmVersion: number;
@@ -375,6 +376,7 @@ function normalizeTextureCacheRequest(request: TextureCacheRequest): NormalizedT
     width: Math.max(1, Math.round(request.width)),
     height: Math.max(1, Math.round(request.height)),
     seed: Math.max(0, Math.round(request.seed)),
+    textureStrength: Number(request.textureStrength.toFixed(4)),
     granularity: Number(request.granularity.toFixed(4)),
     vSteps: Math.max(1, Math.round(request.vSteps)),
     algorithmVersion: Math.max(1, Math.round(request.algorithmVersion)),
@@ -387,6 +389,7 @@ function textureCacheCompositeKey(request: NormalizedTextureCacheRequest): strin
     request.width,
     request.height,
     request.seed,
+    request.textureStrength,
     request.granularity,
     request.vSteps,
     request.algorithmVersion,
@@ -433,6 +436,7 @@ function normalizeTextureMaterialSettings(
   return {
     enabled: source.enabled !== false,
     seed: clampInteger(source.seed, 0, 0x7fffffff, fallback.seed),
+    textureStrength: roundForSignature(clampNumber(source.textureStrength, 0, 1, fallback.textureStrength)),
     granularity: clampInteger(source.granularity, 1, 20, fallback.granularity),
     vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),
     color: {
@@ -2787,6 +2791,7 @@ export class DatabaseService {
         AND width = ?
         AND height = ?
         AND seed = ?
+        AND textureStrength = ?
         AND granularity = ?
         AND vSteps = ?
         AND algorithmVersion = ?
@@ -2796,6 +2801,7 @@ export class DatabaseService {
       normalized.width,
       normalized.height,
       normalized.seed,
+      normalized.textureStrength,
       normalized.granularity,
       normalized.vSteps,
       normalized.algorithmVersion,
@@ -2812,6 +2818,7 @@ export class DatabaseService {
         AND width = ?
         AND height = ?
         AND seed = ?
+        AND textureStrength = ?
         AND granularity = ?
         AND vSteps = ?
         AND algorithmVersion = ?
@@ -2821,6 +2828,7 @@ export class DatabaseService {
       normalized.width,
       normalized.height,
       normalized.seed,
+      normalized.textureStrength,
       normalized.granularity,
       normalized.vSteps,
       normalized.algorithmVersion,
@@ -2842,6 +2850,7 @@ export class DatabaseService {
         width,
         height,
         seed,
+        textureStrength,
         granularity,
         vSteps,
         algorithmVersion,
@@ -2849,12 +2858,13 @@ export class DatabaseService {
         mimeType,
         createdAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       normalized.surface,
       normalized.width,
       normalized.height,
       normalized.seed,
+      normalized.textureStrength,
       normalized.granularity,
       normalized.vSteps,
       normalized.algorithmVersion,
@@ -2875,7 +2885,7 @@ export class DatabaseService {
     const cutoffMs = Date.now() - maxAgeMs;
 
     const rows = db.prepare(`
-      SELECT rowid, surface, width, height, seed, granularity, vSteps, algorithmVersion, createdAt
+      SELECT rowid, surface, width, height, seed, textureStrength, granularity, vSteps, algorithmVersion, createdAt
       FROM texture_pattern_cache
       ORDER BY createdAt DESC
     `).all() as Array<{
@@ -2884,6 +2894,7 @@ export class DatabaseService {
       width: number;
       height: number;
       seed: number;
+      textureStrength: number;
       granularity: number;
       vSteps: number;
       algorithmVersion: number;
@@ -2901,6 +2912,7 @@ export class DatabaseService {
           width: row.width,
           height: row.height,
           seed: row.seed,
+          textureStrength: row.textureStrength,
           granularity: row.granularity,
           vSteps: row.vSteps,
           algorithmVersion: row.algorithmVersion,
@@ -3698,6 +3710,35 @@ export class DatabaseService {
     })();
   }
 
+  private migrateTexturePatternCache(): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(texture_pattern_cache)').all() as Array<{ name: string; pk: number }>;
+    if (
+      columns.some((column) => column.name === 'textureStrength' && column.pk > 0)
+    ) {
+      return;
+    }
+
+    db.exec(`
+      DROP TABLE IF EXISTS texture_pattern_cache;
+      CREATE TABLE texture_pattern_cache (
+        surface TEXT NOT NULL,
+        width INTEGER NOT NULL,
+        height INTEGER NOT NULL,
+        seed INTEGER NOT NULL,
+        textureStrength REAL NOT NULL,
+        granularity REAL NOT NULL,
+        vSteps INTEGER NOT NULL,
+        algorithmVersion INTEGER NOT NULL,
+        data BLOB NOT NULL,
+        mimeType TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        PRIMARY KEY (surface, width, height, seed, textureStrength, granularity, vSteps, algorithmVersion)
+      );
+      CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
+    `);
+  }
+
   private ensureSchema(): void {
     const db = this.requireDb();
 
@@ -3777,13 +3818,14 @@ export class DatabaseService {
         width INTEGER NOT NULL,
         height INTEGER NOT NULL,
         seed INTEGER NOT NULL,
+        textureStrength REAL NOT NULL,
         granularity REAL NOT NULL,
         vSteps INTEGER NOT NULL,
         algorithmVersion INTEGER NOT NULL,
         data BLOB NOT NULL,
         mimeType TEXT NOT NULL,
         createdAt INTEGER NOT NULL,
-        PRIMARY KEY (surface, width, height, seed, granularity, vSteps, algorithmVersion)
+        PRIMARY KEY (surface, width, height, seed, textureStrength, granularity, vSteps, algorithmVersion)
       );
 
       CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
@@ -3971,6 +4013,8 @@ export class DatabaseService {
         trashedAt TEXT NOT NULL
       );
     `);
+
+    this.migrateTexturePatternCache();
 
     // A fresh install always starts with exactly one (default, unnamed)
     // section — the split-view UI grows the rest from there.

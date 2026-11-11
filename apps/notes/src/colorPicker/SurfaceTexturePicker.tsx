@@ -2,8 +2,8 @@
  * The surface textures: the four surfaces that carry a texture, and the one
  * editor they share. Two rows of the six-column grid:
  *
- *   grid    | edit   | preview | preview | seed            | seed
- *   sidebar | render | preview | preview | granularity over smoothness
+ *   grid    | edit   | preview | preview | seed
+ *   sidebar | render | preview | preview | texture / granularity / smoothness
  *
  * The four surfaces are colour targets like every other (ColorTargetButton):
  * a left click links one, which makes it the surface the preview, the seed
@@ -22,6 +22,8 @@ import { hsvaToRgba, parseCssColorToRgba, rgbaToCssColor, rgbaToHsva } from '@th
 import {
   TEXTURE_GRANULARITY_MAX,
   TEXTURE_GRANULARITY_MIN,
+  TEXTURE_STRENGTH_MAX,
+  TEXTURE_STRENGTH_MIN,
   TEXTURE_VSTEPS_MAX,
   TEXTURE_VSTEPS_MIN,
   type TextureMaterialSettings,
@@ -152,7 +154,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
    * A right click on a surface paints it: the staged colour through the
    * channel mask (`css`, already resolved by ColorTargetButton), and -- while
    * a surface is linked and its texture is on -- that texture's seed,
-   * granularity and smoothness too. With the linked texture off, or nothing
+   * strength, granularity and smoothness too. With the linked texture off, or nothing
    * linked, it paints the colour alone.
    */
   const paint = (surface: TextureSurfaceKey, css: string) => {
@@ -162,10 +164,10 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
     }
     const rgba = parseCssColorToRgba(css)
     if (!rgba) return
-    const { seed, granularity, vSteps } = shown
+    const { seed, textureStrength, granularity, vSteps } = shown
     const pending = pendingRef.current
     if (pending?.surface === surface) flush()
-    onWriteRef.current(surface, { ...materialsRef.current[surface], seed, granularity, vSteps, enabled: true, color: rgbaToHsva(rgba) })
+    onWriteRef.current(surface, { ...materialsRef.current[surface], seed, textureStrength, granularity, vSteps, enabled: true, color: rgbaToHsva(rgba) })
   }
 
   const previewCss = useTextureSurface({
@@ -203,49 +205,66 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
           if (active) edit(active, (current) => ({ ...current, enabled: !current.enabled }))
         }}
       />
-      <div className="options-surface-texture-seed">
-        <button
-          type="button"
-          className="options-seed-btn"
-          disabled={!shown}
-          data-live-tooltip={shown ? `Seed: ${shown.seed}\nClick: random. Right click: type one in` : 'Select a surface'}
-          aria-label={shown ? `Texture seed ${shown.seed}` : 'Texture seed'}
-          onClick={() => {
-            if (active) edit(active, (current) => ({ ...current, seed: Math.floor(Math.random() * (TEXTURE_SEED_MAX + 1)) }))
-          }}
-          data-secondary-press="action"
-          onContextMenu={(event) => {
-            event.preventDefault()
-            if (shown) setSeedEntry(String(shown.seed))
-          }}
-        ><span className="fa-solid fa-seedling" aria-hidden="true" /></button>
-        {seedEntry !== null && active ? (
-          <input
-            className="utility-setting-scrollbar-entry"
-            aria-label="Texture seed"
-            inputMode="numeric"
-            spellCheck={false}
-            autoFocus
-            value={seedEntry}
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => setSeedEntry(event.target.value.replace(/[^0-9]/g, ''))}
-            onKeyDown={(event) => {
-              event.stopPropagation()
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                const parsed = Number.parseInt(seedEntry, 10)
-                setSeedEntry(null)
-                if (Number.isFinite(parsed)) edit(active, (current) => ({ ...current, seed: Math.min(TEXTURE_SEED_MAX, Math.max(0, parsed)) }))
-              } else if (event.key === 'Escape' || event.key === 'Tab') {
-                event.preventDefault()
-                setSeedEntry(null)
-              }
+      <div className="options-surface-texture-controls">
+        <div className="options-surface-texture-seed">
+          <button
+            type="button"
+            className="options-seed-btn"
+            disabled={!shown}
+            data-live-tooltip={shown ? `Seed: ${shown.seed}\nClick: random. Right click: type one in` : 'Select a surface'}
+            aria-label={shown ? `Texture seed ${shown.seed}` : 'Texture seed'}
+            onClick={() => {
+              if (active) edit(active, (current) => ({ ...current, seed: Math.floor(Math.random() * (TEXTURE_SEED_MAX + 1)) }))
             }}
-            onBlur={() => setSeedEntry(null)}
-          />
-        ) : null}
-      </div>
-      <div className="options-surface-texture-sliders">
+            data-secondary-press="action"
+            onContextMenu={(event) => {
+              event.preventDefault()
+              if (shown) setSeedEntry(String(shown.seed))
+            }}
+          >
+            <span className="fa-solid fa-seedling" aria-hidden="true" />
+            <span>{shown?.seed ?? ''}</span>
+          </button>
+          {seedEntry !== null && active ? (
+            <input
+              className="utility-setting-scrollbar-entry"
+              aria-label="Texture seed"
+              inputMode="numeric"
+              spellCheck={false}
+              autoFocus
+              value={seedEntry}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => setSeedEntry(event.target.value.replace(/[^0-9]/g, ''))}
+              onKeyDown={(event) => {
+                event.stopPropagation()
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  const parsed = Number.parseInt(seedEntry, 10)
+                  setSeedEntry(null)
+                  if (Number.isFinite(parsed)) edit(active, (current) => ({ ...current, seed: Math.min(TEXTURE_SEED_MAX, Math.max(0, parsed)) }))
+                } else if (event.key === 'Escape' || event.key === 'Tab') {
+                  event.preventDefault()
+                  setSeedEntry(null)
+                }
+              }}
+              onBlur={() => setSeedEntry(null)}
+            />
+          ) : null}
+        </div>
+        <CompactScrollbarSlider
+          id="texture-strength"
+          min={TEXTURE_STRENGTH_MIN}
+          max={TEXTURE_STRENGTH_MAX}
+          step={0.01}
+          value={shown?.textureStrength ?? TEXTURE_STRENGTH_MAX}
+          trackLabel="texture"
+          ariaLabel="Texture strength"
+          secondaryPress="type"
+          disabled={!active}
+          onCommit={(value) => {
+            if (active) edit(active, (current) => ({ ...current, textureStrength: value }))
+          }}
+        />
         <CompactScrollbarSlider
           id="texture-granularity"
           min={TEXTURE_GRANULARITY_MIN}

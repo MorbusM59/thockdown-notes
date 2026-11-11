@@ -4,7 +4,7 @@ import type { TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, 
 import { clampMaterialSettings } from './generateTexture';
 import { beginBackgroundWork } from '../shared/backgroundWork';
 
-export const TEXTURE_ALGORITHM_VERSION = 3;
+export const TEXTURE_ALGORITHM_VERSION = 4;
 export const TEXTURE_REPEAT_TILE_SIZE = 512;
 
 function revokeUrl(url: string | null): void {
@@ -133,6 +133,7 @@ export function useTextureSurface(params: {
   const usePersistentCache = params.usePersistentCache ?? true;
   const material = useMemo(() => clampMaterialSettings(params.material), [params.material]);
   const materialSeed = material.seed;
+  const materialTextureStrength = material.textureStrength;
   const materialGranularity = material.granularity;
   const materialVSteps = material.vSteps;
   const [url, setUrl] = useState<string | null>(null);
@@ -161,6 +162,7 @@ export function useTextureSurface(params: {
       width: TEXTURE_REPEAT_TILE_SIZE,
       height: TEXTURE_REPEAT_TILE_SIZE,
       seed: materialSeed,
+      textureStrength: materialTextureStrength,
       granularity: materialGranularity,
       vSteps: materialVSteps,
       algorithmVersion: TEXTURE_ALGORITHM_VERSION,
@@ -188,6 +190,7 @@ export function useTextureSurface(params: {
           width: TEXTURE_REPEAT_TILE_SIZE,
           height: TEXTURE_REPEAT_TILE_SIZE,
           seed: materialSeed,
+          textureStrength: materialTextureStrength,
           granularity: materialGranularity,
           vSteps: materialVSteps,
         });
@@ -230,6 +233,7 @@ export function useTextureSurface(params: {
     enabled,
     materialGranularity,
     materialSeed,
+    materialTextureStrength,
     materialVSteps,
     surface,
     usePersistentCache,

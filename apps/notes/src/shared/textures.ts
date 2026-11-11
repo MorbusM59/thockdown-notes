@@ -12,6 +12,7 @@ export type TextureCacheRequest = {
   width: number;
   height: number;
   seed: number;
+  textureStrength: number;
   granularity: number;
   vSteps: number;
   algorithmVersion: number;

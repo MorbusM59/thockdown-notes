@@ -676,6 +676,7 @@ function normalizeTextureMaterial(source: unknown, fallback: TextureMaterialSett
   return {
     enabled: record.enabled !== false,
     seed: Math.max(0, Math.round(toFiniteNumber(record.seed, fallback.seed))),
+    textureStrength: clamp(toFiniteNumber(record.textureStrength, fallback.textureStrength), 0, 1),
     granularity: clamp(
       Math.round(toFiniteNumber(record.granularity, fallback.granularity)),
       TEXTURE_GRANULARITY_MIN,
@@ -767,6 +768,7 @@ function normalizeTextureMaterialForLoadoutSignature(source: TextureMaterialSett
   return {
     enabled: source.enabled,
     seed: Math.max(0, Math.round(source.seed)),
+    textureStrength: roundForSignature(clamp(source.textureStrength, 0, 1)),
     granularity: clamp(Math.round(source.granularity), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
     vSteps: clamp(Math.round(source.vSteps), TEXTURE_VSTEPS_MIN, TEXTURE_VSTEPS_MAX),
     color: {
@@ -2455,6 +2457,7 @@ function App() {
         width: TEXTURE_REPEAT_TILE_SIZE,
         height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.appGrid.seed,
+        textureStrength: textureMaterials.appGrid.textureStrength,
         granularity: textureMaterials.appGrid.granularity,
         vSteps: textureMaterials.appGrid.vSteps,
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
@@ -2464,6 +2467,7 @@ function App() {
         width: TEXTURE_REPEAT_TILE_SIZE,
         height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.sidebarContent.seed,
+        textureStrength: textureMaterials.sidebarContent.textureStrength,
         granularity: textureMaterials.sidebarContent.granularity,
         vSteps: textureMaterials.sidebarContent.vSteps,
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
@@ -2473,6 +2477,7 @@ function App() {
         width: TEXTURE_REPEAT_TILE_SIZE,
         height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.editorEditText.seed,
+        textureStrength: textureMaterials.editorEditText.textureStrength,
         granularity: textureMaterials.editorEditText.granularity,
         vSteps: textureMaterials.editorEditText.vSteps,
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,
@@ -2482,6 +2487,7 @@ function App() {
         width: TEXTURE_REPEAT_TILE_SIZE,
         height: TEXTURE_REPEAT_TILE_SIZE,
         seed: textureMaterials.editorRenderText.seed,
+        textureStrength: textureMaterials.editorRenderText.textureStrength,
         granularity: textureMaterials.editorRenderText.granularity,
         vSteps: textureMaterials.editorRenderText.vSteps,
         algorithmVersion: TEXTURE_ALGORITHM_VERSION,

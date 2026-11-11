@@ -41,6 +41,7 @@ function mergeTextureMaterialSettings(
   return {
     enabled: override?.enabled ?? base.enabled,
     seed: override?.seed ?? base.seed,
+    textureStrength: override?.textureStrength ?? base.textureStrength,
     granularity: override?.granularity ?? base.granularity,
     vSteps: override?.vSteps ?? base.vSteps,
     color: {

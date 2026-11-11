@@ -124,6 +124,12 @@ export function quantizeValue(value: number, vSteps: number): number {
   return Math.min(band, steps) / steps;
 }
 
+export function applyTextureStrength(maskAlpha: number, textureStrength: number): number {
+  const mask = Math.max(0, Math.min(1, maskAlpha));
+  const strength = Math.max(0, Math.min(1, textureStrength));
+  return 1 - (strength * (1 - mask));
+}
+
 export function generateTextureRgba(params: {
   width: number;
   height: number;
@@ -184,7 +190,8 @@ export function generateTextureRgba(params: {
       out[idx] = 255;
       out[idx + 1] = 255;
       out[idx + 2] = 255;
-      out[idx + 3] = Math.round(Math.max(0, Math.min(1, stepped)) * 255);
+      const opacity = applyTextureStrength(stepped, material.textureStrength);
+      out[idx + 3] = Math.round(Math.max(0, Math.min(1, opacity)) * 255);
     }
   }
 
@@ -202,6 +209,7 @@ export function clampMaterialSettings(material: TextureMaterialSettings): Textur
   return {
     enabled: material.enabled !== false,
     seed: Number.isFinite(material.seed) ? Math.max(0, Math.round(material.seed)) : 0,
+    textureStrength: Number.isFinite(material.textureStrength) ? Math.max(0, Math.min(1, material.textureStrength)) : 1,
     granularity: Number.isFinite(material.granularity) ? Math.max(1, Math.min(20, material.granularity)) : 10,
     vSteps: Number.isFinite(material.vSteps) ? Math.max(1, Math.min(20, Math.round(material.vSteps))) : 8,
     color,

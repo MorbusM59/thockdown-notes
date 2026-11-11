@@ -16,7 +16,7 @@ class FakeWorker {
   answer(data: unknown) { if (!this.terminated) this.onmessage?.({ data }); }
 }
 
-const request = { width: 1, height: 1, seed: 1, granularity: 1, vSteps: 1 };
+const request = { width: 1, height: 1, seed: 1, textureStrength: 1, granularity: 1, vSteps: 1 };
 
 describe('startTextureJob', () => {
   let state: BackgroundWorkState = { pending: 0, progress: null };

@@ -13,6 +13,7 @@ workerScope.onmessage = async (event: MessageEvent<TextureWorkerRequest>) => {
   const material: TextureMaterialSettings = clampMaterialSettings({
     enabled: true,
     seed: payload.seed,
+    textureStrength: payload.textureStrength,
     granularity: payload.granularity,
     vSteps: payload.vSteps,
     color: { h: 0, s: 0, v: 1, a: 1 },
