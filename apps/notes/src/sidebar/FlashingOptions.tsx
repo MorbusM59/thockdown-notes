@@ -43,7 +43,7 @@ const POSITION: CurveAxisFormat = {
 }
 
 const OPACITY: CurveAxisFormat = {
-  display: (y) => `${Math.round(y * 100)}%`,
+  display: (y) => String(Math.round(y * 100)),
   raw: (y) => String(Math.round(y * 100)),
   parse: (percent) => Math.round((percent / 100) / FLASH_Y_STEP) * FLASH_Y_STEP,
   noun: 'opacity in percent',
@@ -168,7 +168,8 @@ export function FlashingOptions({ flashing, editShape, applyShape, setMatching, 
         horizontals={HORIZONTALS}
         x={POSITION}
         y={OPACITY}
-        endLabels={['start', 'end']}
+        columnHeaders={['#', 'pos.', '%', 'shape']}
+        pointLabel={(index) => String(index)}
         ariaLabel="Flashing curve"
         tooltip={'Flashing curve: the opacity over one cycle, drawn on a bar of twelve (dashed on the beats). The end runs on into the start, so the two are one point'}
       />

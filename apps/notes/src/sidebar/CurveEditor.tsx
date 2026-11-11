@@ -54,8 +54,6 @@ export interface CurveEditorProps {
   columnHeaders?: readonly [string, string, string, string]
   /** Optional replacement for the default endpoint labels. */
   pointLabel?: (index: number, isLast: boolean) => string
-  /** Optional display and input format for a point's handle value. */
-  handleFormat?: Pick<CurveAxisFormat, 'display' | 'raw' | 'parse'>
   ariaLabel: string
   /** The graph's tooltip: what the plane is, then how it is operated. */
   tooltip: string
@@ -347,7 +345,7 @@ interface CurvePointRowProps extends CurveEditorProps {
   onAdd: () => void
 }
 
-function CurvePointRow({ curve, index, isActive, onSelect, onEdit, onSetX, onRemove, onAdd, x, y, xStep, yStep, handleStep, plane, endLabels, pointLabel, handleFormat }: CurvePointRowProps) {
+function CurvePointRow({ curve, index, isActive, onSelect, onEdit, onSetX, onRemove, onAdd, x, y, xStep, yStep, handleStep, plane, endLabels, pointLabel }: CurvePointRowProps) {
   const point = curve[index]
   const isLast = index === curve.length - 1
   const isEnd = index === 0 || isLast
@@ -376,10 +374,10 @@ function CurvePointRow({ curve, index, isActive, onSelect, onEdit, onSetX, onRem
       />
       <CurveField
         ariaLabel={`Point ${label} handle, 0 to ${plane.handleMax}`}
-        display={handleFormat?.display(point.handle) ?? point.handle.toFixed(2)}
-        raw={handleFormat?.raw(point.handle) ?? String(point.handle)}
+        display={point.handle.toFixed(2)}
+        raw={String(point.handle)}
         onFocus={onSelect}
-        onType={(value) => onEdit({ handle: handleFormat?.parse(value) ?? value })}
+        onType={(value) => onEdit({ handle: value })}
         onStep={(direction) => onEdit({ handle: snap(point.handle, handleStep) + (direction * handleStep) })}
       />
       <button

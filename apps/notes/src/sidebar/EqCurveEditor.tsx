@@ -39,12 +39,6 @@ const GAIN: CurveAxisFormat = {
   noun: 'gain in dB',
 }
 
-const HANDLE: Pick<CurveAxisFormat, 'display' | 'raw' | 'parse'> = {
-  display: (value) => String(Math.round(value * 100)),
-  raw: (value) => String(Math.round(value * 100)),
-  parse: (value) => value / 100,
-}
-
 /** The music EQ curve (`shared/musicEqCurve.ts`): the shared curve editor on the EQ's plane of semitones by dB. */
 export function EqCurveEditor({ curve, onChange }: { curve: EqPoint[]; onChange: (next: EqPoint[]) => void }) {
   const points = useMemo(() => eqToPlane(curve), [curve])
@@ -62,9 +56,8 @@ export function EqCurveEditor({ curve, onChange }: { curve: EqPoint[]; onChange:
       horizontals={HORIZONTALS}
       x={FREQUENCY}
       y={GAIN}
-      columnHeaders={['#', 'Hz', 'dB', '%']}
+      columnHeaders={['#', 'Hz', 'dB', 'shape']}
       pointLabel={(index) => String(index)}
-      handleFormat={HANDLE}
       ariaLabel="Music EQ curve"
       tooltip={`EQ curve: 20 Hz to 20 kHz, -${EQ_DB_MAX} to +${EQ_DB_MAX} dB`}
     />
