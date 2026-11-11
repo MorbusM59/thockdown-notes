@@ -734,7 +734,7 @@
   border:          1px solid var(--btn-border-default);
   border-radius:   var(--border-radius-regular);
   background:      var(--btn-bg-default);
-  display:         inline-flex;
+  display:         flex;
   align-items:     center;
   justify-content: center;
 }
