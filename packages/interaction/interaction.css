@@ -747,12 +747,13 @@
   position:   relative;
   overflow:   hidden;
   border:     1px solid var(--btn-border-default);
+  box-shadow:   none;
   background: none;
 }
 
 .options-texture-preview.is-active {
-  border-color: var(--btn-border-active);
-  box-shadow:   var(--box-shadow-inverted-harsh-active);
+  border-color: var(--btn-border-default);
+  box-shadow:   none;
 }
 
 .options-texture-preview::before,
