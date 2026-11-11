@@ -2094,9 +2094,9 @@ function App() {
   // Which section last received a caret placement, click, or keystroke.
   // Interactions that target "the current note" without a section of their
   // own -- Find & Replace today, drag-a-note-onto-a-section later -- read
-  // this rather than assuming there's only one section. With a single
-  // section it's always DEFAULT_EDITOR_SECTION_ID; the split-view work is
-  // what gives it real values to switch between.
+  // this rather than assuming there's only one section. It starts at
+  // DEFAULT_EDITOR_SECTION_ID and follows the section that receives input,
+  // including a right-hand section promoted when the leftmost slot closes.
   const [activeSectionId, setActiveSectionId] = useState<string>(DEFAULT_EDITOR_SECTION_ID)
   const markSectionActive = useCallback((sectionId: string) => {
     setActiveSectionId((previous) => (previous === sectionId ? previous : sectionId))
@@ -5914,6 +5914,11 @@ ${markdownHtml}
     }
   }, [applyResolvedSections, fixedWidthPxBySectionId, measureSlotWidthsPx, persistSlotWidthsPx, pruneReviewGutterVisibility, syncFixedWidthsToComputed])
 
+  const handleCloseSlotLeft = useCallback(async (promotedSectionId: string, leftSectionId: string) => {
+    setActiveSectionId(promotedSectionId)
+    await handleCloseSlot(leftSectionId)
+  }, [handleCloseSlot])
+
   const handleRenameSection = useCallback(async (sectionId: string, name: string | null) => {
     const sectionsApi = window.thockdownSections
     if (!sectionsApi) return
@@ -9374,6 +9379,9 @@ ${markdownHtml}
                   canCreateSlot={canCreateSlot}
                   onCreateSlot={() => void handleCreateSlot(entry.position ?? index, entry.id)}
                   onCloseSlot={() => void handleCloseSlot(entry.id)}
+                  onCloseSlotLeft={index > 0
+                    ? () => void handleCloseSlotLeft(entry.id, editorSections[index - 1].id)
+                    : null}
                   onClearSection={() => void handleClearSection(entry.id)}
                   sectionName={entry.name}
                   onRenameSection={(name) => void handleRenameSection(entry.id, name)}

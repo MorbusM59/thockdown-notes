@@ -12,7 +12,7 @@ export const EDITOR_SECTIONS_CHANNELS = {
   swapIntoSlot: 'sections:swap-into-slot',
 } as const satisfies InvokeChannels<EditorSectionsApi>;
 
-/** The sole section on a fresh install, and always where sidebar note clicks land. */
+/** Initial collection ID on a fresh install; the collection in the leftmost slot may change. */
 export const DEFAULT_EDITOR_SECTION_ID = 'default';
 
 /**
@@ -85,7 +85,7 @@ export interface EditorSectionsApi {
   /** `afterPosition` inserts immediately to the right of that position; omitted appends at the end. */
   createSection(name?: string | null, afterPosition?: number): Promise<EditorSectionEntry[]>;
   renameSection(id: string, name: string | null): Promise<EditorSectionEntry[]>;
-  /** No-op on the default section -- it's never closable. */
+  /** No-op on the initial default section -- permanent deletion is only for named collections. */
   removeSection(id: string): Promise<EditorSectionEntry[]>;
   reorderSections(orderedSectionIds: string[]): Promise<EditorSectionEntry[]>;
   /** Persists the divider layout once a drag settles -- keyed by *slot* position, since geometry is the slot's, not its occupant's. */
@@ -95,11 +95,11 @@ export interface EditorSectionsApi {
   /** Records which note this section last showed -- independent of pinning. */
   setActiveNote(sectionId: string, noteId: string | null): Promise<EditorSectionEntry[]>;
   /**
-   * Closes a section's slot via its own "-" button. Unnamed sections are
-   * deleted outright (cascading their pinned tabs); named sections are only
-   * parked (`position` set to null) -- their row and tabs survive, reachable
-   * again later via `swapIntoSlot`. Either way, remaining sections' positions
-   * are renumbered to stay contiguous.
+   * Closes a section's slot via its own "-" button or the adjacent
+   * left-closing gesture. Unnamed sections are deleted outright (cascading
+   * their pinned tabs); named sections are parked (`position` set to null)
+   * and remain reachable via `swapIntoSlot`. Remaining positions stay
+   * contiguous.
    */
   closeSlot(sectionId: string): Promise<EditorSectionEntry[]>;
   /**

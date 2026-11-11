@@ -457,9 +457,8 @@ export function computeSlotWidthsForCloseFlexAware(
 
 /**
  * Computes new widths for closing `closingSectionId`'s slot: its entire
- * width is handed to its immediate left neighbor, unchanged for everyone
- * else. The leftmost slot is never closable via the UI, so a missing
- * left neighbor is defensive-only and just drops the closed slot.
+ * width is handed to its immediate left neighbor, or to the immediate right
+ * neighbor when closing the leftmost slot.
  */
 export function computeSectionWidthsForClose(
   currentWidthsPx: SlotWidthPx[],
@@ -467,12 +466,14 @@ export function computeSectionWidthsForClose(
 ): SlotWidthPx[] {
   const index = currentWidthsPx.findIndex((entry) => entry.id === closingSectionId)
   if (index < 0) return currentWidthsPx
-  if (index === 0) return currentWidthsPx.filter((entry) => entry.id !== closingSectionId)
 
   const closing = currentWidthsPx[index]
-  const leftNeighborId = currentWidthsPx[index - 1].id
+  const neighborId = index > 0
+    ? currentWidthsPx[index - 1].id
+    : currentWidthsPx[index + 1]?.id
+  if (!neighborId) return currentWidthsPx.filter((entry) => entry.id !== closingSectionId)
 
   return currentWidthsPx
     .filter((entry) => entry.id !== closingSectionId)
-    .map((entry) => (entry.id === leftNeighborId ? { id: entry.id, widthPx: entry.widthPx + closing.widthPx } : entry))
+    .map((entry) => (entry.id === neighborId ? { id: entry.id, widthPx: entry.widthPx + closing.widthPx } : entry))
 }

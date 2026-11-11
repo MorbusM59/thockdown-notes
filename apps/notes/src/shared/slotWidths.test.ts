@@ -95,6 +95,14 @@ describe('computeSectionWidthsForClose', () => {
     )
     expect(result).toEqual([{ id: 'a', widthPx: 400 }, { id: 'b', widthPx: 800 }])
   })
+
+  it('gives a closed leftmost slot to its immediate right neighbor', () => {
+    const result = computeSectionWidthsForClose(
+      [{ id: 'a', widthPx: 400 }, { id: 'b', widthPx: 500 }, { id: 'c', widthPx: 300 }],
+      'a',
+    )
+    expect(result).toEqual([{ id: 'b', widthPx: 900 }, { id: 'c', widthPx: 300 }])
+  })
 })
 
 describe('computeSlotWidthsPx', () => {

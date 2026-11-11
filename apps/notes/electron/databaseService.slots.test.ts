@@ -94,6 +94,29 @@ describe('DatabaseService editor slots', () => {
     expect(db.listEditorSections().filter((entry) => entry.position !== null)).toHaveLength(2)
   })
 
+  it('promotes the second section when the leftmost slot closes', () => {
+    const now = Date.now()
+    for (const id of ['left-note', 'right-note']) {
+      db.upsertNoteContent({
+        id,
+        title: id,
+        text: `# ${id}`,
+        createdAtMs: now,
+        updatedAtMs: now,
+      })
+    }
+
+    const second = db.createEditorSection(null).find((entry) => entry.id !== DEFAULT_EDITOR_SECTION_ID)!
+    db.addNoteTab(DEFAULT_EDITOR_SECTION_ID, 'left-note')
+    db.addNoteTab(second.id, 'right-note')
+
+    db.closeSectionSlot(DEFAULT_EDITOR_SECTION_ID)
+
+    expect(db.listEditorSections().find((entry) => entry.id === second.id)?.position).toBe(0)
+    expect(db.listEditorSections().some((entry) => entry.id === DEFAULT_EDITOR_SECTION_ID)).toBe(false)
+    expect(db.listNoteTabs().filter((tab) => tab.sectionId === second.id).map((tab) => tab.noteId)).toEqual(['right-note'])
+  })
+
   it('leaves geometry in place when sections are reordered between slots', () => {
     db.createEditorSection('b')
     db.updateEditorSlotWidths([
@@ -238,6 +261,23 @@ describe('DatabaseService editor slots', () => {
     expect(loadouts.entries.find((entry) => entry.id === 7)?.isActive).toBe(false)
     expect(loadouts.entries.find((entry) => entry.id === -1)?.isActive).toBe(true)
     expect(loadouts.entries.find((entry) => entry.id === -1)?.payload).toEqual(DARK_FACTORY_PRESETS[0])
+  })
+
+  it('factory reset restores the initial section after its slot was closed', () => {
+    db.createEditorSection('kept')
+    const kept = db.listEditorSections().find((entry) => entry.name === 'kept')!
+    db.closeSectionSlot(DEFAULT_EDITOR_SECTION_ID)
+
+    db.resetToFactoryDefaults()
+
+    expect(db.listEditorSections().find((entry) => entry.id === DEFAULT_EDITOR_SECTION_ID)).toMatchObject({
+      position: 0,
+      name: null,
+    })
+    expect(db.listEditorSections().find((entry) => entry.id === kept.id)).toMatchObject({
+      position: null,
+      name: 'kept',
+    })
   })
 
   it('keeps the unsaved changes as their own preset until they are saved', () => {

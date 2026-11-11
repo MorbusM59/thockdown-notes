@@ -45,6 +45,8 @@ export interface SectionTabBarProps {
   onCreateSlot: () => void
   /** Closes this slot (only ever called for non-leftmost slots). */
   onCloseSlot: () => void
+  /** Closes the immediately preceding slot, promoting this slot into its position. */
+  onCloseSlotLeft: (() => void) | null
   /** The tab strip's own leading "+" pill: creates a brand-new note and pins it as this section's rightmost tab. Always rendered in tabs mode, even with zero tabs currently pinned. */
   onCreateNote: () => void | Promise<void>
 
@@ -129,6 +131,7 @@ export function SectionTabBar({
   exitSlotOverlay,
   onCreateSlot,
   onCloseSlot,
+  onCloseSlotLeft,
   onCreateNote,
   sectionName,
   isEditingSectionName,
@@ -200,9 +203,16 @@ export function SectionTabBar({
         <button
           type="button"
           className="btn-icon section-close-toggle"
-          data-tooltip="Close this slot"
+          data-tooltip={onCloseSlotLeft
+            ? 'Left-click: Close this slot.\nRight-click: Close the slot to its left.'
+            : 'Close this slot'}
           aria-label="Close this slot"
+          data-secondary-press={onCloseSlotLeft ? 'action' : 'none'}
           onClick={onCloseSlot}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            onCloseSlotLeft?.()
+          }}
         >
           <span className="fa-solid fa-chevron-right" aria-hidden="true" />
         </button>

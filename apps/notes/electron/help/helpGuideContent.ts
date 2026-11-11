@@ -443,7 +443,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Closes a split-view slot entirely.*
 
-- The leftmost slot shows the sidebar toggle in this spot instead, since it can't be closed.
+- The leftmost slot shows the sidebar toggle in this spot. Right-click the next slot's chevron to close the leftmost slot and promote that collection into its position.
+- Left-click a chevron to close its own slot. Right-click it to close the slot to its left; the collection whose chevron you pressed is promoted into the vacated position.
 
 ### [Tabs and Tags Mode](#tabs-and-tags-mode)
 

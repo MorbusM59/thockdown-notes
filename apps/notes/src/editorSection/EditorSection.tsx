@@ -172,6 +172,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   canCreateSlot: boolean
   onCreateSlot: () => void
   onCloseSlot: () => void
+  onCloseSlotLeft: (() => void) | null
   /** "Clear this section" from the section picker's leading pill: vacates this slot (parking/deleting the section per the usual close rules) and backfills it with a fresh blank section, without touching this section's own name/tabs/note. */
   onClearSection: () => void
 
@@ -292,6 +293,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   canCreateSlot,
   onCreateSlot,
   onCloseSlot,
+  onCloseSlotLeft,
   onClearSection,
   sectionName,
   onRenameSection,
@@ -2235,6 +2237,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         onToggleSpeedReading={toggleSpeedReading}
         onCreateSlot={onCreateSlot}
         onCloseSlot={onCloseSlot}
+        onCloseSlotLeft={onCloseSlotLeft}
         onCreateNote={handleCreateNoteInSection}
         sectionName={sectionName}
         isEditingSectionName={isEditingSectionName}

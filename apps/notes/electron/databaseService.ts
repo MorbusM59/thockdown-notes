@@ -1437,8 +1437,8 @@ export class DatabaseService {
   removeEditorSection(id: string): EditorSectionEntry[] {
     const db = this.requireDb();
     if (id === DEFAULT_EDITOR_SECTION_ID) {
-      // The default section is where sidebar clicks always land -- it's
-      // never closable, only auxiliary sections are.
+      // The initial section can be closed from its slot, but this operation
+      // is only the permanent-delete path for collections in the picker.
       return this.listEditorSections();
     }
     db.prepare('DELETE FROM editor_sections WHERE id = ?').run(id);
@@ -1525,11 +1525,11 @@ export class DatabaseService {
   }
 
   /**
-   * Closes a section's slot via its own close button. Unnamed sections are
-   * deleted outright (cascading their pinned tabs); named sections are only
-   * parked (`position` set to null) so their row and tabs survive, reachable
-   * again later via `swapSectionIntoSlot`. Either way, the remaining visible
-   * sections' positions are renumbered to stay contiguous.
+   * Closes a section's slot via its own close button or an adjacent
+   * left-closing gesture. Unnamed sections are deleted outright (cascading
+   * their pinned tabs); named sections are parked (`position` set to null)
+   * and remain reachable via `swapSectionIntoSlot`. Remaining visible
+   * positions stay contiguous.
    */
   closeSectionSlot(sectionId: string): EditorSectionEntry[] {
     const db = this.requireDb();
@@ -1598,6 +1598,11 @@ export class DatabaseService {
   resetToFactoryDefaults(): void {
     const db = this.requireDb();
     const tx = db.transaction(() => {
+      db.prepare(`
+        INSERT OR IGNORE INTO editor_sections (id, name, position, widthFraction, lastActiveNoteId)
+        VALUES (?, NULL, NULL, NULL, NULL)
+      `).run(DEFAULT_EDITOR_SECTION_ID);
+
       const defaultNoteIds = new Set(
         (db.prepare('SELECT noteId FROM note_tabs WHERE sectionId = ?')
           .all(DEFAULT_EDITOR_SECTION_ID) as Array<{ noteId: string }>)
