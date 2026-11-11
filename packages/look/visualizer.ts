@@ -348,14 +348,14 @@ export const DEFAULT_VISUALIZER: VisualizerSettings = {
   trackers: DEFAULT_VISUALIZER_TRACKERS,
   grid: {
     dark: {
-      edge: { ...DEFAULT_SAVED_EDGE, effect: 0.3, spreadPx: 0, blurPx: 100 },
-      editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
-      readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.1 },
+      edge: { ...DEFAULT_SAVED_EDGE, effect: 0.12, spreadPx: 0, blurPx: 30 },
+      editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.05 },
+      readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.05 },
     },
     light: {
-      edge: { ...DEFAULT_SAVED_EDGE, effect: 0.3, spreadPx: 0, blurPx: 100 },
-      editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.5 },
-      readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.5 },
+      edge: { ...DEFAULT_SAVED_EDGE, effect: 0.2, spreadPx: 0, blurPx: 30 },
+      editorPane: { ...DEFAULT_SAVED_PANE, effect: 0.3 },
+      readerPane: { ...DEFAULT_SAVED_PANE, effect: 0.3 },
     },
   },
   edge: DEFAULT_SAVED_EDGE,
