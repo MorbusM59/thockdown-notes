@@ -1,25 +1,23 @@
 /**
- * The visualizer's pool filter: three fields in the rectangle `poolFilterArea`
- * gives, bottom right, sharing the song list's lowest line. The top row is
- * artist and album side by side, the row two below it the title, every field
- * framed by accent boxes (accent, artist, accent, album, accent; accent,
- * title, accent). A field is drawn one character per box like everything in
- * the scene, on the middle's colour, or on the letterbox colour (cut out of
- * the middle strip, `middleHoles.ts`) while it has the keyboard. An empty
- * field shows what it takes, at half opacity.
+ * The visualizer's song filter: one field in the rectangle `poolFilterArea`
+ * gives, bottom right, sharing the song list's lowest line. It is framed by
+ * accent boxes and drawn one character per box like everything in the scene,
+ * on the middle's colour, or on the letterbox colour (cut out of the middle
+ * strip, `middleHoles.ts`) while it has the keyboard. An empty field shows
+ * its prompt at half opacity.
  *
- * Typing is a real `<input>` laid over each field, its own text and caret
+ * Typing is a real `<input>` over the field, its own text and caret
  * transparent, so selection, clipboard and IME are the browser's; the boxes
  * draw its value and caret. The song list follows every keystroke
- * (`poolFilterDraft.ts`); playback takes the filter when the reader LEAVES a
- * field: Enter, Tab (which steps to the next field by name), Escape (which
- * empties the field first), a press anywhere outside the fields, or leaving
- * the visualizer. Typed text that reaches the scene with no field holding
- * the keyboard goes to the title field (App.tsx, through
+ * (`poolFilterDraft.ts`); playback takes the filter when the reader leaves
+ * the field: Enter, Tab, Escape (which empties the field first), a press
+ * anywhere outside the field, or leaving the visualizer. Typed text that
+ * reaches the scene with no field holding the keyboard goes to this field
+ * (App.tsx, through
  * `registerPoolFilterFields`).
  */
 
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { EMPTY_POOL_FILTER, type MusicPoolFilter } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
@@ -28,7 +26,7 @@ import { subscribeNowPlaying } from '../sound/nowPlaying'
 import { fieldWindow, type PoolFilterArea, type VisualizerLayout } from './visualizerLayout'
 
 type FieldKey = keyof MusicPoolFilter
-const FIELD_ORDER: readonly FieldKey[] = ['artist', 'album', 'title']
+const FIELD: FieldKey = 'query'
 
 const subscribeShown = (listener: () => void) => {
   const a = subscribePoolFilterDraft(listener)
@@ -45,19 +43,12 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
   const { boxPx, originXPx, originYPx } = layout
   const left = originXPx + area.column * boxPx
   const top = originYPx + area.row * boxPx
-  const wide = 2 * area.fieldColumns + 1
-
-  // Each field's first column (from the area's) and row (0 or 2), and width.
-  const fields: Record<FieldKey, { column: number; row: number; columns: number; placeholder: string }> = {
-    artist: { column: 1, row: 0, columns: area.fieldColumns, placeholder: 'artist' },
-    album: { column: area.fieldColumns + 2, row: 0, columns: area.fieldColumns, placeholder: 'album' },
-    title: { column: 1, row: 2, columns: wide, placeholder: 'title' },
-  }
-  const accents: Array<[number, number]> = [[0, 0], [area.fieldColumns + 1, 0], [area.columns - 1, 0], [0, 2], [area.columns - 1, 2]]
+  const field = { column: 1, row: 0, columns: area.columns - 2, placeholder: 'Filter songs...' }
+  const accents: Array<[number, number]> = [[0, 0], [area.columns - 1, 0]]
   const cell = (column: number, row: number, width = 1) => ({ left: left + column * boxPx, top: top + row * boxPx, width: width * boxPx, height: boxPx })
 
   // The focused field's plate, cut out of the middle strip.
-  const holeKey = focused ? `${fields[focused].column},${fields[focused].row},${fields[focused].columns}` : ''
+  const holeKey = focused ? `${field.column},${field.row},${field.columns}` : ''
   useLayoutEffect(() => {
     const anchor = anchorRef.current
     const middle = anchor ? middleStripOf(anchor) : null
@@ -88,7 +79,7 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
   }, [])
 
   useEffect(() => registerPoolFilterFields({
-    focused: () => FIELD_ORDER.find((key) => inputs.current[key] === document.activeElement) ?? null,
+    focused: () => inputs.current[FIELD] === document.activeElement ? FIELD : null,
     focus: (key) => {
       const input = inputs.current[key]
       if (!input) return
@@ -98,8 +89,8 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
     },
     type: (key, text, fresh) => {
       const base = fresh ? EMPTY_POOL_FILTER : readShownPoolFilter()
-      const next = base[key] + text
-      setPoolFilterDraft({ ...base, [key]: next })
+      const next = base.query + text
+      setPoolFilterDraft({ query: next })
       // Focused before React writes the new value, which puts the caret at
       // the end of it.
       inputs.current[key]?.focus()
@@ -111,68 +102,54 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
     // A code point index, as the boxes count.
     setCaret(Array.from(input.value.slice(0, input.selectionStart ?? input.value.length)).length)
   }
+  const value = filter.query
+  const isFocused = focused === FIELD
+  const shown = value === ''
+    ? { chars: Array.from(field.placeholder).slice(0, field.columns), caretColumn: 0 }
+    : fieldWindow(dropWideGlyphs(value, glyphFont), isFocused ? caret : 0, field.columns)
 
   return (
     <>
       <div ref={anchorRef} hidden />
-      {focused && <div className="visualizer-song-plate visualizer-bucket-box" style={cell(fields[focused].column, fields[focused].row, fields[focused].columns)} />}
+      {focused && <div className="visualizer-song-plate visualizer-bucket-box" style={cell(field.column, field.row, field.columns)} />}
       {accents.map(([column, row]) => <div key={`a${column}-${row}`} className="visualizer-lit visualizer-bucket-box" style={cell(column, row)} />)}
-      {FIELD_ORDER.map((key) => {
-        const field = fields[key]
-        const value = filter[key]
-        const isFocused = focused === key
-        const shown = value === ''
-          ? { chars: Array.from(field.placeholder).slice(0, field.columns), caretColumn: 0 }
-          : fieldWindow(dropWideGlyphs(value, glyphFont), isFocused ? caret : 0, field.columns)
-        return (
-          <Fragment key={key}>
-            {shown.chars.map((char, index) => (char === ' ' ? null : (
-              <div
-                key={`l${key}-${index}`}
-                className={value === '' ? 'visualizer-letter is-panel is-placeholder' : 'visualizer-letter is-panel'}
-                style={{ ...cell(field.column + index, field.row), lineHeight: `${boxPx}px` }}
-              >
-                {char}
-              </div>
-            )))}
-            {isFocused && <div className="visualizer-filter-caret" style={cell(field.column + Math.min(shown.caretColumn, field.columns - 1), field.row)} />}
-            <input
-              ref={(element) => { inputs.current[key] = element }}
-              className="visualizer-filter-input"
-              style={cell(field.column, field.row, field.columns)}
-              value={value}
-              aria-label={field.placeholder}
-              spellCheck={false}
-              autoComplete="off"
-              onFocus={(event) => { setFocused(key); readCaret(event.currentTarget) }}
-              onBlur={() => { setFocused((current) => (current === key ? null : current)); commitPoolFilterDraft() }}
-              onChange={(event) => {
-                setPoolFilterDraft({ ...readShownPoolFilter(), [key]: event.currentTarget.value })
-                readCaret(event.currentTarget)
-              }}
-              onSelect={(event) => readCaret(event.currentTarget)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  event.currentTarget.blur()
-                } else if (event.key === 'Escape') {
-                  // Leaves the field emptied; the blur commits it.
-                  event.preventDefault()
-                  setPoolFilterDraft({ ...readShownPoolFilter(), [key]: '' })
-                  event.currentTarget.blur()
-                } else if (event.key === 'Tab') {
-                  event.preventDefault()
-                  const step = event.shiftKey ? FIELD_ORDER.length - 1 : 1
-                  const next = inputs.current[FIELD_ORDER[(FIELD_ORDER.indexOf(key) + step) % FIELD_ORDER.length]]
-                  commitPoolFilterDraft()
-                  next?.focus()
-                  next?.select()
-                }
-              }}
-            />
-          </Fragment>
-        )
-      })}
+      {shown.chars.map((char, index) => (char === ' ' ? null : (
+        <div
+          key={`l${index}`}
+          className={value === '' ? 'visualizer-letter is-panel is-placeholder' : 'visualizer-letter is-panel'}
+          style={{ ...cell(field.column + index, field.row), lineHeight: `${boxPx}px` }}
+        >
+          {char}
+        </div>
+      )))}
+      {isFocused && <div className="visualizer-filter-caret" style={cell(field.column + Math.min(shown.caretColumn, field.columns - 1), field.row)} />}
+      <input
+        ref={(element) => { inputs.current[FIELD] = element }}
+        className="visualizer-filter-input"
+        style={cell(field.column, field.row, field.columns)}
+        value={value}
+        aria-label={field.placeholder}
+        spellCheck={false}
+        autoComplete="off"
+        onFocus={(event) => { setFocused(FIELD); readCaret(event.currentTarget) }}
+        onBlur={() => { setFocused((current) => (current === FIELD ? null : current)); commitPoolFilterDraft() }}
+        onChange={(event) => {
+          setPoolFilterDraft({ query: event.currentTarget.value })
+          readCaret(event.currentTarget)
+        }}
+        onSelect={(event) => readCaret(event.currentTarget)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === 'Tab') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          } else if (event.key === 'Escape') {
+            // Leaves the field emptied; the blur commits it.
+            event.preventDefault()
+            setPoolFilterDraft(EMPTY_POOL_FILTER)
+            event.currentTarget.blur()
+          }
+        }}
+      />
     </>
   )
 }

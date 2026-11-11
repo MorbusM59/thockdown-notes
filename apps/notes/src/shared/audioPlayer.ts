@@ -340,42 +340,90 @@ export function songListTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath
   return songTagText(file.replace(/\.[^.]+$/, ''));
 }
 
-/**
- * The pool's filter (the visualizer's three fields): a song is in the pool
- * only if each non-blank field is found, ignoring case, in its artist tag,
- * its album tag and its title as the song list shows it (the title tag, or
- * the file name), the way the note list's search matches a note.
- */
-export type MusicPoolFilter = { artist: string; album: string; title: string };
+/** The visualizer's song search, shared by the song list and the next pick. */
+export type MusicPoolFilter = { query: string };
 
-export const EMPTY_POOL_FILTER: MusicPoolFilter = { artist: '', album: '', title: '' };
+export const EMPTY_POOL_FILTER: MusicPoolFilter = { query: '' };
 
 /** Which songs are in the pool: those belonging to any active set in `slots` that pass `filter`. */
 export type MusicPoolQuery = { slots: PlaylistSlot[]; filter: MusicPoolFilter };
 
 export function isPoolFilterEmpty(filter: MusicPoolFilter): boolean {
-  return !filter.artist.trim() && !filter.album.trim() && !filter.title.trim();
+  return !filter.query.trim();
 }
 
 export function samePoolFilter(a: MusicPoolFilter, b: MusicPoolFilter): boolean {
-  return a.artist === b.artist && a.album === b.album && a.title === b.title;
+  return a.query === b.query;
 }
 
-/** A filter read from storage or IPC: every field a string, anything else empty. */
+/** A filter read from storage or IPC; old field values become quoted search terms. */
 export function sanitizePoolFilter(input: unknown): MusicPoolFilter {
   const record = input && typeof input === 'object' ? input as Record<string, unknown> : {};
-  const field = (value: unknown) => (typeof value === 'string' ? value : '');
-  return { artist: field(record.artist), album: field(record.album), title: field(record.title) };
+  if (typeof record.query === 'string') return { query: record.query };
+  const legacyTerms = [record.artist, record.album, record.title]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
+  return { query: legacyTerms.join(' ') };
+}
+
+type PoolSearchField = 'artist' | 'album' | 'title'
+
+function poolSearchFor(query: string): { fields: PoolSearchField[]; terms: string[] } {
+  let fields: PoolSearchField[] = ['artist', 'album', 'title'];
+  if (query.startsWith('$')) {
+    fields = ['artist'];
+    query = query.slice(1);
+  } else if (query.startsWith('§')) {
+    fields = ['album'];
+    query = query.slice(1);
+  } else if (query.startsWith('#')) {
+    fields = ['title'];
+    query = query.slice(1);
+  }
+
+  const terms: string[] = [];
+  let index = 0;
+  while (index < query.length) {
+    while (/\s/.test(query[index] ?? '')) index += 1;
+    if (index >= query.length) break;
+    if (query[index] === '"') {
+      index += 1;
+      let phrase = '';
+      while (index < query.length && query[index] !== '"') {
+        if (query[index] === '\\' && (query[index + 1] === '"' || query[index + 1] === '\\')) index += 1;
+        phrase += query[index];
+        index += 1;
+      }
+      if (query[index] === '"') index += 1;
+      if (phrase) terms.push(phrase.toLowerCase());
+    } else {
+      const start = index;
+      while (index < query.length && !/\s/.test(query[index])) index += 1;
+      terms.push(query.slice(start, index).toLowerCase());
+    }
+  }
+
+  return { fields, terms };
+}
+
+export function createPoolFilterMatcher(filter: MusicPoolFilter): (song: Pick<MusicSongEntry, 'title' | 'artist' | 'album' | 'filePath'>) => boolean {
+  const { fields, terms } = poolSearchFor(filter.query);
+  if (terms.length === 0) return () => true;
+  return (song) => {
+    const textByField = {
+      artist: songTagText(song.artist),
+      album: songTagText(song.album),
+      title: songListTitleText(song),
+    };
+    const searchableText = fields.map((field) => textByField[field].toLowerCase());
+    return terms.every((term) => searchableText.some((text) => text.includes(term)));
+  };
 }
 
 export function matchesPoolFilter(song: Pick<MusicSongEntry, 'title' | 'artist' | 'album' | 'filePath'>, filter: MusicPoolFilter): boolean {
-  const has = (text: string, query: string) => {
-    const needle = query.trim().toLowerCase();
-    return !needle || text.toLowerCase().includes(needle);
-  };
-  return has(songTagText(song.artist), filter.artist)
-    && has(songTagText(song.album), filter.album)
-    && has(songListTitleText(song), filter.title);
+  return createPoolFilterMatcher(filter)(song);
 }
 
 export function songArtistText(song: Pick<MusicSongEntry, 'artist'>): string {

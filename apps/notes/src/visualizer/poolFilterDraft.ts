@@ -1,8 +1,8 @@
 /**
- * The pool filter as it stands in the visualizer's fields, which can be ahead
+ * The pool filter as it stands in the visualizer's field, which can be ahead
  * of the one playback reads (`NowPlaying.pool.filter`): the song list follows
  * every keystroke, the next pick only what was COMMITTED, when the reader
- * left a field. Null until a field is edited, meaning "the committed filter";
+ * leaves the field. Null until it is edited, meaning "the committed filter";
  * after a commit the two are equal, so nothing is ever reset.
  */
 
@@ -63,15 +63,15 @@ async function playFirstRemaining(filter: MusicPoolFilter): Promise<void> {
 
 type PoolFilterField = keyof MusicPoolFilter
 
-/** What the mounted filter fields offer the keyboard handling in App.tsx. */
+/** What the mounted filter field offers the keyboard handling in App.tsx. */
 export interface PoolFilterFields {
   /** The field holding the keyboard, if any. */
   focused(): PoolFilterField | null
-  /** Give `field` the keyboard, its caret at the end. */
+  /** Give the field the keyboard, its caret at the end. */
   focus(field: PoolFilterField): void
   /**
-   * Append `text` to `field` and give it the keyboard, its caret at the end.
-   * `fresh` empties every field first, so the text starts a new filter.
+   * Append `text` to the query and give it the keyboard, its caret at the end.
+   * `fresh` empties the filter first, so the text starts a new search.
    */
   type(field: PoolFilterField, text: string, fresh: boolean): void
 }
@@ -83,7 +83,7 @@ export function registerPoolFilterFields(api: PoolFilterFields): () => void {
   return () => { if (fields === api) fields = null }
 }
 
-/** The mounted filter fields, or null while the visualizer has none. */
+/** The mounted filter field, or null while the visualizer has none. */
 export function readPoolFilterFields(): PoolFilterFields | null {
   return fields
 }

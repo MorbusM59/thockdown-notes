@@ -88,7 +88,7 @@ import {
   isFactoryMusicSet,
   isPlaylistSlot,
   isPoolFilterEmpty,
-  matchesPoolFilter,
+  createPoolFilterMatcher,
   sanitizeMusicSetPreferences,
   sanitizePoolFilter,
   uniqueMusicSetName,
@@ -3674,14 +3674,14 @@ export class DatabaseService {
   /**
    * The rows of the music pool, in pick order (`shared/musicPool.ts`). The ONE
    * definition of which songs are in the pool: the next pick, the list the
-   * visualizer draws and a chosen song all read it, so a filter added here
-   * (by title, artist or album) reaches all three at once.
+   * visualizer draws and a chosen song all read it, so the visualizer's
+   * search reaches all three at once.
    */
   /**
    * THE POOL, in pick order, as rows with their entries: the songs of the
-   * active slots that pass the filter (`matchesPoolFilter`). The filter reads
-   * the entries' tags (read on first use), so it is applied here rather than
-   * in SQL; with no filter nothing is tested.
+   * active slots that pass the filter. It searches title, artist and album
+   * tags (read on first use), so it is applied here rather than in SQL; with
+   * no filter nothing is tested.
    */
   private musicPool(query: MusicPoolQuery): Array<{ row: Record<string, unknown>; song: MusicSongEntry }> {
     const slots = query.slots.filter(isPlaylistSlot);
@@ -3697,7 +3697,9 @@ export class DatabaseService {
        ORDER BY priority ASC, id ASC`
     ).all(...slots) as Record<string, unknown>[];
     const pool = rows.map((row) => ({ row, song: this.rowToSongEntry(row) }));
-    return isPoolFilterEmpty(filter) ? pool : pool.filter(({ song }) => matchesPoolFilter(song, filter));
+    if (isPoolFilterEmpty(filter)) return pool;
+    const matches = createPoolFilterMatcher(filter);
+    return pool.filter(({ song }) => matches(song));
   }
 
   getMusicPool(query: MusicPoolQuery): MusicSongEntry[] {

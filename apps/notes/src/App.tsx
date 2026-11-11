@@ -7643,28 +7643,30 @@ ${markdownHtml}
 
       // In the visualizer the scene holds the keyboard and the note under it
       // is hidden. Tab and Shift+Tab step through the layout presets while
-      // the panels are hidden, and through the filter fields while they are
-      // shown, starting at the title; Enter switches between light and dark.
-      // A letter that is no shortcut is filter text and goes to the title
-      // field; when it is what brings the panels up, it starts a new filter
-      // (every field emptied first). Space and the arrow keys belong to the music
+      // the panels are hidden, and to the song filter while they are
+      // shown; Enter switches between light and dark.
+      // A letter that is no shortcut is filter text and goes to the filter
+      // field; when it brings the panels up, it starts a new search with the
+      // old query emptied first. Space and the arrow keys belong to the music
       // controls. Repeats are ignored where a held key should act once. A
       // pool filter field keeps its own keys.
       if (isVisualizerMode && !isTextEntryElement(event.target instanceof Element ? event.target : null)) {
         const filterFields = readPoolFilterFields()
-        const isFilterText = event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey && !event.altKey
+        const altGraph = event.getModifierState('AltGraph')
+        const isFilterText = event.key.length === 1 && event.key !== ' '
+          && (!event.ctrlKey || altGraph) && !event.metaKey && (!event.altKey || altGraph)
         if (isFilterText && filterFields) {
           event.preventDefault()
           const fresh = !readPanelsShown()
           setPanelsShown(true)
-          filterFields.type('title', event.key, fresh)
+          filterFields.type('query', event.key, fresh)
           return
         }
         // Layouts and light / dark are F3 and F4 here as everywhere; Tab
-        // only enters the filter fields while the panels are up.
+        // only enters the song filter while the panels are up.
         if (matchShortcut(event, 'visualizerFilterField') && readPanelsShown() && filterFields) {
           event.preventDefault()
-          filterFields.focus('title')
+          filterFields.focus('query')
           return
         }
       }

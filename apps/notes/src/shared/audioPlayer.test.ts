@@ -3,11 +3,14 @@ import {
   AUDIO_GRID_COLUMNS,
   DEFAULT_MUSIC_SET_PREFERENCES,
   defaultMusicSetName,
+  EMPTY_POOL_FILTER,
   FACTORY_MUSIC_SETS,
   getNextActiveSlotsForSelection,
   isFactoryMusicSet,
+  matchesPoolFilter,
   PLAYLIST_BUTTON_SLOTS,
   PLAYLIST_SLOT_THEMES,
+  sanitizePoolFilter,
   sanitizeMusicSetPreferences,
   shouldStopCurrentSongAfterSlotSelection,
 } from './audioPlayer'
@@ -76,6 +79,50 @@ describe('music sets', () => {
         { slot: 3, name: 'Ambient' },
       ],
       nextSlot: 8,
+    })
+  })
+
+  describe('music pool search', () => {
+    const song = {
+      title: 'Moonlight',
+      artist: 'Michael',
+      album: 'Jackson',
+      filePath: 'music\\moonlight.mp3',
+    }
+    const matches = (query: string, value = song) => matchesPoolFilter(value, { query })
+
+    it('requires every unquoted word, allowing words to match different fields without case sensitivity', () => {
+      expect(matches('mich jack')).toBe(true)
+      expect(matches('mich beyonce')).toBe(false)
+      expect(matches('')).toBe(true)
+      expect(matches('   ')).toBe(true)
+      expect(EMPTY_POOL_FILTER).toEqual({ query: '' })
+    })
+
+    it('matches quoted phrases contiguously, but not as separated words', () => {
+      const jacksonSong = { ...song, title: 'Michael Jackson' }
+      expect(matches('"Michael J"', jacksonSong)).toBe(true)
+      expect(matches('"Michael J"', { ...jacksonSong, title: 'Michael Goja' })).toBe(false)
+      expect(matches('"michael jack"', jacksonSong)).toBe(true)
+    })
+
+    it('limits the whole query to artist, album, or title when prefixed', () => {
+      expect(matches('$mich')).toBe(true)
+      expect(matches('$mich jack')).toBe(false)
+      expect(matches('§jack')).toBe(true)
+      expect(matches('#moon')).toBe(true)
+      expect(matches('$moon')).toBe(false)
+      expect(matches('§mich')).toBe(false)
+      expect(matches('#jack')).toBe(false)
+    })
+
+    it('migrates saved three-field filters into quoted search phrases', () => {
+      expect(sanitizePoolFilter({
+        artist: ' Michael Jackson ',
+        album: 'Bad',
+        title: 'Thriller',
+      })).toEqual({ query: '"Michael Jackson" "Bad" "Thriller"' })
+      expect(sanitizePoolFilter({ query: 'mich jack' })).toEqual({ query: 'mich jack' })
     })
   })
 })

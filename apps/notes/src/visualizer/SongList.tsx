@@ -14,10 +14,10 @@
  * dynamics (`editor/rowWheel.ts`: notch, step and spin coast). A press on an
  * entry plays it (`NowPlaying.playFromPool`), and while the pointer stays over
  * the list nothing moves: the pressed entry only takes the letterbox plate.
- * Leaving the list scrolls it to the playing song, on the reader's
- * smooth-scroll curve (`buildScrollPlanFromCurrentParams`) but still a whole
- * entry at a time, so text never leaves the grid; the playing song is then
- * re-cut at the top.
+ * Two seconds after the pointer leaves, the list scrolls to the playing song
+ * on the reader's smooth-scroll curve (`buildScrollPlanFromCurrentParams`)
+ * but still a whole entry at a time, so text never leaves the grid; the
+ * playing song is then re-cut at the top.
  *
  * NO PER-FRAME RENDERING: the cells are built once per layout and written
  * imperatively, and only when the entry a slot shows actually changes; the
@@ -33,7 +33,8 @@ import { songListTitleText, type MusicSongEntry } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { claimPlayback, commitPoolFilterDraft, readShownPoolFilter, subscribePoolFilterDraft } from './poolFilterDraft'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
-import { shortestSongListDistance, songListCycle, wrapSongListIndex } from './songListRing'
+import { LIST_RETURN_GRACE_MS } from './listWindow'
+import { listRing, shortestListDistance, wrapListIndex } from './songListRing'
 import { songListEntry, type VisualizerLayout } from './visualizerLayout'
 
 export type SongListArea = { column: number; row: number; columns: number; rows: number; slots: number }
@@ -98,11 +99,12 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
 
     /** The pool in pick order from the playing song on (or from its head, when the playing song is not in it). */
     let songs: MusicSongEntry[] = []
-    let ring = songListCycle(songs)
+    let ring = listRing(songs)
     /** The entry in the top slot. */
     let offset = 0
     let hovered = false
     let travel: number | null = null
+    let returnHomeTimeout: number | null = null
 
     const fromPlaying = (pool: MusicSongEntry[]): MusicSongEntry[] => {
       const id = readNowPlaying().song?.id
@@ -114,7 +116,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const currentId = readNowPlaying().song?.id
       for (let slot = 0; slot < slots.length; slot += 1) {
         const cells = slots[slot]
-        const song = slot < ring.length ? ring[wrapSongListIndex(offset + slot, ring.length)] : null
+        const song = slot < ring.length ? ring[wrapListIndex(offset + slot, ring.length)] : null
         const isCurrent = song !== null && song.id === currentId
         const key = song ? `${song.id}:${isCurrent}` : ''
         if (key === cells.shown) continue
@@ -155,7 +157,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     /** Scroll so entry `next` is in the top slot, wrapping around the ring. */
     const setOffset = (next: number): boolean => {
       if (ring.length === 0) return false
-      const wrapped = wrapSongListIndex(next, ring.length)
+      const wrapped = wrapListIndex(next, ring.length)
       if (wrapped === offset) return false
       offset = wrapped
       draw()
@@ -169,7 +171,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     /** Re-cut the ring at the playing song, which is now in the top slot. */
     const recut = () => {
       songs = fromPlaying(songs)
-      ring = songListCycle(songs)
+      ring = listRing(songs)
       offset = 0
       for (const cells of slots) cells.shown = '\u0000'
       draw()
@@ -179,7 +181,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       stopTravel()
       const playingId = readNowPlaying().song?.id
       const target = ring.findIndex((song) => song?.id === playingId)
-      const entries = shortestSongListDistance(offset, target < 0 ? 0 : target, ring.length)
+      const entries = shortestListDistance(offset, target < 0 ? 0 : target, ring.length)
       if (entries === 0) { recut(); return }
       const start = offset
       const plan = buildScrollPlanFromCurrentParams(entries * pitchPx)
@@ -216,20 +218,20 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       const pool = readNowPlaying().pool
       const next = pool ? await window.thockdownAudioPlayer?.getPool({ slots: [...pool.slots], filter: readShownPoolFilter() }) ?? [] : []
       if (ticket !== request) return
-      const preservePosition = hovered || travel !== null
-      const topSong = ring[wrapSongListIndex(offset, ring.length)]
+      const preservePosition = hovered || travel !== null || returnHomeTimeout !== null
+      const topSong = ring[wrapListIndex(offset, ring.length)]
       const anchor = topSong ?? songs[0] ?? null
       const at = preservePosition && anchor ? next.findIndex((song) => song.id === anchor.id) : -1
       if (at < 0) {
         stopTravel()
         songs = fromPlaying(next)
-        ring = songListCycle(songs)
+        ring = listRing(songs)
         offset = 0
       } else {
         songs = [...next.slice(at), ...next.slice(0, at)]
-        ring = songListCycle(songs)
-        offset = topSong ? 0 : wrapSongListIndex(offset, ring.length)
-        if (!hovered) travelHome()
+        ring = listRing(songs)
+        offset = topSong ? 0 : wrapListIndex(offset, ring.length)
+        if (!hovered && returnHomeTimeout === null) travelHome()
       }
       for (const cells of slots) cells.shown = '\u0000'
       draw()
@@ -252,12 +254,18 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
 
     const onEnter = () => {
       hovered = true
+      if (returnHomeTimeout !== null) window.clearTimeout(returnHomeTimeout)
+      returnHomeTimeout = null
       stopTravel()
     }
     const onLeave = () => {
       hovered = false
       wheel.stop('left the list')
-      travelHome()
+      if (returnHomeTimeout !== null) window.clearTimeout(returnHomeTimeout)
+      returnHomeTimeout = window.setTimeout(() => {
+        returnHomeTimeout = null
+        travelHome()
+      }, LIST_RETURN_GRACE_MS)
     }
     const onPress = (event: PointerEvent) => {
       if (event.button !== 0 || songs.length === 0) return
@@ -266,7 +274,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       if (row % 2 !== 0) return
       const slot = row / 2
       if (slot >= ring.length) return
-      const song = ring[wrapSongListIndex(offset + slot, ring.length)]
+      const song = ring[wrapListIndex(offset + slot, ring.length)]
       if (!song) return
       // A song chosen from the list as filtered is played from that pool.
       commitPoolFilterDraft()
@@ -283,6 +291,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       unsubscribe()
       unsubscribeFilter()
       stopTravel()
+      if (returnHomeTimeout !== null) window.clearTimeout(returnHomeTimeout)
       wheel.stop('unmount')
       hit.removeEventListener('wheel', wheel.handleWheel)
       hit.removeEventListener('pointerenter', onEnter)

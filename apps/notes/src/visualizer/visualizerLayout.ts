@@ -260,63 +260,57 @@ export function songListEntry(name: string, columns: number): { text: string; cl
 
 /**
  * The bucket list's rectangle: the song list's mirrored across the scene,
- * from the middle section's second row to its second-to-last, its right
- * edge one box in from the scene's and its left edge at least
- * `cutoutGapBoxes` empty boxes right of the cutout. Entries on
- * every other row from the top, right-aligned.
+ * from the middle section's second row, right-aligned and one box in from the
+ * scene's edge. When the pool filter fits, the last set entry leaves three
+ * empty rows before it; otherwise entries use the available middle rows.
  */
 export function bucketListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
   const row = layout.contentTopRow
-  // Above the pool filter, a free row between them, when there is one.
   const filter = poolFilterArea(layout)
-  const lastRow = filter ? filter.row - 2 : layout.contentBottomRow
+  const lastRow = filter ? filter.row - 4 : layout.contentBottomRow
   const lastColumn = layout.columns - 2
   const column = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
-  const rows = lastRow - row + 1
+  const availableRows = lastRow - row + 1
   const columns = lastColumn - column + 1
-  if (layout.stripRows <= 0 || rows < 1 || columns < 5) return null
-  return { column, row, columns, rows, slots: Math.floor((rows + 1) / 2) }
+  if (layout.stripRows <= 0 || availableRows < 1 || columns < 5) return null
+  const slots = Math.floor((availableRows + 1) / 2)
+  return { column, row, columns, rows: 2 * slots - 1, slots }
 }
 
-/** The pool filter's widest: two fields of ten on the top row, one of twenty-one below, each framed by accent boxes. */
+/** The filter's widest field, with an accent box at either end. */
 export const POOL_FILTER_MAX_COLUMNS = 23
 
 export type PoolFilterArea = {
-  /** The top row's first column, and the top row; the title row is two below it. */
+  /** Its first column and row. */
   column: number
   row: number
-  /** Both rows' width: `2 * fieldColumns + 3`. */
+  /** The framed field's total width. */
   columns: number
-  /** The artist and album fields' width; the title field's is `2 * fieldColumns + 1`. */
-  fieldColumns: number
 }
 
 /**
- * The pool filter's two rows, bottom-right of the middle section: the right
+ * The pool filter's row, bottom-right of the middle section: the right
  * edge one box in from the scene's (the bucket list's), the left at least
  * `cutoutGapBoxes` empty boxes right of the cutout, and the
- * bottom row on the song list's last entry row, so the two blocks share a
- * lowest line (one row above the middle's last, or two when the song list's
- * every-other-row pattern ends there). The top row is two above it.
+ * row on the song list's last entry row, so the two blocks share a lowest
+ * line (one row above the middle's last, or two when the song list's
+ * every-other-row pattern ends there).
  *
- * The rows are `2 * fieldColumns + 3` wide (accent, field, accent, field,
- * accent above; accent, field, accent below), so where there is less room
- * than `POOL_FILTER_MAX_COLUMNS` the two top fields lose a box each and the
- * title field two. Null when there is no room for fields of one box.
+ * The row is framed by an accent box at either end and uses at most
+ * `POOL_FILTER_MAX_COLUMNS`. Null when there is no room for at least one
+ * search character.
  */
 export function poolFilterArea(layout: VisualizerLayout): PoolFilterArea | null {
   const songs = songListArea(layout)
   const firstRow = layout.contentTopRow
   const bottomRow = songs ? songs.row + 2 * (songs.slots - 1) : layout.contentBottomRow
-  const row = bottomRow - 2
+  const row = bottomRow
   if (layout.stripRows <= 0 || row < firstRow) return null
   const lastColumn = layout.columns - 2
   const leftLimit = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
   const room = Math.min(POOL_FILTER_MAX_COLUMNS, lastColumn - leftLimit + 1)
-  const fieldColumns = Math.floor((room - 3) / 2)
-  if (fieldColumns < 1) return null
-  const columns = 2 * fieldColumns + 3
-  return { column: lastColumn - columns + 1, row, columns, fieldColumns }
+  if (room < 3) return null
+  return { column: lastColumn - room + 1, row, columns: room }
 }
 
 /**
@@ -361,9 +355,8 @@ export function levelAtColumn(columns: number, column: number): number {
 export const REQUIRED_ROWS_BESIDE_CUTOUT = 2 * (STRIP_ROWS + 2)
 
 /**
- * The fewest full rows the scene may have: both strips, both bars, and the
- * bucket list's five entries plus the pool filter's two rows with the empty
- * row between each (7 + 1 + 5 * 2 - 1 + 2 + 2 + 1 + 7).
+ * The fewest full rows the scene may have: both strips and bars, plus enough
+ * middle rows for five set entries with three empty rows before the filter.
  */
 export const MIN_SCENE_ROWS = 31
 

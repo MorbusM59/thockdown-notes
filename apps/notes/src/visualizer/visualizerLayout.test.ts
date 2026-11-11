@@ -165,21 +165,35 @@ describe('bucket list', () => {
     const songs = songListArea(layout)!
     const buckets = bucketListArea(layout)!
     expect(buckets.row).toBe(songs.row)
-    expect(buckets.row + buckets.rows - 1).toBe(poolFilterArea(layout)!.row - 2)
+    expect(buckets.row + buckets.rows - 1).toBe(poolFilterArea(layout)!.row - 4)
     expect(layout.columns - (buckets.column + buckets.columns)).toBe(songs.column)
     expect(buckets.column - (layout.cutout.column + layout.cutout.size)).toBe(cutoutGapBoxes(layout))
+  })
+
+  it('uses every other row while leaving exactly three rows before the filter', () => {
+    const compact = computeVisualizerLayout(1920, 620, 20, 20)
+    const compactBuckets = bucketListArea(compact)!
+    const compactFilter = poolFilterArea(compact)!
+    expect(compactBuckets.slots).toBe(5)
+    expect(compactFilter.row - (compactBuckets.row + 2 * (compactBuckets.slots - 1)) - 1).toBe(3)
+
+    const large = computeVisualizerLayout(1920, 1080, 20, 220)
+    const largeBuckets = bucketListArea(large)!
+    const largeFilter = poolFilterArea(large)!
+    expect(largeBuckets.slots).toBeGreaterThan(5)
+    expect(largeFilter.row - (largeBuckets.row + 2 * (largeBuckets.slots - 1)) - 1).toBe(3)
   })
 })
 
 describe('pool filter', () => {
-  it('shares the song list\'s lowest line, bottom right, at most 23 wide', () => {
+  it('shares the song list\'s lowest line, bottom right, with one framed field at most 23 wide', () => {
     for (const [width, height] of [[1920, 1080], [1920, 1100], [1280, 800], [3840, 2160]]) {
       const layout = computeVisualizerLayout(width, height, 20, 220)
       const songs = songListArea(layout)!
       const area = poolFilterArea(layout)!
-      expect(area.row + 2).toBe(songs.row + 2 * (songs.slots - 1))
+      expect(area.row).toBe(songs.row + 2 * (songs.slots - 1))
       expect(area.column + area.columns).toBe(layout.columns - 1)
-      expect(area.columns).toBe(2 * area.fieldColumns + 3)
+      expect(area.columns - 2).toBeGreaterThanOrEqual(1)
       expect(area.columns).toBeLessThanOrEqual(POOL_FILTER_MAX_COLUMNS)
       expect(area.column - (layout.cutout.column + layout.cutout.size)).toBeGreaterThanOrEqual(cutoutGapBoxes(layout))
     }
