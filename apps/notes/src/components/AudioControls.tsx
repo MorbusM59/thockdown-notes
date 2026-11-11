@@ -11,6 +11,7 @@ import {
   PLAYLIST_SLOT_THEMES,
   shouldStopCurrentSongAfterSlotSelection,
 } from '../shared/audioPlayer'
+import { adjacentSongInPool } from '../shared/musicPool'
 import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   fromDisplayLevel,
@@ -564,30 +565,53 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [advanceToNextSong, playPreviousSong])
 
+  /** Play the adjacent song in the active pool's displayed order. */
+  const playAdjacentSong = useCallback(async (direction: SeekDirection) => {
+    const query = { slots: activeRef.current, filter: filterRef.current }
+    let purgedMissingSong = false
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const pool = await window.thockdownAudioPlayer?.getPool(query) ?? []
+      if (pool.length === 0) {
+        if (purgedMissingSong) {
+          setIsPlaying(false)
+          setCurrentSong(null)
+        }
+        return
+      }
+      const currentId = currentSongRef.current?.id
+      const target = adjacentSongInPool(pool, currentId, direction)
+      if (!target || target.id === currentId) return
+      const song = await window.thockdownAudioPlayer?.rotatePoolTo(query, target.id)
+      if (!song) continue
+      try {
+        await playSong(song)
+        return
+      } catch (err) {
+        if (!(err instanceof MissingFileError)) throw err
+        purgedMissingSong = true
+        await purgeMissingSong(song.id)
+        musicPlayerService.stop()
+      }
+    }
+    if (purgedMissingSong) {
+      setIsPlaying(false)
+      setCurrentSong(null)
+    }
+  }, [playSong, purgeMissingSong])
+
   /**
-   * Right-click: change song.
-   *
-   * Backward walks the tally. Forward does NOT walk it the other way -- it
-   * always picks a fresh random song, exactly as if the current one had
-   * reached its end, which is the whole of what "skip to the end of this
-   * song" means. That asymmetry is intentional: the tally exists to let a
-   * listener return to something, not to pre-decide what comes next.
+   * Right-click, media keys and the visualizer's repeated arrow press all use
+   * this command, so they move through the same active-pool ring.
    */
   const jumpSong = useCallback(async (direction: SeekDirection) => {
     if (isCrossingSongRef.current) return
     isCrossingSongRef.current = true
     try {
-      if (direction === -1) {
-        await playPreviousSong()
-        return
-      }
-      const finished = currentSongRef.current
-      if (finished) await window.thockdownAudioPlayer?.afterPlay(finished.id)
-      await advanceToNextSong()
+      await playAdjacentSong(direction)
     } finally {
       isCrossingSongRef.current = false
     }
-  }, [advanceToNextSong, playPreviousSong])
+  }, [playAdjacentSong])
 
   /**
    * Play a song chosen from the pool (the visualizer's song list). The pool's

@@ -1,7 +1,7 @@
 /**
  * The song that is playing and the two ways to change it, published by the
  * music player (`components/AudioControls.tsx`, which owns the song, the
- * play history and the rules for what "previous" and "next" mean) for
+ * play history and the rules for explicit previous/next commands) for
  * anything elsewhere in the window that shows or steers it -- the visualizer
  * mode's now-playing strip. Position and seeking need no port: they are the
  * player service's own (`musicPlayerService.currentTime`, `setCurrentTime`).
@@ -11,7 +11,7 @@ import type { MusicPoolFilter, MusicSongEntry, PlaylistCountsResult, PlaylistSlo
 
 export type NowPlaying = {
   song: MusicSongEntry | null
-  /** -1 walks back through what was played; 1 picks the next song, as the transport's own buttons do. */
+  /** Move one song backward or forward through the active pool's pick order, wrapping at either end. */
   jumpSong: (direction: -1 | 1) => void
   /**
    * What the pool is drawn from: the active slots, the filter the next pick

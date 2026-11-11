@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { comparePoolOrder, rotatePoolTo, type PoolSong } from './musicPool'
+import { adjacentSongInPool, comparePoolOrder, rotatePoolTo, type PoolSong } from './musicPool'
 
 function apply(pool: PoolSong[], changes: Array<[number, number]>): PoolSong[] {
   const next = new Map(changes)
   return pool.map((song) => ({ id: song.id, priority: next.get(song.id) ?? song.priority })).sort(comparePoolOrder)
 }
+
+describe('adjacentSongInPool', () => {
+  const pool: PoolSong[] = [{ id: 1, priority: 1 }, { id: 2, priority: 2 }, { id: 3, priority: 3 }]
+
+  it('steps forward and backward from the current song, wrapping at both ends', () => {
+    expect(adjacentSongInPool(pool, 2, 1)?.id).toBe(3)
+    expect(adjacentSongInPool(pool, 2, -1)?.id).toBe(1)
+    expect(adjacentSongInPool(pool, 1, -1)?.id).toBe(3)
+    expect(adjacentSongInPool(pool, 3, 1)?.id).toBe(1)
+  })
+
+  it('starts at the appropriate end when the current song is not in the pool', () => {
+    expect(adjacentSongInPool(pool, undefined, 1)?.id).toBe(1)
+    expect(adjacentSongInPool(pool, 99, -1)?.id).toBe(3)
+    expect(adjacentSongInPool([], 1, 1)).toBeNull()
+  })
+})
 
 describe('rotatePoolTo', () => {
   it('moves the chosen song to the head and keeps the ring order, ties included', () => {

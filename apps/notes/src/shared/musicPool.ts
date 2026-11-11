@@ -35,6 +35,18 @@ export function comparePoolOrder(a: PoolSong, b: PoolSong): number {
   return a.priority - b.priority || a.id - b.id
 }
 
+/** The adjacent song in the pool's displayed ring, which starts at `currentId`. */
+export function adjacentSongInPool<T extends PoolSong>(
+  pool: readonly T[],
+  currentId: number | undefined,
+  direction: -1 | 1,
+): T | null {
+  if (pool.length === 0) return null
+  const currentIndex = currentId === undefined ? -1 : pool.findIndex((song) => song.id === currentId)
+  if (currentIndex < 0) return direction === 1 ? pool[0] : pool[pool.length - 1]
+  return pool[(currentIndex + direction + pool.length) % pool.length]
+}
+
 /**
  * The priorities that rotate `pool` (in pick order) so `chosenId` is at its
  * head, as [id, priority] pairs for the songs whose priority changes. Null
