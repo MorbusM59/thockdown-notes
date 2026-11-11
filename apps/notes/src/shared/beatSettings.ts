@@ -7,10 +7,10 @@
 
 export interface BeatSettings {
   /**
-   * Milliseconds the visualizer is drawn later than the music is heard, per
-   * output device (`sound/outputDevice.ts` names it), on top of the latency
-   * the audio stack reports: a wireless headset's delay is often not
-   * reported at all. A device with no entry is at 0. Negative draws earlier.
+   * Additional milliseconds to draw the visualizer later, per output device
+   * (`sound/outputDevice.ts` names it). This is added to the internal timing
+   * offset and the latency the audio stack reports. A device with no entry
+   * uses an additional delay of 0.
    */
   delayMsByDevice: Record<string, number>
   /**
@@ -24,6 +24,8 @@ export interface BeatSettings {
   responseDb: number
 }
 
+/** Internal visual timing calibration; user adjustments start at zero on top of it. */
+export const BEAT_DELAY_OFFSET_MS = -200
 export const BEAT_DELAY_MIN_MS = 0
 export const BEAT_DELAY_MAX_MS = 500
 
@@ -33,6 +35,10 @@ export const BEAT_RESPONSE_MAX_DB = 30
 export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
   delayMsByDevice: {},
   responseDb: 5,
+}
+
+export function effectiveBeatDelayMs(userDelayMs: number | undefined): number {
+  return BEAT_DELAY_OFFSET_MS + (userDelayMs ?? 0)
 }
 
 export function sanitizeBeatSettings(input: unknown): BeatSettings {

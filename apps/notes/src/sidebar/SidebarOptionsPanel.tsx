@@ -3160,8 +3160,8 @@ export function SidebarOptionsPanel({
                 step={5}
                 value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
                 trackLabel="delay"
-                tooltipLabel={`ms the pulse is drawn later than the music, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
-                ariaLabel="Beat pulse: visual delay in milliseconds for this output device"
+                tooltipLabel={`Additional ms to draw the pulse later than its built-in timing offset, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
+                ariaLabel="Beat pulse: additional visual delay in milliseconds for this output device"
                 defaultValue={0}
                 formatValue={(value) => Math.round(value).toString()}
                 onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}

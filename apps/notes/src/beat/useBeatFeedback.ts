@@ -34,7 +34,7 @@
 import { setGridWaveSettings } from '../visualizer/gridWaveTurn'
 import { useEffect, useRef } from 'react'
 import type { VisualizerChannel, VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
-import type { BeatSettings } from '../shared/beatSettings'
+import { effectiveBeatDelayMs, type BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix, type FlashClock, type MusicClockSubscription } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
@@ -166,7 +166,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
     else root.removeProperty('--visualizer-letterbox-color')
   }, [edgeColor, edgeSpreadPx, edgeBlurPx, paneColor, waveColor, waveBoxes, pulseColor, accentColor, letterboxColor])
   const device = useOutputDevice(blocksOn)
-  const delayMs = settings.delayMsByDevice[device] ?? 0
+  const delayMs = effectiveBeatDelayMs(settings.delayMsByDevice[device])
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
   useEffect(() => setBeatResponseHeadroomDb(settings.responseDb), [settings.responseDb])
 }

@@ -465,8 +465,8 @@ export function setBeatResponseHeadroomDb(db: number): void {
 }
 
 /**
- * Draws the pulse this much later than the latency the audio stack reports
- * (the reader's per-device delay, `BeatSettings.delayMsByDevice`).
+ * Sets the visual timing offset added to the latency the audio stack reports:
+ * the internal calibration plus the reader's per-device adjustment.
  */
 export function setBeatVisualDelaySec(sec: number): void {
   visualDelaySec = sec
@@ -480,9 +480,9 @@ function outputLatencySec(): number {
 
 /**
  * How long after the audio graph handles a sample it should be DRAWN: what
- * the audio stack reports plus the reader's per-device delay. The beat pulse
- * and the visualizer mode's spectrum (`visualizer/spectrumTap.ts`) both draw
- * on it, so they cannot disagree about when the listener hears something.
+ * the audio stack reports plus the visual timing offset. The beat pulse and
+ * the visualizer mode's spectrum (`visualizer/spectrumTap.ts`) both draw on
+ * it, so they cannot disagree about when the listener hears something.
  */
 export function heardLagSec(): number {
   return outputLatencySec() + visualDelaySec
