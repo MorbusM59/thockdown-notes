@@ -49,7 +49,13 @@ export interface CurveEditorProps {
   x: CurveAxisFormat
   y: CurveAxisFormat
   /** What the two end points are called in the rows. */
-  endLabels: readonly [string, string]
+  endLabels?: readonly [string, string]
+  /** Optional non-interactive labels for the four value columns. */
+  columnHeaders?: readonly [string, string, string, string]
+  /** Optional replacement for the default endpoint labels. */
+  pointLabel?: (index: number, isLast: boolean) => string
+  /** Optional display and input format for a point's handle value. */
+  handleFormat?: Pick<CurveAxisFormat, 'display' | 'raw' | 'parse'>
   ariaLabel: string
   /** The graph's tooltip: what the plane is, then how it is operated. */
   tooltip: string
@@ -291,6 +297,15 @@ export function CurveEditor(props: CurveEditorProps) {
         </div>
       </div>
       <div className="options-curve-rows" role="group" aria-label={`${ariaLabel}: points`}>
+        {props.columnHeaders ? (
+          <div className="options-curve-cell options-curve-header" aria-hidden="true">
+            {props.columnHeaders.map((header, index) => (
+              <span key={index} className="options-curve-header-cell">{header}</span>
+            ))}
+            <span className="options-curve-header-cell" />
+            <span className="options-curve-header-cell" />
+          </div>
+        ) : null}
         {curve.map((_, index) => (
           <CurvePointRow
             key={index}
@@ -332,11 +347,13 @@ interface CurvePointRowProps extends CurveEditorProps {
   onAdd: () => void
 }
 
-function CurvePointRow({ curve, index, isActive, onSelect, onEdit, onSetX, onRemove, onAdd, x, y, xStep, yStep, handleStep, plane, endLabels }: CurvePointRowProps) {
+function CurvePointRow({ curve, index, isActive, onSelect, onEdit, onSetX, onRemove, onAdd, x, y, xStep, yStep, handleStep, plane, endLabels, pointLabel, handleFormat }: CurvePointRowProps) {
   const point = curve[index]
   const isLast = index === curve.length - 1
   const isEnd = index === 0 || isLast
-  const label = index === 0 ? endLabels[0] : isLast ? endLabels[1] : String(index)
+  const label = pointLabel
+    ? pointLabel(index, isLast)
+    : index === 0 ? endLabels?.[0] ?? String(index) : isLast ? endLabels?.[1] ?? String(index) : String(index)
   return (
     <div className={`options-curve-row${isActive ? ' is-active' : ''}`}>
       <span className="options-curve-cell options-curve-index">{label}</span>
@@ -359,10 +376,10 @@ function CurvePointRow({ curve, index, isActive, onSelect, onEdit, onSetX, onRem
       />
       <CurveField
         ariaLabel={`Point ${label} handle, 0 to ${plane.handleMax}`}
-        display={point.handle.toFixed(2)}
-        raw={String(point.handle)}
+        display={handleFormat?.display(point.handle) ?? point.handle.toFixed(2)}
+        raw={handleFormat?.raw(point.handle) ?? String(point.handle)}
         onFocus={onSelect}
-        onType={(value) => onEdit({ handle: value })}
+        onType={(value) => onEdit({ handle: handleFormat?.parse(value) ?? value })}
         onStep={(direction) => onEdit({ handle: snap(point.handle, handleStep) + (direction * handleStep) })}
       />
       <button

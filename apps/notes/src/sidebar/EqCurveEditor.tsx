@@ -22,7 +22,7 @@ const VERTICALS: readonly CurveGridLine[] = Array.from({ length: Math.floor(EQ_S
 const HORIZONTALS: readonly CurveGridLine[] = [{ at: 0, kind: 'dashed' }]
 
 function formatHz(hz: number): string {
-  return hz < 1000 ? `${Math.round(hz)}Hz` : `${(hz / 1000).toFixed(1)}kHz`
+  return hz < 1000 ? String(Math.round(hz)) : `${Math.round(hz / 1000)}k`
 }
 
 const FREQUENCY: CurveAxisFormat = {
@@ -33,10 +33,16 @@ const FREQUENCY: CurveAxisFormat = {
 }
 
 const GAIN: CurveAxisFormat = {
-  display: (db) => `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`,
+  display: (db) => `${db > 0 ? '+' : ''}${db.toFixed(1)}`,
   raw: (db) => String(db),
   parse: (db) => db,
   noun: 'gain in dB',
+}
+
+const HANDLE: Pick<CurveAxisFormat, 'display' | 'raw' | 'parse'> = {
+  display: (value) => String(Math.round(value * 100)),
+  raw: (value) => String(Math.round(value * 100)),
+  parse: (value) => value / 100,
 }
 
 /** The music EQ curve (`shared/musicEqCurve.ts`): the shared curve editor on the EQ's plane of semitones by dB. */
@@ -56,7 +62,9 @@ export function EqCurveEditor({ curve, onChange }: { curve: EqPoint[]; onChange:
       horizontals={HORIZONTALS}
       x={FREQUENCY}
       y={GAIN}
-      endLabels={['min', 'max']}
+      columnHeaders={['#', 'Hz', 'dB', '%']}
+      pointLabel={(index) => String(index)}
+      handleFormat={HANDLE}
       ariaLabel="Music EQ curve"
       tooltip={`EQ curve: 20 Hz to 20 kHz, -${EQ_DB_MAX} to +${EQ_DB_MAX} dB`}
     />
