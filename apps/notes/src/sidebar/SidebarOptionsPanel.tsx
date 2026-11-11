@@ -929,7 +929,8 @@ export function SidebarOptionsPanel({
     setSpellCheckDictionaries((previous) => previous.filter((entry) => entry !== id))
     await refreshDictionaries()
   }, [refreshDictionaries, setSpellCheckDictionaries])
-    // What a slider resets to: the visualizer is global, so one default for every layout.
+    // Visualizer settings are global across layouts; the full-screen pane has
+    // separate light/dark tuning.
     const visualizerDefaults = DEFAULT_VISUALIZER
     const outputDevice = useOutputDevice(true)
     // Every block's fall: its shape (visualizer.ts, `pulseCurve`) and its
@@ -2393,7 +2394,7 @@ export function SidebarOptionsPanel({
             ]}
           />
           {renderBeatChannel('visualizer-edge', 'Edge', 'the edge round the visualizer mode\'s scene shows', visualizer.edge, visualizerDefaults.edge, (patch) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, ...patch } })))}
-          {renderBeatChannel('visualizer-pane', 'Pane', 'the scene\'s box outlines show in the visualizer mode', visualizer.pane, visualizerDefaults.pane, (patch) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, ...patch } })))}
+          {renderBeatChannel('visualizer-pane', 'Pane', 'the scene\'s box outlines show in the visualizer mode', visualizer.pane[uiMode], visualizerDefaults.pane[uiMode], (patch) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, [uiMode]: { ...prev.pane[uiMode], ...patch } } })))}
           <div className="utility-setting-button-row" role="group" aria-label="Immersive glaze controls">
             <OptionsSubsectionLabel>Glaze</OptionsSubsectionLabel>
           </div>

@@ -141,7 +141,7 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const blocksOn = enabled || isVisualizerMode
   const shownEdge = isVisualizerMode ? visualizer.edge : grid.edge
   useBeatBlock('edge', shownEdge, blocksOn, subscribeMix)
-  useBeatBlock('pane', isVisualizerMode ? visualizer.pane : grid.editorPane, blocksOn, subscribeMix)
+  useBeatBlock('pane', isVisualizerMode ? visualizer.pane[uiMode] : grid.editorPane, blocksOn, subscribeMix)
   useBeatBlock('wash', isVisualizerMode ? OFF_CHANNEL : grid.readerPane, blocksOn, subscribeMix)
   const edgeSpreadPx = shownEdge.spreadPx
   const edgeBlurPx = shownEdge.blurPx

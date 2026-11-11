@@ -16,12 +16,35 @@ describe('sanitizeVisualizer', () => {
     expect(v.edge).toMatchObject({ mix: { thump: 1, pierce: 0, tick: 0.4 }, effect: -1 })
     expect(v.edge).not.toHaveProperty('color')
     expect(v.immersive).not.toHaveProperty('waveColor')
-    expect(v.pane.mix).toEqual(DEFAULT_VISUALIZER.pane.mix)
+    expect(v.pane.light.mix).toEqual(DEFAULT_VISUALIZER.pane.light.mix)
+    expect(v.pane.dark.mix).toEqual(DEFAULT_VISUALIZER.pane.dark.mix)
     expect(v.immersive.pulseMix).toEqual({ thump: 0.5, pierce: DEFAULT_VISUALIZER.immersive.pulseMix.pierce, tick: 1 })
   })
 
   it('drops a caret block an older save carried: the caret follows the flashing curve now', () => {
     expect(sanitizeVisualizer({ caret: { shape: 0.2, fallSec: 0.5 } })).not.toHaveProperty('caret')
+  })
+})
+
+describe('the full-screen visualizer pane', () => {
+  it('has separate light and dark defaults', () => {
+    expect(DEFAULT_VISUALIZER.pane.dark.effect).toBe(0.3)
+    expect(DEFAULT_VISUALIZER.pane.light.effect).toBe(0.5)
+    expect(sanitizeVisualizer({ trackers: {} }).pane).toEqual(DEFAULT_VISUALIZER.pane)
+  })
+
+  it('copies an older shared pane setting to both modes', () => {
+    const pane = sanitizeVisualizer({ pane: { effect: 0.42 } }).pane
+    expect(pane.dark.effect).toBe(0.42)
+    expect(pane.light.effect).toBe(0.42)
+  })
+
+  it('sanitizes independently saved panes and uses them for a missing grid beat', () => {
+    const visualizer = sanitizeVisualizer({ pane: { dark: { effect: 0.3 }, light: { effect: 0.5 } } })
+    expect(visualizer.pane.dark.effect).toBe(0.3)
+    expect(visualizer.pane.light.effect).toBe(0.5)
+    expect(visualizer.grid.dark.editorPane.effect).toBe(0.3)
+    expect(visualizer.grid.light.editorPane.effect).toBe(0.5)
   })
 })
 
@@ -31,13 +54,13 @@ describe('the grid beat', () => {
     for (const mode of ['light', 'dark'] as const) {
       expect(v.grid[mode].edge.effect).toBe(v.edge.effect)
       expect(v.grid[mode].edge.spreadPx).toBe(v.edge.spreadPx)
-      expect(v.grid[mode].editorPane).toEqual(v.pane)
-      expect(v.grid[mode].readerPane).toEqual(v.pane)
+      expect(v.grid[mode].editorPane).toEqual(v.pane[mode])
+      expect(v.grid[mode].readerPane).toEqual(v.pane[mode])
     }
-    const w = sanitizeVisualizer({ ...v, grid: { ...v.grid, dark: { ...v.grid.dark, readerPane: { ...v.pane, effect: 0.9 } } } })
+    const w = sanitizeVisualizer({ ...v, grid: { ...v.grid, dark: { ...v.grid.dark, readerPane: { ...v.pane.dark, effect: 0.9 } } } })
     expect(w.grid.dark.readerPane.effect).toBe(0.9)
-    expect(w.grid.light.readerPane.effect).toBe(v.pane.effect)
-    expect(w.grid.dark.editorPane.effect).toBe(v.pane.effect)
+    expect(w.grid.light.readerPane.effect).toBe(v.pane.light.effect)
+    expect(w.grid.dark.editorPane.effect).toBe(v.pane.dark.effect)
     expect(w.pane).toEqual(v.pane)
   })
 
@@ -95,7 +118,8 @@ describe('a layout saved before the trackers', () => {
       pane: { source: 'hat', groove: 7, contrast: 0.1 },
     })
     expect(v.edge.mix).toEqual(soleMix('thump'))
-    expect(v.pane.mix).toEqual(soleMix('tick'))
+    expect(v.pane.dark.mix).toEqual(soleMix('tick'))
+    expect(v.pane.light.mix).toEqual(soleMix('tick'))
     expect(v.trackers.thump).toEqual({ contrast: 0.3, pattern: 0.5 })
     // A hat's contrast was the drum score's, not the tick's.
     expect(v.trackers.tick).toEqual(DEFAULT_VISUALIZER_TRACKERS.tick)
@@ -108,7 +132,8 @@ describe('a layout saved before the trackers', () => {
   it('reads a band block as following the tick', () => {
     const v = sanitizeVisualizer({ edge: { source: 'band', frequencyHz: 440, octaves: 2, contrast: 0.2 }, pane: { source: 'band', frequencyHz: 99 } })
     expect(v.trackers.tick).toEqual(DEFAULT_VISUALIZER_TRACKERS.tick)
-    expect(v.pane.mix).toEqual(soleMix('tick'))
+    expect(v.pane.dark.mix).toEqual(soleMix('tick'))
+    expect(v.pane.light.mix).toEqual(soleMix('tick'))
     expect(sanitizeVisualizer({ edge: { source: 'kick', effect: 0 } }).immersive.pulseMix.thump).toBe(0)
     // A band edge set no pulse drum: the thump.
     expect(v.immersive.pulseMix).toEqual(soleMix('thump'))
@@ -116,14 +141,16 @@ describe('a layout saved before the trackers', () => {
 
   it('reads a layout saved before the source existed', () => {
     const v = sanitizeVisualizer({ pane: { frequencyHz: 0 }, edge: { frequencyHz: 440 } })
-    expect(v.pane.mix).toEqual(soleMix('thump'))
+    expect(v.pane.dark.mix).toEqual(soleMix('thump'))
+    expect(v.pane.light.mix).toEqual(soleMix('thump'))
     expect(v.edge.mix).toEqual(soleMix('tick'))
   })
 
   it('looks as the defaults did for a layout that saved the defaults', () => {
     const v = sanitizeVisualizer({ edge: { source: 'kick' }, pane: { source: 'snare' } })
     expect(v.edge.mix).toEqual(DEFAULT_VISUALIZER.edge.mix)
-    expect(v.pane.mix).toEqual(DEFAULT_VISUALIZER.pane.mix)
+    expect(v.pane.dark.mix).toEqual(DEFAULT_VISUALIZER.pane.dark.mix)
+    expect(v.pane.light.mix).toEqual(DEFAULT_VISUALIZER.pane.light.mix)
     expect(v.trackers).toEqual(DEFAULT_VISUALIZER_TRACKERS)
   })
 })
@@ -164,7 +191,10 @@ it('reads the fall of a layout saved with one mass slider, or with the first fal
   const v = sanitizeVisualizer({ edge: { mass: 1 }, pane: { fallSec: 99, fallShape: 3 } })
   expect(v.edge.shape).toBe(-1)
   expect(v.edge.fallSec).toBeCloseTo(1.6, 6)
-  expect(v.pane).toMatchObject({ shape: 1, fallSec: FALL_MAX_SEC })
+  expect(v.pane).toMatchObject({
+    dark: { shape: 1, fallSec: FALL_MAX_SEC },
+    light: { shape: 1, fallSec: FALL_MAX_SEC },
+  })
 })
 
 describe('pulseCurve', () => {
@@ -224,7 +254,7 @@ it('gives a save without the edge geometry its defaults, and bounds and rounds w
 it('reads a layout saved under the old block names, shade and outline, as the edge and the pane', () => {
   const v = sanitizeVisualizer({ shade: { effect: 0.4, spreadPx: 12 }, outline: { effect: -0.3, color: 'rgba(1, 2, 3, 1)' } })
   expect(v.edge).toMatchObject({ effect: 0.4, spreadPx: 12 })
-  expect(v.pane).toMatchObject({ effect: -0.3 })
+  expect(v.pane).toMatchObject({ dark: { effect: -0.3 }, light: { effect: -0.3 } })
   expect(sanitizeVisualizer({ edge: { effect: 0.1 }, shade: { effect: 0.9 } }).edge.effect).toBe(0.1)
 })
 
@@ -234,7 +264,7 @@ it('reads a layout saved under the old block names, shade and outline, as the ed
 // `snapValue`), so it must land back on the default, for every block.
 it('every block\'s default fall survives the fall slider\'s reset', () => {
   const v = DEFAULT_VISUALIZER
-  for (const fall of [v.edge.fallSec, v.pane.fallSec]) {
+  for (const fall of [v.edge.fallSec, ...Object.values(v.pane).map((pane) => pane.fallSec)]) {
     const min = Math.log(FALL_MIN_SEC)
     const step = Math.log(fall / FALL_MIN_SEC) / 90
     const snapped = Math.exp(min + Math.round((Math.log(fall) - min) / step) * step)

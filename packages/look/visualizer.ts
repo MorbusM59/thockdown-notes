@@ -124,8 +124,8 @@ export interface VisualizerSettings {
   grid: VisualizerGridBeatModes
   /** The visualizer mode's edge (F5), an inner shadow round its scene; a response deepens it. Its fall also times the centre pulse's solid thump. */
   edge: VisualizerEdgeChannel
-  /** The visualizer mode's pane: a copy of the scene's box outlines over its grid. A response draws it. */
-  pane: VisualizerChannel
+  /** The visualizer mode's pane, tuned separately for light and dark mode: a copy of the scene's box outlines over its grid. */
+  pane: VisualizerPaneModes
   /** The rest of the visualizer mode's own look (F5). */
   immersive: VisualizerImmersive
 }
@@ -146,6 +146,11 @@ export interface VisualizerGridBeat {
   editorPane: VisualizerChannel
   /** The render (reader) view's pane: a flat wash of the pane colour over the editor, which has no grid there. */
   readerPane: VisualizerChannel
+}
+
+export interface VisualizerPaneModes {
+  light: VisualizerChannel
+  dark: VisualizerChannel
 }
 
 /**
@@ -359,7 +364,10 @@ export const DEFAULT_VISUALIZER: VisualizerSettings = {
     },
   },
   edge: DEFAULT_SAVED_EDGE,
-  pane: DEFAULT_SAVED_PANE,
+  pane: {
+    dark: { ...DEFAULT_SAVED_PANE, effect: 0.3 },
+    light: { ...DEFAULT_SAVED_PANE, effect: 0.5 },
+  },
   immersive: {
     ...DEFAULT_VISUALIZER_IMMERSIVE,
     glazeStrength: 0.06, glazeSpread: -1, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 10,
@@ -482,6 +490,23 @@ function sanitizeChannel(input: unknown, d: VisualizerChannel): VisualizerChanne
   }
 }
 
+function sanitizeVisualizerPane(
+  input: unknown,
+  defaults: VisualizerPaneModes,
+  legacyDefault: VisualizerChannel,
+): VisualizerPaneModes {
+  if (input === undefined) return defaults
+  const source = fieldsOf(input)
+  if (source.light !== undefined || source.dark !== undefined) {
+    return {
+      light: sanitizeChannel(source.light, defaults.light),
+      dark: sanitizeChannel(source.dark, defaults.dark),
+    }
+  }
+  const shared = sanitizeChannel(input, legacyDefault)
+  return { light: shared, dark: shared }
+}
+
 function sanitizeTracker(input: unknown, d: VisualizerTracker): VisualizerTracker {
   const source = fieldsOf(input)
   return { contrast: bounded(source.contrast, 0, BEAT_CONTRAST_MAX, d.contrast), pattern: bounded(source.pattern, 0, 1, d.pattern) }
@@ -584,7 +609,7 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
   const edgeInput = source.edge ?? source.shade
   const paneInput = source.pane ?? source.outline
   const edge = sanitizeEdgeChannel(edgeInput, d.edge)
-  const pane = sanitizeChannel(paneInput, d.pane)
+  const pane = sanitizeVisualizerPane(paneInput, d.pane, DEFAULT_SAVED_PANE)
   // LEGACY: a layout saved before the trackers had none, and its centre
   // pulse rode the edge's hits; it keeps the edge's drum (a band, which no
   // pulse took then, reads as the thump, the pulse's default).
@@ -596,9 +621,12 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
   return {
     trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
     // A save from before the grid beat was separated from the visualizer
-    // mode's (2026-11-07) had one edge and one pane for both: each copy
-    // starts from them.
-    grid: sanitizeGridBeatModes(source.grid, { edge, editorPane: pane, readerPane: pane }, d.grid),
+    // mode's (2026-11-07) had one edge and one pane for both. The pane was
+    // shared across light and dark modes too, so both legacy copies match.
+    grid: sanitizeGridBeatModes(source.grid, {
+      light: { edge, editorPane: pane.light, readerPane: pane.light },
+      dark: { edge, editorPane: pane.dark, readerPane: pane.dark },
+    }, d.grid),
     edge,
     pane,
     // ...and its wave followed the snare, whatever the default wave mix is now.
@@ -612,13 +640,13 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
  * grid beat existed at all has none, and both modes take the visualizer
  * mode's edge and pane (`legacy`). Otherwise each mode is read on its own.
  */
-function sanitizeGridBeatModes(input: unknown, legacy: VisualizerGridBeat, d: VisualizerGridBeatModes): VisualizerGridBeatModes {
+function sanitizeGridBeatModes(input: unknown, legacy: VisualizerGridBeatModes, d: VisualizerGridBeatModes): VisualizerGridBeatModes {
   const source = fieldsOf(input)
   if (input !== undefined && source.light === undefined && source.dark === undefined) {
-    const single = sanitizeGridBeat(input, legacy)
+    const single = sanitizeGridBeat(input, legacy.light)
     return { light: single, dark: single }
   }
-  if (input === undefined) return { light: legacy, dark: legacy }
+  if (input === undefined) return legacy
   return { light: sanitizeGridBeat(source.light, d.light), dark: sanitizeGridBeat(source.dark, d.dark) }
 }
 
