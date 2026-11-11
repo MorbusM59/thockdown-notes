@@ -1184,6 +1184,13 @@ function registerIpcHandlers() {
   }];
 
   registerInvokeHandlers<AudioPlayerApi, IpcMainInvokeEvent>(AUDIO_PLAYER_CHANNELS, {
+    initializeMusicSets: async (_event, legacyPreferences) => {
+      return databaseService!.initializeMusicSets(legacyPreferences);
+    },
+    createMusicSet: async () => databaseService!.createMusicSet(),
+    renameMusicSet: async (_event, slot, name) => databaseService!.renameMusicSet(slot, name),
+    moveMusicSet: async (_event, draggedSlot, targetSlot) => databaseService!.moveMusicSet(draggedSlot, targetSlot),
+    deleteMusicSet: async (_event, slot) => databaseService!.deleteMusicSet(slot),
     pickFiles: async () => {
       const { filePaths, canceled } = await dialog.showOpenDialog({
         title: 'Add songs',

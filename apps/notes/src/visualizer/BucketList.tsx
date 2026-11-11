@@ -1,12 +1,12 @@
 /**
- * The visualizer's bucket list: the music bar's playlist buckets
- * (`PLAYLIST_BUTTON_SLOTS`, by name), in the rectangle `bucketListArea`
+ * The visualizer's set list: the music bar's first five music sets
+ * by name, in the rectangle `bucketListArea`
  * gives, mirroring the song list: one entry on every other row from the top,
  * right-aligned, framed the way a song is (accent, gap, name, gap, accent).
- * An active bucket sits on the letterbox colour, cut out of the middle strip
- * (`middleHoles.ts`); the rest on the middle's. A press selects that bucket
+ * An active set sits on the letterbox colour, cut out of the middle strip
+ * (`middleHoles.ts`); the rest on the middle's. A press selects that set
  * alone; Shift-press adds it to the selection (`NowPlaying.selectSlot`), and
- * the song list follows the pool it publishes. An empty bucket is shown and
+ * the song list follows the pool it publishes. An empty set is shown and
  * takes no press: filling one is the music bar's (it opens a file dialog).
  *
  * Five entries, re-rendered only when the pool changes.
@@ -14,7 +14,7 @@
 
 import { Fragment, useLayoutEffect, useRef, useSyncExternalStore } from 'react'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { PLAYLIST_BUTTON_SLOTS, PLAYLIST_SLOT_THEMES } from '../shared/audioPlayer'
+import { MUSIC_SET_QUICK_ACCESS_COUNT } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
 import { songListEntry, type VisualizerLayout } from './visualizerLayout'
@@ -22,22 +22,23 @@ import type { SongListArea } from './SongList'
 
 export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayout; area: SongListArea; glyphFont: string }) {
   const pool = useSyncExternalStore(subscribeNowPlaying, () => readNowPlaying().pool)
+  const musicSets = useSyncExternalStore(subscribeNowPlaying, () => readNowPlaying().musicSets)
   const anchorRef = useRef<HTMLDivElement | null>(null)
   const { boxPx, originXPx, originYPx } = layout
   const right = originXPx + (area.column + area.columns) * boxPx
   const top = originYPx + area.row * boxPx
 
-  const entries = PLAYLIST_BUTTON_SLOTS.slice(0, area.slots).map((slot, index) => {
-    const { text, closingColumn } = songListEntry(dropWideGlyphs(PLAYLIST_SLOT_THEMES[slot], glyphFont), area.columns)
+  const entries = musicSets.slice(0, Math.min(area.slots, MUSIC_SET_QUICK_ACCESS_COUNT)).map((set, index) => {
+    const { text, closingColumn } = songListEntry(dropWideGlyphs(set.name, glyphFont), area.columns)
     const width = closingColumn + 1
     return {
-      slot,
+      slot: set.slot,
       text,
       left: right - width * boxPx,
       top: top + index * 2 * boxPx,
       width,
-      active: pool?.slots.includes(slot) ?? false,
-      empty: (pool?.counts[slot] ?? 0) === 0,
+      active: pool?.slots.includes(set.slot) ?? false,
+      empty: (pool?.counts[set.slot] ?? 0) === 0,
     }
   })
 

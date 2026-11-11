@@ -66,13 +66,33 @@ import {
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
 } from '@thockdown/look/caretSettings';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureMaterialSettings, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes';
-import type { IndexedMusicFile, MusicPoolQuery, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../src/shared/audioPlayer';
+import type {
+  IndexedMusicFile,
+  MusicPoolQuery,
+  MusicSet,
+  MusicSetPreferences,
+  MusicSongEntry,
+  PlaylistSlot,
+  PlaylistCountsResult,
+} from '../src/shared/audioPlayer';
 import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult, type ImageRenameResult, type StoredImageSummary, renameImageReferences } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import { readAudioTags } from './audioTags';
 import { rotatePoolTo } from '../src/shared/musicPool';
-import { AUDIO_EXTENSIONS, emptyPlaylistCounts, isPlaylistSlot, isPoolFilterEmpty, matchesPoolFilter, MAX_PLAYLIST_SLOT, sanitizePoolFilter } from '../src/shared/audioPlayer';
+import {
+  AUDIO_EXTENSIONS,
+  defaultMusicSetName,
+  emptyPlaylistCounts,
+  FACTORY_MUSIC_SETS,
+  isFactoryMusicSet,
+  isPlaylistSlot,
+  isPoolFilterEmpty,
+  matchesPoolFilter,
+  sanitizeMusicSetPreferences,
+  sanitizePoolFilter,
+  uniqueMusicSetName,
+} from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
 let BetterSqlite3: typeof import('better-sqlite3');
@@ -3467,10 +3487,13 @@ export class DatabaseService {
       ).run(tags.title, tags.artist, tags.album, row['id']);
       row = { ...row, ...tags, tagsRead: 1 };
     }
+    const storedSetIds = row['setIds'];
     return {
       id:           row['id'] as number,
       filePath:     row['filePath'] as string,
-      playlistSlot: row['playlistSlot'] as PlaylistSlot,
+      setIds:       typeof storedSetIds === 'string'
+        ? storedSetIds.split(',').map(Number).filter(isPlaylistSlot)
+        : [],
       priority:     row['priority'] as number,
       favorability: row['favorability'] as number,
       title:        row['title'] as string,
@@ -3480,34 +3503,144 @@ export class DatabaseService {
     };
   }
 
+  private musicSongSelectColumns(alias = 'music_songs'): string {
+    return `${alias}.*,
+      COALESCE((
+        SELECT GROUP_CONCAT(setId)
+        FROM (SELECT setId FROM music_set_songs WHERE songId = ${alias}.id ORDER BY setId)
+      ), '') AS setIds`;
+  }
+
+  getMusicSets(): MusicSet[] {
+    const rows = this.requireDb().prepare(
+      'SELECT id, name FROM music_sets ORDER BY position ASC, id ASC'
+    ).all() as Array<{ id: number; name: string }>;
+    return rows.map(({ id, name }) => ({ slot: id, name }));
+  }
+
+  initializeMusicSets(legacyPreferences?: MusicSetPreferences): MusicSet[] {
+    const key = 'music-sets-imported-from-app-state';
+    if (this.getAppMeta(key) === null) {
+      const legacy = legacyPreferences === undefined
+        ? null
+        : sanitizeMusicSetPreferences(legacyPreferences);
+      const db = this.requireDb();
+      db.transaction(() => {
+        if (legacy) {
+          const current = this.getMusicSets();
+          const known = new Set(legacy.sets.map((set) => set.slot));
+          const ordered = [
+            ...legacy.sets,
+            ...current.filter((set) => !known.has(set.slot)),
+          ];
+          const upsert = db.prepare(`
+            INSERT INTO music_sets (id, name, position)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET name = excluded.name, position = excluded.position
+          `);
+          ordered.forEach((set, position) => upsert.run(set.slot, set.name, position));
+          db.prepare(`
+            UPDATE sqlite_sequence
+            SET seq = MAX(seq, ?)
+            WHERE name = 'music_sets'
+          `).run(Math.max(0, legacy.nextSlot - 1));
+        }
+        db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?)').run(key, '1');
+      })();
+    }
+    return this.getMusicSets();
+  }
+
+  createMusicSet(): MusicSet[] {
+    const db = this.requireDb();
+    const sets = this.getMusicSets();
+    const position = sets.length;
+    db.prepare('INSERT INTO music_sets (name, position) VALUES (?, ?)').run(defaultMusicSetName(sets), position);
+    return this.getMusicSets();
+  }
+
+  renameMusicSet(slot: PlaylistSlot, name: string): MusicSet[] {
+    if (isFactoryMusicSet(slot)) return this.getMusicSets();
+    const nextName = sanitizeDocumentText(name).trim().slice(0, 64);
+    if (!nextName) return this.getMusicSets();
+    const db = this.requireDb();
+    const conflict = db.prepare('SELECT 1 FROM music_sets WHERE name = ? AND id != ?').get(nextName, slot);
+    if (conflict) throw new Error('A set with that name already exists.');
+    db.prepare('UPDATE music_sets SET name = ? WHERE id = ?').run(nextName, slot);
+    return this.getMusicSets();
+  }
+
+  moveMusicSet(draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot): MusicSet[] {
+    const db = this.requireDb();
+    const sets = this.getMusicSets();
+    const from = sets.findIndex((set) => set.slot === draggedSlot);
+    const to = sets.findIndex((set) => set.slot === targetSlot);
+    if (from < 0 || to < 0 || from === to) return sets;
+    const reordered = [...sets];
+    const [dragged] = reordered.splice(from, 1);
+    reordered.splice(to, 0, dragged);
+    const update = db.prepare('UPDATE music_sets SET position = ? WHERE id = ?');
+    db.transaction(() => reordered.forEach((set, position) => update.run(position, set.slot)))();
+    return this.getMusicSets();
+  }
+
+  deleteMusicSet(slot: PlaylistSlot): MusicSet[] {
+    const sets = this.getMusicSets();
+    if (!isPlaylistSlot(slot) || isFactoryMusicSet(slot) || !sets.some((set) => set.slot === slot)) return sets;
+    const db = this.requireDb();
+    db.transaction(() => {
+      db.prepare(`
+        DELETE FROM music_songs
+        WHERE id IN (SELECT songId FROM music_set_songs WHERE setId = ?)
+          AND NOT EXISTS (
+            SELECT 1 FROM music_set_songs
+            WHERE songId = music_songs.id AND setId != ?
+          )
+      `).run(slot, slot);
+      db.prepare('DELETE FROM music_sets WHERE id = ?').run(slot);
+    })();
+    return this.getMusicSets();
+  }
+
   getMusicPlaylist(slot: PlaylistSlot): MusicSongEntry[] {
     const db = this.requireDb();
     const rows = db.prepare(
-      'SELECT * FROM music_songs WHERE playlistSlot = ? ORDER BY priority ASC, id ASC'
+      `SELECT ${this.musicSongSelectColumns()}
+       FROM music_songs
+       WHERE id IN (SELECT songId FROM music_set_songs WHERE setId = ?)
+       ORDER BY priority ASC, id ASC`
     ).all(slot) as Record<string, unknown>[];
     return rows.map((r) => this.rowToSongEntry(r, false));
   }
 
   getMusicSongById(id: number): MusicSongEntry | null {
     const db = this.requireDb();
-    const row = db.prepare('SELECT * FROM music_songs WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    const row = db.prepare(
+      `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
+    ).get(id) as Record<string, unknown> | undefined;
     return row ? this.rowToSongEntry(row) : null;
   }
 
   addMusicSongs(slot: PlaylistSlot, indexedFiles: IndexedMusicFile[]): MusicSongEntry[] {
     const db = this.requireDb();
-    const insert = db.prepare(`
-      INSERT INTO music_songs (filePath, playlistSlot, title, artist, album, tagsRead)
-      VALUES (?, ?, ?, ?, ?, 1)
-      ON CONFLICT(filePath) DO NOTHING
-    `);
-
     const songs = indexedFiles.filter(({ filePath }) =>
       AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase()),
     );
+    const insertSong = db.prepare(`
+      INSERT INTO music_songs (filePath, title, artist, album, tagsRead)
+      VALUES (?, ?, ?, ?, 1)
+      ON CONFLICT(filePath) DO NOTHING
+    `);
+    const findSong = db.prepare('SELECT id FROM music_songs WHERE filePath = ?');
+    const addMembership = db.prepare(
+      'INSERT INTO music_set_songs (setId, songId) VALUES (?, ?) ON CONFLICT(setId, songId) DO NOTHING'
+    );
     const tx = db.transaction(() => {
       for (const song of songs) {
-        insert.run(song.filePath, slot, song.title, song.artist, song.album);
+        insertSong.run(song.filePath, song.title, song.artist, song.album);
+        const row = findSong.get(song.filePath) as { id: number } | undefined;
+        if (!row) throw new Error(`Music song insert did not produce a row for ${song.filePath}`);
+        addMembership.run(slot, row.id);
       }
     });
     tx();
@@ -3516,7 +3649,17 @@ export class DatabaseService {
 
   clearMusicPlaylist(slot: PlaylistSlot): void {
     const db = this.requireDb();
-    db.prepare('DELETE FROM music_songs WHERE playlistSlot = ?').run(slot);
+    db.transaction(() => {
+      db.prepare(`
+        DELETE FROM music_songs
+        WHERE id IN (SELECT songId FROM music_set_songs WHERE setId = ?)
+          AND NOT EXISTS (
+            SELECT 1 FROM music_set_songs
+            WHERE songId = music_songs.id AND setId != ?
+          )
+      `).run(slot, slot);
+      db.prepare('DELETE FROM music_set_songs WHERE setId = ?').run(slot);
+    })();
   }
 
   removeMusicSong(id: number): void {
@@ -3546,7 +3689,12 @@ export class DatabaseService {
     const filter = sanitizePoolFilter(query.filter);
     const placeholders = slots.map(() => '?').join(',');
     const rows = this.requireDb().prepare(
-      `SELECT * FROM music_songs WHERE playlistSlot IN (${placeholders}) ORDER BY priority ASC, id ASC`
+      `SELECT ${this.musicSongSelectColumns()}
+       FROM music_songs
+       WHERE id IN (
+         SELECT songId FROM music_set_songs WHERE setId IN (${placeholders})
+       )
+       ORDER BY priority ASC, id ASC`
     ).all(...slots) as Record<string, unknown>[];
     const pool = rows.map((row) => ({ row, song: this.rowToSongEntry(row) }));
     return isPoolFilterEmpty(filter) ? pool : pool.filter(({ song }) => matchesPoolFilter(song, filter));
@@ -3576,7 +3724,9 @@ export class DatabaseService {
       if (!changes) return;
       const update = db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?');
       for (const [songId, priority] of changes) update.run(priority, songId);
-      const row = db.prepare('SELECT * FROM music_songs WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+      const row = db.prepare(
+        `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
+      ).get(id) as Record<string, unknown> | undefined;
       chosen = row ? this.rowToSongEntry(row) : null;
     })();
     return chosen;
@@ -3615,7 +3765,9 @@ export class DatabaseService {
       `).run(id);
     });
     tx();
-    const row = db.prepare('SELECT * FROM music_songs WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    const row = db.prepare(
+      `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
+    ).get(id) as Record<string, unknown> | undefined;
     return row ? this.rowToSongEntry(row) : null;
   }
 
@@ -3638,7 +3790,9 @@ export class DatabaseService {
       db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?').run(total, id);
     });
     tx();
-    const row = db.prepare('SELECT * FROM music_songs WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    const row = db.prepare(
+      `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
+    ).get(id) as Record<string, unknown> | undefined;
     return row ? this.rowToSongEntry(row) : null;
   }
 
@@ -3654,68 +3808,106 @@ export class DatabaseService {
   getMusicPlaylistCounts(): PlaylistCountsResult {
     const db = this.requireDb();
     const rows = db.prepare(
-      'SELECT playlistSlot, COUNT(*) AS cnt FROM music_songs GROUP BY playlistSlot'
-    ).all() as Array<{ playlistSlot: number; cnt: number }>;
+      `SELECT music_sets.id AS setId, COUNT(music_set_songs.songId) AS cnt
+       FROM music_sets
+       LEFT JOIN music_set_songs ON music_set_songs.setId = music_sets.id
+       GROUP BY music_sets.id`
+    ).all() as Array<{ setId: number; cnt: number }>;
 
     const result = emptyPlaylistCounts();
     for (const row of rows) {
-      if (isPlaylistSlot(row.playlistSlot)) {
-        result[row.playlistSlot] = row.cnt;
+      if (isPlaylistSlot(row.setId)) {
+        result[row.setId] = row.cnt;
       }
     }
     return result;
   }
 
-  /**
-   * Widens `music_songs.playlistSlot`'s CHECK constraint when the shared slot
-   * contract grows a bucket.
-   *
-   * The CREATE TABLE above already carries the current range, but it is an
-   * IF NOT EXISTS: on a database written by an older build the table is left
-   * exactly as it was, still refusing the new slot number, and every attempt
-   * to add files to the new bucket would fail a constraint at INSERT time
-   * with nothing in the UI to explain it. SQLite cannot ALTER a CHECK, so the
-   * only fix is the documented 12-step table rebuild, in miniature.
-   *
-   * Idempotent and cheap: it reads the stored DDL and returns immediately
-   * unless the range literal is actually stale, so it costs one
-   * `sqlite_master` lookup on every launch after the one that migrates.
-   * Indexes are recreated explicitly because DROP TABLE takes them with it.
-   */
-  private migrateMusicSongsSlotRange(): void {
+  private ensureFactoryMusicSets(): void {
     const db = this.requireDb();
-    const row = db.prepare(
-      "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'music_songs'"
-    ).get() as { sql: string } | undefined;
-    if (!row?.sql) return;
-    if (row.sql.includes(`BETWEEN 1 AND ${MAX_PLAYLIST_SLOT}`)) return;
+    const insert = db.prepare(
+      'INSERT OR IGNORE INTO music_sets (id, name, position) VALUES (?, ?, ?)'
+    );
+    FACTORY_MUSIC_SETS.forEach((set, position) => insert.run(set.slot, set.name, position));
+  }
 
-    db.transaction(() => {
-      db.exec(`
-        CREATE TABLE music_songs_migrating (
+  private ensureMusicSetNamesAreUnique(): void {
+    const db = this.requireDb();
+    const usedNames = new Set(FACTORY_MUSIC_SETS.map((set) => set.name));
+    const update = db.prepare('UPDATE music_sets SET name = ? WHERE id = ?');
+    for (const set of this.getMusicSets()) {
+      if (isFactoryMusicSet(set.slot)) continue;
+      const name = uniqueMusicSetName(set.name, usedNames);
+      if (name !== set.name) update.run(name, set.slot);
+    }
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_music_sets_name ON music_sets(name)');
+  }
+
+  /** Move old one-set-per-song rows into the membership table without changing song ids. */
+  private migrateMusicSongsToSetMemberships(): void {
+    const db = this.requireDb();
+    const columns = new Set(
+      (db.prepare('PRAGMA table_info(music_songs)').all() as Array<{ name: string }>).map((column) => column.name),
+    );
+    if (!columns.has('playlistSlot')) return;
+    const album = columns.has('album') ? 'album' : "''";
+    const tagsRead = columns.has('tagsRead') ? 'tagsRead' : '0';
+
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        const sets = this.getMusicSets();
+        const insertSet = db.prepare(
+          'INSERT OR IGNORE INTO music_sets (id, name, position) VALUES (?, ?, ?)'
+        );
+        const legacySlots = db.prepare(
+          'SELECT DISTINCT playlistSlot FROM music_songs WHERE playlistSlot > 0 ORDER BY playlistSlot'
+        ).all() as Array<{ playlistSlot: number }>;
+        for (const { playlistSlot } of legacySlots) {
+          if (!isPlaylistSlot(playlistSlot) || sets.some((set) => set.slot === playlistSlot)) continue;
+          const set = { slot: playlistSlot, name: defaultMusicSetName(sets) };
+          insertSet.run(set.slot, set.name, sets.length);
+          sets.push(set);
+        }
+
+        db.prepare(`
+          INSERT OR IGNORE INTO music_set_songs (setId, songId)
+          SELECT playlistSlot, id FROM music_songs WHERE playlistSlot > 0
+        `).run();
+
+        db.exec(`
+          DROP TABLE IF EXISTS music_songs_migrating;
+          CREATE TABLE music_songs_migrating (
           id          INTEGER PRIMARY KEY AUTOINCREMENT,
           filePath    TEXT    NOT NULL UNIQUE,
-          playlistSlot INTEGER NOT NULL CHECK(playlistSlot BETWEEN 1 AND ${MAX_PLAYLIST_SLOT}),
           priority    INTEGER NOT NULL DEFAULT 1,
           favorability INTEGER NOT NULL DEFAULT 1,
           title       TEXT    NOT NULL DEFAULT '',
           artist      TEXT    NOT NULL DEFAULT '',
-          durationSec REAL    NOT NULL DEFAULT 0
-        );
+          durationSec REAL    NOT NULL DEFAULT 0,
+          album       TEXT    NOT NULL DEFAULT '',
+          tagsRead    INTEGER NOT NULL DEFAULT 0
+          );
 
-        INSERT INTO music_songs_migrating
-          (id, filePath, playlistSlot, priority, favorability, title, artist, durationSec)
-        SELECT id, filePath, playlistSlot, priority, favorability, title, artist, durationSec
-        FROM music_songs
-        WHERE playlistSlot BETWEEN 1 AND ${MAX_PLAYLIST_SLOT};
+          INSERT INTO music_songs_migrating
+            (id, filePath, priority, favorability, title, artist, durationSec, album, tagsRead)
+          SELECT id, filePath, priority, favorability, title, artist, durationSec, ${album}, ${tagsRead}
+          FROM music_songs WHERE playlistSlot > 0;
 
-        DROP TABLE music_songs;
-        ALTER TABLE music_songs_migrating RENAME TO music_songs;
+          DROP TABLE music_songs;
+          ALTER TABLE music_songs_migrating RENAME TO music_songs;
 
-        CREATE INDEX IF NOT EXISTS idx_music_songs_slot     ON music_songs(playlistSlot);
-        CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
-      `);
-    })();
+          CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
+        `);
+      })();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+
+    const violations = db.pragma('foreign_key_check(music_set_songs)') as Array<{ table: string; rowid: number; parent: string }>;
+    if (violations.length > 0) {
+      throw new Error(`Music-set migration left a foreign-key violation in ${violations[0].table}`);
+    }
   }
 
   private migrateTexturePatternCache(): void {
@@ -3866,7 +4058,6 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS music_songs (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         filePath    TEXT    NOT NULL UNIQUE,
-        playlistSlot INTEGER NOT NULL CHECK(playlistSlot BETWEEN 1 AND ${MAX_PLAYLIST_SLOT}),
         priority    INTEGER NOT NULL DEFAULT 1,
         favorability INTEGER NOT NULL DEFAULT 1,
         title       TEXT    NOT NULL DEFAULT '',
@@ -3876,7 +4067,21 @@ export class DatabaseService {
         tagsRead    INTEGER NOT NULL DEFAULT 0
       );
 
-      CREATE INDEX IF NOT EXISTS idx_music_songs_slot     ON music_songs(playlistSlot);
+      CREATE TABLE IF NOT EXISTS music_sets (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        name      TEXT NOT NULL,
+        position  INTEGER NOT NULL,
+        createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS music_set_songs (
+        setId  INTEGER NOT NULL REFERENCES music_sets(id) ON DELETE CASCADE,
+        songId INTEGER NOT NULL REFERENCES music_songs(id) ON DELETE CASCADE,
+        PRIMARY KEY (setId, songId)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_music_sets_position ON music_sets(position);
+      CREATE INDEX IF NOT EXISTS idx_music_set_songs_song ON music_set_songs(songId);
       CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
 
       CREATE TABLE IF NOT EXISTS editor_sections (
@@ -4129,14 +4334,12 @@ export class DatabaseService {
     // means only actually-orphaned notes lose anything).
     this.migrateChaptersToSingleParent();
     this.migrateChapterTagsToParent();
-    // Deliberately here rather than inside the CREATE TABLE block above, for
-    // the same reason as the chapters migrations: CREATE TABLE IF NOT EXISTS
-    // is a no-op on a database that already has the table, so a widened
-    // CHECK constraint only reaches an existing install through a rebuild.
-    this.migrateMusicSongsSlotRange();
-    // After the rebuild above, which knows only the original columns: a
-    // rebuilt table gets these back empty and unread, and the tags are read
-    // again on next use.
+    // Seed sets before migrating song rows so every old playlist id has a
+    // corresponding set to reference.
+    this.ensureFactoryMusicSets();
+    this.migrateMusicSongsToSetMemberships();
+    this.ensureMusicSetNamesAreUnique();
+    // Older databases may not yet have these tag columns.
     this.ensureMusicSongsColumn('album', "TEXT NOT NULL DEFAULT ''");
     this.ensureMusicSongsColumn('tagsRead', 'INTEGER NOT NULL DEFAULT 0');
     this.migrateStoredContentOutOfFts();

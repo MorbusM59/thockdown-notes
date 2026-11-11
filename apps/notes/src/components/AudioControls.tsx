@@ -1,14 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
-import type { MusicPoolFilter, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
+import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
 import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
   getNextActiveSlotsForSelection,
-  PLAYLIST_BUTTON_SLOTS,
+  isFactoryMusicSet,
   PLAYLIST_SLOT_ICONS,
-  PLAYLIST_SLOT_THEMES,
+  MUSIC_SET_QUICK_ACCESS_COUNT,
   shouldStopCurrentSongAfterSlotSelection,
 } from '../shared/audioPlayer'
 import { adjacentSongInPool } from '../shared/musicPool'
@@ -41,7 +41,7 @@ import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstag
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import { beginBackgroundWork } from '../shared/backgroundWork'
 
-// Purging a song from the library and clearing a playlist slot are both
+// Purging a song from the library and clearing a music set are both
 // "I know this is not undoable" -- the app's COMMIT threshold
 // (`shared/holdTiming.ts`), which also announces the completion in the
 // cursor. Was 700ms of its own.
@@ -99,9 +99,11 @@ export interface AudioControlsProps {
    */
   isReverbBypassed: boolean
   onReverbBypassedChange: (value: boolean) => void
-  /** Which playlist slots are currently toggled active. */
+  /** Which set ids are currently toggled active. */
   activeSlots: PlaylistSlot[]
   onActiveSlotsChange: (slots: PlaylistSlot[]) => void
+  musicSets: MusicSet[]
+  onMusicSetsChange: (sets: MusicSet[]) => void
   /** The pool's filter (the visualizer's fields): which songs of the active slots are picked. */
   poolFilter: MusicPoolFilter
   onPoolFilterChange: (filter: MusicPoolFilter) => void
@@ -114,7 +116,7 @@ export interface AudioControlsProps {
   onSoundscapePreferencesChange: (preferences: SoundscapePreferences) => void
   /**
    * Whether the bottom row is showing the sound options instead of the
-   * playlist buckets. Owned by the parent so it survives a restart.
+   * music sets. Owned by the parent so it survives a restart.
    */
   isSoundOptionsOpen: boolean
   onSoundOptionsOpenChange: (value: boolean) => void
@@ -148,6 +150,8 @@ export const AudioControls = memo(function AudioControls({
   onReverbBypassedChange,
   activeSlots,
   onActiveSlotsChange,
+  musicSets,
+  onMusicSetsChange,
   poolFilter,
   onPoolFilterChange,
   soundscapePreferences,
@@ -165,7 +169,7 @@ export const AudioControls = memo(function AudioControls({
   const [counts, setCounts] = useState<PlaylistCountsResult>(emptyPlaylistCounts)
   const activeSlotsRef = useRef(activeSlots)
   activeSlotsRef.current = activeSlots
-  const bucketSelectionVersionRef = useRef(0)
+  const selectionVersionRef = useRef(0)
   // Slot button that is currently "primed" for clearing (held right-click)
   const [primedSlot, setPrimedSlot] = useState<PlaylistSlot | null>(null)
   // Position to seek to once the restored song's first playback begins.
@@ -748,15 +752,15 @@ export const AudioControls = memo(function AudioControls({
 
   // ---------------------------------------------------------------- playlist buttons
 
-  /** Change the selected buckets; a song whose bucket leaves the pool stops and the next is picked. */
+  /** Change the selected sets; a song outside every active set stops and the next is picked. */
   const selectSlot = useCallback(async (slot: PlaylistSlot, additive: boolean) => {
     const next = getNextActiveSlotsForSelection(activeSlotsRef.current, slot, additive)
-    bucketSelectionVersionRef.current += 1
+    selectionVersionRef.current += 1
     activeSlotsRef.current = next
     onActiveSlotsChange(next)
 
     if (shouldStopCurrentSongAfterSlotSelection({
-      currentSongSlot: currentSong?.playlistSlot,
+      currentSongSetIds: currentSongRef.current?.setIds,
       nextActiveSlots: next,
     })) {
       musicPlayerService.stop()
@@ -764,35 +768,58 @@ export const AudioControls = memo(function AudioControls({
       setCurrentSong(null)
       await advanceToNextSong(next)
     }
-  }, [currentSong, onActiveSlotsChange, advanceToNextSong])
+  }, [onActiveSlotsChange, advanceToNextSong])
+
+  const keepOnlyQuickAccessSlots = useCallback(async (quickAccessSlots: readonly PlaylistSlot[]) => {
+    const quick = new Set(quickAccessSlots)
+    const nextActiveSlots = activeSlotsRef.current.filter((slot) => quick.has(slot))
+    if (nextActiveSlots.length === activeSlotsRef.current.length) return
+    activeSlotsRef.current = nextActiveSlots
+    activeRef.current = nextActiveSlots
+    onActiveSlotsChange(nextActiveSlots)
+    if (currentSongRef.current && !currentSongRef.current.setIds.some((slot) => quick.has(slot))) {
+      musicPlayerService.stop()
+      setIsPlaying(false)
+      setCurrentSong(null)
+      await advanceToNextSong(nextActiveSlots)
+    }
+  }, [onActiveSlotsChange, advanceToNextSong])
+
+  const addToMusicSet = useCallback(async (slot: PlaylistSlot, source: 'files' | 'folder'): Promise<boolean> => {
+    if (source === 'files') {
+      const files = await window.thockdownAudioPlayer?.pickFiles()
+      if (!files || files.length === 0) return false
+      await withMusicIndex(async () => window.thockdownAudioPlayer?.addSongs(slot, files))
+      await refreshCountsRef.current()
+      return true
+    }
+
+    const folder = await window.thockdownAudioPlayer?.pickFolder()
+    if (!folder) return false
+    const indexedCount = await withMusicIndex(async () => window.thockdownAudioPlayer?.addFolder(slot, folder))
+    if (!indexedCount) return false
+    await refreshCountsRef.current()
+    return true
+  }, [])
 
   const handleSlotLeftClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     const additive = event.shiftKey
-    if (counts[slot] === 0) {
-      // Empty playlist: open file picker.
-      const files = await window.thockdownAudioPlayer?.pickFiles()
-      if (files && files.length > 0) {
-        const selectionVersion = bucketSelectionVersionRef.current
-        await withMusicIndex(async () => window.thockdownAudioPlayer?.addSongs(slot, files))
-        await refreshCounts()
-        if (selectionVersion === bucketSelectionVersionRef.current) await selectSlot(slot, additive)
+    if ((counts[slot] ?? 0) === 0) {
+      const selectionVersion = selectionVersionRef.current
+      if (await addToMusicSet(slot, 'files') && selectionVersion === selectionVersionRef.current) {
+        await selectSlot(slot, additive)
       }
       return
     }
     await selectSlot(slot, additive)
-  }, [counts, refreshCounts, selectSlot])
+  }, [counts, addToMusicSet, selectSlot])
 
 
   const handleSlotRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     event.preventDefault()
     if (primedSlot === slot) return // Already primed — wait for pointer-up.
-    // Normal right-click = add more files.
-    const files = await window.thockdownAudioPlayer?.pickFiles()
-    if (files && files.length > 0) {
-      await withMusicIndex(async () => window.thockdownAudioPlayer?.addSongs(slot, files))
-      await refreshCounts()
-    }
-  }, [primedSlot, refreshCounts])
+    await addToMusicSet(slot, 'files')
+  }, [primedSlot, addToMusicSet])
 
   const handleSlotPointerDown = useCallback((event: React.PointerEvent, slot: PlaylistSlot) => {
     if (event.button !== 2) return
@@ -813,17 +840,18 @@ export const AudioControls = memo(function AudioControls({
       const nextActiveSlots = activeSlots.filter((s) => s !== slot)
       await window.thockdownAudioPlayer?.clearPlaylist(slot)
       await refreshCounts()
-      // Remove this slot from active set if it was active.
+      // Remove this set from the active pool if it was active.
       onActiveSlotsChange(nextActiveSlots)
       // If current song was from this slot, stop and pick next.
-      if (currentSong?.playlistSlot === slot) {
+      const currentSong = currentSongRef.current
+      if (currentSong && !currentSong.setIds.some((setId) => setId !== slot && nextActiveSlots.includes(setId))) {
         musicPlayerService.stop()
         setIsPlaying(false)
         setCurrentSong(null)
         await advanceToNextSong(nextActiveSlots)
       }
     }
-  }, [primedSlot, activeSlots, currentSong, onActiveSlotsChange, refreshCounts, advanceToNextSong])
+  }, [primedSlot, activeSlots, onActiveSlotsChange, refreshCounts, advanceToNextSong])
 
   const handleSlotPointerLeave = useCallback((slot: PlaylistSlot) => {
     if (holdTimerRef.current) {
@@ -836,14 +864,10 @@ export const AudioControls = memo(function AudioControls({
   const handleSlotShiftRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     if (!event.shiftKey) return
     event.preventDefault()
-    const folder = await window.thockdownAudioPlayer?.pickFolder()
-    if (!folder) return
-    const selectionVersion = bucketSelectionVersionRef.current
-    const indexedCount = await withMusicIndex(async () => window.thockdownAudioPlayer?.addFolder(slot, folder))
-    if (!indexedCount) return
-    await refreshCounts()
-    if (selectionVersion === bucketSelectionVersionRef.current) await selectSlot(slot, true)
-  }, [refreshCounts, selectSlot])
+    const selectionVersion = selectionVersionRef.current
+    const added = await addToMusicSet(slot, 'folder')
+    if (added && selectionVersion === selectionVersionRef.current) await selectSlot(slot, true)
+  }, [addToMusicSet, selectSlot])
 
   // Combine shift+right-click vs plain right-click on slot buttons.
   const handleSlotContextMenu = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
@@ -853,6 +877,65 @@ export const AudioControls = memo(function AudioControls({
       await handleSlotRightClick(event, slot)
     }
   }, [handleSlotShiftRightClick, handleSlotRightClick])
+
+  const createMusicSet = useCallback(async () => {
+    const audioPlayer = window.thockdownAudioPlayer
+    if (!audioPlayer) {
+      console.error('[music-sets] cannot create a set without the audio player bridge')
+      return
+    }
+    selectionVersionRef.current += 1
+    const next = await audioPlayer.createMusicSet()
+    onMusicSetsChange(next)
+    await keepOnlyQuickAccessSlots(next.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => set.slot))
+  }, [onMusicSetsChange, keepOnlyQuickAccessSlots])
+
+  const renameMusicSet = useCallback(async (slot: PlaylistSlot, name: string) => {
+    if (isFactoryMusicSet(slot)) return
+    const nextName = name.trim().slice(0, 64)
+    if (!nextName) return
+    const audioPlayer = window.thockdownAudioPlayer
+    if (!audioPlayer) {
+      throw new Error('The audio player is unavailable.')
+    }
+    onMusicSetsChange(await audioPlayer.renameMusicSet(slot, nextName))
+  }, [onMusicSetsChange])
+
+  const reorderMusicSets = useCallback(async (draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot) => {
+    const audioPlayer = window.thockdownAudioPlayer
+    if (!audioPlayer) {
+      console.error('[music-sets] cannot reorder sets without the audio player bridge')
+      return
+    }
+    selectionVersionRef.current += 1
+    const next = await audioPlayer.moveMusicSet(draggedSlot, targetSlot)
+    onMusicSetsChange(next)
+    await keepOnlyQuickAccessSlots(next.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => set.slot))
+  }, [onMusicSetsChange, keepOnlyQuickAccessSlots])
+
+  const deleteMusicSet = useCallback(async (slot: PlaylistSlot) => {
+    if (isFactoryMusicSet(slot)) return
+    const audioPlayer = window.thockdownAudioPlayer
+    if (!audioPlayer) {
+      console.error('[music-sets] cannot delete a set without the audio player bridge')
+      return
+    }
+    selectionVersionRef.current += 1
+    const nextSets = await audioPlayer.deleteMusicSet(slot)
+    onMusicSetsChange(nextSets)
+    const nextActiveSlots = activeSlotsRef.current.filter((activeSlot) => activeSlot !== slot)
+    activeSlotsRef.current = nextActiveSlots
+    activeRef.current = nextActiveSlots
+    onActiveSlotsChange(nextActiveSlots)
+    await refreshCountsRef.current()
+    const currentSong = currentSongRef.current
+    if (currentSong && !currentSong.setIds.some((setId) => setId !== slot && nextActiveSlots.includes(setId))) {
+      musicPlayerService.stop()
+      setIsPlaying(false)
+      setCurrentSong(null)
+      await advanceToNextSong(nextActiveSlots)
+    }
+  }, [onMusicSetsChange, onActiveSlotsChange, advanceToNextSong])
 
   // ---------------------------------------------------------------- system media controls
   // The OS shows its own player for whatever this window is playing (the
@@ -920,8 +1003,38 @@ export const AudioControls = memo(function AudioControls({
   const publishedLevels = useMemo(() => ({ volume, reverb: reverbAmount, room: reverbRoom }), [volume, reverbAmount, reverbRoom])
   const publishedSetLevel = useCallback((level: keyof SoundLevels, fraction: number) => { mediaActionsRef.current.setLevel(level, fraction) }, [])
   useEffect(() => {
-    publishNowPlaying({ song: currentSong, jumpSong: publishedJumpSong, pool: publishedPool, playFromPool: publishedPlayFromPool, selectSlot: publishedSelectSlot, setPoolFilter, levels: publishedLevels, setLevel: publishedSetLevel })
-  }, [currentSong, publishedJumpSong, publishedPool, publishedPlayFromPool, publishedSelectSlot, setPoolFilter, publishedLevels, publishedSetLevel])
+    publishNowPlaying({
+      song: currentSong,
+      jumpSong: publishedJumpSong,
+      pool: publishedPool,
+      musicSets,
+      playFromPool: publishedPlayFromPool,
+      selectSlot: publishedSelectSlot,
+      createMusicSet,
+      renameMusicSet,
+      moveMusicSet: reorderMusicSets,
+      deleteMusicSet,
+      addToMusicSet,
+      setPoolFilter,
+      levels: publishedLevels,
+      setLevel: publishedSetLevel,
+    })
+  }, [
+    currentSong,
+    publishedJumpSong,
+    publishedPool,
+    musicSets,
+    publishedPlayFromPool,
+    publishedSelectSlot,
+    createMusicSet,
+    renameMusicSet,
+    reorderMusicSets,
+    deleteMusicSet,
+    addToMusicSet,
+    setPoolFilter,
+    publishedLevels,
+    publishedSetLevel,
+  ])
 
   useEffect(() => {
     const session = navigator.mediaSession
@@ -936,7 +1049,7 @@ export const AudioControls = memo(function AudioControls({
     : 'No song'
 
   // ---------------------------------------------------------------- sound options
-  // The headphones button swaps the bottom row's six playlist buckets for the
+  // The headphones button swaps the bottom row's five music sets for the
   // six soundstages (the five factory stages and the custom one, played
   // through the published soundstage controls). It is a swap, not an overlay:
   // the row keeps its geometry, so nothing under the cursor moves and the
@@ -1165,7 +1278,7 @@ export const AudioControls = memo(function AudioControls({
           <span className="fa-solid fa-forward" aria-hidden="true" />
         </button>
 
-        {/* Soundstage toggle: swaps the bottom row between buckets and soundstages */}
+        {/* Soundstage toggle: swaps the bottom row between sets and soundstages */}
         <button
           ref={soundOptionsButtonRef}
           type="button"
@@ -1183,7 +1296,7 @@ export const AudioControls = memo(function AudioControls({
           <span className="fa-solid fa-headphones" aria-hidden="true" />
         </button>
 
-        {/* Bottom row — playlist buckets, or the sound options in their place */}
+        {/* Bottom row — music sets, or the sound options in their place */}
         {isSoundOptionsOpen ? (
           <>
             {FACTORY_SOUNDSTAGES.map((stage) => (
@@ -1212,10 +1325,13 @@ export const AudioControls = memo(function AudioControls({
           </>
         ) : (
           <>
-          {PLAYLIST_BUTTON_SLOTS.map((slot) => {
-            const isEmpty = counts[slot] === 0
+          {musicSets.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => {
+            const slot = set.slot
+            const count = counts[slot] ?? 0
+            const isEmpty = count === 0
             const isActive = activeSlots.includes(slot)
             const isPrimed = primedSlot === slot
+            const icon = isFactoryMusicSet(slot) ? PLAYLIST_SLOT_ICONS[slot] : null
             return (
               <button
                 key={slot}
@@ -1223,12 +1339,12 @@ export const AudioControls = memo(function AudioControls({
                 className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isPrimed ? ' is-primed' : ''}${isEmpty ? ' is-empty' : ''}`}
                 data-tooltip={
                   isEmpty
-                    ? `${PLAYLIST_SLOT_THEMES[slot]}: empty — click to add files`
+                    ? `${set.name}: empty — click to add files`
                     : isPrimed
-                      ? `${PLAYLIST_SLOT_THEMES[slot]}: release to clear all ${counts[slot]} songs`
-                      : `${PLAYLIST_SLOT_THEMES[slot]}: ${counts[slot]} song${counts[slot] !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
+                      ? `${set.name}: release to clear all ${count} songs`
+                      : `${set.name}: ${count} song${count !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
                 }
-                aria-label={PLAYLIST_SLOT_THEMES[slot]}
+                aria-label={set.name}
                 aria-pressed={isActive}
                 onClick={(event) => { void handleSlotLeftClick(event, slot) }}
                 data-secondary-press="action"
@@ -1237,7 +1353,9 @@ export const AudioControls = memo(function AudioControls({
                 onPointerUp={(e) => { void handleSlotPointerUp(e, slot) }}
                 onPointerLeave={() => handleSlotPointerLeave(slot)}
               >
-                <span className={PLAYLIST_SLOT_ICONS[slot]} aria-hidden="true" />
+                {icon
+                  ? <span className={icon} aria-hidden="true" />
+                  : <span className="audio-playlist-custom-label" aria-hidden="true">{set.name.slice(0, 2).toUpperCase()}</span>}
               </button>
             )
           })}

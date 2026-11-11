@@ -5,20 +5,11 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import { DatabaseService } from './databaseService'
-import { MAX_PLAYLIST_SLOT, PLAYLIST_SLOTS } from '../src/shared/audioPlayer'
+import { EMPTY_POOL_FILTER, FACTORY_MUSIC_SETS, type MusicSetPreferences } from '../src/shared/audioPlayer'
 
 const indexedFile = (filePath: string) => ({ filePath, title: '', artist: '', album: '' })
 
-/**
- * The playlist buckets grew from five to six ("Lounge"). `music_songs`
- * constrains its slot column with a CHECK, and SQLite cannot ALTER one --
- * CREATE TABLE IF NOT EXISTS is a no-op on an existing database, so without
- * the rebuild migration an upgrading install keeps the old five-slot
- * constraint and every attempt to add files to the new bucket fails at
- * INSERT with nothing on screen to explain it. A fresh install would look
- * perfectly fine, which is exactly why this needs its own coverage.
- */
-describe('DatabaseService music playlist slots', () => {
+describe('DatabaseService music sets', () => {
   let dataRoot: string
   let db: DatabaseService
 
@@ -33,92 +24,150 @@ describe('DatabaseService music playlist slots', () => {
     rmSync(dataRoot, { recursive: true, force: true })
   })
 
-  it('accepts songs in every declared slot on a fresh database', async () => {
+  it('creates the factory sets and appends user-created sets', async () => {
     db = new DatabaseService(dataRoot)
     await db.initialize()
 
-    for (const slot of PLAYLIST_SLOTS) {
-      db.addMusicSongs(slot, [indexedFile(`/music/slot-${slot}.mp3`)])
-    }
-
-    const counts = db.getMusicPlaylistCounts()
-    for (const slot of PLAYLIST_SLOTS) {
-      expect(counts[slot]).toBe(1)
-    }
+    expect(db.getMusicSets()).toEqual(FACTORY_MUSIC_SETS)
+    const sets = db.createMusicSet()
+    expect(sets).toHaveLength(6)
+    expect(sets[5].name).toBe('Set A')
+    expect(sets[5].slot).toBeGreaterThan(6)
   })
 
-  it('stores the tags returned by the background indexer', async () => {
+  it('moves a set onto another row and preserves the intervening order', async () => {
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    db.addMusicSongs(2, [{
-      filePath: '/music/song.mp3',
-      title: 'Title',
-      artist: 'Artist',
-      album: 'Album',
-    }])
+    const initial = db.getMusicSets()
+    const userSet = db.createMusicSet()[5]
 
-    expect(db.getMusicPlaylist(2)[0]).toMatchObject({
-      filePath: '/music/song.mp3',
-      title: 'Title',
-      artist: 'Artist',
-      album: 'Album',
+    expect(db.moveMusicSet(userSet.slot, initial[1].slot).map((set) => set.slot))
+      .toEqual([initial[0].slot, userSet.slot, ...initial.slice(1).map((set) => set.slot)])
+    expect(db.moveMusicSet(initial[1].slot, userSet.slot).map((set) => set.slot))
+      .toEqual([initial[0].slot, initial[1].slot, userSet.slot, ...initial.slice(2).map((set) => set.slot)])
+  })
+
+  it('requires unique set names and repairs duplicates from an older database', async () => {
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    const first = db.createMusicSet()[5]
+    const second = db.createMusicSet()[6]
+
+    expect(() => db.renameMusicSet(second.slot, first.name)).toThrow('A set with that name already exists.')
+
+    db.close()
+    const legacy = new BetterSqlite3(dbFile())
+    legacy.exec('DROP INDEX idx_music_sets_name')
+    legacy.prepare('UPDATE music_sets SET name = ? WHERE id = ?').run(first.name, second.slot)
+    legacy.close()
+
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    expect(db.getMusicSets().find((set) => set.slot === first.slot)?.name).toBe('Set A')
+    expect(db.getMusicSets().find((set) => set.slot === second.slot)?.name).toBe('Set A (2)')
+  })
+
+  it('allows one song to belong to multiple sets without duplicate pool rows', async () => {
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    const factorySet = db.getMusicSets()[0]
+    const userSet = db.createMusicSet()[5]
+
+    db.addMusicSongs(factorySet.slot, [indexedFile('/music/shared.mp3'), indexedFile('/music/factory.mp3')])
+    const sharedInFactory = db.getMusicPlaylist(factorySet.slot).find((song) => song.filePath.endsWith('shared.mp3'))!
+    const userSongs = db.addMusicSongs(userSet.slot, [
+      indexedFile('/music/shared.mp3'),
+      indexedFile('/music/user.mp3'),
+    ])
+    const sharedInUserSet = userSongs.find((song) => song.filePath.endsWith('shared.mp3'))!
+
+    expect(sharedInUserSet.id).toBe(sharedInFactory.id)
+    expect(sharedInUserSet.setIds).toEqual(expect.arrayContaining([factorySet.slot, userSet.slot]))
+    expect(db.getMusicPlaylistCounts()).toMatchObject({
+      [factorySet.slot]: 2,
+      [userSet.slot]: 2,
     })
+
+    const pool = db.getMusicPool({ slots: [factorySet.slot, userSet.slot], filter: EMPTY_POOL_FILTER })
+    expect(pool.map((song) => song.filePath)).toHaveLength(3)
+    expect(new Set(pool.map((song) => song.id)).size).toBe(3)
   })
 
-  it('widens the slot CHECK on a database written by a five-slot build, keeping its songs', async () => {
-    // Stand up the pre-migration table by hand: an old install, five slots
-    // only, with a song already in it.
+  it('preserves shared songs when a set is cleared and purges them only after the last membership is removed', async () => {
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    const factorySet = db.getMusicSets()[0]
+    const userSet = db.createMusicSet()[5]
+
+    db.addMusicSongs(factorySet.slot, [indexedFile('/music/shared.mp3')])
+    db.addMusicSongs(userSet.slot, [indexedFile('/music/shared.mp3'), indexedFile('/music/user-only.mp3')])
+    const sharedSongId = db.getMusicPlaylist(factorySet.slot)[0].id
+    const userOnlySongId = db.getMusicPlaylist(userSet.slot).find((song) => song.filePath.endsWith('user-only.mp3'))!.id
+
+    db.clearMusicPlaylist(factorySet.slot)
+    expect(db.getMusicSongById(sharedSongId)?.setIds).toEqual([userSet.slot])
+    expect(db.getMusicPlaylistCounts()[factorySet.slot]).toBe(0)
+
+    db.deleteMusicSet(userSet.slot)
+    expect(db.getMusicSongById(sharedSongId)).toBeNull()
+    expect(db.getMusicSongById(userOnlySongId)).toBeNull()
+    expect(db.getMusicSets().some((set) => set.slot === userSet.slot)).toBe(false)
+  })
+
+  it('imports legacy slot rows into memberships and preserves their song ids', async () => {
     const legacy = new BetterSqlite3(dbFile())
     legacy.exec(`
       CREATE TABLE music_songs (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        filePath    TEXT    NOT NULL UNIQUE,
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        filePath     TEXT NOT NULL UNIQUE,
         playlistSlot INTEGER NOT NULL CHECK(playlistSlot BETWEEN 1 AND 5),
-        priority    INTEGER NOT NULL DEFAULT 1,
+        priority     INTEGER NOT NULL DEFAULT 1,
         favorability INTEGER NOT NULL DEFAULT 1,
-        title       TEXT    NOT NULL DEFAULT '',
-        artist      TEXT    NOT NULL DEFAULT '',
-        durationSec REAL    NOT NULL DEFAULT 0
+        title        TEXT NOT NULL DEFAULT '',
+        artist       TEXT NOT NULL DEFAULT '',
+        durationSec  REAL NOT NULL DEFAULT 0
       );
     `)
     legacy.prepare(
-      "INSERT INTO music_songs (filePath, playlistSlot, title) VALUES ('/music/old.mp3', 3, 'Old')"
+      "INSERT INTO music_songs (id, filePath, playlistSlot, title) VALUES (19, '/music/old.mp3', 3, 'Old')"
     ).run()
-    expect(() =>
-      legacy.prepare(
-        `INSERT INTO music_songs (filePath, playlistSlot) VALUES ('/music/new.mp3', ${MAX_PLAYLIST_SLOT})`
-      ).run()
-    ).toThrow()
     legacy.close()
 
     db = new DatabaseService(dataRoot)
     await db.initialize()
 
-    // The new bucket now takes files...
-    db.addMusicSongs(MAX_PLAYLIST_SLOT, [indexedFile('/music/new.mp3')])
-    expect(db.getMusicPlaylistCounts()[MAX_PLAYLIST_SLOT]).toBe(1)
+    const migrated = db.getMusicPlaylist(3)
+    expect(migrated).toHaveLength(1)
+    expect(migrated[0]).toMatchObject({
+      id: 19,
+      filePath: '/music/old.mp3',
+      title: 'Old',
+      setIds: [3],
+      album: '',
+    })
 
-    // ...and the rebuild carried the existing library over rather than
-    // starting the user's playlists from scratch.
-    const kept = db.getMusicPlaylist(3)
-    expect(kept).toHaveLength(1)
-    expect(kept[0].filePath).toBe('/music/old.mp3')
-    expect(kept[0].title).toBe('Old')
+    db.close()
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    expect(db.getMusicPlaylist(3)[0].id).toBe(19)
   })
 
-  it('is a no-op on a database already carrying the current range', async () => {
+  it('imports legacy names and order once, then allocates ids beyond the imported set ids', async () => {
     db = new DatabaseService(dataRoot)
     await db.initialize()
-    db.addMusicSongs(MAX_PLAYLIST_SLOT, [indexedFile('/music/keep.mp3')])
-    const idBefore = db.getMusicPlaylist(MAX_PLAYLIST_SLOT)[0].id
-    db.close()
+    const legacy: MusicSetPreferences = {
+      sets: [
+        { slot: 9, name: 'My Set' },
+        { slot: 10, name: 'My Set' },
+        ...FACTORY_MUSIC_SETS.map((set) => ({ ...set })),
+      ],
+      nextSlot: 11,
+    }
 
-    // A second launch must not rebuild the table again (which would be
-    // harmless but wasteful) nor disturb the rows it holds.
-    db = new DatabaseService(dataRoot)
-    await db.initialize()
-    const after = db.getMusicPlaylist(MAX_PLAYLIST_SLOT)
-    expect(after).toHaveLength(1)
-    expect(after[0].id).toBe(idBefore)
+    const imported = db.initializeMusicSets(legacy)
+    expect(imported[0]).toEqual({ slot: 9, name: 'My Set' })
+    expect(imported[1]).toEqual({ slot: 10, name: 'My Set (2)' })
+    expect(db.initializeMusicSets()).toEqual(imported)
+    expect(db.createMusicSet()[imported.length].slot).toBeGreaterThan(9)
   })
 })

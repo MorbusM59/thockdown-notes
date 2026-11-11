@@ -54,6 +54,11 @@
   font-size:          10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
+.audio-playlist-custom-label {
+  font-size: 8px;
+  font-weight: 700;
+}
+
 .audio-ctrl-btn[data-hovered] {
   background:   var(--btn-bg-hover);
   border-color: var(--btn-border-hover);

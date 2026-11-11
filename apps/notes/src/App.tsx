@@ -12,7 +12,15 @@ import { SidebarOptionsPanel } from './sidebar/SidebarOptionsPanel'
 import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
-import { EMPTY_POOL_FILTER, isPlaylistButtonSlot, sanitizePoolFilter, type MusicPoolFilter } from './shared/audioPlayer'
+import {
+  DEFAULT_MUSIC_SET_PREFERENCES,
+  EMPTY_POOL_FILTER,
+  MUSIC_SET_QUICK_ACCESS_COUNT,
+  sanitizeMusicSetPreferences,
+  sanitizePoolFilter,
+  type MusicPoolFilter,
+  type MusicSet,
+} from './shared/audioPlayer'
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
@@ -2294,6 +2302,9 @@ function App() {
     soundscapeEngine.apply(soundscapePreferences)
   }, [soundscapePreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
+  const [musicSets, setMusicSets] = useState<MusicSet[]>(() =>
+    DEFAULT_MUSIC_SET_PREFERENCES.sets.map((set) => ({ ...set })),
+  )
   const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
   // The EQ curve (shared/musicEqCurve.ts) and the soundstages (shared/soundstages.ts).
   const [musicEqCurve, setMusicEqCurve] = useState<EqPoint[]>(() => FLAT_EQ_CURVE.map((point) => ({ ...point })))
@@ -5133,6 +5144,13 @@ ${markdownHtml}
           const appState = window.thockdownState ? await window.thockdownState.loadAppState() : { selectedNoteId: null }
           if (disposed) return
 
+          const legacyMusicSetPreferences = sanitizeMusicSetPreferences(appState.menu?.musicSets)
+          const restoredMusicSets = window.thockdownAudioPlayer
+            ? await window.thockdownAudioPlayer.initializeMusicSets(appState.menu?.musicSets)
+            : legacyMusicSetPreferences.sets
+          if (disposed) return
+          setMusicSets(restoredMusicSets)
+
           let restoredOverlay: SlotOverlay | null = null
 
           if (appState.menu) {
@@ -5294,9 +5312,8 @@ ${markdownHtml}
             soundscapeEngine.fadeInNextStart(RESTORE_FADE_IN_SEC)
             setSoundscapePreferences(sanitizeSoundscapePreferences(appState.menu.soundscapes))
             if (Array.isArray(appState.menu.musicActiveSlots)) {
-              setMusicActiveSlots(
-                (appState.menu.musicActiveSlots as number[]).filter(isPlaylistButtonSlot)
-              )
+              const quickAccessSlots = new Set(restoredMusicSets.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => set.slot))
+              setMusicActiveSlots((appState.menu.musicActiveSlots as number[]).filter((slot) => quickAccessSlots.has(slot)))
             }
             if (appState.menu.musicPoolFilter) setMusicPoolFilter(sanitizePoolFilter(appState.menu.musicPoolFilter))
             setSoundstagePreferences(sanitizeSoundstagePreferences(appState.menu.musicSoundstages))
@@ -9205,6 +9222,8 @@ ${markdownHtml}
                 onReverbBypassedChange={setMusicReverbBypassed}
                 activeSlots={musicActiveSlots}
                 onActiveSlotsChange={setMusicActiveSlots}
+                musicSets={musicSets}
+                onMusicSetsChange={setMusicSets}
                 poolFilter={musicPoolFilter}
                 onPoolFilterChange={setMusicPoolFilter}
                 soundscapePreferences={soundscapePreferences}

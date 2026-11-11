@@ -2,6 +2,7 @@ import type { KeystrokeSoundPreferences, KeystrokeSoundSettings } from './keystr
 import type { OptionsSectionId } from './optionsSections';
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
+import type { MusicSetPreferences } from './audioPlayer';
 import type { FeatureToggles } from './features';
 import type { TypingTrailSettings } from './typingTrailSettings';
 import type { VisualizerFont } from './visualizerFont';
@@ -210,9 +211,11 @@ export interface PersistedMenuState {
   musicMuted?: boolean;
   /** Reverb bypassed; both the reverb and the room button reflect this one flag. */
   musicReverbBypassed?: boolean;
-  /** Bottom row of the player showing the sound options instead of the playlist buckets. */
+  /** Bottom row of the player showing sound options instead of the music sets. */
   musicSoundOptionsOpen?: boolean;
   musicActiveSlots?: number[];
+  /** Legacy renderer-owned set list; imported into SQLite once, never written by current code. */
+  musicSets?: MusicSetPreferences;
   /** The pool's filter (`audioPlayer.ts`'s `MusicPoolFilter`), set in the visualizer. */
   musicPoolFilter?: { artist: string; album: string; title: string };
   /** The music's soundstages (`shared/soundstages.ts`): the last factory stage, the custom stage, the saved ones. */

@@ -20,28 +20,40 @@ export const AUDIO_PLAYER_CHANNELS = {
   purgeSong:            'audio-player:purge-song',
   getPlaylistCounts:    'audio-player:get-playlist-counts',
   getSongById:          'audio-player:get-song-by-id',
+  initializeMusicSets:  'audio-player:initialize-music-sets',
+  createMusicSet:       'audio-player:create-music-set',
+  renameMusicSet:       'audio-player:rename-music-set',
+  moveMusicSet:         'audio-player:move-music-set',
+  deleteMusicSet:       'audio-player:delete-music-set',
 } as const satisfies InvokeChannels<AudioPlayerApi>;
 
-/** One persisted playlist slot (1-indexed). */
-export type PlaylistSlot = 1 | 2 | 3 | 4 | 5 | 6;
+/** A persisted music set's numeric id; factory ids retain their historical slot values. */
+export type PlaylistSlot = number;
 
 /**
- * Every persisted playlist slot. This is the single source of truth for the
- * persisted-state range check, playlist-count record and database CHECK
- * constraint. Slot 1 remains valid for existing libraries but is no longer
- * presented as a player button.
+ * The five factory sets retain their historical numeric ids, so
+ * existing songs stay in the same set when custom sets are introduced.
  */
-export const PLAYLIST_SLOTS: readonly PlaylistSlot[] = [1, 2, 3, 4, 5, 6];
-
-/** Visible music buckets in player order; slot 1 is intentionally omitted. */
 export const PLAYLIST_BUTTON_SLOTS = [2, 4, 5, 6, 3] as const satisfies readonly PlaylistSlot[];
 export type PlaylistButtonSlot = (typeof PLAYLIST_BUTTON_SLOTS)[number];
+export const MUSIC_SET_QUICK_ACCESS_COUNT = PLAYLIST_BUTTON_SLOTS.length;
 
-/** Highest valid slot number -- derived, never written out by hand. */
-export const MAX_PLAYLIST_SLOT: PlaylistSlot = PLAYLIST_SLOTS[PLAYLIST_SLOTS.length - 1];
+export const MAX_FACTORY_PLAYLIST_SLOT = 6;
+
+export interface MusicSet {
+  slot: PlaylistSlot;
+  name: string;
+}
+
+export interface MusicSetPreferences {
+  /** Legacy app-state representation, imported once into the database. */
+  sets: MusicSet[];
+  /** Legacy app-state allocator, imported into SQLite's AUTOINCREMENT sequence. */
+  nextSlot: PlaylistSlot;
+}
 
 /**
- * Column count of the player's button grid: five visible music buckets plus
+ * Column count of the player's button grid: five visible music sets plus
  * the Soundscapes toggle. The top row fills the same width (play spans two).
  *
  * This is a LAYOUT measurement, not just a render detail, and three places
@@ -62,23 +74,19 @@ export const AUDIO_GRID_COLUMNS = PLAYLIST_BUTTON_SLOTS.length + 1;
 
 /** Narrowing guard for values arriving from persisted state or the database. */
 export function isPlaylistSlot(value: unknown): value is PlaylistSlot {
-  return Number.isInteger(value) && (PLAYLIST_SLOTS as readonly number[]).includes(value as number);
+  return Number.isSafeInteger(value) && (value as number) > 0;
 }
 
-/** True when a persisted slot is represented by a player bucket button. */
-export function isPlaylistButtonSlot(value: unknown): value is PlaylistButtonSlot {
-  return isPlaylistSlot(value) && (PLAYLIST_BUTTON_SLOTS as readonly number[]).includes(value);
-}
-
-/** An all-zero count record covering exactly the slots that exist. */
+/** Empty count map; consumers treat an absent set count as zero until loaded. */
 export function emptyPlaylistCounts(): PlaylistCountsResult {
-  return Object.fromEntries(PLAYLIST_SLOTS.map((slot) => [slot, 0])) as PlaylistCountsResult;
+  return {};
 }
 
 export type MusicSongEntry = {
   id: number;
   filePath: string;
-  playlistSlot: PlaylistSlot;
+  /** Every set containing this song. A song can belong to several sets. */
+  setIds: PlaylistSlot[];
   /** Lower value = higher priority. 1 is the highest (just added / least recently played). */
   priority: number;
   /** 1–10; affects how quickly the song regains priority. */
@@ -97,20 +105,30 @@ export type IndexedMusicFile = Pick<MusicSongEntry, 'filePath' | 'title' | 'arti
 
 export type PickNextSongResult = MusicSongEntry | null;
 
-export type PlaylistCountsResult = Record<PlaylistSlot, number>;
+export type PlaylistCountsResult = Record<number, number>;
 
 export type AudioPlayerApi = {
+  /** Import legacy app-state set preferences once, then return database-owned sets in display order. */
+  initializeMusicSets(legacyPreferences?: MusicSetPreferences): Promise<MusicSet[]>;
+  /** Create a set at the end of the ordered set list. */
+  createMusicSet(): Promise<MusicSet[]>;
+  /** Rename a user-created set. Factory names are fixed. */
+  renameMusicSet(slot: PlaylistSlot, name: string): Promise<MusicSet[]>;
+  /** Move one set onto another row, shifting the intervening rows. */
+  moveMusicSet(draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot): Promise<MusicSet[]>;
+  /** Purge memberships and orphan songs, then delete a user-created set. */
+  deleteMusicSet(slot: PlaylistSlot): Promise<MusicSet[]>;
   /** Open a multi-select file dialog; returns an array of chosen file paths. */
   pickFiles(): Promise<string[]>;
   /** Open a folder dialog; returns the chosen folder path or null. */
   pickFolder(): Promise<string | null>;
   /** Recursively index a folder and add its audio files; returns the number found. */
   addFolder(slot: PlaylistSlot, folderPath: string): Promise<number>;
-  /** Return all songs for the given playlist slot. */
+    /** Return all songs belonging to the given set. */
   getPlaylist(slot: PlaylistSlot): Promise<MusicSongEntry[]>;
-  /** Add files to the given playlist slot. */
+    /** Add files to the given set. */
   addSongs(slot: PlaylistSlot, filePaths: string[]): Promise<MusicSongEntry[]>;
-  /** Permanently remove all songs from a slot. */
+  /** Remove a set's memberships and permanently purge songs with no remaining memberships. */
   clearPlaylist(slot: PlaylistSlot): Promise<void>;
   /** Remove a single song by its DB id. */
   removeSong(id: number): Promise<void>;
@@ -152,7 +170,7 @@ export type AudioPlayerApi = {
   skipSong(id: number): Promise<void>;
   /** Permanently delete a song from the database. */
   purgeSong(id: number): Promise<void>;
-  /** Return the total song count for each playlist slot. */
+  /** Return the total song count for each set id. */
   getPlaylistCounts(): Promise<PlaylistCountsResult>;
   /** Look up a single song by its DB id (used to restore the last-played song across sessions). */
   getSongById(id: number): Promise<MusicSongEntry | null>;
@@ -168,13 +186,14 @@ export function getNextActiveSlotsForSelection(
 }
 
 export function shouldStopCurrentSongAfterSlotSelection({
-  currentSongSlot,
+  currentSongSetIds,
   nextActiveSlots,
 }: {
-  currentSongSlot: PlaylistSlot | undefined;
+  currentSongSetIds: readonly PlaylistSlot[] | undefined;
   nextActiveSlots: readonly PlaylistSlot[];
 }): boolean {
-  return currentSongSlot !== undefined && !nextActiveSlots.includes(currentSongSlot)
+  return currentSongSetIds !== undefined
+    && !currentSongSetIds.some((slot) => nextActiveSlots.includes(slot))
 }
 
 /** Supported audio file extensions that can be added to playlists. */
@@ -199,6 +218,86 @@ export const PLAYLIST_SLOT_THEMES: Record<PlaylistButtonSlot, string> = {
   5: 'Electronic',
   6: 'Lounge',
 };
+
+export const FACTORY_MUSIC_SETS: readonly MusicSet[] = PLAYLIST_BUTTON_SLOTS.map((slot) => ({
+  slot,
+  name: PLAYLIST_SLOT_THEMES[slot],
+}));
+
+export const DEFAULT_MUSIC_SET_PREFERENCES: MusicSetPreferences = {
+  sets: FACTORY_MUSIC_SETS.map((set) => ({ ...set })),
+  nextSlot: MAX_FACTORY_PLAYLIST_SLOT + 1,
+};
+
+const FACTORY_SET_BY_SLOT = new Map(FACTORY_MUSIC_SETS.map((set) => [set.slot, set]));
+
+export function isFactoryMusicSet(slot: number): slot is PlaylistButtonSlot {
+  return FACTORY_SET_BY_SLOT.has(slot);
+}
+
+export function defaultMusicSetName(sets: readonly MusicSet[]): string {
+  const used = new Set(sets.map((set) => set.name.trim().toLowerCase()));
+  for (let index = 0; ; index += 1) {
+    let value = index + 1
+    let letters = ''
+    while (value > 0) {
+      value -= 1
+      letters = String.fromCharCode(65 + (value % 26)) + letters
+      value = Math.floor(value / 26)
+    }
+    const name = `Set ${letters}`
+    if (!used.has(name.toLowerCase())) return name
+  }
+}
+
+export function uniqueMusicSetName(name: string, usedNames: Set<string>): string {
+  let candidate = name
+  for (let suffix = 2; usedNames.has(candidate); suffix += 1) {
+    const ending = ` (${suffix})`
+    candidate = `${name.slice(0, 64 - ending.length)}${ending}`
+  }
+  usedNames.add(candidate)
+  return candidate
+}
+
+export function sanitizeMusicSetPreferences(input: unknown): MusicSetPreferences {
+  const source = input && typeof input === 'object' ? input as Record<string, unknown> : {}
+  const entries = Array.isArray(source.sets) ? source.sets : []
+  const sets: MusicSet[] = []
+  const seen = new Set<number>()
+  const usedNames = new Set(FACTORY_MUSIC_SETS.map((set) => set.name))
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue
+    const record = entry as Record<string, unknown>
+    const slot = record.slot
+    if (!isPlaylistSlot(slot) || seen.has(slot)) continue
+    if (isFactoryMusicSet(slot)) {
+      const factory = FACTORY_SET_BY_SLOT.get(slot)
+      if (!factory) continue
+      sets.push({ ...factory })
+      seen.add(slot)
+      continue
+    }
+    if (slot <= MAX_FACTORY_PLAYLIST_SLOT || typeof record.name !== 'string') continue
+    const name = sanitizeDocumentText(record.name).trim().slice(0, 64)
+    if (!name) continue
+    const uniqueName = uniqueMusicSetName(name, usedNames)
+    sets.push({ slot, name: uniqueName })
+    seen.add(slot)
+  }
+
+  for (const factory of FACTORY_MUSIC_SETS) {
+    if (!seen.has(factory.slot)) sets.push({ ...factory })
+  }
+
+  const highestSlot = Math.max(MAX_FACTORY_PLAYLIST_SLOT, ...sets.map((set) => set.slot))
+  const requestedNextSlot = source.nextSlot
+  const nextSlot = Number.isSafeInteger(requestedNextSlot) && (requestedNextSlot as number) > highestSlot
+    ? requestedNextSlot as number
+    : highestSlot + 1
+  return { sets, nextSlot }
+}
 
 /**
  * How a song's tags are shown, the same everywhere (the music bar, the OS
@@ -251,7 +350,7 @@ export type MusicPoolFilter = { artist: string; album: string; title: string };
 
 export const EMPTY_POOL_FILTER: MusicPoolFilter = { artist: '', album: '', title: '' };
 
-/** Which songs are in the pool: those in `slots` that pass `filter`. */
+/** Which songs are in the pool: those belonging to any active set in `slots` that pass `filter`. */
 export type MusicPoolQuery = { slots: PlaylistSlot[]; filter: MusicPoolFilter };
 
 export function isPoolFilterEmpty(filter: MusicPoolFilter): boolean {

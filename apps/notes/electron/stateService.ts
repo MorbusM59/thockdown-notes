@@ -12,7 +12,7 @@ import type {
 } from '../src/shared/appState';
 import { sanitizeGameSave } from '../src/adventure/save';
 import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
-import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
+import { isPlaylistSlot, sanitizeMusicSetPreferences, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
 import { sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings } from '../src/shared/keystrokeSounds';
@@ -387,9 +387,8 @@ function sanitizeChapterBarMode(input: unknown): 'tags' | 'tabs' | undefined {
 }
 
 function sanitizeMusicActiveSlots(input: unknown): number[] | undefined {
-  // Range comes from the shared slot contract, not a literal, so adding a
-  // playlist bucket cannot silently leave this allowlist one slot behind and
-  // drop the new bucket's active state on every save.
+  // Set ids are positive integers and may be user-created; App filters this
+  // list against the five sets currently above the quick-access divider.
   return Array.isArray(input)
     ? input.filter((value): value is number => isPlaylistSlot(value))
     : undefined;
@@ -582,6 +581,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicReverbBypassed: sanitizeOptionalBoolean(input?.musicReverbBypassed),
     musicSoundOptionsOpen: sanitizeOptionalBoolean(input?.musicSoundOptionsOpen),
     musicActiveSlots: sanitizeMusicActiveSlots(input?.musicActiveSlots),
+    musicSets: input?.musicSets === undefined ? undefined : sanitizeMusicSetPreferences(input.musicSets),
     musicPoolFilter: input?.musicPoolFilter === undefined ? undefined : sanitizePoolFilter(input.musicPoolFilter),
     musicSoundstages: input?.musicSoundstages === undefined ? undefined : sanitizeSoundstagePreferences(input.musicSoundstages),
     musicEqCurve: input?.musicEqCurve === undefined ? undefined : sanitizeEqCurve(input.musicEqCurve),

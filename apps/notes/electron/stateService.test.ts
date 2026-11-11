@@ -486,9 +486,7 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicSoundstages?.saved[0]?.settings.room).toBe(0.7)
   })
 
-  // The sixth ("Lounge") bucket needs the persisted-slot allowlist to know
-  // about it; sanitizeMusicActiveSlots hard-coded 1-5 before it existed.
-  it('persists an active slot from the full playlist range', async () => {
+  it('persists active ids for user-created music sets', async () => {
     const writer = new StateService(dataRoot)
     await writer.saveAppState({
       selectedNoteId: null,
@@ -503,7 +501,34 @@ describe('StateService app-state field round-trip', () => {
 
     const reader = new StateService(dataRoot)
     const loaded = await reader.loadAppState()
-    expect(loaded.menu?.musicActiveSlots).toEqual([1, 6])
+    expect(loaded.menu?.musicActiveSlots).toEqual([1, 6, 7])
+  })
+
+  it('keeps legacy music-set preferences readable for the one-time database import', async () => {
+    const writer = new StateService(dataRoot)
+    await writer.saveAppState({
+      selectedNoteId: null,
+      menu: {
+        sidebarMode: 'date',
+        selectedMonths: [],
+        selectedYears: [],
+        searchQuery: '',
+        musicSets: {
+          sets: [
+            { slot: 4, name: 'Ignored factory rename' },
+            { slot: 2, name: 'Pop' },
+            { slot: 7, name: 'My set' },
+          ],
+          nextSlot: 8,
+        },
+      },
+    })
+
+    const reader = new StateService(dataRoot)
+    const loaded = await reader.loadAppState()
+    expect(loaded.menu?.musicSets?.sets.map((set) => set.slot)).toEqual([4, 2, 7, 5, 6, 3])
+    expect(loaded.menu?.musicSets?.sets[0].name).toBe('Rock')
+    expect(loaded.menu?.musicSets?.nextSlot).toBe(8)
   })
 
   it('clearAppState restores factory preferences while preserving user-created presets', async () => {
@@ -568,6 +593,7 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.soundscapes?.customPresets.map((preset) => preset.id)).toEqual(['my-soundscape'])
     expect(loaded.menu?.musicSoundstages?.factory).toBe('neutral')
     expect(loaded.menu?.musicSoundstages?.saved.map((stage) => stage.id)).toEqual(['my-stage'])
+    expect(loaded.menu?.musicSets).toBeUndefined()
     expect(loaded.menu?.keystrokeSoundPresets?.saved.map((preset) => preset.id)).toEqual(['my-keystrokes'])
     expect(loaded.menu?.flashing).toEqual(DEFAULT_FLASHING_SETTINGS)
     expect(loaded.menu?.flashingPresets?.saved.map((preset) => preset.id)).toEqual(['my-flash'])

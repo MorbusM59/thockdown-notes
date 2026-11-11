@@ -7,7 +7,7 @@
  * player service's own (`musicPlayerService.currentTime`, `setCurrentTime`).
  */
 
-import type { MusicPoolFilter, MusicSongEntry, PlaylistCountsResult, PlaylistSlot } from '../shared/audioPlayer'
+import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistCountsResult, PlaylistSlot } from '../shared/audioPlayer'
 
 export type NowPlaying = {
   song: MusicSongEntry | null
@@ -22,10 +22,17 @@ export type NowPlaying = {
    * hands over a new `song`.
    */
   pool: { slots: readonly PlaylistSlot[]; counts: PlaylistCountsResult; filter: MusicPoolFilter } | null
+  /** The user's ordered sets; the first five are quick access in the player. */
+  musicSets: readonly MusicSet[]
   /** Play a song of the pool now, rotating the pool's order to it (`shared/musicPool.ts`). */
   playFromPool: (id: number) => void
-  /** Select one bucket, or add it to the selection, as the music bar does. */
+  /** Select one set, or add it to the active selection, as the music bar does. */
   selectSlot: (slot: PlaylistSlot, additive: boolean) => void
+  createMusicSet: () => void
+  renameMusicSet: (slot: PlaylistSlot, name: string) => Promise<void>
+  moveMusicSet: (draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot) => void
+  deleteMusicSet: (slot: PlaylistSlot) => Promise<void>
+  addToMusicSet: (slot: PlaylistSlot, source: 'files' | 'folder') => Promise<boolean>
   /** The music's volume, reverb amount and reverb room, each a fraction 0..1 (what is resumed while muted or bypassed). */
   levels: SoundLevels
   /** Set one of them, as the music bar's own controls do: adjusting a muted volume or a bypassed reverb turns it back on. */
@@ -36,12 +43,42 @@ export type NowPlaying = {
 
 export type SoundLevels = { volume: number; reverb: number; room: number }
 
-let current: NowPlaying = { song: null, jumpSong: () => {}, pool: null, playFromPool: () => {}, selectSlot: () => {}, setPoolFilter: () => {}, levels: { volume: 0, reverb: 0, room: 0 }, setLevel: () => {} }
+let current: NowPlaying = {
+  song: null,
+  jumpSong: () => {},
+  pool: null,
+  musicSets: [],
+  playFromPool: () => {},
+  selectSlot: () => {},
+  createMusicSet: () => {},
+  renameMusicSet: async () => {},
+  moveMusicSet: () => {},
+  deleteMusicSet: async () => {},
+  addToMusicSet: async () => false,
+  setPoolFilter: () => {},
+  levels: { volume: 0, reverb: 0, room: 0 },
+  setLevel: () => {},
+}
 const listeners = new Set<() => void>()
 
 /** Called by the music player whenever the song or its actions change. */
 export function publishNowPlaying(next: NowPlaying): void {
-  if (next.song === current.song && next.jumpSong === current.jumpSong && next.pool === current.pool && next.playFromPool === current.playFromPool && next.selectSlot === current.selectSlot && next.setPoolFilter === current.setPoolFilter && next.levels === current.levels && next.setLevel === current.setLevel) return
+  if (
+    next.song === current.song
+    && next.jumpSong === current.jumpSong
+    && next.pool === current.pool
+    && next.musicSets === current.musicSets
+    && next.playFromPool === current.playFromPool
+    && next.selectSlot === current.selectSlot
+    && next.createMusicSet === current.createMusicSet
+    && next.renameMusicSet === current.renameMusicSet
+    && next.moveMusicSet === current.moveMusicSet
+    && next.deleteMusicSet === current.deleteMusicSet
+    && next.addToMusicSet === current.addToMusicSet
+    && next.setPoolFilter === current.setPoolFilter
+    && next.levels === current.levels
+    && next.setLevel === current.setLevel
+  ) return
   current = next
   for (const listener of listeners) listener()
 }

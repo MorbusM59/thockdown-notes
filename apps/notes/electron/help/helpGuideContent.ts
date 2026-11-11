@@ -995,13 +995,17 @@ ${shortcutTable()}
 > **Where?**
 > The window-controls bar, center.
 
-*A built-in music player with five themed playlist slots, each holding your own local audio files, and an independent Soundscapes switch.*
+*A built-in music player with five quick-access music sets, user-created sets, and an independent Soundscapes switch.*
 
-- Music slots: Pop, Rock, Electro, Lounge, Ambient. The Soundscapes button, showing the icon of the soundscape it will play, turns soundscapes on or off independently; scroll over it to set their volume.
-- **Adding music** — right-click a slot to pick individual files; shift+right-click to add an entire folder at once.
-- **Clearing a slot** — hold a right-click on a slot until it arms, then release to clear every song in it.
+- Music sets: Pop, Rock, Electronic, Lounge, Ambient. The Soundscapes button, showing the icon of the soundscape it will play, turns soundscapes on or off independently; scroll over it to set their volume.
+- **Managing sets** — in Settings → Music → Sets, right-click a user-created set's name to rename it. The folder button adds files on a left-click or a folder on a right-click. The plus button adds a new set at the end of the list.
+- **Ordering sets** — drag rows to reorder them. The blank divider after the fifth row never moves: only the five sets above it appear in the music player.
+- **Songs in sets** — a song can belong to more than one set. Adding a song already in your library adds it to the chosen set without creating a duplicate.
+- **Deleting a set** — factory sets cannot be deleted. Deleting a user-created set removes its memberships and purges only songs that belong to no other set.
+- **Adding music in the player** — right-click a set to pick individual files; Shift+right-click to add an entire folder at once. Left-clicking an empty set also opens the file picker.
+- **Clearing a set** — hold a right-click on a set until it arms, then release to remove its songs. A song that also belongs to another set stays in your library.
 - **Choosing what plays** — click a slot to make it the only active playback pool; **Shift-click** to add it to the active slots. Clicking an active slot does not turn it off.
-- **Playback** — play/pause, and the favorite/skip button (click to favorite the current song for early replay, right-click to skip it, hold right-click to purge it from its slot entirely). The favorite click is a toggle: clicking a song that is already marked takes the replay marker off and drops it back into the normal rotation, without undoing how much you have favorited it over time.
+- **Playback** — play/pause, and the favorite/skip button (click to favorite the current song for early replay, right-click to skip it, hold right-click to purge it from the library and every set). The favorite click is a toggle: clicking a song that is already marked takes the replay marker off and drops it back into the normal rotation, without undoing how much you have favorited it over time.
 - **Rewind and fast-forward** — left-click jumps 20% of the track, right-click moves to the previous or next song in the active pool's displayed order (wrapping at either end), and holding either mouse button scrubs continuously. A scrub that runs off either end continues into a song on that side, so you can keep travelling without stopping at each boundary.
 - **What a 20% click does near an edge** — it lands somewhere sensible rather than partway into a neighbour. With less than 20% of the track left, forward starts the next song from its beginning. Less than 20% in, rewind returns to the start of the song you are on. And in the first two seconds, rewind means the previous song, dropping you 80% of the way through it — near the end, where you were.
 - **Going back** — the player remembers the last hundred songs it played. A seek or scrub that runs backward past the start of a song can step back through that history; the previous-song command instead moves one place backward in the active pool's list.
