@@ -39,7 +39,6 @@ function mergeTextureMaterialSettings(
   override: PartialTextureMaterialSettings | undefined,
 ) {
   return {
-    enabled: override?.enabled ?? base.enabled,
     seed: override?.seed ?? base.seed,
     textureStrength: override?.textureStrength ?? base.textureStrength,
     granularity: override?.granularity ?? base.granularity,
@@ -295,7 +294,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0706,
           "v": 1,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
       "editorRenderText": {
         "color": {
@@ -304,7 +303,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0706,
           "v": 1,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
       "sidebarContent": {
         "color": {
@@ -313,7 +312,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0706,
           "v": 1,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
     },
   }),
@@ -525,7 +524,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0664,
           "v": 0.8863,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
       "sidebarContent": {
         "color": {
@@ -628,9 +627,9 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
       },
       sidebarContent: {
         color: { a: 1, h: 24, s: 0.0217, v: 0.902 },
-        enabled: false,
         granularity: 1,
         seed: 476621,
+        textureStrength: 0,
         vSteps: 1,
       },
     },
@@ -837,9 +836,9 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0,
           "v": 0.8824,
         },
-        "enabled": false,
         "granularity": 2,
         "seed": 8561,
+        "textureStrength": 0,
         "vSteps": 13,
       },
       "editorEditText": {
@@ -849,7 +848,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.1617,
           "v": 0.9216,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
       "editorRenderText": {
         "color": {
@@ -858,7 +857,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.1617,
           "v": 0.9216,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
       "sidebarContent": {
         "color": {
@@ -866,7 +865,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.1617,
           "v": 0.9216,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
     },
   }),
@@ -920,7 +919,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0667,
           "v": 1,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
       "sidebarContent": {
         "color": {
@@ -929,7 +928,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0667,
           "v": 1,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
     },
   }),
@@ -997,7 +996,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0667,
           "v": 1,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
       "sidebarContent": {
         "color": {
@@ -1006,7 +1005,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
           "s": 0.0667,
           "v": 1,
         },
-        "enabled": false,
+        "textureStrength": 0,
       },
     },
   }),

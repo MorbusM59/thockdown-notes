@@ -751,11 +751,6 @@
   background: #fff;
 }
 
-.options-texture-preview.is-active {
-  border-color: var(--btn-border-default);
-  box-shadow:   none;
-}
-
 /* Preview order: white button background, app base, then the masked tint. */
 .options-texture-preview::before,
 .options-texture-preview::after {

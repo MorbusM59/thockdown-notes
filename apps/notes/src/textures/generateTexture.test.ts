@@ -15,7 +15,6 @@ describe('quantizeValue', () => {
 
   describe('texture strength', () => {
     const material = {
-      enabled: true,
       seed: 137,
       textureStrength: 0,
       granularity: 9,
@@ -23,12 +22,12 @@ describe('quantizeValue', () => {
       color: { h: 0, s: 0, v: 1, a: 1 },
     };
 
-    it('keeps the mask fully opaque at zero strength', () => {
+    it('keeps the color layer fully opaque at zero strength', () => {
       const rgba = generateTextureRgba({ width: 32, height: 32, material: clampMaterialSettings(material) });
       for (let index = 3; index < rgba.length; index += 4) expect(rgba[index]).toBe(255);
     });
 
-    it('raises mask alpha from its transparent end', () => {
+    it('interpolates mask alpha toward full opacity by texture strength', () => {
       const full = generateTextureRgba({
         width: 32,
         height: 32,

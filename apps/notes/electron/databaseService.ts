@@ -428,15 +428,18 @@ function normalizeTextureMaterialSettings(
   input: unknown,
   fallback: TextureMaterialSettings,
 ): TextureMaterialSettings {
-  const source = input && typeof input === 'object' ? input as Partial<TextureMaterialSettings> : {};
+  const source = input && typeof input === 'object'
+    ? input as Partial<TextureMaterialSettings> & { enabled?: unknown }
+    : {};
   const color = source.color && typeof source.color === 'object'
     ? source.color as Partial<TextureMaterialSettings['color']>
     : {};
 
   return {
-    enabled: source.enabled !== false,
     seed: clampInteger(source.seed, 0, 0x7fffffff, fallback.seed),
-    textureStrength: roundForSignature(clampNumber(source.textureStrength, 0, 1, fallback.textureStrength)),
+    textureStrength: source.enabled === false
+      ? 0
+      : roundForSignature(clampNumber(source.textureStrength, 0, 1, fallback.textureStrength)),
     granularity: clampInteger(source.granularity, 1, 20, fallback.granularity),
     vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),
     color: {

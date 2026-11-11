@@ -295,11 +295,12 @@ function sanitizeTextureColor(input: unknown, fallback: TextureColorHsva): Textu
 }
 
 function sanitizeTextureMaterial(input: unknown, fallback: TextureMaterialSettings): TextureMaterialSettings {
-  const source = (input && typeof input === 'object') ? input as Partial<TextureMaterialSettings> : {};
+  const source = (input && typeof input === 'object')
+    ? input as Partial<TextureMaterialSettings> & { enabled?: unknown }
+    : {};
   return {
-    enabled: source.enabled !== false,
     seed: sanitizeIntegerInRange(source.seed, 0, 0x7fffffff, fallback.seed),
-    textureStrength: sanitizeRatio(source.textureStrength, fallback.textureStrength),
+    textureStrength: source.enabled === false ? 0 : sanitizeRatio(source.textureStrength, fallback.textureStrength),
     granularity: sanitizeIntegerInRange(source.granularity, 1, 20, fallback.granularity),
     vSteps: sanitizeIntegerInRange(source.vSteps, 1, 20, fallback.vSteps),
     color: sanitizeTextureColor(source.color, fallback.color),

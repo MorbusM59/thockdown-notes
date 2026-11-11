@@ -207,7 +207,6 @@ export function clampMaterialSettings(material: TextureMaterialSettings): Textur
   };
 
   return {
-    enabled: material.enabled !== false,
     seed: Number.isFinite(material.seed) ? Math.max(0, Math.round(material.seed)) : 0,
     textureStrength: Number.isFinite(material.textureStrength) ? Math.max(0, Math.min(1, material.textureStrength)) : 1,
     granularity: Number.isFinite(material.granularity) ? Math.max(1, Math.min(20, material.granularity)) : 10,

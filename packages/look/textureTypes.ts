@@ -8,7 +8,6 @@ export type TextureColorHsva = {
 };
 
 export type TextureMaterialSettings = {
-  enabled: boolean;
   seed: number;
   textureStrength: number;
   granularity: number;
@@ -29,7 +28,6 @@ export const TEXTURE_STRENGTH_MAX = 1;
 
 export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
   appGrid: {
-    enabled: true,
     seed: 137,
     textureStrength: 1,
     granularity: 9,
@@ -37,7 +35,6 @@ export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
     color: { h: 32, s: 0.12, v: 0.95, a: 0.16 },
   },
   sidebarContent: {
-    enabled: true,
     seed: 211,
     textureStrength: 1,
     granularity: 8,
@@ -45,7 +42,6 @@ export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
     color: { h: 30, s: 0.11, v: 0.93, a: 0.17 },
   },
   editorEditText: {
-    enabled: true,
     seed: 389,
     textureStrength: 1,
     granularity: 10,
@@ -53,7 +49,6 @@ export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
     color: { h: 29, s: 0.1, v: 0.92, a: 0.14 },
   },
   editorRenderText: {
-    enabled: true,
     seed: 467,
     textureStrength: 1,
     granularity: 11,

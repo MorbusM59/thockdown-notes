@@ -11,7 +11,6 @@ workerScope.onmessage = async (event: MessageEvent<TextureWorkerRequest>) => {
   const height = Math.max(1, Math.floor(payload.height));
 
   const material: TextureMaterialSettings = clampMaterialSettings({
-    enabled: true,
     seed: payload.seed,
     textureStrength: payload.textureStrength,
     granularity: payload.granularity,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DARK_FACTORY_PRESETS } from './presets';
+import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from './presets';
 
 describe('dark default cursor settings', () => {
   it('uses the saved custom layout cursor', () => {
@@ -19,6 +19,12 @@ describe('dark default cursor settings', () => {
       cursorHaloFalloff: 10,
       cursorPulseMagnitude: 0.3,
       cursorClickSkew: 0.3,
+    });
+  });
+
+  describe('factory texture settings', () => {
+    it('represents the former disabled Paper sidebar texture with zero strength', () => {
+      expect(LIGHT_FACTORY_PRESETS[3].textureMaterials.sidebarContent.textureStrength).toBe(0);
     });
   });
 });

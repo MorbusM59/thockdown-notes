@@ -674,9 +674,10 @@ function normalizeTextureMaterial(source: unknown, fallback: TextureMaterialSett
   const color = toRecord(record.color)
 
   return {
-    enabled: record.enabled !== false,
     seed: Math.max(0, Math.round(toFiniteNumber(record.seed, fallback.seed))),
-    textureStrength: clamp(toFiniteNumber(record.textureStrength, fallback.textureStrength), 0, 1),
+    textureStrength: record.enabled === false
+      ? 0
+      : clamp(toFiniteNumber(record.textureStrength, fallback.textureStrength), 0, 1),
     granularity: clamp(
       Math.round(toFiniteNumber(record.granularity, fallback.granularity)),
       TEXTURE_GRANULARITY_MIN,
@@ -766,7 +767,6 @@ function roundForSignature(value: number, decimals = 4): number {
 
 function normalizeTextureMaterialForLoadoutSignature(source: TextureMaterialSettings): TextureMaterialSettings {
   return {
-    enabled: source.enabled,
     seed: Math.max(0, Math.round(source.seed)),
     textureStrength: roundForSignature(clamp(source.textureStrength, 0, 1)),
     granularity: clamp(Math.round(source.granularity), TEXTURE_GRANULARITY_MIN, TEXTURE_GRANULARITY_MAX),
@@ -2387,22 +2387,22 @@ function App() {
 
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
   const appGridTextureCss = useTextureSurface({
-    enabled: textureEnabled && textureMaterials.appGrid.enabled,
+    enabled: textureEnabled,
     surface: 'appGrid',
     material: textureMaterials.appGrid,
   })
   const sidebarTextureCss = useTextureSurface({
-    enabled: textureEnabled && textureMaterials.sidebarContent.enabled,
+    enabled: textureEnabled,
     surface: 'sidebarContent',
     material: textureMaterials.sidebarContent,
   })
   const editorEditTextTextureCss = useTextureSurface({
-    enabled: textureEnabled && textureMaterials.editorEditText.enabled,
+    enabled: textureEnabled,
     surface: 'editorEditText',
     material: textureMaterials.editorEditText,
   })
   const editorRenderTextTextureCss = useTextureSurface({
-    enabled: textureEnabled && textureMaterials.editorRenderText.enabled,
+    enabled: textureEnabled,
     surface: 'editorRenderText',
     material: textureMaterials.editorRenderText,
   })

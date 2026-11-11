@@ -113,12 +113,11 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
   /**
    * A right click on a surface paints it: the staged colour through the
    * channel mask (`css`, already resolved by ColorTargetButton), and -- while
-   * a surface is linked and its texture is on -- that texture's seed,
-   * strength, granularity and smoothness too. With the linked texture off, or nothing
-   * linked, it paints the colour alone.
+   * a surface is linked -- that texture's seed, strength, granularity and
+   * smoothness too. With nothing linked, it paints the colour alone.
    */
   const paint = (surface: TextureSurfaceKey, css: string) => {
-    if (!shown || !shown.enabled || surface === active) {
+    if (!shown || surface === active) {
       setColor(surface, css)
       return
     }
@@ -127,7 +126,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
     const { seed, textureStrength, granularity, vSteps } = shown
     const pending = pendingRef.current
     if (pending?.surface === surface) flush()
-    onWriteRef.current(surface, { ...materialsRef.current[surface], seed, textureStrength, granularity, vSteps, enabled: true, color: rgbaToHsva(rgba) })
+    onWriteRef.current(surface, { ...materialsRef.current[surface], seed, textureStrength, granularity, vSteps, color: rgbaToHsva(rgba) })
   }
 
   const previewCss = useTextureSurface({
@@ -150,19 +149,14 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
           onPaint={(css) => paint(surface, css)}
         />
       ))}
-      <button
-        type="button"
-        className={`btn-icon options-color-swatch options-texture-preview options-surface-texture-preview${shown?.enabled ? ' is-active' : ''}`}
-        disabled={!shown}
-        aria-pressed={shown?.enabled ?? false}
-        data-tooltip={shown ? (shown.enabled ? 'Texture on: click for colour only' : 'Colour only: click to turn the texture on') : 'Select a surface'}
+      <div
+        className="options-color-swatch options-texture-preview options-surface-texture-preview"
+        role="img"
+        aria-label="Surface texture preview"
         style={shown ? {
           '--texture-preview-color': liveColor ?? rgbaToCssColor(hsvaToRgba(shown.color)),
-          '--texture-preview-mask': shown.enabled ? previewCss : 'none',
+          '--texture-preview-mask': previewCss,
         } as CSSProperties : undefined}
-        onClick={() => {
-          if (active) edit(active, (current) => ({ ...current, enabled: !current.enabled }))
-        }}
       />
       <div className="options-surface-texture-controls">
         <div className="options-surface-texture-seed">

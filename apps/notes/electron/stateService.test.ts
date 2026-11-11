@@ -14,6 +14,7 @@ import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, cloneSettin
 import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES } from '../src/shared/keystrokeSounds'
 import { DEFAULT_SOUNDSTAGE_PREFERENCES } from '../src/shared/soundstages'
 import { DEFAULT_FLASH_SHAPE_PREFERENCES, DEFAULT_FLASHING_SETTINGS } from '../src/shared/flashing'
+import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
@@ -51,6 +52,28 @@ describe('StateService app-state field round-trip', () => {
     const reader = new StateService(dataRoot)
     const loaded = await reader.loadAppState()
     expect(loaded.menu?.isDoubleSizeMode).toBe(true)
+  })
+
+  it('migrates a disabled texture to zero strength when loading legacy app state', async () => {
+    const textureMaterials = {
+      ...DEFAULT_TEXTURE_MATERIALS,
+      sidebarContent: { ...DEFAULT_TEXTURE_MATERIALS.sidebarContent, enabled: false },
+    } as unknown as TextureMaterialsBySurface
+
+    await new StateService(dataRoot).saveAppState({
+      selectedNoteId: null,
+      menu: {
+        sidebarMode: 'date',
+        selectedMonths: [],
+        selectedYears: [],
+        searchQuery: '',
+        textureMaterials,
+      },
+    })
+
+    const loaded = await new StateService(dataRoot).loadAppState()
+    expect(loaded.menu?.textureMaterials?.sidebarContent.textureStrength).toBe(0)
+    expect(loaded.menu?.textureMaterials?.sidebarContent).not.toHaveProperty('enabled')
   })
 
   it('persists the visualizer font across a restart, and leaves it absent in a save without one', async () => {
