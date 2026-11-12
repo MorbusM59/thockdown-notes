@@ -1001,7 +1001,7 @@ ${shortcutTable()}
 - **Managing sets** — in Options → Music → Sets: right-click a set's name to rename it, use the file and folder buttons to add songs, drag rows to reorder, and the plus to add a set. Only the five sets above the divider appear in the player. Hold the remove button to delete a set (factory sets cannot be deleted); click a set's song count to list its songs, by folder or by artist, and take songs out of the set; hold a right-click on the count to empty it.
 - **Songs in sets** — a song can be in several sets. Removing it from one keeps it in your library while another set still holds it.
 - **Adding music in the player** — right-click a set to pick files, Shift+right-click for a folder; left-clicking an empty set also opens the file picker.
-- **Emptying a set** — hold a right-click on a set until it arms, then release.
+- **Listing a set's songs** — hold a right-click on a set to open its songs in the sidebar; leaving the list puts the sidebar back as it was.
 - **Choosing what plays** — click a set to play from it alone; **Shift-click** to add it to the sets playing.
 - **Playback** — play/pause, and the favorite/skip button (click to favorite the current song for early replay, right-click to skip it, hold right-click to purge it from the library and every set). The favorite click is a toggle: clicking a song that is already marked takes the replay marker off and drops it back into the normal rotation, without undoing how much you have favorited it over time.
 - **Rewind and fast-forward** — left-click jumps 20% of the track, right-click plays the previous or next song of the list the visualizer shows (wrapping at either end), and holding either mouse button scrubs, carrying on into the neighbouring song at either end.

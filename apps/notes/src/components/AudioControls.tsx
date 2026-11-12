@@ -36,6 +36,7 @@ import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
+import { openMusicSetList } from '../sidebar/musicSetListView'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
@@ -171,7 +172,8 @@ export const AudioControls = memo(function AudioControls({
   activeSlotsRef.current = activeSlots
   const selectionVersionRef = useRef(0)
   // Slot button that is currently "primed" for clearing (held right-click)
-  const [primedSlot, setPrimedSlot] = useState<PlaylistSlot | null>(null)
+  /** The set whose list the current right press opened by being held; its release's contextmenu is ignored. */
+  const heldSlotRef = useRef<PlaylistSlot | null>(null)
   // Position to seek to once the restored song's first playback begins.
   const pendingSeekSecRef = useRef<number | null>(null)
 
@@ -813,15 +815,20 @@ export const AudioControls = memo(function AudioControls({
 
   const handleSlotRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     event.preventDefault()
-    if (primedSlot === slot) return // Already primed — wait for pointer-up.
+    // The release of a hold that opened the set list is not a right-click.
+    if (heldSlotRef.current === slot) return
     await addToMusicSet(slot, 'files')
-  }, [primedSlot, addToMusicSet])
+  }, [addToMusicSet])
 
   const handleSlotPointerDown = useCallback((event: React.PointerEvent, slot: PlaylistSlot) => {
     if (event.button !== 2) return
     event.preventDefault()
+    heldSlotRef.current = null
+    // A held right press opens the set's songs in the sidebar (the set list).
     holdTimerRef.current = armHold(() => {
-      setPrimedSlot(slot)
+      holdTimerRef.current = null
+      heldSlotRef.current = slot
+      openMusicSetList(slot, 'player')
     }, HOLD_THRESHOLD_MS)
   }, [])
 
@@ -874,25 +881,12 @@ export const AudioControls = memo(function AudioControls({
     await leaveSet(slot)
   }, [leaveSet])
 
-  const handleSlotPointerUp = useCallback(async (event: React.PointerEvent, slot: PlaylistSlot) => {
-    if (event.button !== 2) return
+  const cancelSlotHold = useCallback(() => {
     if (holdTimerRef.current) {
       holdTimerRef.current()
       holdTimerRef.current = null
     }
-    if (primedSlot === slot) {
-      setPrimedSlot(null)
-      await purgeMusicSet(slot)
-    }
-  }, [primedSlot, purgeMusicSet])
-
-  const handleSlotPointerLeave = useCallback((slot: PlaylistSlot) => {
-    if (holdTimerRef.current) {
-      holdTimerRef.current()
-      holdTimerRef.current = null
-    }
-    if (primedSlot === slot) setPrimedSlot(null)
-  }, [primedSlot])
+  }, [])
 
   const handleSlotShiftRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
     if (!event.shiftKey) return
@@ -1356,19 +1350,16 @@ export const AudioControls = memo(function AudioControls({
             const count = counts[slot] ?? 0
             const isEmpty = count === 0
             const isActive = activeSlots.includes(slot)
-            const isPrimed = primedSlot === slot
             const icon = isFactoryMusicSet(slot) ? PLAYLIST_SLOT_ICONS[slot] : null
             return (
               <button
                 key={slot}
                 type="button"
-                className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isPrimed ? ' is-primed' : ''}${isEmpty ? ' is-empty' : ''}`}
+                className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isEmpty ? ' is-empty' : ''}`}
                 data-tooltip={
                   isEmpty
                     ? `${set.name}: empty — click to add files`
-                    : isPrimed
-                      ? `${set.name}: release to clear all ${count} songs`
-                      : `${set.name}: ${count} song${count !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
+                    : `${set.name}: ${count} song${count !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
                 }
                 aria-label={set.name}
                 aria-pressed={isActive}
@@ -1376,8 +1367,9 @@ export const AudioControls = memo(function AudioControls({
                 data-secondary-press="action"
                 onContextMenu={(e) => { void handleSlotContextMenu(e, slot) }}
                 onPointerDown={(e) => handleSlotPointerDown(e, slot)}
-                onPointerUp={(e) => { void handleSlotPointerUp(e, slot) }}
-                onPointerLeave={() => handleSlotPointerLeave(slot)}
+                onPointerUp={cancelSlotHold}
+                onPointerCancel={cancelSlotHold}
+                onMouseLeave={cancelSlotHold}
               >
                 {icon
                   ? <span className={icon} aria-hidden="true" />

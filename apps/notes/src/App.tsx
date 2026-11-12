@@ -3816,6 +3816,47 @@ function App() {
     showSidebarInMode('options')
   }, [lastSidebarModeBeforeOptions, runSidebarMenuTransition, showSidebarInMode, sidebarMode])
 
+  // The set list opened from the PLAYER (a held right press on a set button)
+  // comes up over whatever the sidebar was showing, hidden or not: Options is
+  // brought up to hold it, and closing the list with its exit button puts the
+  // sidebar back as it was. Leaving Options any other way is the reader
+  // choosing where to go, and nothing is put back.
+  const sidebarBeforeSetListRef = useRef<{ mode: SidebarMode; visible: boolean } | null>(null)
+  const previousSetListSlotRef = useRef<number | null>(null)
+  useEffect(() => {
+    const previousSlot = previousSetListSlotRef.current
+    previousSetListSlotRef.current = musicSetListSlot
+    if (previousSlot === null && musicSetListSlot !== null) {
+      if (readMusicSetListView().origin !== 'player') return
+      sidebarBeforeSetListRef.current = { mode: sidebarMode, visible: isSidebarVisible && !isImmersiveMode }
+      if (sidebarMode !== 'options') setLastSidebarModeBeforeOptions(sidebarMode)
+      showSidebarInMode('options')
+      return
+    }
+    if (previousSlot === null || musicSetListSlot !== null) return
+    const before = sidebarBeforeSetListRef.current
+    sidebarBeforeSetListRef.current = null
+    if (!before || sidebarMode !== 'options') return
+    if (!before.visible) {
+      setIsSidebarVisible(false)
+      try {
+        window.windowControls?.setSidebarVisible?.(false)
+      } catch {
+        // ignore
+      }
+    }
+    // The visibility goes into the transition's own snapshot (see
+    // showSidebarInMode); alone only when there is no transition to carry it.
+    if (before.mode !== 'options') {
+      runSidebarMenuTransition(before.mode, before.visible ? undefined : { isSidebarVisible: false })
+    } else if (!before.visible) {
+      void persistMenuStateNow({ isSidebarVisible: false })
+    }
+    // Keyed on the list alone: everything else is read as it stands when the
+    // list opens or closes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [musicSetListSlot])
+
   const handleWindowMinimize = useCallback(() => {
     window.windowControls?.minimize?.()
   }, [])
