@@ -7681,7 +7681,9 @@ ${markdownHtml}
       // Before the defaultPrevented bail-out: a fresh press starts clean even
       // when something else (CM6's own Escape binding) claims its keydown.
       if (event.key === 'Escape' && !event.repeat) {
-        escapeConsumedByFieldRef.current = false
+        const target = event.target instanceof Element ? event.target : null
+        // A field's Escape was marked in the capture phase (below); keep it.
+        escapeConsumedByFieldRef.current = isTextEntryElement(target) && !target?.closest('.editor-stage')
       }
       // In the visualizer every Escape is spent there (a pool filter field
       // claims its own before this listener sees it), so its release never
@@ -8052,6 +8054,18 @@ ${markdownHtml}
       void activeSection?.toggleRenderViewMode()
     }
 
+    // An Escape pressed in a text field outside the editor is the FIELD's:
+    // its release must not also switch the slot's mode. Decided here, in the
+    // capture phase, from where the press landed, because a field that
+    // handles Escape itself (an entry list's field reverts and leaves) stops
+    // the keydown before the bubble listener above can mark it.
+    const onFieldEscapeCapture = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.repeat) return
+      const target = event.target instanceof Element ? event.target : null
+      if (isTextEntryElement(target) && !target?.closest('.editor-stage')) escapeConsumedByFieldRef.current = true
+    }
+
+    window.addEventListener('keydown', onFieldEscapeCapture, true)
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     // The hold timer is NOT cleared here. This effect re-registers whenever
@@ -8060,6 +8074,7 @@ ${markdownHtml}
     // re-render. The timer callback touches only setters and refs, so it
     // outlives a re-render safely; unmount clears it.
     return () => {
+      window.removeEventListener('keydown', onFieldEscapeCapture, true)
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
