@@ -1057,7 +1057,8 @@
   display: block;
   width: 100%;
   height: auto;
-  margin-top: var(--spacing-small);
+  /* The card's own side inset (.is-tree-card's padding) below it too. */
+  margin: var(--spacing-small) 0;
   border-radius: var(--border-radius-small);
 }
 
