@@ -52,8 +52,24 @@
   border:          1px solid var(--color-border-light-70);
   border-left:     none;
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
-  box-shadow:      var(--box-shadow-inverted);
   background-color: var(--palette-parchment-lightest);
+}
+
+/* The inset shadow is drawn on an overlay ABOVE the texture layer and the
+ * content rather than on the box itself: an inset box-shadow paints just over
+ * the box's own background, so the full-size texture layer (z-index 1) hid it
+ * and only the border line showed. The list's overlay hangs off the
+ * non-scrolling .sidebar-wrapper so it does not scroll away with the list;
+ * it covers the same box, since .sidebar-content fills the wrapper. */
+.sidebar-wrapper::after,
+.sidebar-color-picker-dock::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  z-index:        3;
+  pointer-events: none;
+  border-radius:  inherit;
+  box-shadow:     var(--box-shadow-inverted);
 }
 
 .sidebar-color-picker-dock {
