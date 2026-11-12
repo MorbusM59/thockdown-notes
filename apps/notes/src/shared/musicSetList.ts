@@ -76,3 +76,42 @@ export function groupMusicSetList(songs: readonly MusicSongEntry[], grouping: Mu
   }))
   return groups.sort((a, b) => collator.compare(a.label, b.label) || collator.compare(a.key, b.key))
 }
+
+/** How many cells the set list's selector shows; more sets than this are reached by stepping. */
+export const MUSIC_SET_SELECTOR_CELLS = 6
+
+export type MusicSetSelectorCell = { kind: 'set'; index: number } | { kind: 'earlier' } | { kind: 'later' }
+
+/** The furthest the selector's window can start: its last cell on the last set. */
+export function maxMusicSetSelectorOffset(setCount: number): number {
+  return Math.max(0, setCount - MUSIC_SET_SELECTOR_CELLS)
+}
+
+/**
+ * The selector's cells for `setCount` sets with its window starting at set
+ * `offset`. The window is the sets `offset` to `offset + 5`; while sets lie
+ * before it the first cell is the step towards the beginning instead of its
+ * set, and while sets lie after it the last cell is the step towards the end.
+ */
+export function musicSetSelectorCells(setCount: number, offset: number): MusicSetSelectorCell[] {
+  const start = Math.min(Math.max(0, offset), maxMusicSetSelectorOffset(setCount))
+  const shown = Math.min(setCount, MUSIC_SET_SELECTOR_CELLS)
+  return Array.from({ length: shown }, (_, cell): MusicSetSelectorCell => {
+    if (cell === 0 && start > 0) return { kind: 'earlier' }
+    if (cell === shown - 1 && start + shown < setCount) return { kind: 'later' }
+    return { kind: 'set', index: start + cell }
+  })
+}
+
+/** The offset nearest `offset` at which set `index` is shown as itself, not covered by a step cell. */
+export function musicSetSelectorOffsetShowing(setCount: number, offset: number, index: number): number {
+  const max = maxMusicSetSelectorOffset(setCount)
+  const shows = (candidate: number) =>
+    musicSetSelectorCells(setCount, candidate).some((cell) => cell.kind === 'set' && cell.index === index)
+  const start = Math.min(Math.max(0, offset), max)
+  for (let distance = 0; distance <= max; distance += 1) {
+    if (start - distance >= 0 && shows(start - distance)) return start - distance
+    if (start + distance <= max && shows(start + distance)) return start + distance
+  }
+  return start
+}
