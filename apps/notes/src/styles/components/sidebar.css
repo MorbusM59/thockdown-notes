@@ -71,6 +71,12 @@
   z-index:        3;
   pointer-events: none;
   border-radius:  inherit;
+  /* The panel's own border, transparent: an inset shadow is drawn inside the
+     border box, so without it the shadow ran over the panel's border line
+     instead of starting inside it. */
+  border:         var(--backdrop-surface-border);
+  border-color:   transparent;
+  border-left:    none;
   box-shadow:     var(--backdrop-surface-shadow);
 }
 
