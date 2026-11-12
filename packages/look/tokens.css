@@ -31,7 +31,7 @@
   --color-background-dark:      #eeeeee;
   --color-panel-shadow:         rgba(20, 0, 0, 0.4);
   --color-panel-border:         #ffffff88;
-  --color-input-backdrop:       var(--palette-parchment-input);
+  --color-accent:               var(--palette-parchment-input);
 
   --color-border-dark-10: rgba(0, 0, 0, 0.1);
   --color-border-dark-20: rgba(0, 0, 0, 0.2);
@@ -483,7 +483,6 @@
   --btn-bg-default: var(--palette-parchment-input);
   --btn-bg-hover:   #EEEEEEBB;
   --btn-bg-pressed: #DDDDDDBB;
-  --btn-bg-active:  var(--color-input-backdrop);
 
   --btn-shadow-active:
     inset 0 0 2px rgba(0, 0, 0, 0.5),
@@ -511,10 +510,10 @@
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
   );
 
-  --canonical-scroll-track-bg:     var(--color-input-backdrop);
-  /* The backdrop surface, untextured, for anything outside an app shell; the
-     shell redeclares all three with the texture (loadoutTheme.ts). */
-  --backdrop-surface-background:   var(--color-input-backdrop);
+  /* The backdrop surface, untextured, for anything outside an app shell: the
+     base shows through. The shell redeclares all three with the back panel
+     texture (loadoutTheme.ts). */
+  --backdrop-surface-background:   transparent;
   --backdrop-surface-border:       1px solid var(--color-border-light-70);
   --backdrop-surface-shadow:       var(--box-shadow-inverted);
   --canonical-handle-border:       rgba(81, 73, 66, 0.6);

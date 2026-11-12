@@ -39,9 +39,9 @@ export const TEXTURE_WRITE_DEBOUNCE_MS = 300
 const TEXTURE_SEED_MAX = 1000000
 
 const SURFACES: ReadonlyArray<{ surface: TextureSurfaceKey; glyph: string; name: string }> = [
-  { surface: 'appGrid', glyph: 'fa-solid fa-table-columns', name: 'Grid' },
+  { surface: 'appGrid', glyph: 'fa-solid fa-table-columns', name: 'Chrome' },
   { surface: 'editorEditText', glyph: 'fa-solid fa-pen', name: 'Editor' },
-  { surface: 'sidebarContent', glyph: 'fa-solid fa-list', name: 'Sidebar' },
+  { surface: 'sidebarContent', glyph: 'fa-solid fa-list', name: 'Back Panel' },
   { surface: 'editorRenderText', glyph: 'fa-solid fa-book-open', name: 'Reader' },
 ]
 
@@ -144,7 +144,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
           key={surface}
           linkId={linkIdOf(surface)}
           glyph={glyph}
-          tooltip={`${name} texture`}
+          tooltip={`${name} Texture`}
           color={rgbaToCssColor(hsvaToRgba((draft?.surface === surface ? draft.material : materials[surface]).color))}
           onApply={(css) => setColor(surface, css)}
           onPaint={(css) => paint(surface, css)}

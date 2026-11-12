@@ -28,7 +28,7 @@
 .app-shell,
 .app-shell * {
   scrollbar-width: thin;
-  scrollbar-color: var(--canonical-handle-border) var(--canonical-scroll-track-bg);
+  scrollbar-color: var(--canonical-handle-border) transparent;
 }
 
 /* WebKit */

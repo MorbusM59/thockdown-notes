@@ -146,7 +146,7 @@
   text-align:     right;
   color:          var(--color-text-60);
   user-select:    none;
-  background-color: var(--color-input-backdrop);
+  background-color: var(--color-accent);
 }
 
 /* A label that opens its section has nothing above it to be set apart from.

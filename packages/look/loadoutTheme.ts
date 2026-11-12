@@ -432,9 +432,11 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     '--line-number-opacity': String(lineNumberRgba.a),
     '--color-caret': colors.caret,
     '--color-selection': options.isPreviewMode ? colors.selectionRender : colors.selectionEdit,
-    '--color-input-backdrop': colors.inputFields,
-    '--canonical-scroll-track-bg': colors.inputFields,
-    // THE BACKDROP SURFACE: what every recessed panel is drawn as (the
+    // The ACCENT colour: section labels, the empty-note plate, the
+    // visualizer's centre face. (Its field keeps its old name, inputFields.)
+    '--color-accent': colors.inputFields,
+    // THE BACKDROP SURFACE: what every recessed panel is drawn as -- the back
+    // panel texture over the app's one base colour, with no colour of its own (the
     // sidebar, the toolbar, the window controls, the display-mode buttons,
     // input fields, scroll tracks). Declared HERE, on the shell, rather than
     // in tokens.css on :root, because a custom property's own var()s resolve
@@ -442,7 +444,7 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     // `--backdrop-texture`) and the flipped border and shadow (`.shadow-flip`)
     // exist on the shell and not on :root. tokens.css carries the same three
     // for anything outside a shell, untextured.
-    '--backdrop-surface-background': `var(--backdrop-texture, none) 0 0 / var(--texture-tile-size) var(--texture-tile-size) repeat, ${colors.inputFields}`,
+    '--backdrop-surface-background': 'var(--backdrop-texture, none) 0 0 / var(--texture-tile-size) var(--texture-tile-size) repeat',
     '--backdrop-surface-border': '1px solid var(--color-border-light-70)',
     '--backdrop-surface-shadow': 'var(--box-shadow-inverted)',
     '--btn-bg-default': colors.appButtons,

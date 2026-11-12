@@ -391,7 +391,7 @@
   background:     transparent;
   pointer-events: auto;
   z-index:        2;
-  border: 1px solid var(--canonical-scroll-track-bg);
+  border: 1px solid transparent;
   outline: 1px solid var(--color-text-40);
   background-color: transparent;
 }
@@ -474,7 +474,7 @@
   width:         var(--canonical-scroll-handle-thickness);
   height:        var(--canonical-scroll-handle-thickness);
   border-radius: var(--border-radius-small);
-  border: 1px solid var(--canonical-scroll-track-bg);
+  border: 1px solid transparent;
   background-color: var(--color-text-60);
 }
 
@@ -787,7 +787,7 @@ html[data-beat-wash] .editor-section-column.is-active .editor-beat-wash.is-shown
 .editor-stage .editor-empty-state-plate {
   display: none;
   z-index: 10;
-  background: linear-gradient(var(--color-input-backdrop), var(--color-input-backdrop)), var(--background-color-root);
+  background: linear-gradient(var(--color-accent), var(--color-accent)), var(--background-color-root);
 }
 
 .editor-stage .editor-empty-state-plate.is-visible {

@@ -65,8 +65,8 @@
 }
 
 .audio-ctrl-btn.is-active {
-  background:   var(--btn-bg-active, rgba(120, 100, 80, 0.22));
-  border-color: var(--btn-border-active, #9a8070);
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
   color:        var(--color-text-base);
 }
 

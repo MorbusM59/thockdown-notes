@@ -378,7 +378,7 @@ const HIGHLIGHT_COLOR_TITLES: Record<HighlightColorKey, string> = {
   warningLine: 'Warning Flag Color',
   lineNumber: 'Line Number Color',
   base: 'App Base Background',
-  inputFields: 'App (Input) Fields',
+  inputFields: 'Accent Color',
   appButtons: 'App Buttons',
   markdownHeadline: 'Markdown heading color',
   markdownList: 'Markdown list color',

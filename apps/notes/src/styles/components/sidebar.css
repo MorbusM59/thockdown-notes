@@ -54,11 +54,11 @@
   border:          var(--backdrop-surface-border);
   border-left:     none;
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
-  background-color: var(--color-input-backdrop);
 }
 
-/* The backdrop surface, drawn in parts because this one scrolls: the colour
- * here, the texture as the scroll-synced layer below (.sidebar-content-texture,
+/* The backdrop surface, drawn in parts because this one scrolls: no colour
+ * of its own (the app base shows through), the texture as the scroll-synced
+ * layer below (.sidebar-content-texture,
  * the same material every other backdrop panel takes as its background image),
  * and the inset shadow on an overlay ABOVE that layer. An inset box-shadow
  * paints just over the box's own background, so the full-size texture layer
