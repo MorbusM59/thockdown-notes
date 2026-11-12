@@ -277,7 +277,7 @@ import {
   WHEEL_STEP_LINES_MIN,
   WHEEL_STEP_ROWS_MAX,
   WHEEL_STEP_ROWS_MIN,
-} from './editor/wheelStep'
+} from './scroll/wheelStep'
 import {
   getWheelSpinCutoffMs,
   getWheelSpinDampenDivisor,
@@ -291,7 +291,7 @@ import {
   WHEEL_SPIN_DAMPEN_ENDLESS,
   WHEEL_SPIN_THRESHOLD_MAX_MS,
   WHEEL_SPIN_THRESHOLD_OFF,
-} from './editor/wheelSpin'
+} from './scroll/wheelSpin'
 import {
   FILTER_MONTHS,
   FILTER_YEARS,

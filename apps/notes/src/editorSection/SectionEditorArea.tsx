@@ -77,7 +77,7 @@ export interface SectionEditorAreaProps {
   /** The spell checker's switch (Options' feature bar); it runs only in the active slot's editor. */
   spellCheckEnabled: boolean
   previewTextureRef: RefObject<HTMLDivElement>
-  /** Where the long-journey bridge draws -- see editor/scrollBridge.ts. */
+  /** Where the long-journey bridge draws -- see scroll/scrollBridge.ts. */
   previewBridgeHostRef: RefObject<HTMLDivElement>
   previewScrollRef: RefObject<HTMLDivElement>
   handlePreviewScroll: () => void

@@ -2,17 +2,17 @@ import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeom
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
-import { beginScrollTrackHold } from '../editor/scrollTrackHold'
-import { registerScrollBridge } from '../editor/scrollBridge'
-import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand'
-import { createCommittedThumbHeight } from '../editor/scrollThumbMetrics'
+import { beginScrollTrackHold } from '../scroll/scrollTrackHold'
+import { registerScrollBridge } from '../scroll/scrollBridge'
+import { resolveThumbRubberBand } from '../scroll/scrollThumbRubberBand'
+import { createCommittedThumbHeight } from '../scroll/scrollThumbMetrics'
 import { sampleCurveRampProgress } from '@thockdown/interaction/ScrollCurvePlan'
 import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney'
-import { measureAverageCharWidthPx } from '../editor/scrollBridgeTexture'
-import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
-import { getWheelStepLines } from '../editor/wheelStep'
+import { measureAverageCharWidthPx } from '../scroll/scrollBridgeTexture'
+import { createWheelNotchState, resolveWheelEventUnits } from '../scroll/wheelNotch'
+import { getWheelStepLines } from '../scroll/wheelStep'
 import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
-import { appendWheelTrace, isWheelTraceOn } from '../editor/wheelTrace'
+import { appendWheelTrace, isWheelTraceOn } from '../scroll/wheelTrace'
 import {
   cancelWheelSpin,
   createWheelSpinState,
@@ -22,14 +22,14 @@ import {
   refreshWheelSpinCoast,
   registerWheelSpinNudge,
   type WheelSpinDirection,
-} from '../editor/wheelSpin'
+} from '../scroll/wheelSpin'
 import {
   remainingWheelNotchTravelPx,
   retargetWheelNotchTravel,
   resolveWheelNotchTravelMs,
   takeWheelNotchTravelStep,
   type WheelNotchTravel,
-} from '../editor/wheelNotchTravel'
+} from '../scroll/wheelNotchTravel'
 import {
   addWheelSpinProfileCarry,
   buildWheelSpinProfile,
@@ -37,7 +37,7 @@ import {
   wheelSpinProfileSpeedPxPerMs,
   wheelSpinProfileUndeliveredCarryPx,
   type WheelSpinProfile,
-} from '../editor/wheelSpinProfile'
+} from '../scroll/wheelSpinProfile'
 import { buildReleaseRampDownPlanFromCurrentParams, CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER, resolveApexSpeedPxPerSecFromCurrentParams, sampleReleaseRampDownPlan, resolveRampCrossingTimeSecFromCurrentParams, scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
 import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
 import { clamp } from '@thockdown/interaction/clamp'
@@ -82,7 +82,7 @@ export interface UseCanonicalScrollerOptions {
    */
   previewDocumentPositionRef?: MutableRefObject<PreviewDocumentPositionApi | null>
   /**
-   * The pane box the long-journey bridge draws into (editor/scrollBridge.ts).
+   * The pane box the long-journey bridge draws into (scroll/scrollBridge.ts).
    *
    * Deliberately the render CONTAINER rather than the scroller: a curtain
    * inside the scroller would scroll with the content and add its own height
@@ -152,8 +152,8 @@ export function useCanonicalScroller({
   } | null>(null)
   const trackHoldCancelRef = useRef<(() => void) | null>(null)
   const rubberBandRafRef = useRef<number | null>(null)
-  // Spin-to-keep-scrolling, the render view's half (editor/wheelSpin.ts for
-  // the gesture, editor/wheelSpinProfile.ts for the curve this one rides).
+  // Spin-to-keep-scrolling, the render view's half (scroll/wheelSpin.ts for
+  // the gesture, scroll/wheelSpinProfile.ts for the curve this one rides).
   // Per hook instance, like the edit view's is per mount: two split-view
   // panes are two scrollers, and a spin in one says nothing about the other.
   const previewWheelSpinStateRef = useRef(createWheelSpinState())
@@ -178,7 +178,7 @@ export function useCanonicalScroller({
   const previewWheelSpinClockMsRef = useRef(0)
   const previewWheelSpinPaidPxRef = useRef(0)
   /**
-   * The single notch's own glide (editor/wheelNotchTravel.ts).
+   * The single notch's own glide (scroll/wheelNotchTravel.ts).
    *
    * Separate from the coast because it answers a different question -- how a
    * notch is delivered, rather than what happens after the hand lets go --
@@ -321,7 +321,7 @@ export function useCanonicalScroller({
     const position = previewDocumentPositionRef?.current ?? null
 
     // SIZE is committed and held; POSITION stays live. See
-    // editor/scrollThumbMetrics.ts. The signature is every input that may
+    // scroll/scrollThumbMetrics.ts. The signature is every input that may
     // honestly change the size -- the document, the viewport, the track, and
     // the type geometry -- and deliberately not scrollHeight, which moves as
     // blocks are measured, nor the scroll position, which is none of the
@@ -523,7 +523,7 @@ export function useCanonicalScroller({
   }, [isPreviewMode, syncPreviewCustomScrollbar, layoutKey])
 
   /**
-   * Offers this pane a curtain for long journeys (editor/scrollBridge.ts).
+   * Offers this pane a curtain for long journeys (scroll/scrollBridge.ts).
    *
    * Registered rather than passed: the engine that needs it is
    * scrollToNonQuantizedSmooth, and it is reached from half a dozen places
@@ -1326,12 +1326,12 @@ export function useCanonicalScroller({
    * Spin-to-keep-scrolling in the render view.
    *
    * The gesture, its sliders and its rules are the edit view's, whole and
-   * unchanged: `editor/wheelSpin.ts` decides what a spin is, how long the
+   * unchanged: `scroll/wheelSpin.ts` decides what a spin is, how long the
    * tail of one is ignored, when the next notch takes control back, and when
-   * the coast has damped out. `editor/wheelNotch.ts` decides what counts as
+   * the coast has damped out. `scroll/wheelNotch.ts` decides what counts as
    * a notch, so the same wheel on the same desk makes a nudge in both panes
    * at the same moment and a trackpad's sub-notch stream makes one in
-   * neither. `editor/wheelStep.ts` says what a notch is worth.
+   * neither. `scroll/wheelStep.ts` says what a notch is worth.
    *
    * This pane owns every notch, exactly as the edit view does. It has to:
    * the reader's `step` is a number of line heights, and a notch cannot be
@@ -1346,7 +1346,7 @@ export function useCanonicalScroller({
    * One thing is different from the edit view, and it follows from this pane
    * having no row grid: **the coast is continuous, not stepped**. The nudge
    * distance sets how far the coast travels and how fast, and nothing about
-   * how the pixels are laid down -- `editor/wheelSpinProfile.ts` plans the
+   * how the pixels are laid down -- `scroll/wheelSpinProfile.ts` plans the
    * whole schedule at the moment the spin is detected and hands back a
    * smooth curve through it, ending in the shared release ramp. This loop
    * only reads that curve and pays the difference.
@@ -1390,11 +1390,11 @@ export function useCanonicalScroller({
      * What one wheel event is worth here, in pixels, or 0 when the device
      * has not turned far enough to make a notch yet.
      *
-     * Notches are counted by the shared accumulator (editor/wheelNotch.ts),
+     * Notches are counted by the shared accumulator (scroll/wheelNotch.ts),
      * so the same wheel on the same desk makes a nudge in this pane and the
      * edit view at the same moment -- and a trackpad's sub-notch stream
      * makes one in neither. What a notch is WORTH is the reader's `step`,
-     * measured in line heights (editor/wheelStep.ts): the same setting at
+     * measured in line heights (scroll/wheelStep.ts): the same setting at
      * any text size moves the same amount of reading, which a pixel figure
      * cannot promise.
      */
@@ -1638,7 +1638,7 @@ export function useCanonicalScroller({
       previewNotchTravelRef.current = null
       // The whole coast, decided here and not revisited: the dampening and
       // the cut off are read once, at the moment the hand set the gesture's
-      // shape. See editor/wheelSpinProfile.ts.
+      // shape. See scroll/wheelSpinProfile.ts.
       previewWheelSpinProfileRef.current = buildWheelSpinProfile({
         direction,
         pixelsPerNudge,

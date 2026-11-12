@@ -5,7 +5,7 @@ import { choose, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, carryLimit, emptySave, keepAllowance, playerTierOf, type GameSave } from '../model/gameState'
 import { FAME_PURCHASES, FAME_PURCHASE_CEILING } from '../model/famePurchases'
 import { famePointsAvailable } from '../model/gold'
-import { ROOT_STAGE_ID, STAGES } from '../stages'
+import { ROOT_STAGE_ID, STAGES } from '.'
 
 const DEPS: DirectorDeps = { stages: STAGES, content: THOCKQUEST, rootStageId: ROOT_STAGE_ID }
 const NOW = 1_700_000_000_000

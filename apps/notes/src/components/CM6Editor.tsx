@@ -23,10 +23,10 @@ import { isTableCellDragStart, resolveTableCellDrop, resolveTableSelectionStep }
 import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images';
 import { malformedImageTitlesOnLine, resolveImageSelectionStep } from '../editor/MarkdownImageTransforms';
 import { hasTravelledDragThreshold } from '../shared/pointerDrag';
-import { createRowWheel } from '../editor/rowWheel';
-import { appendWheelTrace, isWheelTraceOn } from '../editor/wheelTrace';
-import { getWheelSpinEffectiveThresholdMs } from '../editor/wheelSpin';
-import { beginFingerPan, moveFingerPan, releaseFingerPan, type FingerPan } from '../editor/fingerPan';
+import { createRowWheel } from '../scroll/rowWheel';
+import { appendWheelTrace, isWheelTraceOn } from '../scroll/wheelTrace';
+import { getWheelSpinEffectiveThresholdMs } from '../scroll/wheelSpin';
+import { beginFingerPan, moveFingerPan, releaseFingerPan, type FingerPan } from '../scroll/fingerPan';
 import { TOUCH_SLOP_PX } from '@thockdown/interaction/touchGesture';
 import {
   buildReleaseRampDownPlanFromCurrentParams,
@@ -35,18 +35,18 @@ import {
   resolveRampCrossingTimeSecFromCurrentParams,
   sampleReleaseRampDownPlan,
 } from '@thockdown/interaction/NonQuantizedSmoothScroll';
-import { quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../editor/QuantizedSmoothScroll';
+import { quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../scroll/QuantizedSmoothScroll';
 import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry';
-import { beginScrollTrackHold } from '../editor/scrollTrackHold';
-import { countWrappedLines, resolveThumbLineRatio } from '../editor/scrollThumbMetrics';
+import { beginScrollTrackHold } from '../scroll/scrollTrackHold';
+import { countWrappedLines, resolveThumbLineRatio } from '../scroll/scrollThumbMetrics';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
 import { subscribeTouchModifiers, touchModifiers } from '@thockdown/interaction/touchInput';
 import { attachRowGridGuard, resolveRowGridCorrection, resolveRowGridDirection, type RowGridGuard } from '../editor/rowGridGuard';
-import { registerScrollBridge } from '../editor/scrollBridge';
-import { resolveThumbRubberBand } from '../editor/scrollThumbRubberBand';
+import { registerScrollBridge } from '../scroll/scrollBridge';
+import { resolveThumbRubberBand } from '../scroll/scrollThumbRubberBand';
 import { boxMouseSelection, resolveBoxAtCoords } from '../editor/boxPointer';
-import { computeRightEdgeReservePx, quantizeThumbHeightToRows, resolveScrollColumnLeftPx, snapThumbSpanToRows } from '../editor/immersiveScrollColumn';
-import { createCommittedThumbHeight } from '../editor/scrollThumbMetrics';
+import { computeRightEdgeReservePx, quantizeThumbHeightToRows, resolveScrollColumnLeftPx, snapThumbSpanToRows } from '../scroll/immersiveScrollColumn';
+import { createCommittedThumbHeight } from '../scroll/scrollThumbMetrics';
 import { sampleCurveRampProgress } from '@thockdown/interaction/ScrollCurvePlan';
 import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney';
 import { sanitizeDocumentText, sanitizeDocumentTextExtended } from '../shared/textSanitization';
@@ -346,7 +346,7 @@ export interface CM6EditorProps {
   showLineNumbers?: boolean;
   showReviewFlags?: boolean;
   // Immersive mode (App.tsx isImmersiveMode): the scroll track moves into the
-  // grid's last full box column -- see editor/immersiveScrollColumn.ts.
+  // grid's last full box column -- see scroll/immersiveScrollColumn.ts.
   isImmersive?: boolean;
 }
 
@@ -697,7 +697,7 @@ const quantizeToPhase = (value: number, unit: number, phase: number) => (
 
 /*
  * The right-edge reservation -- the review-flag column, and in immersive mode
- * the grid scrollbar's column -- is editor/immersiveScrollColumn.ts's
+ * the grid scrollbar's column -- is scroll/immersiveScrollColumn.ts's
  * computeRightEdgeReservePx, a pure function called from TWO triggers: render,
  * and the resize-observer callback below, which applies it synchronously the
  * instant it measures a new scroller width. Applying
@@ -1490,7 +1490,7 @@ export function CM6Editor({
       };
     }
 
-    // Thumb SIZE in lines, from the text -- see editor/scrollThumbMetrics.ts
+    // Thumb SIZE in lines, from the text -- see scroll/scrollThumbMetrics.ts
     // and the twin of this line in useCanonicalScroller. The pixel ratio is
     // kept only as the answer of last resort, before the editor has enough
     // geometry to say anything.
@@ -1503,7 +1503,7 @@ export function CM6Editor({
       })
       : null;
 
-    // Decided once and held -- see editor/scrollThumbMetrics.ts, and the twin
+    // Decided once and held -- see scroll/scrollThumbMetrics.ts, and the twin
     // of this in useCanonicalScroller. The signature holds every input allowed
     // to change the size; scrollHeight is not one of them, because CM6 refines
     // it as it measures more of the document, and a thumb that follows that is
@@ -1574,7 +1574,7 @@ export function CM6Editor({
    * bridged-journey stretch both draw through here, so the two presentations
    * can never disagree about where the thumb is. The ordinary track moves its
    * thumb element; immersive mode's grid track colours whole rows instead
-   * (editor/immersiveScrollColumn.ts), as two custom properties the painted
+   * (scroll/immersiveScrollColumn.ts), as two custom properties the painted
    * column's own background reads -- two style writes per frame, however long
    * the journey.
    */
@@ -1984,7 +1984,7 @@ export function CM6Editor({
   const reviewGutterFlagBoxWidthPx = showReviewFlags ? cellWidthPx : 0;
   // Immersive mode's grid scrollbar: the last full box column, over exactly
   // the whole rows the viewport shows -- the half row the grid opens with and
-  // the sliver it closes with stay out. See editor/immersiveScrollColumn.ts.
+  // the sliver it closes with stay out. See scroll/immersiveScrollColumn.ts.
   const immersiveScrollColumnLeftPx = isImmersive && scrollerClientWidthPx > 0 && cellWidthPx > 0
     ? resolveScrollColumnLeftPx(reviewGutterRightLeftPx, cellWidthPx, showReviewFlags)
     : null;
@@ -4774,7 +4774,7 @@ export function CM6Editor({
     // Built for, and immediately decisive on, "scrolling up only produces a
     // line movement on every other wheel position": the deltas it printed
     // were 50px, against a handler that assumed 100 (see
-    // editor/wheelNotch.ts). Kept, because the shape of that report --
+    // scroll/wheelNotch.ts). Kept, because the shape of that report --
     // "scrolling feels wrong" -- has exactly one useful first question, what
     // the device is actually sending, and nothing else in the app can answer
     // it.
@@ -4787,7 +4787,7 @@ export function CM6Editor({
     // already saved one session from mistaking a settle gate for a scroll
     // bug. Buffered on window.__wheelTrace (last 400):
     //   copy(window.__wheelTrace.join(String.fromCharCode(10)))
-    // Flag and buffer live in editor/wheelTrace.ts: the render view runs the
+    // Flag and buffer live in scroll/wheelTrace.ts: the render view runs the
     // same feature through the same trace, and a gesture that crosses panes
     // has to read as one story.
     const wheelTraceOn = isWheelTraceOn;
@@ -4847,7 +4847,7 @@ export function CM6Editor({
     };
 
     // The wheel's row dynamics -- notch, step and the spin coast -- are
-    // shared with every row-quantized surface (editor/rowWheel.ts).
+    // shared with every row-quantized surface (scroll/rowWheel.ts).
     const rowWheel = createRowWheel({
       scrollRows,
       isBlocked: isEditScrollInteractionBlocked,
@@ -4873,7 +4873,7 @@ export function CM6Editor({
 
     // A finger dragging the text moves it a row at a time, as a wheel does,
     // and a swipe still moving when the finger lifts hands its rate to the
-    // wheel's coast (editor/fingerPan.ts). The browser's own pan would slide
+    // wheel's coast (scroll/fingerPan.ts). The browser's own pan would slide
     // the text off the row grid, so the scroller declines it.
     // Only a PLAIN finger reaches here: a finger the touch layer has given
     // another role (part of a two-finger press, a resting Ctrl) has its
@@ -5059,7 +5059,7 @@ export function CM6Editor({
       });
     };
 
-    // The long-journey bridge for this pane (editor/scrollBridge.ts).
+    // The long-journey bridge for this pane (scroll/scrollBridge.ts).
     //
     // The host is layerRef, the non-scrolling frame the caret is already
     // positioned against: viewport-sized, overflow-hidden, and outside the
@@ -6473,7 +6473,7 @@ export function CM6Editor({
           />
         </>
       )}
-      {/* Immersive mode's grid scrollbar -- see editor/immersiveScrollColumn.ts.
+      {/* Immersive mode's grid scrollbar -- see scroll/immersiveScrollColumn.ts.
           Two elements over the same boxes: the painted column under the grid
           lines (zIndex 2, like the gutter), so it reads as boxes of the grid;
           and a transparent hit target above the text layer, which would

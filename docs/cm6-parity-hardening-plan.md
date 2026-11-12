@@ -2057,7 +2057,7 @@ it's "extend whatever margin already makes the 3-row case invisible to also cove
 which is a smaller, more targeted question than either of the two candidate directions from the previous
 round was framed as. Concretely worth checking next: what specifically makes the existing reconcile
 absorb -78px but not -156px+ -- e.g. whether `scrollToQuantizedSmooth`'s immediate-write-vs-animated-
-curve threshold (see `apps/notes/src/editor/QuantizedSmoothScroll.ts`, `distanceRows <= 1` triggers an immediate
+curve threshold (see `apps/notes/src/scroll/QuantizedSmoothScroll.ts`, `distanceRows <= 1` triggers an immediate
 write; this case is exactly the boundary CM6's jump can now blow past) or `resolveCagedScrollTarget`'s
 own boundary clamping is where the absorbed/leaked cases diverge.
 
@@ -2160,7 +2160,7 @@ wrap-sensitivity round, an A/B (`git stash`) proving the corrected metric is sou
 baseline anomalies it would otherwise have missed, byte-exact cursor-movement verification, full
 `npm test` (277/277 passed), `npx tsc --noEmit` and `npm run lint` clean. Production change is isolated
 to `reconcileCagedScroll` in `apps/notes/src/components/CM6Editor.tsx`; `resolveCagedScrollTarget`
-(`apps/notes/src/editor/CageMath.ts`) and `scrollToQuantizedSmooth` (`apps/notes/src/editor/QuantizedSmoothScroll.ts`) are
+(`apps/notes/src/editor/CageMath.ts`) and `scrollToQuantizedSmooth` (`apps/notes/src/scroll/QuantizedSmoothScroll.ts`) are
 unchanged -- the fix reuses them as-is.
 
 ### What's next for lead #4

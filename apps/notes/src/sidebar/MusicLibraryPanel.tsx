@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 
-import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits } from '../scroll/wheelNotch'
 
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
 import {

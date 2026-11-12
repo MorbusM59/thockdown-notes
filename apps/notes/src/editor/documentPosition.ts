@@ -103,7 +103,7 @@ export interface DocumentPosition {
    * document's is read off `scrollHeight`, which is only the truth once every
    * block has actually been measured, and before that it is an estimate that
    * happens to be a number. A caller that commits to the thumb's size (see
-   * editor/scrollThumbMetrics.ts) has to know the difference, or it freezes
+   * scroll/scrollThumbMetrics.ts) has to know the difference, or it freezes
    * the estimate and the exactness a small document is entitled to is lost --
    * measured at 79px against a true 69.2px.
    *

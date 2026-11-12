@@ -349,7 +349,7 @@ html[data-beat-caret] .thockdown-block-caret {
   min-height: var(--editor-line-height);
 }
 
-/* ── The long-journey bridge (editor/scrollBridge.ts) ──────────────────────
+/* ── The long-journey bridge (scroll/scrollBridge.ts) ──────────────────────
    A band of spoof text that sweeps through the pane while the scroller does
    its jump underneath.
 

@@ -119,7 +119,7 @@ export function holdCompletedDuringPress(pointerId: number): boolean {
  *
  * `settled` is what makes begin and end exactly paired, once, whatever the
  * caller does: several sites cancel unconditionally on release, including
- * after the hold already fired (`editor/scrollTrackHold.ts` cleans up from
+ * after the hold already fired (`scroll/scrollTrackHold.ts` cleans up from
  * inside its own completion), and a second end would retract a swell that
  * belongs to a hold still running underneath it.
  *

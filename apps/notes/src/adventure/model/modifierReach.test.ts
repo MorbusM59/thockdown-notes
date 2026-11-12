@@ -14,7 +14,7 @@ import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../c
 import {
   activeGame, applyEffects, BASE_KEEP_ALLOWANCE, emptySave, heldModifiers, keepAllowance,
   keptModifierIds, profileOf, resolveRunProfile, withKeepMark, type GameSave,
-} from '../model/gameState'
+} from './gameState'
 import { resolveProfile, type Modifier } from './modifiers'
 import { resolveExchange, rollDodgeOffered } from './combat'
 import { resolveChanceWith } from './chance'

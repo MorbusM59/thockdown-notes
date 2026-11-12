@@ -72,7 +72,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   work rather than by the reader doing something, it is the wrong trigger.
 - That rule is now enforced rather than merely intended: the size is COMMITTED
   against a signature of exactly those inputs and held until one of them moves
-  (`createCommittedThumbHeight`, `apps/notes/src/editor/scrollThumbMetrics.ts`). Deriving
+  (`createCommittedThumbHeight`, `apps/notes/src/scroll/scrollThumbMetrics.ts`). Deriving
   the right answer on every sync is not the same thing as holding it -- any
   wobble in the reading became a thumb that resized under the reader, most
   visibly at the end of a long journey.
@@ -246,7 +246,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
 ### 3g. A wheel spin may outlive the hand, and one nudge takes it back
 - Three notches in the same direction, each inside the user's `auto scroll`
   threshold (10-50ms), are one gesture rather than three, and the view keeps
-  scrolling at the rate that gesture set (`apps/notes/src/editor/wheelSpin.ts`). Both
+  scrolling at the rate that gesture set (`apps/notes/src/scroll/wheelSpin.ts`). Both
   sliders carry an OFF position as their leftmost step rather than a
   separate toggle -- one persisted number per control, and the off state
   living at the end of the axis it continues.
@@ -289,7 +289,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   -- ends it too. A page that keeps moving under a keypress is not a feature.
 
 ### 3h. A notch is worth so much reading, and the reader sets how much
-- **A wheel notch is measured in text, in both panes** (`apps/notes/src/editor/wheelStep.ts`).
+- **A wheel notch is measured in text, in both panes** (`apps/notes/src/scroll/wheelStep.ts`).
   The edit view scrolls `step` whole rows per notch (1-10); the render view
   scrolls `step` line heights (0.5-5, fractional). Neither is a pixel figure,
   and that is the point: turn the text size or the line spacing up and the
@@ -311,11 +311,11 @@ The goal is deterministic behavior with one source of truth per interaction phas
   for rather than what the device happened to send. It also makes the two
   panes answer a wheel the same way, which they visibly did not before.
 - **What counts as a nudge is decided identically**, by the one
-  `editor/wheelNotch.ts` accumulator both panes learn the device on. The
+  `scroll/wheelNotch.ts` accumulator both panes learn the device on. The
   same wheel on the same desk makes a nudge in both at the same moment, and
   a trackpad's sub-notch stream makes one in neither.
 - **The render view's coast is continuous, not stepped**
-  (`apps/notes/src/editor/wheelSpinProfile.ts`). Same schedule, same decay, same cut
+  (`apps/notes/src/scroll/wheelSpinProfile.ts`). Same schedule, same decay, same cut
   off, same distance travelled at every nudge time -- but the nudge distance
   is a unit of calculation only, never of animation. A row is small enough
   that a step reads as motion; a render view step is several lines tall, and
@@ -344,7 +344,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   gesture already in flight; it applies to the next one. The auto-scroll
   threshold's off position is the exception, and stops a running coast at
   once -- switching a feature off is a request to stop now.
-- **A single notch is travelled, not jumped** (`apps/notes/src/editor/wheelNotchTravel.ts`).
+- **A single notch is travelled, not jumped** (`apps/notes/src/scroll/wheelNotchTravel.ts`).
   Owning the notch means nothing animates it any more, and an instantaneous
   write of several line heights is the one kind of motion the eye cannot
   follow at all. So a notch is played across time instead.
@@ -495,7 +495,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
   to a row, as every edit-view scroll is. The thumb is a whole number of rows
   (decided where its size is decided, not only where it is drawn), and its
   two edges are each rounded to their own nearest row boundary
-  (`apps/notes/src/editor/immersiveScrollColumn.ts`). That is what keeps it steady while
+  (`apps/notes/src/scroll/immersiveScrollColumn.ts`). That is what keeps it steady while
   it moves, makes it always cover the box that was clicked (pinned against
   either end of the track included), and keeps a journey's stretch from ever
   colouring a box past where it lands -- rounding a size and a start
@@ -506,7 +506,7 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Travel time is a property of the interaction, not of the distance. A
   scrollbar click across a very large document takes about the same half second
   as one across a small one, because the journey's middle is removed rather
-  than played (`packages/interaction/scrollJourney.ts`, `apps/notes/src/editor/scrollBridge.ts`).
+  than played (`packages/interaction/scrollJourney.ts`, `apps/notes/src/scroll/scrollBridge.ts`).
 - It is a cut, not a teleport, and the difference is the whole design: the
   motion ramps up on the real document, a curtain of spoof text sweeps in at
   the journey's own speed, the jump happens only while the pane is fully

@@ -17,7 +17,7 @@ import {
   roundLineHeightMultiplier,
   roundViewLetterSpacingEm,
 } from '../editor/EditorTypography'
-import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits } from '../scroll/wheelNotch'
 
 /**
  * Ctrl+wheel over the TEXT of an editor adjusts that pane's typography by one

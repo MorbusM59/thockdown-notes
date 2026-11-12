@@ -3,9 +3,9 @@
  * scrolls in whole rows: the edit view (CM6Editor.tsx) and the visualizer's
  * song list (visualizer/SongList.tsx). A surface hands over the one write it
  * knows how to make -- move by N rows, and say whether anything moved -- and
- * gets back the notch resolution (editor/wheelNotch.ts), the reader's step
- * (editor/wheelStep.ts) and the spin-to-keep-scrolling coast
- * (editor/wheelSpin.ts) exactly as the edit view has them, so a wheel feels
+ * gets back the notch resolution (scroll/wheelNotch.ts), the reader's step
+ * (scroll/wheelStep.ts) and the spin-to-keep-scrolling coast
+ * (scroll/wheelSpin.ts) exactly as the edit view has them, so a wheel feels
  * the same wherever it turns rows. Per instance: two surfaces are two
  * independent scrollers, and a spin in one has nothing to say about the other.
  */
@@ -33,7 +33,7 @@ export interface RowWheelOptions {
   scrollRows: (rows: number, traceLabel: string) => boolean
   /** True while the surface may not scroll; a wheel then scrolls nothing and ends any coast. */
   isBlocked: () => boolean
-  /** An optional trace (editor/wheelTrace.ts), read live. */
+  /** An optional trace (scroll/wheelTrace.ts), read live. */
   trace?: { isOn: () => boolean; append: (line: string) => void } | null
 }
 
@@ -44,7 +44,7 @@ export interface RowWheel {
   handleWheel: (event: WheelEvent) => void
   /** End any coast. */
   stop: (reason: string) => void
-  /** Hand a coast the surface's own measured rate (a finger's swipe, editor/fingerPan.ts). */
+  /** Hand a coast the surface's own measured rate (a finger's swipe, scroll/fingerPan.ts). */
   startCoast: (direction: WheelSpinDirection, averageGapMs: number) => void
 }
 
@@ -125,9 +125,9 @@ export function createRowWheel({ scrollRows, isBlocked, trace = null }: RowWheel
     if (event.deltaY === 0) return;
     event.preventDefault();
 
-    // How many notches (editor/wheelNotch.ts, shared with the render view
+    // How many notches (scroll/wheelNotch.ts, shared with the render view
     // so the same gesture reads the same way in both panes) times what the
-    // reader has said a notch is worth (editor/wheelStep.ts).
+    // reader has said a notch is worth (scroll/wheelStep.ts).
     const notches = resolveWheelEventUnits(event, wheelNotchState, performance.now());
     if (notches === 0) {
       if (tracing) {

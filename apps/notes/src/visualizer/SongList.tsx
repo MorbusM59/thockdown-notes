@@ -11,7 +11,7 @@
  * colour, the rest on the middle's (so no box is drawn behind them at all).
  *
  * The wheel scrolls it a whole entry at a time with the edit view's own
- * dynamics (`editor/rowWheel.ts`: notch, step and spin coast). A press on an
+ * dynamics (`scroll/rowWheel.ts`: notch, step and spin coast). A press on an
  * entry plays it (`NowPlaying.playFromPool`), and while the pointer stays over
  * the list nothing moves: the pressed entry only takes the letterbox plate.
  * Two seconds after the pointer leaves, the list scrolls to the playing song
@@ -26,7 +26,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { createRowWheel } from '../editor/rowWheel'
+import { createRowWheel } from '../scroll/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songListTitleText, type MusicSongEntry } from '../shared/audioPlayer'

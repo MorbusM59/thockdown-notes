@@ -1667,7 +1667,7 @@ displayed lines -- it has to be in a reasonable ballpark and then hold still.
 
 **The heuristic**: `viewport lines / document lines`, where document lines is a
 single linear scan of the source counting WRAPPED lines
-(`editor/scrollThumbMetrics.ts`).
+(`scroll/scrollThumbMetrics.ts`).
 
 Why lines, established by measurement before choosing:
 
@@ -2331,11 +2331,11 @@ is what let the duration ceiling go (see that section above).
 **The modules.**
 - `packages/interaction/scrollJourney.ts` — plans it. Returns `direct` or `bridged` plus
   the two ramps and the bridge distance. No DOM.
-- `apps/notes/src/editor/scrollBridge.ts` — the curtain itself. `registerScrollBridge`
+- `apps/notes/src/scroll/scrollBridge.ts` — the curtain itself. `registerScrollBridge`
   once per pane; `begin` / `advance` / `isCovering` / `end` per journey.
-- `apps/notes/src/editor/scrollBridgeTexture.ts` — the tile, drawn to a canvas and cached
+- `apps/notes/src/scroll/scrollBridgeTexture.ts` — the tile, drawn to a canvas and cached
   per host plus typography key.
-- `apps/notes/src/editor/scrollThumbRubberBand.ts` — the thumb's two edges.
+- `apps/notes/src/scroll/scrollThumbRubberBand.ts` — the thumb's two edges.
 - Both engines (`NonQuantizedSmoothScroll`, `QuantizedSmoothScroll`) run the
   identical three-phase branch and return the journey's timing, so whatever
   drives the scrollbar can move in step with it.

@@ -2,7 +2,7 @@
 //
 // A journey across a large document ramps up to peak speed, jumps while a
 // curtain of spoof text covers the pane, and ramps down onto the target (see
-// packages/interaction/scrollJourney.ts and src/editor/scrollBridge.ts). The thing that
+// packages/interaction/scrollJourney.ts and src/scroll/scrollBridge.ts). The thing that
 // makes it honest rather than a trick is that the jump happens ONLY while the
 // viewport is covered -- so this samples every frame and checks exactly that,
 // rather than checking that a curtain appeared at some point and hoping.
@@ -275,7 +275,7 @@ async function runPane(page, pane) {
   // document is measured (28px -> 32px, measured). Two things were wrong with
   // that. The size is not allowed to depend on how much of the document has
   // been looked at -- it is committed against the document and the type
-  // geometry and held (src/editor/scrollThumbMetrics.ts). And the drift was
+  // geometry and held (src/scroll/scrollThumbMetrics.ts). And the drift was
   // not the line count at all: the rubber band writes the thumb's style
   // directly, so its last frame stayed on screen whenever the ordinary sync's
   // React state came back unchanged and skipped its re-render. The slack in

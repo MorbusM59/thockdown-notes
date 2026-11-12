@@ -10,7 +10,7 @@ import {
 import { PROGRESSION_MAX, PROGRESSION_MIN } from '../model/difficulty'
 import { guardianLuckiness } from '../model/guardian'
 import { AUTO_ADVANCE_MIN_MS } from '../model/autoAdvance'
-import { ROOT_STAGE_ID, STAGES } from '../stages'
+import { ROOT_STAGE_ID, STAGES } from '.'
 import { createdRun, GAME_EXIT_CHOICE } from '../testing/run'
 import { LEVEL_ENCOUNTER_COUNT } from '../model/encounterOffers'
 import { resolveProfile } from '../model/modifiers'

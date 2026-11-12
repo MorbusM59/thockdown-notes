@@ -242,7 +242,7 @@ import {
   WHEEL_SPIN_THRESHOLD_MAX_MS,
   WHEEL_SPIN_THRESHOLD_OFF,
   WHEEL_SPIN_THRESHOLD_STEP_MS,
-} from '../editor/wheelSpin'
+} from '../scroll/wheelSpin'
 import {
   DEFAULT_WHEEL_STEP_LINES,
   DEFAULT_WHEEL_STEP_ROWS,
@@ -253,7 +253,7 @@ import {
   WHEEL_STEP_ROWS_MAX,
   WHEEL_STEP_ROWS_MIN,
   WHEEL_STEP_ROWS_STEP,
-} from '../editor/wheelStep'
+} from '../scroll/wheelStep'
 import type { GameSettings } from '../adventure/model/gameState'
 import {
   DEFAULT_PROGRESSION, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP,

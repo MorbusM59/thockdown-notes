@@ -59,7 +59,7 @@
 // oversensitive. They still accumulate against the standing unit, which is
 // exactly the behavior a trackpad had before any of this.
 
-import { PIXELS_PER_WHEEL_UNIT } from './LayoutConstants'
+import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants'
 
 /** The notch size assumed until a device demonstrates its own. */
 export const WHEEL_NOTCH_DEFAULT_PX = PIXELS_PER_WHEEL_UNIT
@@ -162,7 +162,7 @@ export interface WheelDelta {
  *
  * The one place the three delta modes are read, so the two panes cannot
  * drift apart on what counts as a nudge: the same wheel on the same desk
- * must start a spin (editor/wheelSpin.ts) in both of them at the same
+ * must start a spin (scroll/wheelSpin.ts) in both of them at the same
  * moment, and a trackpad's sub-notch stream must start one in neither.
  *
  * Line and page mode state their own unit and are taken at their word --
@@ -172,7 +172,7 @@ export interface WheelDelta {
  * which is the only case a caller should decline.
  *
  * What a notch is then WORTH to the reader is not this module's business:
- * see editor/wheelStep.ts.
+ * see scroll/wheelStep.ts.
  */
 export function resolveWheelEventUnits(
   event: WheelDelta,

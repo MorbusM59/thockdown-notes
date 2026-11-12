@@ -4,7 +4,7 @@ import { THOCKQUEST } from '../content'
 import { choose, currentScreen, enterEntryScreen, type DirectorDeps } from '../core/director'
 import { activeGame, applyEffects, emptySave, profileOf, type GameSave } from '../model/gameState'
 import { SPREAD_PIVOT } from '../model/damageRoll'
-import { ROOT_STAGE_ID, STAGES } from '../stages'
+import { ROOT_STAGE_ID, STAGES } from '.'
 import { splitNarration } from '../../escapeMenu/narrationMarkup'
 import { withVectorsOnly, GAME_EXIT_CHOICE } from '../testing/run'
 

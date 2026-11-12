@@ -1,4 +1,4 @@
-import type { EditorSelectionState } from '../editor/EditorContract';
+import type { EditorSelectionState } from './EditorContract';
 import { clamp } from '@thockdown/interaction/clamp';
 
 const SENTENCE_ENDING_PUNCTUATION = new Set(['.', '!', '?', ':']);

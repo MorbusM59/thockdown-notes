@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { createRowWheel } from '../editor/rowWheel'
+import { createRowWheel } from '../scroll/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { dropWideGlyphs } from './cellGlyphs'
