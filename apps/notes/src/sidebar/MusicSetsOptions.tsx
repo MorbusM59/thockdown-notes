@@ -229,7 +229,17 @@ export function MusicSetsOptions() {
       {rows.map(renderSet)}
       <div className="options-music-set-divider" aria-hidden="true" />
       {laterSets.map(renderSet)}
-      <div className="options-curve-row options-music-set-row options-music-set-add-row">
+      <div className="options-curve-row options-music-set-add-row">
+        <button
+          type="button"
+          className={`options-curve-cell options-curve-button options-music-set-show${sets.length === 0 ? ' is-disabled' : ''}`}
+          data-tooltip={sets[0] ? `Show the songs of ${sets[0].name}` : undefined}
+          aria-label="Show songs"
+          disabled={sets.length === 0}
+          onClick={() => { if (sets[0]) openMusicSetList(sets[0].slot) }}
+        >
+          Show songs
+        </button>
         <button
           type="button"
           className="options-curve-cell options-curve-button options-music-set-add"

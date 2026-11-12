@@ -601,8 +601,9 @@
   grid-template-columns: var(--entry-height) 4fr 2fr var(--entry-height) var(--entry-height) var(--entry-height);
 }
 
-.options-music-set-add {
-  grid-column: -2 / -1;
+/* Two buttons sharing the row: the top set's songs, and a new set. */
+.options-music-set-add-row {
+  grid-template-columns: 1fr 1fr;
 }
 
 .options-music-set-name {
