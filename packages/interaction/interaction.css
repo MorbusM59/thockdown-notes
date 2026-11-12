@@ -368,7 +368,7 @@
 
 /* An icon drawn taller than its glyph: the Caret subsection's block. */
 .sidebar-options-section-heading > .options-heading-icon-tall {
-  transform: scaleY(1.5);
+  transform: scaleX(0.8) scaleY(1.2);
 }
 
 .sidebar-options-section-heading::after {
