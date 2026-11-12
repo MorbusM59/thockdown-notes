@@ -998,7 +998,7 @@ ${shortcutTable()}
 *A built-in music player with your own music sets and an independent Soundscapes switch.*
 
 - The player shows five sets (Pop, Rock, Electronic, Lounge and Ambient until you reorder them). The Soundscapes button, showing the icon of the soundscape it will play, turns soundscapes on or off independently; scroll over it to set their volume.
-- **Managing sets** — in Options → Music → Sets: right-click a set's name to rename it, use the file and folder buttons to add songs, drag rows to reorder, and the plus to add a set. Only the five sets above the divider appear in the player. Hold the remove button to delete a set (factory sets cannot be deleted); hold right-click on it to empty a set and keep it.
+- **Managing sets** — in Options → Music → Sets: right-click a set's name to rename it, use the file and folder buttons to add songs, drag rows to reorder, and the plus to add a set. Only the five sets above the divider appear in the player. Hold the remove button to delete a set (factory sets cannot be deleted); hold a right-click on a set's song count to empty it.
 - **Songs in sets** — a song can be in several sets. Removing it from one keeps it in your library while another set still holds it.
 - **Adding music in the player** — right-click a set to pick files, Shift+right-click for a folder; left-clicking an empty set also opens the file picker.
 - **Emptying a set** — hold a right-click on a set until it arms, then release.

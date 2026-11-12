@@ -141,13 +141,33 @@ export function MusicSetsOptions() {
             : set.name.slice(0, 2).toUpperCase()}
         </div>
         <SetName slot={set.slot} name={set.name} factory={factory} takenNames={sets.map((other) => other.name)} onRename={nowPlaying.renameMusicSet} />
-        <div
-          className="options-curve-cell options-music-set-count"
-          data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
+        <button
+          type="button"
+          className="options-curve-cell options-curve-button options-music-set-count"
+          data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs. Hold right-click to empty ${set.name}.`}
           aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
+          data-secondary-press="action"
+          onPointerDown={(event) => {
+            event.stopPropagation()
+            if (event.button !== 2) return
+            // Emptying a set cannot be undone, so it is a hold (HOLD_COMMIT_MS).
+            event.preventDefault()
+            cancelHold()
+            cancelHoldRef.current = armHold(() => {
+              cancelHoldRef.current = null
+              void nowPlaying.purgeMusicSet(set.slot)
+            }, HOLD_COMMIT_MS)
+          }}
+          onPointerUp={() => { cancelHold() }}
+          onPointerCancel={() => { cancelHold() }}
+          onMouseLeave={() => { cancelHold() }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
         >
           {nowPlaying.pool?.counts[set.slot] ?? 0}
-        </div>
+        </button>
         <button
           type="button"
           className="options-curve-cell options-curve-button"
@@ -173,22 +193,19 @@ export function MusicSetsOptions() {
           className={`options-curve-cell options-curve-button options-loadout-btn${factory ? ' is-disabled' : ''}`}
           data-tooltip={
             factory
-              ? `Factory sets cannot be deleted. Hold right-click to purge ${set.name}'s songs.`
-              : `Hold to delete ${set.name}. Hold right-click to purge its songs without deleting the set.`
+              ? 'Factory sets cannot be deleted'
+              : `Hold to delete ${set.name}`
           }
-          aria-label={factory ? `Purge ${set.name}` : `Delete ${set.name}`}
-          data-secondary-press="action"
+          aria-label={factory ? `${set.name} cannot be deleted` : `Delete ${set.name}`}
+          data-secondary-press="none"
           onPointerDown={(event) => {
             event.stopPropagation()
-            // Both gestures cannot be undone, so both are holds
-            // (HOLD_COMMIT_MS): left deletes a user set, right purges its songs.
-            if (event.button === 2) event.preventDefault()
-            else if (event.button !== 0 || factory) return
-            const purge = event.button === 2
+            // Deleting cannot be undone, so it is a hold (HOLD_COMMIT_MS).
+            if (event.button !== 0 || factory) return
             cancelHold()
             cancelHoldRef.current = armHold(() => {
               cancelHoldRef.current = null
-              void (purge ? nowPlaying.purgeMusicSet(set.slot) : nowPlaying.deleteMusicSet(set.slot))
+              void nowPlaying.deleteMusicSet(set.slot)
             }, HOLD_COMMIT_MS)
           }}
           onPointerUp={() => { cancelHold() }}
