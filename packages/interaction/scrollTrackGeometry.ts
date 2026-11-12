@@ -42,8 +42,16 @@ export function scrollTrackSizeFor(uiFontScale: number): ScrollTrackSize {
  * through getComputedStyle as a number. tokens.css carries the scale-1 values
  * only as a fallback for the first paint.
  */
+/**
+ * The largest UI font scale text inside a SLIDER PAIR is drawn at. A pair is
+ * two controls stacked in one button's height, which does not grow with the
+ * font (`--micro-height`), so past this their labels no longer fit.
+ */
+export const MICRO_UI_FONT_SCALE_MAX = 1.2
+
 export function installScrollTrackTokens(uiFontScale: number): void {
   const rootStyle = document.documentElement.style
+  rootStyle.setProperty('--ui-font-scale-micro', String(Math.min(uiFontScale, MICRO_UI_FONT_SCALE_MAX)))
   const size = scrollTrackSizeFor(uiFontScale)
   rootStyle.setProperty('--canonical-scroll-track-edge-gap', `${SCROLL_TRACK_EDGE_GAP_PX}px`)
   rootStyle.setProperty('--canonical-scroll-thickness', `${size.thicknessPx}px`)

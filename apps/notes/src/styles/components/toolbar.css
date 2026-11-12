@@ -493,7 +493,9 @@
 
 /* Track-styled rows shared by the curve editor and dictionary list. */
 /* ENTRY LISTS: the curve editors' points, the dictionaries, the music sets
-   and a set's songs. Every cell is the micro height, and is one of three
+   and a set's songs. Every cell is a slider track's height
+   (--entry-height, the track thickness, which grows with the UI font), the
+   rows and columns as far apart as stacked tracks are, and is one of three
    kinds, named by its class:
    - a FIELD (.options-curve-field) can be clicked into to change its text,
      and is drawn as a micro slider track;
@@ -501,9 +503,14 @@
      drawn as a button of any width;
    - a BUTTON (.options-curve-button) is square, drawn as the colour
      picker's micro channel toggles. Its column in a row's template is
-     var(--micro-height) wide, which is what makes it square.
+     var(--entry-height) wide, which is what makes it square.
    A display cell renamed by a right-click becomes a field while it is
    edited. */
+.options-curve-rows,
+.options-music-song-divider {
+  --entry-height: var(--canonical-scroll-thickness);
+}
+
 .options-curve-rows {
   display:        flex;
   flex-direction: column;
@@ -513,9 +520,9 @@
 
 .options-curve-row {
   display:               grid;
-  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr var(--micro-height) var(--micro-height);
+  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr var(--entry-height) var(--entry-height);
   column-gap:            var(--toolbar-options-gap);
-  height:                var(--micro-height);
+  height:                var(--entry-height);
 }
 
 .options-curve-cell {
@@ -562,9 +569,9 @@
 
 .options-curve-header {
   width:                 100%;
-  height:                var(--micro-height);
+  height:                var(--entry-height);
   display:               grid;
-  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr var(--micro-height) var(--micro-height);
+  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr var(--entry-height) var(--entry-height);
   column-gap:            var(--toolbar-options-gap);
 }
 
@@ -586,12 +593,12 @@
 
 /* A dictionary row: the EQ point row's cells, as toggle, name, remove, install. */
 .options-dictionary-row {
-  grid-template-columns: var(--micro-height) 1fr var(--micro-height) var(--micro-height);
+  grid-template-columns: var(--entry-height) 1fr var(--entry-height) var(--entry-height);
 }
 
 .options-music-set-row,
 .options-music-set-divider {
-  grid-template-columns: var(--micro-height) 4fr 2fr var(--micro-height) var(--micro-height) var(--micro-height);
+  grid-template-columns: var(--entry-height) 4fr 2fr var(--entry-height) var(--entry-height) var(--entry-height);
 }
 
 .options-music-set-add {
@@ -627,10 +634,10 @@
 
 /* The set list (sidebar/MusicSetListPanel.tsx): a song's name and its remove button. */
 .options-music-song-row {
-  grid-template-columns: 1fr var(--micro-height);
+  grid-template-columns: 1fr var(--entry-height);
   /* A long set is thousands of rows; only those on screen are painted. */
   content-visibility:    auto;
-  contain-intrinsic-size: auto var(--micro-height);
+  contain-intrinsic-size: auto var(--entry-height);
 }
 
 /* A folder's or artist's name, cut to the heading's width. */
@@ -645,6 +652,7 @@
    six-column grid. The filter and the two groupings are stacked in it at the
    picker's stacked-slider thickness; the exit takes the sixth cell whole. */
 .options-music-set-list-dock {
+  --ui-font-scale:       var(--ui-font-scale-micro);
   display:               grid;
   grid-template-columns: repeat(6, var(--color-grid-cell));
   grid-template-rows:    repeat(2, var(--micro-height));
@@ -689,9 +697,9 @@
 /* An icon in a micro cell leaves the cell's frame visible around it, as the
    colour picker's channel letters do; a set's initials are two glyphs. */
 .options-curve-cell > .fa-solid {
-  font-size: calc(var(--micro-height) * 0.55);
+  font-size: calc(var(--entry-height) * 0.55);
 }
 
 .options-music-set-icon {
-  font-size: calc(var(--micro-height) * 0.45);
+  font-size: calc(var(--entry-height) * 0.45);
 }

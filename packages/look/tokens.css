@@ -385,6 +385,9 @@
      14px button stay intact as the whole scale grows or shrinks together. */
   --ui-font-family: system-ui, -apple-system, sans-serif;
   --ui-font-scale:  1;
+  /* The scale inside a slider pair, capped (scrollTrackGeometry.ts's
+     MICRO_UI_FONT_SCALE_MAX); a pair sets --ui-font-scale to it. */
+  --ui-font-scale-micro: 1;
 
   /* Tab/tag/chapter-bar pills (pillbars.css) size themselves purely from
    * their own content: this line-height (unitless, like the root's own)
