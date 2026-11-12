@@ -16,7 +16,9 @@
   height: 100%;
   position:         relative;
   display:     flex;
-  background-color: var(--background-color-root);
+  /* No background of its own: the panel sits on the app's base (the page
+     colour and the app-grid texture) like every other backdrop panel, so a
+     translucent input-field colour reads the same here as on the toolbar. */
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
 }
 
