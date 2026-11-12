@@ -35,6 +35,11 @@ describe('groupMusicSetList', () => {
     expect(groupMusicSetList(songs, 'artist', '$zed').map((g) => g.label)).toEqual(['Zed'])
   })
 
+  it('matches the file path unless a prefix narrows the search to a tag', () => {
+    expect(groupMusicSetList(songs, 'folder', 'other').map((g) => g.label)).toEqual(['Rock'])
+    expect(groupMusicSetList(songs, 'folder', '#other')).toEqual([])
+  })
+
   it('sanitizes the grouping', () => {
     expect(sanitizeMusicSetListGrouping('artist')).toBe('artist')
     expect(sanitizeMusicSetListGrouping('x')).toBe('folder')

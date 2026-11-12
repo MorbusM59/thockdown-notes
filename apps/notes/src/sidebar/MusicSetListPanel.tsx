@@ -183,7 +183,7 @@ export function MusicSetListDock({ grouping, onGroupingChange }: { grouping: Mus
       <input
         className="options-curve-cell options-curve-field options-music-set-list-filter"
         aria-label="Filter songs"
-        data-tooltip="Filter by title, artist or album; $ artist, § album, # title"
+        data-tooltip="Filter by title, artist, album or file path; $ artist, § album, # title"
         spellCheck={false}
         value={filter}
         onChange={(event) => setMusicSetListFilter(event.target.value)}

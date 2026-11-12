@@ -310,10 +310,11 @@ export function sanitizePoolFilter(input: unknown): MusicPoolFilter {
   return { query: legacyTerms.join(' ') };
 }
 
-type PoolSearchField = 'artist' | 'album' | 'title'
+type PoolSearchField = 'artist' | 'album' | 'title' | 'path'
 
 function poolSearchFor(query: string): { fields: PoolSearchField[]; terms: string[] } {
-  let fields: PoolSearchField[] = ['artist', 'album', 'title'];
+  // Unprefixed, a term may hit the file's path too; a prefix narrows it to one tag.
+  let fields: PoolSearchField[] = ['artist', 'album', 'title', 'path'];
   if (query.startsWith('$')) {
     fields = ['artist'];
     query = query.slice(1);
@@ -358,6 +359,7 @@ export function createPoolFilterMatcher(filter: MusicPoolFilter): (song: Pick<Mu
       artist: songTagText(song.artist),
       album: songTagText(song.album),
       title: songListTitleText(song),
+      path: song.filePath,
     };
     const searchableText = fields.map((field) => textByField[field].toLowerCase());
     return terms.every((term) => searchableText.some((text) => text.includes(term)));
