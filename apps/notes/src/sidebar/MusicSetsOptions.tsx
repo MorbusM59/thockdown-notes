@@ -137,6 +137,13 @@ export function MusicSetsOptions() {
             : set.name.slice(0, 2).toUpperCase()}
         </div>
         <SetName slot={set.slot} name={set.name} factory={factory} onRename={nowPlaying.renameMusicSet} />
+        <div
+          className="options-curve-cell options-music-set-count"
+          data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
+          aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
+        >
+          {nowPlaying.pool?.counts[set.slot] ?? 0}
+        </div>
         <button
           type="button"
           className="options-curve-cell options-curve-button"
