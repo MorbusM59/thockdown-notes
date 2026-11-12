@@ -627,13 +627,16 @@
   grid-template-rows:    var(--color-grid-cell);
   gap:                   var(--color-grid-gap);
   margin-bottom:         0;
+  /* The gap inside a cell holding two stacked controls: the channel toggles
+     and the slider stacks share it, so a slider is exactly a toggle's height. */
+  --color-picker-pair-gap: 2px;
 }
 
 .options-color-picker-toggles {
   display:               grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows:    repeat(2, 1fr);
-  gap:                   2px;
+  gap:                   var(--color-picker-pair-gap);
   min-width:             0;
   min-height:            0;
 }
@@ -659,8 +662,9 @@
   grid-column:    span 2;
   display:        flex;
   flex-direction: column;
-  gap:            var(--color-grid-gap);
+  gap:            var(--color-picker-pair-gap);
   min-width:      0;
+  --canonical-scroll-thickness: calc((var(--color-grid-cell) - var(--color-picker-pair-gap)) / 2);
 }
 
 /* Two sliders stacked in one grid row: the slider's thickness is set at its
