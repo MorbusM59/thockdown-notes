@@ -203,7 +203,7 @@ Fixed by virtualizing the preview pane with `@tanstack/react-virtual` (`useVirtu
 `apps/notes/src/editorSection/usePreviewMarkdownRendering.tsx`): only blocks near the viewport (plus a
 small overscan buffer) ever mount real `ReactMarkdown` output now, with per-block height
 estimated then corrected via `measureElement`/`ResizeObserver` as each block actually renders.
-`usePreviewScrollbar.ts`'s thumb math needed no changes — the virtualizer's own total-size
+`useCanonicalScroller.ts`'s thumb math needed no changes — the virtualizer's own total-size
 wrapper div is real DOM sized to `getTotalSize()`, so `scroller.scrollHeight` stays accurate
 automatically. Three consumers that used to assume every block was always real DOM were
 updated:
@@ -363,7 +363,7 @@ original pair:
 
 1. **Move markdown parsing to a Web Worker.** Still not investigated. Strongest guarantee (a
    slow parse literally can't compete with keystroke handling on the main thread), but real
-   integration cost: `apps/notes/src/editorSection/usePreviewScrollbar.ts`'s custom-scrollbar sync, and
+   integration cost: `apps/notes/src/editorSection/useCanonicalScroller.ts`'s custom-scrollbar sync, and
    the source-anchor capture in `apps/notes/src/editorSection/useEditorSectionMount.ts`
    (`resolvePreviewSourceAnchorFromContainer`), both assume *synchronous* DOM access to the
    already-rendered markdown (`querySelectorAll` for `[data-source-line]` elements happening in
@@ -1188,7 +1188,7 @@ young; at 1.5M characters it means one full-string allocation (`view.state.doc.t
 `readCanonicalRootText()`) every keystroke, handed to every consumer downstream
 (`useEditorSectionMount.ts`'s `onTextChange` binding, and transitively `useNoteSaveQueue.ts`,
 `noteTitle.ts`, `MarkdownContext.ts`, `PreviewBlockSplit.ts`, `useDocumentFind.ts`,
-`usePreviewScrollbar.ts`, `useMarkdownFormattingToolbar.ts` — see `EditorSection.tsx`'s hook
+`useCanonicalScroller.ts`, `useMarkdownFormattingToolbar.ts` — see `EditorSection.tsx`'s hook
 fan-out). Every one of those consumers has already been made *internally* incremental (reuse
 prior work, diff against a cached previous string) per this doc's long history — but every single
 one of them still starts from a **fresh, fully-materialized string** each keystroke, because
@@ -1900,7 +1900,7 @@ scroll. Position must be exact; size only has to be steady.
 > both stable and meaningful.
 
 **The wiring.** `usePreviewMarkdownRendering` owns the block list and the
-virtualizer, `usePreviewScrollbar` owns the thumb, and they are separate hooks
+virtualizer, `useCanonicalScroller` owns the thumb, and they are separate hooks
 in `EditorSection`. The bridge is a ref holding two functions
 (`PreviewDocumentPositionApi`) rather than a value — the scrollbar reads it on
 every scroll event, and anything routed through React state would re-render the

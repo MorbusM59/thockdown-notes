@@ -163,7 +163,7 @@ inventory is the handover for the mission that does it.
 
 ### `landOnDocumentEnd` — the 40-frame end-of-document correction
 
-**What.** `usePreviewScrollbar.ts`'s `landOnDocumentEnd` / `landOnDocumentEndAfterJourney`:
+**What.** `useCanonicalScroller.ts`'s `landOnDocumentEnd` / `landOnDocumentEndAfterJourney`:
 a `requestAnimationFrame` loop, up to 40 frames, that forces `scrollTop` to the
 maximum after a journey aimed at the end of the document, standing down if the
 reader takes over.
@@ -185,7 +185,7 @@ rather than the scroller's).
 
 ### The pixel fallbacks in the preview scrollbar
 
-**What.** Four sites in `usePreviewScrollbar.ts` that compute a ratio or a target
+**What.** Four sites in `useCanonicalScroller.ts` that compute a ratio or a target
 from `scrollTop / (scrollHeight - clientHeight)` when the document-position API
 has not answered: the `provisionalRatio` for thumb size, the `scrollRatio`
 fallback, and the fallbacks in `jumpToRatio` and `goTo`.
@@ -204,7 +204,7 @@ frame after a note switch and after a mode toggle.
 
 ### The scrollbar right-hold thumb watcher
 
-**What.** `usePreviewScrollbar.ts`'s `watchThumbReachesCursor` recomputes the
+**What.** `useCanonicalScroller.ts`'s `watchThumbReachesCursor` recomputes the
 thumb's position from `scrollTop / maxScrollTop` on every frame of a right-button
 track hold, to decide when the thumb has reached the cursor.
 

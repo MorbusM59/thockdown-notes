@@ -1,8 +1,10 @@
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
+import { CanonicalScrollRail } from './components/CanonicalScrollRail'
+import { scrollerIdentity } from './shared/scrollerIdentity'
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
-import { installScrollTrackTokens, scrollThumbFor, scrollTopForThumb, scrollTrackSizeFor } from '@thockdown/interaction/scrollTrackGeometry'
+import { installScrollTrackTokens, scrollTrackSizeFor } from '@thockdown/interaction/scrollTrackGeometry'
 import { flushSync } from 'react-dom'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { CSSProperties, DragEvent, KeyboardEvent, MouseEvent, PointerEvent, SetStateAction } from 'react'
@@ -265,7 +267,6 @@ import {
   setRenderScrollTotalTimeSec as applyRenderScrollTotalTimeSec,
   setRenderScrollMaxSpeedPxPerSec as applyRenderScrollMaxSpeedPxPerSec,
   setRenderScrollSkew as applyRenderScrollSkew,
-  scrollToNonQuantizedSmooth,
 } from '@thockdown/interaction/NonQuantizedSmoothScroll'
 import {
   getWheelStepLines,
@@ -891,10 +892,6 @@ function buildUiLoadoutSignature(loadout: UiLayoutLoadout): string {
   return stableStringify(normalizeUiLoadoutForSignature(loadout))
 }
 
-const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
-  maskEl.style.maskPosition = `0 ${-scrollTop}px`;
-  maskEl.style.webkitMaskPosition = `0 ${-scrollTop}px`;
-};
 
 function formatCreatedDate(timestampMs: number): string {
   const date = new Date(timestampMs)
@@ -2398,14 +2395,6 @@ function App() {
   const archiveTreeRef = useRef<PrimaryGroup[]>([])
   const externalOpenQueueRef = useRef<Promise<void>>(Promise.resolve())
   const pendingExternalImportPathsRef = useRef<Set<string>>(new Set())
-  const sidebarScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
-  const sidebarScrollbarRafRef = useRef<number | null>(null)
-  const sidebarScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
-  const sidebarScrollbarThumbRef = useRef<HTMLDivElement | null>(null)
-  const sidebarScrollThumbTopRef = useRef(0)
-  const sidebarScrollThumbHeightRef = useRef(0)
-  const [isSidebarScrollThumbActive, setIsSidebarScrollThumbActive] = useState(false)
-  const [isDraggingSidebarScrollThumb, setIsDraggingSidebarScrollThumb] = useState(false)
   const sidebarTextureRef = useRef<HTMLDivElement | null>(null)
 
   const editorRuntimeMetrics = useMemo(
@@ -6997,41 +6986,11 @@ ${markdownHtml}
   const isMusicLibraryDocked = sidebarMode === 'songs'
   const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 
-  // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
-  // state updates that re-render the entire App component (heavy for long
-  // notes), starving rAF and producing slow/standstill/fast scroll artefacts.
-  // We mutate thumb DOM nodes imperatively and reserve React state only for
-  // visibility toggles (rare).
-  const applySidebarThumbDom = useCallback((topPx: number, heightPx: number) => {
-    sidebarScrollThumbTopRef.current = topPx
-    sidebarScrollThumbHeightRef.current = heightPx
-    const thumbEl = sidebarScrollbarThumbRef.current
-    if (!thumbEl) return
-    thumbEl.style.top = `${topPx}px`
-    thumbEl.style.height = `${Math.max(0, heightPx)}px`
-  }, [])
-
-  const syncSidebarCustomScrollbar = useCallback(() => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentEl
-    const track = sidebarScrollbarTrackRef.current
-    if (!scroller || !track) return
-
-    if (sidebarTextureRef.current) {
-      syncTextureToScroll(scroller.scrollTop, sidebarTextureRef.current)
-    }
-
-    const thumb = scrollThumbFor(scroller, track.clientHeight, sidebarScrollbarThumbRef.current?.offsetWidth ?? 0)
-    applySidebarThumbDom(thumb.top, thumb.height)
-    setIsSidebarScrollThumbActive(thumb.active)
-  }, [applySidebarThumbDom, sidebarContentEl, sidebarTreeScrollerEl])
-
-  const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentEl
-    const track = sidebarScrollbarTrackRef.current
-    if (!scroller || !track) return
-
-    scroller.scrollTop = scrollTopForThumb(scroller, track.clientHeight, sidebarScrollThumbHeightRef.current, thumbTopPx)
-  }, [sidebarContentEl, sidebarTreeScrollerEl])
+  // The sidebar's scroll box: the list's own scroller in a list view, the
+  // panel otherwise. Its rail is remounted when the box is replaced, because
+  // the shared scroller binds its listeners to the box it mounted with.
+  const sidebarScroller = sidebarTreeScrollerEl || sidebarContentEl
+  const sidebarScrollerKey = useMemo(() => scrollerIdentity(sidebarScroller), [sidebarScroller])
 
   const pagedVisibleNotes = useMemo(() => {
     if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
@@ -7071,7 +7030,6 @@ ${markdownHtml}
 
       scroller.scrollTop = pending.scrollTop
       pendingSidebarScrollRestoreRef.current = null
-      syncSidebarCustomScrollbar()
     }
 
     requestAnimationFrame(apply)
@@ -7085,7 +7043,6 @@ ${markdownHtml}
     getSidebarScrollerForMode,
     pagedVisibleNotes.length,
     sidebarMode,
-    syncSidebarCustomScrollbar,
   ])
 
   const activeSection = activeSectionSnapshot
@@ -7382,134 +7339,6 @@ ${markdownHtml}
   // Keyed on the element: immersive mode unmounts the sidebar and restores
   // it without any setting changing.
   }, [isImageLibraryShown, sidebarContentEl, sidebarMode, spacingRegularPx, totalPagedNotes])
-
-  useEffect(() => {
-    syncSidebarCustomScrollbar()
-  }, [syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, activeSection?.documentFindHits])
-
-  useEffect(() => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentEl
-    if (!scroller) return
-
-    const onScroll = () => {
-      syncSidebarCustomScrollbar()
-    }
-
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    return () => scroller.removeEventListener('scroll', onScroll)
-  }, [sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
-
-  useEffect(() => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentEl
-    if (!scroller) return
-
-    // Coalesced, not debounced: a request while one is pending joins it. It
-    // used to cancel the pending frame and ask for the next one, which never
-    // ran while something mutated the sidebar every frame -- an accordion
-    // section animating its height writes a style each frame, from its own
-    // rAF callback, whose mutation records cancelled this frame's sync before
-    // it came up. The thumb then stood still for the whole animation.
-    const scheduleSync = () => {
-      if (sidebarScrollbarRafRef.current !== null) return
-
-      sidebarScrollbarRafRef.current = requestAnimationFrame(() => {
-        sidebarScrollbarRafRef.current = null
-        syncSidebarCustomScrollbar()
-      })
-    }
-
-    scheduleSync()
-    // What grows and shrinks inside the scroller. A panel (Options, the Music
-    // Library) is one box of content; a list's cards are the list's own
-    // children, whose changes the mutation observer below reports.
-    const observedContentEl = sidebarTreeScrollerEl
-      ? null
-      : scroller.querySelector<HTMLElement>(':scope > .sidebar-options-content')
-
-    const resizeObserver = new ResizeObserver(() => scheduleSync())
-    resizeObserver.observe(scroller)
-    if (observedContentEl) {
-      resizeObserver.observe(observedContentEl)
-    }
-
-    const mutationObserver = new MutationObserver(() => scheduleSync())
-    mutationObserver.observe(scroller, {
-      subtree: true,
-      childList: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ['open', 'style'],
-    })
-
-    const onDetailsToggle = (event: Event) => {
-      if (event.target instanceof HTMLDetailsElement) {
-        scheduleSync()
-      }
-    }
-
-    scroller.addEventListener('toggle', onDetailsToggle, true)
-
-    return () => {
-      scroller.removeEventListener('toggle', onDetailsToggle, true)
-      mutationObserver.disconnect()
-      resizeObserver.disconnect()
-      if (sidebarScrollbarRafRef.current !== null) {
-        cancelAnimationFrame(sidebarScrollbarRafRef.current)
-        sidebarScrollbarRafRef.current = null
-      }
-    }
-  }, [sidebarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
-
-  useEffect(() => {
-    if (!isDraggingSidebarScrollThumb) return
-
-    const onPointerMove = (event: globalThis.PointerEvent) => {
-      const origin = sidebarScrollbarDragOriginRef.current
-      if (!origin) return
-      const deltaY = event.clientY - origin.pointerY
-      sidebarScrollFromThumbTop(origin.thumbTopPx + deltaY)
-      syncSidebarCustomScrollbar()
-    }
-
-    const onPointerUp = () => {
-      setIsDraggingSidebarScrollThumb(false)
-      sidebarScrollbarDragOriginRef.current = null
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-    window.addEventListener('pointercancel', onPointerUp)
-    return () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-      window.removeEventListener('pointercancel', onPointerUp)
-    }
-  }, [isDraggingSidebarScrollThumb, sidebarScrollFromThumbTop, syncSidebarCustomScrollbar])
-
-  const handleSidebarTrackPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    const track = sidebarScrollbarTrackRef.current
-    if (!track) return
-
-    const rect = track.getBoundingClientRect()
-    const clickY = event.clientY - rect.top
-    const thumbHeightPx = sidebarScrollThumbHeightRef.current
-    const targetThumbTop = clickY - (thumbHeightPx / 2)
-
-    const scroller = sidebarTreeScrollerEl || sidebarContentEl
-    if (!scroller) return
-    const targetScrollTop = scrollTopForThumb(scroller, track.clientHeight, thumbHeightPx, targetThumbTop)
-
-    scrollToNonQuantizedSmooth(scroller, targetScrollTop)
-  }, [sidebarContentEl, sidebarTreeScrollerEl])
-
-  const handleSidebarThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    event.stopPropagation()
-    setIsDraggingSidebarScrollThumb(true)
-    sidebarScrollbarDragOriginRef.current = {
-      pointerY: event.clientY,
-      thumbTopPx: sidebarScrollThumbTopRef.current,
-    }
-  }, [])
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -8400,20 +8229,6 @@ ${markdownHtml}
     }
   }, [])
 
-  const syncSidebarTexture = useCallback(() => {
-    const scroller = sidebarTreeScrollerEl || sidebarContentEl
-    if (!scroller || !sidebarTextureRef.current) return
-    syncTextureToScroll(scroller.scrollTop, sidebarTextureRef.current)
-  }, [sidebarContentEl, sidebarTreeScrollerEl])
-
-  const handleSidebarScroll = useCallback(() => {
-    syncSidebarTexture()
-  }, [syncSidebarTexture])
-
-  useEffect(() => {
-    syncSidebarTexture()
-  }, [syncSidebarTexture, sidebarMode])
-
   return (
     <div
       className={`app-root${customCursorSettings.enabled ? ' hide-native-cursor' : ' default-native-cursor'}`}
@@ -8695,7 +8510,6 @@ ${markdownHtml}
                   <div
                     className={`sidebar-content${isSidebarPanelMode ? ' is-scrollbar-mode' : ' is-tree-mode'}`}
                     ref={setSidebarContentRef}
-                    onScroll={handleSidebarScroll}
                   >
                     <div ref={sidebarTextureRef} className="sidebar-content-texture" />
                     {isImageLibraryShown ? (
@@ -9135,29 +8949,22 @@ ${markdownHtml}
                     aria-hidden="true"
                     // The rail sits beside the scroller, not inside it, so a
                     // wheel over any part of it would otherwise scroll
-                    // nothing. Hand the wheel's travel to the list it
-                    // belongs to, in the browser's own units.
+                    // nothing. The same wheel is handed to the scroller, so
+                    // it gets the scroller's own notches and coast.
                     onWheel={(event) => {
-                      const scroller = getSidebarScrollerForMode(sidebarMode)
-                      if (!scroller || event.ctrlKey) return
-                      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? scroller.clientHeight : 1
-                      scroller.scrollBy({ top: event.deltaY * unit })
+                      if (!sidebarScroller || event.ctrlKey) return
+                      sidebarScroller.dispatchEvent(new WheelEvent('wheel', event.nativeEvent))
                     }}
                   >
                     <div className="sidebar-scrollbar-slot-inner">
-                      <div className="thockdown-scroll-rail sidebar-thockdown-scroll-rail">
-                        <div
-                          ref={sidebarScrollbarTrackRef}
-                          className="thockdown-scroll-track"
-                          onPointerDown={handleSidebarTrackPointerDown}
-                        >
-                          <div
-                            ref={sidebarScrollbarThumbRef}
-                            className={`thockdown-scroll-thumb${isDraggingSidebarScrollThumb ? ' is-dragging' : ''}${isSidebarScrollThumbActive ? '' : ' is-inactive'}`}
-                            onPointerDown={handleSidebarThumbPointerDown}
-                          />
-                        </div>
-                      </div>
+                      <CanonicalScrollRail
+                        key={sidebarScrollerKey}
+                        className="sidebar-thockdown-scroll-rail"
+                        scroller={sidebarScroller}
+                        ownsKeyboard={false}
+                        layoutKey={`${sidebarMode}|${effectiveCurrentPage}`}
+                        textureRef={sidebarTextureRef}
+                      />
                     </div>
                   </aside>
               </div>

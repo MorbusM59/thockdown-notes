@@ -49,7 +49,7 @@ export interface UseDocumentFindNavigationOptions {
   /** The pane's position in ratios -- see editor/documentPosition.ts. */
   previewDocumentPositionRef: MutableRefObject<PreviewDocumentPositionApi | null>
   /**
-   * The scrollbar's own journey, published by usePreviewScrollbar. A hit
+   * The scrollbar's own journey, published by useCanonicalScroller. A hit
    * further down the document is a long jump like any other, and gets the
    * bridge and the stretched thumb every other long jump gets.
    */

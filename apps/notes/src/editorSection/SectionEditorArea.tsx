@@ -27,7 +27,7 @@ import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 import { EscapeMenuChromeBarRow, EscapeMenuChromeGauges, EscapeMenuChromeStatsRow } from '../escapeMenu/EscapeMenuStatus'
 import { ImageSlotView } from '../imageLibrary/ImageSlotView'
-import { ElementScrollRail } from '../components/ElementScrollRail'
+import { CanonicalScrollRail } from '../components/CanonicalScrollRail'
 import { ImageTagBar } from '../imageLibrary/ImageTagBar'
 
 export interface SectionEditorAreaProps {
@@ -594,7 +594,7 @@ export function SectionEditorArea({
           {modeStatus ? (
             <EscapeMenuChromeGauges status={modeStatus} />
           ) : shownImageId ? (
-            <ElementScrollRail scroller={imageScrollerEl} />
+            <CanonicalScrollRail key={shownImageId} scroller={imageScrollerEl} ownsKeyboard={isSectionActive} layoutKey={shownImageId} />
           ) : !isPreviewMode ? (
             activeNoteId ? (
               <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />

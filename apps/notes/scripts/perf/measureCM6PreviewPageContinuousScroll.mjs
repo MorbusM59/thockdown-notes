@@ -2,7 +2,7 @@
 // Same methodology as measureCM6PageContinuousScroll.mjs, applied to the
 // PREVIEW/render-view pane instead of the CM6 edit pane. The preview pane
 // has its own, structurally near-identical PageUp/PageDown continuous-scroll
-// implementation (usePreviewScrollbar.ts's startPreviewContinuousScroll/
+// implementation (useCanonicalScroller.ts's startPreviewContinuousScroll/
 // startPreviewReleaseRampDown) writing scrollTop raw every animation frame,
 // and virtualizes its content via @tanstack/react-virtual with a fixed
 // estimateSize (56px) corrected by measureElement on real render -- the

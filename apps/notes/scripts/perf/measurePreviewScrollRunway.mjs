@@ -4,7 +4,7 @@
 //
 //   DRAIN  -- how fast a held PageDown actually consumes content, in px/s and
 //             in blocks/s, at the continuous-scroll speed the app really uses
-//             (usePreviewScrollbar.ts's startPreviewContinuousScroll, which is
+//             (useCanonicalScroller.ts's startPreviewContinuousScroll, which is
 //             1.5x the apex speed of a one-page journey -- NOT the 80,000px/s
 //             peak, which only a bridged journey ever reaches).
 //   REFILL -- how long it takes, cold, for a fresh screenful of blocks to be

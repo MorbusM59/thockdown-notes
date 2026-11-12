@@ -28,7 +28,7 @@ import { startDevServer, waitForAppReady, ensurePreviewMode } from './perfHarnes
 const PORT = 5203
 
 /**
- * The track keeps a small gap at each end (usePreviewScrollbar), so the thumb
+ * The track keeps a small gap at each end (useCanonicalScroller), so the thumb
  * at its furthest is flush with the USABLE track, not with the element.
  */
 const TRACK_EDGE_GAP_PX = 3

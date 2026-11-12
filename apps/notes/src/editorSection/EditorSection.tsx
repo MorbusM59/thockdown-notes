@@ -40,7 +40,7 @@ import { useNoteSnapshotTimeline } from './useNoteSnapshotTimeline'
 import { useDocumentFind } from '../find/useDocumentFind'
 import { usePreviewMarkdownRendering } from './usePreviewMarkdownRendering'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
-import { usePreviewScrollbar } from './usePreviewScrollbar'
+import { useCanonicalScroller } from './useCanonicalScroller'
 import { useDocumentFindNavigation } from './useDocumentFindNavigation'
 import { useMarkdownFormattingToolbar } from './useMarkdownFormattingToolbar'
 import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/PreviewBlockSplit'
@@ -1534,12 +1534,12 @@ export function EditorSection(rawProps: EditorSectionProps) {
   ), [editorSectionMountRest.previewSettleGateRef])
 
   // Published by usePreviewMarkdownRendering (which owns the block list and
-  // the virtualizer) and consumed by usePreviewScrollbar (which owns the
+  // the virtualizer) and consumed by useCanonicalScroller (which owns the
   // thumb): the preview's position in character space. See
   // previewCharPosition.ts for why the thumb is not a pixel quantity.
   const previewDocumentPositionRef = useRef<PreviewDocumentPositionApi | null>(null)
   // The non-scrolling pane box the long-journey bridge draws into --
-  // see usePreviewScrollbar's own note on why it is not the scroller.
+  // see useCanonicalScroller's own note on why it is not the scroller.
   const previewBridgeHostRef = useRef<HTMLDivElement | null>(null)
 
   const { previewMarkdownElement, previewBlockCount, readWordsBelowView } = usePreviewMarkdownRendering({
@@ -1568,6 +1568,26 @@ export function EditorSection(rawProps: EditorSectionProps) {
     isPreviewSettleHolding,
   })
 
+  /**
+   * WHAT THIS SLOT IS SHOWING -- derived, every render, from the record plus
+   * this slot's own active note (src/shared/slotOverlay.ts). The single
+   * answer every consumer below reads, and the reason this component no
+   * longer carries a pair of "have I seen it yet" latches that watched the
+   * note and told App to retract a flag.
+   *
+   * The guide is matched against its whole FAMILY rather than one note id,
+   * so clicking through its chapters keeps the guide open: a chapter of the
+   * guide is still the guide, and the bar must not flip back to the
+   * collection underneath halfway through reading.
+   */
+  const occupancy = useMemo(
+    () => occupancyOf(sectionId, activeNoteId, slotOverlay),
+    [sectionId, activeNoteId, slotOverlay],
+  )
+  const isShowingGuide = occupancy.kind === 'guide'
+  const isShowingUndockedNote = occupancy.kind === 'undocked'
+  const shownImageId = occupancy.kind === 'image' ? occupancy.imageId : null
+
   const {
     previewTextureRef,
     previewScrollbarTrackRef,
@@ -1580,20 +1600,15 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handlePreviewThumbPointerDown,
     handlePreviewScroll,
     travelPreviewToRatio,
-  } = usePreviewScrollbar({
-    isPreviewMode,
-    isPreviewScrollInteractionBlocked: editorSectionMountRest.isPreviewScrollInteractionBlocked,
-    previewScrollRef,
-    isSectionActive: sectionId === activeSectionId,
+  } = useCanonicalScroller({
+    isEnabled: isPreviewMode,
+    isScrollInteractionBlocked: editorSectionMountRest.isPreviewScrollInteractionBlocked,
+    scrollerRef: previewScrollRef,
+    ownsKeyboard: sectionId === activeSectionId && !shownImageId,
+    layoutKey: `${activeNoteId}|${editorTextVersion}|${viewStyle}|${viewFontSize}|${viewSpacing}|${viewLetterSpacingEm}`,
     previewDocumentPositionRef,
     previewBridgeHostRef,
-    activeNoteId,
-    readEditorText,
-    editorTextVersion,
-    viewStyle,
-    viewFontSize,
-    viewSpacing,
-    viewLetterSpacingEm,
+    readBridgeText: readEditorText,
   })
 
   // Hands the settle gate the render view's scrollbar. It is not inside the
@@ -1693,25 +1708,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     headlineRule: activeHeadlineRule,
   })
 
-  /**
-   * WHAT THIS SLOT IS SHOWING -- derived, every render, from the record plus
-   * this slot's own active note (src/shared/slotOverlay.ts). The single
-   * answer every consumer below reads, and the reason this component no
-   * longer carries a pair of "have I seen it yet" latches that watched the
-   * note and told App to retract a flag.
-   *
-   * The guide is matched against its whole FAMILY rather than one note id,
-   * so clicking through its chapters keeps the guide open: a chapter of the
-   * guide is still the guide, and the bar must not flip back to the
-   * collection underneath halfway through reading.
-   */
-  const occupancy = useMemo(
-    () => occupancyOf(sectionId, activeNoteId, slotOverlay),
-    [sectionId, activeNoteId, slotOverlay],
-  )
-  const isShowingGuide = occupancy.kind === 'guide'
-  const isShowingUndockedNote = occupancy.kind === 'undocked'
-  const shownImageId = occupancy.kind === 'image' ? occupancy.imageId : null
 
   /**
    * What the slot's render-mode control means right now -- non-null when

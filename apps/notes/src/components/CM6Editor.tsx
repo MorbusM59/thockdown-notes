@@ -1491,7 +1491,7 @@ export function CM6Editor({
     }
 
     // Thumb SIZE in lines, from the text -- see editor/scrollThumbMetrics.ts
-    // and the twin of this line in usePreviewScrollbar. The pixel ratio is
+    // and the twin of this line in useCanonicalScroller. The pixel ratio is
     // kept only as the answer of last resort, before the editor has enough
     // geometry to say anything.
     const lineMetrics = readDocumentLines();
@@ -1504,7 +1504,7 @@ export function CM6Editor({
       : null;
 
     // Decided once and held -- see editor/scrollThumbMetrics.ts, and the twin
-    // of this in usePreviewScrollbar. The signature holds every input allowed
+    // of this in useCanonicalScroller. The signature holds every input allowed
     // to change the size; scrollHeight is not one of them, because CM6 refines
     // it as it measures more of the document, and a thumb that follows that is
     // reporting on the app's knowledge rather than on the reader's position.
@@ -1683,7 +1683,7 @@ export function CM6Editor({
   /**
    * The thumb during a bridged journey: it stretches rather than slides.
    *
-   * Identical in shape to the render view's (usePreviewScrollbar), and for the
+   * Identical in shape to the render view's (useCanonicalScroller), and for the
    * same reason -- the document's middle is being cut out, so a thumb that
    * slid smoothly would describe a journey that did not happen. The leading
    * edge runs the span, both edges hold while the bridge covers the cut, then
@@ -5837,7 +5837,7 @@ export function CM6Editor({
         if (!el || framesLeft-- <= 0) return;
         const maxScrollTopPx = Math.max(0, el.scrollHeight - el.clientHeight);
         // Who MOVED it, not how far from the end it is -- see the twin of this
-        // in usePreviewScrollbar for why distance was the wrong question.
+        // in useCanonicalScroller for why distance was the wrong question.
         if (expectedTopPx !== null
           && Math.abs(el.scrollTop - expectedTopPx) > 2
           && el.scrollTop !== maxScrollTopPx) return;
@@ -5855,7 +5855,7 @@ export function CM6Editor({
       requestAnimationFrame(step);
     };
 
-    // See the twin of this in usePreviewScrollbar: a second click cannot
+    // See the twin of this in useCanonicalScroller: a second click cannot
     // become a second journey while the thumb is stretched across the first,
     // or the new one takes that stretched span for its base size and grows
     // out of its rail. Only the snap is honored mid-flight -- it ends the

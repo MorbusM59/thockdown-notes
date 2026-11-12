@@ -42,19 +42,6 @@ import { buildReleaseRampDownPlanFromCurrentParams, CONTINUOUS_SCROLL_APEX_SPEED
 import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
 import { clamp } from '@thockdown/interaction/clamp'
 
-type ViewStyleKey =
-  | 'modern'
-  | 'narrow'
-  | 'cute'
-  | 'boogaloo'
-  | 'print'
-  | 'calibrilight'
-  | 'opensans'
-  | 'notoserif'
-  | 'neuton'
-  | 'faunaone'
-  | 'fredericka'
-  | 'bubblerone'
 const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 
 
@@ -63,18 +50,29 @@ const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
   maskEl.style.webkitMaskPosition = `0 ${-scrollTop}px`;
 };
 
-export interface UsePreviewScrollbarOptions {
-  isPreviewMode: boolean
-  isPreviewScrollInteractionBlocked?: () => boolean
-  previewScrollRef: MutableRefObject<HTMLDivElement | null>
+export interface UseCanonicalScrollerOptions {
+  /** Whether the scroller is on screen and taking input (the reader: its slot is in reader mode). */
+  isEnabled: boolean
+  isScrollInteractionBlocked?: () => boolean
+  scrollerRef: MutableRefObject<HTMLElement | null>
   /**
-   * Whether this section is the one the reader is working in.
+   * Whether this scroller answers the keyboard: the page keys, and a
+   * keystroke stopping a wheel coast.
    *
    * The page-key listener below is on the window, so in split view every
-   * preview pane would otherwise answer the same keypress and both would page
-   * at once. Only the active section's does.
+   * reader would otherwise answer the same keypress and both would page at
+   * once. Only the active slot's does; the sidebar's lists never do.
    */
-  isSectionActive?: boolean
+  ownsKeyboard?: boolean
+  /**
+   * Everything the thumb's size and the wheel's line height are made of,
+   * besides the scroller's own geometry: a change re-decides the thumb's
+   * committed size and re-measures the line height. The reader's is its
+   * note, its text and its type settings.
+   */
+  layoutKey: string
+  /** The layer drawn behind the content, kept in step with the scroll position. */
+  textureRef?: MutableRefObject<HTMLDivElement | null>
   /**
    * The preview's position in character space, published by
    * usePreviewMarkdownRendering. When present the thumb's POSITION is driven
@@ -92,40 +90,46 @@ export interface UsePreviewScrollbarOptions {
    * worse than merely wrong.
    */
   previewBridgeHostRef?: MutableRefObject<HTMLDivElement | null>
-  activeNoteId: string | null
-  /** The section's live text, read when needed, and its version (see useDisplayedNoteText.ts). */
-  readEditorText: () => string
-  editorTextVersion: number
-  viewStyle: ViewStyleKey
-  viewFontSize: number
-  viewSpacing: number
-  viewLetterSpacingEm: number
+  /** The text the bridge draws (the note's live text, see useDisplayedNoteText.ts); needed with a bridge host. */
+  readBridgeText?: () => string
 }
 
 
 /**
- * Custom preview scrollbar (direct-DOM thumb sync + drag), PageUp/PageDown
- * continuous-scroll-with-momentum-release, and the native-scroll texture
- * sync -- extracted verbatim from App.tsx with zero behavior change. Direct
- * DOM mutation instead of React state is deliberate: per-frame scroll events
- * would otherwise re-render the entire App component on every tick.
+ * THE CANONICAL SCROLLING of every scroll box in the app that is not the
+ * editor's row-quantized one: the reader, the sidebar's lists and panels, and
+ * a library image shown in a slot. One implementation, so the same gesture
+ * behaves the same everywhere:
+ *
+ * - the app's own scrollbar (direct-DOM thumb sync, a committed thumb size,
+ *   a drag of the thumb, a track click that travels and a track hold that
+ *   snaps, a right hold on the track that pages towards the pointer, the
+ *   thumb stretched across a bridged journey);
+ * - PageUp/PageDown, continuous while held, with a momentum release;
+ * - the wheel's notch glide and spin-to-keep-scrolling coast.
+ *
+ * Written for the reader first, which is why its internal names say
+ * `preview`: what is particular to the reader (a document only partly drawn,
+ * and the bridge over a long journey) arrives through the optional ports
+ * `previewDocumentPositionRef` and `previewBridgeHostRef`, and a scroller
+ * without them is driven by its pixels alone.
+ *
+ * Direct DOM mutation instead of React state is deliberate: per-frame scroll
+ * events would otherwise re-render the host on every tick.
  */
-export function usePreviewScrollbar({
-  isPreviewMode,
-  isPreviewScrollInteractionBlocked,
-  previewScrollRef,
-  isSectionActive = true,
+export function useCanonicalScroller({
+  isEnabled: isPreviewMode,
+  isScrollInteractionBlocked: isPreviewScrollInteractionBlocked,
+  scrollerRef: previewScrollRef,
+  ownsKeyboard: isSectionActive = true,
+  layoutKey,
+  textureRef,
   previewDocumentPositionRef,
   previewBridgeHostRef,
-  activeNoteId,
-  readEditorText,
-  editorTextVersion,
-  viewStyle,
-  viewFontSize,
-  viewSpacing,
-  viewLetterSpacingEm,
-}: UsePreviewScrollbarOptions) {
-  const previewTextureRef = useRef<HTMLDivElement>(null)
+  readBridgeText,
+}: UseCanonicalScrollerOptions) {
+  const ownTextureRef = useRef<HTMLDivElement>(null)
+  const previewTextureRef = textureRef ?? ownTextureRef
   const previewScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const previewScrollbarRafRef = useRef<number | null>(null)
   const previewScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
@@ -323,16 +327,7 @@ export function usePreviewScrollbar({
     // blocks are measured, nor the scroll position, which is none of the
     // size's business.
     const nextThumbHeight = thumbHeightCommitRef.current.resolve({
-      signature: [
-        activeNoteId ?? '',
-        readEditorText().length,
-        viewportHeight,
-        usableTrackHeight,
-        viewStyle,
-        viewFontSize,
-        viewSpacing,
-        viewLetterSpacingEm,
-      ].join('|'),
+      signature: [layoutKey, viewportHeight, usableTrackHeight].join('|'),
       // Only a settled answer is committed to. Until the document's heights
       // are real, the live pixel ratio is drawn but never frozen -- otherwise
       // a small document, which is entitled to an exact scrollbar, keeps
@@ -359,7 +354,7 @@ export function usePreviewScrollbar({
 
     applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
     setIsPreviewScrollThumbActive(true)
-  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef, activeNoteId, readEditorText, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
+  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef, previewTextureRef, layoutKey])
 
   /**
    * The thumb during a bridged journey: it stretches rather than slides.
@@ -524,9 +519,8 @@ export function usePreviewScrollbar({
   useEffect(() => {
     if (!isPreviewMode) return
     syncPreviewCustomScrollbar()
-    // editorTextVersion is not read: a new text is one of the things that
-    // changes the thumb's size.
-  }, [isPreviewMode, syncPreviewCustomScrollbar, activeNoteId, editorTextVersion, viewStyle, viewFontSize, viewSpacing, viewLetterSpacingEm])
+    // layoutKey is not read: it is one of the things that changes the thumb's size.
+  }, [isPreviewMode, syncPreviewCustomScrollbar, layoutKey])
 
   /**
    * Offers this pane a curtain for long journeys (editor/scrollBridge.ts).
@@ -543,7 +537,7 @@ export function usePreviewScrollbar({
   useEffect(() => {
     const scroller = previewScrollRef.current
     const host = previewBridgeHostRef?.current
-    if (!scroller || !host) return undefined
+    if (!scroller || !host || !readBridgeText) return undefined
 
     return registerScrollBridge(scroller, {
       host,
@@ -574,7 +568,7 @@ export function usePreviewScrollbar({
 
         const usableWidthPx = Math.max(1, scroller.clientWidth - paddingLeftPx - paddingRightPx)
         return {
-          text: readEditorText(),
+          text: readBridgeText(),
           charsPerLine: Math.max(1, Math.round(usableWidthPx / averageCharWidthPx)),
           lineHeightPx,
           fontPx,
@@ -585,7 +579,7 @@ export function usePreviewScrollbar({
         }
       },
     })
-  }, [previewScrollRef, previewBridgeHostRef, activeNoteId, readEditorText])
+  }, [previewScrollRef, previewBridgeHostRef, readBridgeText])
 
   useEffect(() => {
     if (!isPreviewMode) return
@@ -607,11 +601,13 @@ export function usePreviewScrollbar({
     const scroller = previewScrollRef.current
     if (!scroller) return
 
+    // Coalesced, not debounced: a request while one is pending joins it.
+    // Cancelling the pending frame and asking for the next one never ran
+    // while something mutated the content every frame (an accordion section
+    // animating its height writes a style each frame from its own rAF
+    // callback), so the thumb stood still for the whole animation.
     const scheduleSync = () => {
-      if (previewScrollbarRafRef.current !== null) {
-        cancelAnimationFrame(previewScrollbarRafRef.current)
-      }
-
+      if (previewScrollbarRafRef.current !== null) return
       previewScrollbarRafRef.current = requestAnimationFrame(() => {
         previewScrollbarRafRef.current = null
         syncPreviewCustomScrollbar()
@@ -619,22 +615,44 @@ export function usePreviewScrollbar({
     }
 
     scheduleSync()
-    const previewContentEl = scroller.firstElementChild as HTMLElement | null
 
+    // What grows and shrinks inside the scroller is its children: the
+    // reader's content, a sidebar panel, a list's cards. Each is watched for
+    // size, and the set is refreshed when the scroller's own children change.
     const resizeObserver = new ResizeObserver(() => scheduleSync())
     resizeObserver.observe(scroller)
-    if (previewContentEl) {
-      resizeObserver.observe(previewContentEl)
+    const observed = new Set<Element>()
+    const observeChildren = () => {
+      for (const child of Array.from(scroller.children)) {
+        if (observed.has(child)) continue
+        observed.add(child)
+        resizeObserver.observe(child)
+      }
+      for (const child of observed) {
+        if (child.parentElement === scroller) continue
+        observed.delete(child)
+        resizeObserver.unobserve(child)
+      }
     }
+    observeChildren()
 
-    const mutationObserver = new MutationObserver(() => scheduleSync())
+    const mutationObserver = new MutationObserver((records) => {
+      if (records.some((record) => record.target === scroller && record.type === 'childList')) observeChildren()
+      scheduleSync()
+    })
     mutationObserver.observe(scroller, {
       subtree: true,
       childList: true,
       characterData: true,
     })
 
+    const onDetailsToggle = (event: Event) => {
+      if (event.target instanceof HTMLDetailsElement) scheduleSync()
+    }
+    scroller.addEventListener('toggle', onDetailsToggle, true)
+
     return () => {
+      scroller.removeEventListener('toggle', onDetailsToggle, true)
       mutationObserver.disconnect()
       resizeObserver.disconnect()
       if (previewScrollbarRafRef.current !== null) {
@@ -686,9 +704,19 @@ export function usePreviewScrollbar({
 
   // Right-click-and-hold on the track pages in the clicked direction for as
   // long as the button is held, exactly like holding PageUp/PageDown -- it's
-  // dispatched as a real synthetic KeyboardEvent on window so it reuses the
+  // pressed through the same page press the keys use (pageControlRef), so it reuses the
   // one-shot jump, continuous-hold, and release-ramp logic below verbatim
   // instead of duplicating that curve/timing math here.
+  // The page press and release the page keys drive, published by the key
+  // effect below. The track hold calls them directly rather than dispatching
+  // a key on window: a window key would also reach every other scroller and
+  // the editor, and would be refused here whenever this scroller does not
+  // own the keyboard (the sidebar never does).
+  const pageControlRef = useRef<{
+    press: (key: 'PageUp' | 'PageDown', repeat: boolean) => boolean
+    release: (key: 'PageUp' | 'PageDown') => void
+  } | null>(null)
+
   const stopPreviewScrollbarRightHold = useCallback(() => {
     const hold = previewScrollbarRightHoldRef.current
     if (!hold) return
@@ -696,7 +724,7 @@ export function usePreviewScrollbar({
       cancelAnimationFrame(hold.rafId)
     }
     previewScrollbarRightHoldRef.current = null
-    window.dispatchEvent(new KeyboardEvent('keyup', { key: hold.key, code: hold.key, bubbles: true, cancelable: true }))
+    pageControlRef.current?.release(hold.key)
   }, [])
 
   useEffect(() => {
@@ -736,7 +764,7 @@ export function usePreviewScrollbar({
     const direction: 1 | -1 = clickY > thumbBottom ? 1 : -1
     const key: 'PageUp' | 'PageDown' = direction === 1 ? 'PageDown' : 'PageUp'
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true, repeat: false }))
+    pageControlRef.current?.press(key, false)
 
     previewScrollbarRightHoldRef.current = { key, direction, cursorYPx: clickY, rafId: null }
 
@@ -1183,32 +1211,28 @@ export function usePreviewScrollbar({
       return target.isContentEditable && (previewScrollRef.current?.contains(target) ?? false)
     }
 
-    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented) return
-      if (!isSectionActive) return
-      if (targetOwnsPageKeys(event.target)) return
-      if (event.key !== 'PageDown' && event.key !== 'PageUp') return
-
+    // One page press, from the keyboard or from this scroller's own track
+    // hold. Returns whether it was taken, so a key event is consumed exactly
+    // when a press happened.
+    const pressPage = (key: 'PageUp' | 'PageDown', repeat: boolean): boolean => {
       if (shouldBlockPreviewInteraction()) {
-        event.preventDefault()
-        pageKeysHeld.delete(event.key)
+        pageKeysHeld.delete(key)
         clearPreviewContinuousHandoff()
         stopPreviewContinuousScroll()
-        return
+        return true
       }
 
       const scroller = previewScrollRef.current
-      if (!scroller) return
+      if (!scroller) return false
 
-      event.preventDefault()
-      const direction: -1 | 1 = event.key === 'PageDown' ? 1 : -1
-      pageKeysHeld.add(event.key)
+      const direction: -1 | 1 = key === 'PageDown' ? 1 : -1
+      pageKeysHeld.add(key)
 
-      if (event.repeat) {
+      if (repeat) {
         if (previewContinuousHandoffTimeoutRef.current === null) {
           startPreviewContinuousScroll(direction)
         }
-        return
+        return true
       }
 
       clearPreviewContinuousHandoff()
@@ -1235,25 +1259,37 @@ export function usePreviewScrollbar({
         previewContinuousHandoffTimeoutRef.current = window.setTimeout(() => {
           previewContinuousHandoffTimeoutRef.current = null
           if (!isPreviewMode) return
-          if (!pageKeysHeld.has(event.key)) return
+          if (!pageKeysHeld.has(key)) return
           startPreviewContinuousScroll(direction)
         }, delayMs)
       }
+      return true
+    }
+
+    const releasePage = (key: 'PageUp' | 'PageDown') => {
+      pageKeysHeld.delete(key)
+      clearPreviewContinuousHandoff()
+      if (pageKeysHeld.size === 0) {
+        const activeDirection = previewContinuousScrollDirectionRef.current
+        if (activeDirection !== 0) {
+          startPreviewReleaseRampDown(activeDirection)
+        } else {
+          stopPreviewContinuousScroll()
+        }
+      }
+    }
+    pageControlRef.current = { press: pressPage, release: releasePage }
+
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented) return
+      if (!isSectionActive) return
+      if (targetOwnsPageKeys(event.target)) return
+      if (event.key !== 'PageDown' && event.key !== 'PageUp') return
+      if (pressPage(event.key, event.repeat)) event.preventDefault()
     }
 
     const onWindowKeyUp = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'PageDown' || event.key === 'PageUp') {
-        pageKeysHeld.delete(event.key)
-        clearPreviewContinuousHandoff()
-        if (pageKeysHeld.size === 0) {
-          const activeDirection = previewContinuousScrollDirectionRef.current
-          if (activeDirection !== 0) {
-            startPreviewReleaseRampDown(activeDirection)
-          } else {
-            stopPreviewContinuousScroll()
-          }
-        }
-      }
+      if (event.key === 'PageDown' || event.key === 'PageUp') releasePage(event.key)
     }
 
     const onWindowBlur = () => {
@@ -1269,6 +1305,7 @@ export function usePreviewScrollbar({
       window.removeEventListener('keydown', onWindowKeyDown)
       window.removeEventListener('keyup', onWindowKeyUp)
       window.removeEventListener('blur', onWindowBlur)
+      pageControlRef.current = null
       pageKeysHeld.clear()
       clearPreviewContinuousHandoff()
       stopPreviewContinuousScroll()
@@ -1813,20 +1850,17 @@ export function usePreviewScrollbar({
     shouldBlockPreviewInteraction,
     stopPreviewWheelSpin,
     syncPreviewCustomScrollbar,
-    activeNoteId,
-    // Not incidental: these are what the pane's line height is made of, and
+    // Not incidental: it holds what the pane's line height is made of, and
     // the step is measured in line heights. Re-running the effect is how the
     // measurement is retaken.
-    viewStyle,
-    viewFontSize,
-    viewSpacing,
+    layoutKey,
   ])
 
   // Native scroll (covers mouse wheel, trackpad, keyboard when not intercepted)
   const handlePreviewScroll = useCallback(() => {
     if (!previewScrollRef.current || !previewTextureRef.current) return;
     syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
-  }, [previewScrollRef]);
+  }, [previewScrollRef, previewTextureRef]);
 
   return {
     previewTextureRef,

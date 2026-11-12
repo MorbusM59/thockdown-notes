@@ -208,7 +208,7 @@ export interface UseEditorSectionMountResult {
    */
   previewSettleGateRef: MutableRefObject<PreviewSettleGate | null>
   /**
-   * Set by the component from usePreviewScrollbar, so the settle gate can
+   * Set by the component from useCanonicalScroller, so the settle gate can
    * hide the render view's scrollbar along with the pane and redraw it from
    * the settled geometry just before both reappear. See the declaration in
    * the hook body.
@@ -336,7 +336,7 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // geometry fixed point instead of waiting a fixed number of frames.
   const previewSettleGateRef = useRef<PreviewSettleGate | null>(null)
   /**
-   * The render view's scrollbar, published by usePreviewScrollbar so the gate
+   * The render view's scrollbar, published by useCanonicalScroller so the gate
    * can cover it too. Same forwarding reason as the refs either side of this
    * one: the gate is created here, the scrollbar is a hook EditorSection
    * calls further down. `getThumb` is what gets hidden with the pane;

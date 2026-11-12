@@ -2,7 +2,7 @@
 // One-off diagnostic: reads out the temporary performance.mark/measure pairs
 // added to EditorSection.tsx (t:currentEditorText, t:useNoteSnapshotTimeline,
 // t:activeNoteDocumentStats, t:useDocumentFind, t:usePreviewMarkdownRendering,
-// t:usePreviewScrollbar, t:useDocumentFindNavigation,
+// t:useCanonicalScroller, t:useDocumentFindNavigation,
 // t:useMarkdownFormattingToolbar) during a real keystroke burst on the CM6
 // path, to find which of EditorSection's hook calls is actually behind the
 // large but source-map-drifted "(anonymous) @ EditorSection.tsx:549" CDP

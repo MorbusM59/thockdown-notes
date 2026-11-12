@@ -290,7 +290,7 @@ Remaining follow-up to complete parity sweep:
 - Preview-side paging/scroll ownership now participates in transition
   provenance: `useEditorSectionMount` owns a preview restore transition
   controller, classifies restore-origin scrolls deterministically, and
-  exports `isPreviewScrollInteractionBlocked`; `usePreviewScrollbar` consumes
+  exports `isPreviewScrollInteractionBlocked`; `useCanonicalScroller` consumes
   it to block PageUp/PageDown and custom-scrollbar track/thumb interactions
   while restore settle is active.
 - Next verification focus is live-behavior stress under rapid mode toggles:
@@ -870,7 +870,7 @@ or streamlining gap could live, then verify live in the browser — not the reve
    of the user's named symptom. Check every place glyph/line geometry is read or written for
    whether it stays grid-quantized under every code path (resize, zoom/font-size change, note
    switch, split-view pane resize) or only under the ones already tested.
-3. **Custom scrollbar** — `usePreviewScrollbar.ts` (734 lines, both edit- and preview-side
+3. **Custom scrollbar** — `useCanonicalScroller.ts` (734 lines, both edit- and preview-side
    scrollbar track/thumb ownership, PageUp/PageDown interaction blocking during restore settle —
    see this doc's own "Latest Session Update" above for the most recent work here, which named its
    own follow-up: verify blocked interactions release promptly and don't starve under rapid mode
@@ -1733,7 +1733,7 @@ one -- ArrowUp's `reconcileCagedScroll` -- covered by prior rounds):
 ### Render/preview pane: genuine viewport misplacement confirmed, not cosmetic thumb lag
 
 The preview pane has its own, structurally near-identical PageUp/PageDown continuous-scroll
-implementation (`usePreviewScrollbar.ts`'s `startPreviewContinuousScroll`/
+implementation (`useCanonicalScroller.ts`'s `startPreviewContinuousScroll`/
 `startPreviewReleaseRampDown`), and — **at the time of this round; no longer true, see
 `large-document-performance-handover.md`'s "the preview stopped virtualizing"** — virtualized
 content via `@tanstack/react-virtual`
