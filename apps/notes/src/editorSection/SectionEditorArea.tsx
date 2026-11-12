@@ -27,6 +27,7 @@ import { splitChapterFamily } from '../shared/chapters'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 import { EscapeMenuChromeBarRow, EscapeMenuChromeGauges, EscapeMenuChromeStatsRow } from '../escapeMenu/EscapeMenuStatus'
 import { ImageSlotView } from '../imageLibrary/ImageSlotView'
+import { ElementScrollRail } from '../components/ElementScrollRail'
 import { ImageTagBar } from '../imageLibrary/ImageTagBar'
 
 export interface SectionEditorAreaProps {
@@ -367,6 +368,8 @@ export function SectionEditorArea({
   const activeRingCellDetail = escapeMenu?.activeMode?.cells
     .find((cell) => cell.id === activeRingCellId)?.detail ?? null
   const isEmptyStateVisible = (!activeNoteId && !shownImageId) || isEscapeHoldActive
+  // The scroll box of a library image shown in the slot, for its scrollbar.
+  const [imageScrollerEl, setImageScrollerEl] = useState<HTMLDivElement | null>(null)
 
   // A select-all in the render view copies the WHOLE note: the pane mounts
   // only a window of it, so the browser's own copy would take that window
@@ -537,7 +540,7 @@ export function SectionEditorArea({
                 `isOpen` prop -- so EscapeHoldPanel's focus-management (also
                 keyed off `isOpen`, not mount) keeps working across repeated
                 opens. */}
-            {shownImageId && !isEscapeHoldActive ? <ImageSlotView imageId={shownImageId} /> : null}
+            {shownImageId && !isEscapeHoldActive ? <ImageSlotView imageId={shownImageId} onScroller={setImageScrollerEl} /> : null}
             <div className={`editor-empty-state-plate${isEmptyStateVisible ? ' is-visible' : ''}`}/>
             <div
               className={`editor-empty-state${isEmptyStateVisible ? ' is-visible' : ''}`}
@@ -590,6 +593,8 @@ export function SectionEditorArea({
         <div className="editor-scrollbar-slot-inner" aria-hidden={modeStatus ? undefined : true}>
           {modeStatus ? (
             <EscapeMenuChromeGauges status={modeStatus} />
+          ) : shownImageId ? (
+            <ElementScrollRail scroller={imageScrollerEl} />
           ) : !isPreviewMode ? (
             activeNoteId ? (
               <div ref={setScrollbarHostEl} className="editor-scrollbar-slot-inner" />

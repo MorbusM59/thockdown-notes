@@ -5,10 +5,12 @@ import { useLibraryImage } from './imageLibraryStore'
 // allows and never larger than itself. The tab bar above names it and says
 // where it came from; the chapter bar below holds its id and tags.
 
-export function ImageSlotView({ imageId }: { imageId: string }) {
+// It scrolls under the app's own scrollbar, which the slot draws in its
+// scrollbar slot (`onScroller` hands it the scroll box).
+export function ImageSlotView({ imageId, onScroller }: { imageId: string; onScroller: (element: HTMLDivElement | null) => void }) {
   const { image, loaded } = useLibraryImage(imageId)
   return (
-    <div className="image-slot-view" aria-label={`Image ${imageId}`}>
+    <div ref={onScroller} className="image-slot-view thockdown-custom-scrollbar" aria-label={`Image ${imageId}`}>
       {image ? (
         // Framed as the render view frames an image (markdown.css).
         <span className="markdown-image-frame image-slot-view-frame">
