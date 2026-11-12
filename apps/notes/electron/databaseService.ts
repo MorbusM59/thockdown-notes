@@ -77,7 +77,6 @@ import type {
 import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult, type ImageRenameResult, type StoredImageSummary, renameImageReferences } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
-import { readAudioTags } from './audioTags';
 import { rotatePoolTo } from '../src/shared/musicPool';
 import {
   AUDIO_EXTENSIONS,
@@ -3468,20 +3467,13 @@ export class DatabaseService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Legacy song rows whose tags were not read on import have their tags read
-   * here and stored once, lazily, one song at a time as they are played or
-   * touched, so an existing library is never read in one go.
-   * `getMusicPlaylist` passes `readTags: false`: listing a whole bucket must
-   * not open every file in it.
+   * A song row as the renderer sees it. Never reads a file: tags are read on
+   * import, off the main process (`musicIndexing.ts`), and a row written
+   * before that existed is filled in the same way at start-up
+   * (`songsWithUnreadTags` / `storeReadTags`), so listing or filtering the
+   * pool costs no disk access on the main thread.
    */
-  private rowToSongEntry(row: Record<string, unknown>, readTags = true): MusicSongEntry {
-    if (readTags && !row['tagsRead']) {
-      const tags = readAudioTags(row['filePath'] as string);
-      this.requireDb().prepare(
-        'UPDATE music_songs SET title = ?, artist = ?, album = ?, tagsRead = 1 WHERE id = ?'
-      ).run(tags.title, tags.artist, tags.album, row['id']);
-      row = { ...row, ...tags, tagsRead: 1 };
-    }
+  private rowToSongEntry(row: Record<string, unknown>): MusicSongEntry {
     const storedSetIds = row['setIds'];
     return {
       id:           row['id'] as number,
@@ -3504,6 +3496,19 @@ export class DatabaseService {
         SELECT GROUP_CONCAT(setId)
         FROM (SELECT setId FROM music_set_songs WHERE songId = ${alias}.id ORDER BY setId)
       ), '') AS setIds`;
+  }
+
+  /** Paths of the songs whose tags have never been read (rows from before tags were read on import). */
+  songsWithUnreadTags(): string[] {
+    return (this.requireDb().prepare('SELECT filePath FROM music_songs WHERE tagsRead = 0').all() as Array<{ filePath: string }>)
+      .map(({ filePath }) => filePath);
+  }
+
+  /** Stores tags read off the main process (`musicIndexing.ts`) for songs already in the library. */
+  storeReadTags(files: IndexedMusicFile[]): void {
+    const db = this.requireDb();
+    const update = db.prepare('UPDATE music_songs SET title = ?, artist = ?, album = ?, tagsRead = 1 WHERE filePath = ?');
+    db.transaction(() => { for (const file of files) update.run(file.title, file.artist, file.album, file.filePath); })();
   }
 
   getMusicSets(): MusicSet[] {
@@ -3572,7 +3577,7 @@ export class DatabaseService {
        WHERE id IN (SELECT songId FROM music_set_songs WHERE setId = ?)
        ORDER BY priority ASC, id ASC`
     ).all(slot) as Record<string, unknown>[];
-    return rows.map((r) => this.rowToSongEntry(r, false));
+    return rows.map((r) => this.rowToSongEntry(r));
   }
 
   getMusicSongById(id: number): MusicSongEntry | null {

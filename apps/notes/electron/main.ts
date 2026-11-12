@@ -1817,6 +1817,14 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   await migrateVisualizerTuning(stateService!, databaseService).catch((error) => console.error('[state] visualizer migration failed', error))
   await ensureHelpGuide(databaseService, noteLifecycleService!)
+  // Songs added before tags were read on import get them now, in the index
+  // worker, so nothing on the main thread ever opens a music file.
+  const unreadTags = databaseService.songsWithUnreadTags()
+  if (unreadTags.length > 0) {
+    void indexMusicFiles(unreadTags)
+      .then((files) => databaseService?.storeReadTags(files))
+      .catch((error: unknown) => console.error('[music] reading tags failed', error))
+  }
 
   // Proxy thockdown-music:// → file system reads so the renderer can load local
   // audio files regardless of origin (http://localhost in dev, file:// in prod).
