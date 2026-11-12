@@ -14,7 +14,6 @@ import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, cloneSettin
 import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES } from '../src/shared/keystrokeSounds'
 import { DEFAULT_SOUNDSTAGE_PREFERENCES } from '../src/shared/soundstages'
 import { DEFAULT_FLASH_SHAPE_PREFERENCES, DEFAULT_FLASHING_SETTINGS } from '../src/shared/flashing'
-import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialsBySurface } from '@thockdown/look/textureTypes'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
@@ -52,28 +51,6 @@ describe('StateService app-state field round-trip', () => {
     const reader = new StateService(dataRoot)
     const loaded = await reader.loadAppState()
     expect(loaded.menu?.isDoubleSizeMode).toBe(true)
-  })
-
-  it('migrates a disabled texture to zero strength when loading legacy app state', async () => {
-    const textureMaterials = {
-      ...DEFAULT_TEXTURE_MATERIALS,
-      sidebarContent: { ...DEFAULT_TEXTURE_MATERIALS.sidebarContent, enabled: false },
-    } as unknown as TextureMaterialsBySurface
-
-    await new StateService(dataRoot).saveAppState({
-      selectedNoteId: null,
-      menu: {
-        sidebarMode: 'date',
-        selectedMonths: [],
-        selectedYears: [],
-        searchQuery: '',
-        textureMaterials,
-      },
-    })
-
-    const loaded = await new StateService(dataRoot).loadAppState()
-    expect(loaded.menu?.textureMaterials?.sidebarContent.textureStrength).toBe(0)
-    expect(loaded.menu?.textureMaterials?.sidebarContent).not.toHaveProperty('enabled')
   })
 
   it('persists the visualizer font across a restart, and leaves it absent in a save without one', async () => {
@@ -504,33 +481,6 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicActiveSlots).toEqual([1, 6, 7])
   })
 
-  it('keeps legacy music-set preferences readable for the one-time database import', async () => {
-    const writer = new StateService(dataRoot)
-    await writer.saveAppState({
-      selectedNoteId: null,
-      menu: {
-        sidebarMode: 'date',
-        selectedMonths: [],
-        selectedYears: [],
-        searchQuery: '',
-        musicSets: {
-          sets: [
-            { slot: 4, name: 'Ignored factory rename' },
-            { slot: 2, name: 'Pop' },
-            { slot: 7, name: 'My set' },
-          ],
-          nextSlot: 8,
-        },
-      },
-    })
-
-    const reader = new StateService(dataRoot)
-    const loaded = await reader.loadAppState()
-    expect(loaded.menu?.musicSets?.sets.map((set) => set.slot)).toEqual([4, 2, 7, 5, 6, 3])
-    expect(loaded.menu?.musicSets?.sets[0].name).toBe('Rock')
-    expect(loaded.menu?.musicSets?.nextSlot).toBe(8)
-  })
-
   it('clearAppState restores factory preferences while preserving user-created presets', async () => {
     const writer = new StateService(dataRoot)
     const savedSoundscape = {
@@ -593,7 +543,6 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.soundscapes?.customPresets.map((preset) => preset.id)).toEqual(['my-soundscape'])
     expect(loaded.menu?.musicSoundstages?.factory).toBe('neutral')
     expect(loaded.menu?.musicSoundstages?.saved.map((stage) => stage.id)).toEqual(['my-stage'])
-    expect(loaded.menu?.musicSets).toBeUndefined()
     expect(loaded.menu?.keystrokeSoundPresets?.saved.map((preset) => preset.id)).toEqual(['my-keystrokes'])
     expect(loaded.menu?.flashing).toEqual(DEFAULT_FLASHING_SETTINGS)
     expect(loaded.menu?.flashingPresets?.saved.map((preset) => preset.id)).toEqual(['my-flash'])

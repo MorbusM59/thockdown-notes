@@ -2,7 +2,7 @@ import type { KeystrokeSoundPreferences, KeystrokeSoundSettings } from './keystr
 import type { OptionsSectionId } from './optionsSections';
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
-import type { MusicPoolFilter, MusicSetPreferences } from './audioPlayer';
+import type { MusicPoolFilter } from './audioPlayer';
 import type { FeatureToggles } from './features';
 import type { TypingTrailSettings } from './typingTrailSettings';
 import type { VisualizerFont } from './visualizerFont';
@@ -214,8 +214,6 @@ export interface PersistedMenuState {
   /** Bottom row of the player showing sound options instead of the music sets. */
   musicSoundOptionsOpen?: boolean;
   musicActiveSlots?: number[];
-  /** Legacy renderer-owned set list; imported into SQLite once, never written by current code. */
-  musicSets?: MusicSetPreferences;
   /** The pool's search (`audioPlayer.ts`'s `MusicPoolFilter`), set in the visualizer. */
   musicPoolFilter?: MusicPoolFilter;
   /** The music's soundstages (`shared/soundstages.ts`): the last factory stage, the custom stage, the saved ones. */

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   AUDIO_GRID_COLUMNS,
-  DEFAULT_MUSIC_SET_PREFERENCES,
   defaultMusicSetName,
   EMPTY_POOL_FILTER,
   FACTORY_MUSIC_SETS,
@@ -11,7 +10,6 @@ import {
   PLAYLIST_BUTTON_SLOTS,
   PLAYLIST_SLOT_THEMES,
   sanitizePoolFilter,
-  sanitizeMusicSetPreferences,
   shouldStopCurrentSongAfterSlotSelection,
 } from './audioPlayer'
 
@@ -53,33 +51,9 @@ describe('audio set selection', () => {
 })
 
 describe('music sets', () => {
-  it('keeps legacy factory defaults and continues generated names beyond Z', () => {
-    expect(DEFAULT_MUSIC_SET_PREFERENCES.sets).toEqual(FACTORY_MUSIC_SETS)
+  it('continues generated names beyond Z', () => {
     expect(defaultMusicSetName(Array.from({ length: 26 }, (_, index) => ({ slot: index + 10, name: `Set ${String.fromCharCode(65 + index)}` }))))
       .toBe('Set AA')
-  })
-
-  it('sanitizes persisted rows while restoring missing, non-deletable factory sets', () => {
-    expect(sanitizeMusicSetPreferences({
-      sets: [
-        { slot: 7, name: '  My set  ' },
-        { slot: 2, name: 'Changed factory name' },
-        { slot: 8, name: '   ' },
-        { slot: 7, name: 'Duplicate id' },
-        { slot: 1, name: 'Legacy slot' },
-      ],
-      nextSlot: 4,
-    })).toEqual({
-      sets: [
-        { slot: 7, name: 'My set' },
-        { slot: 2, name: 'Pop' },
-        { slot: 4, name: 'Rock' },
-        { slot: 5, name: 'Electronic' },
-        { slot: 6, name: 'Lounge' },
-        { slot: 3, name: 'Ambient' },
-      ],
-      nextSlot: 8,
-    })
   })
 
   describe('music pool search', () => {

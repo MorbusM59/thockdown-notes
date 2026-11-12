@@ -12,7 +12,7 @@ import type {
 } from '../src/shared/appState';
 import { sanitizeGameSave } from '../src/adventure/save';
 import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
-import { isPlaylistSlot, sanitizeMusicSetPreferences, sanitizePoolFilter } from '../src/shared/audioPlayer';
+import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
 import { sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings } from '../src/shared/keystrokeSounds';
@@ -295,12 +295,10 @@ function sanitizeTextureColor(input: unknown, fallback: TextureColorHsva): Textu
 }
 
 function sanitizeTextureMaterial(input: unknown, fallback: TextureMaterialSettings): TextureMaterialSettings {
-  const source = (input && typeof input === 'object')
-    ? input as Partial<TextureMaterialSettings> & { enabled?: unknown }
-    : {};
+  const source = (input && typeof input === 'object') ? input as Partial<TextureMaterialSettings> : {};
   return {
     seed: sanitizeIntegerInRange(source.seed, 0, 0x7fffffff, fallback.seed),
-    textureStrength: source.enabled === false ? 0 : sanitizeRatio(source.textureStrength, fallback.textureStrength),
+    textureStrength: sanitizeRatio(source.textureStrength, fallback.textureStrength),
     granularity: sanitizeIntegerInRange(source.granularity, 1, 20, fallback.granularity),
     vSteps: sanitizeIntegerInRange(source.vSteps, 1, 20, fallback.vSteps),
     color: sanitizeTextureColor(source.color, fallback.color),
@@ -581,7 +579,6 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicReverbBypassed: sanitizeOptionalBoolean(input?.musicReverbBypassed),
     musicSoundOptionsOpen: sanitizeOptionalBoolean(input?.musicSoundOptionsOpen),
     musicActiveSlots: sanitizeMusicActiveSlots(input?.musicActiveSlots),
-    musicSets: input?.musicSets === undefined ? undefined : sanitizeMusicSetPreferences(input.musicSets),
     musicPoolFilter: input?.musicPoolFilter === undefined ? undefined : sanitizePoolFilter(input.musicPoolFilter),
     musicSoundstages: input?.musicSoundstages === undefined ? undefined : sanitizeSoundstagePreferences(input.musicSoundstages),
     musicEqCurve: input?.musicEqCurve === undefined ? undefined : sanitizeEqCurve(input.musicEqCurve),

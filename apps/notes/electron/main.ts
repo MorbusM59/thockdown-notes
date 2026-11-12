@@ -1184,9 +1184,7 @@ function registerIpcHandlers() {
   }];
 
   registerInvokeHandlers<AudioPlayerApi, IpcMainInvokeEvent>(AUDIO_PLAYER_CHANNELS, {
-    initializeMusicSets: async (_event, legacyPreferences) => {
-      return databaseService!.initializeMusicSets(legacyPreferences);
-    },
+    getMusicSets: async () => databaseService!.getMusicSets(),
     createMusicSet: async () => databaseService!.createMusicSet(),
     renameMusicSet: async (_event, slot, name) => databaseService!.renameMusicSet(slot, name),
     moveMusicSet: async (_event, draggedSlot, targetSlot) => databaseService!.moveMusicSet(draggedSlot, targetSlot),

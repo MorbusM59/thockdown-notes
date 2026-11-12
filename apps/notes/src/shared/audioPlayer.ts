@@ -20,7 +20,7 @@ export const AUDIO_PLAYER_CHANNELS = {
   purgeSong:            'audio-player:purge-song',
   getPlaylistCounts:    'audio-player:get-playlist-counts',
   getSongById:          'audio-player:get-song-by-id',
-  initializeMusicSets:  'audio-player:initialize-music-sets',
+  getMusicSets:         'audio-player:get-music-sets',
   createMusicSet:       'audio-player:create-music-set',
   renameMusicSet:       'audio-player:rename-music-set',
   moveMusicSet:         'audio-player:move-music-set',
@@ -43,13 +43,6 @@ export const MAX_FACTORY_PLAYLIST_SLOT = 6;
 export interface MusicSet {
   slot: PlaylistSlot;
   name: string;
-}
-
-export interface MusicSetPreferences {
-  /** Legacy app-state representation, imported once into the database. */
-  sets: MusicSet[];
-  /** Legacy app-state allocator, imported into SQLite's AUTOINCREMENT sequence. */
-  nextSlot: PlaylistSlot;
 }
 
 /**
@@ -108,8 +101,8 @@ export type PickNextSongResult = MusicSongEntry | null;
 export type PlaylistCountsResult = Record<number, number>;
 
 export type AudioPlayerApi = {
-  /** Import legacy app-state set preferences once, then return database-owned sets in display order. */
-  initializeMusicSets(legacyPreferences?: MusicSetPreferences): Promise<MusicSet[]>;
+  /** The sets, in display order. */
+  getMusicSets(): Promise<MusicSet[]>;
   /** Create a set at the end of the ordered set list. */
   createMusicSet(): Promise<MusicSet[]>;
   /** Rename a user-created set. Factory names are fixed. */
@@ -224,11 +217,6 @@ export const FACTORY_MUSIC_SETS: readonly MusicSet[] = PLAYLIST_BUTTON_SLOTS.map
   name: PLAYLIST_SLOT_THEMES[slot],
 }));
 
-export const DEFAULT_MUSIC_SET_PREFERENCES: MusicSetPreferences = {
-  sets: FACTORY_MUSIC_SETS.map((set) => ({ ...set })),
-  nextSlot: MAX_FACTORY_PLAYLIST_SLOT + 1,
-};
-
 const FACTORY_SET_BY_SLOT = new Map(FACTORY_MUSIC_SETS.map((set) => [set.slot, set]));
 
 export function isFactoryMusicSet(slot: number): slot is PlaylistButtonSlot {
@@ -248,55 +236,6 @@ export function defaultMusicSetName(sets: readonly MusicSet[]): string {
     const name = `Set ${letters}`
     if (!used.has(name.toLowerCase())) return name
   }
-}
-
-export function uniqueMusicSetName(name: string, usedNames: Set<string>): string {
-  let candidate = name
-  for (let suffix = 2; usedNames.has(candidate); suffix += 1) {
-    const ending = ` (${suffix})`
-    candidate = `${name.slice(0, 64 - ending.length)}${ending}`
-  }
-  usedNames.add(candidate)
-  return candidate
-}
-
-export function sanitizeMusicSetPreferences(input: unknown): MusicSetPreferences {
-  const source = input && typeof input === 'object' ? input as Record<string, unknown> : {}
-  const entries = Array.isArray(source.sets) ? source.sets : []
-  const sets: MusicSet[] = []
-  const seen = new Set<number>()
-  const usedNames = new Set(FACTORY_MUSIC_SETS.map((set) => set.name))
-
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue
-    const record = entry as Record<string, unknown>
-    const slot = record.slot
-    if (!isPlaylistSlot(slot) || seen.has(slot)) continue
-    if (isFactoryMusicSet(slot)) {
-      const factory = FACTORY_SET_BY_SLOT.get(slot)
-      if (!factory) continue
-      sets.push({ ...factory })
-      seen.add(slot)
-      continue
-    }
-    if (slot <= MAX_FACTORY_PLAYLIST_SLOT || typeof record.name !== 'string') continue
-    const name = sanitizeDocumentText(record.name).trim().slice(0, 64)
-    if (!name) continue
-    const uniqueName = uniqueMusicSetName(name, usedNames)
-    sets.push({ slot, name: uniqueName })
-    seen.add(slot)
-  }
-
-  for (const factory of FACTORY_MUSIC_SETS) {
-    if (!seen.has(factory.slot)) sets.push({ ...factory })
-  }
-
-  const highestSlot = Math.max(MAX_FACTORY_PLAYLIST_SLOT, ...sets.map((set) => set.slot))
-  const requestedNextSlot = source.nextSlot
-  const nextSlot = Number.isSafeInteger(requestedNextSlot) && (requestedNextSlot as number) > highestSlot
-    ? requestedNextSlot as number
-    : highestSlot + 1
-  return { sets, nextSlot }
 }
 
 /**

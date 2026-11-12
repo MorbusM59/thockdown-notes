@@ -70,7 +70,6 @@ import type {
   IndexedMusicFile,
   MusicPoolQuery,
   MusicSet,
-  MusicSetPreferences,
   MusicSongEntry,
   PlaylistSlot,
   PlaylistCountsResult,
@@ -89,9 +88,7 @@ import {
   isPlaylistSlot,
   isPoolFilterEmpty,
   createPoolFilterMatcher,
-  sanitizeMusicSetPreferences,
   sanitizePoolFilter,
-  uniqueMusicSetName,
 } from '../src/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
@@ -449,7 +446,7 @@ function normalizeTextureMaterialSettings(
   fallback: TextureMaterialSettings,
 ): TextureMaterialSettings {
   const source = input && typeof input === 'object'
-    ? input as Partial<TextureMaterialSettings> & { enabled?: unknown }
+    ? input as Partial<TextureMaterialSettings>
     : {};
   const color = source.color && typeof source.color === 'object'
     ? source.color as Partial<TextureMaterialSettings['color']>
@@ -457,9 +454,7 @@ function normalizeTextureMaterialSettings(
 
   return {
     seed: clampInteger(source.seed, 0, 0x7fffffff, fallback.seed),
-    textureStrength: source.enabled === false
-      ? 0
-      : roundForSignature(clampNumber(source.textureStrength, 0, 1, fallback.textureStrength)),
+    textureStrength: roundForSignature(clampNumber(source.textureStrength, 0, 1, fallback.textureStrength)),
     granularity: clampInteger(source.granularity, 1, 20, fallback.granularity),
     vSteps: clampInteger(source.vSteps, 1, 20, fallback.vSteps),
     color: {
@@ -3518,39 +3513,6 @@ export class DatabaseService {
     return rows.map(({ id, name }) => ({ slot: id, name }));
   }
 
-  initializeMusicSets(legacyPreferences?: MusicSetPreferences): MusicSet[] {
-    const key = 'music-sets-imported-from-app-state';
-    if (this.getAppMeta(key) === null) {
-      const legacy = legacyPreferences === undefined
-        ? null
-        : sanitizeMusicSetPreferences(legacyPreferences);
-      const db = this.requireDb();
-      db.transaction(() => {
-        if (legacy) {
-          const current = this.getMusicSets();
-          const known = new Set(legacy.sets.map((set) => set.slot));
-          const ordered = [
-            ...legacy.sets,
-            ...current.filter((set) => !known.has(set.slot)),
-          ];
-          const upsert = db.prepare(`
-            INSERT INTO music_sets (id, name, position)
-            VALUES (?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET name = excluded.name, position = excluded.position
-          `);
-          ordered.forEach((set, position) => upsert.run(set.slot, set.name, position));
-          db.prepare(`
-            UPDATE sqlite_sequence
-            SET seq = MAX(seq, ?)
-            WHERE name = 'music_sets'
-          `).run(Math.max(0, legacy.nextSlot - 1));
-        }
-        db.prepare('INSERT INTO app_meta (key, value) VALUES (?, ?)').run(key, '1');
-      })();
-    }
-    return this.getMusicSets();
-  }
-
   createMusicSet(): MusicSet[] {
     const db = this.requireDb();
     const sets = this.getMusicSets();
@@ -3833,114 +3795,6 @@ export class DatabaseService {
     FACTORY_MUSIC_SETS.forEach((set, position) => insert.run(set.slot, set.name, position));
   }
 
-  private ensureMusicSetNamesAreUnique(): void {
-    const db = this.requireDb();
-    const usedNames = new Set(FACTORY_MUSIC_SETS.map((set) => set.name));
-    const update = db.prepare('UPDATE music_sets SET name = ? WHERE id = ?');
-    for (const set of this.getMusicSets()) {
-      if (isFactoryMusicSet(set.slot)) continue;
-      const name = uniqueMusicSetName(set.name, usedNames);
-      if (name !== set.name) update.run(name, set.slot);
-    }
-    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_music_sets_name ON music_sets(name)');
-  }
-
-  /** Move old one-set-per-song rows into the membership table without changing song ids. */
-  private migrateMusicSongsToSetMemberships(): void {
-    const db = this.requireDb();
-    const columns = new Set(
-      (db.prepare('PRAGMA table_info(music_songs)').all() as Array<{ name: string }>).map((column) => column.name),
-    );
-    if (!columns.has('playlistSlot')) return;
-    const album = columns.has('album') ? 'album' : "''";
-    const tagsRead = columns.has('tagsRead') ? 'tagsRead' : '0';
-
-    db.pragma('foreign_keys = OFF');
-    try {
-      db.transaction(() => {
-        const sets = this.getMusicSets();
-        const insertSet = db.prepare(
-          'INSERT OR IGNORE INTO music_sets (id, name, position) VALUES (?, ?, ?)'
-        );
-        const legacySlots = db.prepare(
-          'SELECT DISTINCT playlistSlot FROM music_songs WHERE playlistSlot > 0 ORDER BY playlistSlot'
-        ).all() as Array<{ playlistSlot: number }>;
-        for (const { playlistSlot } of legacySlots) {
-          if (!isPlaylistSlot(playlistSlot) || sets.some((set) => set.slot === playlistSlot)) continue;
-          const set = { slot: playlistSlot, name: defaultMusicSetName(sets) };
-          insertSet.run(set.slot, set.name, sets.length);
-          sets.push(set);
-        }
-
-        db.prepare(`
-          INSERT OR IGNORE INTO music_set_songs (setId, songId)
-          SELECT playlistSlot, id FROM music_songs WHERE playlistSlot > 0
-        `).run();
-
-        db.exec(`
-          DROP TABLE IF EXISTS music_songs_migrating;
-          CREATE TABLE music_songs_migrating (
-          id          INTEGER PRIMARY KEY AUTOINCREMENT,
-          filePath    TEXT    NOT NULL UNIQUE,
-          priority    INTEGER NOT NULL DEFAULT 1,
-          favorability INTEGER NOT NULL DEFAULT 1,
-          title       TEXT    NOT NULL DEFAULT '',
-          artist      TEXT    NOT NULL DEFAULT '',
-          durationSec REAL    NOT NULL DEFAULT 0,
-          album       TEXT    NOT NULL DEFAULT '',
-          tagsRead    INTEGER NOT NULL DEFAULT 0
-          );
-
-          INSERT INTO music_songs_migrating
-            (id, filePath, priority, favorability, title, artist, durationSec, album, tagsRead)
-          SELECT id, filePath, priority, favorability, title, artist, durationSec, ${album}, ${tagsRead}
-          FROM music_songs WHERE playlistSlot > 0;
-
-          DROP TABLE music_songs;
-          ALTER TABLE music_songs_migrating RENAME TO music_songs;
-
-          CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
-        `);
-      })();
-    } finally {
-      db.pragma('foreign_keys = ON');
-    }
-
-    const violations = db.pragma('foreign_key_check(music_set_songs)') as Array<{ table: string; rowid: number; parent: string }>;
-    if (violations.length > 0) {
-      throw new Error(`Music-set migration left a foreign-key violation in ${violations[0].table}`);
-    }
-  }
-
-  private migrateTexturePatternCache(): void {
-    const db = this.requireDb();
-    const columns = db.prepare('PRAGMA table_info(texture_pattern_cache)').all() as Array<{ name: string; pk: number }>;
-    if (
-      columns.some((column) => column.name === 'textureStrength' && column.pk > 0)
-    ) {
-      return;
-    }
-
-    db.exec(`
-      DROP TABLE IF EXISTS texture_pattern_cache;
-      CREATE TABLE texture_pattern_cache (
-        surface TEXT NOT NULL,
-        width INTEGER NOT NULL,
-        height INTEGER NOT NULL,
-        seed INTEGER NOT NULL,
-        textureStrength REAL NOT NULL,
-        granularity REAL NOT NULL,
-        vSteps INTEGER NOT NULL,
-        algorithmVersion INTEGER NOT NULL,
-        data BLOB NOT NULL,
-        mimeType TEXT NOT NULL,
-        createdAt INTEGER NOT NULL,
-        PRIMARY KEY (surface, width, height, seed, textureStrength, granularity, vSteps, algorithmVersion)
-      );
-      CREATE INDEX IF NOT EXISTS idx_texture_pattern_cache_created_at ON texture_pattern_cache(createdAt DESC);
-    `);
-  }
-
   private ensureSchema(): void {
     const db = this.requireDb();
 
@@ -4083,6 +3937,7 @@ export class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_music_sets_position ON music_sets(position);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_music_sets_name ON music_sets(name);
       CREATE INDEX IF NOT EXISTS idx_music_set_songs_song ON music_set_songs(songId);
       CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
 
@@ -4229,7 +4084,6 @@ export class DatabaseService {
       );
     `);
 
-    this.migrateTexturePatternCache();
 
     // A fresh install always starts with exactly one (default, unnamed)
     // section — the split-view UI grows the rest from there.
@@ -4336,11 +4190,8 @@ export class DatabaseService {
     // means only actually-orphaned notes lose anything).
     this.migrateChaptersToSingleParent();
     this.migrateChapterTagsToParent();
-    // Seed sets before migrating song rows so every old playlist id has a
-    // corresponding set to reference.
+    // The factory sets always exist (ids 2..6, `FACTORY_MUSIC_SETS`).
     this.ensureFactoryMusicSets();
-    this.migrateMusicSongsToSetMemberships();
-    this.ensureMusicSetNamesAreUnique();
     // Older databases may not yet have these tag columns.
     this.ensureMusicSongsColumn('album', "TEXT NOT NULL DEFAULT ''");
     this.ensureMusicSongsColumn('tagsRead', 'INTEGER NOT NULL DEFAULT 0');

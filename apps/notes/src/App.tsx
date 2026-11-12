@@ -13,10 +13,9 @@ import { AudioControls } from './components/AudioControls'
 import { soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import {
-  DEFAULT_MUSIC_SET_PREFERENCES,
   EMPTY_POOL_FILTER,
+  FACTORY_MUSIC_SETS,
   MUSIC_SET_QUICK_ACCESS_COUNT,
-  sanitizeMusicSetPreferences,
   sanitizePoolFilter,
   type MusicPoolFilter,
   type MusicSet,
@@ -683,9 +682,7 @@ function normalizeTextureMaterial(source: unknown, fallback: TextureMaterialSett
 
   return {
     seed: Math.max(0, Math.round(toFiniteNumber(record.seed, fallback.seed))),
-    textureStrength: record.enabled === false
-      ? 0
-      : clamp(toFiniteNumber(record.textureStrength, fallback.textureStrength), 0, 1),
+    textureStrength: clamp(toFiniteNumber(record.textureStrength, fallback.textureStrength), 0, 1),
     granularity: clamp(
       Math.round(toFiniteNumber(record.granularity, fallback.granularity)),
       TEXTURE_GRANULARITY_MIN,
@@ -2303,7 +2300,7 @@ function App() {
   }, [soundscapePreferences])
   const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
   const [musicSets, setMusicSets] = useState<MusicSet[]>(() =>
-    DEFAULT_MUSIC_SET_PREFERENCES.sets.map((set) => ({ ...set })),
+    FACTORY_MUSIC_SETS.map((set) => ({ ...set })),
   )
   const [musicPoolFilter, setMusicPoolFilter] = useState<MusicPoolFilter>(EMPTY_POOL_FILTER)
   // The EQ curve (shared/musicEqCurve.ts) and the soundstages (shared/soundstages.ts).
@@ -5144,10 +5141,9 @@ ${markdownHtml}
           const appState = window.thockdownState ? await window.thockdownState.loadAppState() : { selectedNoteId: null }
           if (disposed) return
 
-          const legacyMusicSetPreferences = sanitizeMusicSetPreferences(appState.menu?.musicSets)
           const restoredMusicSets = window.thockdownAudioPlayer
-            ? await window.thockdownAudioPlayer.initializeMusicSets(appState.menu?.musicSets)
-            : legacyMusicSetPreferences.sets
+            ? await window.thockdownAudioPlayer.getMusicSets()
+            : FACTORY_MUSIC_SETS.map((set) => ({ ...set }))
           if (disposed) return
           setMusicSets(restoredMusicSets)
 

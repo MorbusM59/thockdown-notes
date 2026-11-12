@@ -3,9 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import BetterSqlite3 from 'better-sqlite3'
 import { DatabaseService } from './databaseService'
-import { EMPTY_POOL_FILTER, FACTORY_MUSIC_SETS, type MusicSetPreferences } from '../src/shared/audioPlayer'
+import { EMPTY_POOL_FILTER, FACTORY_MUSIC_SETS } from '../src/shared/audioPlayer'
 
 const indexedFile = (filePath: string) => ({ filePath, title: '', artist: '', album: '' })
 
@@ -13,7 +12,6 @@ describe('DatabaseService music sets', () => {
   let dataRoot: string
   let db: DatabaseService
 
-  const dbFile = () => path.join(dataRoot, 'thockdown-notes.db')
 
   beforeEach(() => {
     dataRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-music-test-'))
@@ -47,7 +45,7 @@ describe('DatabaseService music sets', () => {
       .toEqual([initial[0].slot, initial[1].slot, userSet.slot, ...initial.slice(2).map((set) => set.slot)])
   })
 
-  it('requires unique set names and repairs duplicates from an older database', async () => {
+  it('requires unique set names', async () => {
     db = new DatabaseService(dataRoot)
     await db.initialize()
     const first = db.createMusicSet()[5]
@@ -55,16 +53,6 @@ describe('DatabaseService music sets', () => {
 
     expect(() => db.renameMusicSet(second.slot, first.name)).toThrow('A set with that name already exists.')
 
-    db.close()
-    const legacy = new BetterSqlite3(dbFile())
-    legacy.exec('DROP INDEX idx_music_sets_name')
-    legacy.prepare('UPDATE music_sets SET name = ? WHERE id = ?').run(first.name, second.slot)
-    legacy.close()
-
-    db = new DatabaseService(dataRoot)
-    await db.initialize()
-    expect(db.getMusicSets().find((set) => set.slot === first.slot)?.name).toBe('Set A')
-    expect(db.getMusicSets().find((set) => set.slot === second.slot)?.name).toBe('Set A (2)')
   })
 
   it('allows one song to belong to multiple sets without duplicate pool rows', async () => {
@@ -114,60 +102,4 @@ describe('DatabaseService music sets', () => {
     expect(db.getMusicSets().some((set) => set.slot === userSet.slot)).toBe(false)
   })
 
-  it('imports legacy slot rows into memberships and preserves their song ids', async () => {
-    const legacy = new BetterSqlite3(dbFile())
-    legacy.exec(`
-      CREATE TABLE music_songs (
-        id           INTEGER PRIMARY KEY AUTOINCREMENT,
-        filePath     TEXT NOT NULL UNIQUE,
-        playlistSlot INTEGER NOT NULL CHECK(playlistSlot BETWEEN 1 AND 5),
-        priority     INTEGER NOT NULL DEFAULT 1,
-        favorability INTEGER NOT NULL DEFAULT 1,
-        title        TEXT NOT NULL DEFAULT '',
-        artist       TEXT NOT NULL DEFAULT '',
-        durationSec  REAL NOT NULL DEFAULT 0
-      );
-    `)
-    legacy.prepare(
-      "INSERT INTO music_songs (id, filePath, playlistSlot, title) VALUES (19, '/music/old.mp3', 3, 'Old')"
-    ).run()
-    legacy.close()
-
-    db = new DatabaseService(dataRoot)
-    await db.initialize()
-
-    const migrated = db.getMusicPlaylist(3)
-    expect(migrated).toHaveLength(1)
-    expect(migrated[0]).toMatchObject({
-      id: 19,
-      filePath: '/music/old.mp3',
-      title: 'Old',
-      setIds: [3],
-      album: '',
-    })
-
-    db.close()
-    db = new DatabaseService(dataRoot)
-    await db.initialize()
-    expect(db.getMusicPlaylist(3)[0].id).toBe(19)
-  })
-
-  it('imports legacy names and order once, then allocates ids beyond the imported set ids', async () => {
-    db = new DatabaseService(dataRoot)
-    await db.initialize()
-    const legacy: MusicSetPreferences = {
-      sets: [
-        { slot: 9, name: 'My Set' },
-        { slot: 10, name: 'My Set' },
-        ...FACTORY_MUSIC_SETS.map((set) => ({ ...set })),
-      ],
-      nextSlot: 11,
-    }
-
-    const imported = db.initializeMusicSets(legacy)
-    expect(imported[0]).toEqual({ slot: 9, name: 'My Set' })
-    expect(imported[1]).toEqual({ slot: 10, name: 'My Set (2)' })
-    expect(db.initializeMusicSets()).toEqual(imported)
-    expect(db.createMusicSet()[imported.length].slot).toBeGreaterThan(9)
-  })
 })
