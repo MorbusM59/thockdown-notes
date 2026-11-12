@@ -1,3 +1,7 @@
+import { sampleCurveRampProgress } from '@thockdown/interaction/ScrollCurvePlan'
+import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney'
+import { isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
+
 // The scrollbar thumb during a bridged journey.
 //
 // ## What it does
@@ -72,4 +76,69 @@ export function resolveThumbRubberBand(input: ThumbRubberBandInput): ThumbGeomet
     topPx: Math.min(leadingEdgeTopPx, trailingEdgeTopPx),
     heightPx: thumbHeightPx + Math.abs(leadingEdgeTopPx - trailingEdgeTopPx),
   }
+}
+
+export interface ThumbRubberBand {
+  /** Stretch the thumb from `startTopPx` to `targetTopPx` over the journey's ramps. */
+  start: (timing: ScrollJourneyTiming, startTopPx: number, targetTopPx: number) => void
+  stop: () => void
+  /** True while the band owns the thumb; the surface's ordinary sync stands down. */
+  isRunning: () => boolean
+}
+
+/**
+ * The frame loop that draws the band, the same for every scrollbar. The
+ * surface supplies its scroller, its thumb's resting height, how to paint the
+ * thumb, and `onSettled`, which hands the thumb back to the surface's own sync
+ * once the journey is over.
+ *
+ * The reader may interrupt a journey with a wheel, a drag, a page key or
+ * another click, and every one of those cancels the scroll without telling
+ * the scrollbar. Asking the engine whether its journey is still running
+ * covers all of them at once; without it the band would go on stretching
+ * toward a target nobody is travelling to any more.
+ */
+export function createThumbRubberBand({
+  scroller,
+  thumbHeightPx,
+  paint,
+  onSettled,
+}: {
+  scroller: () => HTMLElement | null
+  thumbHeightPx: () => number
+  paint: (topPx: number, heightPx: number) => void
+  onSettled: () => void
+}): ThumbRubberBand {
+  let raf: number | null = null
+  const stop = () => {
+    if (raf !== null) cancelAnimationFrame(raf)
+    raf = null
+  }
+  const start = (timing: ScrollJourneyTiming, startTopPx: number, targetTopPx: number) => {
+    stop()
+    const heightPx = thumbHeightPx()
+    const rampUpSec = timing.rampUp.durationSec
+    const bridgeEndSec = rampUpSec + timing.bridgeDurationSec
+    const totalSec = bridgeEndSec + timing.rampDown.durationSec
+    let startedAtMs: number | null = null
+    const frame = (nowMs: number) => {
+      startedAtMs ??= nowMs
+      const elapsedSec = (nowMs - startedAtMs) / 1000
+      const el = scroller()
+      if (elapsedSec >= totalSec || !el || !isSmoothScrollActive(el)) {
+        raf = null
+        onSettled()
+        return
+      }
+      const leadProgress = elapsedSec < rampUpSec ? sampleCurveRampProgress(timing.rampUp, elapsedSec) : 1
+      const trailProgress = elapsedSec <= bridgeEndSec
+        ? 0
+        : sampleCurveRampProgress(timing.rampDown, elapsedSec - bridgeEndSec)
+      const band = resolveThumbRubberBand({ startTopPx, targetTopPx, thumbHeightPx: heightPx, leadProgress, trailProgress })
+      paint(band.topPx, band.heightPx)
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+  }
+  return { start, stop, isRunning: () => raf !== null }
 }
