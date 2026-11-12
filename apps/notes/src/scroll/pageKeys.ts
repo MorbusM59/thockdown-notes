@@ -159,8 +159,13 @@ export function createPageKeys({
     if (rampRaf !== null) cancelAnimationFrame(rampRaf)
     releaseScrollBehavior ??= borrowAutoScrollBehavior(scroller)
 
-    const startScrollTop = scroller.scrollTop
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    // The ramp writes its displacement as a STEP from the scroller's current
+    // position, never as an offset from where it started: a windowed
+    // scroller re-anchors its content under the reader (the block window's
+    // carry lowers scrollTop by what it unmounted), and an absolute target
+    // from before that carry would throw the reader forward by the same
+    // amount on every frame, re-triggering the move until the document end.
+    let writtenDisplacement = 0
     let startMs: number | null = null
     const rampFrame = (nowMs: number) => {
       rampRaf = null
@@ -168,7 +173,12 @@ export function createPageKeys({
       startMs ??= nowMs
       const elapsedSec = Math.max(0, (nowMs - startMs) / 1000)
       const displacement = sampleReleaseRampDownPlan(plan, elapsedSec)
-      const next = place(clamp(startScrollTop + displacement, 0, maxScrollTop))
+      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      const before = scroller.scrollTop
+      const next = place(clamp(before + (displacement - writtenDisplacement), 0, maxScrollTop))
+      // Counted as what actually moved, so a step the row grid rounds away
+      // is carried into the next frame rather than lost.
+      writtenDisplacement += next - before
       write(next)
       if (elapsedSec >= plan.tailDurationSec || atEdge(next, displacement >= 0 ? 1 : -1)) {
         returnScrollBehavior()
