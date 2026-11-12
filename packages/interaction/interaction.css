@@ -664,14 +664,17 @@
   flex-direction: column;
   gap:            var(--color-picker-pair-gap);
   min-width:      0;
-  --canonical-scroll-thickness: calc((var(--color-grid-cell) - var(--color-picker-pair-gap)) / 2);
 }
 
 /* Two sliders stacked in one grid row: the slider's thickness is set at its
-   source, so the shell, the thumb and the pointer arithmetic all follow it. */
+   source, so the shell, the thumb and the pointer arithmetic all follow it.
+   Inside the colour picker row the stack's gap is the toggles' pair gap, so a
+   track is exactly a toggle's height; elsewhere it is the grid gap. */
 .options-color-picker-sliders,
 .options-surface-texture-controls {
-  --canonical-scroll-thickness: calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
+  --canonical-scroll-thickness: calc(
+    (var(--color-grid-cell) - var(--color-picker-pair-gap, var(--color-grid-gap))) / 2
+  );
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
   );
