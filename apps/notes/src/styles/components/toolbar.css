@@ -704,8 +704,8 @@
   font-size: calc(var(--entry-height) * 0.45);
 }
 
-/* A display cell that shows text reads from the left, cut with an ellipsis
-   where it does not fit. A block rather than a flex box, because
+/* A display cell that shows text is centred, cut with an ellipsis where it
+   does not fit (a song in the set list reads from the left). A block rather than a flex box, because
    text-overflow applies to a block's own line; the line box is the cell's
    inner height, so the text centres vertically without flex. A set's icon
    cell (an icon or two initials in a square) and the column headers stay
@@ -713,9 +713,13 @@
 .options-curve-display:not(.options-curve-header):not(.options-music-set-icon) {
   display:       block;
   padding:       0 var(--spacing-small);
-  text-align:    left;
+  text-align:    center;
   white-space:   nowrap;
   overflow:      hidden;
   text-overflow: ellipsis;
   line-height:   calc(var(--entry-height) - 2px);
+}
+
+.options-music-song-row > .options-curve-display {
+  text-align: left;
 }
