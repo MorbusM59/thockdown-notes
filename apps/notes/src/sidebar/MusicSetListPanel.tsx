@@ -148,7 +148,7 @@ export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grou
                     const name = songListTitleText(song)
                     return (
                       <div key={song.id} className="options-curve-row options-music-song-row">
-                        <div className="options-curve-cell options-music-set-name" data-tooltip={song.filePath}>{name}</div>
+                        <div className="options-curve-cell options-curve-display options-music-set-name" data-tooltip={song.filePath}>{name}</div>
                         <button
                           type="button"
                           className="options-curve-cell options-curve-button"

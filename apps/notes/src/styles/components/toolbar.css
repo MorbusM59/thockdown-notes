@@ -492,6 +492,18 @@
 }
 
 /* Track-styled rows shared by the curve editor and dictionary list. */
+/* ENTRY LISTS: the curve editors' points, the dictionaries, the music sets
+   and a set's songs. Every cell is the micro height, and is one of three
+   kinds, named by its class:
+   - a FIELD (.options-curve-field) can be clicked into to change its text,
+     and is drawn as a micro slider track;
+   - a DISPLAY cell (.options-curve-display) only shows its text, and is
+     drawn as a button of any width;
+   - a BUTTON (.options-curve-button) is square, drawn as the colour
+     picker's micro channel toggles. Its column in a row's template is
+     var(--micro-height) wide, which is what makes it square.
+   A display cell renamed by a right-click becomes a field while it is
+   edited. */
 .options-curve-rows {
   display:        flex;
   flex-direction: column;
@@ -501,39 +513,59 @@
 
 .options-curve-row {
   display:               grid;
-  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr 0.8fr 0.8fr;
+  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr var(--micro-height) var(--micro-height);
   column-gap:            var(--toolbar-options-gap);
-  height:                var(--canonical-scroll-thickness);
+  height:                var(--micro-height);
 }
 
 .options-curve-cell {
-  box-sizing:    border-box;
-  min-width:     0;
-  height:        100%;
-  margin:        0;
-  padding:       0;
-  border:        1px solid var(--canonical-scroll-track-border);
-  border-radius: var(--border-radius-regular);
-  background:    var(--canonical-scroll-track-bg);
-  box-shadow:    var(--box-shadow-inverted-light);
-  color:         var(--color-text-80);
-  font-size:     calc(10px * var(--ui-font-scale));
-  line-height:   1;
-  text-align:    center;
-  display:       flex;
-  align-items:   center;
+  box-sizing:      border-box;
+  min-width:       0;
+  height:          100%;
+  margin:          0;
+  padding:         0;
+  border-radius:   var(--border-radius-regular);
+  color:           var(--color-text-80);
+  font-size:       calc(9px * var(--ui-font-scale));
+  line-height:     1;
+  text-align:      center;
+  display:         flex;
+  align-items:     center;
   justify-content: center;
 }
 
+.options-curve-field {
+  border:      1px solid var(--canonical-scroll-track-border);
+  background:  var(--canonical-scroll-track-bg);
+  box-shadow:  var(--box-shadow-inverted-light);
+  outline:     none;
+  font-family: inherit;
+}
+
+.options-curve-field:focus {
+  border-color: var(--btn-border-active);
+}
+
+/* A button's own rules (look.css) already draw a <button> this way; a
+   display cell that is not a button takes the same resting look. */
+.options-curve-display,
+.options-curve-button {
+  border:     1px solid var(--btn-border-default);
+  background: var(--btn-bg-default);
+  font-weight: 600;
+}
+
+.options-curve-button {
+  width:  100%;
+  font-size: calc(9px * var(--ui-font-scale));
+}
+
 .options-curve-header {
-  box-sizing:            border-box;
   width:                 100%;
-  height:                var(--canonical-scroll-thickness);
+  height:                var(--micro-height);
   display:               grid;
-  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr 0.8fr 0.8fr;
+  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr var(--micro-height) var(--micro-height);
   column-gap:            var(--toolbar-options-gap);
-  color:                 var(--color-text-80);
-  font-size:             calc(10px * var(--ui-font-scale));
 }
 
 .options-curve-header-cell {
@@ -544,16 +576,8 @@
 }
 
 .options-curve-row.is-active .options-curve-index {
-  border-color: rgba(81, 73, 66, 0.8);
-}
-
-.options-curve-field {
-  outline: none;
-  font-family: inherit;
-}
-
-.options-curve-field:focus {
   border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 .options-curve-button.is-disabled {
@@ -562,16 +586,16 @@
 
 /* A dictionary row: the EQ point row's cells, as toggle, name, remove, install. */
 .options-dictionary-row {
-  grid-template-columns: 0.8fr 4.1fr 0.8fr 0.8fr;
+  grid-template-columns: var(--micro-height) 1fr var(--micro-height) var(--micro-height);
 }
 
 .options-music-set-row,
 .options-music-set-divider {
-  grid-template-columns: 1fr 4fr 2fr 1fr 1fr 1fr;
+  grid-template-columns: var(--micro-height) 4fr 2fr var(--micro-height) var(--micro-height) var(--micro-height);
 }
 
 .options-music-set-add {
-  grid-column: 1 / -1;
+  grid-column: -2 / -1;
 }
 
 .options-music-set-name {
@@ -603,10 +627,10 @@
 
 /* The set list (sidebar/MusicSetListPanel.tsx): a song's name and its remove button. */
 .options-music-song-row {
-  grid-template-columns: 9fr 1fr;
+  grid-template-columns: 1fr var(--micro-height);
   /* A long set is thousands of rows; only those on screen are painted. */
   content-visibility:    auto;
-  contain-intrinsic-size: auto var(--canonical-scroll-thickness);
+  contain-intrinsic-size: auto var(--micro-height);
 }
 
 /* A folder's or artist's name, cut to the heading's width. */
@@ -621,11 +645,11 @@
    six-column grid. The filter and the two groupings are stacked in it at the
    picker's stacked-slider thickness; the exit takes the sixth cell whole. */
 .options-music-set-list-dock {
-  --set-list-half-cell:  calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
   display:               grid;
   grid-template-columns: repeat(6, var(--color-grid-cell));
-  grid-template-rows:    repeat(2, var(--set-list-half-cell));
-  gap:                   var(--color-grid-gap);
+  grid-template-rows:    repeat(2, var(--micro-height));
+  row-gap:               var(--slider-pair-gap);
+  column-gap:            var(--color-grid-gap);
 }
 
 .options-music-set-list-filter {
@@ -660,4 +684,14 @@
   height:       100%;
   min-width:    0;
   min-height:   0;
+}
+
+/* An icon in a micro cell leaves the cell's frame visible around it, as the
+   colour picker's channel letters do; a set's initials are two glyphs. */
+.options-curve-cell > .fa-solid {
+  font-size: calc(var(--micro-height) * 0.55);
+}
+
+.options-music-set-icon {
+  font-size: calc(var(--micro-height) * 0.45);
 }

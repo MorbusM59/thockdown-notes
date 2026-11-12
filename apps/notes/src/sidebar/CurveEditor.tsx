@@ -296,7 +296,7 @@ export function CurveEditor(props: CurveEditorProps) {
       </div>
       <div className="options-curve-rows" role="group" aria-label={`${ariaLabel}: points`}>
         {props.columnHeaders ? (
-          <div className="options-curve-cell options-curve-header" aria-hidden="true">
+          <div className="options-curve-cell options-curve-display options-curve-header" aria-hidden="true">
             {props.columnHeaders.map((header, index) => (
               <span key={index} className="options-curve-header-cell">{header}</span>
             ))}
@@ -354,7 +354,7 @@ function CurvePointRow({ curve, index, isActive, onSelect, onEdit, onSetX, onRem
     : index === 0 ? endLabels?.[0] ?? String(index) : isLast ? endLabels?.[1] ?? String(index) : String(index)
   return (
     <div className={`options-curve-row${isActive ? ' is-active' : ''}`}>
-      <span className="options-curve-cell options-curve-index">{label}</span>
+      <span className="options-curve-cell options-curve-display options-curve-index">{label}</span>
       <CurveField
         ariaLabel={`Point ${label} ${x.noun}`}
         display={x.display(point.x)}

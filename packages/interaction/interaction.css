@@ -671,7 +671,7 @@
   gap:                var(--slider-pair-gap);
   min-width:          0;
   min-height:         0;
-  --canonical-scroll-thickness: calc((var(--color-grid-cell) - var(--slider-pair-gap)) / 2);
+  --canonical-scroll-thickness: var(--micro-height);
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
   );

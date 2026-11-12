@@ -557,6 +557,10 @@
   /* Between two controls sharing one grid cell (.options-slider-pair, the
      colour picker's channel toggles). */
   --slider-pair-gap:     2px;
+  /* The MICRO height: one of two controls stacked in a grid cell, split by
+     --slider-pair-gap (a colour picker channel toggle, a paired slider's
+     track, every cell of an entry list). */
+  --micro-height:        calc((var(--color-grid-cell) - var(--slider-pair-gap)) / 2);
 
   /* Additional Editor tokens found later in file */
   /* These bars/rows have padding derived from --spacing-regular (the fine

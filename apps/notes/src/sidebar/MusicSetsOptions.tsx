@@ -44,7 +44,7 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
   }
 
   if (factory) {
-    return <div className="options-curve-cell options-music-set-name">{name}</div>
+    return <div className="options-curve-cell options-curve-display options-music-set-name">{name}</div>
   }
 
   if (editing) {
@@ -79,7 +79,7 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
   return (
     <button
       type="button"
-      className="options-curve-cell options-curve-button options-music-set-name"
+      className="options-curve-cell options-curve-display options-music-set-name"
       data-tooltip="Right-click to rename this set"
       aria-label={`${name}; right-click to rename`}
       data-secondary-press="action"
@@ -136,7 +136,7 @@ export function MusicSetsOptions() {
           if (Number.isSafeInteger(draggedSlot) && draggedSlot > 0) nowPlaying.moveMusicSet(draggedSlot, set.slot)
         }}
       >
-        <div className="options-curve-cell options-music-set-icon" aria-label={factory ? set.name : undefined}>
+        <div className="options-curve-cell options-curve-display options-music-set-icon" aria-label={factory ? set.name : undefined}>
           {factory
             ? <span className={PLAYLIST_SLOT_ICONS[set.slot as keyof typeof PLAYLIST_SLOT_ICONS]} aria-hidden="true" />
             : set.name.slice(0, 2).toUpperCase()}
@@ -144,7 +144,7 @@ export function MusicSetsOptions() {
         <SetName slot={set.slot} name={set.name} factory={factory} takenNames={sets.map((other) => other.name)} onRename={nowPlaying.renameMusicSet} />
         <button
           type="button"
-          className="options-curve-cell options-curve-button options-music-set-count"
+          className="options-curve-cell options-curve-display options-music-set-count"
           data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs. Click to list them; hold right-click to empty ${set.name}.`}
           aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
           data-secondary-press="action"
