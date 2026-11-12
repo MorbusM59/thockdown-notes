@@ -570,6 +570,10 @@
   grid-template-columns: 0.8fr 3.3fr 0.8fr 0.8fr 0.8fr;
 }
 
+.options-music-set-add {
+  grid-column: 1 / -1;
+}
+
 .options-music-set-name {
   overflow:      hidden;
   white-space:   nowrap;
@@ -581,8 +585,11 @@
 }
 
 .options-music-set-divider {
-  border-top:    1px solid var(--canonical-scroll-track-border);
-  border-bottom: 1px solid var(--canonical-scroll-track-border);
+  margin: var(--spacing-small);
+  box-sizing:            border-box;
+  height:                1px;
+  border: none;
+  background-color: var(--btn-border-default);
 }
 
 .options-dictionary-toggle.is-active {

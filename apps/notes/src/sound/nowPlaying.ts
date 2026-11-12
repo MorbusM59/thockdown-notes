@@ -32,6 +32,7 @@ export type NowPlaying = {
   renameMusicSet: (slot: PlaylistSlot, name: string) => Promise<void>
   moveMusicSet: (draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot) => void
   deleteMusicSet: (slot: PlaylistSlot) => Promise<void>
+  purgeMusicSet: (slot: PlaylistSlot) => Promise<void>
   addToMusicSet: (slot: PlaylistSlot, source: 'files' | 'folder') => Promise<boolean>
   /** The music's volume, reverb amount and reverb room, each a fraction 0..1 (what is resumed while muted or bypassed). */
   levels: SoundLevels
@@ -54,6 +55,7 @@ let current: NowPlaying = {
   renameMusicSet: async () => {},
   moveMusicSet: () => {},
   deleteMusicSet: async () => {},
+  purgeMusicSet: async () => {},
   addToMusicSet: async () => false,
   setPoolFilter: () => {},
   levels: { volume: 0, reverb: 0, room: 0 },
@@ -74,6 +76,7 @@ export function publishNowPlaying(next: NowPlaying): void {
     && next.renameMusicSet === current.renameMusicSet
     && next.moveMusicSet === current.moveMusicSet
     && next.deleteMusicSet === current.deleteMusicSet
+    && next.purgeMusicSet === current.purgeMusicSet
     && next.addToMusicSet === current.addToMusicSet
     && next.setPoolFilter === current.setPoolFilter
     && next.levels === current.levels

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 import { isFactoryMusicSet, MUSIC_SET_QUICK_ACCESS_COUNT, PLAYLIST_SLOT_ICONS } from '../shared/audioPlayer'
 import { armPointerDrag } from '../shared/pointerDrag'
@@ -91,6 +92,15 @@ function SetName({ slot, name, factory, onRename }: { slot: number; name: string
 
 export function MusicSetsOptions() {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  const [primedSlot, setPrimedSlot] = useState<number | null>(null)
+  const cancelHoldRef = useRef<(() => void) | null>(null)
+  const heldPurgeRef = useRef(false)
+  const cancelHold = () => {
+    cancelHoldRef.current?.()
+    cancelHoldRef.current = null
+  }
+  useEffect(() => cancelHold, [])
+
   const sets = nowPlaying.musicSets
   const rows = sets.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT)
   const laterSets = sets.slice(MUSIC_SET_QUICK_ACCESS_COUNT)
@@ -130,39 +140,80 @@ export function MusicSetsOptions() {
         <button
           type="button"
           className="options-curve-cell options-curve-button"
-          data-tooltip="Left-click to add files; right-click to add a folder"
-          aria-label={`Add music to ${set.name}`}
-          data-secondary-press="action"
+          data-tooltip={`Add audio files to ${set.name}`}
+          aria-label={`Add audio files to ${set.name}`}
           onClick={() => { void nowPlaying.addToMusicSet(set.slot, 'files') }}
-          onContextMenu={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void nowPlaying.addToMusicSet(set.slot, 'folder')
-          }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <span className="fa-solid fa-file-audio" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="options-curve-cell options-curve-button"
+          data-tooltip={`Add a folder of audio files to ${set.name}`}
+          aria-label={`Add a folder of audio files to ${set.name}`}
+          onClick={() => { void nowPlaying.addToMusicSet(set.slot, 'folder') }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <span className="fa-solid fa-folder-open" aria-hidden="true" />
         </button>
         <button
           type="button"
-          className={`options-curve-cell options-curve-button${factory ? ' is-disabled' : ''}`}
-          data-tooltip={factory ? 'Factory sets cannot be deleted' : 'Purge this set’s songs, then delete the set'}
-          aria-label={factory ? `Cannot delete ${set.name}` : `Delete ${set.name}`}
-          aria-disabled={factory}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => { if (!factory) void nowPlaying.deleteMusicSet(set.slot) }}
+          className={`options-curve-cell options-curve-button options-loadout-btn${primedSlot === set.slot ? ' primed' : ''}${factory ? ' is-disabled' : ''}`}
+          data-tooltip={
+            factory
+              ? `Factory sets cannot be deleted. Hold right-click to purge ${set.name}'s songs.`
+              : primedSlot === set.slot
+                ? `Click again to delete ${set.name}; hold right-click to purge its songs without deleting the set.`
+                : `Click twice to delete ${set.name}. Hold right-click to purge its songs without deleting the set.`
+          }
+          aria-label={factory ? `Cannot delete ${set.name}` : primedSlot === set.slot ? `Confirm deletion of ${set.name}` : `Delete ${set.name}`}
+          data-secondary-press="action"
+          onPointerDown={(event) => {
+            event.stopPropagation()
+            if (event.button === 0) {
+              heldPurgeRef.current = false
+              return
+            }
+            if (event.button !== 2) return
+            event.preventDefault()
+            heldPurgeRef.current = false
+            cancelHold()
+            cancelHoldRef.current = armHold(() => {
+              cancelHoldRef.current = null
+              heldPurgeRef.current = true
+              setPrimedSlot(null)
+              void nowPlaying.purgeMusicSet(set.slot)
+            }, HOLD_COMMIT_MS)
+          }}
+          onPointerUp={(event) => {
+            if (event.button !== 2) return
+            cancelHold()
+          }}
+          onPointerCancel={() => { cancelHold() }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onClick={() => {
+            if (heldPurgeRef.current) {
+              heldPurgeRef.current = false
+              return
+            }
+            if (factory) {
+              setPrimedSlot(null)
+              return
+            }
+            if (primedSlot === set.slot) {
+              setPrimedSlot(null)
+              void nowPlaying.deleteMusicSet(set.slot)
+            } else {
+              setPrimedSlot(set.slot)
+            }
+          }}
+          onMouseLeave={() => { if (primedSlot === set.slot) setPrimedSlot(null) }}
         >
           <span className="fa-solid fa-xmark" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="options-curve-cell options-curve-button"
-          data-tooltip="Add a music set"
-          aria-label="Add a music set"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={nowPlaying.createMusicSet}
-        >
-          <span className="fa-solid fa-plus" aria-hidden="true" />
         </button>
       </div>
     )
@@ -171,8 +222,19 @@ export function MusicSetsOptions() {
   return (
     <div className="options-curve-rows options-music-set-rows" role="group" aria-label="Music sets">
       {rows.map(renderSet)}
-      <div className="options-curve-header options-music-set-divider" aria-hidden="true" />
+      <div className="options-music-set-divider" aria-hidden="true" />
       {laterSets.map(renderSet)}
+      <div className="options-curve-row options-music-set-row options-music-set-add-row">
+        <button
+          type="button"
+          className="options-curve-cell options-curve-button options-music-set-add"
+          data-tooltip="Add a music set"
+          aria-label="Add a music set"
+          onClick={nowPlaying.createMusicSet}
+        >
+          <span className="fa-solid fa-plus" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   )
 }

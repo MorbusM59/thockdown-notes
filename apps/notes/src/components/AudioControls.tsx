@@ -379,10 +379,6 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [playSong, purgeMissingSong])
 
-  const refreshCounts = useCallback(async () => {
-    await refreshCountsRef.current()
-  }, [])
-
   // ---------------------------------------------------------------- restore last session
 
   // Restore the last-played song (paused, cued at its saved position) once the
@@ -829,6 +825,27 @@ export const AudioControls = memo(function AudioControls({
     }, HOLD_THRESHOLD_MS)
   }, [])
 
+  const purgeMusicSet = useCallback(async (slot: PlaylistSlot) => {
+    const audioPlayer = window.thockdownAudioPlayer
+    if (!audioPlayer) {
+      console.error('[music-sets] cannot purge a set without the audio player bridge')
+      return
+    }
+    const nextActiveSlots = activeSlotsRef.current.filter((activeSlot) => activeSlot !== slot)
+    await audioPlayer.clearPlaylist(slot)
+    activeSlotsRef.current = nextActiveSlots
+    activeRef.current = nextActiveSlots
+    onActiveSlotsChange(nextActiveSlots)
+    await refreshCountsRef.current()
+    const currentSong = currentSongRef.current
+    if (currentSong && !currentSong.setIds.some((setId) => setId !== slot && nextActiveSlots.includes(setId))) {
+      musicPlayerService.stop()
+      setIsPlaying(false)
+      setCurrentSong(null)
+      await advanceToNextSong(nextActiveSlots)
+    }
+  }, [onActiveSlotsChange, advanceToNextSong])
+
   const handleSlotPointerUp = useCallback(async (event: React.PointerEvent, slot: PlaylistSlot) => {
     if (event.button !== 2) return
     if (holdTimerRef.current) {
@@ -837,21 +854,9 @@ export const AudioControls = memo(function AudioControls({
     }
     if (primedSlot === slot) {
       setPrimedSlot(null)
-      const nextActiveSlots = activeSlots.filter((s) => s !== slot)
-      await window.thockdownAudioPlayer?.clearPlaylist(slot)
-      await refreshCounts()
-      // Remove this set from the active pool if it was active.
-      onActiveSlotsChange(nextActiveSlots)
-      // If current song was from this slot, stop and pick next.
-      const currentSong = currentSongRef.current
-      if (currentSong && !currentSong.setIds.some((setId) => setId !== slot && nextActiveSlots.includes(setId))) {
-        musicPlayerService.stop()
-        setIsPlaying(false)
-        setCurrentSong(null)
-        await advanceToNextSong(nextActiveSlots)
-      }
+      await purgeMusicSet(slot)
     }
-  }, [primedSlot, activeSlots, onActiveSlotsChange, refreshCounts, advanceToNextSong])
+  }, [primedSlot, purgeMusicSet])
 
   const handleSlotPointerLeave = useCallback((slot: PlaylistSlot) => {
     if (holdTimerRef.current) {
@@ -1014,6 +1019,7 @@ export const AudioControls = memo(function AudioControls({
       renameMusicSet,
       moveMusicSet: reorderMusicSets,
       deleteMusicSet,
+      purgeMusicSet,
       addToMusicSet,
       setPoolFilter,
       levels: publishedLevels,
@@ -1030,6 +1036,7 @@ export const AudioControls = memo(function AudioControls({
     renameMusicSet,
     reorderMusicSets,
     deleteMusicSet,
+    purgeMusicSet,
     addToMusicSet,
     setPoolFilter,
     publishedLevels,
