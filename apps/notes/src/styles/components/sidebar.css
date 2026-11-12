@@ -311,14 +311,10 @@
   container-type: inline-size;
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-glyph .view-toggle-options-glyph {
-  display:   block;
-  font-size: calc(55cqw + 3*var(--spacing-small));
-}
-
+.notes-sidebar .view-toggle .icon-btn.btn-glyph .view-toggle-options-glyph,
 .notes-sidebar .view-toggle .icon-btn.btn-glyph .view-toggle-glyph {
   display:   block;
-  font-size: calc(40cqw + 2*var(--spacing-small));
+  font-size: calc(55cqw + 3*var(--spacing-small));
 }
 
 /* The Notes view's Trash section button, primed by a held right press: the
