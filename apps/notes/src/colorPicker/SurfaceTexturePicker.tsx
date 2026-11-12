@@ -160,6 +160,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
         } as CSSProperties : undefined}
       />
       <div className="options-surface-texture-controls">
+        <div className="options-slider-pair">
         <div className="options-surface-texture-seed">
           <button
             type="button"
@@ -219,6 +220,8 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
             if (active) edit(active, (current) => ({ ...current, textureStrength: value }))
           }}
         />
+        </div>
+        <div className="options-slider-pair">
         <CompactScrollbarSlider
           id="texture-granularity"
           min={TEXTURE_GRANULARITY_MIN}
@@ -247,6 +250,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
             if (active) edit(active, (current) => ({ ...current, vSteps: value }))
           }}
         />
+        </div>
       </div>
     </div>
   )

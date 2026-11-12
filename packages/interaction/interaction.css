@@ -627,16 +627,13 @@
   grid-template-rows:    var(--color-grid-cell);
   gap:                   var(--color-grid-gap);
   margin-bottom:         0;
-  /* The gap inside a cell holding two stacked controls: the channel toggles
-     and the slider stacks share it, so a slider is exactly a toggle's height. */
-  --color-picker-pair-gap: 2px;
 }
 
 .options-color-picker-toggles {
   display:               grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows:    repeat(2, 1fr);
-  gap:                   var(--color-picker-pair-gap);
+  gap:                   var(--slider-pair-gap);
   min-width:             0;
   min-height:            0;
 }
@@ -659,25 +656,30 @@
 }
 
 .options-color-picker-sliders {
-  grid-column:    span 2;
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--color-picker-pair-gap);
-  min-width:      0;
+  grid-column: span 2;
 }
 
-/* Two sliders stacked in one grid row: the slider's thickness is set at its
-   source, so the shell, the thumb and the pointer arithmetic all follow it.
-   Inside the colour picker row the stack's gap is the toggles' pair gap, so a
-   track is exactly a toggle's height; elsewhere it is the grid gap. */
-.options-color-picker-sliders,
-.options-surface-texture-controls {
-  --canonical-scroll-thickness: calc(
-    (var(--color-grid-cell) - var(--color-picker-pair-gap, var(--color-grid-gap))) / 2
-  );
+/* A SLIDER PAIR: two controls stacked in the height of one grid cell (one
+   regular button), split by --slider-pair-gap -- the same gap the colour
+   picker's 2x2 channel toggles use, so a track is exactly a micro button's
+   height. Sliders stacked anywhere else keep their own scaled thickness and
+   the regular gap. The thickness is set at its source, so the shell, the
+   thumb and the pointer arithmetic all follow it. */
+.options-slider-pair {
+  display:            grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap:                var(--slider-pair-gap);
+  min-width:          0;
+  min-height:         0;
+  --canonical-scroll-thickness: calc((var(--color-grid-cell) - var(--slider-pair-gap)) / 2);
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
   );
+}
+
+.options-slider-pair > [role="slider"] {
+  min-height: 0;
+  min-width:  0;
 }
 
 /* Surface textures (apps/notes/src/colorPicker/SurfaceTexturePicker.tsx):
@@ -701,7 +703,7 @@
   grid-column:    5 / span 2;
   grid-row:       1 / span 2;
   display:        grid;
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, var(--color-grid-cell));
   gap:            var(--color-grid-gap);
   min-width:      0;
 }
@@ -717,11 +719,6 @@
   gap:             var(--spacing-regular);
   padding-block:   0;
   line-height:     calc(var(--canonical-scroll-thickness) - 2px);
-}
-
-.options-surface-texture-controls > [role="slider"] {
-  min-height: 0;
-  min-width:  0;
 }
 
 /* Seed buttons (the texture's and the glaze's) and the texture preview */

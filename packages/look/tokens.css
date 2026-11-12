@@ -554,6 +554,9 @@
   --toolbar-options-gap: var(--spacing-regular);
   --color-grid-gap:      var(--toolbar-options-gap);
   --color-grid-cell:     32px;
+  /* Between two controls sharing one grid cell (.options-slider-pair, the
+     colour picker's channel toggles). */
+  --slider-pair-gap:     2px;
 
   /* Additional Editor tokens found later in file */
   /* These bars/rows have padding derived from --spacing-regular (the fine

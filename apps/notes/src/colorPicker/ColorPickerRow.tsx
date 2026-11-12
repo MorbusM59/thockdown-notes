@@ -85,7 +85,7 @@ export function ColorPickerRow() {
         ))}
       </div>
       {[SLIDER_ORDER.slice(0, 2), SLIDER_ORDER.slice(2)].map((pair) => (
-        <div key={pair.join('')} className="options-color-picker-sliders">
+        <div key={pair.join('')} className="options-color-picker-sliders options-slider-pair">
           {pair.map((channel) => (
             <CompactScrollbarSlider
               key={channel}
