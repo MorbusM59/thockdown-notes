@@ -386,7 +386,11 @@
   gap:            var(--spacing-large);
 }
 
-.notes-list > * {
+/* Above the sidebar's texture layer (z-index 1). A list's cards sit in a
+   `display: contents` group (.notes-list-rows), which makes them laid out as
+   the list's children but leaves them the GROUP's children for selectors. */
+.notes-list > *,
+.notes-list > .notes-list-rows > * {
   z-index: 2;
 }
 
