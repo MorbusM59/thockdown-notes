@@ -96,10 +96,6 @@
   overflow:    hidden;
 }
 
-.toolbar-grid button,
-.toolbar-grid select {
-}
-
 /* Toolbar buttons & controls */
 .toolbar-toggle-btn {
   width:       70px;
