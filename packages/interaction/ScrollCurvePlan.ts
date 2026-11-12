@@ -450,7 +450,7 @@ export const buildScrollRampUpPlanFromCurrentParams = (
 // Build a post-apex-only decay plan that starts at the bell apex and follows
 // the natural bell tail down to zero velocity. Expressed through the shared
 // half-curve builder above; the field names here are the ones its two callers
-// (the page-key release ramps in CM6Editor and usePreviewScrollbar) already
+// (the page-key release ramps in CM6Editor and useCanonicalScroller) already
 // read, so they are kept rather than renamed.
 export const buildReleaseRampDownPlanFromCurrentParams = (
   direction: -1 | 1,
