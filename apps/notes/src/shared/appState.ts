@@ -1,5 +1,6 @@
 import type { KeystrokeSoundPreferences, KeystrokeSoundSettings } from './keystrokeSounds';
 import type { OptionsSectionId } from './optionsSections';
+import type { MusicSetListGrouping } from './musicSetList';
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
 import type { MusicPoolFilter } from './audioPlayer';
@@ -45,6 +46,8 @@ export interface PersistedMenuState {
   optionsSearchQuery?: string;
   /** The options panel's selected section (shared/optionsSections.ts). */
   optionsSection?: OptionsSectionId;
+  /** How the set list groups a set's songs (shared/musicSetList.ts). */
+  musicSetListGrouping?: MusicSetListGrouping;
   searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
   isPreviewMode?: boolean;

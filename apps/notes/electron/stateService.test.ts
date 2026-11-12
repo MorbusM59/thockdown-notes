@@ -393,6 +393,14 @@ describe('StateService app-state field round-trip', () => {
     expect((await new StateService(dataRoot).loadAppState()).menu?.optionsSection).toBe('general')
   })
 
+  it('persists how the set list groups songs, and reads anything else as by folder', async () => {
+    const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, musicSetListGrouping: 'artist' } })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.musicSetListGrouping).toBe('artist')
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, musicSetListGrouping: 'genre' as unknown as 'artist' } })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.musicSetListGrouping).toBe('folder')
+  })
+
   it('reads an older save\'s separate flags into the feature toggles', async () => {
     const legacy = {
       sidebarMode: 'date', selectedMonths: [], selectedYears: [], searchQuery: '',

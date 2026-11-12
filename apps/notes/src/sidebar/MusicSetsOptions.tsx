@@ -4,6 +4,7 @@ import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { isFactoryMusicSet, MUSIC_SET_QUICK_ACCESS_COUNT, PLAYLIST_SLOT_ICONS } from '../shared/audioPlayer'
 import { armPointerDrag } from '../shared/pointerDrag'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { openMusicSetList } from './musicSetListView'
 
 function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; name: string; factory: boolean; takenNames: readonly string[]; onRename: (slot: number, name: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false)
@@ -144,9 +145,10 @@ export function MusicSetsOptions() {
         <button
           type="button"
           className="options-curve-cell options-curve-button options-music-set-count"
-          data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs. Hold right-click to empty ${set.name}.`}
+          data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs. Click to list them; hold right-click to empty ${set.name}.`}
           aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
           data-secondary-press="action"
+          onClick={() => openMusicSetList(set.slot)}
           onPointerDown={(event) => {
             event.stopPropagation()
             if (event.button !== 2) return

@@ -3629,6 +3629,15 @@ export class DatabaseService {
     })();
   }
 
+  /** One song out of one set; a song that is then in no set leaves the library (the rule `clearMusicPlaylist` follows). */
+  removeSongFromMusicSet(slot: PlaylistSlot, songId: number): void {
+    const db = this.requireDb();
+    db.transaction(() => {
+      db.prepare('DELETE FROM music_set_songs WHERE setId = ? AND songId = ?').run(slot, songId);
+      db.prepare('DELETE FROM music_songs WHERE id = ? AND NOT EXISTS (SELECT 1 FROM music_set_songs WHERE songId = ?)').run(songId, songId);
+    })();
+  }
+
   removeMusicSong(id: number): void {
     const db = this.requireDb();
     db.prepare('DELETE FROM music_songs WHERE id = ?').run(id);

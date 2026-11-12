@@ -27,6 +27,7 @@ import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/f
 import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection } from '../src/shared/optionsSections';
+import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping } from '../src/shared/musicSetList';
 import { sanitizeBoxBevel } from '@thockdown/look/boxBevel';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';
 import { sanitizeSoundscapePreferences } from '@thockdown/soundscape/soundscape';
@@ -45,6 +46,7 @@ const DEFAULT_APP_STATE: AppState = {
     searchQuery: '',
     optionsSearchQuery: '',
     optionsSection: DEFAULT_OPTIONS_SECTION,
+    musicSetListGrouping: DEFAULT_MUSIC_SET_LIST_GROUPING,
     searchQueryCaseSensitive: false,
     isPreviewMode: false,
     viewStyle: 'modern',
@@ -454,6 +456,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     searchQuery: typeof input?.searchQuery === 'string' ? input.searchQuery : '',
     optionsSearchQuery: typeof input?.optionsSearchQuery === 'string' ? input.optionsSearchQuery : '',
     optionsSection: sanitizeOptionsSection(input?.optionsSection),
+    musicSetListGrouping: sanitizeMusicSetListGrouping(input?.musicSetListGrouping),
     searchQueryCaseSensitive: Boolean(input?.searchQueryCaseSensitive),
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
     isPreviewMode: Boolean(input?.isPreviewMode),

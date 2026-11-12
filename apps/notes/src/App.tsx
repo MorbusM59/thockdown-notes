@@ -1,5 +1,5 @@
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { IS_LINUX_DESKTOP } from './shared/platform'
 import { useTypographyWheel } from './editorSection/typographyWheel'
 import { installScrollTrackTokens, scrollThumbFor, scrollTopForThumb, scrollTrackSizeFor } from '@thockdown/interaction/scrollTrackGeometry'
@@ -163,6 +163,9 @@ import { useBeatFeedback } from './beat/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId } from './shared/optionsSections'
+import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
+import { closeMusicSetList, readMusicSetListView, subscribeMusicSetListView } from './sidebar/musicSetListView'
+import { MusicSetListDock, MusicSetListPanel } from './sidebar/MusicSetListPanel'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -1455,6 +1458,8 @@ function App() {
   // that leaving the options for a note list (and coming back) costs neither.
   const [optionsSearchQuery, setOptionsSearchQuery] = useState('')
   const [optionsSection, setOptionsSection] = useState<OptionsSectionId>(DEFAULT_OPTIONS_SECTION)
+  const [musicSetListGrouping, setMusicSetListGrouping] = useState<MusicSetListGrouping>(DEFAULT_MUSIC_SET_LIST_GROUPING)
+  const musicSetListSlot = useSyncExternalStore(subscribeMusicSetListView, () => readMusicSetListView().slot)
   // Whether the options panel's Colors section is open, which docks its colour picker below the sidebar.
   const [isColorsSectionOpen, setIsColorsSectionOpen] = useState(false)
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
@@ -3271,6 +3276,7 @@ function App() {
       searchQuery,
       optionsSearchQuery,
       optionsSection,
+      musicSetListGrouping,
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
       isPreviewMode: getActiveSection()?.isPreviewMode,
@@ -3492,6 +3498,7 @@ function App() {
     searchQuery,
     optionsSearchQuery,
     optionsSection,
+    musicSetListGrouping,
     selectedMonths,
     selectedYears,
     sidebarMode,
@@ -5180,6 +5187,7 @@ ${markdownHtml}
             setSearchQuery(appState.menu.searchQuery)
             setOptionsSearchQuery(appState.menu.optionsSearchQuery ?? '')
             setOptionsSection(sanitizeOptionsSection(appState.menu.optionsSection))
+            setMusicSetListGrouping(sanitizeMusicSetListGrouping(appState.menu.musicSetListGrouping))
             setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
@@ -6935,7 +6943,27 @@ ${markdownHtml}
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
   const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode || isImageLibraryShown
   const isSidebarScrollbarMode = isSidebarCustomScrollbarMode || sidebarMode === 'options'
-  const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
+  const isMusicSetListDocked = sidebarMode === 'options' && musicSetListSlot !== null
+  // The set list and Options share the sidebar's scroller: Options' place is
+  // kept while the list is up and given back when it closes.
+  const optionsScrollTopUnderSetListRef = useRef<number | null>(null)
+  const isSetListUp = isMusicSetListDocked
+  useLayoutEffect(() => {
+    const scroller = sidebarContentEl
+    if (!scroller) return
+    if (isSetListUp) {
+      optionsScrollTopUnderSetListRef.current ??= scroller.scrollTop
+      scroller.scrollTop = 0
+    } else if (optionsScrollTopUnderSetListRef.current !== null) {
+      if (sidebarMode === 'options') scroller.scrollTop = optionsScrollTopUnderSetListRef.current
+      optionsScrollTopUnderSetListRef.current = null
+    }
+  }, [isSetListUp, sidebarContentEl, sidebarMode])
+  // The list belongs to Options: leaving Options closes it.
+  useEffect(() => {
+    if (sidebarMode !== 'options') closeMusicSetList()
+  }, [sidebarMode])
+  const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen && !isMusicSetListDocked
 
   // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
   // state updates that re-render the entire App component (heavy for long
@@ -8777,7 +8805,13 @@ ${markdownHtml}
                           </div>
                         ) : null}
                       </div>
-                    ) : sidebarMode === 'options' ? (
+                    ) : sidebarMode === 'options' ? (<>
+                      {musicSetListSlot !== null ? (
+                        <MusicSetListPanel slot={musicSetListSlot} grouping={musicSetListGrouping} />
+                      ) : null}
+                      {/* Kept mounted under the set list, so leaving the list
+                          returns to Options exactly as it was. */}
+                      <div className="sidebar-options-panel-host" hidden={musicSetListSlot !== null}>
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
                         optionsSection={optionsSection}
@@ -8999,6 +9033,8 @@ ${markdownHtml}
                         setFlashShapePreferences={setFlashShapePreferences}
                         activeFlashShape={activeFlashShape}
                       />
+                      </div>
+                    </>
                     ) : (
                       <div
                         className={`notes-list tree-view thockdown-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
@@ -9023,6 +9059,22 @@ ${markdownHtml}
                     )}
                   </div>
                 </div>
+                  {isMusicSetListDocked ? (
+                    // The set list's controls, docked where the colour picker
+                    // docks and in the same box.
+                    <div className="sidebar-color-picker-dock">
+                      <div className="sidebar-content-texture" />
+                      <div className="sidebar-color-picker-dock-content">
+                        <section className="options-section sidebar-options-section" aria-label="Song list controls">
+                          <div className="sidebar-options-accordion is-headerless">
+                            <div className="sidebar-options-accordion-body">
+                              <MusicSetListDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
+                            </div>
+                          </div>
+                        </section>
+                      </div>
+                    </div>
+                  ) : null}
                   {isColorPickerDocked ? (
                     // The Colors section's picker, docked below the list in a
                     // box styled like it, so it stays in reach however far

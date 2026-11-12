@@ -9,6 +9,7 @@ export const AUDIO_PLAYER_CHANNELS = {
   getPlaylist:          'audio-player:get-playlist',
   addSongs:             'audio-player:add-songs',
   clearPlaylist:        'audio-player:clear-playlist',
+  removeFromSet:        'audio-player:remove-from-set',
   removeSong:           'audio-player:remove-song',
   pickNextSong:         'audio-player:pick-next-song',
   getPool:              'audio-player:get-pool',
@@ -123,6 +124,8 @@ export type AudioPlayerApi = {
   addSongs(slot: PlaylistSlot, filePaths: string[]): Promise<MusicSongEntry[]>;
   /** Remove a set's memberships and permanently purge songs with no remaining memberships. */
   clearPlaylist(slot: PlaylistSlot): Promise<void>;
+  /** Take one song out of one set; a song left in no set leaves the library, as clearing a set does. */
+  removeFromSet(slot: PlaylistSlot, songId: number): Promise<void>;
   /** Remove a single song by its DB id. */
   removeSong(id: number): Promise<void>;
   /** Pick the next song to play from the pool `query` describes. */
