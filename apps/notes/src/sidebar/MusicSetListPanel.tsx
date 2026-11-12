@@ -172,37 +172,37 @@ export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grou
 }
 
 /**
- * The set list's dock, below the sidebar where the colour picker docks: the
- * filter (the visualizer's pool-filter syntax) over the two groupings, and
- * the way back to Options spanning both rows.
+ * The set list's dock, below the sidebar where the colour picker docks: one
+ * entry row of the filter (the visualizer's pool-filter syntax), the two
+ * groupings and the way back to Options.
  */
 export function MusicSetListDock({ grouping, onGroupingChange }: { grouping: MusicSetListGrouping; onGroupingChange: (grouping: MusicSetListGrouping) => void }) {
   const { filter } = useSyncExternalStore(subscribeMusicSetListView, readMusicSetListView)
   return (
-    <div className="options-music-set-list-dock" role="group" aria-label="Song list controls">
-      <input
-        className="options-curve-cell options-curve-field options-music-set-list-filter"
-        aria-label="Filter songs"
-        data-tooltip="Filter by title, artist, album or file path; $ artist, § album, # title"
-        spellCheck={false}
-        value={filter}
-        onChange={(event) => setMusicSetListFilter(event.target.value)}
-        onKeyDown={(event) => {
-          event.stopPropagation()
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            setMusicSetListFilter('')
-          }
-        }}
-      />
-      <div className="options-music-set-list-groupings" role="radiogroup" aria-label="Group songs by">
+    <div className="options-curve-rows options-music-set-list-dock" role="group" aria-label="Song list controls">
+      <div className="options-curve-row options-music-set-list-dock-row">
+        <input
+          className="options-curve-cell options-curve-field options-music-set-list-filter"
+          aria-label="Filter songs"
+          data-tooltip="Filter by title, artist, album or file path; $ artist, § album, # title"
+          spellCheck={false}
+          value={filter}
+          onChange={(event) => setMusicSetListFilter(event.target.value)}
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              setMusicSetListFilter('')
+            }
+          }}
+        />
         {(['folder', 'artist'] as const).map((option) => (
           <button
             key={option}
             type="button"
             role="radio"
             aria-checked={grouping === option}
-            className={`btn-icon options-color-swatch options-loadout-btn${grouping === option ? ' is-active' : ''}`}
+            className={`options-curve-cell options-curve-button${grouping === option ? ' is-active' : ''}`}
             data-tooltip={option === 'folder' ? 'By folder' : 'By artist'}
             aria-label={option === 'folder' ? 'Group by folder' : 'Group by artist'}
             onClick={() => onGroupingChange(option)}
@@ -210,16 +210,16 @@ export function MusicSetListDock({ grouping, onGroupingChange }: { grouping: Mus
             <span className={option === 'folder' ? 'fa-solid fa-folder' : 'fa-solid fa-user'} aria-hidden="true" />
           </button>
         ))}
+        <button
+          type="button"
+          className="options-curve-cell options-curve-button"
+          data-tooltip="Back to Options"
+          aria-label="Back to Options"
+          onClick={closeMusicSetList}
+        >
+          <span className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true" />
+        </button>
       </div>
-      <button
-        type="button"
-        className="btn-icon options-color-swatch options-loadout-btn options-music-set-list-exit"
-        data-tooltip="Back to Options"
-        aria-label="Back to Options"
-        onClick={closeMusicSetList}
-      >
-        <span className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true" />
-      </button>
     </div>
   )
 }
