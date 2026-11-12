@@ -1092,3 +1092,24 @@
   width: 100%;
   height: 100%;
 }
+
+/* The Date and Trash cards are drawn as the box holding the section selector
+   above them (toolbar.css's .preset-section): its fill, border, corner and
+   shadow, and so are the archive and trash buttons that replace the date on
+   hover. An active card is pressed in, as an active button is. */
+.date-view .note-list-item .note-list-column.note-list-column-primary,
+.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button {
+  background:    #FFFFFF66;
+  border:        1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-small);
+  box-shadow:    var(--box-shadow-regular-light);
+}
+
+.date-view .note-list-item .note-list-column.note-list-column-action {
+  background: none;
+}
+
+.date-view .note-list-item.is-active .note-list-column.note-list-column-primary,
+.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button[data-pressed] {
+  box-shadow: var(--box-shadow-inverted-harsh-active);
+}
