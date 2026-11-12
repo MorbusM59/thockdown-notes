@@ -11,11 +11,10 @@ import type { ScrollJourneyTiming } from '@thockdown/interaction/scrollJourney'
 import { measureAverageCharWidthPx } from '../scroll/scrollBridgeTexture'
 import { createContinuousWheel, type ContinuousWheel } from '../scroll/continuousWheel'
 import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
-import { buildReleaseRampDownPlanFromCurrentParams, CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER, resolveApexSpeedPxPerSecFromCurrentParams, sampleReleaseRampDownPlan, resolveRampCrossingTimeSecFromCurrentParams, scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
+import { createPageKeys, type PageKeys } from '../scroll/pageKeys'
 import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
 import { clamp } from '@thockdown/interaction/clamp'
-
-const PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
 
 
 const syncTextureToScroll = (scrollTop: number, maskEl: HTMLElement) => {
@@ -110,13 +109,6 @@ export function useCanonicalScroller({
   const previewScrollThumbTopRef = useRef(0)
   const previewScrollThumbHeightRef = useRef(0)
   const thumbHeightCommitRef = useRef(createCommittedThumbHeight())
-  const previewContinuousScrollDirectionRef = useRef<-1 | 0 | 1>(0)
-  const previewContinuousScrollRafRef = useRef<number | null>(null)
-  const previewContinuousScrollLastTsRef = useRef<number | null>(null)
-  const previewReleaseRampDownRafRef = useRef<number | null>(null)
-  const previewContinuousPreviousScrollBehaviorRef = useRef<(() => void) | null>(null)
-  const previewPageKeysHeldRef = useRef(new Set<string>())
-  const previewContinuousHandoffTimeoutRef = useRef<number | null>(null)
   const previewScrollbarRightHoldRef = useRef<{
     key: 'PageUp' | 'PageDown'
     direction: 1 | -1
@@ -592,18 +584,12 @@ export function useCanonicalScroller({
 
   // Right-click-and-hold on the track pages in the clicked direction for as
   // long as the button is held, exactly like holding PageUp/PageDown -- it's
-  // pressed through the same page press the keys use (pageControlRef), so it reuses the
-  // one-shot jump, continuous-hold, and release-ramp logic below verbatim
-  // instead of duplicating that curve/timing math here.
-  // The page press and release the page keys drive, published by the key
-  // effect below. The track hold calls them directly rather than dispatching
+  // pressed through the same page keys (scroll/pageKeys.ts), published by the
+  // key effect below. The track hold calls them directly rather than dispatching
   // a key on window: a window key would also reach every other scroller and
   // the editor, and would be refused here whenever this scroller does not
   // own the keyboard (the sidebar never does).
-  const pageControlRef = useRef<{
-    press: (key: 'PageUp' | 'PageDown', repeat: boolean) => boolean
-    release: (key: 'PageUp' | 'PageDown') => void
-  } | null>(null)
+  const pageKeysRef = useRef<PageKeys | null>(null)
 
   const stopPreviewScrollbarRightHold = useCallback(() => {
     const hold = previewScrollbarRightHoldRef.current
@@ -612,7 +598,7 @@ export function useCanonicalScroller({
       cancelAnimationFrame(hold.rafId)
     }
     previewScrollbarRightHoldRef.current = null
-    pageControlRef.current?.release(hold.key)
+    pageKeysRef.current?.release(hold.key)
   }, [])
 
   useEffect(() => {
@@ -652,7 +638,7 @@ export function useCanonicalScroller({
     const direction: 1 | -1 = clickY > thumbBottom ? 1 : -1
     const key: 'PageUp' | 'PageDown' = direction === 1 ? 'PageDown' : 'PageUp'
 
-    pageControlRef.current?.press(key, false)
+    pageKeysRef.current?.press(key, false)
 
     previewScrollbarRightHoldRef.current = { key, direction, cursorYPx: clickY, rafId: null }
 
@@ -876,208 +862,26 @@ export function useCanonicalScroller({
     }
   }, [shouldBlockPreviewInteraction, stopPreviewWheelSpin])
 
-  const stopPreviewContinuousScroll = useCallback(() => {
-    previewContinuousScrollDirectionRef.current = 0
-    previewContinuousScrollLastTsRef.current = null
-    if (previewContinuousScrollRafRef.current !== null) {
-      cancelAnimationFrame(previewContinuousScrollRafRef.current)
-      previewContinuousScrollRafRef.current = null
-    }
-    if (previewReleaseRampDownRafRef.current !== null) {
-      cancelAnimationFrame(previewReleaseRampDownRafRef.current)
-      previewReleaseRampDownRafRef.current = null
-    }
-
-    const scroller = previewScrollRef.current
-    if (scroller && previewContinuousPreviousScrollBehaviorRef.current !== null) {
-      previewContinuousPreviousScrollBehaviorRef.current?.()
-      previewContinuousPreviousScrollBehaviorRef.current = null
-    }
-  }, [previewScrollRef])
-
-  const clearPreviewContinuousHandoff = useCallback(() => {
-    if (previewContinuousHandoffTimeoutRef.current !== null) {
-      window.clearTimeout(previewContinuousHandoffTimeoutRef.current)
-      previewContinuousHandoffTimeoutRef.current = null
-    }
-  }, [])
-
-  const runPreviewContinuousScroll = useCallback((nowMs: number) => {
-    const direction = previewContinuousScrollDirectionRef.current
-    if (direction === 0) {
-      previewContinuousScrollRafRef.current = null
-      previewContinuousScrollLastTsRef.current = null
-      return
-    }
-
-    const scroller = previewScrollRef.current
-    if (!scroller || !isPreviewMode) {
-      previewContinuousScrollDirectionRef.current = 0
-      previewContinuousScrollRafRef.current = null
-      previewContinuousScrollLastTsRef.current = null
-      return
-    }
-
-    const previousTs = previewContinuousScrollLastTsRef.current
-    previewContinuousScrollLastTsRef.current = nowMs
-    if (previousTs !== null) {
-      const deltaSec = Math.max(0, (nowMs - previousTs) / 1000)
-      const speedPxPerSec = Math.max(
-        1,
-        resolveApexSpeedPxPerSecFromCurrentParams(scroller.clientHeight * 0.9)
-          * PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
-      )
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      const nextScrollTop = clamp(
-        scroller.scrollTop + (direction * speedPxPerSec * deltaSec),
-        0,
-        maxScrollTop,
-      )
-
-      if (Math.abs(nextScrollTop - scroller.scrollTop) > 0.01) {
-        scroller.scrollTop = nextScrollTop
-        syncPreviewCustomScrollbar()
-      }
-
-      // Running out of scroller is not the same as running out of document.
-      // A windowed preview (editorSection/previewWindow.ts) reaches the end of
-      // its mounted content many times on the way through a large note -- each
-      // one a runway being consumed, with more arriving a frame later. Stopping
-      // there would strand the reader mid-document with a key still held.
-      const atScrollerEnd = (direction < 0 && nextScrollTop <= 0.01)
-        || (direction > 0 && nextScrollTop >= maxScrollTop - 0.01)
-      const position = previewDocumentPositionRef?.current
-      const hitBoundary = atScrollerEnd
-        && (position?.isAtDocumentEdge?.(direction) ?? true)
-      if (hitBoundary) {
-        previewContinuousScrollDirectionRef.current = 0
-        previewContinuousScrollRafRef.current = null
-        previewContinuousScrollLastTsRef.current = null
-        return
-      }
-    }
-
-    previewContinuousScrollRafRef.current = requestAnimationFrame(runPreviewContinuousScroll)
-  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
-
-  const startPreviewReleaseRampDown = useCallback((direction: -1 | 1) => {
-    if (!isPreviewMode) {
-      stopPreviewContinuousScroll()
-      return
-    }
-
-    const scroller = previewScrollRef.current
-    if (!scroller) {
-      stopPreviewContinuousScroll()
-      return
-    }
-
-    const releaseSpeedPxPerSec = Math.max(
-      1,
-      resolveApexSpeedPxPerSecFromCurrentParams(scroller.clientHeight * 0.9)
-        * PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
-    )
-    const rampDownPlan = buildReleaseRampDownPlanFromCurrentParams(direction, releaseSpeedPxPerSec)
-    if (!rampDownPlan) {
-      stopPreviewContinuousScroll()
-      return
-    }
-
-    if (previewContinuousScrollRafRef.current !== null) {
-      cancelAnimationFrame(previewContinuousScrollRafRef.current)
-      previewContinuousScrollRafRef.current = null
-    }
-    previewContinuousScrollDirectionRef.current = 0
-    previewContinuousScrollLastTsRef.current = null
-
-    if (previewReleaseRampDownRafRef.current !== null) {
-      cancelAnimationFrame(previewReleaseRampDownRafRef.current)
-      previewReleaseRampDownRafRef.current = null
-    }
-
-    if (previewContinuousPreviousScrollBehaviorRef.current === null) {
-      previewContinuousPreviousScrollBehaviorRef.current = borrowAutoScrollBehavior(scroller)
-    }
-
-    const startScrollTop = scroller.scrollTop
-    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-    let startMs: number | null = null
-
-    const animateRampDown = (nowMs: number) => {
-      if (!isPreviewMode) {
-        stopPreviewContinuousScroll()
-        return
-      }
-
-      if (startMs === null) {
-        startMs = nowMs
-      }
-
-      const elapsedSec = Math.max(0, (nowMs - startMs) / 1000)
-      const displacement = sampleReleaseRampDownPlan(rampDownPlan, elapsedSec)
-      const nextScrollTop = clamp(startScrollTop + displacement, 0, maxScrollTop)
-
-      if (Math.abs(nextScrollTop - scroller.scrollTop) > 0.01) {
-        scroller.scrollTop = nextScrollTop
-        syncPreviewCustomScrollbar()
-      }
-
-      // Same distinction as the continuous loop above: the release ramp must
-      // coast to a stop, not be cut short by a runway edge.
-      const rampDirection: -1 | 1 = displacement >= 0 ? 1 : -1
-      const atScrollerEnd = nextScrollTop <= 0.01 || nextScrollTop >= maxScrollTop - 0.01
-      const hitBoundary = atScrollerEnd
-        && (previewDocumentPositionRef?.current?.isAtDocumentEdge?.(rampDirection) ?? true)
-      if (elapsedSec >= rampDownPlan.tailDurationSec || hitBoundary) {
-        previewReleaseRampDownRafRef.current = null
-        previewContinuousPreviousScrollBehaviorRef.current?.()
-        previewContinuousPreviousScrollBehaviorRef.current = null
-        return
-      }
-
-      previewReleaseRampDownRafRef.current = requestAnimationFrame(animateRampDown)
-    }
-
-    previewReleaseRampDownRafRef.current = requestAnimationFrame(animateRampDown)
-  }, [isPreviewMode, stopPreviewContinuousScroll, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
-
-  const startPreviewContinuousScroll = useCallback((direction: -1 | 1) => {
+  /**
+   * The page keys (scroll/pageKeys.ts): one page is 90% of the scroller's
+   * height, written sub-pixel on the reader's own engine. A windowed
+   * scroller's edge is the document's only where the window says so.
+   */
+  useEffect(() => {
     if (!isPreviewMode) return
     const scroller = previewScrollRef.current
     if (!scroller) return
-
-    cancelSmoothScroll(scroller)
-
-    if (previewContinuousPreviousScrollBehaviorRef.current === null) {
-      previewContinuousPreviousScrollBehaviorRef.current = borrowAutoScrollBehavior(scroller)
-    }
-
-    const previousDirection = previewContinuousScrollDirectionRef.current
-    previewContinuousScrollDirectionRef.current = direction
-
-    // Do not reset timing on every key-repeat event; that throttles effective
-    // speed. Only reset when direction changes or when starting from idle.
-    if (previewContinuousScrollRafRef.current === null || previousDirection !== direction) {
-      previewContinuousScrollLastTsRef.current = null
-    }
-
-    if (previewContinuousScrollRafRef.current === null) {
-      previewContinuousScrollRafRef.current = requestAnimationFrame(runPreviewContinuousScroll)
-    }
-  }, [isPreviewMode, runPreviewContinuousScroll, previewScrollRef])
-
-  useEffect(() => {
-    // Captured once per effect run -- previewPageKeysHeldRef.current is
-    // mutated in place (add/delete/clear), never reassigned, so this is the
-    // same Set instance the cleanup below still needs.
-    const pageKeysHeld = previewPageKeysHeldRef.current
-
-    if (!isPreviewMode) {
-      pageKeysHeld.clear()
-      clearPreviewContinuousHandoff()
-      stopPreviewContinuousScroll()
-      return
-    }
+    const pageKeys = createPageKeys({
+      scroller,
+      isBlocked: shouldBlockPreviewInteraction,
+      pageStepPx: () => Math.max(1, scroller.clientHeight * 0.9),
+      travelTo: (target) => scrollToNonQuantizedSmooth(scroller, target, { onStep: () => syncPreviewCustomScrollbar() }),
+      onScrolled: () => syncPreviewCustomScrollbar(),
+      isAtDocumentEdge: previewDocumentPositionRef
+        ? (direction) => previewDocumentPositionRef.current?.isAtDocumentEdge?.(direction) ?? true
+        : undefined,
+    })
+    pageKeysRef.current = pageKeys
 
     /**
      * Whether something else has a real claim on a page key.
@@ -1099,92 +903,17 @@ export function useCanonicalScroller({
       return target.isContentEditable && (previewScrollRef.current?.contains(target) ?? false)
     }
 
-    // One page press, from the keyboard or from this scroller's own track
-    // hold. Returns whether it was taken, so a key event is consumed exactly
-    // when a press happened.
-    const pressPage = (key: 'PageUp' | 'PageDown', repeat: boolean): boolean => {
-      if (shouldBlockPreviewInteraction()) {
-        pageKeysHeld.delete(key)
-        clearPreviewContinuousHandoff()
-        stopPreviewContinuousScroll()
-        return true
-      }
-
-      const scroller = previewScrollRef.current
-      if (!scroller) return false
-
-      const direction: -1 | 1 = key === 'PageDown' ? 1 : -1
-      pageKeysHeld.add(key)
-
-      if (repeat) {
-        if (previewContinuousHandoffTimeoutRef.current === null) {
-          startPreviewContinuousScroll(direction)
-        }
-        return true
-      }
-
-      clearPreviewContinuousHandoff()
-      stopPreviewContinuousScroll()
-      const pageStepPx = Math.max(1, scroller.clientHeight * 0.9)
-      const startScrollTop = scroller.scrollTop
-      const targetScrollTop = scroller.scrollTop + (direction * pageStepPx)
-      scrollToNonQuantizedSmooth(scroller, targetScrollTop, {
-        onStep: () => syncPreviewCustomScrollbar(),
-      })
-
-      const targetContinuousSpeedPxPerSec = Math.max(
-        1,
-        resolveApexSpeedPxPerSecFromCurrentParams(targetScrollTop - startScrollTop)
-          * PREVIEW_CONTINUOUS_SCROLL_APEX_MULTIPLIER,
-      )
-      const crossingTimeSec = resolveRampCrossingTimeSecFromCurrentParams(
-        targetScrollTop - startScrollTop,
-        targetContinuousSpeedPxPerSec,
-      )
-
-      if (crossingTimeSec !== null) {
-        const delayMs = Math.max(0, Math.round(crossingTimeSec * 1000))
-        previewContinuousHandoffTimeoutRef.current = window.setTimeout(() => {
-          previewContinuousHandoffTimeoutRef.current = null
-          if (!isPreviewMode) return
-          if (!pageKeysHeld.has(key)) return
-          startPreviewContinuousScroll(direction)
-        }, delayMs)
-      }
-      return true
-    }
-
-    const releasePage = (key: 'PageUp' | 'PageDown') => {
-      pageKeysHeld.delete(key)
-      clearPreviewContinuousHandoff()
-      if (pageKeysHeld.size === 0) {
-        const activeDirection = previewContinuousScrollDirectionRef.current
-        if (activeDirection !== 0) {
-          startPreviewReleaseRampDown(activeDirection)
-        } else {
-          stopPreviewContinuousScroll()
-        }
-      }
-    }
-    pageControlRef.current = { press: pressPage, release: releasePage }
-
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (!isSectionActive) return
       if (targetOwnsPageKeys(event.target)) return
       if (event.key !== 'PageDown' && event.key !== 'PageUp') return
-      if (pressPage(event.key, event.repeat)) event.preventDefault()
+      if (pageKeys.press(event.key, event.repeat)) event.preventDefault()
     }
-
     const onWindowKeyUp = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'PageDown' || event.key === 'PageUp') releasePage(event.key)
+      if (event.key === 'PageDown' || event.key === 'PageUp') pageKeys.release(event.key)
     }
-
-    const onWindowBlur = () => {
-      pageKeysHeld.clear()
-      clearPreviewContinuousHandoff()
-      stopPreviewContinuousScroll()
-    }
+    const onWindowBlur = () => pageKeys.reset()
 
     window.addEventListener('keydown', onWindowKeyDown)
     window.addEventListener('keyup', onWindowKeyUp)
@@ -1193,21 +922,16 @@ export function useCanonicalScroller({
       window.removeEventListener('keydown', onWindowKeyDown)
       window.removeEventListener('keyup', onWindowKeyUp)
       window.removeEventListener('blur', onWindowBlur)
-      pageControlRef.current = null
-      pageKeysHeld.clear()
-      clearPreviewContinuousHandoff()
-      stopPreviewContinuousScroll()
+      pageKeys.reset()
+      if (pageKeysRef.current === pageKeys) pageKeysRef.current = null
     }
   }, [
-    clearPreviewContinuousHandoff,
     isPreviewMode,
     isSectionActive,
     shouldBlockPreviewInteraction,
-    startPreviewReleaseRampDown,
-    startPreviewContinuousScroll,
-    stopPreviewContinuousScroll,
     syncPreviewCustomScrollbar,
     previewScrollRef,
+    previewDocumentPositionRef,
   ])
 
   /**
