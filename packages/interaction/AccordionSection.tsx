@@ -394,8 +394,10 @@ export function AccordionSection({
  * section that wants its dividers to close one another wraps them in a group
  * of their own.
  */
-export function AccordionDivider({ label, children, ariaLabel, ...fold }: FoldControl & {
+export function AccordionDivider({ label, count, children, ariaLabel, ...fold }: FoldControl & {
   label: ReactNode
+  /** How many entries the divider folds, shown at the line's open end. */
+  count: number
   children: ReactNode
   ariaLabel?: string
 }) {
@@ -410,6 +412,7 @@ export function AccordionDivider({ label, children, ariaLabel, ...fold }: FoldCo
           data-secondary-press="action"
           onContextMenu={handleContextMenu}
         >
+          <span className="options-divider-count">({count})</span>
           {label}
         </summary>
         <div ref={contentRef} className="options-divider-body">{children}</div>

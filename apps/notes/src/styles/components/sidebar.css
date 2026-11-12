@@ -969,10 +969,16 @@
   font-weight: 400;
 }
 
-/* Category tree: the options panel's sections and dividers (CategoryTree.tsx);
-   the list's own padding already sets it in from the sidebar's edge. */
-.category-tree-root.sidebar-options-content {
-  padding: 0;
+/* Category tree: the options panel's sections and dividers (CategoryTree.tsx),
+   spaced as the options content is. NOT .sidebar-options-content: that
+   clips overflow-x, which turns overflow-y into a scroll box, and inside
+   the list's own scroller it became a second, native scrollbar. The list's
+   own padding already sets it in from the sidebar's edge. */
+.category-tree-root {
+  display:        flex;
+  flex-direction: column;
+  flex-shrink:    0;
+  gap:            var(--toolbar-options-gap);
 }
 
 /* The image library (imageLibrary/ImageLibraryList.tsx). In the date and

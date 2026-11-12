@@ -141,7 +141,7 @@ export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grou
           >
             <AccordionGroup>
             {group.dividers.map((divider) => (
-              <AccordionDivider key={divider.label} label={divider.label} defaultOpen>
+              <AccordionDivider key={divider.label} label={divider.label} count={divider.songs.length} defaultOpen>
                 <div className="options-curve-rows">
                   {divider.songs.map((song) => {
                     const name = songListTitleText(song)

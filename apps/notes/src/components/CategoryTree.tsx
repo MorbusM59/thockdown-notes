@@ -222,7 +222,7 @@ export function CategoryTree<T>({
   }
 
   return (
-    <div className="sidebar-options-content category-tree-root" aria-label={ariaLabel}>
+    <div className="category-tree-root" aria-label={ariaLabel}>
       {groups.map((primary) => (
         <AccordionSection
           key={primary.name}
@@ -242,6 +242,7 @@ export function CategoryTree<T>({
               <AccordionDivider
                 key={secondary.name}
                 label={secondary.name}
+                count={secondary.items.length}
                 open={!collapsedSecondary.has(secondaryKey(primary.name, secondary.name))}
                 onRequestOpenChange={(open, exclusive) => requestSecondary(primary.name, secondary.name, open, exclusive)}
               >

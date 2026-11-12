@@ -175,21 +175,15 @@
   display: none;
 }
 
-/* The fold arrow, at the line's open end, as a section heading has. */
+/* The entry count, at the line's open end, in the label's own type. */
 .options-divider-label {
   display:     flex;
   align-items: center;
   gap:         var(--spacing-regular);
 }
 
-.options-divider-label::before {
-  content:    '▾';
+.options-divider-count {
   margin-right: auto;
-  transition: transform 0.15s ease;
-}
-
-.options-divider-fold:not([open]) > .options-divider-label::before {
-  transform: rotate(90deg);
 }
 
 /* Custom slider / scrollbar shell */
