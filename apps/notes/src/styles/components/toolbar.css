@@ -598,7 +598,13 @@
 
 .options-music-set-row,
 .options-music-set-divider {
-  grid-template-columns: var(--entry-height) 4fr 2fr var(--entry-height) var(--entry-height) var(--entry-height);
+  /* The icon and the name end where the Show songs button below ends (half
+     the row less half a gap), so the count starts where the add button
+     does. */
+  grid-template-columns:
+    var(--entry-height)
+    calc((100% - var(--toolbar-options-gap)) / 2 - var(--toolbar-options-gap) - var(--entry-height))
+    1fr var(--entry-height) var(--entry-height) var(--entry-height);
 }
 
 /* Two buttons sharing the row: the top set's songs, and a new set. */
