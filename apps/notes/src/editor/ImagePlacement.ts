@@ -1,6 +1,4 @@
 import { imagesOnLine } from './MarkdownImageTransforms'
-import { imageMarkdown } from '../shared/images'
-import { imagesInLine, type ImageSyntaxSpan } from '../shared/imageSyntax'
 import { EMPTY_IMAGE_LAYOUT, formatImageLayout, parseImageTitle, type ImageAlignment, type ImageLayout } from '../shared/imageLayout'
 
 // WHERE AN IMAGE IN THE RENDER VIEW IS IN THE TEXT, and the two edits the
@@ -186,48 +184,4 @@ export function insertAtBlockStart(text: string, targetLine0: number, markdown: 
 export function sameAlt(written: string, drawn: string): boolean {
   const plain = (value: string) => value.replace(/[\\*_`~]/g, '').replace(/\s+/g, ' ').trim()
   return plain(written) === plain(drawn)
-}
-
-/**
- * A library image put at the caret (a card clicked in the image sidebar).
- * With the caret inside an image -- typically the empty `![]()` the toolbar's
- * image button leaves -- that image's destination becomes `id` and its alt
- * text `alt` (kept as written when `alt` is empty), and its title, which holds
- * the size and alignment, is untouched. Anywhere else a new reference replaces
- * the selection. The caret ends after the image.
- */
-export function placeImageAt(
-  text: string,
-  selection: { start: number; end: number },
-  id: string,
-  alt: string,
-  isInFencedCodeBlock: (offset: number) => boolean,
-): { text: string; caret: number } {
-  const image = selection.start === selection.end ? imageOrPlaceholderAt(text, selection.start) : null
-  if (!image || isInFencedCodeBlock(image.from)) {
-    const markdown = imageMarkdown(alt, id)
-    return { text: text.slice(0, selection.start) + markdown + text.slice(selection.end), caret: selection.start + markdown.length }
-  }
-  const cleanAlt = alt.replace(/[[\]\n]/g, ' ').trim()
-  const newAlt = cleanAlt || text.slice(image.altFrom, image.altTo)
-  const next = text.slice(0, image.altFrom) + newAlt + text.slice(image.altTo, image.destinationFrom) + id + text.slice(image.destinationTo)
-  return { text: next, caret: image.to + next.length - text.length }
-}
-
-// An image, or the toolbar's empty `![]()`, which the image keys do not count.
-function imageOrPlaceholderAt(text: string, offset: number): ImageSyntaxSpan | null {
-  const lineFrom = text.lastIndexOf('\n', offset - 1) + 1
-  const lineEnd = text.indexOf('\n', offset)
-  const line = text.slice(lineFrom, lineEnd === -1 ? text.length : lineEnd)
-  const span = imagesInLine(line).find((each) => offset > lineFrom + each.from && offset <= lineFrom + each.to)
-  if (!span) return null
-  return {
-    ...span,
-    from: lineFrom + span.from,
-    to: lineFrom + span.to,
-    altFrom: lineFrom + span.altFrom,
-    altTo: lineFrom + span.altTo,
-    destinationFrom: lineFrom + span.destinationFrom,
-    destinationTo: lineFrom + span.destinationTo,
-  }
 }

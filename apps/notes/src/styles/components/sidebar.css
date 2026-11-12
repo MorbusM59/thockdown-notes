@@ -1027,7 +1027,7 @@
   position: relative;
 }
 
-/* Images in Order: a right-click expands a card to the image's own
+/* Images in Order and the trash: a click expands a card to the image's own
  * proportions (`--image-ratio`, height over width, set by the card) and
  * fades out the text over it, so the image is seen whole. */
 .image-list-item:not(.is-tree-card) .note-list-column-primary {

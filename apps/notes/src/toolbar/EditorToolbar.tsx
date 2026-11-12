@@ -73,7 +73,7 @@ function useFormattingToolbarCompact(toolbarRef: RefObject<HTMLDivElement | null
   return isCompact
 }
 
-export interface EditorToolbarProps extends Omit<UseMarkdownFormattingToolbarResult, 'placeLibraryImage'> {
+export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   /** The image button also turns the sidebar to the image library, to pick what goes in the empty image. */
   showImageLibrary: () => void
   isPreviewMode: boolean

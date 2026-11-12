@@ -7169,13 +7169,6 @@ ${markdownHtml}
     if (!edit || !adapter || live.section.readEditorText() !== live.text) return
     adapter.applyEdit([edit], live.text)
   }, [liveImageUseText])
-  // A card puts its image at the caret, which needs a note in edit mode.
-  const placeLibraryImage = useCallback((id: string, alt: string) => {
-    const section = getActiveSection()
-    if (!section?.activeNoteId || section.isPreviewMode || section.previewedSnapshotId !== null) return
-    section.placeLibraryImage(id, alt)
-  }, [getActiveSection])
-
   // The view bar's Notes and Images buttons, and the toolbar's image button.
   // Each of the two views comes back on the section it was last left on.
   // Pressing the view already on screen locates the active slot's note in it
@@ -8720,7 +8713,6 @@ ${markdownHtml}
                           uses={imageUses}
                           shownImageId={shownImageId}
                           caretUseFrom={caretUseFrom}
-                          onPlace={placeLibraryImage}
                           onReveal={revealImageUse}
                           onRemove={removeImageUse}
                           onStore={storeImageUse}
