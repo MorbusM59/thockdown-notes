@@ -617,11 +617,14 @@
   text-overflow: ellipsis;
 }
 
-/* The set list's dock: filter over the two groupings, exit down the right. */
+/* The set list's dock, in the colour picker row's dimensions: one row of the
+   six-column grid. The filter and the two groupings are stacked in it at the
+   picker's stacked-slider thickness; the exit takes the sixth cell whole. */
 .options-music-set-list-dock {
+  --set-list-half-cell:  calc((var(--color-grid-cell) - var(--color-grid-gap)) / 2);
   display:               grid;
   grid-template-columns: repeat(6, var(--color-grid-cell));
-  grid-template-rows:    repeat(2, var(--color-grid-cell));
+  grid-template-rows:    repeat(2, var(--set-list-half-cell));
   gap:                   var(--color-grid-gap);
 }
 
@@ -638,6 +641,11 @@
   display:               grid;
   grid-template-columns: 1fr 1fr;
   gap:                   var(--color-grid-gap);
+  min-height:            0;
+}
+
+.options-music-set-list-groupings .options-loadout-btn {
+  font-size: calc(9px * var(--ui-font-scale));
 }
 
 .options-music-set-list-exit {
