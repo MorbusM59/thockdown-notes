@@ -63,12 +63,12 @@
   cursor: ns-resize;
 }
 
-.thockdown-scroll-thumb[data-hovered].is-inactive,
-.thockdown-scroll-thumb.is-dragging.is-inactive,
+/* Nothing to scroll (the scrollbar logic's is-inactive, which also covers a
+   slot with no note): the track is drawn empty and the thumb not at all.
+   Hidden rather than removed, so the track keeps its geometry and nothing
+   moves when the content grows past one screen. */
 .thockdown-scroll-thumb.is-inactive {
-  border-color: rgba(81, 73, 66, 0.30);
-  background: var(--canonical-handle-bg);
-  cursor: default;
+  visibility: hidden;
 }
 
 .utility-setting-row {

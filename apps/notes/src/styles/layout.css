@@ -166,13 +166,9 @@
   box-shadow: none;
 }
 
-/* Nothing to scroll, nothing drawn: in immersive mode a scrollbar appears only
-   while there is something to scroll. "Something to scroll" is the scrollbar
-   logic's own is-inactive, which also covers a slot with no note (the empty
-   scene). Hidden rather than removed, so the track keeps its geometry and the
-   text keeps its reserved column -- the layout does not move when a note
-   grows past one screen. */
-.app-grid.is-immersive .editor-scrollbar-slot .thockdown-scroll-thumb.is-inactive,
+/* Nothing to scroll, nothing drawn: the edit view's grid scrollbar column
+   hides with the thumb (interaction.css's .thockdown-scroll-thumb.is-inactive),
+   keeping its reserved column so the layout does not move. */
 .app-grid.is-immersive .immersive-scroll-column.is-inactive {
   visibility: hidden;
 }
