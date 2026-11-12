@@ -1094,23 +1094,29 @@
   height: 100%;
 }
 
-/* The Date and Trash cards are drawn as the box holding the section selector
-   above them (toolbar.css's .preset-section): its fill, border, corner and
-   shadow, and so are the archive and trash buttons that replace the date on
-   hover. An active card is pressed in, as an active button is. */
+/* The Date and Trash cards, and the image cards of Images in Order and the
+   image trash, are drawn as the box holding the section selector above them
+   (toolbar.css's .preset-section): its fill, border, corner and shadow, and
+   so are the buttons that replace the meta line on hover. An active card is
+   pressed in, as an active button is. */
 .date-view .note-list-item .note-list-column.note-list-column-primary,
-.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button {
+.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-primary,
+.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button,
+.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-action .note-list-action-button {
   background:    #FFFFFF66;
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-small);
   box-shadow:    var(--box-shadow-regular-light);
 }
 
-.date-view .note-list-item .note-list-column.note-list-column-action {
+.date-view .note-list-item .note-list-column.note-list-column-action,
+.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-action {
   background: none;
 }
 
 .date-view .note-list-item.is-active .note-list-column.note-list-column-primary,
-.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button[data-pressed] {
+.image-library-view .note-list-item:not(.is-tree-card).is-active .note-list-column.note-list-column-primary,
+.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button[data-pressed],
+.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-action .note-list-action-button[data-pressed] {
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
