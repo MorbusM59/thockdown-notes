@@ -148,6 +148,8 @@ function dragImage(id: string) {
     // Dragged into a note, it is referenced there (CM6Editor's and the
     // render view's drop handlers); nothing is stored again.
     'data-drag-source': '',
+    // A card is too large to carry about: the cursor shows the drag instead.
+    'data-drag-picture': 'cursor',
     onDragStart: (event: DragEvent) => {
       event.dataTransfer.setData(IMAGE_DRAG_MIME_TYPE, id)
       event.dataTransfer.effectAllowed = 'copy'

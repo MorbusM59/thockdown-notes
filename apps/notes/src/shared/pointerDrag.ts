@@ -61,6 +61,7 @@
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { armHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from '@thockdown/interaction/holdTiming'
 import { holdTouchPanning } from '@thockdown/interaction/touchInput'
+import { beginCursorHold, endCursorHold } from '@thockdown/interaction/cursorHoldFeedback'
 
 /**
  * How far a press must travel, in screen pixels, before it is a drag rather
@@ -76,6 +77,18 @@ export const DRAG_THRESHOLD_PX = HOLD_GRACE_PX
  */
 export const DRAG_SOURCE_ATTRIBUTE = 'data-drag-source'
 export const DRAG_SOURCE_SELECTOR = `[${DRAG_SOURCE_ATTRIBUTE}]`
+
+/**
+ * How a drag shows that it is under way. Absent, a translucent copy of the
+ * source follows the pointer. `"cursor"`: nothing follows the pointer, and
+ * the custom cursor shows the left-hold confirmation instead -- its halo
+ * swells as for a hold of `HOLD_CONFIRM_MS` and stays up for the whole drag,
+ * and a drop a target took ends it with the hold's completion twitch. For a
+ * source too large to carry about (an image card), whose drop places it
+ * exactly where the pointer is. With no custom cursor (Linux) a drag of
+ * this kind shows nothing but its drop target's own feedback.
+ */
+export const DRAG_PICTURE_ATTRIBUTE = 'data-drag-picture'
 
 /** Class on `<body>` for the whole of a drag, so styles can react to it. */
 export const DRAG_ACTIVE_BODY_CLASS = 'is-pointer-dragging'
@@ -121,6 +134,7 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
   let releasePanning: (() => void) | null = null
 
   let dataTransfer: DataTransfer | null = null
+  const showsOnCursor = source.getAttribute(DRAG_PICTURE_ATTRIBUTE) === 'cursor'
   let ghost: HTMLElement | null = null
   let ghostOffsetX = 0
   let ghostOffsetY = 0
@@ -144,6 +158,11 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     // declined to be dragged (a protected tag, say).
     if (!dispatch('dragstart', source)) {
       finish(false)
+      return
+    }
+    document.body.classList.add(DRAG_ACTIVE_BODY_CLASS)
+    if (showsOnCursor) {
+      beginCursorHold(HOLD_CONFIRM_MS)
       return
     }
     const rect = source.getBoundingClientRect()
@@ -178,7 +197,6 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     ghostOffsetX += origin.left
     ghostOffsetY += origin.top
     placeGhost()
-    document.body.classList.add(DRAG_ACTIVE_BODY_CLASS)
   }
 
   const placeGhost = () => {
@@ -244,11 +262,14 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     ghost?.remove()
     ghost = null
     document.body.classList.remove(DRAG_ACTIVE_BODY_CLASS)
+    // A target takes a drop by cancelling it, which `dispatch` reports as false.
+    let taken = false
     if (drop) {
       const target = elementUnderPointer()
-      if (target) dispatch('drop', target)
+      if (target) taken = !dispatch('drop', target)
       swallowNextClick()
     }
+    if (showsOnCursor) endCursorHold(taken)
     dispatch('dragend', source)
   }
 
