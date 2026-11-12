@@ -38,10 +38,10 @@
 }
 
 .app-shell *::-webkit-scrollbar-track {
-  border:        1px solid var(--canonical-scroll-track-border);
+  border:        var(--backdrop-surface-border);
   border-radius: var(--border-radius-regular);
-  background:    var(--canonical-scroll-track-bg);
-  box-shadow:    var(--box-shadow-inverted);
+  background:    var(--backdrop-surface-background);
+  box-shadow:    var(--backdrop-surface-shadow);
 }
 
 .app-shell *::-webkit-scrollbar-thumb {

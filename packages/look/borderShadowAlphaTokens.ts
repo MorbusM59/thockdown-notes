@@ -51,7 +51,6 @@ export const BORDER_ALPHA_TOKENS: readonly string[] = [
   '--color-border-hr',
   '--btn-border-default',
   '--btn-border-hover',
-  '--canonical-scroll-track-border',
   '--canonical-handle-border',
 ]
 

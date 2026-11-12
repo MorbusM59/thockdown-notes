@@ -512,7 +512,11 @@
   );
 
   --canonical-scroll-track-bg:     var(--color-input-backdrop);
-  --canonical-scroll-track-border: rgba(106, 92, 79, 0.45);
+  /* The backdrop surface, untextured, for anything outside an app shell; the
+     shell redeclares all three with the texture (loadoutTheme.ts). */
+  --backdrop-surface-background:   var(--color-input-backdrop);
+  --backdrop-surface-border:       1px solid var(--color-border-light-70);
+  --backdrop-surface-shadow:       var(--box-shadow-inverted);
   --canonical-handle-border:       rgba(81, 73, 66, 0.6);
   --canonical-handle-bg:           var(--btn-bg-default);
 

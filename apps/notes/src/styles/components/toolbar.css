@@ -10,10 +10,10 @@
   width:           auto;
   height:          100%;
   border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
-  border:      1px solid var(--color-border-light-70);
+  border:      var(--backdrop-surface-border);
   border-top: none;
-  box-shadow:       var(--box-shadow-inverted);
-  background:       var(--color-input-backdrop);
+  box-shadow:       var(--backdrop-surface-shadow);
+  background:       var(--backdrop-surface-background);
   padding: var(--spacing-regular);
   gap: var(--spacing-regular);
 }
@@ -146,10 +146,10 @@
   height: 100%;
   margin: 0 var(--spacing-large);
   border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
-  border:      1px solid var(--color-border-light-70);
+  border:      var(--backdrop-surface-border);
   border-top: none;
-  box-shadow:       var(--box-shadow-inverted);
-  background:       var(--color-input-backdrop);
+  box-shadow:       var(--backdrop-surface-shadow);
+  background:       var(--backdrop-surface-background);
 }
 
 .markdown-toolbar {
@@ -542,9 +542,9 @@
 }
 
 .options-curve-field {
-  border:      1px solid var(--canonical-scroll-track-border);
-  background:  var(--canonical-scroll-track-bg);
-  box-shadow:  var(--box-shadow-inverted-light);
+  border:      var(--backdrop-surface-border);
+  background:  var(--backdrop-surface-background);
+  box-shadow:  var(--backdrop-surface-shadow);
 }
 
 /* A field looks the same while it is being typed into. A display cell that

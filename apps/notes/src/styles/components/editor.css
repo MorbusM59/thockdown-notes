@@ -64,9 +64,9 @@
    thing" as the regular tab bar, just one row down. Geometry lives in
    pillbars.css, combined with .tab-mode-shell. */
 .chapter-tab-mode-shell {
-  background:     var(--color-input-backdrop);
-  border:         1px solid var(--color-border-light-70);
-  box-shadow:     var(--box-shadow-inverted);
+  background:     var(--backdrop-surface-background);
+  border:         var(--backdrop-surface-border);
+  box-shadow:     var(--backdrop-surface-shadow);
   border-radius:  var(--border-radius-regular);
 }
 
@@ -308,10 +308,10 @@
   white-space:    nowrap;
   height:         var(--bottom-utility-bar-content-height);
   padding:        0 var(--spacing-large);
-  border:         1px solid var(--canonical-scroll-track-border);
+  border:         var(--backdrop-surface-border);
   border-radius:  var(--border-radius-regular);
-  box-shadow:     var(--box-shadow-inverted-light);
-  background:     var(--canonical-scroll-track-bg);
+  box-shadow:     var(--backdrop-surface-shadow);
+  background:     var(--backdrop-surface-background);
   color:          var(--color-text-80);
   font-size:      calc(9px * var(--ui-font-scale));
   letter-spacing: 0.02em;
@@ -372,10 +372,10 @@
 .snapshot-timeline-rail {
   position:      absolute;
   inset:         0;
-  border:        1px solid var(--canonical-scroll-track-border);
+  border:        var(--backdrop-surface-border);
   border-radius: var(--border-radius-regular);
-  background:    var(--canonical-scroll-track-bg);
-  box-shadow:    var(--box-shadow-inverted-light);
+  background:    var(--backdrop-surface-background);
+  box-shadow:    var(--backdrop-surface-shadow);
 }
 
 .snapshot-timeline-mark {

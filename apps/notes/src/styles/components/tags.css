@@ -30,9 +30,9 @@
    height/min-width) lives in pillbars.css, combined with
    .chapter-tab-mode-shell -- this rule only owns the well's look. */
 .tab-mode-shell {
-  background: var(--color-input-backdrop);
-  border:        1px solid var(--color-border-light-70);
-  box-shadow:    var(--box-shadow-inverted);
+  background: var(--backdrop-surface-background);
+  border:        var(--backdrop-surface-border);
+  box-shadow:    var(--backdrop-surface-shadow);
   border-radius: var(--border-radius-regular);
 }
 

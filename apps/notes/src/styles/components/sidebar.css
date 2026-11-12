@@ -49,18 +49,20 @@
   isolation:  isolate;
   margin:     0;
   padding:    0;
-  border:          1px solid var(--color-border-light-70);
+  border:          var(--backdrop-surface-border);
   border-left:     none;
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
-  background-color: var(--palette-parchment-lightest);
+  background-color: var(--color-input-backdrop);
 }
 
-/* The inset shadow is drawn on an overlay ABOVE the texture layer and the
- * content rather than on the box itself: an inset box-shadow paints just over
- * the box's own background, so the full-size texture layer (z-index 1) hid it
- * and only the border line showed. The list's overlay hangs off the
- * non-scrolling .sidebar-wrapper so it does not scroll away with the list;
- * it covers the same box, since .sidebar-content fills the wrapper. */
+/* The backdrop surface, drawn in parts because this one scrolls: the colour
+ * here, the texture as the scroll-synced layer below (.sidebar-content-texture,
+ * the same material every other backdrop panel takes as its background image),
+ * and the inset shadow on an overlay ABOVE that layer. An inset box-shadow
+ * paints just over the box's own background, so the full-size texture layer
+ * (z-index 1) hid it when it was drawn on the box. The list's overlay hangs
+ * off the non-scrolling .sidebar-wrapper so it does not scroll away with the
+ * list; it covers the same box, since .sidebar-content fills the wrapper. */
 .sidebar-wrapper::after,
 .sidebar-color-picker-dock::after {
   content:        '';
@@ -69,7 +71,7 @@
   z-index:        3;
   pointer-events: none;
   border-radius:  inherit;
-  box-shadow:     var(--box-shadow-inverted);
+  box-shadow:     var(--backdrop-surface-shadow);
 }
 
 .sidebar-color-picker-dock {
@@ -184,12 +186,12 @@
 .search-box .search-input-field {
   width:          100%;
   padding:        var(--spacing-large);
-  border:         1px solid var(--color-border-light-70);
+  border:         var(--backdrop-surface-border);
   border-radius:  var(--border-radius-regular);
-  box-shadow:     var(--box-shadow-inverted);
+  box-shadow:     var(--backdrop-surface-shadow);
   font-size:      calc(14px * var(--ui-font-scale));
   outline:        none;
-  background:     var(--color-input-backdrop);
+  background:     var(--backdrop-surface-background);
   transition:     border-color 0.2s;
   color:           var(--color-text-base);
   min-height: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);

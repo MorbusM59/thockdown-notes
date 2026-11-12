@@ -14,10 +14,10 @@
   width:           100%;
   height:          100%;
   border-radius:    0 0 0 var(--border-radius-regular);
-  border-left:      1px solid var(--color-border-light-70);
-  border-bottom:    1px solid var(--color-border-light-70);
-  box-shadow:       var(--box-shadow-inverted);
-  background:       var(--color-input-backdrop);
+  border-left:      var(--backdrop-surface-border);
+  border-bottom:    var(--backdrop-surface-border);
+  box-shadow:       var(--backdrop-surface-shadow);
+  background:       var(--backdrop-surface-background);
 }
 
 .window-controls-grid.is-collapsed .window-maximize-split,
@@ -30,8 +30,7 @@
 }
 
 .window-controls-grid.is-collapsed {
-  border: 1px solid var(--color-border-light-70);
-  box-shadow: inset 0 0 8px #ffffff, inset 0 0 4px #ffffff, inset 0 0 2px #000000;
+  border: var(--backdrop-surface-border);
   grid-template-columns: auto auto;
 }
 

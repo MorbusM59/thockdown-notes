@@ -302,6 +302,7 @@ import {
   TEXTURE_VSTEPS_MAX,
 } from '@thockdown/look/textureTypes'
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
+import { useTintedTexture } from './textures/useTintedTexture'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
@@ -2421,6 +2422,9 @@ function App() {
   })
   const appGridTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.appGrid.color)), [textureMaterials.appGrid.color])
   const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
+  // The sidebar's material, composed into one image for every backdrop panel
+  // that does not scroll (useTintedTexture.ts).
+  const backdropTextureCss = useTintedTexture(sidebarTextureCss, sidebarTextureTintCss)
   const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
   const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
   // Everything the visual loadout decides about the look, in one place
@@ -4054,6 +4058,7 @@ function App() {
       '--texture-editor-render': editorRenderTextTextureCss,
       '--texture-app-grid-tint': appGridTextureTintCss,
       '--texture-sidebar-content-tint': sidebarTextureTintCss,
+      '--backdrop-texture': backdropTextureCss,
       '--texture-editor-edit-tint': editorEditTextureTintCss,
       '--texture-editor-render-tint': editorRenderTextureTintCss,
     }
@@ -4074,6 +4079,7 @@ function App() {
     flashing.cycleMs,
     layout.gridTemplateColumns,
     sidebarTextureCss,
+    backdropTextureCss,
     sidebarTextureTintCss,
   ])
 
@@ -9601,6 +9607,7 @@ ${markdownHtml}
               ...theme.shellVariables,
               '--texture-sidebar-content': sidebarTextureCss,
               '--texture-sidebar-content-tint': sidebarTextureTintCss,
+              '--backdrop-texture': backdropTextureCss,
             }}
           />
         ) : null}

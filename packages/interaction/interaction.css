@@ -42,10 +42,10 @@
   touch-action: none;
   width: var(--canonical-scroll-thickness);
   height: 100%;
-  border: 1px solid var(--canonical-scroll-track-border);
+  border: var(--backdrop-surface-border);
   border-radius: var(--border-radius-regular);
-  box-shadow: var(--box-shadow-inverted-light);
-  background: var(--canonical-scroll-track-bg);
+  box-shadow: var(--backdrop-surface-shadow);
+  background: var(--backdrop-surface-background);
 }
 
 .thockdown-scroll-thumb {
@@ -83,9 +83,10 @@
 
 .utility-setting-row input {
   width:         100%;
-  border:        1px solid #c6b9ab;
+  border:        var(--backdrop-surface-border);
   border-radius: var(--border-radius-regular);
-  background:    var(--color-input-backdrop);
+  box-shadow:    var(--backdrop-surface-shadow);
+  background:    var(--backdrop-surface-background);
   color:         var(--color-text-base);
   font-size:     calc(11px * var(--ui-font-scale));
   padding:       var(--spacing-regular);
@@ -177,10 +178,10 @@
 .utility-setting-scrollbar-rail {
   position:      absolute;
   inset:         0;
-  border:        1px solid var(--canonical-scroll-track-border);
+  border:        var(--backdrop-surface-border);
   border-radius: var(--border-radius-regular);
-  background:    var(--canonical-scroll-track-bg);
-  box-shadow:    var(--box-shadow-inverted-light);
+  background:    var(--backdrop-surface-background);
+  box-shadow:    var(--backdrop-surface-shadow);
 }
 
 /* One line, centred, cut with an ellipsis where it does not fit: a label
