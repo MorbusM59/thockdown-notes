@@ -9,7 +9,7 @@ import {
   groupMusicSetList, maxMusicSetSelectorOffset, musicSetSelectorCells, musicSetSelectorOffsetShowing, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { closeMusicSetList, openMusicSetList, readMusicSetListView, setMusicSetListFilter, subscribeMusicSetListView } from './musicSetListView'
+import { readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
 /** A set's mark: a factory set's icon, anyone else's first two letters (as in Music > Sets). */
 function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
@@ -33,8 +33,8 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
     setOffset((current) => Math.min(Math.max(0, Math.min(current, max) + direction), max))
   }, [])
 
-  // The open set is brought into the window when the list opens on it or the
-  // sets change; stepping afterwards may take it out of sight again.
+  // The open set is brought into the window when the library opens on it or
+  // the sets change; stepping afterwards may take it out of sight again.
   const openIndex = sets.findIndex((candidate) => candidate.slot === slot)
   useEffect(() => {
     if (openIndex >= 0) setOffset((current) => musicSetSelectorOffsetShowing(sets.length, current, openIndex))
@@ -79,7 +79,7 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
             data-tooltip={`${candidate.name}: ${nowPlaying.pool?.counts[candidate.slot] ?? 0} songs`}
             aria-label={candidate.name}
             aria-checked={candidate.slot === slot}
-            onClick={() => openMusicSetList(candidate.slot)}
+            onClick={() => selectMusicLibrarySet(candidate.slot)}
           >
             <SetMark slot={candidate.slot} name={candidate.name} />
           </button>
@@ -90,7 +90,7 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
 }
 
 /**
- * The songs of the set the list is open on, read from the database, and read
+ * The songs of the set the library is open on, read from the database, and read
  * again whenever that set's count changes (a song added or removed, here or
  * anywhere else).
  */
@@ -107,26 +107,31 @@ function useSetSongs(slot: PlaylistSlot, count: number | undefined): MusicSongEn
 }
 
 /**
- * The SET LIST (`shared/musicSetList.ts`): drawn in the sidebar in place of
- * the options panel while a set is open, in the options panel's own
- * structure. The selector bar holds the sets; each folder or artist is a
- * subsection and each file type or album a divider; a song is a row of the
- * curve editor's kind, its name and a button taking it out of the set.
+ * The MUSIC LIBRARY, the sidebar's Songs view (`shared/musicSetList.ts`), in
+ * the options panel's own structure. The selector bar holds the sets, as the
+ * view's sections; each folder or artist of the open set is a subsection and
+ * each file type or album a divider; a song is a row of the curve editor's
+ * kind, its name and a button taking it out of the set. `filter` is the
+ * sidebar's search field (the visualizer's pool-filter syntax).
+ *
+ * The open set is the one last picked (musicLibraryView.ts), or the first set
+ * when none was or that one is gone.
  */
-export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grouping: MusicSetListGrouping }) {
+export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetListGrouping; filter: string }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-  const { filter } = useSyncExternalStore(subscribeMusicSetListView, readMusicSetListView)
+  const pickedSlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
+  const set = nowPlaying.musicSets.find((candidate) => candidate.slot === pickedSlot) ?? nowPlaying.musicSets[0]
+  if (!set) return <div className="options-content sidebar-options-content" aria-label="Songs" />
+  return <MusicLibrarySet slot={set.slot} name={set.name} grouping={grouping} filter={filter} />
+}
+
+function MusicLibrarySet({ slot, name, grouping, filter }: { slot: PlaylistSlot; name: string; grouping: MusicSetListGrouping; filter: string }) {
+  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const songs = useSetSongs(slot, nowPlaying.pool?.counts[slot])
   const groups = useMemo(() => groupMusicSetList(songs, grouping, filter), [songs, grouping, filter])
-  const set = nowPlaying.musicSets.find((candidate) => candidate.slot === slot)
-
-  // A set deleted while its list is up leaves nothing to show.
-  useEffect(() => {
-    if (nowPlaying.musicSets.length > 0 && !set) closeMusicSetList()
-  }, [nowPlaying.musicSets, set])
 
   return (
-    <div className="options-content sidebar-options-content" aria-label={set ? `Songs in ${set.name}` : 'Songs'}>
+    <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
       <div className="preset-section">
         <SetSelector slot={slot} />
       </div>
@@ -151,8 +156,8 @@ export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grou
                         <button
                           type="button"
                           className="options-curve-cell options-curve-button"
-                          data-tooltip={`Remove from ${set?.name ?? 'this set'}`}
-                          aria-label={`Remove ${name} from ${set?.name ?? 'this set'}`}
+                          data-tooltip={`Remove from ${name}`}
+                          aria-label={`Remove ${name} from ${name}`}
                           onClick={() => { void nowPlaying.removeFromMusicSet(slot, song.id) }}
                         >
                           <span className="fa-solid fa-xmark" aria-hidden="true" />
@@ -172,31 +177,13 @@ export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grou
 }
 
 /**
- * The set list's dock, below the sidebar where the colour picker docks: one
- * entry row of the filter (the visualizer's pool-filter syntax), the two
- * groupings and the way back to Options.
+ * The Music Library's dock, below the sidebar where the colour picker docks:
+ * the two groupings of a set's songs.
  */
-export function MusicSetListDock({ grouping, onGroupingChange }: { grouping: MusicSetListGrouping; onGroupingChange: (grouping: MusicSetListGrouping) => void }) {
-  const { filter } = useSyncExternalStore(subscribeMusicSetListView, readMusicSetListView)
+export function MusicLibraryDock({ grouping, onGroupingChange }: { grouping: MusicSetListGrouping; onGroupingChange: (grouping: MusicSetListGrouping) => void }) {
   return (
-    <div className="options-curve-rows options-music-set-list-dock" role="group" aria-label="Song list controls">
+    <div className="options-curve-rows options-music-set-list-dock" role="radiogroup" aria-label="Song grouping">
       <div className="options-curve-row options-music-set-list-dock-row">
-        <input
-          className="options-curve-cell options-curve-field options-music-set-list-filter"
-          aria-label="Filter songs"
-          data-tooltip="Filter by title, artist, album or file path; $ artist, § album, # title"
-          spellCheck={false}
-          value={filter}
-          onChange={(event) => setMusicSetListFilter(event.target.value)}
-          onKeyDown={(event) => {
-            event.stopPropagation()
-            // Enter and Escape both leave the field; the filter stays as typed.
-            if (event.key === 'Enter' || event.key === 'Escape') {
-              event.preventDefault()
-              event.currentTarget.blur()
-            }
-          }}
-        />
         {(['folder', 'artist'] as const).map((option) => (
           <button
             key={option}
@@ -211,15 +198,6 @@ export function MusicSetListDock({ grouping, onGroupingChange }: { grouping: Mus
             <span className={option === 'folder' ? 'fa-solid fa-folder' : 'fa-solid fa-user'} aria-hidden="true" />
           </button>
         ))}
-        <button
-          type="button"
-          className="options-curve-cell options-curve-button"
-          data-tooltip="Back to Options"
-          aria-label="Back to Options"
-          onClick={closeMusicSetList}
-        >
-          <span className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true" />
-        </button>
       </div>
     </div>
   )

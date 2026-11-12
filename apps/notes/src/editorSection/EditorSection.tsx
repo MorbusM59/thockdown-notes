@@ -1,3 +1,4 @@
+import type { SidebarMode } from '../shared/appState'
 import type { VisualizerFont } from '../shared/visualizerFont'
 import { useImagePreviewGestures } from './useImagePreviewGestures'
 import { useSpeedReading } from '../speedReading/useSpeedReading'
@@ -154,7 +155,7 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   restoredTabBarMode: 'tags' | 'tabs' | null
   chapterBarModeRef: MutableRefObject<'tags' | 'tabs'>
 
-  sidebarMode: 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
+  sidebarMode: SidebarMode
 
   restoredDocumentFindCaseSensitive: boolean | null
   documentFindCaseSensitiveRef: MutableRefObject<boolean>

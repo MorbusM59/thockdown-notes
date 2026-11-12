@@ -1,3 +1,4 @@
+import type { SidebarMode } from '../shared/appState'
 import { withExternalFileTurn } from './externalFileSync'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject } from 'react'
@@ -17,7 +18,6 @@ const NOTE_RIGHT_CLICK_HOLD_MS = HOLD_CONFIRM_MS
 
 type NotePrimedAction = 'archive' | 'deletion'
 type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
-type SidebarModeForRemoval = 'date' | 'trash' | 'category' | 'archive' | 'find' | 'options'
 
 export interface UseNoteProtectionActionsOptions {
   notes: NoteSummary[]
@@ -34,7 +34,7 @@ export interface UseNoteProtectionActionsOptions {
   persistenceReady: boolean
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   noteTransitionLockRef: MutableRefObject<boolean>
-  sidebarMode: SidebarModeForRemoval
+  sidebarMode: SidebarMode
   activeNoteExternalPathRef: MutableRefObject<string | null>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
   /** The open notes' live documents (noteDocumentStore.ts). */

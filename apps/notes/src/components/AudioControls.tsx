@@ -36,7 +36,7 @@ import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
-import { openMusicSetList } from '../sidebar/musicSetListView'
+import { openMusicLibrary } from '../sidebar/musicLibraryView'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
@@ -824,11 +824,11 @@ export const AudioControls = memo(function AudioControls({
     if (event.button !== 2) return
     event.preventDefault()
     heldSlotRef.current = null
-    // A held right press opens the set's songs in the sidebar (the set list).
+    // A held right press opens the set's songs in the sidebar (the Music Library).
     holdTimerRef.current = armHold(() => {
       holdTimerRef.current = null
       heldSlotRef.current = slot
-      openMusicSetList(slot, 'player')
+      openMusicLibrary(slot)
     }, HOLD_THRESHOLD_MS)
   }, [])
 

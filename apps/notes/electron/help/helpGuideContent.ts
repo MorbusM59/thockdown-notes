@@ -384,19 +384,21 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 > **Where?**
 > The row of icons at the top of the sidebar, just below the search field.
 
-*Five different ways to browse your notes, switched with one click.*
+*What the sidebar shows, switched with one click.*
 
-- **Date** — a flat, chronological list ordered by last-updated time, paginated.
+- **Notes**, **Images** and the **Music Library** are the first three icons. Notes and Images each have four sections, picked in the row of icons at the top of their list; each view comes back on the section you left it on. Images is covered in [Images](${guideLink('TOOLBAR-FORMATTING', 'images')}); the Music Library lists the songs of a music set, one set per icon at its top, and the search field filters them.
+- The Notes sections:
+- **Date** — a flat, chronological list ordered by last-updated time, fifty notes to a page.
 - **Category** — notes grouped by primary tag, then by secondary tag, folded like the options' sections: a click opens a group and folds the others beside it, a right-click opens or folds just that one.
 - **Archive** — the same tree layout as Category, restricted to archived notes.
-- **Trash** — a flat, paginated list of notes marked for deletion, awaiting purge or restore.
+- **Trash** — a flat list of notes marked for deletion, awaiting purge or restore, paged like Date.
 - **Find** — find (and replace) inside the note you have open, see [Find and Replace](${guideLink('FIND-REPLACE', 'find-and-replace')}).
-- A sixth icon, the cogwheel, opens Settings, which replaces the sidebar content rather than being a note-browsing view — see [Settings Panel](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
+- The last icon, the cogwheel, opens Settings — see [Settings Panel](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
 
 ### [Pagination](#pagination)
 
 > **Where?**
-> Bottom of the sidebar, visible only in Date and Trash views.
+> Bottom of the sidebar, in the Date and Trash sections once they hold more than fifty notes.
 
 *Steps through a long, flat list of notes a page at a time.*
 
@@ -405,7 +407,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Search](#search)
 
 > **Where?**
-> The search field at the top of the sidebar, in the Date, Category, Archive and Trash views. (In the Find view the same field searches inside the open note instead, and in the options it filters the settings down to the ones that mention your term; its X clears it.)
+> The search field at the top of the sidebar, in the Notes view. (In the Find view the same field searches inside the open note instead, in the Music Library it filters the songs, and in the options it filters the settings down to the ones that mention your term; its X clears it.)
 
 *Filters your notes by title, content, filename, or tag as you type.*
 
@@ -529,7 +531,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Empty Trash](#empty-trash)
 
 > **Where?**
-> The Trash icon in the sidebar's view-mode row, held with a right-click.
+> The Trash icon in the row of sections at the top of the Notes list, held with a right-click.
 
 *Permanently purges every note currently in Trash, in one action.*
 
@@ -648,7 +650,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Drop or paste an image file** into a note to store it in the app (up to 20 MB). It is inserted as \`![name](&1)\`: \`&1\` is the stored image's id, and the note keeps showing it even if the original file moves or is deleted.
 - **In the reader**, \`Ctrl\`+drag an image onto another paragraph to move it there: dropped on the left third of the page it sits left, the middle centres it, the right third puts it right. \`Shift\`+drag resizes it (drag away from the side it is aligned to, or down, to grow), and \`Ctrl+Shift\`+drag changes width and height separately. \`Ctrl\`+drag near an edge or corner crops it instead, and \`Ctrl\`+right-click takes the crop off. Image files can be dropped onto a paragraph here too.
 - **The image button**, beside the word count, appears when a note has images: a globe while any of them is loaded from the web or a file, a database once all are stored in the app. **Hold left-click** to download and store them (this works with remote images turned off); **hold right-click** to point stored images back to where they came from. Either is one undo step. To give an image a name of your own before storing it, put \`&NAME\` in its title, as in \`"&LOGO 12em"\`.
-- **Image mode**: the toolbar's image button leaves an empty \`![]()\` at the caret and turns the sidebar to images; right-clicking the options button switches between images and notes. **Images in Order** lists the note's images with their alt text, and **Images by Section** groups them by \`##\` and \`###\` headings. In both, click an image to go to it, and its X takes it out of the note. Images from the web or a file show a globe; **hold left-click** on one to store it in the app. **Image Archive** holds every stored image, grouped by its own tags: click one to put it at the caret (inside an image it replaces the address and alt text and keeps the size and placement). **Hold right-click** on any image to view it in the slot, with its tags below (drag them into order; right-click its id to rename it in every note); a click in the sidebar closes it. A **right-click** on an image shows it whole.
+- **Image mode**: the toolbar's image button leaves an empty \`![]()\` at the caret and turns the sidebar to the Images view. **Images in Order** lists the note's images with their alt text, and **Images by Section** groups them by \`##\` and \`###\` headings. In both, click an image to go to it, and its X takes it out of the note. Images from the web or a file show a globe; **hold left-click** on one to store it in the app. **Image Archive** holds every stored image, grouped by its own tags: click one to put it at the caret (inside an image it replaces the address and alt text and keeps the size and placement). **Hold right-click** on any image to view it in the slot, with its tags below (drag them into order; right-click its id to rename it in every note); a click in the sidebar closes it. A **right-click** on an image shows it whole.
 - **Right-click** in an image selects its alt text, then its id (when it has one), then the whole image. Inside a table, the table's keys and right-click take precedence.
 `,
   `## Find & Replace
@@ -998,7 +1000,7 @@ ${shortcutTable()}
 *A built-in music player with your own music sets and an independent Soundscapes switch.*
 
 - The player shows five sets (Pop, Rock, Electronic, Lounge and Ambient until you reorder them). The Soundscapes button, showing the icon of the soundscape it will play, turns soundscapes on or off independently; scroll over it to set their volume.
-- **Managing sets** — in Options → Music → Sets: right-click a set's name to rename it, use the file and folder buttons to add songs, drag rows to reorder, and the plus to add a set. Only the five sets above the divider appear in the player. Hold the remove button to delete a set (factory sets cannot be deleted); click a set's song count to list its songs, by folder or by artist, and take songs out of the set; hold a right-click on the count to empty it.
+- **Managing sets** — in Options → Music → Sets: right-click a set's name to rename it, use the file and folder buttons to add songs, drag rows to reorder, and the plus to add a set. Only the five sets above the divider appear in the player. Hold the remove button to delete a set (factory sets cannot be deleted); click a set's song count to open it in the Music Library, where its songs are listed by folder or by artist and can be taken out of the set; hold a right-click on the count to empty it.
 - **Songs in sets** — a song can be in several sets. Removing it from one keeps it in your library while another set still holds it.
 - **Adding music in the player** — right-click a set to pick files, Shift+right-click for a folder; left-clicking an empty set also opens the file picker.
 - **Listing a set's songs** — hold a right-click on a set to open its songs in the sidebar; leaving the list puts the sidebar back as it was.

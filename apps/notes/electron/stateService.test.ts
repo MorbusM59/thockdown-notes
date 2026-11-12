@@ -393,6 +393,23 @@ describe('StateService app-state field round-trip', () => {
     expect((await new StateService(dataRoot).loadAppState()).menu?.optionsSection).toBe('general')
   })
 
+  it('persists the Songs view, the Music Library set and each list view\'s section across a restart', async () => {
+    const base = { selectedMonths: [], selectedYears: [], searchQuery: '' }
+    await new StateService(dataRoot).saveAppState({
+      selectedNoteId: null,
+      menu: { ...base, sidebarMode: 'songs', musicLibrarySlot: 3, sidebarSections: { notes: 'category', images: 'archive' } },
+    })
+    const menu = (await new StateService(dataRoot).loadAppState()).menu
+    expect(menu?.sidebarMode).toBe('songs')
+    expect(menu?.musicLibrarySlot).toBe(3)
+    expect(menu?.sidebarSections).toEqual({ notes: 'category', images: 'archive' })
+    await new StateService(dataRoot).saveAppState({
+      selectedNoteId: null,
+      menu: { ...base, sidebarMode: 'date', sidebarSections: { notes: 'songs', images: 7 } as unknown as { notes: 'date'; images: 'date' } },
+    })
+    expect((await new StateService(dataRoot).loadAppState()).menu?.sidebarSections).toEqual({ notes: 'date', images: 'date' })
+  })
+
   it('persists how the set list groups songs, and reads anything else as by folder', async () => {
     const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
     await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, musicSetListGrouping: 'artist' } })

@@ -17,7 +17,7 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' })
 const p = await b.newPage({ viewport: { width: 1400, height: 900 } })
 const errs = []; p.on('pageerror', e => errs.push(String(e)))
 await p.goto('http://localhost:5180/'); await p.waitForTimeout(3000)
-await p.click('.btn-options'); await p.waitForTimeout(800)
+await p.click('[data-tooltip="Options"]'); await p.waitForTimeout(800)
 const out = {}
 const snap = () => p.evaluate(() => {
   const s = (sel) => document.querySelector(sel)?.getAttribute('style') ?? null

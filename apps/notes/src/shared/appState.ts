@@ -1,6 +1,7 @@
 import type { KeystrokeSoundPreferences, KeystrokeSoundSettings } from './keystrokeSounds';
 import type { OptionsSectionId } from './optionsSections';
 import type { MusicSetListGrouping } from './musicSetList';
+import type { SidebarSections } from './sidebarSections';
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
 import type { MusicPoolFilter } from './audioPlayer';
@@ -27,7 +28,7 @@ export const APP_STATE_CHANNELS = {
   saveWindowState: 'state:window:save',
 } as const satisfies InvokeChannels<AppStateApi>;
 
-export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options';
+export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'songs' | 'find' | 'options';
 
 export interface PersistedSidebarViewState {
   scrollTop?: number;
@@ -46,8 +47,12 @@ export interface PersistedMenuState {
   optionsSearchQuery?: string;
   /** The options panel's selected section (shared/optionsSections.ts). */
   optionsSection?: OptionsSectionId;
-  /** How the set list groups a set's songs (shared/musicSetList.ts). */
+  /** How the Music Library groups a set's songs (shared/musicSetList.ts). */
   musicSetListGrouping?: MusicSetListGrouping;
+  /** The music set the Music Library last showed; absent or gone, it shows the first set. */
+  musicLibrarySlot?: number;
+  /** The section the Notes and Images views were each last on (shared/sidebarSections.ts). */
+  sidebarSections?: SidebarSections;
   searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
   isPreviewMode?: boolean;
@@ -188,7 +193,7 @@ export interface PersistedMenuState {
   textureEnabled?: boolean;
   textureActiveSurface?: TextureSurfaceKey;
   textureMaterials?: TextureMaterialsBySurface;
-  /** The sidebar's date/category/archive/trash views list stored images instead of notes (imageLibrary/). */
+  /** The sidebar's list sections show the Images view rather than the Notes view (imageLibrary/). */
   sidebarShowsImages?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;

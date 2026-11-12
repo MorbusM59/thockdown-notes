@@ -28,6 +28,7 @@ import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection } from '../src/shared/optionsSections';
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping } from '../src/shared/musicSetList';
+import { sanitizeSidebarSections } from '../src/shared/sidebarSections';
 import { sanitizeBoxBevel } from '@thockdown/look/boxBevel';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';
 import { sanitizeSoundscapePreferences } from '@thockdown/soundscape/soundscape';
@@ -114,7 +115,7 @@ function sanitizeViewport(input: Partial<PersistedViewportState> | undefined): P
 }
 
 function sanitizeSidebarMode(input: unknown): SidebarMode {
-  if (input === 'date' || input === 'category' || input === 'archive' || input === 'trash' || input === 'find') {
+  if (input === 'date' || input === 'category' || input === 'archive' || input === 'trash' || input === 'songs' || input === 'find') {
     return input;
   }
   return 'date';
@@ -354,6 +355,7 @@ function sanitizeSidebarViewState(
     category: sanitizeSidebarViewStateEntry(input?.category),
     archive: sanitizeSidebarViewStateEntry(input?.archive),
     trash: sanitizeSidebarViewStateEntry(input?.trash),
+    songs: sanitizeSidebarViewStateEntry(input?.songs),
     find: sanitizeSidebarViewStateEntry(input?.find),
   };
 }
@@ -457,6 +459,8 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     optionsSearchQuery: typeof input?.optionsSearchQuery === 'string' ? input.optionsSearchQuery : '',
     optionsSection: sanitizeOptionsSection(input?.optionsSection),
     musicSetListGrouping: sanitizeMusicSetListGrouping(input?.musicSetListGrouping),
+    musicLibrarySlot: sanitizeOptionalNumber(input?.musicLibrarySlot),
+    sidebarSections: sanitizeSidebarSections(input?.sidebarSections),
     searchQueryCaseSensitive: Boolean(input?.searchQueryCaseSensitive),
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
     isPreviewMode: Boolean(input?.isPreviewMode),

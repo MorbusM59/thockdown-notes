@@ -144,10 +144,6 @@
   mask-position: 0 0;
 }
 
-.sidebar-content.is-paged-mode {
-  overflow-y: hidden;
-}
-
 .sidebar-content.is-tree-mode {
   display:    flex;
   overflow-y: hidden;
@@ -275,10 +271,6 @@
   font-size: var(--btn-icon-size);
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-date,
-.notes-sidebar .view-toggle .icon-btn.btn-category,
-.notes-sidebar .view-toggle .icon-btn.btn-archived,
-.notes-sidebar .view-toggle .icon-btn.btn-deleted,
 .notes-sidebar .view-toggle .icon-btn.btn-find {
   background-image: none;
 }
@@ -287,10 +279,6 @@
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-date::before,
-.notes-sidebar .view-toggle .icon-btn.btn-category::before,
-.notes-sidebar .view-toggle .icon-btn.btn-archived::before,
-.notes-sidebar .view-toggle .icon-btn.btn-deleted::before,
 .notes-sidebar .view-toggle .icon-btn.btn-find::before {
   content: '';
   position: absolute;
@@ -305,57 +293,57 @@
   mask-size: contain;
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-date::before {
-  -webkit-mask-image: url('../../assets/buttons/latest.png');
-  mask-image: url('../../assets/buttons/latest.png');
-}
-
-.notes-sidebar .view-toggle .icon-btn.btn-category::before {
-  -webkit-mask-image: url('../../assets/buttons/active.png');
-  mask-image: url('../../assets/buttons/active.png');
-}
-
-.notes-sidebar .view-toggle .icon-btn.btn-archived::before {
-  -webkit-mask-image: url('../../assets/buttons/archived.png');
-  mask-image: url('../../assets/buttons/archived.png');
-}
-
-.notes-sidebar .view-toggle .icon-btn.btn-deleted::before {
-  -webkit-mask-image: url('../../assets/buttons/deleted.png');
-  mask-image: url('../../assets/buttons/deleted.png');
-}
-
 .notes-sidebar .view-toggle .icon-btn.btn-find::before {
   -webkit-mask-image: url('../../assets/buttons/find.png');
   mask-image: url('../../assets/buttons/find.png');
 }
 
-/* Unlike the other 5 (fixed-size ::before mask icons, inset a flat 6px from
-   the button edge -- fine since that inset was tuned for one fixed button
-   size), .btn-options's glyph is a live font-size, and the button itself is
-   now dynamically sized (flex: 1 1 0, see the .view-toggle comment above) --
-   a flat px/em font-size wouldn't track that. container-type: inline-size
-   turns the button into a query container so the glyph can be sized in cqw
-   (% of the button's own current inline size) instead, keeping it
-   proportional to the button at any size the row's available width produces. */
-.notes-sidebar .view-toggle .icon-btn.btn-options {
+/* A view button holding a glyph (the Notes, Images and Music Library icons,
+   the options gear) rather than Find's ::before mask icon. The button is
+   dynamically sized (flex: 1 1 0, see the .view-toggle comment above), so a
+   flat px/em font-size would not track it. container-type: inline-size turns
+   the button into a query container, and the glyph is sized in cqw (% of the
+   button's own current inline size), keeping it proportional to the button
+   at any size the row's available width produces. */
+.notes-sidebar .view-toggle .icon-btn.btn-glyph {
   background-image: none;
   color:  var(--color-text-80);
   container-type: inline-size;
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-options .view-toggle-options-glyph {
+.notes-sidebar .view-toggle .icon-btn.btn-glyph .view-toggle-options-glyph {
   display:   block;
   font-size: calc(55cqw + 3*var(--spacing-small));
 }
 
+.notes-sidebar .view-toggle .icon-btn.btn-glyph .view-toggle-glyph {
+  display:   block;
+  font-size: calc(40cqw + 2*var(--spacing-small));
+}
 
-.icon-btn.btn-deleted.is-primed-for-deletion,
-.icon-btn.btn-deleted.is-primed-for-deletion[data-hovered],
-.icon-btn.btn-deleted.is-primed-for-deletion.is-active,
-.icon-btn.btn-deleted.is-primed-for-deletion.is-active[data-hovered] {
+/* The Notes view's Trash section button, primed by a held right press: the
+   next click on it empties the trash. */
+.options-loadout-btn.is-primed-for-deletion,
+.options-loadout-btn.is-primed-for-deletion[data-hovered],
+.options-loadout-btn.is-primed-for-deletion.is-active,
+.options-loadout-btn.is-primed-for-deletion.is-active[data-hovered] {
   filter: var(--filter-primed-delete);
   transition: all 300ms;
+}
+
+/* The section selector at the top of a Notes or Images list. It is the first
+   thing in the list's scroll box and scrolls with the list, as the options
+   panel's selector does. No vertical auto margin: the list is a flex column
+   with room to spare under a short list, which an auto margin would take. */
+.notes-list > .sidebar-section-bar {
+  flex:   0 0 auto;
+  margin: 0 auto;
+}
+
+/* The cards of a list, grouped for assistive technology (a listbox) without
+   a box of their own: they are laid out as the list's own children. */
+.notes-list-rows {
+  display: contents;
 }
 
 /* Sidebar scrollbar slot */
@@ -457,7 +445,7 @@
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
-.notes-list.date-view  { overflow-y: hidden; }
+.notes-list.date-view,
 .notes-list.tree-view,
 .notes-list.find-view  { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 

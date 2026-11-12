@@ -44,7 +44,12 @@ import { buildExportCss, type ExportViewStyle } from './exportStyles'
 import {
   typingSoundManager,
 } from './sound/TypingSoundManager'
-import type { PersistedMenuState, PersistedSidebarViewState } from './shared/appState'
+import type { PersistedMenuState, PersistedSidebarViewState, SidebarMode } from './shared/appState'
+import {
+  DEFAULT_SIDEBAR_SECTIONS, isSidebarListSection, rememberSidebarSection, sanitizeSidebarSections, sidebarListViewOf,
+  type SidebarListSection, type SidebarListView, type SidebarSections,
+} from './shared/sidebarSections'
+import { SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -164,8 +169,8 @@ import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from '
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId } from './shared/optionsSections'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
-import { closeMusicSetList, readMusicSetListView, subscribeMusicSetListView } from './sidebar/musicSetListView'
-import { MusicSetListDock, MusicSetListPanel } from './sidebar/MusicSetListPanel'
+import { readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
+import { MusicLibraryDock, MusicLibraryPanel } from './sidebar/MusicLibraryPanel'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -456,7 +461,6 @@ const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
   editorRenderText: '#000000DD',
 }
 
-type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'find' | 'options'
 type NotePrimedAction = 'archive' | 'deletion'
 type ViewStyleKey =
   | 'modern'
@@ -514,23 +518,30 @@ type SidebarViewState = {
 
 type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
 
-/** What the list views are called while they list images (image mode); trash keeps its name. */
 const NO_IMAGE_USES: NoteImageUse[] = []
 
-const IMAGE_VIEW_LABELS: Partial<Record<SidebarMode, string>> = {
-  date: 'Images in Order',
-  category: 'Images by Section',
-  archive: 'Image Archive',
+/** The four sections of the Notes view and of the Images view, in the section selector's order (shared/sidebarSections.ts). */
+const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelectorEntry<SidebarListSection>>> = {
+  notes: [
+    { id: 'date', label: 'Date', icon: 'fa-solid fa-clock' },
+    { id: 'category', label: 'Category', icon: 'fa-solid fa-tags' },
+    { id: 'archive', label: 'Archive', icon: 'fa-solid fa-box-archive' },
+    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
+  ],
+  images: [
+    { id: 'date', label: 'Images in Order', icon: 'fa-solid fa-list-ol' },
+    { id: 'category', label: 'Images by Section', icon: 'fa-solid fa-tags' },
+    { id: 'archive', label: 'Image Archive', icon: 'fa-solid fa-box-archive' },
+    { id: 'trash', label: 'Image Trash', icon: 'fa-solid fa-trash' },
+  ],
 }
 
-const SIDEBAR_MODES: Array<{ mode: SidebarMode; label: string }> = [
-  { mode: 'date', label: 'Date' },
-  { mode: 'category', label: 'Category' },
-  { mode: 'archive', label: 'Archive' },
-  { mode: 'trash', label: 'Trash' },
-  { mode: 'find', label: 'Find' },
-  { mode: 'options', label: 'View options' },
-]
+/**
+ * How many notes one page of the Date and Trash sections holds: page 1 is
+ * notes 1 to 50, page 2 is 51 to 100, and so on. A page scrolls, so the
+ * number does not depend on how many cards fit the window.
+ */
+const NOTES_PER_PAGE = 50
 
 function sanitizeCollapsedList(input: unknown): string[] {
   if (!Array.isArray(input)) return []
@@ -559,6 +570,7 @@ function createDefaultSidebarViewStateByMode(): SidebarViewStateByMode {
     category: sanitizeSidebarViewState(undefined),
     archive: sanitizeSidebarViewState(undefined),
     trash: sanitizeSidebarViewState(undefined),
+    songs: sanitizeSidebarViewState(undefined),
     find: sanitizeSidebarViewState(undefined),
     options: sanitizeSidebarViewState(undefined),
   }
@@ -1458,9 +1470,13 @@ function App() {
   // The options panel's own search term, kept apart from the note search so
   // that leaving the options for a note list (and coming back) costs neither.
   const [optionsSearchQuery, setOptionsSearchQuery] = useState('')
+  // The Music Library's song filter: what the search field holds while the
+  // Songs view is up, separate from the note search's and not kept across a
+  // restart.
+  const [songsSearchQuery, setSongsSearchQuery] = useState('')
   const [optionsSection, setOptionsSection] = useState<OptionsSectionId>(DEFAULT_OPTIONS_SECTION)
   const [musicSetListGrouping, setMusicSetListGrouping] = useState<MusicSetListGrouping>(DEFAULT_MUSIC_SET_LIST_GROUPING)
-  const musicSetListSlot = useSyncExternalStore(subscribeMusicSetListView, () => readMusicSetListView().slot)
+  const musicLibrarySlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
   // Whether the options panel's Colors section is open, which docks its colour picker below the sidebar.
   const [isColorsSectionOpen, setIsColorsSectionOpen] = useState(false)
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
@@ -1691,9 +1707,9 @@ function App() {
     [sidebarWidthPx, toolbarMinWidthPx, windowControlsWidthPx],
   )
 
-  // The window height the Date-view sidebar needs to actually show four note
-  // cards, measured off the rendered sidebar (see the effect that sets this,
-  // near the itemsPerPage computation it inverts). Null until the first
+  // The window height the sidebar's Date section needs to show four note
+  // cards without scrolling, measured off the rendered sidebar (see the effect
+  // that sets this). Null until the first
   // measurement lands, and while the sidebar is hidden or in a view this floor
   // isn't about -- the arithmetic below stands in for those.
   const [measuredMinHeightPx, setMeasuredMinHeightPx] = useState<number | null>(null)
@@ -1753,11 +1769,15 @@ function App() {
   }, [measuredMinHeightPx, sidebarWidthPx, spacingRegularPx, uiScale])
   const [editorFontLoadVersion, setEditorFontLoadVersion] = useState(0)
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>('date')
-  // Whether the date/category/archive/trash views list stored images
-  // (imageLibrary/) rather than notes: a right-click on one of those view
-  // selectors switches, which is why it is one flag across the four views
-  // rather than four more modes.
+  // Whether the four list sections (date, category, archive, trash) are the
+  // IMAGES view's (stored images, imageLibrary/) rather than the NOTES
+  // view's. The two views hold the same four sections, which is why this is
+  // one flag beside the mode rather than four more modes.
   const [sidebarShowsImages, setSidebarShowsImages] = useState(false)
+  // The section each of those two views was on when it was last left; the
+  // view on screen reads its section from `sidebarMode`
+  // (shared/sidebarSections.ts).
+  const [sidebarSections, setSidebarSections] = useState<SidebarSections>(DEFAULT_SIDEBAR_SECTIONS)
   const [lastSidebarModeBeforeOptions, setLastSidebarModeBeforeOptions] = useState<Exclude<SidebarMode, 'options'>>('date')
   const [sidebarViewStateByMode, setSidebarViewStateByMode] = useState<SidebarViewStateByMode>(() => createDefaultSidebarViewStateByMode())
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
@@ -1771,8 +1791,6 @@ function App() {
   const [archiveCollapsedSecondary, setArchiveCollapsedSecondary] = useState<string[]>([])
   const [categoryFocusRequestKey, setCategoryFocusRequestKey] = useState(0)
   const [archiveFocusRequestKey, setArchiveFocusRequestKey] = useState(0)
-  const [itemsPerPage, setItemsPerPage] = useState(20)
-  const [showPagination, setShowPagination] = useState(false)
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   // The sidebar's own scroller, as state as well as a ref: immersive mode
   // unmounts the sidebar and restores it with nothing else changed, so the
@@ -3272,6 +3290,7 @@ function App() {
     sidebarShowsImages?: boolean
   }): PersistedMenuState => {
     const effectiveViewStateByMode = overrides?.sidebarViewStateByMode ?? sidebarViewStateByMode
+    const effectiveShowsImages = overrides?.sidebarShowsImages ?? sidebarShowsImages
 
     return {
       sidebarMode: overrides?.sidebarMode ?? sidebarMode,
@@ -3281,6 +3300,14 @@ function App() {
       optionsSearchQuery,
       optionsSection,
       musicSetListGrouping,
+      musicLibrarySlot: musicLibrarySlot ?? undefined,
+      // The section being left and the one being entered are both recorded,
+      // so the saved sections are right whichever of them is a list section.
+      sidebarSections: rememberSidebarSection(
+        rememberSidebarSection(sidebarSections, sidebarMode, sidebarShowsImages),
+        overrides?.sidebarMode ?? sidebarMode,
+        effectiveShowsImages,
+      ),
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
       isPreviewMode: getActiveSection()?.isPreviewMode,
@@ -3429,7 +3456,7 @@ function App() {
       ),
       adventure: overrides && 'adventure' in overrides ? overrides.adventure ?? null : adventureSave,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
-      sidebarShowsImages: overrides?.sidebarShowsImages ?? sidebarShowsImages,
+      sidebarShowsImages: effectiveShowsImages,
     }
   }, [
     archiveCollapsedPrimary,
@@ -3503,6 +3530,8 @@ function App() {
     optionsSearchQuery,
     optionsSection,
     musicSetListGrouping,
+    musicLibrarySlot,
+    sidebarSections,
     selectedMonths,
     selectedYears,
     sidebarMode,
@@ -3559,11 +3588,13 @@ function App() {
   }, [])
 
   const getSidebarScrollerForMode = useCallback((mode: SidebarMode): HTMLDivElement | null => {
-    if (mode === 'category' || mode === 'archive' || mode === 'find') {
-      return sidebarTreeScrollerEl
+    // Options and the Music Library scroll the sidebar's content box itself;
+    // every list scrolls in its own box inside it.
+    if (mode === 'options' || mode === 'songs') {
+      return sidebarContentEl
     }
 
-    return sidebarContentEl
+    return sidebarTreeScrollerEl
   }, [sidebarContentEl, sidebarTreeScrollerEl])
 
   const captureSidebarModeState = useCallback((mode: SidebarMode): SidebarViewState => {
@@ -3687,23 +3718,15 @@ function App() {
         return false
       }
 
-      // Measure itemsPerPage from the DOM directly â€” same calculation as the
-      // useLayoutEffect compute() â€” so the target page always agrees with
-      // the clamp that compute() applies. Using the itemsPerPage state value
-      // risks a frame where state and DOM measurement disagree.
-      const container = sidebarContentRef.current
-      const list = container?.querySelector('.notes-list') as HTMLElement | null
-      const firstItem = list?.querySelector('.note-list-item') as HTMLElement | null
-      const listStyles = list ? window.getComputedStyle(list) : null
-      const rowHeight = firstItem ? Math.round(firstItem.getBoundingClientRect().height) : 48
-      const rowGap = listStyles ? Math.round(parseFloat(listStyles.rowGap || listStyles.gap || '8')) : 8
-      const paddingTop = listStyles ? Math.round(parseFloat(listStyles.paddingTop || '10')) : 10
-      const paddingBottom = listStyles ? Math.round(parseFloat(listStyles.paddingBottom || '10')) : 10
-      const contentHeight = container ? container.clientHeight - paddingTop - paddingBottom : 0
-      const measuredItemsPerPage = Math.max(1, Math.floor((contentHeight + rowGap) / (rowHeight + rowGap)))
-
-      const targetPage = Math.floor(noteIndex / measuredItemsPerPage) + 1
-      setCurrentPage(targetPage)
+      setCurrentPage(Math.floor(noteIndex / NOTES_PER_PAGE) + 1)
+      // Once that page is drawn, the note's card is brought into the list's
+      // scroll box. Two frames: the first is the one a mode transition
+      // restores the section's saved scroll position in, which this follows.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        sidebarContentRef.current
+          ?.querySelector('.notes-list.date-view .note-list-item.is-active')
+          ?.scrollIntoView({ block: 'nearest' })
+      }))
       return true
     }
 
@@ -3751,6 +3774,9 @@ function App() {
       setLastSidebarModeBeforeOptions(nextMode)
     }
 
+    // A list section being left is the one its view comes back to.
+    setSidebarSections((previous) => rememberSidebarSection(previous, sidebarMode, sidebarShowsImages))
+
     setSidebarViewStateByMode(nextSidebarViewStateByMode)
     setSidebarMode(nextMode)
     restoreSidebarModeStateFrom(nextMode, nextSidebarViewStateByMode)
@@ -3762,6 +3788,7 @@ function App() {
     })
   }, [
     sidebarMode,
+    sidebarShowsImages,
     captureSidebarModeState,
     sidebarViewStateByMode,
     restoreSidebarModeStateFrom,
@@ -3820,46 +3847,13 @@ function App() {
     showSidebarInMode('options')
   }, [lastSidebarModeBeforeOptions, runSidebarMenuTransition, showSidebarInMode, sidebarMode])
 
-  // The set list opened from the PLAYER (a held right press on a set button)
-  // comes up over whatever the sidebar was showing, hidden or not: Options is
-  // brought up to hold it, and closing the list with its exit button puts the
-  // sidebar back as it was. Leaving Options any other way is the reader
-  // choosing where to go, and nothing is put back.
-  const sidebarBeforeSetListRef = useRef<{ mode: SidebarMode; visible: boolean } | null>(null)
-  const previousSetListSlotRef = useRef<number | null>(null)
-  useEffect(() => {
-    const previousSlot = previousSetListSlotRef.current
-    previousSetListSlotRef.current = musicSetListSlot
-    if (previousSlot === null && musicSetListSlot !== null) {
-      if (readMusicSetListView().origin !== 'player') return
-      sidebarBeforeSetListRef.current = { mode: sidebarMode, visible: isSidebarVisible && !isImmersiveMode }
-      if (sidebarMode !== 'options') setLastSidebarModeBeforeOptions(sidebarMode)
-      showSidebarInMode('options')
-      return
-    }
-    if (previousSlot === null || musicSetListSlot !== null) return
-    const before = sidebarBeforeSetListRef.current
-    sidebarBeforeSetListRef.current = null
-    if (!before || sidebarMode !== 'options') return
-    if (!before.visible) {
-      setIsSidebarVisible(false)
-      try {
-        window.windowControls?.setSidebarVisible?.(false)
-      } catch {
-        // ignore
-      }
-    }
-    // The visibility goes into the transition's own snapshot (see
-    // showSidebarInMode); alone only when there is no transition to carry it.
-    if (before.mode !== 'options') {
-      runSidebarMenuTransition(before.mode, before.visible ? undefined : { isSidebarVisible: false })
-    } else if (!before.visible) {
-      void persistMenuStateNow({ isSidebarVisible: false })
-    }
-    // Keyed on the list alone: everything else is read as it stands when the
-    // list opens or closes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [musicSetListSlot])
+  // The Music Library is asked for from outside the sidebar (the count
+  // buttons in Options > Music > Sets, a held right press on a set button of
+  // the music player): this is how such a request shows the Songs view,
+  // bringing the sidebar up if it is hidden.
+  const showSidebarInModeRef = useRef(showSidebarInMode)
+  showSidebarInModeRef.current = showSidebarInMode
+  useEffect(() => registerMusicLibraryPresenter(() => showSidebarInModeRef.current('songs')), [])
 
   const handleWindowMinimize = useCallback(() => {
     window.windowControls?.minimize?.()
@@ -5209,6 +5203,7 @@ ${markdownHtml}
               category: sanitizeSidebarViewState(appState.menu.sidebarViewState?.category),
               archive: sanitizeSidebarViewState(appState.menu.sidebarViewState?.archive),
               trash: sanitizeSidebarViewState(appState.menu.sidebarViewState?.trash),
+              songs: sanitizeSidebarViewState(appState.menu.sidebarViewState?.songs),
               find: sanitizeSidebarViewState(appState.menu.sidebarViewState?.find),
               options: sanitizeSidebarViewState(appState.menu.sidebarViewState?.options),
             }
@@ -5235,6 +5230,8 @@ ${markdownHtml}
             setOptionsSearchQuery(appState.menu.optionsSearchQuery ?? '')
             setOptionsSection(sanitizeOptionsSection(appState.menu.optionsSection))
             setMusicSetListGrouping(sanitizeMusicSetListGrouping(appState.menu.musicSetListGrouping))
+            selectMusicLibrarySet(appState.menu.musicLibrarySlot ?? null)
+            setSidebarSections(sanitizeSidebarSections(appState.menu.sidebarSections))
             setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
@@ -6698,6 +6695,7 @@ ${markdownHtml}
 
   const isFindMode = sidebarMode === 'find'
   const isOptionsSearchMode = sidebarMode === 'options'
+  const isSongsSearchMode = sidebarMode === 'songs'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
@@ -6935,7 +6933,7 @@ ${markdownHtml}
             ? sidebarMode
             : 'category'
 
-    const staysInCurrentMode = targetMode === sidebarMode
+    const staysInCurrentMode = targetMode === sidebarMode && !sidebarShowsImages
     const needsDatePaginationPrep = !isDeleted && !isArchived && !isExternal && targetMode === 'category' && !staysInCurrentMode
 
     // Deferred a frame: the filter-clearing state updates above need to
@@ -6944,8 +6942,16 @@ ${markdownHtml}
     requestAnimationFrame(() => {
       if (staysInCurrentMode) {
         focusActiveNoteInSidebarMode(sidebarMode)
+      } else if (targetMode !== sidebarMode) {
+        // A note is revealed in the Notes view, whichever view was up.
+        if (sidebarShowsImages) setSidebarShowsImages(false)
+        runSidebarMenuTransition(targetMode, sidebarShowsImages ? { sidebarShowsImages: false } : undefined)
       } else {
-        runSidebarMenuTransition(targetMode)
+        // The Images view on the very section the note is in: only the view
+        // changes, which is no mode transition.
+        setSidebarShowsImages(false)
+        persistMenuStateNowRef.current({ sidebarShowsImages: false })
+        requestAnimationFrame(() => focusActiveNoteInSidebarMode(targetMode))
       }
 
       // Silently prep date view's pagination so it's already positioned
@@ -6957,17 +6963,7 @@ ${markdownHtml}
       if (needsDatePaginationPrep) {
         const noteIndex = dateFilteredNotesRef.current.findIndex((note) => note.id === activeNoteId)
         if (noteIndex >= 0) {
-          const container = sidebarContentRef.current
-          const list = container?.querySelector('.notes-list') as HTMLElement | null
-          const firstItem = list?.querySelector('.note-list-item') as HTMLElement | null
-          const listStyles = list ? window.getComputedStyle(list) : null
-          const rowHeight = firstItem ? Math.round(firstItem.getBoundingClientRect().height) : 48
-          const rowGap = listStyles ? Math.round(parseFloat(listStyles.rowGap || listStyles.gap || '8')) : 8
-          const paddingTop = listStyles ? Math.round(parseFloat(listStyles.paddingTop || '10')) : 10
-          const paddingBottom = listStyles ? Math.round(parseFloat(listStyles.paddingBottom || '10')) : 10
-          const contentHeight = container ? container.clientHeight - paddingTop - paddingBottom : 0
-          const measuredItemsPerPage = Math.max(1, Math.floor((contentHeight + rowGap) / (rowHeight + rowGap)))
-          const targetPage = Math.floor(noteIndex / measuredItemsPerPage) + 1
+          const targetPage = Math.floor(noteIndex / NOTES_PER_PAGE) + 1
 
           setSidebarViewStateByMode((previous) => ({
             ...previous,
@@ -6976,41 +6972,30 @@ ${markdownHtml}
         }
       }
     })
-  }, [getActiveSection, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, readNoteContent, runSidebarMenuTransition, searchQuery, sidebarMode])
+  }, [getActiveSection, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, readNoteContent, runSidebarMenuTransition, searchQuery, sidebarMode, sidebarShowsImages])
   revealNoteInMenuRef.current = revealNoteInMenu
 
-  const totalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, itemsPerPage)))
+  const totalPages = Math.max(1, Math.ceil(totalPagedNotes / NOTES_PER_PAGE))
   const effectiveCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
-  // The image library takes over the date/category/archive/trash views; it
-  // scrolls like the tree views, never pages.
   // The image the active slot shows, so its card reads as selected.
   const activeOccupancy = activeSectionId ? liveOccupancyBySectionId[activeSectionId] : undefined
   const shownImageId = activeOccupancy?.kind === 'image' ? activeOccupancy.imageId : null
-  const isImageLibraryShown = sidebarShowsImages && (sidebarMode === 'date' || sidebarMode === 'category' || sidebarMode === 'archive' || sidebarMode === 'trash')
+  // The Images view is up: its four sections list stored images.
+  const isImageLibraryShown = sidebarShowsImages && isSidebarListSection(sidebarMode)
+  // The view the view bar marks as selected: a list section belongs to Notes
+  // or to Images, and every other mode is a view of its own.
+  const sidebarView = isSidebarListSection(sidebarMode) ? sidebarListViewOf(sidebarShowsImages) : sidebarMode
   const isSidebarTreeMode = sidebarMode === 'category' || sidebarMode === 'archive'
-  const isSidebarCustomScrollbarMode = isSidebarTreeMode || isFindMode || isImageLibraryShown
-  const isSidebarScrollbarMode = isSidebarCustomScrollbarMode || sidebarMode === 'options'
-  const isMusicSetListDocked = sidebarMode === 'options' && musicSetListSlot !== null
-  // The set list and Options share the sidebar's scroller: Options' place is
-  // kept while the list is up and given back when it closes.
-  const optionsScrollTopUnderSetListRef = useRef<number | null>(null)
-  const isSetListUp = isMusicSetListDocked
-  useLayoutEffect(() => {
-    const scroller = sidebarContentEl
-    if (!scroller) return
-    if (isSetListUp) {
-      optionsScrollTopUnderSetListRef.current ??= scroller.scrollTop
-      scroller.scrollTop = 0
-    } else if (optionsScrollTopUnderSetListRef.current !== null) {
-      if (sidebarMode === 'options') scroller.scrollTop = optionsScrollTopUnderSetListRef.current
-      optionsScrollTopUnderSetListRef.current = null
-    }
-  }, [isSetListUp, sidebarContentEl, sidebarMode])
-  // The list belongs to Options: leaving Options closes it.
-  useEffect(() => {
-    if (sidebarMode !== 'options') closeMusicSetList()
-  }, [sidebarMode])
-  const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen && !isMusicSetListDocked
+  // Options and the Music Library are panels: the sidebar's content box
+  // scrolls them itself. Every other mode is a list in a scroll box of its
+  // own inside the content box (`setSidebarTreeScrollerEl`). Either way the
+  // sidebar's own scrollbar beside the box is what shows and moves it.
+  const isSidebarPanelMode = sidebarMode === 'options' || sidebarMode === 'songs'
+  // Whether the two pages controls are needed at all: only the Date and
+  // Trash sections of the Notes view are paged.
+  const showPagination = !isImageLibraryShown && (sidebarMode === 'date' || sidebarMode === 'trash') && totalPages > 1
+  const isMusicLibraryDocked = sidebarMode === 'songs'
+  const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 
   // Direct-DOM helpers: per-frame scroll events would otherwise trigger React
   // state updates that re-render the entire App component (heavy for long
@@ -7027,12 +7012,6 @@ ${markdownHtml}
   }, [])
 
   const syncSidebarCustomScrollbar = useCallback(() => {
-    if (!isSidebarScrollbarMode) {
-      applySidebarThumbDom(0, 0)
-      setIsSidebarScrollThumbActive(false)
-      return
-    }
-
     const scroller = sidebarTreeScrollerEl || sidebarContentEl
     const track = sidebarScrollbarTrackRef.current
     if (!scroller || !track) return
@@ -7044,7 +7023,7 @@ ${markdownHtml}
     const thumb = scrollThumbFor(scroller, track.clientHeight, sidebarScrollbarThumbRef.current?.offsetWidth ?? 0)
     applySidebarThumbDom(thumb.top, thumb.height)
     setIsSidebarScrollThumbActive(thumb.active)
-  }, [applySidebarThumbDom, isSidebarScrollbarMode, sidebarContentEl, sidebarTreeScrollerEl])
+  }, [applySidebarThumbDom, sidebarContentEl, sidebarTreeScrollerEl])
 
   const sidebarScrollFromThumbTop = useCallback((thumbTopPx: number) => {
     const scroller = sidebarTreeScrollerEl || sidebarContentEl
@@ -7059,9 +7038,18 @@ ${markdownHtml}
       return visibleNotes
     }
 
-    const startIndex = (effectiveCurrentPage - 1) * itemsPerPage
-    return visibleNotes.slice(startIndex, startIndex + itemsPerPage)
-  }, [effectiveCurrentPage, itemsPerPage, sidebarMode, visibleNotes])
+    const startIndex = (effectiveCurrentPage - 1) * NOTES_PER_PAGE
+    return visibleNotes.slice(startIndex, startIndex + NOTES_PER_PAGE)
+  }, [effectiveCurrentPage, sidebarMode, visibleNotes])
+
+  // A new page starts at its top. A mode transition and a jump to the active
+  // note both set the scroll position after this, in a later frame.
+  useLayoutEffect(() => {
+    if (sidebarMode !== 'date' && sidebarMode !== 'trash') return
+    if (sidebarTreeScrollerEl) sidebarTreeScrollerEl.scrollTop = 0
+    // Keyed on the page alone: entering the section keeps its saved position.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveCurrentPage])
 
   useEffect(() => {
     const pending = pendingSidebarScrollRestoreRef.current
@@ -7188,27 +7176,69 @@ ${markdownHtml}
     section.placeLibraryImage(id, alt)
   }, [getActiveSection])
 
-  // IMAGE MODE: the date, category, archive and trash views list images
-  // instead of notes (imageLibrary/ImageLibraryList.tsx). Right-clicking the
-  // options button switches it; the toolbar's image button turns it on. Turned
-  // on from options or find, it lands on Images in Order.
-  const setImageMode = useCallback((next: boolean) => {
-    const listsImages = sidebarMode === 'date' || sidebarMode === 'category' || sidebarMode === 'archive' || sidebarMode === 'trash'
-    if (next === sidebarShowsImages && (!next || listsImages)) return
-    setSidebarShowsImages(next)
-    if (!next || listsImages) {
-      persistMenuStateNowRef.current({ sidebarShowsImages: next })
+  // The view bar's Notes and Images buttons, and the toolbar's image button.
+  // Each of the two views comes back on the section it was last left on.
+  // Pressing the view already on screen locates the active slot's note in it
+  // (Notes), or does nothing (Images).
+  const showSidebarListView = useCallback((view: SidebarListView) => {
+    const showsImages = view === 'images'
+    if (isSidebarListSection(sidebarMode) && showsImages === sidebarShowsImages) {
+      if (!showsImages) focusActiveNoteInSidebarMode(sidebarMode)
       return
     }
-    // One persist for both changes (see persistMenuStateOnce).
-    runSidebarMenuTransition('date', { sidebarShowsImages: next })
-  }, [runSidebarMenuTransition, sidebarMode, sidebarShowsImages])
-  const showImageLibrary = useCallback(() => setImageMode(true), [setImageMode])
-  const handleOptionsButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setImageMode(!sidebarShowsImages)
-  }, [setImageMode, sidebarShowsImages])
+    const section = sidebarSections[view]
+    setSidebarShowsImages(showsImages)
+    // One persist for both changes (see persistMenuStateOnce). The two views
+    // share their section modes, so going from one view's section to the
+    // other view's same section is no mode transition at all.
+    if (section !== sidebarMode) {
+      runSidebarMenuTransition(section, { sidebarShowsImages: showsImages })
+    } else {
+      setSidebarSections((previous) => rememberSidebarSection(previous, sidebarMode, sidebarShowsImages))
+      persistMenuStateNowRef.current({ sidebarShowsImages: showsImages })
+    }
+  }, [focusActiveNoteInSidebarMode, runSidebarMenuTransition, sidebarMode, sidebarSections, sidebarShowsImages])
+  const showImageLibrary = useCallback(() => showSidebarListView('images'), [showSidebarListView])
+
+  // A page of the Date section is fifty memoized cards: these three are
+  // stable so that a render of the app that changes nothing about a card
+  // does not redraw it.
+  const handleNotePrimedLeftClick = useCallback((noteId: string) => {
+    getActiveSection()?.handlePrimedNoteLeftClick(noteId)
+  }, [getActiveSection])
+  const handleNoteRightPressStart = useCallback((noteId: string, hasOwnActionButtons: boolean) => {
+    getActiveSection()?.handleNoteRightPressStart(noteId, hasOwnActionButtons)
+  }, [getActiveSection])
+  const handleNoteRightPressEnd = useCallback((noteId: string) => {
+    getActiveSection()?.handleNoteRightPressEnd(noteId)
+  }, [getActiveSection])
+
+  // The section selector at the top of every Notes and Images list. The Notes
+  // view's Trash button is also where the trash is emptied: a held right
+  // press primes it, and a click on it while primed purges.
+  const isTrashSectionPrimed = Boolean(activeSection?.isTrashViewDeletePrimed)
+  const listSectionBar = isSidebarListSection(sidebarMode) ? (
+    <div className="preset-section sidebar-section-bar">
+      <SectionSelector
+        sections={LIST_SECTION_ENTRIES[sidebarListViewOf(sidebarShowsImages)]}
+        selected={sidebarMode}
+        onSelect={handleViewModeButtonClick}
+        ariaLabel={sidebarShowsImages ? 'Image sections' : 'Note sections'}
+        buttonProps={sidebarShowsImages ? undefined : (section) => (section === 'trash' ? {
+          className: isTrashSectionPrimed ? 'is-primed-for-deletion' : undefined,
+          'data-tooltip': isTrashSectionPrimed ? 'Click to empty the Trash' : 'Trash. Hold right-click to empty it',
+          'data-secondary-press': 'action',
+          onContextMenu: activeSection?.handleTrashViewButtonContextMenu,
+          onPointerDown: activeSection?.handleTrashViewButtonPointerDown,
+          onPointerUp: activeSection?.handleTrashViewButtonPointerUp,
+          onMouseLeave: () => {
+            activeSection?.clearTrashButtonArmTimer()
+            activeSection?.setIsTrashViewDeletePrimed(false)
+          },
+        } : undefined)}
+      />
+    </div>
+  ) : null
 
   const handleFindViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -7282,10 +7312,10 @@ ${markdownHtml}
 
 
   useLayoutEffect(() => {
-    // Only the paged views lay the sidebar out the way this floor is about --
-    // in Options or Find, `.sidebar-content` is holding something else
-    // entirely and would measure nonsense. Elsewhere the last good
-    // measurement stands (or the arithmetic, if there hasn't been one yet).
+    // Only the Notes view's Date and Trash sections hold the note cards this
+    // floor is about -- in Options or Find, `.sidebar-content` is holding
+    // something else entirely and would measure nonsense. Elsewhere the last
+    // good measurement stands (or the arithmetic, if there hasn't been one yet).
     if ((sidebarMode !== 'date' && sidebarMode !== 'trash') || isImageLibraryShown) return
     const contentEl = sidebarContentEl
     const sidebarEl = contentEl?.closest('.notes-sidebar') as HTMLElement | null
@@ -7298,15 +7328,11 @@ ${markdownHtml}
       const cardEl = listEl?.querySelector('.note-list-item')
       if (!contentRectPx || !windowHeightPx || !listEl || !cardEl) return
 
-      // How tall the card area has to be for the sidebar to actually show
-      // SIDEBAR_MIN_VISIBLE_NOTE_CARDS of them -- derived by inverting the very
-      // formula that decides it (the itemsPerPage effect below), down to the
-      // same Math.round of each term. Fitting four cards' worth of pixels is
-      // NOT the same question: that formula reads `clientHeight`, which is an
-      // integer and excludes .sidebar-content's 1px top/bottom borders, so it
-      // can conclude "three" while nearly a whole extra card's worth of space
-      // sits there. Two independent calculations of one number is what kept
-      // this floor a pixel short; now there is only one.
+      // How tall the list's box has to be to show
+      // SIDEBAR_MIN_VISIBLE_NOTE_CARDS cards without scrolling: the cards,
+      // the gaps between them and the list's own padding. The section
+      // selector above the cards scrolls with them and is not counted: the
+      // floor is about the cards.
       const listStyles = window.getComputedStyle(listEl)
       const rowHeightPx = Math.round(cardEl.getBoundingClientRect().height)
       const rowGapPx = Math.round(parseFloat(listStyles.rowGap))
@@ -7314,7 +7340,6 @@ ${markdownHtml}
         + Math.round(parseFloat(listStyles.paddingBottom))
       if (!rowHeightPx || !Number.isFinite(rowGapPx) || !Number.isFinite(listPaddingPx)) return
 
-      // itemsPerPage = floor((clientHeight - listPadding + rowGap) / (rowHeight + rowGap))
       const minClientHeightPx = SIDEBAR_MIN_VISIBLE_NOTE_CARDS * (rowHeightPx + rowGapPx)
         - rowGapPx
         + listPaddingPx
@@ -7332,8 +7357,9 @@ ${markdownHtml}
       // and below the list, plus anything between window and sidebar.
       let outsideContentPx = windowHeightPx - contentRectPx
       // The pagination bar is only in the DOM once the list runs to more than
-      // one page -- which it always does at this height, so reserve its row
-      // (and the gap it brings as another sidebar child) when it isn't.
+      // one page. Its row (and the gap it brings as another sidebar child) is
+      // reserved when it isn't, so the floor does not move when a list
+      // crosses a page's worth of notes.
       if (!sidebarEl.querySelector('.sidebar-pagination')) {
         outsideContentPx += SIDEBAR_MINI_CONTROL_HEIGHT_PX + spacingRegularPx
       }
@@ -7357,72 +7383,18 @@ ${markdownHtml}
     observer.observe(sidebarEl)
     observer.observe(contentEl)
     return () => observer.disconnect()
-    // totalPagedNotes/itemsPerPage are in here so the card measurement re-runs
-    // once notes actually populate the list -- the observers above only fire on
-    // box changes, and filling an already-sized list isn't one.
+    // totalPagedNotes is in here so the card measurement re-runs once notes
+    // actually populate the list -- the observers above only fire on box
+    // changes, and filling an already-sized list isn't one.
   // Keyed on the element: immersive mode unmounts the sidebar and restores
   // it without any setting changing.
-  }, [isImageLibraryShown, sidebarContentEl, sidebarMode, spacingRegularPx, totalPagedNotes, itemsPerPage])
-
-  useLayoutEffect(() => {
-    // The image library's cards are not the notes being paged: measuring
-    // them would page the note list by the wrong row height.
-    if (isImageLibraryShown) return
-    const compute = () => {
-      const container = sidebarContentRef.current
-      if (!container) return
-
-      const list = container.querySelector('.notes-list') as HTMLElement | null
-      const firstItem = list?.querySelector('.note-list-item') as HTMLElement | null
-      const listStyles = list ? window.getComputedStyle(list) : null
-
-      const rowHeight = firstItem ? Math.round(firstItem.getBoundingClientRect().height) : 48
-      const rowGap = listStyles ? Math.round(parseFloat(listStyles.rowGap || listStyles.gap || '8')) : 8
-      const paddingTop = listStyles ? Math.round(parseFloat(listStyles.paddingTop || '10')) : 10
-      const paddingBottom = listStyles ? Math.round(parseFloat(listStyles.paddingBottom || '10')) : 10
-
-      const contentHeight = container.clientHeight - paddingTop - paddingBottom
-      const nextItemsPerPage = Math.max(1, Math.floor((contentHeight + rowGap) / (rowHeight + rowGap)))
-
-      const nextTotalPages = Math.max(1, Math.ceil(totalPagedNotes / Math.max(1, nextItemsPerPage)))
-      const shouldShowPagination =
-        (sidebarMode === 'date' || sidebarMode === 'trash') && nextTotalPages > 1
-
-      if (nextItemsPerPage !== itemsPerPage) {
-        setItemsPerPage(nextItemsPerPage)
-      }
-
-      if (currentPage > nextTotalPages) {
-        setCurrentPage(nextTotalPages)
-      }
-
-      setShowPagination(shouldShowPagination)
-    }
-
-    const container = sidebarContentEl
-    const resizeObserver = new ResizeObserver(compute)
-
-    if (container) {
-      compute()
-      resizeObserver.observe(container)
-      window.requestAnimationFrame(compute)
-    }
-
-    window.addEventListener('resize', compute)
-    return () => {
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', compute)
-    }
-  }, [currentPage, isImageLibraryShown, itemsPerPage, sidebarContentEl, sidebarMode, totalPagedNotes])
+  }, [isImageLibraryShown, sidebarContentEl, sidebarMode, spacingRegularPx, totalPagedNotes])
 
   useEffect(() => {
-    if (!isSidebarScrollbarMode) return
     syncSidebarCustomScrollbar()
-  }, [isSidebarScrollbarMode, syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, activeSection?.documentFindHits])
+  }, [syncSidebarCustomScrollbar, sidebarMode, categoryTree, archiveTree, activeSection?.documentFindHits])
 
   useEffect(() => {
-    if (!isSidebarScrollbarMode) return
-
     const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
 
@@ -7432,11 +7404,9 @@ ${markdownHtml}
 
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [isSidebarScrollbarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
-    if (!isSidebarScrollbarMode) return
-
     const scroller = sidebarTreeScrollerEl || sidebarContentEl
     if (!scroller) return
 
@@ -7456,8 +7426,12 @@ ${markdownHtml}
     }
 
     scheduleSync()
-    const observedContentEl = (sidebarTreeScrollerEl?.firstElementChild as HTMLElement | null)
-      ?? (sidebarMode === 'options' ? optionsContentRef.current : null)
+    // What grows and shrinks inside the scroller. A panel (Options, the Music
+    // Library) is one box of content; a list's cards are the list's own
+    // children, whose changes the mutation observer below reports.
+    const observedContentEl = sidebarTreeScrollerEl
+      ? null
+      : scroller.querySelector<HTMLElement>(':scope > .sidebar-options-content')
 
     const resizeObserver = new ResizeObserver(() => scheduleSync())
     resizeObserver.observe(scroller)
@@ -7491,7 +7465,7 @@ ${markdownHtml}
         sidebarScrollbarRafRef.current = null
       }
     }
-  }, [isSidebarScrollbarMode, sidebarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
+  }, [sidebarMode, sidebarContentEl, sidebarTreeScrollerEl, syncSidebarCustomScrollbar])
 
   useEffect(() => {
     if (!isDraggingSidebarScrollThumb) return
@@ -8445,7 +8419,7 @@ ${markdownHtml}
 
   useEffect(() => {
     syncSidebarTexture()
-  }, [syncSidebarTexture, sidebarMode, isSidebarScrollbarMode])
+  }, [syncSidebarTexture, sidebarMode])
 
   return (
     <div
@@ -8564,14 +8538,16 @@ ${markdownHtml}
                   spellCheck={false}
                   autoCorrect="off"
                   autoCapitalize="off"
-                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : 'Search for content or #tag...'}
-                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : searchQuery}
+                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : 'Search for content or #tag...'}
+                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
                     if (isFindMode) {
                       getActiveSection()?.setDocumentFindQuery(value)
                     } else if (isOptionsSearchMode) {
                       setOptionsSearchQuery(value)
+                    } else if (isSongsSearchMode) {
+                      setSongsSearchQuery(value)
                     } else {
                       setSearchQuery(value)
                     }
@@ -8617,19 +8593,20 @@ ${markdownHtml}
                       Aa
                     </button>
                   </div>
-                ) : isOptionsSearchMode ? (
-                  // The options search is never case sensitive, so the
-                  // toggle's place goes to clearing the term: back to the
-                  // whole panel without reaching for the keyboard.
+                ) : (isOptionsSearchMode || isSongsSearchMode) ? (
+                  // The options search and the song filter are never case
+                  // sensitive, so the toggle's place goes to clearing the
+                  // term: back to the whole panel without reaching for the
+                  // keyboard.
                   <button
                     type="button"
                     className="btn-icon search-input-case-toggle"
                     data-tooltip="Clear search"
                     aria-label="Clear search"
-                    disabled={optionsSearchQuery === ''}
+                    disabled={(isSongsSearchMode ? songsSearchQuery : optionsSearchQuery) === ''}
                     /* mouse-default: focus semantics, read by focusOwnership on mousedown */
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => setOptionsSearchQuery('')}
+                    onClick={() => (isSongsSearchMode ? setSongsSearchQuery('') : setOptionsSearchQuery(''))}
                   >
                     <span className="fa-solid fa-xmark" aria-hidden="true" />
                   </button>
@@ -8655,71 +8632,75 @@ ${markdownHtml}
                 </div>
               </div>
 
-              <div className="view-toggle" role="tablist" aria-label="Note view modes">
-                {SIDEBAR_MODES.map(({ mode, label }) => {
-                  const isActive = sidebarMode === mode
-                  const viewLabel = (sidebarShowsImages ? IMAGE_VIEW_LABELS[mode] : undefined) ?? label
-                  const iconClassByMode: Record<SidebarMode, string> = {
-                    date: 'btn-date',
-                    category: 'btn-category',
-                    archive: 'btn-archived',
-                    trash: 'btn-deleted',
-                    find: 'btn-find',
-                    options: 'btn-options',
-                  }
-                  return (
-                    <button
-                      key={mode}
-                      className={`toggle-btn notes-mode-button icon-btn ${iconClassByMode[mode]}${isActive ? ' is-active' : ''}${mode === 'trash' && activeSection?.isTrashViewDeletePrimed ? ' is-primed-for-deletion' : ''}`}
-                      type="button"
-                      role="tab"
-                      aria-selected={isActive}
-                      data-tooltip={mode === 'options'
-                        ? `${label}. Right-click: ${sidebarShowsImages ? 'notes' : 'images'}`
-                        : viewLabel}
-                      aria-label={viewLabel}
-                      onClick={mode === 'options' ? toggleSidebarOptionsMenu : () => handleViewModeButtonClick(mode)}
-                      data-secondary-press={mode === 'trash' || mode === 'find' || mode === 'options' ? 'action' : 'none'}
-                      onContextMenu={
-                        mode === 'trash'
-                          ? activeSection?.handleTrashViewButtonContextMenu
-                          : mode === 'find'
-                            ? handleFindViewButtonContextMenu
-                            : mode === 'options'
-                              ? handleOptionsButtonContextMenu
-                              : undefined
-                      }
-                      onPointerDown={mode === 'trash' ? activeSection?.handleTrashViewButtonPointerDown : undefined}
-                      onPointerUp={mode === 'trash' ? activeSection?.handleTrashViewButtonPointerUp : undefined}
-                      onMouseLeave={mode === 'trash' ? () => {
-                        activeSection?.clearTrashButtonArmTimer()
-                        activeSection?.setIsTrashViewDeletePrimed(false)
-                      } : undefined}
-                    >
-                      {/* Unlike the other 5 modes, .btn-options has no
-                          src/assets/buttons/*.png mask asset (see sidebar.css) --
-                          it was already styled for an inline glyph instead
-                          (color, not background-color), matching this. */}
-                      {mode === 'options' && sidebarShowsImages ? (
-                        <span className="fa-solid fa-image" aria-hidden="true" />
-                      ) : mode === 'options' ? (
-                        <WorkIndicatorGlyph
-                          speedX={customCursorClickSpeedX}
-                          ramp={customCursorClickRamp}
-                          skew={customCursorClickSkew}
-                        />
-                      ) : null}
-                      <span className="sr-only-mode-label">{viewLabel}</span>
-                    </button>
-                  )
-                })}
+              {/* The view bar: six cells, the fourth of them blank. Notes
+                  and Images each hold four sections, chosen in the section
+                  selector at the top of their list; Songs is the Music
+                  Library. */}
+              <div className="view-toggle" role="tablist" aria-label="Sidebar views">
+                {([
+                  { view: 'notes', label: 'Notes', icon: 'fa-solid fa-file-lines' },
+                  { view: 'images', label: 'Images', icon: 'fa-solid fa-image' },
+                  { view: 'songs', label: 'Music Library', icon: 'fa-solid fa-music' },
+                ] as const).map(({ view, label, icon }) => (
+                  <button
+                    key={view}
+                    className={`toggle-btn notes-mode-button icon-btn btn-glyph${sidebarView === view ? ' is-active' : ''}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={sidebarView === view}
+                    data-tooltip={label}
+                    aria-label={label}
+                    onClick={() => {
+                      const section = getActiveSection()
+                      section?.setIsTrashViewDeletePrimed(false)
+                      section?.clearTrashButtonArmTimer()
+                      if (view === 'songs') handleViewModeButtonClick('songs')
+                      else showSidebarListView(view)
+                    }}
+                  >
+                    <span className={`view-toggle-glyph ${icon}`} aria-hidden="true" />
+                  </button>
+                ))}
+                <button
+                  className="toggle-btn notes-mode-button icon-btn is-blank"
+                  type="button"
+                  disabled
+                  aria-hidden="true"
+                  tabIndex={-1}
+                />
+                <button
+                  className={`toggle-btn notes-mode-button icon-btn btn-find${isFindMode ? ' is-active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isFindMode}
+                  data-tooltip="Find"
+                  aria-label="Find"
+                  onClick={() => handleViewModeButtonClick('find')}
+                  data-secondary-press="action"
+                  onContextMenu={handleFindViewButtonContextMenu}
+                />
+                <button
+                  className={`toggle-btn notes-mode-button icon-btn btn-glyph${sidebarMode === 'options' ? ' is-active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={sidebarMode === 'options'}
+                  data-tooltip="Options"
+                  aria-label="Options"
+                  onClick={toggleSidebarOptionsMenu}
+                >
+                  <WorkIndicatorGlyph
+                    speedX={customCursorClickSpeedX}
+                    ramp={customCursorClickRamp}
+                    skew={customCursorClickSkew}
+                  />
+                </button>
               </div>
 
-              <div className={`sidebar-scroll-frame${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}`}>
+              <div className={`sidebar-scroll-frame${isSidebarPanelMode ? '' : ' is-tree-mode'}`}>
                 <div className="sidebar-content-column">
                 <div className="sidebar-wrapper">
                   <div
-                    className={`sidebar-content${(sidebarMode === 'date' || sidebarMode === 'trash') && !isImageLibraryShown ? ' is-paged-mode' : ''}${isSidebarCustomScrollbarMode ? ' is-tree-mode' : ''}${isSidebarScrollbarMode && !isSidebarCustomScrollbarMode ? ' is-scrollbar-mode' : ''}`}
+                    className={`sidebar-content${isSidebarPanelMode ? ' is-scrollbar-mode' : ' is-tree-mode'}`}
                     ref={setSidebarContentRef}
                     onScroll={handleSidebarScroll}
                   >
@@ -8728,9 +8709,10 @@ ${markdownHtml}
                       <div
                         className="notes-list tree-view image-library-view thockdown-custom-scrollbar"
                         ref={setSidebarTreeScrollerEl}
-                        role="listbox"
                         aria-label="Image library"
                       >
+                        {listSectionBar}
+                        <div className="notes-list-rows" role="listbox" aria-label="Images">
                         <ImageLibraryList
                           view={sidebarMode as ImageLibraryView}
                           searchQuery={searchQuery}
@@ -8744,13 +8726,15 @@ ${markdownHtml}
                           onStore={storeImageUse}
                           onOpen={openImageViewHere}
                         />
+                        </div>
                       </div>
                     ) : (sidebarMode === 'date' || sidebarMode === 'trash') ? (
                       <div
-                        className={`notes-list date-view${hasDateFilter ? ' is-filtered' : ''}`}
-                        role="listbox"
-                        aria-label="Note list"
+                        className={`notes-list date-view thockdown-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
+                        ref={setSidebarTreeScrollerEl}
                       >
+                        {listSectionBar}
+                        <div className="notes-list-rows" role="listbox" aria-label="Note list">
                         {pagedVisibleNotes.map((note) => {
                           // menuIdentityNoteId collapses an active chapter to
                           // its parent (so the chapter bar's owner note
@@ -8791,15 +8775,15 @@ ${markdownHtml}
                               chapterParentTitle={chapterParentTitle}
                               isChapterParentUnavailable={isChapterParentUnavailable}
                               onSelect={handleSelectNote}
-                              onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
+                              onPrimedLeftClick={handleNotePrimedLeftClick}
                               onSaveClick={activeSection?.handleSaveButtonClick}
                               onCloseClick={activeSection?.handleCloseButtonClick}
                               onArchiveClick={activeSection?.handleArchiveClick}
                               onTrashClick={activeSection?.handleTrashClick}
                               isTrashMode={sidebarMode === 'trash'}
                               primedAction={activeSection?.primedNoteActionById.get(note.id) ?? null}
-                              onRightPressStart={(noteId, hasOwnActionButtons) => getActiveSection()?.handleNoteRightPressStart(noteId, hasOwnActionButtons)}
-                              onRightPressEnd={(noteId) => getActiveSection()?.handleNoteRightPressEnd(noteId)}
+                              onRightPressStart={handleNoteRightPressStart}
+                              onRightPressEnd={handleNoteRightPressEnd}
                               onMouseLeave={activeSection?.handleNoteMouseLeave}
                             />
                           )
@@ -8811,6 +8795,7 @@ ${markdownHtml}
                               : 'No notes match the current date filters.'}
                           </div>
                         ) : null}
+                        </div>
                       </div>
                     ) : isFindMode ? (
                       <div
@@ -8867,13 +8852,9 @@ ${markdownHtml}
                           </div>
                         ) : null}
                       </div>
-                    ) : sidebarMode === 'options' ? (<>
-                      {musicSetListSlot !== null ? (
-                        <MusicSetListPanel slot={musicSetListSlot} grouping={musicSetListGrouping} />
-                      ) : null}
-                      {/* Kept mounted under the set list, so leaving the list
-                          returns to Options exactly as it was. */}
-                      <div className="sidebar-options-panel-host" hidden={musicSetListSlot !== null}>
+                    ) : sidebarMode === 'songs' ? (
+                      <MusicLibraryPanel grouping={musicSetListGrouping} filter={songsSearchQuery} />
+                    ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
                         optionsSection={optionsSection}
@@ -9095,13 +9076,12 @@ ${markdownHtml}
                         setFlashShapePreferences={setFlashShapePreferences}
                         activeFlashShape={activeFlashShape}
                       />
-                      </div>
-                    </>
                     ) : (
                       <div
                         className={`notes-list tree-view thockdown-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
                         ref={setSidebarTreeScrollerEl}
                       >
+                        {listSectionBar}
                         <CategoryTreeView
                           groups={sidebarMode === 'category' ? categoryTree : archiveTree}
                           activeNoteId={activeSection?.menuIdentityNoteId ?? null}
@@ -9121,16 +9101,16 @@ ${markdownHtml}
                     )}
                   </div>
                 </div>
-                  {isMusicSetListDocked ? (
-                    // The set list's controls, docked where the colour picker
-                    // docks and in the same box.
+                  {isMusicLibraryDocked ? (
+                    // The Music Library's controls, docked where the colour
+                    // picker docks and in the same box.
                     <div className="sidebar-color-picker-dock">
                       <div className="sidebar-content-texture" />
                       <div className="sidebar-color-picker-dock-content">
-                        <section className="options-section sidebar-options-section" aria-label="Song list controls">
+                        <section className="options-section sidebar-options-section" aria-label="Music Library controls">
                           <div className="sidebar-options-accordion is-headerless">
                             <div className="sidebar-options-accordion-body">
-                              <MusicSetListDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
+                              <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
                             </div>
                           </div>
                         </section>
@@ -9158,8 +9138,7 @@ ${markdownHtml}
                   ) : null}
                   </div>
 
-                {isSidebarScrollbarMode ? (
-                  <aside
+                <aside
                     className="sidebar-scrollbar-slot"
                     aria-hidden="true"
                     // The rail sits beside the scroller, not inside it, so a
@@ -9189,10 +9168,9 @@ ${markdownHtml}
                       </div>
                     </div>
                   </aside>
-                ) : null}
               </div>
 
-              {showPagination && !isImageLibraryShown ? (
+              {showPagination ? (
                 <div className="sidebar-pagination" aria-label="Sidebar pagination">
                   <button
                     type="button"
@@ -9260,7 +9238,7 @@ ${markdownHtml}
                 </div>
               ) : null}
 
-              {(sidebarMode === 'options' || isFindMode || isImageLibraryShown) ? (
+              {(isSidebarPanelMode || isFindMode || isImageLibraryShown) ? (
                 <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
               ) : null}
 
