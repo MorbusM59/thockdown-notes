@@ -504,8 +504,8 @@
    - a BUTTON (.options-curve-button) is square, drawn as the colour
      picker's micro channel toggles. Its column in a row's template is
      var(--entry-height) wide, which is what makes it square.
-   A display cell renamed by a right-click becomes a field while it is
-   edited. */
+   A display cell renamed by a right-click keeps its look while it is
+   edited (.options-curve-input). */
 .options-curve-rows,
 .options-music-song-divider {
   --entry-height: var(--canonical-scroll-thickness);
@@ -545,12 +545,15 @@
   border:      1px solid var(--canonical-scroll-track-border);
   background:  var(--canonical-scroll-track-bg);
   box-shadow:  var(--box-shadow-inverted-light);
-  outline:     none;
-  font-family: inherit;
 }
 
-.options-curve-field:focus {
-  border-color: var(--btn-border-active);
+/* A field looks the same while it is being typed into. A display cell that
+   a right-click turns into an input (.options-curve-input) keeps the display
+   look while it is edited. */
+.options-curve-field,
+.options-curve-input {
+  outline:     none;
+  font-family: inherit;
 }
 
 /* A button's own rules (look.css) already draw a <button> this way; a

@@ -51,7 +51,7 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
     return (
       <input
         ref={inputRef}
-        className="options-curve-cell options-curve-field options-music-set-name"
+        className="options-curve-cell options-curve-display options-curve-input options-music-set-name"
         aria-label={`Name of set ${name}`}
         aria-invalid={error !== null}
         data-tooltip={error ?? undefined}

@@ -190,9 +190,10 @@ export function MusicSetListDock({ grouping, onGroupingChange }: { grouping: Mus
           onChange={(event) => setMusicSetListFilter(event.target.value)}
           onKeyDown={(event) => {
             event.stopPropagation()
-            if (event.key === 'Escape') {
+            // Enter and Escape both leave the field; the filter stays as typed.
+            if (event.key === 'Enter' || event.key === 'Escape') {
               event.preventDefault()
-              setMusicSetListFilter('')
+              event.currentTarget.blur()
             }
           }}
         />
