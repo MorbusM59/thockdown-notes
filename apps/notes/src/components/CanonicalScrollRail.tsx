@@ -31,14 +31,14 @@ export function CanonicalScrollRail({
   const scrollerRef = useRef<HTMLElement | null>(scroller)
   scrollerRef.current = scroller
   const {
-    previewScrollbarTrackRef,
-    previewScrollbarThumbRef,
-    isPreviewScrollThumbActive,
-    isDraggingPreviewScrollThumb,
-    syncPreviewCustomScrollbar,
-    handlePreviewTrackPointerDown,
-    handlePreviewTrackContextMenu,
-    handlePreviewThumbPointerDown,
+    scrollbarTrackRef,
+    scrollbarThumbRef,
+    isThumbActive,
+    isDraggingThumb,
+    syncScrollbar,
+    handleTrackPointerDown,
+    handleTrackContextMenu,
+    handleThumbPointerDown,
   } = useCanonicalScroller({
     isEnabled: scroller !== null,
     scrollerRef,
@@ -47,21 +47,21 @@ export function CanonicalScrollRail({
     textureRef,
   })
 
-  useEffect(() => { syncPreviewCustomScrollbar() }, [scroller, layoutKey, syncPreviewCustomScrollbar])
+  useEffect(() => { syncScrollbar() }, [scroller, layoutKey, syncScrollbar])
 
   return (
     <div className={`thockdown-scroll-rail${className ? ` ${className}` : ''}`}>
       <div
-        ref={previewScrollbarTrackRef}
+        ref={scrollbarTrackRef}
         className="thockdown-scroll-track"
-        onPointerDown={handlePreviewTrackPointerDown}
+        onPointerDown={handleTrackPointerDown}
         data-secondary-press="action"
-        onContextMenu={handlePreviewTrackContextMenu}
+        onContextMenu={handleTrackContextMenu}
       >
         <div
-          ref={previewScrollbarThumbRef}
-          className={`thockdown-scroll-thumb${isDraggingPreviewScrollThumb ? ' is-dragging' : ''}${isPreviewScrollThumbActive ? '' : ' is-inactive'}`}
-          onPointerDown={handlePreviewThumbPointerDown}
+          ref={scrollbarThumbRef}
+          className={`thockdown-scroll-thumb${isDraggingThumb ? ' is-dragging' : ''}${isThumbActive ? '' : ' is-inactive'}`}
+          onPointerDown={handleThumbPointerDown}
         />
       </div>
     </div>

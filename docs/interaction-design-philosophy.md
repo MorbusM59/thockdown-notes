@@ -28,6 +28,31 @@ The goal is deterministic behavior with one source of truth per interaction phas
 - Caret visibility and viewport movement must not compete across multiple independent handlers.
 - Each interaction has one active owner for state transitions.
 
+### 3a. One scrolling, adapted only where a surface must differ
+Every scroll box shares one implementation; a surface supplies only what is
+genuinely its own. All of it is in `apps/notes/src/scroll/` (the engines and the
+thumb arithmetic in `packages/interaction/`):
+- **Drivers**: `rowWheel.ts` (the wheel in whole rows: the editor, the
+  visualizer's song list) and `continuousWheel.ts` (the wheel in pixels: the
+  reader, the sidebar, an image in a slot) share the notch resolution
+  (`wheelNotch.ts`), the reader's step (`wheelStep.ts`) and the spin coast
+  (`wheelSpin.ts`). `pageKeys.ts` is PageUp/PageDown for both, a surface
+  passing its page size, its grid (`snap`, the editor's rows) and its travel.
+- **Scrollbar**: `useCanonicalScroller` (`editorSection/`, drawn by
+  `components/CanonicalScrollRail.tsx` outside the reader) for every pixel
+  scroller, and CM6Editor's own row-quantized bar for the editor, whose thumb
+  geometry and painting (the immersive column) are its own. Both use
+  `trackRightHold.ts` for a right hold on the track and
+  `scrollThumbRubberBand.ts` for the thumb across a bridged journey, and
+  `scrollTrackHold.ts` for click-travels, hold-snaps.
+- **Not scrollers**: the escape ring and the Music Library's set list step
+  by notch DIRECTION (`wheelNotch.ts` only), because a notch there is one
+  choice. The Soundscapes app's `PageScrollbar.tsx` is a touch page's only
+  scroll, worked from its whole column, and shares the thumb arithmetic
+  (`scrollTrackGeometry.ts`) rather than the desktop's gestures.
+A new scroll box picks a driver and a bar from this list; a second copy of
+any of them is a defect.
+
 ### 3b. View-scrolling keys belong to the visible pane, not to whatever has focus
 - `PageUp`/`PageDown` move the *view the reader is looking at*. Focus is where
   their next character would go, which is a different question: having just

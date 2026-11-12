@@ -1589,25 +1589,25 @@ export function EditorSection(rawProps: EditorSectionProps) {
   const shownImageId = occupancy.kind === 'image' ? occupancy.imageId : null
 
   const {
-    previewTextureRef,
-    previewScrollbarTrackRef,
-    previewScrollbarThumbRef,
-    isPreviewScrollThumbActive,
-    isDraggingPreviewScrollThumb,
-    syncPreviewCustomScrollbar,
-    handlePreviewTrackPointerDown,
-    handlePreviewTrackContextMenu,
-    handlePreviewThumbPointerDown,
-    handlePreviewScroll,
-    travelPreviewToRatio,
+    textureLayerRef: previewTextureRef,
+    scrollbarTrackRef: previewScrollbarTrackRef,
+    scrollbarThumbRef: previewScrollbarThumbRef,
+    isThumbActive: isPreviewScrollThumbActive,
+    isDraggingThumb: isDraggingPreviewScrollThumb,
+    syncScrollbar: syncPreviewCustomScrollbar,
+    handleTrackPointerDown: handlePreviewTrackPointerDown,
+    handleTrackContextMenu: handlePreviewTrackContextMenu,
+    handleThumbPointerDown: handlePreviewThumbPointerDown,
+    handleScroll: handlePreviewScroll,
+    travelToRatio: travelPreviewToRatio,
   } = useCanonicalScroller({
     isEnabled: isPreviewMode,
     isScrollInteractionBlocked: editorSectionMountRest.isPreviewScrollInteractionBlocked,
     scrollerRef: previewScrollRef,
     ownsKeyboard: sectionId === activeSectionId && !shownImageId,
     layoutKey: `${activeNoteId}|${editorTextVersion}|${viewStyle}|${viewFontSize}|${viewSpacing}|${viewLetterSpacingEm}`,
-    previewDocumentPositionRef,
-    previewBridgeHostRef,
+    documentPositionRef: previewDocumentPositionRef,
+    bridgeHostRef: previewBridgeHostRef,
     readBridgeText: readEditorText,
   })
 

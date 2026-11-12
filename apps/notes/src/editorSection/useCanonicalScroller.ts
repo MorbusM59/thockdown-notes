@@ -51,7 +51,7 @@ export interface UseCanonicalScrollerOptions {
    * and null until the preview has blocks, so every path here still has to
    * work on the pixel mapping alone.
    */
-  previewDocumentPositionRef?: MutableRefObject<PreviewDocumentPositionApi | null>
+  documentPositionRef?: MutableRefObject<PreviewDocumentPositionApi | null>
   /**
    * The pane box the long-journey bridge draws into (scroll/scrollBridge.ts).
    *
@@ -60,7 +60,7 @@ export interface UseCanonicalScrollerOptions {
    * to the scrollable area, which for a bridge this tall would be a good deal
    * worse than merely wrong.
    */
-  previewBridgeHostRef?: MutableRefObject<HTMLDivElement | null>
+  bridgeHostRef?: MutableRefObject<HTMLDivElement | null>
   /** The text the bridge draws (the note's live text, see useDisplayedNoteText.ts); needed with a bridge host. */
   readBridgeText?: () => string
 }
@@ -79,46 +79,49 @@ export interface UseCanonicalScrollerOptions {
  * - PageUp/PageDown, continuous while held, with a momentum release;
  * - the wheel's notch glide and spin-to-keep-scrolling coast.
  *
- * Written for the reader first, which is why its internal names say
- * `preview`: what is particular to the reader (a document only partly drawn,
- * and the bridge over a long journey) arrives through the optional ports
- * `previewDocumentPositionRef` and `previewBridgeHostRef`, and a scroller
- * without them is driven by its pixels alone.
+ * What is particular to the reader (a document only partly drawn, and the
+ * bridge over a long journey) arrives through the optional ports
+ * `documentPositionRef` and `bridgeHostRef`; a scroller without them is
+ * driven by its pixels alone. The wheel and the page keys are the shared
+ * drivers in scroll/ (continuousWheel.ts, pageKeys.ts), and the scrollbar's
+ * right hold and rubber band are scroll/trackRightHold.ts and
+ * scroll/scrollThumbRubberBand.ts, which the editor's row-quantized
+ * scrollbar uses too.
  *
  * Direct DOM mutation instead of React state is deliberate: per-frame scroll
  * events would otherwise re-render the host on every tick.
  */
 export function useCanonicalScroller({
-  isEnabled: isPreviewMode,
-  isScrollInteractionBlocked: isPreviewScrollInteractionBlocked,
-  scrollerRef: previewScrollRef,
-  ownsKeyboard: isSectionActive = true,
+  isEnabled,
+  isScrollInteractionBlocked,
+  scrollerRef,
+  ownsKeyboard = true,
   layoutKey,
   textureRef,
-  previewDocumentPositionRef,
-  previewBridgeHostRef,
+  documentPositionRef,
+  bridgeHostRef,
   readBridgeText,
 }: UseCanonicalScrollerOptions) {
   const ownTextureRef = useRef<HTMLDivElement>(null)
-  const previewTextureRef = textureRef ?? ownTextureRef
-  const previewScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
-  const previewScrollbarRafRef = useRef<number | null>(null)
-  const previewScrollbarDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
-  const previewScrollbarThumbRef = useRef<HTMLDivElement | null>(null)
-  const previewScrollThumbTopRef = useRef(0)
-  const previewScrollThumbHeightRef = useRef(0)
+  const textureLayerRef = textureRef ?? ownTextureRef
+  const scrollbarTrackRef = useRef<HTMLDivElement | null>(null)
+  const scrollbarRafRef = useRef<number | null>(null)
+  const thumbDragOriginRef = useRef<{ pointerY: number; thumbTopPx: number } | null>(null)
+  const scrollbarThumbRef = useRef<HTMLDivElement | null>(null)
+  const thumbTopRef = useRef(0)
+  const thumbHeightRef = useRef(0)
   const thumbHeightCommitRef = useRef(createCommittedThumbHeight())
   const trackHoldCancelRef = useRef<(() => void) | null>(null)
   // This scroller's wheel driver (scroll/continuousWheel.ts), created by the
   // wheel effect below for the element it binds to.
   const wheelRef = useRef<ContinuousWheel | null>(null)
-  const [isPreviewScrollThumbActive, setIsPreviewScrollThumbActive] = useState(false)
-  const [isDraggingPreviewScrollThumb, setIsDraggingPreviewScrollThumb] = useState(false)
+  const [isThumbActive, setIsThumbActive] = useState(false)
+  const [isDraggingThumb, setIsDraggingThumb] = useState(false)
 
-  const shouldBlockPreviewInteraction = useCallback(() => {
-    if (!isPreviewMode) return true
-    return isPreviewScrollInteractionBlocked?.() ?? false
-  }, [isPreviewMode, isPreviewScrollInteractionBlocked])
+  const isBlocked = useCallback(() => {
+    if (!isEnabled) return true
+    return isScrollInteractionBlocked?.() ?? false
+  }, [isEnabled, isScrollInteractionBlocked])
 
   /**
    * End a coast, whatever it was doing, and say why in the wheel trace.
@@ -128,14 +131,14 @@ export function useCanonicalScroller({
    * able to call it, and they are defined further down. Everything it
    * touches is a ref, so it has no dependency on any of that.
    */
-  const stopPreviewWheelSpin = useCallback((reason: string) => {
+  const stopWheelSpin = useCallback((reason: string) => {
     wheelRef.current?.stop(reason)
   }, [])
 
-  const applyPreviewThumbDom = useCallback((topPx: number, heightPx: number) => {
-    previewScrollThumbTopRef.current = topPx
-    previewScrollThumbHeightRef.current = heightPx
-    const thumbEl = previewScrollbarThumbRef.current
+  const paintThumb = useCallback((topPx: number, heightPx: number) => {
+    thumbTopRef.current = topPx
+    thumbHeightRef.current = heightPx
+    const thumbEl = scrollbarThumbRef.current
     if (!thumbEl) return
     thumbEl.style.top = `${topPx}px`
     thumbEl.style.height = `${Math.max(0, heightPx)}px`
@@ -144,40 +147,40 @@ export function useCanonicalScroller({
   // The loop is scroll/scrollThumbRubberBand.ts's, shared with the editor.
   // It is made once; the sync it hands the thumb back to is read through a
   // ref, since the sync itself asks whether the band is running.
-  const syncPreviewCustomScrollbarRef = useRef<(options?: { force?: boolean }) => void>(() => {})
+  const syncScrollbarRef = useRef<(options?: { force?: boolean }) => void>(() => {})
   const [rubberBand] = useState(() => createThumbRubberBand({
-    scroller: () => previewScrollRef.current,
-    thumbHeightPx: () => previewScrollThumbHeightRef.current,
-    paint: applyPreviewThumbDom,
-    onSettled: () => syncPreviewCustomScrollbarRef.current({ force: true }),
+    scroller: () => scrollerRef.current,
+    thumbHeightPx: () => thumbHeightRef.current,
+    paint: paintThumb,
+    onSettled: () => syncScrollbarRef.current({ force: true }),
   }))
   useEffect(() => rubberBand.stop, [rubberBand])
 
-  const syncPreviewCustomScrollbar = useCallback((options?: { force?: boolean }) => {
+  const syncScrollbar = useCallback((options?: { force?: boolean }) => {
     // The rubber band owns the thumb for the length of a bridged journey, the
     // same way a drag does. Both would otherwise be overwritten every frame by
     // a sync reading the real scroll position -- which during a bridge is
     // mid-cut and says nothing anybody wants drawn.
-    if ((isDraggingPreviewScrollThumb || rubberBand.isRunning()) && !options?.force) {
+    if ((isDraggingThumb || rubberBand.isRunning()) && !options?.force) {
       return
     }
 
-    if (!isPreviewMode) {
-      applyPreviewThumbDom(0, 0)
-      setIsPreviewScrollThumbActive(false)
+    if (!isEnabled) {
+      paintThumb(0, 0)
+      setIsThumbActive(false)
       return
     }
 
-    const scroller = previewScrollRef.current
-    const track = previewScrollbarTrackRef.current
+    const scroller = scrollerRef.current
+    const track = scrollbarTrackRef.current
     if (!scroller) return
 
-    if (previewTextureRef.current) {
+    if (textureLayerRef.current) {
       // Not scrollTop: on a windowed pane that number jumps every time the
       // window's front edge moves, and the texture would slip against the
       // text it is meant to be printed on.
-      const continuousOffsetPx = previewDocumentPositionRef?.current?.readContinuousScrollOffsetPx?.()
-      syncTextureToScroll(continuousOffsetPx ?? scroller.scrollTop, previewTextureRef.current)
+      const continuousOffsetPx = documentPositionRef?.current?.readContinuousScrollOffsetPx?.()
+      syncTextureToScroll(continuousOffsetPx ?? scroller.scrollTop, textureLayerRef.current)
     }
 
     if (!track) return
@@ -187,14 +190,14 @@ export function useCanonicalScroller({
     const trackHeight = track.clientHeight
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
     if (viewportHeight <= 0 || contentHeight <= 0 || trackHeight <= 0) {
-      applyPreviewThumbDom(0, 0)
-      setIsPreviewScrollThumbActive(false)
+      paintThumb(0, 0)
+      setIsThumbActive(false)
       return
     }
 
     if (contentHeight <= viewportHeight) {
-      applyPreviewThumbDom(SCROLL_TRACK_EDGE_GAP_PX, usableTrackHeight)
-      setIsPreviewScrollThumbActive(false)
+      paintThumb(SCROLL_TRACK_EDGE_GAP_PX, usableTrackHeight)
+      setIsThumbActive(false)
       return
     }
 
@@ -202,7 +205,7 @@ export function useCanonicalScroller({
     // which answers in ratios and does not say whether this document is being
     // measured or modelled underneath. The pixel fallbacks below are for the
     // one frame before it can answer at all -- not a second opinion.
-    const position = previewDocumentPositionRef?.current ?? null
+    const position = documentPositionRef?.current ?? null
 
     // SIZE is committed and held; POSITION stays live. See
     // scroll/scrollThumbMetrics.ts. The signature is every input that may
@@ -226,7 +229,7 @@ export function useCanonicalScroller({
       // out the width is 0 -- harmless, since the committed height is held
       // against its floor too and re-decided once the real width exists (see
       // createCommittedThumbHeight).
-      minThumbHeightPx: previewScrollbarThumbRef.current?.offsetWidth ?? 0,
+      minThumbHeightPx: scrollbarThumbRef.current?.offsetWidth ?? 0,
     })
 
     const maxScrollTop = contentHeight - viewportHeight
@@ -236,11 +239,11 @@ export function useCanonicalScroller({
       ?? (maxScrollTop > 0 ? clamp(scroller.scrollTop / maxScrollTop, 0, 1) : 0)
     const nextThumbTop = SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * scrollRatio)
 
-    applyPreviewThumbDom(nextThumbTop, nextThumbHeight)
-    setIsPreviewScrollThumbActive(true)
-  }, [applyPreviewThumbDom, isDraggingPreviewScrollThumb, isPreviewMode, previewScrollRef, previewDocumentPositionRef, previewTextureRef, layoutKey, rubberBand])
+    paintThumb(nextThumbTop, nextThumbHeight)
+    setIsThumbActive(true)
+  }, [paintThumb, isDraggingThumb, isEnabled, scrollerRef, documentPositionRef, textureLayerRef, layoutKey, rubberBand])
 
-  useEffect(() => { syncPreviewCustomScrollbarRef.current = syncPreviewCustomScrollbar }, [syncPreviewCustomScrollbar])
+  useEffect(() => { syncScrollbarRef.current = syncScrollbar }, [syncScrollbar])
 
   /**
    * The thumb top a ratio corresponds to. The one conversion the track click
@@ -248,10 +251,10 @@ export function useCanonicalScroller({
    * for a destination the sync does not put it at.
    */
   const resolveThumbTopForRatio = useCallback((ratio: number): number => {
-    const track = previewScrollbarTrackRef.current
+    const track = scrollbarTrackRef.current
     const trackHeight = track?.clientHeight ?? 0
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    const maxThumbTop = Math.max(0, usableTrackHeight - previewScrollThumbHeightRef.current)
+    const maxThumbTop = Math.max(0, usableTrackHeight - thumbHeightRef.current)
     return SCROLL_TRACK_EDGE_GAP_PX + Math.round(maxThumbTop * clamp(ratio, 0, 1))
   }, [])
 
@@ -274,48 +277,48 @@ export function useCanonicalScroller({
    * the sync puts the thumb back at its committed size on the position it has
    * actually reached, which is the honest base for the next journey.
    */
-  const travelPreviewToRatio = useCallback((ratio: number): boolean => {
-    const scroller = previewScrollRef.current
-    const position = previewDocumentPositionRef?.current
+  const travelToRatio = useCallback((ratio: number): boolean => {
+    const scroller = scrollerRef.current
+    const position = documentPositionRef?.current
     if (!scroller || !position) return false
 
     if (rubberBand.isRunning() || isSmoothScrollActive(scroller)) {
       cancelSmoothScroll(scroller)
       rubberBand.stop()
-      syncPreviewCustomScrollbar({ force: true })
+      syncScrollbar({ force: true })
     }
 
-    const startThumbTopPx = previewScrollThumbTopRef.current
+    const startThumbTopPx = thumbTopRef.current
     const timing = position.travelToRatio(ratio)
     if (timing) rubberBand.start(timing, startThumbTopPx, resolveThumbTopForRatio(ratio))
     return true
   }, [
-    previewScrollRef,
-    previewDocumentPositionRef,
+    scrollerRef,
+    documentPositionRef,
     resolveThumbTopForRatio,
     rubberBand,
-    syncPreviewCustomScrollbar,
+    syncScrollbar,
   ])
 
-  const previewScrollFromThumbTop = useCallback((thumbTopPx: number) => {
-    const scroller = previewScrollRef.current
-    const track = previewScrollbarTrackRef.current
+  const scrollFromThumbTop = useCallback((thumbTopPx: number) => {
+    const scroller = scrollerRef.current
+    const track = scrollbarTrackRef.current
     if (!scroller || !track) return
 
     const trackHeight = track.clientHeight
     const usableTrackHeight = Math.max(0, trackHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-    const maxThumbTravel = Math.max(0, usableTrackHeight - previewScrollThumbHeightRef.current)
+    const maxThumbTravel = Math.max(0, usableTrackHeight - thumbHeightRef.current)
     const minThumbTop = SCROLL_TRACK_EDGE_GAP_PX
     const maxThumbTop = SCROLL_TRACK_EDGE_GAP_PX + maxThumbTravel
     const clampedTop = Math.max(minThumbTop, Math.min(thumbTopPx, maxThumbTop))
-    applyPreviewThumbDom(clampedTop, previewScrollThumbHeightRef.current)
+    paintThumb(clampedTop, thumbHeightRef.current)
     const ratio = maxThumbTravel > 0 ? (clampedTop - SCROLL_TRACK_EDGE_GAP_PX) / maxThumbTravel : 0
 
     // The exact inverse of the reading above, and it has to stay that way:
     // reading position in one space and writing it in another would drop the
     // thumb somewhere other than where it was released. Routing both through
     // the same object is what guarantees it.
-    const position = previewDocumentPositionRef?.current
+    const position = documentPositionRef?.current
     if (position) {
       position.jumpToRatio(ratio)
       return
@@ -323,13 +326,13 @@ export function useCanonicalScroller({
 
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
     scroller.scrollTop = ratio * maxScrollTop
-  }, [applyPreviewThumbDom, previewScrollRef, previewDocumentPositionRef])
+  }, [paintThumb, scrollerRef, documentPositionRef])
 
   useEffect(() => {
-    if (!isPreviewMode) return
-    syncPreviewCustomScrollbar()
+    if (!isEnabled) return
+    syncScrollbar()
     // layoutKey is not read: it is one of the things that changes the thumb's size.
-  }, [isPreviewMode, syncPreviewCustomScrollbar, layoutKey])
+  }, [isEnabled, syncScrollbar, layoutKey])
 
   /**
    * Offers this pane a curtain for long journeys (scroll/scrollBridge.ts).
@@ -344,8 +347,8 @@ export function useCanonicalScroller({
    * font, size, spacing or theme needs no invalidation of its own.
    */
   useEffect(() => {
-    const scroller = previewScrollRef.current
-    const host = previewBridgeHostRef?.current
+    const scroller = scrollerRef.current
+    const host = bridgeHostRef?.current
     if (!scroller || !host || !readBridgeText) return undefined
 
     return registerScrollBridge(scroller, {
@@ -388,26 +391,26 @@ export function useCanonicalScroller({
         }
       },
     })
-  }, [previewScrollRef, previewBridgeHostRef, readBridgeText])
+  }, [scrollerRef, bridgeHostRef, readBridgeText])
 
   useEffect(() => {
-    if (!isPreviewMode) return
+    if (!isEnabled) return
 
-    const scroller = previewScrollRef.current
+    const scroller = scrollerRef.current
     if (!scroller) return
 
     const onScroll = () => {
-      syncPreviewCustomScrollbar()
+      syncScrollbar()
     }
 
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
-  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
+  }, [isEnabled, syncScrollbar, scrollerRef, documentPositionRef])
 
   useEffect(() => {
-    if (!isPreviewMode) return
+    if (!isEnabled) return
 
-    const scroller = previewScrollRef.current
+    const scroller = scrollerRef.current
     if (!scroller) return
 
     // Coalesced, not debounced: a request while one is pending joins it.
@@ -416,10 +419,10 @@ export function useCanonicalScroller({
     // animating its height writes a style each frame from its own rAF
     // callback), so the thumb stood still for the whole animation.
     const scheduleSync = () => {
-      if (previewScrollbarRafRef.current !== null) return
-      previewScrollbarRafRef.current = requestAnimationFrame(() => {
-        previewScrollbarRafRef.current = null
-        syncPreviewCustomScrollbar()
+      if (scrollbarRafRef.current !== null) return
+      scrollbarRafRef.current = requestAnimationFrame(() => {
+        scrollbarRafRef.current = null
+        syncScrollbar()
       })
     }
 
@@ -464,27 +467,27 @@ export function useCanonicalScroller({
       scroller.removeEventListener('toggle', onDetailsToggle, true)
       mutationObserver.disconnect()
       resizeObserver.disconnect()
-      if (previewScrollbarRafRef.current !== null) {
-        cancelAnimationFrame(previewScrollbarRafRef.current)
-        previewScrollbarRafRef.current = null
+      if (scrollbarRafRef.current !== null) {
+        cancelAnimationFrame(scrollbarRafRef.current)
+        scrollbarRafRef.current = null
       }
     }
-  }, [isPreviewMode, syncPreviewCustomScrollbar, previewScrollRef, previewDocumentPositionRef])
+  }, [isEnabled, syncScrollbar, scrollerRef, documentPositionRef])
 
   useEffect(() => {
-    if (!isDraggingPreviewScrollThumb) return
+    if (!isDraggingThumb) return
 
     const onPointerMove = (event: globalThis.PointerEvent) => {
-      const origin = previewScrollbarDragOriginRef.current
+      const origin = thumbDragOriginRef.current
       if (!origin) return
       const deltaY = event.clientY - origin.pointerY
-      previewScrollFromThumbTop(origin.thumbTopPx + deltaY)
+      scrollFromThumbTop(origin.thumbTopPx + deltaY)
     }
 
     const onPointerUp = () => {
-      setIsDraggingPreviewScrollThumb(false)
-      previewScrollbarDragOriginRef.current = null
-      requestAnimationFrame(() => syncPreviewCustomScrollbar({ force: true }))
+      setIsDraggingThumb(false)
+      thumbDragOriginRef.current = null
+      requestAnimationFrame(() => syncScrollbar({ force: true }))
     }
 
     window.addEventListener('pointermove', onPointerMove)
@@ -495,10 +498,10 @@ export function useCanonicalScroller({
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('pointercancel', onPointerUp)
     }
-  }, [isDraggingPreviewScrollThumb, previewScrollFromThumbTop, syncPreviewCustomScrollbar])
+  }, [isDraggingThumb, scrollFromThumbTop, syncScrollbar])
 
   useEffect(() => {
-    const scroller = previewScrollRef.current
+    const scroller = scrollerRef.current
     if (!scroller) return
 
     // A drag is a cross-frame borrow like any other, so it goes through the
@@ -506,10 +509,10 @@ export function useCanonicalScroller({
     // the effect re-runs on every drag state change and used to hand the
     // property back to the empty string, whether or not a journey or a coast
     // was in the middle of using it.
-    if (!isDraggingPreviewScrollThumb) return
+    if (!isDraggingThumb) return
     const release = borrowAutoScrollBehavior(scroller)
     return release
-  }, [isDraggingPreviewScrollThumb, previewScrollRef])
+  }, [isDraggingThumb, scrollerRef])
 
   // Right-click-and-hold on the track pages in the clicked direction for as
   // long as the button is held, exactly like holding PageUp/PageDown -- it's
@@ -521,14 +524,14 @@ export function useCanonicalScroller({
   const pageKeysRef = useRef<PageKeys | null>(null)
 
   const [trackRightHold] = useState(() => createTrackRightHold({
-    track: () => previewScrollbarTrackRef.current,
+    track: () => scrollbarTrackRef.current,
     pageKeys: () => pageKeysRef.current,
     liveThumb: () => {
-      const track = previewScrollbarTrackRef.current
-      const scroller = previewScrollRef.current
+      const track = scrollbarTrackRef.current
+      const scroller = scrollerRef.current
       if (!track || !scroller) return null
       const usableTrackHeight = Math.max(0, track.clientHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-      const heightPx = previewScrollThumbHeightRef.current
+      const heightPx = thumbHeightRef.current
       const maxThumbTravel = Math.max(0, usableTrackHeight - heightPx)
       const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
       const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
@@ -537,34 +540,34 @@ export function useCanonicalScroller({
   }))
   useEffect(() => trackRightHold.stop, [trackRightHold])
 
-  const handlePreviewTrackRightPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (shouldBlockPreviewInteraction()) return
+  const handleTrackRightPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (isBlocked()) return
     trackRightHold.begin(event.clientY)
-  }, [shouldBlockPreviewInteraction, trackRightHold])
+  }, [isBlocked, trackRightHold])
 
-  const handlePreviewTrackContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
+  const handleTrackContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
   }, [])
 
-  const handlePreviewTrackPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (shouldBlockPreviewInteraction()) return
+  const handleTrackPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (isBlocked()) return
     // The scrollbar is not inside the scroller, so the coast's own
     // mousedown listener never sees a click here -- and a reader reaching
     // for the thumb has plainly stopped being carried along.
-    stopPreviewWheelSpin('scrollbar')
+    stopWheelSpin('scrollbar')
     if (event.button === 2) {
-      handlePreviewTrackRightPointerDown(event)
+      handleTrackRightPointerDown(event)
       return
     }
     if (event.button !== 0) return
 
-    const track = previewScrollbarTrackRef.current
-    const scroller = previewScrollRef.current
+    const track = scrollbarTrackRef.current
+    const scroller = scrollerRef.current
     if (!track || !scroller) return
 
     const rect = track.getBoundingClientRect()
     const clickY = event.clientY - rect.top
-    const thumbHeightPx = previewScrollThumbHeightRef.current
+    const thumbHeightPx = thumbHeightRef.current
     const targetThumbTop = clickY - (thumbHeightPx / 2)
 
     const trackHeight = track.clientHeight
@@ -603,7 +606,7 @@ export function useCanonicalScroller({
       let framesLeft = 40
       let expectedTopPx: number | null = null
       const step = () => {
-        const el = previewScrollRef.current
+        const el = scrollerRef.current
         if (!el || framesLeft-- <= 0) return
         const maxScrollTopPx = Math.max(0, el.scrollHeight - el.clientHeight)
 
@@ -620,7 +623,7 @@ export function useCanonicalScroller({
           && el.scrollTop !== maxScrollTopPx) return
 
         if (el.scrollTop < maxScrollTopPx - 0.5) {
-          const position = previewDocumentPositionRef?.current
+          const position = documentPositionRef?.current
           // On a windowed pane `maxScrollTopPx` is the end of the MOUNTED
           // RUN, so writing it would park the reader at the edge of a window
           // somewhere in the middle of the note and call it the end. Ask the
@@ -636,7 +639,7 @@ export function useCanonicalScroller({
             el.scrollTop = maxScrollTopPx
             el.style.scrollBehavior = previousBehavior
           }
-          syncPreviewCustomScrollbar({ force: true })
+          syncScrollbar({ force: true })
         }
         expectedTopPx = el.scrollTop
         requestAnimationFrame(step)
@@ -645,7 +648,7 @@ export function useCanonicalScroller({
     }
     const landOnDocumentEndAfterJourney = () => {
       const waitForArrival = () => {
-        const el = previewScrollRef.current
+        const el = scrollerRef.current
         if (!el) return
         if (isSmoothScrollActive(el)) {
           requestAnimationFrame(waitForArrival)
@@ -662,14 +665,14 @@ export function useCanonicalScroller({
     // it -- which is how a thumb ends up longer than its rail. Only the snap
     // is honored mid-flight, because a snap ends the journey outright rather
     // than trying to travel alongside it.
-    const scrollerNow = previewScrollRef.current
+    const scrollerNow = scrollerRef.current
     const journeyInFlight = rubberBand.isRunning()
       || (!!scrollerNow && isSmoothScrollActive(scrollerNow))
 
     const goTo = (instant: boolean) => {
-      const element = previewScrollRef.current
+      const element = scrollerRef.current
       if (!element) return
-      const position = previewDocumentPositionRef?.current
+      const position = documentPositionRef?.current
       if (position) {
         if (instant) {
           // Land, and hand the thumb back at its committed size. Without
@@ -678,11 +681,11 @@ export function useCanonicalScroller({
           cancelSmoothScroll(element)
           rubberBand.stop()
           position.jumpToRatio(ratio)
-          syncPreviewCustomScrollbar({ force: true })
+          syncScrollbar({ force: true })
           if (aimedAtEnd) landOnDocumentEnd()
           return
         }
-        const startThumbTopPx = previewScrollThumbTopRef.current
+        const startThumbTopPx = thumbTopRef.current
         const timing = position.travelToRatio(ratio)
         if (timing) rubberBand.start(timing, startThumbTopPx, clampedTop)
         if (aimedAtEnd) landOnDocumentEndAfterJourney()
@@ -713,27 +716,27 @@ export function useCanonicalScroller({
         goTo(false)
       },
     })
-  }, [previewScrollRef, shouldBlockPreviewInteraction, stopPreviewWheelSpin, handlePreviewTrackRightPointerDown, previewDocumentPositionRef, rubberBand, syncPreviewCustomScrollbar])
+  }, [scrollerRef, isBlocked, stopWheelSpin, handleTrackRightPointerDown, documentPositionRef, rubberBand, syncScrollbar])
 
   // A gesture in flight when this unmounts would otherwise fire its snap into
   // a torn-down pane.
   useEffect(() => () => { trackHoldCancelRef.current?.() }, [])
 
-  const handlePreviewThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (shouldBlockPreviewInteraction()) return
-    stopPreviewWheelSpin('scrollbar')
+  const handleThumbPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (isBlocked()) return
+    stopWheelSpin('scrollbar')
     if (event.button !== 0) return
     // No preventDefault: cancelling a pointerdown suppresses the mousedown
     // that focusOwnership.ts reads to keep the keyboard where it is.
     event.stopPropagation()
     // The borrow belongs to the drag effect above, which runs before any
     // pointermove can be delivered.
-    setIsDraggingPreviewScrollThumb(true)
-    previewScrollbarDragOriginRef.current = {
+    setIsDraggingThumb(true)
+    thumbDragOriginRef.current = {
       pointerY: event.clientY,
-      thumbTopPx: previewScrollThumbTopRef.current,
+      thumbTopPx: thumbTopRef.current,
     }
-  }, [shouldBlockPreviewInteraction, stopPreviewWheelSpin])
+  }, [isBlocked, stopWheelSpin])
 
   /**
    * The page keys (scroll/pageKeys.ts): one page is 90% of the scroller's
@@ -741,17 +744,17 @@ export function useCanonicalScroller({
    * scroller's edge is the document's only where the window says so.
    */
   useEffect(() => {
-    if (!isPreviewMode) return
-    const scroller = previewScrollRef.current
+    if (!isEnabled) return
+    const scroller = scrollerRef.current
     if (!scroller) return
     const pageKeys = createPageKeys({
       scroller,
-      isBlocked: shouldBlockPreviewInteraction,
+      isBlocked: isBlocked,
       pageStepPx: () => Math.max(1, scroller.clientHeight * 0.9),
-      travelTo: (target) => scrollToNonQuantizedSmooth(scroller, target, { onStep: () => syncPreviewCustomScrollbar() }),
-      onScrolled: () => syncPreviewCustomScrollbar(),
-      isAtDocumentEdge: previewDocumentPositionRef
-        ? (direction) => previewDocumentPositionRef.current?.isAtDocumentEdge?.(direction) ?? true
+      travelTo: (target) => scrollToNonQuantizedSmooth(scroller, target, { onStep: () => syncScrollbar() }),
+      onScrolled: () => syncScrollbar(),
+      isAtDocumentEdge: documentPositionRef
+        ? (direction) => documentPositionRef.current?.isAtDocumentEdge?.(direction) ?? true
         : undefined,
     })
     pageKeysRef.current = pageKeys
@@ -773,12 +776,12 @@ export function useCanonicalScroller({
     const targetOwnsPageKeys = (target: EventTarget | null): boolean => {
       if (!(target instanceof HTMLElement)) return false
       if (target.tagName === 'TEXTAREA') return true
-      return target.isContentEditable && (previewScrollRef.current?.contains(target) ?? false)
+      return target.isContentEditable && (scrollerRef.current?.contains(target) ?? false)
     }
 
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
-      if (!isSectionActive) return
+      if (!ownsKeyboard) return
       if (targetOwnsPageKeys(event.target)) return
       if (event.key !== 'PageDown' && event.key !== 'PageUp') return
       if (pageKeys.press(event.key, event.repeat)) event.preventDefault()
@@ -799,12 +802,12 @@ export function useCanonicalScroller({
       if (pageKeysRef.current === pageKeys) pageKeysRef.current = null
     }
   }, [
-    isPreviewMode,
-    isSectionActive,
-    shouldBlockPreviewInteraction,
-    syncPreviewCustomScrollbar,
-    previewScrollRef,
-    previewDocumentPositionRef,
+    isEnabled,
+    ownsKeyboard,
+    isBlocked,
+    syncScrollbar,
+    scrollerRef,
+    documentPositionRef,
   ])
 
   /**
@@ -814,15 +817,15 @@ export function useCanonicalScroller({
    * height once.
    */
   useEffect(() => {
-    if (!isPreviewMode) return
-    const scroller = previewScrollRef.current
+    if (!isEnabled) return
+    const scroller = scrollerRef.current
     if (!scroller) return
     const wheel = createContinuousWheel({
       scroller,
-      isBlocked: shouldBlockPreviewInteraction,
-      onScrolled: () => syncPreviewCustomScrollbar(),
-      isAtDocumentEdge: previewDocumentPositionRef
-        ? (direction) => previewDocumentPositionRef.current?.isAtDocumentEdge?.(direction) ?? true
+      isBlocked: isBlocked,
+      onScrolled: () => syncScrollbar(),
+      isAtDocumentEdge: documentPositionRef
+        ? (direction) => documentPositionRef.current?.isAtDocumentEdge?.(direction) ?? true
         : undefined,
       traceLabel: 'preview',
     })
@@ -836,7 +839,7 @@ export function useCanonicalScroller({
     const cancelOnWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       const target = event.target
       const insideThisScroller = target instanceof Node && scroller.contains(target)
-      if (!insideThisScroller && !isSectionActive) return
+      if (!insideThisScroller && !ownsKeyboard) return
       wheel.stop('keystroke')
     }
 
@@ -851,32 +854,32 @@ export function useCanonicalScroller({
       if (wheelRef.current === wheel) wheelRef.current = null
     }
   }, [
-    isPreviewMode,
-    isSectionActive,
-    previewScrollRef,
-    previewDocumentPositionRef,
-    shouldBlockPreviewInteraction,
-    syncPreviewCustomScrollbar,
+    isEnabled,
+    ownsKeyboard,
+    scrollerRef,
+    documentPositionRef,
+    isBlocked,
+    syncScrollbar,
     layoutKey,
   ])
 
   // Native scroll (covers mouse wheel, trackpad, keyboard when not intercepted)
-  const handlePreviewScroll = useCallback(() => {
-    if (!previewScrollRef.current || !previewTextureRef.current) return;
-    syncTextureToScroll(previewScrollRef.current.scrollTop, previewTextureRef.current);
-  }, [previewScrollRef, previewTextureRef]);
+  const handleScroll = useCallback(() => {
+    if (!scrollerRef.current || !textureLayerRef.current) return;
+    syncTextureToScroll(scrollerRef.current.scrollTop, textureLayerRef.current);
+  }, [scrollerRef, textureLayerRef]);
 
   return {
-    previewTextureRef,
-    previewScrollbarTrackRef,
-    previewScrollbarThumbRef,
-    isPreviewScrollThumbActive,
-    isDraggingPreviewScrollThumb,
-    syncPreviewCustomScrollbar,
-    handlePreviewTrackPointerDown,
-    handlePreviewTrackContextMenu,
-    handlePreviewThumbPointerDown,
-    handlePreviewScroll,
-    travelPreviewToRatio,
+    textureLayerRef,
+    scrollbarTrackRef,
+    scrollbarThumbRef,
+    isThumbActive,
+    isDraggingThumb,
+    syncScrollbar,
+    handleTrackPointerDown,
+    handleTrackContextMenu,
+    handleThumbPointerDown,
+    handleScroll,
+    travelToRatio,
   }
 }
