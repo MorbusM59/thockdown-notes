@@ -568,7 +568,7 @@ type PrimaryGroup = TagPrimaryGroup<NoteSummary>
 
 function buildHierarchyGroups(notes: NoteSummary[]): PrimaryGroup[] {
   const byTitle = [...notes].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
-  return buildTagHierarchy(byTitle, (note) => note.tags, 'Notes')
+  return buildTagHierarchy(byTitle, (note) => note.tags)
 }
 
 function sanitizeClipboardTitle(raw: string): string {

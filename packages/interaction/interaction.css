@@ -159,6 +159,39 @@
   margin-top: 0;
 }
 
+/* A FOLDING sub-section label (AccordionSection.tsx's AccordionDivider): the
+   label above, pressed like a section heading, folding the group below it.
+   It owns the entry height its rows are sized from. */
+.options-divider {
+  --entry-height: var(--canonical-scroll-thickness);
+}
+
+.options-divider-fold > summary {
+  list-style: none;
+  cursor:     default;
+}
+
+.options-divider-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* The fold arrow, at the line's open end, as a section heading has. */
+.options-divider-label {
+  display:     flex;
+  align-items: center;
+  gap:         var(--spacing-regular);
+}
+
+.options-divider-label::before {
+  content:    '▾';
+  margin-right: auto;
+  transition: transform 0.15s ease;
+}
+
+.options-divider-fold:not([open]) > .options-divider-label::before {
+  transform: rotate(90deg);
+}
+
 /* Custom slider / scrollbar shell */
 .utility-setting-scrollbar-shell {
   position:    relative;

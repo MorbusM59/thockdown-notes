@@ -506,8 +506,7 @@
      var(--entry-height) wide, which is what makes it square.
    A display cell renamed by a right-click keeps its look while it is
    edited (.options-curve-input). */
-.options-curve-rows,
-.options-music-song-divider {
+.options-curve-rows {
   --entry-height: var(--canonical-scroll-thickness);
 }
 

@@ -292,7 +292,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
 
   const sectionGroups = useMemo(() => (view === 'category' ? groupCardsBySection(cards) : null), [cards, view])
   // The archive is the notes' tree: an image sits in one place, by the order of its tags.
-  const tagGroups = useMemo(() => (view === 'archive' ? buildTagHierarchy(libraryImages, (image) => image.tags, 'Images') : null), [libraryImages, view])
+  const tagGroups = useMemo(() => (view === 'archive' ? buildTagHierarchy(libraryImages, (image) => image.tags) : null), [libraryImages, view])
   // What is folded is remembered per view for as long as the sidebar shows
   // images, and not across restarts.
   const [collapseByView, setCollapseByView] = useState<Partial<Record<ImageLibraryView, CategoryTreeCollapse>>>({})

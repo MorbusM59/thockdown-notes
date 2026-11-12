@@ -839,42 +839,59 @@
   transition: none;
 }
 
+/* An item in a tag list (CategoryTree.tsx) is an ENTRY ROW of the options
+   panel's language, as a song is in the music set list: one display cell
+   (toolbar.css's .options-curve-display) as tall as the entry height, its
+   title from the left and cut with an ellipsis. The active item is drawn as
+   an active button is, a hovered one as a hovered button. Off-screen rows
+   are not painted, as in the song list. */
 .note-list-item.is-tree-card {
-  padding:          var(--spacing-small) var(--spacing-large);
-  margin:           var(--spacing-small) var(--spacing-regular);
-  background-color: transparent;
-  border:           1px solid var(--color-border-dark-20);
-  border-radius:    var(--border-radius-regular);
-  box-shadow:       none;
-  font-weight:      200;
-}
-
-/* An archived chapter nested under its parent's fold-out row in the Archive
-   tree (see App.tsx's CategoryTreeView) -- indented an extra
-   2*var(--spacing-large) beyond the tree card's own base margin so it
-   visibly reads as a child of the row above it. */
-.note-list-item.is-tree-card.is-archive-fold-out-chapter {
-  margin-left: calc(var(--spacing-regular) + 2 * var(--spacing-large));
+  box-sizing:             border-box;
+  min-height:             var(--entry-height);
+  margin:                 0;
+  padding:                0 var(--spacing-small);
+  border:                 1px solid var(--btn-border-default);
+  border-radius:          var(--border-radius-regular);
+  background:             var(--btn-bg-default);
+  box-shadow:             none;
+  color:                  var(--color-text-80);
+  font-size:              calc(9px * var(--ui-font-scale));
+  font-weight:            600;
+  line-height:            calc(var(--entry-height) - 2px);
+  content-visibility:     auto;
+  contain-intrinsic-size: auto var(--entry-height);
 }
 
 .note-list-item.is-tree-card .note-list-content {
-  padding: 0;
+  flex:      1 1 auto;
+  min-width: 0;
+  padding:   0;
 }
 
-.note-list-item.is-tree-card.is-active{
-  border: 1px solid var(--color-border-dark-40);
-  box-shadow: var(--box-shadow-inverted-active);
-  background: rgba(255, 255, 255, 0.2);
+.is-tree-card .note-list-title,
+.is-tree-card .note-list-meta-row {
+  font-size:   inherit;
+  font-weight: inherit;
+  color:       inherit;
+}
+
+.note-list-item.is-tree-card.is-active {
+  border-color: var(--btn-border-active);
+  box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
 .note-list-item.is-tree-card[data-hovered] {
-  border: 1px solid var(--color-border-dark-40);
-  outline: 2px solid #ffffff88;
-  background: rgba(255, 255, 255, 0.4);
+  border-color: var(--btn-border-hover);
+  background:   var(--btn-bg-hover);
 }
 
-.is-tree-card .note-list-title           { font-weight: 400; }
-.is-tree-card.is-active .note-list-title { font-weight: 600; }
+/* An archived chapter nested under its parent's fold-out row in the Archive
+   tree (see App.tsx's CategoryTreeView) -- indented by one entry height so
+   it visibly reads as a child of the row above it. */
+.note-list-item.is-tree-card.is-archive-fold-out-chapter {
+  margin-left: var(--entry-height);
+}
+
 
 .date-view .note-list-item {
   height:     calc(var(--note-list-row-content-height) + var(--spacing-large) * 2);
@@ -952,70 +969,10 @@
   font-weight: 400;
 }
 
-/* Category tree */
-.category-tree-root {
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--spacing-large);
-}
-
-.category-primary-summary {
-  border:         1px solid #d2cec9;
-  border-radius:  var(--border-radius-regular);
-  background:     rgba(255, 255, 255, 0.6);
-  list-style:     none;
-  cursor:         default;
-  padding:        var(--spacing-regular);
-  color:          var(--color-text-60);
-  font-size:      calc(10px * var(--ui-font-scale));
-  font-weight:    900;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  text-align:     center;
-  text-shadow:    var(--text-shadow-emboss-panel);
-}
-
-.category-secondary-summary {
-  list-style:       none;
-  cursor:           default;
-  margin:           0;
-  padding:          var(--spacing-small) var(--spacing-regular);
-  color:            var(--color-text-60);
-  font-size:        calc(10px * var(--ui-font-scale));
-  font-weight:      700;
-  text-transform:   uppercase;
-  letter-spacing:   0.1em;
-  text-shadow:      var(--text-shadow-emboss-panel);
-}
-
-.category-secondary-summary.is-general-secondary {
-  padding:        0;
-  font-size:      0;
-  letter-spacing: 0;
-  text-shadow:    none;
-}
-
-.category-secondary {
-  border:           1px solid #999999;
-  border-radius:    var(--border-radius-regular);
-  margin:           var(--spacing-large) 0;
-  background-color: rgba(255, 255, 255, 0.4);
-}
-
-.category-primary-summary::-webkit-details-marker,
-.category-secondary-summary::-webkit-details-marker {
-  display: none;
-}
-
-.category-tertiary-block {
-  display:        flex;
-  flex-direction: column;
-  gap:            0;
-  padding:        var(--spacing-small) 0;
-}
-
-.category-tertiary-heading {
-  display: none;
+/* Category tree: the options panel's sections and dividers (CategoryTree.tsx);
+   the list's own padding already sets it in from the sidebar's edge. */
+.category-tree-root.sidebar-options-content {
+  padding: 0;
 }
 
 /* The image library (imageLibrary/ImageLibraryList.tsx). In the date and

@@ -9,14 +9,14 @@ describe('buildTagHierarchy', () => {
       { id: 'c', tags: ['tabby', 'cats', 'old'] },
       { id: 'd', tags: [] },
     ]
-    const shape = buildTagHierarchy(items, (item) => item.tags, 'Images').map((primary) => [
+    const shape = buildTagHierarchy(items, (item) => item.tags).map((primary) => [
       primary.name,
-      primary.secondary.map((secondary) => [secondary.name, secondary.tertiary.map((tertiary) => [tertiary.name, tertiary.items.map((item) => item.id)])]),
+      primary.secondary.map((secondary) => [secondary.name, secondary.items.map((item) => item.id)]),
     ])
     expect(shape).toEqual([
-      ['cats', [[GENERAL_SECONDARY_NAME, [['Images', ['b']]]], ['tabby', [['Images', ['a']]]]]],
-      ['tabby', [['cats', [['old', ['c']]]]]],
-      [UNCATEGORIZED_PRIMARY_NAME, [[GENERAL_SECONDARY_NAME, [['Images', ['d']]]]]],
+      ['cats', [[GENERAL_SECONDARY_NAME, ['b']], ['tabby', ['a']]]],
+      ['tabby', [['cats', ['c']]]],
+      [UNCATEGORIZED_PRIMARY_NAME, [[GENERAL_SECONDARY_NAME, ['d']]]],
     ])
   })
 })

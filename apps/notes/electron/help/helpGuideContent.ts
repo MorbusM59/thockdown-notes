@@ -387,7 +387,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Five different ways to browse your notes, switched with one click.*
 
 - **Date** — a flat, chronological list ordered by last-updated time, paginated.
-- **Category** — a two-level collapsible tree grouped by primary tag, then secondary tag.
+- **Category** — notes grouped by primary tag, then by secondary tag, folded like the options' sections: a click opens a group and folds the others beside it, a right-click opens or folds just that one.
 - **Archive** — the same tree layout as Category, restricted to archived notes.
 - **Trash** — a flat, paginated list of notes marked for deletion, awaiting purge or restore.
 - **Find** — find (and replace) inside the note you have open, see [Find and Replace](${guideLink('FIND-REPLACE', 'find-and-replace')}).

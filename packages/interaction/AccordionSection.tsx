@@ -7,7 +7,9 @@
 //
 // Left-click: opens this section, closes all siblings.
 // Right-click: opens this section without closing siblings.
-// All sections are closed by default.
+// All sections are closed by default. An owner that keeps the open state
+// itself (the sidebar's tag lists) passes `open` and is asked instead -- see
+// useFold. AccordionDivider is the same fold on a sub-section label.
 //
 // A group given a `filter` shows only what the term appears in (optionsSearch.ts):
 // whole sections whose heading holds it, otherwise only the sub-sections that
@@ -16,7 +18,7 @@
 // so a keystroke that leaves the same options standing leaves whatever the
 // reader opened or closed since as it is.
 
-import { type MouseEvent, type ReactNode, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type MouseEvent, type ReactNode, type RefObject, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AccordionSectionOpenContext } from './accordionSectionOpen'
 import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from './ScrollCurvePlan'
 import { type OptionsSearchSection, applyOptionsSelection, indexOptionsSection, selectOptions } from './optionsSearch'
@@ -146,43 +148,30 @@ export function AccordionGroup({ children, filter = '' }: { children: ReactNode,
   )
 }
 
-// ── AccordionSection ───────────────────────────────────────────────────────
+// ── The fold, shared by a section and a divider ───────────────────────────
 
-interface AccordionSectionProps {
-  heading: ReactNode
-  children: ReactNode
-  className?: string
-  headingClassName?: string
-  ariaLabel?: string
-  /** fa-solid icon class(es) for the heading, saying what the subsection is about, e.g. "fa-paint-roller". */
-  iconClass: string
-  /**
-   * Told when the section opens (as its unfold starts) and when it closes (as
-   * its fold ends), and told `false` when it unmounts open, so a listener
-   * never holds an open state for a section that is gone.
-   */
+/**
+ * Whether a fold is open, and who decides. UNCONTROLLED (no `open` given),
+ * the fold keeps its own state: a left press opens it and closes its
+ * siblings in the nearest AccordionGroup, a right press toggles it alone.
+ * CONTROLLED (`open` given), the owner keeps the state -- the sidebar's tag
+ * lists remember theirs across restarts -- and a press only ASKS, through
+ * `onRequestOpenChange(open, exclusive)`, `exclusive` being the left press's
+ * "and close the others". The fold then animates to whatever `open` becomes.
+ */
+interface FoldControl {
+  open?: boolean
+  onRequestOpenChange?: (open: boolean, exclusive: boolean) => void
+  /** Uncontrolled only: open on mount. */
+  defaultOpen?: boolean
   onOpenChange?: (open: boolean) => void
 }
 
-interface AnimState {
-  rafId: number
-  startTimeMs: number | null
-  fromPx: number
-  toPx: number
-}
-
-export function AccordionSection({
-  heading,
-  children,
-  className,
-  headingClassName,
-  ariaLabel,
-  iconClass,
-  onOpenChange,
-}: AccordionSectionProps) {
+function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = false, onOpenChange }: FoldControl) {
   const id = useId()
   const group = useContext(AccordionGroupContext)
-  const [isOpen, setIsOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined
+  const [isOpen, setIsOpen] = useState(isControlled ? controlledOpen : defaultOpen)
   const sectionRef = useRef<HTMLElement>(null)
   const detailsRef = useRef<HTMLDetailsElement>(null)
   const summaryRef = useRef<HTMLElement>(null)
@@ -265,6 +254,14 @@ export function AccordionSection({
     })
   }, [isOpen, animateTo])
 
+  // A fold that starts open is drawn open at once. `open` is never a React
+  // prop of the <details>: the fold animation sets it itself, at the end of
+  // a close, and a prop would fight it.
+  useLayoutEffect(() => {
+    if (detailsRef.current && isOpen) detailsRef.current.open = true
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Register with the group once; the handle reads the latest open/close.
   const openCloseRef = useRef({ open, close })
   openCloseRef.current = { open, close }
@@ -280,6 +277,13 @@ export function AccordionSection({
     return () => group.unregister(id)
   }, [group, id])
 
+  // Controlled: follow the owner's state, animated.
+  useLayoutEffect(() => {
+    if (controlledOpen === undefined) return
+    if (controlledOpen) openCloseRef.current.open()
+    else openCloseRef.current.close()
+  }, [controlledOpen])
+
   useEffect(() => () => cancelAnim(), [cancelAnim])
 
   const onOpenChangeRef = useRef(onOpenChange)
@@ -290,22 +294,72 @@ export function AccordionSection({
     return () => onOpenChangeRef.current?.(false)
   }, [isOpen])
 
+  // What the reader will see once the fold settles: in a controlled fold the
+  // owner's state, which the animation is already heading for.
+  const settlesOpen = isControlled ? controlledOpen : isOpen
+
   const handleClick = useCallback((e: MouseEvent<HTMLElement>) => {
     e.preventDefault()
+    if (isControlled) {
+      onRequestOpenChange?.(!settlesOpen, !settlesOpen)
+      return
+    }
     if (isOpen) {
       close()
     } else {
       group?.closeOthers(id)
       open()
     }
-  }, [isOpen, close, open, group, id])
+  }, [isControlled, onRequestOpenChange, settlesOpen, isOpen, close, open, group, id])
 
   const handleContextMenu = useCallback((e: MouseEvent<HTMLElement>) => {
     e.preventDefault()
+    if (isControlled) {
+      onRequestOpenChange?.(!settlesOpen, false)
+      return
+    }
     if (isOpen) close()
     else open()
-  }, [isOpen, close, open])
+  }, [isControlled, onRequestOpenChange, settlesOpen, isOpen, close, open])
 
+  return { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu }
+}
+
+// ── AccordionSection ───────────────────────────────────────────────────────
+
+interface AccordionSectionProps extends FoldControl {
+  heading: ReactNode
+  children: ReactNode
+  className?: string
+  headingClassName?: string
+  ariaLabel?: string
+  /** fa-solid icon class(es) for the heading, saying what the subsection is about, e.g. "fa-paint-roller". */
+  iconClass: string
+  /**
+   * Told when the section opens (as its unfold starts) and when it closes (as
+   * its fold ends), and told `false` when it unmounts open, so a listener
+   * never holds an open state for a section that is gone.
+   */
+  onOpenChange?: (open: boolean) => void
+}
+
+interface AnimState {
+  rafId: number
+  startTimeMs: number | null
+  fromPx: number
+  toPx: number
+}
+
+export function AccordionSection({
+  heading,
+  children,
+  className,
+  headingClassName,
+  ariaLabel,
+  iconClass,
+  ...fold
+}: AccordionSectionProps) {
+  const { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold)
   return (
     <section
       ref={sectionRef}
@@ -328,5 +382,38 @@ export function AccordionSection({
         </div>
       </details>
     </section>
+  )
+}
+
+// ── AccordionDivider ───────────────────────────────────────────────────────
+
+/**
+ * A FOLDING sub-section label: the `.options-subsection-label` divider, which
+ * folds the group beneath it with the same fold and the same presses as a
+ * section. Its siblings are the dividers in the nearest AccordionGroup, so a
+ * section that wants its dividers to close one another wraps them in a group
+ * of their own.
+ */
+export function AccordionDivider({ label, children, ariaLabel, ...fold }: FoldControl & {
+  label: ReactNode
+  children: ReactNode
+  ariaLabel?: string
+}) {
+  const { sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold)
+  return (
+    <div ref={sectionRef as RefObject<HTMLDivElement>} className="options-divider" aria-label={ariaLabel}>
+      <details ref={detailsRef} className="options-divider-fold">
+        <summary
+          ref={summaryRef}
+          className="options-subsection-label options-divider-label"
+          onClick={handleClick}
+          data-secondary-press="action"
+          onContextMenu={handleContextMenu}
+        >
+          {label}
+        </summary>
+        <div ref={contentRef} className="options-divider-body">{children}</div>
+      </details>
+    </div>
   )
 }

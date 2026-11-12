@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 
 import { createWheelNotchState, resolveWheelEventUnits } from '../editor/wheelNotch'
@@ -140,9 +139,9 @@ export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grou
             ariaLabel={group.label}
             iconClass={grouping === 'folder' ? 'fa-folder' : 'fa-user'}
           >
+            <AccordionGroup>
             {group.dividers.map((divider) => (
-              <div key={divider.label} className="options-music-song-divider">
-                <OptionsSubsectionLabel>{divider.label}</OptionsSubsectionLabel>
+              <AccordionDivider key={divider.label} label={divider.label} defaultOpen>
                 <div className="options-curve-rows">
                   {divider.songs.map((song) => {
                     const name = songListTitleText(song)
@@ -162,8 +161,9 @@ export function MusicSetListPanel({ slot, grouping }: { slot: PlaylistSlot; grou
                     )
                   })}
                 </div>
-              </div>
+              </AccordionDivider>
             ))}
+            </AccordionGroup>
           </AccordionSection>
         ))}
       </AccordionGroup>

@@ -76,6 +76,6 @@ export function groupCardsBySection(cards: readonly ImageUseCard[]): TagPrimaryG
   }
   return [...sections].map(([name, subsections]) => ({
     name,
-    secondary: [...subsections].map(([subsectionName, items]) => ({ name: subsectionName, tertiary: [{ name: '', items }] })),
+    secondary: [...subsections].map(([subsectionName, items]) => ({ name: subsectionName, items })),
   }))
 }

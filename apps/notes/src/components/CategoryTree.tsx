@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { AccordionDivider, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { areStringArraysEqual } from '../shared/stringArrays'
 import { GENERAL_SECONDARY_NAME, type TagPrimaryGroup } from '../shared/tagHierarchy'
 
@@ -21,11 +22,15 @@ type CategoryTreeProps<T> = {
 }
 
 /**
- * The sidebar's three-level category tree (see `shared/tagHierarchy.ts` for
- * the grouping), for any kind of item. It owns the accordion: opening a
- * primary closes every other, and opening a secondary closes its siblings.
- * The collapse state is the caller's, so each tree decides whether it is
- * remembered.
+ * The sidebar's category tree (see `shared/tagHierarchy.ts` for the
+ * grouping), for any kind of item, drawn in the options panel's language --
+ * the same as the music set list: a primary tag is a SECTION, a secondary tag
+ * a folding DIVIDER (the unlabelled general group sits under the section's
+ * heading with no divider), and an item an entry row. Both levels fold the
+ * way a section does: a left press opens one and closes its siblings, a
+ * right press toggles it alone. The collapse state is the caller's, so each
+ * tree decides whether it is remembered; the folds only ask
+ * (AccordionSection's controlled mode).
  */
 export function CategoryTree<T>({
   groups,
@@ -54,15 +59,9 @@ export function CategoryTree<T>({
 
     for (const primary of groups) {
       for (const secondary of primary.secondary) {
-        for (const tertiary of secondary.tertiary) {
-          if (tertiary.items.some((item) => itemId(item) === activeItemId)) {
-            targetPrimaryName = primary.name
-            targetSecondaryName = secondary.name
-            break
-          }
-        }
-
-        if (targetPrimaryName) {
+        if (secondary.items.some((item) => itemId(item) === activeItemId)) {
+          targetPrimaryName = primary.name
+          targetSecondaryName = secondary.name
           break
         }
       }
@@ -85,10 +84,9 @@ export function CategoryTree<T>({
     const nextCollapsedSecondary = new Set<string>()
     for (const primary of groups) {
       for (const secondary of primary.secondary) {
-        const secondaryKey = `${primary.name}:${secondary.name}`
         const keepOpen = primary.name === targetPrimaryName && secondary.name === targetSecondaryName
         if (!keepOpen) {
-          nextCollapsedSecondary.add(secondaryKey)
+          nextCollapsedSecondary.add(secondaryKey(primary.name, secondary.name))
         }
       }
     }
@@ -177,138 +175,91 @@ export function CategoryTree<T>({
     }
   }, [ensureActiveItemVisible, focusRequestKey, unfoldPathForActiveItem])
 
-  const togglePrimaryCategory = useCallback((categoryName: string) => {
-    const allPrimary = groups.map((group) => group.name)
-    const selectedPrimary = groups.find((group) => group.name === categoryName)
-    const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${categoryName}:${secondary.name}`)
-    const generalSecondaryKey = `${categoryName}:${GENERAL_SECONDARY_NAME}`
+  const commit = useCallback((nextPrimary: Set<string>, nextSecondary: Set<string>) => {
+    const nextCollapsedPrimaryList = [...nextPrimary]
+    const nextCollapsedSecondaryList = [...nextSecondary]
+    if (
+      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
+      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
+    ) {
+      return
+    }
+    onCollapseChange({ collapsedPrimary: nextCollapsedPrimaryList, collapsedSecondary: nextCollapsedSecondaryList })
+  }, [onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
 
-    const nextCollapsedPrimary = new Set<string>()
-    const nextCollapsedSecondary = new Set(collapsedSecondary)
-
-    if (collapsedPrimary.has(categoryName)) {
-      allPrimary
-        .filter((primaryName) => primaryName !== categoryName)
-        .forEach((primaryName) => nextCollapsedPrimary.add(primaryName))
-
-      // Keep the fallback/general bucket visible whenever a primary is expanded.
-      nextCollapsedSecondary.delete(generalSecondaryKey)
-
-      secondaryKeys.forEach((secondaryKey) => {
-        if (secondaryKey !== generalSecondaryKey) {
-          nextCollapsedSecondary.add(secondaryKey)
-        }
-      })
-    } else {
-      allPrimary
-        .filter((primaryName) => primaryName !== categoryName)
-        .forEach((primaryName) => nextCollapsedPrimary.add(primaryName))
-
-      if (secondaryKeys.length > 0) {
-        const allExpanded = secondaryKeys.every((secondaryKey) => !collapsedSecondary.has(secondaryKey))
-        if (allExpanded) {
-          secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.add(secondaryKey))
-        } else {
-          secondaryKeys.forEach((secondaryKey) => nextCollapsedSecondary.delete(secondaryKey))
-        }
-
-        nextCollapsedSecondary.delete(generalSecondaryKey)
+  const requestPrimary = useCallback((primaryName: string, open: boolean, exclusive: boolean) => {
+    const nextPrimary = new Set(collapsedPrimary)
+    if (open) {
+      nextPrimary.delete(primaryName)
+      if (exclusive) {
+        for (const group of groups) if (group.name !== primaryName) nextPrimary.add(group.name)
       }
-    }
-
-    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
-    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
-    if (
-      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
-      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
-    ) {
-      return
-    }
-
-    onCollapseChange({
-      collapsedPrimary: nextCollapsedPrimaryList,
-      collapsedSecondary: nextCollapsedSecondaryList,
-    })
-  }, [collapsedPrimary, collapsedSecondary, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
-
-  const toggleSecondaryCategory = useCallback((primaryName: string, secondaryName: string) => {
-    const key = `${primaryName}:${secondaryName}`
-    const allPrimary = groups.map((group) => group.name)
-    const selectedPrimary = groups.find((group) => group.name === primaryName)
-    const secondaryKeys = (selectedPrimary?.secondary ?? []).map((secondary) => `${primaryName}:${secondary.name}`)
-    const nextCollapsedPrimary = new Set(allPrimary.filter((primary) => primary !== primaryName))
-    const nextCollapsedSecondary = new Set(collapsedSecondary)
-
-    if (nextCollapsedSecondary.has(key)) {
-      secondaryKeys.forEach((secondaryKey) => {
-        if (secondaryKey !== key) {
-          nextCollapsedSecondary.add(secondaryKey)
-        }
-      })
-      nextCollapsedSecondary.delete(key)
     } else {
-      nextCollapsedSecondary.add(key)
+      nextPrimary.add(primaryName)
     }
+    commit(nextPrimary, collapsedSecondary)
+  }, [collapsedPrimary, collapsedSecondary, commit, groups])
 
-    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
-    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
-    if (
-      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
-      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
-    ) {
-      return
+  const requestSecondary = useCallback((primaryName: string, secondaryName: string, open: boolean, exclusive: boolean) => {
+    const key = secondaryKey(primaryName, secondaryName)
+    const nextSecondary = new Set(collapsedSecondary)
+    if (open) {
+      nextSecondary.delete(key)
+      if (exclusive) {
+        const siblings = groups.find((group) => group.name === primaryName)?.secondary ?? []
+        for (const sibling of siblings) {
+          if (sibling.name !== secondaryName && sibling.name !== GENERAL_SECONDARY_NAME) nextSecondary.add(secondaryKey(primaryName, sibling.name))
+        }
+      }
+    } else {
+      nextSecondary.add(key)
     }
-
-    onCollapseChange({
-      collapsedPrimary: nextCollapsedPrimaryList,
-      collapsedSecondary: nextCollapsedSecondaryList,
-    })
-  }, [collapsedSecondary, groups, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
-
+    commit(collapsedPrimary, nextSecondary)
+  }, [collapsedPrimary, collapsedSecondary, commit, groups])
 
   if (groups.length === 0) {
     return <div className="notes-empty-state">{emptyLabel}</div>
   }
 
   return (
-    <div className="category-tree-root" aria-label={ariaLabel}>
+    <div className="sidebar-options-content category-tree-root" aria-label={ariaLabel}>
       {groups.map((primary) => (
-        <details key={primary.name} className="category-primary" open={!collapsedPrimary.has(primary.name)}>
-          <summary
-            className="category-primary-summary"
-            onClick={(event) => {
-              event.preventDefault()
-              togglePrimaryCategory(primary.name)
-            }}
-          >
-            {primary.name}
-          </summary>
-          {primary.secondary.map((secondary) => (
-            <details
-              key={`${primary.name}:${secondary.name}`}
-              className="category-secondary"
-              open={!collapsedSecondary.has(`${primary.name}:${secondary.name}`)}
-            >
-              <summary
-                className={`category-secondary-summary${secondary.name === GENERAL_SECONDARY_NAME ? ' is-general-secondary' : ''}`}
-                aria-label={secondary.name === GENERAL_SECONDARY_NAME ? 'General' : undefined}
-                onClick={(event) => {
-                  event.preventDefault()
-                  toggleSecondaryCategory(primary.name, secondary.name)
-                }}
+        <AccordionSection
+          key={primary.name}
+          heading={<span className="options-music-song-heading">{primary.name}</span>}
+          ariaLabel={primary.name}
+          iconClass="fa-tag"
+          open={!collapsedPrimary.has(primary.name)}
+          onRequestOpenChange={(open, exclusive) => requestPrimary(primary.name, open, exclusive)}
+        >
+          {/* The general group is the section's own contents, so it leads, under the heading. */}
+          {generalFirst(primary.secondary).map((secondary) => (
+            secondary.name === GENERAL_SECONDARY_NAME ? (
+              <div key={secondary.name} className="options-curve-rows category-tree-rows">
+                {secondary.items.map(renderItem)}
+              </div>
+            ) : (
+              <AccordionDivider
+                key={secondary.name}
+                label={secondary.name}
+                open={!collapsedSecondary.has(secondaryKey(primary.name, secondary.name))}
+                onRequestOpenChange={(open, exclusive) => requestSecondary(primary.name, secondary.name, open, exclusive)}
               >
-                {secondary.name === GENERAL_SECONDARY_NAME ? <span className="sr-only-mode-label">General</span> : secondary.name}
-              </summary>
-              {secondary.tertiary.map((tertiary) => (
-                <div key={`${primary.name}:${secondary.name}:${tertiary.name}`} className="category-tertiary-block">
-                  <div className="category-tertiary-heading">{tertiary.name}</div>
-                  {tertiary.items.map(renderItem)}
+                <div className="options-curve-rows category-tree-rows">
+                  {secondary.items.map(renderItem)}
                 </div>
-              ))}
-            </details>
+              </AccordionDivider>
+            )
           ))}
-        </details>
+        </AccordionSection>
       ))}
     </div>
   )
 }
+
+const generalFirst = <T,>(secondary: TagPrimaryGroup<T>['secondary']) => [
+  ...secondary.filter((group) => group.name === GENERAL_SECONDARY_NAME),
+  ...secondary.filter((group) => group.name !== GENERAL_SECONDARY_NAME),
+]
+
+const secondaryKey = (primaryName: string, secondaryName: string) => `${primaryName}:${secondaryName}`
