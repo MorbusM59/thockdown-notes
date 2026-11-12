@@ -23,7 +23,14 @@ export async function indexMusicRequest(request: MusicIndexRequest): Promise<Ind
 async function audioFilesIn(folderPath: string): Promise<string[]> {
   const results: string[] = []
   const scan = async (directory: string): Promise<void> => {
-    const entries = await fs.readdir(directory, { withFileTypes: true })
+    // A folder that cannot be read (a protected system folder, a broken
+    // junction) is skipped, so one of them never costs the rest of the tree.
+    let entries
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true })
+    } catch {
+      return
+    }
     for (const entry of entries) {
       const filePath = path.join(directory, entry.name)
       if (entry.isDirectory()) {

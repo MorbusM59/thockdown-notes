@@ -141,8 +141,14 @@ export function useTextureSurface(params: {
   const jobRef = useRef<TextureJob | null>(null);
   const generationTimeoutRef = useRef<number | null>(null);
 
+  // At strength 0 every pixel of the mask would be opaque (`applyTextureStrength`
+  // maps every mask value to 1), which is exactly what `mask-image: none`
+  // draws: the tint layer is shown whole either way, so nothing is
+  // generated, cached or masked with.
+  const generates = enabled && materialTextureStrength > 0;
+
   useEffect(() => {
-    if (!enabled) {
+    if (!generates) {
       if (generationTimeoutRef.current !== null) {
         window.clearTimeout(generationTimeoutRef.current);
         generationTimeoutRef.current = null;
@@ -230,7 +236,7 @@ export function useTextureSurface(params: {
       jobRef.current = null;
     };
   }, [
-    enabled,
+    generates,
     materialGranularity,
     materialSeed,
     materialTextureStrength,

@@ -24,6 +24,7 @@ import {
   TEXTURE_GRANULARITY_MIN,
   TEXTURE_STRENGTH_MAX,
   TEXTURE_STRENGTH_MIN,
+  TEXTURE_STRENGTH_STEP,
   TEXTURE_VSTEPS_MAX,
   TEXTURE_VSTEPS_MIN,
   type TextureMaterialSettings,
@@ -208,7 +209,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
           id="texture-strength"
           min={TEXTURE_STRENGTH_MIN}
           max={TEXTURE_STRENGTH_MAX}
-          step={0.01}
+          step={TEXTURE_STRENGTH_STEP}
           value={shown?.textureStrength ?? TEXTURE_STRENGTH_MAX}
           trackLabel="texture"
           ariaLabel="Texture strength"

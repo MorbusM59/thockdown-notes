@@ -25,6 +25,8 @@ export const TEXTURE_VSTEPS_MIN = 1;
 export const TEXTURE_VSTEPS_MAX = 20;
 export const TEXTURE_STRENGTH_MIN = 0;
 export const TEXTURE_STRENGTH_MAX = 1;
+/** The slider's step, and the grain a strength is rounded to before it names a texture (and a cache row). */
+export const TEXTURE_STRENGTH_STEP = 0.01;
 
 export const DEFAULT_TEXTURE_MATERIALS: TextureMaterialsBySurface = {
   appGrid: {

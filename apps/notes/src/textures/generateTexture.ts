@@ -1,4 +1,4 @@
-import type { TextureColorHsva, TextureMaterialSettings } from '@thockdown/look/textureTypes';
+import { TEXTURE_STRENGTH_STEP, type TextureColorHsva, type TextureMaterialSettings } from '@thockdown/look/textureTypes';
 
 type MaterialPersonality = {
   persistence: number;
@@ -208,7 +208,9 @@ export function clampMaterialSettings(material: TextureMaterialSettings): Textur
 
   return {
     seed: Number.isFinite(material.seed) ? Math.max(0, Math.round(material.seed)) : 0,
-    textureStrength: Number.isFinite(material.textureStrength) ? Math.max(0, Math.min(1, material.textureStrength)) : 1,
+    textureStrength: Number.isFinite(material.textureStrength)
+      ? Math.round(Math.max(0, Math.min(1, material.textureStrength)) / TEXTURE_STRENGTH_STEP) * TEXTURE_STRENGTH_STEP
+      : 1,
     granularity: Number.isFinite(material.granularity) ? Math.max(1, Math.min(20, material.granularity)) : 10,
     vSteps: Number.isFinite(material.vSteps) ? Math.max(1, Math.min(20, Math.round(material.vSteps))) : 8,
     color,

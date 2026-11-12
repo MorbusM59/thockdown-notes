@@ -565,22 +565,22 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [advanceToNextSong, playPreviousSong])
 
-  /** Play the adjacent song in the active pool's displayed order. */
+  /**
+   * Play the adjacent song in the active pool's displayed order. The pool is
+   * read ONCE and walked in `direction` from the current song: a song whose
+   * file is gone is purged and the walk moves on to the next candidate of the
+   * same list, so the walk is bounded by the pool itself and never re-reads it.
+   */
   const playAdjacentSong = useCallback(async (direction: SeekDirection) => {
     const query = { slots: activeRef.current, filter: filterRef.current }
+    const pool = await window.thockdownAudioPlayer?.getPool(query) ?? []
+    const currentId = currentSongRef.current?.id
     let purgedMissingSong = false
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const pool = await window.thockdownAudioPlayer?.getPool(query) ?? []
-      if (pool.length === 0) {
-        if (purgedMissingSong) {
-          setIsPlaying(false)
-          setCurrentSong(null)
-        }
-        return
-      }
-      const currentId = currentSongRef.current?.id
-      const target = adjacentSongInPool(pool, currentId, direction)
-      if (!target || target.id === currentId) return
+    let candidateId = currentId
+    for (let step = 0; step < pool.length; step += 1) {
+      const target = adjacentSongInPool(pool, candidateId, direction)
+      if (!target || target.id === currentId) break
+      candidateId = target.id
       const song = await window.thockdownAudioPlayer?.rotatePoolTo(query, target.id)
       if (!song) continue
       try {
@@ -825,14 +825,13 @@ export const AudioControls = memo(function AudioControls({
     }, HOLD_THRESHOLD_MS)
   }, [])
 
-  const purgeMusicSet = useCallback(async (slot: PlaylistSlot) => {
-    const audioPlayer = window.thockdownAudioPlayer
-    if (!audioPlayer) {
-      console.error('[music-sets] cannot purge a set without the audio player bridge')
-      return
-    }
+  /**
+   * After a set lost its songs (purged) or ceased to exist (deleted): take it
+   * out of the selection, refresh the counts, and if the playing song now
+   * belongs to no active set, stop it and pick the next one.
+   */
+  const leaveSet = useCallback(async (slot: PlaylistSlot) => {
     const nextActiveSlots = activeSlotsRef.current.filter((activeSlot) => activeSlot !== slot)
-    await audioPlayer.clearPlaylist(slot)
     activeSlotsRef.current = nextActiveSlots
     activeRef.current = nextActiveSlots
     onActiveSlotsChange(nextActiveSlots)
@@ -845,6 +844,16 @@ export const AudioControls = memo(function AudioControls({
       await advanceToNextSong(nextActiveSlots)
     }
   }, [onActiveSlotsChange, advanceToNextSong])
+
+  const purgeMusicSet = useCallback(async (slot: PlaylistSlot) => {
+    const audioPlayer = window.thockdownAudioPlayer
+    if (!audioPlayer) {
+      console.error('[music-sets] cannot purge a set without the audio player bridge')
+      return
+    }
+    await audioPlayer.clearPlaylist(slot)
+    await leaveSet(slot)
+  }, [leaveSet])
 
   const handleSlotPointerUp = useCallback(async (event: React.PointerEvent, slot: PlaylistSlot) => {
     if (event.button !== 2) return
@@ -928,19 +937,8 @@ export const AudioControls = memo(function AudioControls({
     selectionVersionRef.current += 1
     const nextSets = await audioPlayer.deleteMusicSet(slot)
     onMusicSetsChange(nextSets)
-    const nextActiveSlots = activeSlotsRef.current.filter((activeSlot) => activeSlot !== slot)
-    activeSlotsRef.current = nextActiveSlots
-    activeRef.current = nextActiveSlots
-    onActiveSlotsChange(nextActiveSlots)
-    await refreshCountsRef.current()
-    const currentSong = currentSongRef.current
-    if (currentSong && !currentSong.setIds.some((setId) => setId !== slot && nextActiveSlots.includes(setId))) {
-      musicPlayerService.stop()
-      setIsPlaying(false)
-      setCurrentSong(null)
-      await advanceToNextSong(nextActiveSlots)
-    }
-  }, [onMusicSetsChange, onActiveSlotsChange, advanceToNextSong])
+    await leaveSet(slot)
+  }, [onMusicSetsChange, leaveSet])
 
   // ---------------------------------------------------------------- system media controls
   // The OS shows its own player for whatever this window is playing (the
