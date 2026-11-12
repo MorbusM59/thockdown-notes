@@ -526,17 +526,13 @@ export function useCanonicalScroller({
   const [trackRightHold] = useState(() => createTrackRightHold({
     track: () => scrollbarTrackRef.current,
     pageKeys: () => pageKeysRef.current,
-    liveThumb: () => {
-      const track = scrollbarTrackRef.current
-      const scroller = scrollerRef.current
-      if (!track || !scroller) return null
-      const usableTrackHeight = Math.max(0, track.clientHeight - (SCROLL_TRACK_EDGE_GAP_PX * 2))
-      const heightPx = thumbHeightRef.current
-      const maxThumbTravel = Math.max(0, usableTrackHeight - heightPx)
-      const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      const scrollRatio = maxScrollTop > 0 ? scroller.scrollTop / maxScrollTop : 0
-      return { topPx: SCROLL_TRACK_EDGE_GAP_PX + (maxThumbTravel * scrollRatio), heightPx }
-    },
+    // The painted thumb, which the scroll sync keeps current. It is the only
+    // honest answer for a windowed note: its thumb is placed by character
+    // position (documentPositionRef), and the mounted pixels say nothing
+    // about where in the document the reader is.
+    liveThumb: () => (scrollbarTrackRef.current
+      ? { topPx: thumbTopRef.current, heightPx: thumbHeightRef.current }
+      : null),
   }))
   useEffect(() => trackRightHold.stop, [trackRightHold])
 
