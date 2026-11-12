@@ -626,7 +626,7 @@
   grid-template-columns: repeat(6, var(--color-grid-cell));
   grid-template-rows:    var(--color-grid-cell);
   gap:                   var(--color-grid-gap);
-  margin-bottom:         var(--color-grid-gap);
+  margin-bottom:         0;
 }
 
 .options-color-picker-toggles {
