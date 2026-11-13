@@ -94,7 +94,7 @@
    the sidebar with no panel of their own, on the dock's gutter. */
 .sidebar-music-library-dock {
   flex:    0 0 auto;
-  padding: var(--spacing-large);
+  padding: var(--spacing-small) 0 0 var(--spacing-large);
 }
 
 /* .sidebar-options-content's gutter, so the section lines up with the ones above. */
