@@ -4553,6 +4553,16 @@ export class DatabaseService {
     return rows.map((row) => ({ ...row, tags: tags.get(row.id) ?? [] }));
   }
 
+  /** An image's tags in order; empty when it has none or does not exist. */
+  imageTagNames(id: string): string[] {
+    const imageId = normalizeImageId(id);
+    if (!imageId) return [];
+    return (this.requireDb().prepare(`
+      SELECT tags.name AS name FROM image_tags JOIN tags ON tags.id = image_tags.tagId
+      WHERE image_tags.imageId = ? ORDER BY image_tags.position
+    `).all(imageId) as Array<{ name: string }>).map((row) => row.name);
+  }
+
   /** Replaces an image's tags; answers the tags kept (normalized, de-duplicated, never the protected ones). */
   setImageTags(id: string, rawTags: string[]): string[] {
     const imageId = normalizeImageId(id);

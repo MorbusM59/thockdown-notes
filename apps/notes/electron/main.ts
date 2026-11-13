@@ -1378,8 +1378,13 @@ function registerIpcHandlers() {
           continue;
         }
         imported += 1;
+        // A drop is also the way back for an image that was trashed.
+        databaseService!.setImageTrashed(result.id, false);
+        // Folder tags name a NEW image; one already stored keeps the tags the reader gave it.
         const tags = imageTagsFromFolders(folders);
-        if (tags.length > 0) databaseService!.setImageTags(result.id, tags);
+        if (tags.length > 0 && databaseService!.imageTagNames(result.id).length === 0) databaseService!.setImageTags(result.id, tags);
+        // Each image is read, hashed and written synchronously; yield so a large folder does not hold the main process.
+        await new Promise((resolve) => setImmediate(resolve));
       }
       return { imported, failed };
     },
