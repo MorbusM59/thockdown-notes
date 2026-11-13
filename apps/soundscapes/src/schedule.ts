@@ -17,7 +17,7 @@
  * EVENTS they come to (scheduleEvents) and plays those, so the rules are
  * not restated on the native side.
  */
-import { SOUNDSCAPE_FACTORY_PRESETS, type SoundscapePreset } from '@thockdown/soundscape/soundscape'
+import { type SoundscapePreset } from '@thockdown/soundscape/soundscape'
 
 export const HOURS = 24
 const MINUTES_PER_DAY = HOURS * 60
@@ -54,13 +54,9 @@ export function emptySchedule(): Schedule {
   return { enabled: false, slots: Array.from({ length: HOURS }, () => ({ presetId: null, on: false, minute: 0 })) }
 }
 
-export function allPresets(customPresets: readonly SoundscapePreset[]): SoundscapePreset[] {
-  return [...SOUNDSCAPE_FACTORY_PRESETS, ...customPresets]
-}
-
 /** `schedule` as stored, made safe: 24 slots, known soundscapes only (a deleted one empties its slots), minutes on the 5-minute grid. */
-export function sanitizeSchedule(input: unknown, customPresets: readonly SoundscapePreset[]): Schedule {
-  const known = new Set(allPresets(customPresets).map((preset) => preset.id))
+export function sanitizeSchedule(input: unknown, presets: readonly SoundscapePreset[]): Schedule {
+  const known = new Set(presets.map((preset) => preset.id))
   const record = (input ?? {}) as { enabled?: unknown; slots?: unknown }
   const slots = Array.isArray(record.slots) ? record.slots : []
   return {

@@ -10,7 +10,8 @@ import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { HoverActions } from '../components/HoverActions'
 import { MusicSetRow, SetMark } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
-import { closeMusicSetIconPick, filterSolidIcons, readMusicSetIconPick, subscribeMusicSetIconPick } from './iconPicker/musicSetIconPicker'
+import { IconPicker } from './iconPicker/IconPicker'
+import { closeIconPick } from './iconPicker/iconPick'
 import { useSelectorReorder } from './useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
@@ -163,62 +164,32 @@ function useOpenMusicSet(): MusicSet | undefined {
  * The open set is the one last picked (musicLibraryView.ts), or the first set
  * when none was or that one is gone.
  */
+/** The icon picker for the open set (iconPicker/iconPick.ts): a press gives the set that icon and closes it. */
+export function MusicSetIconPicker({ query }: { query: string }) {
+  const set = useOpenMusicSet()
+  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  if (!set) return null
+  return (
+    <IconPicker
+      label={set.name}
+      current={set.icon}
+      query={query}
+      onPick={(icon) => {
+        closeIconPick()
+        void nowPlaying.setMusicSetIcon(set.slot, icon)
+      }}
+    />
+  )
+}
+
 export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetListGrouping; filter: string }) {
   const set = useOpenMusicSet()
   if (!set) return <div className="options-content sidebar-options-content" aria-label="Songs" />
   return <MusicLibrarySet set={set} grouping={grouping} filter={filter} />
 }
 
-type SolidIconCatalog = ReadonlyArray<readonly [string, string]>
-let catalogLoad: Promise<SolidIconCatalog> | null = null
-/** The catalog is 180 KB, so it is its own chunk, fetched when a picker first opens. */
-function loadSolidIconCatalog(): Promise<SolidIconCatalog> {
-  catalogLoad ??= import('./iconPicker/solidIconCatalog.json').then((module) => module.default as unknown as SolidIconCatalog)
-  return catalogLoad
-}
-
-/**
- * Every solid icon, in one unfolded section in place of the set's songs,
- * filtered by the sidebar's filter field (musicSetIconPicker.ts). A press
- * gives the set that icon and closes the picker.
- */
-function MusicSetIconPicker({ set, query }: { set: MusicSet; query: string }) {
-  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-  const [catalog, setCatalog] = useState<SolidIconCatalog | null>(null)
-  useEffect(() => {
-    let live = true
-    void loadSolidIconCatalog().then((loaded) => { if (live) setCatalog(loaded) })
-    return () => { live = false }
-  }, [])
-  const names = useMemo(() => (catalog ? filterSolidIcons(catalog, query) : []), [catalog, query])
-  return (
-    <div className="preset-section">
-      <div className="options-loadout-grid music-set-icon-grid" role="listbox" aria-label={`Icons for ${set.name}`}>
-        {names.map((name) => (
-          <button
-            key={name}
-            type="button"
-            role="option"
-            aria-selected={set.icon === `fa-${name}`}
-            className={`btn-icon options-color-swatch options-loadout-btn${set.icon === `fa-${name}` ? ' is-active' : ''}`}
-            data-tooltip={name.replace(/-/g, ' ')}
-            aria-label={name.replace(/-/g, ' ')}
-            onClick={() => {
-              closeMusicSetIconPick()
-              void nowPlaying.setMusicSetIcon(set.slot, `fa-${name}`)
-            }}
-          >
-            <span className={`fa-solid fa-${name}`} aria-hidden="true" />
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string }) {
   const { slot, name } = set
-  const iconPick = useSyncExternalStore(subscribeMusicSetIconPick, readMusicSetIconPick)
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
   const shownSlot = loaded?.slot ?? slot
@@ -226,9 +197,6 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
 
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
-      {/* An icon pick shows the icons without the set selector; the dock stays, naming the set they are for. */}
-      {iconPick?.slot === slot ? <MusicSetIconPicker set={set} query={iconPick.query} /> : (
-      <>
       <div className="preset-section">
         <SetSelector slot={slot} />
       </div>
@@ -297,8 +265,6 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
           </AccordionSection>
         ))}
       </AccordionGroup>
-      </>
-      )}
     </div>
   )
 }

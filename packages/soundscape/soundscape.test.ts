@@ -11,6 +11,15 @@ import {
   soundscapeFaderGain,
   soundscapeSettingsSignature,
   applySoundscapePreset,
+  activeSoundscape,
+  createSoundscape,
+  deleteSoundscape,
+  editSoundscape,
+  FACTORY_SOUNDSCAPE_ICONS,
+  renameSoundscape,
+  restoreFactorySoundscape,
+  setSoundscapeIcon,
+  soundscapeMarkOf,
   cloneSettings,
   chimeSemitoneHz,
   createSoundscapeChannel,
@@ -155,7 +164,7 @@ describe('sanitizing', () => {
     expect(settings.space).toEqual({ size: 0.3, foliage: 0.8, brilliance: DEFAULT_SOUNDSCAPE_SPACE.brilliance, amount: 0.5 });
   });
 
-  it('bounds and deduplicates saved presets, drops ones from before the roster, and an invalid active id', () => {
+  it('bounds and deduplicates saved presets, drops ones from before the roster, and an invalid active id lands on the soundscape that sounds the same', () => {
     const settings = cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[2].settings);
     const preferences = sanitizeSoundscapePreferences({
       enabled: true,
@@ -170,7 +179,7 @@ describe('sanitizing', () => {
       ],
     });
     expect(preferences.masterVolume).toBe(1);
-    expect(preferences.activePresetId).toBeNull();
+    expect(preferences.activePresetId).toBe(SOUNDSCAPE_FACTORY_PRESETS[2].id);
     expect(preferences.customPresets.map((preset) => [preset.id, preset.name])).toEqual([['a', 'Night']]);
   });
 });
@@ -199,7 +208,7 @@ describe('stepping through soundscapes', () => {
   const preferences = sanitizeSoundscapePreferences({});
 
   it('walks the factory soundscapes in order and wraps, when there are no custom ones', () => {
-    let current: SoundscapePreferences = { ...preferences, activePresetId: null };
+    let current: SoundscapePreferences = { ...preferences, activePresetId: SOUNDSCAPE_FACTORY_PRESETS.at(-1)!.id };
     const seen = SOUNDSCAPE_FACTORY_PRESETS.map(() => {
       current = applySoundscapePreset(current, nextSoundscapePreset(current));
       return current.activePresetId;
@@ -342,5 +351,58 @@ describe("the noise cycle", () => {
   it('meets the sine at the bell that is actually nearest to it', () => {
     expect(SOUNDSCAPE_BELL_RAMP_NEAREST_SINE).toBeGreaterThan(0.5);
     expect(SOUNDSCAPE_BELL_RAMP_NEAREST_SINE).toBeLessThan(1);
+  });
+});
+
+describe('editing soundscapes in place', () => {
+  const base = sanitizeSoundscapePreferences({});
+  const factory = SOUNDSCAPE_FACTORY_PRESETS[0];
+  const quieter = (preferences: SoundscapePreferences) => editSoundscape(preferences, { ...preferences.settings, volume: 0.25 });
+
+  it('writes an edit into the soundscape that plays, and keeps a factory one changed until it is restored', () => {
+    const edited = quieter(applySoundscapePreset(base, factory));
+    expect(edited.activePresetId).toBe(factory.id);
+    expect(activeSoundscape(edited).settings.volume).toBe(0.25);
+    const elsewhere = applySoundscapePreset(edited, SOUNDSCAPE_FACTORY_PRESETS[1]);
+    expect(applySoundscapePreset(elsewhere, activeSoundscape(edited)).settings.volume).toBe(0.25);
+    const restored = restoreFactorySoundscape(edited, factory.id);
+    expect(restored.factoryEdits).toEqual([]);
+    expect(restored.settings).toEqual(factory.settings);
+  });
+
+  it('never stores a solo in the soundscape', () => {
+    const soloed = editSoundscape(base, { ...base.settings, channels: base.settings.channels.map((channel, index) => ({ ...channel, solo: index === 0 })) });
+    expect(soloed.settings.channels[0].solo).toBe(true);
+    expect(activeSoundscape(soloed).settings.channels.some((channel) => channel.solo)).toBe(false);
+  });
+
+  it('creates copies of the one that plays as Soundscape A, B, ... and trashes one onto its neighbour', () => {
+    const first = createSoundscape(quieter(base), 'one')!;
+    expect(activeSoundscape(first)).toMatchObject({ id: 'one', name: 'Soundscape A', icon: null });
+    expect(activeSoundscape(first).settings.volume).toBe(0.25);
+    const second = createSoundscape(first, 'two')!;
+    expect(activeSoundscape(second).name).toBe('Soundscape B');
+    const trashed = deleteSoundscape(second, 'two');
+    expect(trashed.activePresetId).toBe('one');
+    expect(trashed.customPresets.map((preset) => preset.id)).toEqual(['one']);
+  });
+
+  it('renames anything to a name no other soundscape has, and sets or clears an icon', () => {
+    const renamed = renameSoundscape(base, factory.id, 'Rainy');
+    expect(activeSoundscape(renamed).name).toBe('Rainy');
+    expect(renameSoundscape(renamed, factory.id, SOUNDSCAPE_FACTORY_PRESETS[1].name.toUpperCase())).toBe(renamed);
+    const iconed = setSoundscapeIcon(renamed, factory.id, 'fa-moon');
+    expect(soundscapeMarkOf(activeSoundscape(iconed))).toEqual({ iconClass: 'fa-solid fa-moon' });
+    expect(setSoundscapeIcon(iconed, factory.id, 'not an icon')).toBe(iconed);
+    expect(soundscapeMarkOf(activeSoundscape(setSoundscapeIcon(iconed, factory.id, null))))
+      .toEqual({ iconClass: `fa-solid ${FACTORY_SOUNDSCAPE_ICONS[factory.id]}` });
+  });
+
+  it('keeps settings that name no soundscape as one of the listener\'s own', () => {
+    const settings = { ...base.settings, volume: 0.3 };
+    const loaded = sanitizeSoundscapePreferences({ settings, activePresetId: null });
+    expect(activeSoundscape(loaded)).toMatchObject({ name: 'Soundscape A' });
+    expect(activeSoundscape(loaded).settings.volume).toBe(0.3);
+    expect(sanitizeSoundscapePreferences({ settings: factory.settings, activePresetId: null }).activePresetId).toBe(factory.id);
   });
 });

@@ -179,17 +179,14 @@ export class SoundscapeEngine {
     if (serialised !== this.sentConfiguration) {
       // The first configuration of a playback starts it (its fade-in is
       // the output's); after that, choosing another soundscape is a
-      // transition, and anything else a settings change. An edit that
-      // leaves the preset (activePresetId null) is still that soundscape,
-      // so editing back onto it -- a channel turned off and on again -- is
-      // a settings change, not a crossfade into a fresh voice.
+      // transition, and anything else a settings change: an edit writes
+      // the soundscape that plays, so its id stays put.
       const switching = this.sentConfiguration !== null
-        && preferences.activePresetId !== null
         && preferences.activePresetId !== this.sentPresetId;
       playback.configure(configuration, switching ? SOUNDSCAPE_SWITCH_SEC : 0);
       this.sentConfiguration = serialised;
     }
-    if (preferences.activePresetId !== null) this.sentPresetId = preferences.activePresetId;
+    this.sentPresetId = preferences.activePresetId;
   }
 
   private fadeOutAndClose(): void {

@@ -3,42 +3,35 @@
  * follows them (MobileSoundscapeApp.tsx).
  *
  * The cycle is the desktop's (soundscapeCycle: every factory soundscape,
- * then the user's own). Unsaved changes are not a stop: the page is on no
- * entry then, and stepping goes to the first (or, backwards, the last).
- *
- * The page is current on an entry when its settings sound the same as it
- * (soundscapeSettingsSignature, which ignores solo).
+ * then the user's own). The page is always on an entry: the soundscape
+ * that plays (`activePresetId`), whose edits are written to it.
  */
 import { soundscapeConfiguration } from '@thockdown/soundscape/SoundscapeEngine'
 import {
+  activeSoundscape,
   cloneSettings,
   soundscapeCycle,
-  soundscapeSettingsSignature,
   type SoundscapePreferences,
+  type SoundscapePreset,
 } from '@thockdown/soundscape/soundscape'
 import type { SessionEntry, SessionState } from './backgroundAudioHost'
 
-const UNSAVED_NAME = 'Unsaved soundscape'
-
-export function sessionEntries(customPresets: SoundscapePreferences['customPresets']): SessionEntry[] {
-  return soundscapeCycle({ customPresets }).map((preset) => ({
+export function sessionEntries(presets: readonly SoundscapePreset[]): SessionEntry[] {
+  return presets.map((preset) => ({
     id: preset.id,
     name: preset.name,
     configuration: JSON.stringify(soundscapeConfiguration(preset.settings)),
   }))
 }
 
-/** The soundscape (factory or the user's) the settings sound the same as, preferring the active one; null for none. */
-export function currentEntryId(preferences: SoundscapePreferences): string | null {
-  const signature = soundscapeSettingsSignature(preferences.settings)
-  const matching = soundscapeCycle(preferences).filter((preset) => soundscapeSettingsSignature(preset.settings) === signature)
-  return (matching.find((preset) => preset.id === preferences.activePresetId) ?? matching[0])?.id ?? null
+/** The entry the page is on: the soundscape that plays. */
+export function currentEntryId(preferences: SoundscapePreferences): string {
+  return activeSoundscape(preferences).id
 }
 
-/** The name of the soundscape the settings sound the same as, or the unsaved one's when they match none. */
+/** The name of the soundscape that plays. */
 export function currentSoundscapeName(preferences: SoundscapePreferences): string {
-  const id = currentEntryId(preferences)
-  return soundscapeCycle(preferences).find((preset) => preset.id === id)?.name ?? UNSAVED_NAME
+  return activeSoundscape(preferences).name
 }
 
 /**

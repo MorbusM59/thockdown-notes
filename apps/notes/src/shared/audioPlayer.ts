@@ -127,7 +127,7 @@ export type AudioPlayerApi = {
   getMusicSets(): Promise<MusicSet[]>;
   /** Create a set at the end of the ordered set list. */
   createMusicSet(): Promise<MusicSet[]>;
-  /** Rename a user-created set. Factory names are fixed. */
+  /** Rename a set, factory sets included; names are unique. */
   renameMusicSet(slot: PlaylistSlot, name: string): Promise<MusicSet[]>;
   /** Move one set onto another row, shifting the intervening rows. */
   moveMusicSet(draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot): Promise<MusicSet[]>;

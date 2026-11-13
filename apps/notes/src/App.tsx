@@ -52,7 +52,7 @@ import {
   type SidebarListSection, type SidebarListView, type SidebarSections,
 } from './shared/sidebarSections'
 import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
-import { SoundscapesView } from './sidebar/SoundscapesView'
+import { SoundscapeDock, SoundscapeIconPicker, SoundscapesView } from './sidebar/SoundscapesView'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -173,8 +173,8 @@ import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } 
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId } from './shared/optionsSections'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
 import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
-import { MusicLibraryDock, MusicLibraryPanel } from './sidebar/MusicLibraryPanel'
-import { closeMusicSetIconPick, readMusicSetIconPick, setMusicSetIconQuery, subscribeMusicSetIconPick } from './sidebar/iconPicker/musicSetIconPicker'
+import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from './sidebar/MusicLibraryPanel'
+import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
 import { TextButton } from './components/TextButton'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
@@ -6471,18 +6471,20 @@ ${markdownHtml}
   const isFindMode = sidebarMode === 'find'
   const isOptionsSearchMode = sidebarMode === 'options'
   const isSongsSearchMode = sidebarMode === 'songs'
-  // While a set's icon is being picked (sidebar/iconPicker), the Songs view's
-  // filter field filters the icons, with a query of the picker's own: the
-  // song filter is left as it was and is simply back when the picker closes.
-  const musicSetIconPick = useSyncExternalStore(subscribeMusicSetIconPick, readMusicSetIconPick)
-  const isIconPickMode = isSongsSearchMode && musicSetIconPick !== null
-  const songsFieldQuery = isIconPickMode ? musicSetIconPick.query : songsSearchQuery
-  const setSongsFieldQuery = isIconPickMode ? setMusicSetIconQuery : setSongsSearchQuery
-  // A pick belongs to the Songs view: leaving it by any route ends the pick,
-  // so an open pick always means the picker is on screen (Escape relies on it).
+  // While an entry's icon is being picked (sidebar/iconPicker/iconPick.ts),
+  // its view's filter field filters the icons, with a query of the picker's
+  // own: the view's filter is left as it was and is simply back when the
+  // picker closes.
+  const iconPick = useSyncExternalStore(subscribeIconPick, readIconPick)
+  const iconPickView = iconPick === null ? null : ICON_PICK_VIEW[iconPick.target.kind]
+  const isIconPickMode = iconPickView !== null && iconPickView === sidebarMode
+  const iconPickQuery = isIconPickMode && iconPick ? iconPick.query : ''
+  // A pick belongs to its entry's view: leaving the view by any route ends
+  // the pick, so an open pick always means the picker is on screen (Escape
+  // relies on it).
   useEffect(() => {
-    if (sidebarMode !== 'songs') closeMusicSetIconPick()
-  }, [sidebarMode])
+    if (iconPickView !== null && iconPickView !== sidebarMode) closeIconPick()
+  }, [sidebarMode, iconPickView])
   const isSoundscapesSearchMode = sidebarMode === 'soundscapes'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
 
@@ -7201,10 +7203,10 @@ ${markdownHtml}
       if (isVisualizerMode && event.key === 'Escape') escapeConsumedByFieldRef.current = true
       // Escape closes an icon pick and does nothing else: its release must
       // not also switch the note's view, nor its hold raise the ring.
-      if (event.key === 'Escape' && readMusicSetIconPick() !== null) {
+      if (event.key === 'Escape' && readIconPick() !== null) {
         escapeConsumedByFieldRef.current = true
         event.preventDefault()
-        if (!event.repeat) closeMusicSetIconPick()
+        if (!event.repeat) closeIconPick()
         return
       }
       if (event.defaultPrevented) return
@@ -8086,15 +8088,17 @@ ${markdownHtml}
                   autoCorrect="off"
                   autoCapitalize="off"
                   placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isIconPickMode ? 'Filter icons...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : isSoundscapesSearchMode ? 'Search soundscape options...' : 'Search for content or #tag...'}
-                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsFieldQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery}
+                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isIconPickMode ? iconPickQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
                     if (isFindMode) {
                       getActiveSection()?.setDocumentFindQuery(value)
+                    } else if (isIconPickMode) {
+                      setIconPickQuery(value)
                     } else if (isOptionsSearchMode) {
                       setOptionsSearchQuery(value)
                     } else if (isSongsSearchMode) {
-                      setSongsFieldQuery(value)
+                      setSongsSearchQuery(value)
                     } else if (isSoundscapesSearchMode) {
                       setSoundscapesSearchQuery(value)
                     } else {
@@ -8152,10 +8156,10 @@ ${markdownHtml}
                     className="btn-icon search-input-case-toggle"
                     data-tooltip="Clear search"
                     aria-label="Clear search"
-                    disabled={(isSongsSearchMode ? songsFieldQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : optionsSearchQuery) === ''}
+                    disabled={(isIconPickMode ? iconPickQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : optionsSearchQuery) === ''}
                     /* mouse-default: focus semantics, read by focusOwnership on mousedown */
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => (isSongsSearchMode ? setSongsFieldQuery('') : isSoundscapesSearchMode ? setSoundscapesSearchQuery('') : setOptionsSearchQuery(''))}
+                    onClick={() => (isIconPickMode ? setIconPickQuery('') : isSongsSearchMode ? setSongsSearchQuery('') : isSoundscapesSearchMode ? setSoundscapesSearchQuery('') : setOptionsSearchQuery(''))}
                   >
                     <span className="fa-solid fa-xmark" aria-hidden="true" />
                   </button>
@@ -8187,7 +8191,7 @@ ${markdownHtml}
                   Library and Soundscapes the soundscape's presets and
                   controls. */}
               {/* A press on any view, the Songs view's own included, ends an icon pick. */}
-              <div className="view-toggle" role="tablist" aria-label="Sidebar views" onClickCapture={closeMusicSetIconPick}>
+              <div className="view-toggle" role="tablist" aria-label="Sidebar views" onClickCapture={closeIconPick}>
                 {([
                   { view: 'notes', label: 'Notes', icon: 'fa-solid fa-file-lines' },
                   { view: 'images', label: 'Images', icon: 'fa-solid fa-image' },
@@ -8390,9 +8394,13 @@ ${markdownHtml}
                         ) : null}
                       </div>
                     ) : sidebarMode === 'songs' ? (
-                      <MusicLibraryPanel grouping={musicSetListGrouping} filter={songsSearchQuery} />
+                      isIconPickMode
+                        ? <MusicSetIconPicker query={iconPickQuery} />
+                        : <MusicLibraryPanel grouping={musicSetListGrouping} filter={songsSearchQuery} />
                     ) : sidebarMode === 'soundscapes' ? (
-                      <SoundscapesView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
+                      isIconPickMode
+                        ? <SoundscapeIconPicker preferences={soundscapePreferences} onChange={setSoundscapePreferences} query={iconPickQuery} />
+                        : <SoundscapesView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
@@ -8640,6 +8648,12 @@ ${markdownHtml}
                     // picker docks but straight on the sidebar, with no box.
                     <div className="sidebar-plain-dock">
                       <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'soundscapes' ? (
+                    // The playing soundscape's row, docked as the Music Library's is.
+                    <div className="sidebar-plain-dock">
+                      <SoundscapeDock preferences={soundscapePreferences} onChange={setSoundscapePreferences} />
                     </div>
                   ) : null}
                   {isReplaceMode ? (

@@ -3542,7 +3542,6 @@ export class DatabaseService {
   }
 
   renameMusicSet(slot: PlaylistSlot, name: string): MusicSet[] {
-    if (isFactoryMusicSet(slot)) return this.getMusicSets();
     const nextName = sanitizeDocumentText(name).trim().slice(0, 64);
     if (!nextName) return this.getMusicSets();
     const db = this.requireDb();

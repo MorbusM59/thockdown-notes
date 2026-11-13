@@ -377,8 +377,18 @@ export interface SoundscapeSettings {
 export interface SoundscapePreset {
   id: string;
   name: string;
+  /**
+   * The Font Awesome solid icon the listener picked (`fa-wind`), or null for
+   * the soundscape's default: a factory soundscape's own icon
+   * (FACTORY_SOUNDSCAPE_ICONS), anyone else's initials (soundscapeMarkOf).
+   */
+  icon: string | null;
   settings: SoundscapeSettings;
 }
+
+/** A solid icon's name as a soundscape stores it: `fa-` and the icon's id. */
+export const SOUNDSCAPE_ICON_PATTERN = /^fa-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SOUNDSCAPE_NAME_MAX_LENGTH = 40;
 
 export interface SoundscapePreferences {
   enabled: boolean;
@@ -388,9 +398,24 @@ export interface SoundscapePreferences {
    * part of a preset and does not affect which preset reads as selected.
    */
   masterVolume: number;
+  /**
+   * What plays: the active soundscape's settings, plus a soloed channel if
+   * the listener is soloing one (a solo is a listening aid and is never
+   * stored in a soundscape). Every edit writes it AND the active soundscape
+   * (`editSoundscape`), so there are no pending changes: what plays is
+   * always a soundscape the listener can see in the list.
+   */
   settings: SoundscapeSettings;
-  activePresetId: string | null;
+  /** The soundscape that plays: always one of `soundscapePresets`. */
+  activePresetId: string;
   customPresets: SoundscapePreset[];
+  /**
+   * The factory soundscapes the listener changed (name, icon or settings),
+   * whole, by the factory soundscape's id. A factory soundscape not listed
+   * here is exactly as shipped, and follows the shipped one when it is
+   * retuned; restoring one (`restoreFactorySoundscape`) takes it out.
+   */
+  factoryEdits: SoundscapePreset[];
   /**
    * The order the listener put the soundscapes in, factory and their own
    * alike, as preset ids: the order every list of soundscapes shows them in
@@ -399,14 +424,6 @@ export interface SoundscapePreferences {
    * empty order is the natural one.
    */
   presetOrder: string[];
-  /**
-   * The UNSAVED soundscape: the settings as the listener last edited them.
-   * Every edit writes it (`SoundscapeOptions.tsx`'s `withSettings`) and
-   * selecting a preset leaves it alone, so the plus after the presets brings
-   * it back. The plus is shown exactly while this equals no preset
-   * (`SoundscapeOptions.tsx`), as layouts and soundstages do.
-   */
-  unsaved: SoundscapeSettings;
 }
 
 // ---------------------------------------------------------------------------
@@ -640,6 +657,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'stormy-night',
     name: 'Stormy Night',
+    icon: null,
     settings: soundscape({
       'chimes-1': { activity: 0.79, distance: 0.86, hardness: 1, material: 0.68, pan: -0.61, pitchHz: chimeSemitoneHz(-10), ringSec: 15, scale: 1, tubes: 8, unison: 0, volume: 0.66 },
       'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 1, unison: 0.84, volume: 0.57, weather: 1 },
@@ -655,6 +673,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'wild-sea',
     name: 'Wild Sea',
+    icon: null,
     settings: soundscape({
       'noise-1': { brightnessHz: 327.08, colour: 0.48, depth: 0.73, sweep: -0.24, volume: 0.83, weather: 1 },
       'noise-2': { brightnessHz: 1450.47, sweep: 0.34, weather: 1 },
@@ -671,6 +690,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'winds',
     name: 'Snowy Peaks',
+    icon: null,
     settings: soundscape({
       'noise-1': { brightnessHz: 113.76, colour: 0.88, focus: 0.75, periodSec: 38.074, skew: 0.25, sweep: 0.24, variation: 0.81, volume: 0.75 },
       'noise-2': { brightnessHz: 1167.94, colour: 0.26, focus: 0.42, skew: 0.34, sweep: 0.2, weather: 1 },
@@ -684,6 +704,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'underwater',
     name: 'Ocean Floor',
+    icon: null,
     settings: soundscape({
       'noise-1': { brightnessHz: 200.89, colour: 0.02, periodSec: 14.615, sweep: 0.04, volume: 1 },
       'noise-2': { brightnessHz: 86.77, colour: 0, focus: 0.58, skew: 0.19, sway: 0.18, sweep: 0.12, volume: 0.88, width: 0.87 },
@@ -696,6 +717,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'campsite',
     name: 'River Camp',
+    icon: null,
     settings: soundscape({
       'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.424 },
       'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.82, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.43, volume: 0.984, width: 0.15 },
@@ -709,6 +731,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'storm',
     name: 'Thunderstorm',
+    icon: null,
     settings: soundscape({
       'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sway: 0.32, sweep: 0.3, variation: 0.6, volume: 0.81, weather: 0.82 },
       'noise-2': { brightnessHz: 6976.55, colour: 0.76, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sway: 0.26, sweep: 1, variation: 0.65, volume: 0.79, weather: 0.97 },
@@ -726,6 +749,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'temple',
     name: 'Temple Grounds',
+    icon: null,
     settings: soundscape({
       'chimes-1': { activity: 0.9, distance: 0.95, hardness: 0.52, material: 0.13, pan: -0.5, pitchHz: chimeSemitoneHz(-5), ringSec: 13.829565, scale: 64, tubes: 8, unison: 1, volume: 0.7, weather: 1 },
       'chimes-2': { activity: 1, distance: 0.55, hardness: 0.65, material: 0.04, pan: 0.26, pitchHz: chimeSemitoneHz(-3), ringSec: 15, scale: 64, unison: 0.62, weather: 1 },
@@ -747,6 +771,7 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
   {
     id: 'cloudburst',
     name: 'Cloudburst',
+    icon: null,
     settings: soundscape({
       'noise-1': { brightnessHz: 1850.78, colour: 0.09, distance: 0.7, focus: 0.1, sweep: 0.28, volume: 0.51, weather: 0.95 },
       'noise-2': { brightnessHz: 452.68, colour: 0.42, distance: 0.5, focus: 0.12, sweep: 0.52, volume: 0.84, weather: 1 },
@@ -766,8 +791,8 @@ export const DEFAULT_SOUNDSCAPE_PREFERENCES: SoundscapePreferences = {
   settings: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
   activePresetId: SOUNDSCAPE_FACTORY_PRESETS[0].id,
   customPresets: [],
+  factoryEdits: [],
   presetOrder: [],
-  unsaved: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
 };
 
 export function cloneSettings(settings: SoundscapeSettings): SoundscapeSettings {
@@ -918,46 +943,195 @@ export function sanitizeSoundscapeSettings(input: unknown): SoundscapeSettings {
   };
 }
 
-export function sanitizeSoundscapePreferences(input: unknown): SoundscapePreferences {
-  const source = asRecord(input);
-  const rawCustom = Array.isArray(source.customPresets) ? source.customPresets : [];
-  const seenIds = new Set<string>();
-  const customPresets = rawCustom.slice(0, MAX_SOUNDSCAPE_CUSTOM_PRESETS).flatMap((item): SoundscapePreset[] => {
-    const entry = asRecord(item);
-    if (typeof entry.id !== 'string' || !entry.id || seenIds.has(entry.id)) return [];
-    if (typeof entry.name !== 'string' || !entry.name.trim()) return [];
-    if (!Array.isArray(asRecord(entry.settings).channels)) return [];
-    seenIds.add(entry.id);
-    const settings = sanitizeSoundscapeSettings(entry.settings);
-    return [{
-      id: entry.id.slice(0, 80),
-      name: entry.name.trim().slice(0, 40),
-      settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) },
-    }];
-  });
-  const activePresetId = typeof source.activePresetId === 'string'
-    && (SOUNDSCAPE_FACTORY_PRESETS.some((item) => item.id === source.activePresetId)
-      || customPresets.some((item) => item.id === source.activePresetId))
-    ? source.activePresetId
-    : null;
-
-  const settings = sanitizeSoundscapeSettings(source.settings);
+/** A stored soundscape, or null when it is not one; solo is never stored. */
+function sanitizeSoundscapePreset(item: unknown): SoundscapePreset | null {
+  const entry = asRecord(item);
+  if (typeof entry.id !== 'string' || !entry.id) return null;
+  if (typeof entry.name !== 'string' || !entry.name.trim()) return null;
+  if (!Array.isArray(asRecord(entry.settings).channels)) return null;
+  const settings = sanitizeSoundscapeSettings(entry.settings);
   return {
-    enabled: source.enabled === true,
-    masterVolume: finiteRange(source.masterVolume, 0, 1, SOUNDSCAPE_DEFAULT_MASTER_VOLUME),
-    settings,
-    activePresetId,
-    customPresets,
-    presetOrder: Array.isArray(source.presetOrder)
-      ? [...new Set(source.presetOrder.filter((id): id is string => typeof id === 'string'))]
-      : [],
-    unsaved: source.unsaved === undefined ? cloneSettings(settings) : sanitizeSoundscapeSettings(source.unsaved),
+    id: entry.id.slice(0, 80),
+    name: entry.name.trim().slice(0, SOUNDSCAPE_NAME_MAX_LENGTH),
+    icon: typeof entry.icon === 'string' && SOUNDSCAPE_ICON_PATTERN.test(entry.icon) ? entry.icon : null,
+    settings: withoutSolo(settings),
   };
 }
 
+function withoutSolo(settings: SoundscapeSettings): SoundscapeSettings {
+  return { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) };
+}
+
+export function sanitizeSoundscapePreferences(input: unknown): SoundscapePreferences {
+  const source = asRecord(input);
+  const seenIds = new Set<string>(SOUNDSCAPE_FACTORY_PRESETS.map((preset) => preset.id));
+  const customPresets = (Array.isArray(source.customPresets) ? source.customPresets : [])
+    .slice(0, MAX_SOUNDSCAPE_CUSTOM_PRESETS)
+    .flatMap((item): SoundscapePreset[] => {
+      const preset = sanitizeSoundscapePreset(item);
+      if (!preset || seenIds.has(preset.id)) return [];
+      seenIds.add(preset.id);
+      return [preset];
+    });
+  const editedIds = new Set<string>();
+  const factoryEdits = (Array.isArray(source.factoryEdits) ? source.factoryEdits : []).flatMap((item): SoundscapePreset[] => {
+    const preset = sanitizeSoundscapePreset(item);
+    if (!preset || editedIds.has(preset.id) || !SOUNDSCAPE_FACTORY_PRESETS.some((factory) => factory.id === preset.id)) return [];
+    editedIds.add(preset.id);
+    return [preset];
+  });
+  const settings = sanitizeSoundscapeSettings(source.settings);
+  const preferences: SoundscapePreferences = {
+    enabled: source.enabled === true,
+    masterVolume: finiteRange(source.masterVolume, 0, 1, SOUNDSCAPE_DEFAULT_MASTER_VOLUME),
+    settings,
+    activePresetId: typeof source.activePresetId === 'string' ? source.activePresetId : '',
+    customPresets,
+    factoryEdits,
+    presetOrder: Array.isArray(source.presetOrder)
+      ? [...new Set(source.presetOrder.filter((id): id is string => typeof id === 'string'))]
+      : [],
+  };
+  if (soundscapePresets(preferences).some((preset) => preset.id === preferences.activePresetId)) return preferences;
+  // What plays is always a soundscape in the list. Settings that name none
+  // (a save from before that rule, or one whose soundscape is gone) are the
+  // soundscape the listener was hearing: it becomes one of their own rather
+  // than being dropped, unless a soundscape already sounds exactly like it.
+  const signature = soundscapeSettingsSignature(settings);
+  const matching = soundscapePresets(preferences).find((preset) => soundscapeSettingsSignature(preset.settings) === signature);
+  if (matching) return { ...preferences, activePresetId: matching.id };
+  if (customPresets.length >= MAX_SOUNDSCAPE_CUSTOM_PRESETS) return applySoundscapePreset(preferences, soundscapePresets(preferences)[0], preferences.enabled);
+  let keptId = 1;
+  while (seenIds.has(`kept-${keptId}`)) keptId += 1;
+  const kept: SoundscapePreset = { id: `kept-${keptId}`, name: defaultSoundscapeName(preferences), icon: null, settings: withoutSolo(settings) };
+  return { ...preferences, activePresetId: kept.id, customPresets: [...customPresets, kept] };
+}
+
+/**
+ * Every soundscape, factory first and then the listener's own, in that
+ * natural order: each factory soundscape as the listener left it (its
+ * `factoryEdits` entry, or as shipped). The one place the two lists meet.
+ */
+export function soundscapePresets(preferences: Pick<SoundscapePreferences, 'customPresets' | 'factoryEdits'>): SoundscapePreset[] {
+  const edits = new Map(preferences.factoryEdits.map((preset) => [preset.id, preset]));
+  return [...SOUNDSCAPE_FACTORY_PRESETS.map((preset) => edits.get(preset.id) ?? preset), ...preferences.customPresets];
+}
+
+export function isFactorySoundscape(id: string): boolean {
+  return SOUNDSCAPE_FACTORY_PRESETS.some((preset) => preset.id === id);
+}
+
+/** What a soundscape is drawn with: its picked icon, a factory soundscape's own, or its initials. */
+export function soundscapeMarkOf(preset: SoundscapePreset): { iconClass: string } | { letters: string } {
+  const icon = preset.icon ?? FACTORY_SOUNDSCAPE_ICONS[preset.id];
+  if (icon) return { iconClass: `fa-solid ${icon}` };
+  const words = preset.name.trim().split(/\s+/).filter(Boolean);
+  const letters = words.length >= 2 ? [...words[0]][0] + [...words[1]][0] : [...(words[0] ?? '')].slice(0, 2).join('');
+  return { letters: letters.toUpperCase() };
+}
+
+/** The first free "Soundscape A", "Soundscape B", ... "Soundscape AA". */
+export function defaultSoundscapeName(preferences: Pick<SoundscapePreferences, 'customPresets' | 'factoryEdits'>): string {
+  const used = new Set(soundscapePresets(preferences).map((preset) => preset.name.trim().toLowerCase()));
+  for (let index = 1; ; index += 1) {
+    let value = index;
+    let letters = '';
+    while (value > 0) {
+      value -= 1;
+      letters = String.fromCharCode(65 + (value % 26)) + letters;
+      value = Math.floor(value / 26);
+    }
+    const name = `Soundscape ${letters}`;
+    if (!used.has(name.toLowerCase())) return name;
+  }
+}
+
+/** The soundscape that plays. */
+export function activeSoundscape(preferences: SoundscapePreferences): SoundscapePreset {
+  const presets = soundscapePresets(preferences);
+  return presets.find((preset) => preset.id === preferences.activePresetId) ?? presets[0];
+}
+
+/** One soundscape replaced, wherever it is kept: a factory one becomes (or stays) an edit. */
+function withPreset(preferences: SoundscapePreferences, next: SoundscapePreset): SoundscapePreferences {
+  if (isFactorySoundscape(next.id)) {
+    return { ...preferences, factoryEdits: [...preferences.factoryEdits.filter((preset) => preset.id !== next.id), next] };
+  }
+  return { ...preferences, customPresets: preferences.customPresets.map((preset) => (preset.id === next.id ? next : preset)) };
+}
+
+/**
+ * New settings for what plays, written to the active soundscape as well:
+ * every edit of the soundscape goes through here. A solo stays in what plays
+ * and is left out of what is kept.
+ */
+export function editSoundscape(preferences: SoundscapePreferences, settings: SoundscapeSettings): SoundscapePreferences {
+  const active = activeSoundscape(preferences);
+  return withPreset({ ...preferences, settings }, { ...active, settings: withoutSolo(settings) });
+}
+
+/** Rename a soundscape. A blank name changes nothing; names are unique, case aside. */
+export function renameSoundscape(preferences: SoundscapePreferences, id: string, name: string): SoundscapePreferences {
+  const next = name.trim().slice(0, SOUNDSCAPE_NAME_MAX_LENGTH);
+  const preset = soundscapePresets(preferences).find((candidate) => candidate.id === id);
+  if (!preset || !next || next === preset.name) return preferences;
+  if (soundscapePresets(preferences).some((candidate) => candidate.id !== id && candidate.name.toLowerCase() === next.toLowerCase())) return preferences;
+  return withPreset(preferences, { ...preset, name: next });
+}
+
+/** Give a soundscape a solid icon (`fa-wind`), or null for its default; a malformed one changes nothing. */
+export function setSoundscapeIcon(preferences: SoundscapePreferences, id: string, icon: string | null): SoundscapePreferences {
+  const preset = soundscapePresets(preferences).find((candidate) => candidate.id === id);
+  if (!preset || (icon !== null && !SOUNDSCAPE_ICON_PATTERN.test(icon)) || preset.icon === icon) return preferences;
+  return withPreset(preferences, { ...preset, icon });
+}
+
+/**
+ * A new soundscape of the listener's own, a copy of the one that plays under
+ * the first free "Soundscape A/B/..." name, and played. Null when there is
+ * no room for another.
+ */
+export function createSoundscape(preferences: SoundscapePreferences, id: string): SoundscapePreferences | null {
+  if (preferences.customPresets.length >= MAX_SOUNDSCAPE_CUSTOM_PRESETS) return null;
+  const created: SoundscapePreset = {
+    id,
+    name: defaultSoundscapeName(preferences),
+    icon: null,
+    settings: withoutSolo(cloneSettings(preferences.settings)),
+  };
+  return { ...preferences, customPresets: [...preferences.customPresets, created], activePresetId: id };
+}
+
+/**
+ * Trash one of the listener's own soundscapes. When it is the one that
+ * plays, the soundscape before it in the listener's order plays instead
+ * (the first, when it was first).
+ */
+export function deleteSoundscape(preferences: SoundscapePreferences, id: string): SoundscapePreferences {
+  if (!preferences.customPresets.some((preset) => preset.id === id)) return preferences;
+  const order = orderedSoundscapePresets(preferences);
+  const index = order.findIndex((preset) => preset.id === id);
+  const next = {
+    ...preferences,
+    customPresets: preferences.customPresets.filter((preset) => preset.id !== id),
+    presetOrder: preferences.presetOrder.filter((presetId) => presetId !== id),
+  };
+  if (preferences.activePresetId !== id) return next;
+  const successor = order[index - 1] ?? order[index + 1];
+  return applySoundscapePreset(next, successor, preferences.enabled);
+}
+
+/** A factory soundscape as shipped again: name, icon and settings; heard at once when it plays. */
+export function restoreFactorySoundscape(preferences: SoundscapePreferences, id: string): SoundscapePreferences {
+  const factory = SOUNDSCAPE_FACTORY_PRESETS.find((preset) => preset.id === id);
+  if (!factory) return preferences;
+  const next = { ...preferences, factoryEdits: preferences.factoryEdits.filter((preset) => preset.id !== id) };
+  return preferences.activePresetId === id ? applySoundscapePreset(next, factory, preferences.enabled) : next;
+}
+
 /** Every soundscape, factory and custom, in the listener's order (`presetOrder`). */
-export function orderedSoundscapePresets(preferences: SoundscapePreferences): SoundscapePreset[] {
-  const natural = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets];
+export function orderedSoundscapePresets(preferences: Pick<SoundscapePreferences, 'customPresets' | 'factoryEdits' | 'presetOrder'>): SoundscapePreset[] {
+  const natural = soundscapePresets(preferences);
   const rank = new Map(preferences.presetOrder.map((id, index) => [id, index]));
   return natural
     .map((preset, index) => ({ preset, key: rank.get(preset.id) ?? preferences.presetOrder.length + index }))
@@ -987,12 +1161,11 @@ export function moveSoundscapePreset(preferences: SoundscapePreferences, dragged
  * channels are what is chosen. The one way a preset is applied, whether
  * from the settings panel or the player's switch.
  */
-export function applySoundscapePreset(preferences: SoundscapePreferences, preset: SoundscapePreset): SoundscapePreferences {
-  const settings = cloneSettings(preset.settings);
+export function applySoundscapePreset(preferences: SoundscapePreferences, preset: SoundscapePreset, enabled = true): SoundscapePreferences {
   return {
     ...preferences,
-    enabled: true,
-    settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) },
+    enabled,
+    settings: withoutSolo(cloneSettings(preset.settings)),
     activePresetId: preset.id,
   };
 }
@@ -1001,10 +1174,10 @@ export function applySoundscapePreset(preferences: SoundscapePreferences, preset
  * The soundscapes stepping goes through, from the desktop player's
  * soundscape button and the mobile app's media controls alike: every factory
  * soundscape and then the user's own, in the order the settings panel shows
- * them. Unsaved changes are not a stop: stepping away from them leaves them.
+ * them.
  */
-export function soundscapeCycle(preferences: Pick<SoundscapePreferences, 'customPresets'>): readonly SoundscapePreset[] {
-  return [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets];
+export function soundscapeCycle(preferences: Pick<SoundscapePreferences, 'customPresets' | 'factoryEdits'>): readonly SoundscapePreset[] {
+  return soundscapePresets(preferences);
 }
 
 /** The soundscape after the active one in soundscapeCycle, wrapping at the end. */

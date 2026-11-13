@@ -28,7 +28,7 @@ describe('soundscape files', () => {
 
   it('carry a soundscape\'s own volume, and read one saved before it existed as unity', () => {
     const settings = { ...neutralSoundscape(), volume: 0.62 }
-    const file = buildSoundscapeFile([{ id: 'quiet', name: 'Quiet', settings }])
+    const file = buildSoundscapeFile([{ id: 'quiet', name: 'Quiet', icon: null, settings }])
     expect(file).toContain('volume: 0.62')
     expect(parseSoundscapeFile(file)[0].settings.volume).toBe(0.62)
     // A preference saved before the field existed has no volume at all.
@@ -37,7 +37,7 @@ describe('soundscape files', () => {
   })
 
   it('write only what differs from the neutral soundscape', () => {
-    const file = buildSoundscapeFile([{ id: 'x', name: 'Silence', settings: neutralSoundscape() }])
+    const file = buildSoundscapeFile([{ id: 'x', name: 'Silence', icon: null, settings: neutralSoundscape() }])
     const [line] = parsePresetLines(file, 'NEUTRAL_SOUNDSCAPE')
     expect(line.overrides).toEqual({ name: 'Silence' })
     // Its own fixture rather than a factory preset, so editing a preset cannot
@@ -46,7 +46,7 @@ describe('soundscape files', () => {
     const settings = neutralSoundscape()
     const rainChannel = settings.channels.find((channel) => channel.id === 'rain-1')!
     rainChannel.enabled = true
-    const rain = buildSoundscapeFile([{ id: 'rain', name: 'Rain', settings }])
+    const rain = buildSoundscapeFile([{ id: 'rain', name: 'Rain', icon: null, settings }])
     // Disabled channels at their defaults are not written at all.
     expect(rain).not.toContain('"thunder-1"')
     expect(rain).toContain('"rain-1"')

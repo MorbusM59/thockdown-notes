@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- a plain .mjs script, without types
 import { buildSolidIconCatalog, CATALOG_PATH, METADATA_PATH, serializeCatalog } from '../../../scripts/generateSolidIconCatalog.mjs'
 import { MUSIC_SET_ICON_PATTERN } from '../../shared/audioPlayer'
-import { filterSolidIcons } from './musicSetIconPicker'
+import { filterSolidIcons } from './iconPick'
 
 describe('the solid icon catalog', () => {
   it('is what the installed Font Awesome generates (re-run scripts/generateSolidIconCatalog.mjs)', () => {

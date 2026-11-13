@@ -17,7 +17,8 @@ import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarS
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
-  SOUNDSCAPE_FACTORY_PRESETS,
+  activeSoundscape,
+  soundscapePresets,
   type SoundscapePreferences,
 } from '@thockdown/soundscape/soundscape'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
@@ -49,7 +50,7 @@ import {
   type MobileLook,
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
-import { allPresets, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
+import { sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleGrid } from './ScheduleGrid'
 import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
@@ -73,9 +74,7 @@ function clipLengthLabel(minutes: number): string {
 
 /** The name a clip of the current soundscape is saved under. */
 function clipName(preferences: SoundscapePreferences, minutes: number): string {
-  const preset = [...preferences.customPresets, ...SOUNDSCAPE_FACTORY_PRESETS]
-    .find((candidate) => candidate.id === preferences.activePresetId)
-  return `${preset?.name ?? 'Soundscape'} - ${minutes} min`.replace(/[^\w .-]+/g, '')
+  return `${activeSoundscape(preferences).name} - ${minutes} min`.replace(/[^\w .-]+/g, '')
 }
 
 export function MobileSoundscapeApp() {
@@ -91,7 +90,8 @@ export function MobileSoundscapeApp() {
   const loadout = PRESETS[look.mode][look.preset[look.mode]]
   const theme = useMemo(() => themeFrame(loadout, { isPreviewMode: false }), [loadout])
 
-  const customPresets = preferences.customPresets
+  // Every soundscape, factory (as the listener left it) and their own.
+  const presets = useMemo(() => soundscapePresets(preferences), [preferences.customPresets, preferences.factoryEdits])
   // Whether the native session plays (playbackMode.ts); the engine is not
   // started before that is settled, or its first start would open the web
   // playback instead.
@@ -152,10 +152,10 @@ export function MobileSoundscapeApp() {
 
   // The daily schedule (schedule.ts). Its events are worked out here and
   // handed to the native session, which runs them with or without this page.
-  const [schedule, setSchedule] = useState<Schedule>(() => loadSchedule(preferences.customPresets))
+  const [schedule, setSchedule] = useState<Schedule>(() => loadSchedule(soundscapePresets(preferences)))
   useEffect(() => saveSchedule(schedule), [schedule])
   // A deleted soundscape empties the slots that held it.
-  useEffect(() => setSchedule((current) => sanitizeSchedule(current, customPresets)), [customPresets])
+  useEffect(() => setSchedule((current) => sanitizeSchedule(current, presets)), [presets])
   const events = useMemo(() => scheduleEvents(schedule), [schedule])
   useEffect(() => {
     if (!native) return
@@ -164,14 +164,14 @@ export function MobileSoundscapeApp() {
       enabled: schedule.enabled,
       masterVolume: preferences.masterVolume,
       events,
-      entries: allPresets(customPresets)
+      entries: presets
         .filter((preset) => named.has(preset.id))
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
-  }, [native, schedule.enabled, events, customPresets, preferences.masterVolume])
+  }, [native, schedule.enabled, events, presets, preferences.masterVolume])
 
   // What the media controls step through, published whenever it changes.
-  const entries = useMemo(() => sessionEntries(customPresets), [customPresets])
+  const entries = useMemo(() => sessionEntries(presets), [presets])
   const currentId = currentEntryId(preferences)
   const currentName = currentSoundscapeName(preferences)
   useEffect(() => {
@@ -439,7 +439,7 @@ export function MobileSoundscapeApp() {
                   <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleGrid
                     schedule={schedule}
-                    customPresets={customPresets}
+                    presets={presets}
                     pickedPresetId={pickedPresetId}
                     onChange={setSchedule}
                   />}

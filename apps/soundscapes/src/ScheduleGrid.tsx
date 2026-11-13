@@ -43,10 +43,10 @@
  * here is always the slot's.
  */
 import { useEffect, useRef, useState } from 'react'
-import { FACTORY_SOUNDSCAPE_ICONS, type SoundscapePreset } from '@thockdown/soundscape/soundscape'
+import { type SoundscapePreset } from '@thockdown/soundscape/soundscape'
+import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import {
   HOURS,
-  allPresets,
   runAround,
   slotRole,
   type Schedule,
@@ -59,7 +59,8 @@ const MINUTE_STEP = 5
 
 interface ScheduleGridProps {
   schedule: Schedule
-  customPresets: readonly SoundscapePreset[]
+  /** Every soundscape (soundscapePresets). */
+  presets: readonly SoundscapePreset[]
   /** The soundscape picked up, which a tap puts into a slot; null for none. */
   pickedPresetId: string | null
   onChange: (schedule: Schedule) => void
@@ -106,7 +107,7 @@ function useCurrentHour(): number {
   return hour
 }
 
-export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange }: ScheduleGridProps) {
+export function ScheduleGrid({ schedule, presets, pickedPresetId, onChange }: ScheduleGridProps) {
   const currentHour = useCurrentHour()
   const pressRef = useRef<SlotPress | null>(null)
 
@@ -197,10 +198,8 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
       return <span className="mobile-schedule-minute">{String(slot.minute).padStart(2, '0')}</span>
     }
     if (slot.presetId === null) return null
-    const factoryIcon = FACTORY_SOUNDSCAPE_ICONS[slot.presetId]
-    if (factoryIcon) return <span className={`fa-solid ${factoryIcon}`} aria-hidden="true" />
-    const number = customPresets.findIndex((preset) => preset.id === slot.presetId) + 1
-    return <span className="options-loadout-index">{number}</span>
+    const preset = presets.find((candidate) => candidate.id === slot.presetId)
+    return preset ? <SoundscapeMark preset={preset} /> : null
   }
 
   const button = (hour: number) => {
@@ -208,7 +207,7 @@ export function ScheduleGrid({ schedule, customPresets, pickedPresetId, onChange
     const role = slotRole(schedule, hour)
     const name = slot.presetId === null
       ? 'empty'
-      : allPresets(customPresets).find((preset) => preset.id === slot.presetId)?.name ?? slot.presetId
+      : presets.find((preset) => preset.id === slot.presetId)?.name ?? slot.presetId
     const minuteText = role === 'start' ? `, starts at :${String(slot.minute).padStart(2, '0')}`
       : role === 'end' ? `, stops at :${String(slot.minute).padStart(2, '0')}` : ''
     return (

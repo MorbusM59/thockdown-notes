@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SoundscapeEngine, SOUNDSCAPE_SWITCH_SEC } from './SoundscapeEngine';
-import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, type SoundscapePreferences } from './soundscape';
+import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, editSoundscape, type SoundscapePreferences } from './soundscape';
 
 async function engineWithLog() {
   const transitions: number[] = [];
@@ -15,9 +15,9 @@ async function engineWithLog() {
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-function withChannel(preferences: SoundscapePreferences, enabled: boolean, activePresetId: string | null): SoundscapePreferences {
+function withChannel(preferences: SoundscapePreferences, enabled: boolean): SoundscapePreferences {
   const [first, ...rest] = preferences.settings.channels;
-  return { ...preferences, activePresetId, settings: { ...preferences.settings, channels: [{ ...first, enabled }, ...rest] } };
+  return editSoundscape(preferences, { ...preferences.settings, channels: [{ ...first, enabled }, ...rest] });
 }
 
 describe('SoundscapeEngine: a change of soundscape against a change of settings', () => {
@@ -28,16 +28,16 @@ describe('SoundscapeEngine: a change of soundscape against a change of settings'
     const { engine, transitions } = await engineWithLog();
     engine.apply(start);
     await flush();
-    engine.apply(withChannel(start, false, null));
-    engine.apply(withChannel(start, true, preset.id));
+    engine.apply(withChannel(start, false));
+    engine.apply(withChannel(start, true));
     expect(transitions).toEqual([0, 0, 0]);
   });
 
-  it('choosing another preset, also after editing off one, is a transition', async () => {
+  it('choosing another preset, also after editing one, is a transition', async () => {
     const { engine, transitions } = await engineWithLog();
     engine.apply(start);
     await flush();
-    engine.apply(withChannel(start, false, null));
+    engine.apply(withChannel(start, false));
     engine.apply(applySoundscapePreset(start, SOUNDSCAPE_FACTORY_PRESETS[1]));
     expect(transitions).toEqual([0, 0, SOUNDSCAPE_SWITCH_SEC]);
   });

@@ -102,12 +102,13 @@ describe('StateService app-state field round-trip', () => {
       enabled: true,
       masterVolume: 0.37,
       settings,
-      unsaved: settings,
+      factoryEdits: [],
       activePresetId: 'night-rain',
       presetOrder: ['night-rain'],
       customPresets: [{
         id: 'night-rain',
         name: 'Night rain',
+        icon: 'fa-moon',
         settings: { ...settings, channels: settings.channels.map((channel) => ({ ...channel, solo: false })) },
       }],
     }
@@ -512,6 +513,7 @@ describe('StateService app-state field round-trip', () => {
     const savedSoundscape = {
       id: 'my-soundscape',
       name: 'My soundscape',
+      icon: null,
       settings: cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[0].settings),
     }
     await writer.saveAppState({
@@ -586,6 +588,7 @@ describe('StateService app-state field round-trip', () => {
         customPresets: [{
           id: 'unsaved-to-disk',
           name: 'Current session preset',
+          icon: null,
           settings: cloneSettings(SOUNDSCAPE_FACTORY_PRESETS[0].settings),
         }],
       },

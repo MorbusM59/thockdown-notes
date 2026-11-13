@@ -152,7 +152,8 @@ closing; a stop is its own call, made first, so the engine's closing pause
 that follows is ignored (and so is its fade-out to silence, which would
 otherwise silence the schedule taking over). The page also PUBLISHES what
 next and previous step through (`sessionEntries.ts`): the desktop's own
-cycle (`soundscapeCycle`) plus one stop for unsaved changes, each with the
+cycle (`soundscapeCycle`; there are no unsaved changes, an edit is written to
+the soundscape that plays), each with the
 configuration the engine would send, so the session can switch with the
 page paused. Changes the session makes itself (media controls, the
 schedule, closing the app) are reported (`sessionChanged`), and the page asks

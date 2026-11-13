@@ -3,24 +3,26 @@ import {
   DEFAULT_SOUNDSCAPE_PREFERENCES,
   SOUNDSCAPE_FACTORY_PRESETS,
   applySoundscapePreset,
+  editSoundscape,
+  soundscapePresets,
   type SoundscapePreferences,
 } from '@thockdown/soundscape/soundscape'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 
 const onPreset = (index: number): SoundscapePreferences => applySoundscapePreset(DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS[index])
 
-/** `preferences` with one setting changed, so they match no soundscape. */
+/** `preferences` with one setting changed: an edit of the soundscape that plays. */
 function edited(preferences: SoundscapePreferences): SoundscapePreferences {
-  return { ...preferences, activePresetId: null, settings: { ...preferences.settings, volume: preferences.settings.volume * 0.5 } }
+  return editSoundscape(preferences, { ...preferences.settings, volume: preferences.settings.volume * 0.5 })
 }
 
 describe('media-control cycle', () => {
-  it('steps through every factory soundscape and then the user\'s own, with no stop for unsaved changes', () => {
+  it('steps through every factory soundscape and then the user\'s own, and an edit stays on its soundscape', () => {
     const changed = edited(onPreset(0))
-    const mine = { ...changed, customPresets: [{ id: 'mine', name: 'Mine', settings: onPreset(1).settings }] }
-    expect(sessionEntries(mine.customPresets).map((entry) => entry.id))
+    const mine = { ...changed, customPresets: [{ id: 'mine', name: 'Mine', icon: null, settings: onPreset(1).settings }] }
+    expect(sessionEntries(soundscapePresets(mine)).map((entry) => entry.id))
       .toEqual([...SOUNDSCAPE_FACTORY_PRESETS.map((preset) => preset.id), 'mine'])
-    expect(currentEntryId(changed)).toBeNull()
+    expect(currentEntryId(changed)).toBe(SOUNDSCAPE_FACTORY_PRESETS[0].id)
   })
 
   it('follows play and pause without touching the settings', () => {
@@ -42,13 +44,9 @@ describe('media-control cycle', () => {
 
 describe('the name the notification shows', () => {
   it('names a factory soundscape and the user\'s own alike', () => {
-    const custom = { id: 'mine', name: 'Custom soundscape 1', settings: edited(onPreset(0)).settings }
+    const custom = { id: 'mine', name: 'Soundscape A', icon: null, settings: edited(onPreset(0)).settings }
     const last = { ...onPreset(SOUNDSCAPE_FACTORY_PRESETS.length - 1), customPresets: [custom] }
     expect(currentSoundscapeName(last)).toBe(SOUNDSCAPE_FACTORY_PRESETS[SOUNDSCAPE_FACTORY_PRESETS.length - 1].name)
-    expect(currentSoundscapeName({ ...last, activePresetId: 'mine', settings: custom.settings })).toBe('Custom soundscape 1')
-  })
-
-  it('names unsaved changes', () => {
-    expect(currentSoundscapeName(edited(onPreset(0)))).toBe('Unsaved soundscape')
+    expect(currentSoundscapeName({ ...last, activePresetId: 'mine', settings: custom.settings })).toBe('Soundscape A')
   })
 })

@@ -116,7 +116,7 @@ export function mergeImportedSoundscapes(
     const signature = soundscapeSettingsSignature(soundscape.settings);
     if (signatures.has(signature)) continue;
     signatures.add(signature);
-    customPresets.push({ id: makeId(), name: soundscape.name, settings: cloneSettings(soundscape.settings) });
+    customPresets.push({ id: makeId(), name: soundscape.name, icon: null, settings: cloneSettings(soundscape.settings) });
   }
   return { ...preferences, customPresets };
 }

@@ -19,7 +19,7 @@ describe('the soundscapes order', () => {
 
   it('places a soundscape the order does not name after the ones it does', () => {
     const moved = moveSoundscapePreset(DEFAULT_SOUNDSCAPE_PREFERENCES, natural[0], natural[1])
-    const custom = { id: 'mine', name: 'Mine', settings: DEFAULT_SOUNDSCAPE_PREFERENCES.settings }
+    const custom = { id: 'mine', name: 'Mine', icon: null, settings: DEFAULT_SOUNDSCAPE_PREFERENCES.settings }
     expect(ids({ ...moved, customPresets: [custom] }).at(-1)).toBe('mine')
   })
 })

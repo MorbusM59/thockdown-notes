@@ -619,14 +619,21 @@
 }
 
 
+/* The Soundscapes view's dock (sidebar/SoundscapesView.tsx): mark, name,
+   reset, and trash or restore. */
+.soundscape-dock-row {
+  grid-template-columns: var(--entry-height) 1fr var(--entry-height) var(--entry-height);
+  column-gap: var(--spacing-small);
+}
+
+.options-dock-rows {
+  margin-top: 0;
+}
+
 .options-music-set-name {
   overflow:      hidden;
   white-space:   nowrap;
   text-overflow: ellipsis;
-}
-
-.options-music-set-icon {
-  overflow: hidden;
 }
 
 .options-music-set-count {
@@ -693,17 +700,12 @@
   font-size: calc(var(--entry-height) * 0.55);
 }
 
-.options-music-set-icon {
-  font-size: calc(var(--entry-height) * 0.45);
-}
-
 /* A display cell that shows text is centred, cut with an ellipsis where it
    does not fit (a song in the Music Library reads from the left). A block rather than a flex box, because
    text-overflow applies to a block's own line; the line box is the cell's
-   inner height, so the text centres vertically without flex. A set's icon
-   cell (an icon or two initials in a square) and the column headers stay
-   centred. */
-.options-curve-display:not(.options-curve-header):not(.options-music-set-icon) {
+   inner height, so the text centres vertically without flex. The column
+   headers stay centred. */
+.options-curve-display:not(.options-curve-header) {
   display:       block;
   padding:       0 var(--spacing-regular);
   text-align:    center;

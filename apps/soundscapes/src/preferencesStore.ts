@@ -35,12 +35,12 @@ export function savePreferences(preferences: SoundscapePreferences): void {
 const SCHEDULE_STORAGE_KEY = 'thockdown:soundscape-schedule'
 
 /** The daily schedule (schedule.ts), checked against the soundscapes that exist. */
-export function loadSchedule(customPresets: readonly SoundscapePreset[]): Schedule {
+export function loadSchedule(presets: readonly SoundscapePreset[]): Schedule {
   try {
     const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY)
-    return sanitizeSchedule(raw === null ? null : JSON.parse(raw), customPresets)
+    return sanitizeSchedule(raw === null ? null : JSON.parse(raw), presets)
   } catch {
-    return sanitizeSchedule(null, customPresets)
+    return sanitizeSchedule(null, presets)
   }
 }
 

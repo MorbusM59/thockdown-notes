@@ -23,7 +23,7 @@ const HELP: Record<string, string[]> = {
   ],
   Presets: [
     'Soundscapes: Tap one to play it. Hold one to pick it up for the schedule.',
-    'Plus button: Saves the current settings as a new soundscape of your own. Hold it instead to switch every channel off and reset it.',
+    'Plus button: Makes a new soundscape of your own, a copy of the one playing. Changes you make go straight into the soundscape that plays, factory ones included.',
     'Deleting: When one of your own soundscapes is picked up, the plus button turns into a bin. Tap it to delete that soundscape.',
   ],
   Environment: [

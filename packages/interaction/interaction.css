@@ -912,3 +912,17 @@
 .options-subsection-label[data-options-search-lead] {
   margin-top: 0;
 }
+
+/* A dock entry row (DockEntryRow.tsx): the entry's mark, an icon or two
+   initials, in a square button, and its name, cut with an ellipsis. The
+   columns are the host's. */
+.options-dock-entry-icon {
+  overflow:  hidden;
+  font-size: calc(var(--entry-height) * 0.45);
+}
+
+.options-dock-entry-name {
+  overflow:      hidden;
+  white-space:   nowrap;
+  text-overflow: ellipsis;
+}

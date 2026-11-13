@@ -10,7 +10,8 @@ import {
   MUSIC_SET_QUICK_ACCESS_COUNT,
 } from '../shared/audioPlayer'
 import { adjacentSongInPool } from '../shared/musicPool'
-import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
+import { activeSoundscape, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
+import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import {
   fromDisplayLevel,
   nudgeLevel,
@@ -910,7 +911,6 @@ export const AudioControls = memo(function AudioControls({
   }, [onMusicSetsChange, keepOnlyQuickAccessSlots])
 
   const renameMusicSet = useCallback(async (slot: PlaylistSlot, name: string) => {
-    if (isFactoryMusicSet(slot)) return
     const nextName = name.trim().slice(0, 64)
     if (!nextName) return
     const audioPlayer = window.thockdownAudioPlayer
@@ -1431,13 +1431,9 @@ function SoundscapesButton({
 
   const level = toDisplayLevel(preferences.masterVolume)
   const next = nextSoundscapePreset(preferences)
-  // A null or unknown active id means the mix was hand-edited away from any
-  // saved soundscape, so it has no name to show.
-  const current = [...preferences.customPresets, ...SOUNDSCAPE_FACTORY_PRESETS]
-    .find((preset) => preset.id === preferences.activePresetId)
-  const customNumber = preferences.customPresets.findIndex((preset) => preset.id === preferences.activePresetId) + 1
+  const current = activeSoundscape(preferences)
   const tooltip = [
-    `Soundscape: ${preferences.enabled ? (current?.name ?? 'Custom') : 'OFF'}`,
+    `Soundscape: ${preferences.enabled ? current.name : 'OFF'}`,
     `[Scroll] Volume: ${level}`,
     `[Right] ${next.name}`,
   ].join('\n')
@@ -1456,9 +1452,7 @@ function SoundscapesButton({
       aria-pressed={preferences.enabled}
       onClick={() => onChange({ ...preferences, enabled: !preferences.enabled })}
     >
-      {customNumber > 0
-        ? <span className="options-loadout-index" aria-hidden="true">{customNumber}</span>
-        : <span className={`fa-solid ${FACTORY_SOUNDSCAPE_ICONS[preferences.activePresetId ?? ''] ?? 'fa-cloud-bolt'}`} aria-hidden="true" />}
+      <SoundscapeMark preset={current} lettersClassName="audio-playlist-custom-label" />
     </button>
   )
 }
