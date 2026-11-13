@@ -13,11 +13,13 @@ import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
-/** A song's length as hh:mm:ss. */
+/** A song's length without leading zeros: 3:21, or 1:02:05 past an hour. */
 function formatSongDuration(seconds: number): string {
   const total = Math.round(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor(total / 60) % 60
   const pad = (value: number) => String(value).padStart(2, '0')
-  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(total % 60)}` : `${minutes}:${pad(total % 60)}`
 }
 
 /** A set's mark: a factory set's icon, anyone else's initials (musicSetMark). */

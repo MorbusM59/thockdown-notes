@@ -651,10 +651,18 @@
 
 /* A song is one cell: its title, cut with an ellipsis, and its duration at
    the cell's end, which its remove action replaces on hover. */
-.options-music-song-row > .options-curve-display.options-music-set-name {
+/* One class more than the centred display cell's rule further down, which it must beat. */
+.options-curve-row.options-music-song-row > .options-curve-display.options-music-set-name {
   display:     flex;
   align-items: center;
   gap:         var(--spacing-regular);
+}
+
+.options-curve-cell.hold-icon {
+  /* A held icon standing as a whole cell (the set row's delete): the glyph centred in it. */
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
 }
 
 .options-music-song-duration {
