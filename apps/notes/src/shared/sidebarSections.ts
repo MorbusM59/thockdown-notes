@@ -23,7 +23,7 @@ export type SidebarSections = Record<SidebarListView, SidebarListSection>;
 
 /** Which sections each list view has, in the section selector's order. */
 export const SECTIONS_OF_VIEW: Record<SidebarListView, readonly SidebarListSection[]> = {
-  notes: ['date', 'category', 'archive', 'trash', 'external'],
+  notes: ['date', 'category', 'archive', 'external', 'trash'],
   images: ['date', 'category', 'archive', 'trash'],
 };
 

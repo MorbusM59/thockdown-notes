@@ -1116,3 +1116,9 @@
 .image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-action .note-list-action-button[data-pressed] {
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
+
+/* A section with nothing to show (the Notes view's External with no note open from a file). */
+.sidebar-section-bar .options-loadout-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

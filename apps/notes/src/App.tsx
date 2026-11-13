@@ -51,7 +51,7 @@ import {
   DEFAULT_SIDEBAR_SECTIONS, isPagedNoteSection, isSidebarListSection, rememberSidebarSection, sanitizeSidebarSections, sidebarListViewOf,
   type SidebarListSection, type SidebarListView, type SidebarSections,
 } from './shared/sidebarSections'
-import { SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
+import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -522,13 +522,15 @@ type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
 const NO_IMAGE_USES: NoteImageUse[] = []
 
 /** The sections of the Notes view and of the Images view, in the section selector's order (`SECTIONS_OF_VIEW`, shared/sidebarSections.ts). */
-const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelectorEntry<SidebarListSection>>> = {
+const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelectorEntry<SidebarListSection> | typeof SECTION_SELECTOR_GAP>> = {
+  // The fourth cell is left empty, so External and Trash sit at the row's end.
   notes: [
     { id: 'date', label: 'Date', icon: 'fa-solid fa-clock' },
     { id: 'category', label: 'Category', icon: 'fa-solid fa-tags' },
     { id: 'archive', label: 'Archive', icon: 'fa-solid fa-box-archive' },
-    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
+    SECTION_SELECTOR_GAP,
     { id: 'external', label: 'External', icon: 'fa-solid fa-file-import' },
+    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
   ],
   images: [
     { id: 'date', label: 'Images in Order', icon: 'fa-solid fa-list-ol' },
@@ -7180,10 +7182,21 @@ ${markdownHtml}
   // view's Trash button is also where the trash is emptied: a held right
   // press primes it, and a click on it while primed purges.
   const isTrashSectionPrimed = Boolean(activeSection?.isTrashViewDeletePrimed)
+  // External is greyed out while no note is open from a file (the search and
+  // date filters aside, which only narrow what it lists), and a sidebar on
+  // it when the last one closes moves to Date.
+  const hasExternalNotes = useMemo(() => notes.some((note) => isExternalNote(note) && !isDeletedNote(note)), [notes])
+  const listSectionEntries = useMemo(() => (sidebarShowsImages
+    ? LIST_SECTION_ENTRIES.images
+    : LIST_SECTION_ENTRIES.notes.map((entry) => (entry?.id === 'external' && !hasExternalNotes ? { ...entry, disabled: true } : entry))
+  ), [hasExternalNotes, sidebarShowsImages])
+  useEffect(() => {
+    if (sidebarMode === 'external' && !hasExternalNotes) runSidebarMenuTransition('date')
+  }, [hasExternalNotes, runSidebarMenuTransition, sidebarMode])
   const listSectionBar = isSidebarListSection(sidebarMode) ? (
     <div className="preset-section sidebar-section-bar">
       <SectionSelector
-        sections={LIST_SECTION_ENTRIES[sidebarListViewOf(sidebarShowsImages)]}
+        sections={listSectionEntries}
         selected={sidebarMode}
         onSelect={handleViewModeButtonClick}
         ariaLabel={sidebarShowsImages ? 'Image sections' : 'Note sections'}
