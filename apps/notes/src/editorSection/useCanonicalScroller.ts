@@ -692,13 +692,20 @@ export function useCanonicalScroller({
       const targetScrollTop = ratio * maxScrollTop
       if (instant) {
         cancelSmoothScroll(element)
+        rubberBand.stop()
         const previousBehavior = element.style.scrollBehavior
         element.style.scrollBehavior = 'auto'
         element.scrollTop = targetScrollTop
         element.style.scrollBehavior = previousBehavior
+        syncScrollbar({ force: true })
         return
       }
-      scrollToNonQuantizedSmooth(element, targetScrollTop)
+      // A plain box (the sidebar's lists) stretches its thumb across a bridged
+      // journey exactly as a note's does: the engine hands back the same
+      // timing, and nothing about the band depends on a document position.
+      const startThumbTopPx = thumbTopRef.current
+      const timing = scrollToNonQuantizedSmooth(element, targetScrollTop)
+      if (timing) rubberBand.start(timing, startThumbTopPx, clampedTop)
     }
 
     // Click travels, hold snaps -- see scrollTrackHold.ts. Resolved on a timer
