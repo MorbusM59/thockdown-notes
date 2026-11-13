@@ -650,11 +650,6 @@
   contain-intrinsic-size: auto var(--entry-height);
 }
 
-/* A song's title is a button that plays it, reading as text. */
-.options-music-song-row > .options-music-set-name {
-  text-align: start;
-}
-
 .options-music-song-row:not([data-hovered]) > .options-music-song-remove {
   display: none;
 }
@@ -713,8 +708,9 @@
   line-height:   calc(var(--entry-height) - 2px);
 }
 
-.options-music-song-row > .options-curve-display {
-  text-align: left;
+.options-music-song-row > .options-curve-display.options-music-set-name {
+  /* As specific as the rule above, so it wins by coming later. */
+  text-align: start;
 }
 
 /* A growing selector's window (sidebar/SelectorRows.tsx): whole rows, moved
