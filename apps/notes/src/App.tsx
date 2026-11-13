@@ -8792,13 +8792,8 @@ ${markdownHtml}
                     <div className="sidebar-color-picker-dock">
                       <div className="sidebar-content-texture" />
                       <div className="sidebar-color-picker-dock-content">
-                        <section className="options-section sidebar-options-section" aria-label="Music Library controls">
-                          <div className="sidebar-options-accordion is-headerless">
-                            <div className="sidebar-options-accordion-body">
-                              <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
-                            </div>
-                          </div>
-                        </section>
+                        {/* Straight on the dock's panel, with no subsection box of its own. */}
+                        <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
                       </div>
                     </div>
                   ) : null}
