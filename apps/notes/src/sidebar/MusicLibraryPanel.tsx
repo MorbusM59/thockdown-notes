@@ -6,6 +6,7 @@ import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { pressMusicSet } from '../sound/setPress'
 import { HoverActions } from '../components/HoverActions'
 import { MusicSetRow, SetMark } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
@@ -47,16 +48,21 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
             type="button"
             role="radio"
             // A set is pressed in while it plays in the pool and dashed while
-            // it is the set this view shows and edits. A left click plays from
-            // it alone and a Shift click adds it, as the music player's set
-            // buttons do; a right click opens it here.
+            // it is the set this view shows and edits. A click toggles it in
+            // the pool and a hold plays it alone (sound/setPress.ts), as the
+            // music player's set buttons do; a right click opens it here.
             className={`btn-icon options-color-swatch options-loadout-btn${isActive ? ' is-active' : ''}${candidate.slot === slot ? ' is-edited' : ''}`}
             data-tooltip={`${candidate.name}: ${nowPlaying.pool?.counts[candidate.slot] ?? 0} songs`}
             aria-label={`${candidate.name}, ${isActive ? 'playing in the pool' : 'not in the pool'}`}
             aria-checked={candidate.slot === slot}
             data-secondary-press="action"
-            onClick={(event) => nowPlaying.selectSlot(candidate.slot, event.shiftKey)}
-            onPointerDown={cell.onPointerDown}
+            onPointerDown={(event) => {
+              cell.onPointerDown(event)
+              pressMusicSet(event.nativeEvent, {
+                toggle: () => nowPlaying.selectSlot(candidate.slot, 'toggle'),
+                solo: () => nowPlaying.selectSlot(candidate.slot, 'solo'),
+              })
+            }}
             onContextMenu={(event) => {
               event.preventDefault()
               event.stopPropagation()

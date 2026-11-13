@@ -197,13 +197,23 @@ export type AudioPlayerApi = {
   getSongById(id: number): Promise<MusicSongEntry | null>;
 };
 
+/**
+ * How a set joins or leaves the activated sets: `solo` plays from it alone,
+ * `add` puts it in, `toggle` puts it in or takes it out (never the last one:
+ * a pool with nothing in it plays nothing, and taking the last set out is
+ * not what a click on it means).
+ */
+export type SetSelection = 'solo' | 'add' | 'toggle'
+
 export function getNextActiveSlotsForSelection(
   activeSlots: PlaylistSlot[],
   selectedSlot: PlaylistSlot,
-  additive: boolean,
+  selection: SetSelection,
 ): PlaylistSlot[] {
-  if (!additive) return [selectedSlot]
-  return activeSlots.includes(selectedSlot) ? activeSlots : [...activeSlots, selectedSlot]
+  if (selection === 'solo') return [selectedSlot]
+  if (!activeSlots.includes(selectedSlot)) return [...activeSlots, selectedSlot]
+  if (selection === 'add' || activeSlots.length === 1) return activeSlots
+  return activeSlots.filter((slot) => slot !== selectedSlot)
 }
 
 /** Supported audio file extensions that can be added to playlists. */

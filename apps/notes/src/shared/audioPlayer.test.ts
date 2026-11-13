@@ -27,9 +27,12 @@ describe('audio player set layout', () => {
 
 describe('audio set selection', () => {
   it('selects only the clicked slot unless the selection is additive', () => {
-    expect(getNextActiveSlotsForSelection([1, 2, 3], 2, false)).toEqual([2])
-    expect(getNextActiveSlotsForSelection([1, 2, 3], 2, true)).toEqual([1, 2, 3])
-    expect(getNextActiveSlotsForSelection([1, 3], 2, true)).toEqual([1, 3, 2])
+    expect(getNextActiveSlotsForSelection([1, 2, 3], 2, 'solo')).toEqual([2])
+    expect(getNextActiveSlotsForSelection([1, 2, 3], 2, 'add')).toEqual([1, 2, 3])
+    expect(getNextActiveSlotsForSelection([1, 3], 2, 'add')).toEqual([1, 3, 2])
+    expect(getNextActiveSlotsForSelection([1, 3], 2, 'toggle')).toEqual([1, 3, 2])
+    expect(getNextActiveSlotsForSelection([1, 2, 3], 2, 'toggle')).toEqual([1, 3])
+    expect(getNextActiveSlotsForSelection([2], 2, 'toggle')).toEqual([2])
   })
 
 })

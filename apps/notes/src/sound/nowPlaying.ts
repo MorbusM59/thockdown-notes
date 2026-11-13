@@ -7,7 +7,7 @@
  * player service's own (`musicPlayerService.currentTime`, `setCurrentTime`).
  */
 
-import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistCountsResult, PlaylistSlot } from '../shared/audioPlayer'
+import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistCountsResult, PlaylistSlot, SetSelection } from '../shared/audioPlayer'
 
 export type NowPlaying = {
   song: MusicSongEntry | null
@@ -26,8 +26,8 @@ export type NowPlaying = {
   musicSets: readonly MusicSet[]
   /** Play a song of the pool now, rotating the pool's order to it (`shared/musicPool.ts`). */
   playFromPool: (id: number, entry?: MusicSongEntry) => void
-  /** Select one set, or add it to the active selection, as the music bar does. */
-  selectSlot: (slot: PlaylistSlot, additive: boolean) => void
+  /** Change the activated sets (`SetSelection`), as the music bar does. */
+  selectSlot: (slot: PlaylistSlot, selection: SetSelection) => void
   /** Create a set at the end of the list; the new set's slot, or null when none could be made. */
   createMusicSet: () => Promise<PlaylistSlot | null>
   renameMusicSet: (slot: PlaylistSlot, name: string) => Promise<void>

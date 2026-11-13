@@ -14,6 +14,7 @@ import { useEffect, useRef } from 'react'
 import { createRowWheel } from '../scroll/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { pressMusicSet } from '../sound/setPress'
 import { dropWideGlyphs } from './cellGlyphs'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
 import { clampListOffset, LIST_RETURN_GRACE_MS, maximumListOffset, visibleListWindow } from './listWindow'
@@ -206,7 +207,10 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
       if (!entry || entry.kind !== 'item') return
       const set = entry.value
       if ((readNowPlaying().pool?.counts[set.slot] ?? 0) > 0) {
-        readNowPlaying().selectSlot(set.slot, event.shiftKey)
+        pressMusicSet(event, {
+          toggle: () => readNowPlaying().selectSlot(set.slot, 'toggle'),
+          solo: () => readNowPlaying().selectSlot(set.slot, 'solo'),
+        })
       }
     }
 

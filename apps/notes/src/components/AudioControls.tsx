@@ -6,6 +6,7 @@ import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
   getNextActiveSlotsForSelection,
+  type SetSelection,
   isFactoryMusicSet,
   MUSIC_SET_QUICK_ACCESS_COUNT,
 } from '../shared/audioPlayer'
@@ -36,6 +37,7 @@ import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { openMusicLibrary } from '../sidebar/musicLibraryView'
+import { pressMusicSet } from '../sound/setPress'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
@@ -761,8 +763,8 @@ export const AudioControls = memo(function AudioControls({
    * Change the activated sets. The song playing plays on whatever the change:
    * it belongs to the pool while it plays, and the next pick reads the new pool.
    */
-  const selectSlot = useCallback(async (slot: PlaylistSlot, additive: boolean) => {
-    const next = getNextActiveSlotsForSelection(activeSlotsRef.current, slot, additive)
+  const selectSlot = useCallback(async (slot: PlaylistSlot, selection: SetSelection) => {
+    const next = getNextActiveSlotsForSelection(activeSlotsRef.current, slot, selection)
     selectionVersionRef.current += 1
     activeSlotsRef.current = next
     onActiveSlotsChange(next)
@@ -802,16 +804,23 @@ export const AudioControls = memo(function AudioControls({
     return true
   }, [])
 
-  const handleSlotLeftClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
-    const additive = event.shiftKey
-    if ((counts[slot] ?? 0) === 0) {
-      const selectionVersion = selectionVersionRef.current
-      if (await addToMusicSet(slot, 'files') && selectionVersion === selectionVersionRef.current) {
-        await selectSlot(slot, additive)
+  /**
+   * A left press on a set button (sound/setPress.ts): a click toggles the set
+   * in the pool, a hold plays it alone. An empty set has nothing to play, so
+   * either asks for files first and joins the pool once it has some.
+   */
+  const handleSlotLeftPress = useCallback((event: React.PointerEvent, slot: PlaylistSlot) => {
+    const choose = async (selection: SetSelection) => {
+      if ((counts[slot] ?? 0) === 0) {
+        const selectionVersion = selectionVersionRef.current
+        if (await addToMusicSet(slot, 'files') && selectionVersion === selectionVersionRef.current) {
+          await selectSlot(slot, selection === 'solo' ? 'solo' : 'add')
+        }
+        return
       }
-      return
+      await selectSlot(slot, selection)
     }
-    await selectSlot(slot, additive)
+    pressMusicSet(event.nativeEvent, { toggle: () => { void choose('toggle') }, solo: () => { void choose('solo') } })
   }, [counts, addToMusicSet, selectSlot])
 
 
@@ -877,7 +886,7 @@ export const AudioControls = memo(function AudioControls({
     event.preventDefault()
     const selectionVersion = selectionVersionRef.current
     const added = await addToMusicSet(slot, 'folder')
-    if (added && selectionVersion === selectionVersionRef.current) await selectSlot(slot, true)
+    if (added && selectionVersion === selectionVersionRef.current) await selectSlot(slot, 'add')
   }, [addToMusicSet, selectSlot])
 
   // Combine shift+right-click vs plain right-click on slot buttons.
@@ -996,8 +1005,8 @@ export const AudioControls = memo(function AudioControls({
   // published once stays current.
   const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
   const publishedPlayFromPool = useCallback((id: number, entry?: MusicSongEntry) => { void mediaActionsRef.current.playFromPool(id, entry) }, [])
-  const publishedSelectSlot = useCallback((slot: PlaylistSlot, additive: boolean) => {
-    void mediaActionsRef.current.selectSlot(slot, additive)
+  const publishedSelectSlot = useCallback((slot: PlaylistSlot, selection: SetSelection) => {
+    void mediaActionsRef.current.selectSlot(slot, selection)
   }, [])
   // A new filter applies from the next pick: the song playing plays on.
   const setPoolFilter = useCallback((filter: MusicPoolFilter) => {
@@ -1358,10 +1367,12 @@ export const AudioControls = memo(function AudioControls({
                 }
                 aria-label={set.name}
                 aria-pressed={isActive}
-                onClick={(event) => { void handleSlotLeftClick(event, slot) }}
                 data-secondary-press="action"
                 onContextMenu={(e) => { void handleSlotContextMenu(e, slot) }}
-                onPointerDown={(e) => handleSlotPointerDown(e, slot)}
+                onPointerDown={(e) => {
+                  handleSlotLeftPress(e, slot)
+                  handleSlotPointerDown(e, slot)
+                }}
                 onPointerUp={cancelSlotHold}
                 onPointerCancel={cancelSlotHold}
                 onMouseLeave={cancelSlotHold}
