@@ -22,11 +22,10 @@
   border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
 }
 
-/* The sidebar's list, beside the scrollbar slot. A dock (.sidebar-plain-dock:
- * the Music Library's and soundscape's rows, the colour picker; the boxed
- * .sidebar-color-picker-dock: Find & Replace's actions) sits BELOW the list and
- * its scrollbar alike, as the date filter rail does: content-sized, the scroll
- * frame taking what is left. */
+/* The sidebar's list and, while the options panel's Colors section is open,
+ * the colour picker docked below it (.sidebar-plain-dock; Find & Replace's actions dock in the boxed .sidebar-color-picker-dock): a column
+ * beside the scrollbar slot, which runs the height of both. The dock is
+ * content-sized and the list takes what is left. */
 .sidebar-content-column {
   flex:           1 1 auto;
   min-width:      0;
@@ -41,7 +40,7 @@
 }
 
 /* The picker never squeezes the list to nothing on a short window. */
-.sidebar-scroll-frame:has(~ .sidebar-plain-dock .options-color-picker-row) {
+.sidebar-content-column:has(> .sidebar-plain-dock .options-color-picker-row) > .sidebar-wrapper {
   min-height: calc(var(--color-grid-cell) * 3);
 }
 
