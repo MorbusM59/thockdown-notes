@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { TextButton } from '../components/TextButton'
 import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
+import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { MusicSetRow } from './MusicSetsOptions'
 import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
 import { readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
@@ -86,10 +87,11 @@ export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetList
   const pickedSlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
   const set = nowPlaying.musicSets.find((candidate) => candidate.slot === pickedSlot) ?? nowPlaying.musicSets[0]
   if (!set) return <div className="options-content sidebar-options-content" aria-label="Songs" />
-  return <MusicLibrarySet slot={set.slot} name={set.name} grouping={grouping} filter={filter} />
+  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} />
 }
 
-function MusicLibrarySet({ slot, name, grouping, filter }: { slot: PlaylistSlot; name: string; grouping: MusicSetListGrouping; filter: string }) {
+function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string }) {
+  const { slot, name } = set
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const songs = useSetSongs(slot, nowPlaying.pool?.counts[slot])
   const groups = useMemo(() => groupMusicSetList(songs, grouping, filter), [songs, grouping, filter])
@@ -99,6 +101,15 @@ function MusicLibrarySet({ slot, name, grouping, filter }: { slot: PlaylistSlot;
       <div className="preset-section">
         <SetSelector slot={slot} />
       </div>
+      <section className="options-section sidebar-options-section" aria-label={name}>
+          <div className="sidebar-options-accordion is-headerless">
+            <div className="sidebar-options-accordion-body">
+              <div className="options-curve-rows options-music-set-rows">
+                <MusicSetRow set={set} inLibrary />
+              </div>
+            </div>
+          </div>
+        </section>
       {/* Keyed on the set and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${slot}:${grouping}`}>
         {groups.map((group) => (

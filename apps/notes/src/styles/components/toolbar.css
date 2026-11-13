@@ -620,6 +620,15 @@
     1fr var(--entry-height) var(--entry-height) var(--entry-height);
 }
 
+/* The same row heading the Music Library's Songs view, on narrower gaps. */
+.options-music-set-row.is-in-library {
+  column-gap: var(--spacing-small);
+  grid-template-columns:
+    var(--entry-height)
+    calc((100% - var(--spacing-small)) / 2 - var(--spacing-small) - var(--entry-height))
+    1fr var(--entry-height) var(--entry-height) var(--entry-height);
+}
+
 /* Two buttons sharing the row: the top set's songs, and a new set. */
 .options-music-set-add-row {
   grid-template-columns: 1fr 1fr;
