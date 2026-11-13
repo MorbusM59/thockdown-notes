@@ -71,6 +71,13 @@ function useSetSongs(slot: PlaylistSlot, count: number | undefined): MusicSongEn
   return songs.slot === slot ? songs.songs : []
 }
 
+/** The set the library is open on: the one last picked, or the first set when none was or that one is gone. */
+function useOpenMusicSet(): MusicSet | undefined {
+  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  const pickedSlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
+  return nowPlaying.musicSets.find((candidate) => candidate.slot === pickedSlot) ?? nowPlaying.musicSets[0]
+}
+
 /**
  * The MUSIC LIBRARY, the sidebar's Songs view (`shared/musicSetList.ts`), in
  * the options panel's own structure. The selector bar holds the sets, as the
@@ -83,9 +90,7 @@ function useSetSongs(slot: PlaylistSlot, count: number | undefined): MusicSongEn
  * when none was or that one is gone.
  */
 export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetListGrouping; filter: string }) {
-  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-  const pickedSlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
-  const set = nowPlaying.musicSets.find((candidate) => candidate.slot === pickedSlot) ?? nowPlaying.musicSets[0]
+  const set = useOpenMusicSet()
   if (!set) return <div className="options-content sidebar-options-content" aria-label="Songs" />
   return <MusicLibrarySet set={set} grouping={grouping} filter={filter} />
 }
@@ -101,15 +106,6 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
       <div className="preset-section">
         <SetSelector slot={slot} />
       </div>
-      <section className="options-section sidebar-options-section" aria-label={name}>
-          <div className="sidebar-options-accordion is-headerless">
-            <div className="sidebar-options-accordion-body">
-              <div className="options-curve-rows options-music-set-rows">
-                <MusicSetRow set={set} inLibrary />
-              </div>
-            </div>
-          </div>
-        </section>
       {/* Keyed on the set and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${slot}:${grouping}`}>
         {groups.map((group) => (
@@ -154,12 +150,14 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
 
 /**
  * The Music Library's dock, below the sidebar where the colour picker docks:
- * the two groupings of a set's songs.
+ * the open set's row (MusicSetRow), then the two groupings of its songs.
  */
 export function MusicLibraryDock({ grouping, onGroupingChange }: { grouping: MusicSetListGrouping; onGroupingChange: (grouping: MusicSetListGrouping) => void }) {
+  const set = useOpenMusicSet()
   return (
-    <div className="options-curve-rows options-music-set-list-dock" role="radiogroup" aria-label="Song grouping">
-      <div className="options-curve-row options-music-set-list-dock-row">
+    <div className="options-curve-rows options-music-set-list-dock">
+      {set ? <MusicSetRow set={set} inLibrary /> : null}
+      <div className="options-curve-row options-music-set-list-dock-row" role="radiogroup" aria-label="Song grouping">
         {(['folder', 'artist'] as const).map((option) => (
           <TextButton
             key={option}

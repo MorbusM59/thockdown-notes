@@ -620,7 +620,7 @@
     1fr var(--entry-height) var(--entry-height) var(--entry-height);
 }
 
-/* The same row heading the Music Library's Songs view, on narrower gaps. */
+/* The same row in the Music Library's dock, on narrower gaps. */
 .options-music-set-row.is-in-library {
   column-gap: var(--spacing-small);
   grid-template-columns:

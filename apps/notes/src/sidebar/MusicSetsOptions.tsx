@@ -100,7 +100,7 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
 /**
  * One set's row as Options > Music > Sets lists it: its mark, its name (renamed
  * by right-click), its song count, adding files or a folder, and deleting it.
- * `inLibrary` is the same row heading the Music Library's Songs view, which
+ * `inLibrary` is the same row in the Music Library's dock, over its groupings, which
  * already lists the set's songs: the count there is a plain figure rather than
  * the way to them (and the hold that empties the set), and the row is not
  * dragged, the selector above it being where sets are reordered.
