@@ -20,8 +20,9 @@ function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
 
 /**
  * The selector bar: every set, six to a row, in a window of whole rows
- * (SelectorRows), reordered by dragging (useSelectorReorder). The order is the
- * sets' one order, the music player's buttons included.
+ * (SelectorRows), reordered by dragging (useSelectorReorder), then a button
+ * creating a set, as the Soundscapes view's presets end in theirs. The order is
+ * the sets' one order, the music player's buttons included.
  */
 function SetSelector({ slot }: { slot: PlaylistSlot }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
@@ -49,6 +50,15 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
           </button>
         )
       })}
+      <button
+        type="button"
+        className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus"
+        data-tooltip="Create a music set"
+        aria-label="Create a music set"
+        onClick={nowPlaying.createMusicSet}
+      >
+        <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
+      </button>
     </div>
     </SelectorRows>
   )
