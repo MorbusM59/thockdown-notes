@@ -697,6 +697,7 @@
 
 .options-music-set-list-dock-row {
   grid-template-columns: 1fr 1fr;
+  column-gap: var(--spacing-small);
 }
 
 /* An icon in a micro cell leaves the cell's frame visible around it, as the
