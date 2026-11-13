@@ -1,6 +1,6 @@
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
-import { CategoryTree, type CategoryTreeCollapse } from '../components/CategoryTree'
+import { CategoryTree, type CategoryTreeFolds } from '../components/CategoryTree'
 import { IMAGE_DRAG_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
 import { armPointerDrag } from '../shared/pointerDrag'
@@ -298,9 +298,9 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
   const tagGroups = useMemo(() => (view === 'archive' ? buildTagHierarchy(libraryImages, (image) => image.tags) : null), [libraryImages, view])
   // What is folded is remembered per view for as long as the sidebar shows
   // images, and not across restarts.
-  const [collapseByView, setCollapseByView] = useState<Partial<Record<ImageLibraryView, CategoryTreeCollapse>>>({})
-  const collapse = collapseByView[view] ?? NOTHING_COLLAPSED
-  const onCollapseChange = useCallback((next: CategoryTreeCollapse) => setCollapseByView((previous) => ({ ...previous, [view]: next })), [view])
+  const [collapseByView, setCollapseByView] = useState<Partial<Record<ImageLibraryView, CategoryTreeFolds>>>({})
+  const collapse = collapseByView[view] ?? NOTHING_FLIPPED
+  const onCollapseChange = useCallback((next: CategoryTreeFolds) => setCollapseByView((previous) => ({ ...previous, [view]: next })), [view])
   const renderUseTreeCard = useCallback((card: ImageUseCard) => (
     <ImageTreeCard
       key={card.key}
@@ -432,14 +432,10 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
     return (
       <CategoryTree
         groups={sectionGroups}
-        itemId={cardKey}
-        itemSelector={imageTreeCardSelector}
         renderItem={renderUseTreeCard}
-        activeItemId={null}
-        persistedCollapsedPrimary={collapse.collapsedPrimary}
-        persistedCollapsedSecondary={collapse.collapsedSecondary}
-        focusRequestKey={0}
-        onCollapseChange={onCollapseChange}
+        startsFolded={false}
+        folds={collapse}
+        onFoldsChange={onCollapseChange}
         emptyLabel=""
         ariaLabel="Images by section"
       />
@@ -448,14 +444,10 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
   return (
     <CategoryTree
       groups={tagGroups ?? []}
-      itemId={imageIdOf}
-      itemSelector={imageTreeCardSelector}
       renderItem={renderImageTreeCard}
-      activeItemId={shownImageId}
-      persistedCollapsedPrimary={collapse.collapsedPrimary}
-      persistedCollapsedSecondary={collapse.collapsedSecondary}
-      focusRequestKey={0}
-      onCollapseChange={onCollapseChange}
+      startsFolded={false}
+      folds={collapse}
+      onFoldsChange={onCollapseChange}
       emptyLabel=""
       ariaLabel="Images by tag"
     />
@@ -463,7 +455,4 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
 })
 
 const noop = () => {}
-const NOTHING_COLLAPSED: CategoryTreeCollapse = { collapsedPrimary: [], collapsedSecondary: [] }
-const imageIdOf = (image: StoredImageSummary) => image.id
-const cardKey = (card: ImageUseCard) => card.key
-const imageTreeCardSelector = (id: string) => `.image-list-item.is-tree-card[data-image-id="${CSS.escape(id)}"]`
+const NOTHING_FLIPPED: CategoryTreeFolds = { primary: [], secondary: [] }

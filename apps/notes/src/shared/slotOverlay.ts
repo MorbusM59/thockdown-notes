@@ -21,7 +21,7 @@
 //   - A link into the guide from an ordinary note (the `$HELP` id, since
 //     retired) activated a guide note without setting any record,
 //     so the guide appeared as an ORDINARY note: dark toggle, its own temp
-//     tab, and clicking that tab called revealNoteInMenu, which cleared the
+//     tab, and clicking that tab called revealNoteInMenu (since removed), which cleared the
 //     reader's month/year filters to "reveal" a note that is filtered out of
 //     every sidebar list. That is what "the date view broke" was.
 //   - A note arriving during the gap left the retraction's latch unarmed,

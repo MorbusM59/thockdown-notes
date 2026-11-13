@@ -33,8 +33,8 @@ export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'external'
 export interface PersistedSidebarViewState {
   scrollTop?: number;
   page?: number;
-  collapsedPrimary?: string[];
-  collapsedSecondary?: string[];
+  unfoldedPrimary?: string[];
+  unfoldedSecondary?: string[];
 }
 
 

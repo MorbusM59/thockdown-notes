@@ -1,22 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import { AccordionDivider, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { areStringArraysEqual } from '../shared/stringArrays'
 import { GENERAL_SECONDARY_NAME, type TagPrimaryGroup } from '../shared/tagHierarchy'
 
-export type CategoryTreeCollapse = { collapsedPrimary: string[]; collapsedSecondary: string[] }
+/**
+ * The folds that differ from the tree's default (`startsFolded`): with the
+ * tree folded by default these are the open sections and dividers, with it
+ * open by default the folded ones. Stored as the difference so a tag that
+ * appears later takes the default rather than whatever the lists happen to
+ * say about tags they never saw.
+ */
+export type CategoryTreeFolds = { primary: string[]; secondary: string[] }
 
 type CategoryTreeProps<T> = {
   groups: TagPrimaryGroup<T>[]
-  itemId: (item: T) => string
-  /** The CSS selector of an item's card, used to scroll the active item into view. */
-  itemSelector: (id: string) => string
   renderItem: (item: T) => ReactNode
-  activeItemId: string | null
-  persistedCollapsedPrimary: string[]
-  persistedCollapsedSecondary: string[]
-  /** Each new value unfolds the active item's path and scrolls it into view; 0 never does. */
-  focusRequestKey: number
-  onCollapseChange: (next: CategoryTreeCollapse) => void
+  /** Every section and divider starts folded (true) or open (false). */
+  startsFolded: boolean
+  folds: CategoryTreeFolds
+  onFoldsChange: (next: CategoryTreeFolds) => void
   emptyLabel: string
   ariaLabel: string
 }
@@ -28,194 +30,49 @@ type CategoryTreeProps<T> = {
  * a folding DIVIDER (the unlabelled general group sits under the section's
  * heading with no divider), and an item an entry row. Both levels fold the
  * way a section does: a left press opens one and closes its siblings, a
- * right press toggles it alone. The collapse state is the caller's, so each
+ * right press toggles it alone. The fold state is the caller's, so each
  * tree decides whether it is remembered; the folds only ask
- * (AccordionSection's controlled mode).
+ * (AccordionSection's controlled mode). The tree never moves on its own:
+ * it does not unfold or scroll to follow the active item.
  */
 export function CategoryTree<T>({
   groups,
-  itemId,
-  itemSelector,
   renderItem,
-  activeItemId,
-  persistedCollapsedPrimary,
-  persistedCollapsedSecondary,
-  focusRequestKey,
-  onCollapseChange,
+  startsFolded,
+  folds,
+  onFoldsChange,
   emptyLabel,
   ariaLabel,
 }: CategoryTreeProps<T>) {
-  const collapsedPrimary = useMemo(() => new Set(persistedCollapsedPrimary), [persistedCollapsedPrimary])
-  const collapsedSecondary = useMemo(() => new Set(persistedCollapsedSecondary), [persistedCollapsedSecondary])
-  const lastHandledFocusRequestKeyRef = useRef(focusRequestKey)
-
-  const unfoldPathForActiveItem = useCallback(() => {
-    if (!activeItemId || groups.length === 0) {
-      return false
-    }
-
-    let targetPrimaryName: string | null = null
-    let targetSecondaryName: string | null = null
-
-    for (const primary of groups) {
-      for (const secondary of primary.secondary) {
-        if (secondary.items.some((item) => itemId(item) === activeItemId)) {
-          targetPrimaryName = primary.name
-          targetSecondaryName = secondary.name
-          break
-        }
-      }
-
-      if (targetPrimaryName) {
-        break
-      }
-    }
-
-    if (!targetPrimaryName || !targetSecondaryName) {
-      return false
-    }
-
-    const nextCollapsedPrimary = new Set(
-      groups
-        .map((primary) => primary.name)
-        .filter((primaryName) => primaryName !== targetPrimaryName),
-    )
-
-    const nextCollapsedSecondary = new Set<string>()
-    for (const primary of groups) {
-      for (const secondary of primary.secondary) {
-        const keepOpen = primary.name === targetPrimaryName && secondary.name === targetSecondaryName
-        if (!keepOpen) {
-          nextCollapsedSecondary.add(secondaryKey(primary.name, secondary.name))
-        }
-      }
-    }
-
-    const nextCollapsedPrimaryList = [...nextCollapsedPrimary]
-    const nextCollapsedSecondaryList = [...nextCollapsedSecondary]
-
-    if (
-      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
-      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
-    ) {
-      return false
-    }
-
-    onCollapseChange({
-      collapsedPrimary: nextCollapsedPrimaryList,
-      collapsedSecondary: nextCollapsedSecondaryList,
-    })
-    return true
-  }, [activeItemId, groups, itemId, onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
-
-  const ensureActiveItemVisible = useCallback(() => {
-    if (!activeItemId) {
-      return
-    }
-
-    const activeElement = document.querySelector<HTMLElement>(itemSelector(activeItemId))
-    if (!activeElement) {
-      return
-    }
-
-    const scrollContainer =
-      activeElement.closest<HTMLElement>('.notes-list.tree-view')
-      ?? activeElement.closest<HTMLElement>('.sidebar-content')
-
-    if (!scrollContainer) {
-      return
-    }
-
-    const containerRect = scrollContainer.getBoundingClientRect()
-    const itemRect = activeElement.getBoundingClientRect()
-    const visibilityPaddingPx = 8
-    const visibleTop = containerRect.top + visibilityPaddingPx
-    const visibleBottom = containerRect.bottom - visibilityPaddingPx
-
-    if (itemRect.top < visibleTop) {
-      scrollContainer.scrollTop -= (visibleTop - itemRect.top)
-      return
-    }
-
-    if (itemRect.bottom > visibleBottom) {
-      scrollContainer.scrollTop += (itemRect.bottom - visibleBottom)
-    }
-  }, [activeItemId, itemSelector])
-
-  useEffect(() => {
-    if (focusRequestKey <= 0) {
-      return
-    }
-
-    if (focusRequestKey === lastHandledFocusRequestKeyRef.current) {
-      return
-    }
-
-    lastHandledFocusRequestKeyRef.current = focusRequestKey
-
-    unfoldPathForActiveItem()
-
-    let cancelled = false
-    const firstFrame = requestAnimationFrame(() => {
-      const secondFrame = requestAnimationFrame(() => {
-        if (cancelled) {
-          return
-        }
-        ensureActiveItemVisible()
-      })
-
-      if (cancelled) {
-        cancelAnimationFrame(secondFrame)
-      }
-    })
-
-    return () => {
-      cancelled = true
-      cancelAnimationFrame(firstFrame)
-    }
-  }, [ensureActiveItemVisible, focusRequestKey, unfoldPathForActiveItem])
-
+  const flippedPrimary = useMemo(() => new Set(folds.primary), [folds.primary])
+  const flippedSecondary = useMemo(() => new Set(folds.secondary), [folds.secondary])
   const commit = useCallback((nextPrimary: Set<string>, nextSecondary: Set<string>) => {
-    const nextCollapsedPrimaryList = [...nextPrimary]
-    const nextCollapsedSecondaryList = [...nextSecondary]
-    if (
-      areStringArraysEqual(nextCollapsedPrimaryList, persistedCollapsedPrimary)
-      && areStringArraysEqual(nextCollapsedSecondaryList, persistedCollapsedSecondary)
-    ) {
-      return
-    }
-    onCollapseChange({ collapsedPrimary: nextCollapsedPrimaryList, collapsedSecondary: nextCollapsedSecondaryList })
-  }, [onCollapseChange, persistedCollapsedPrimary, persistedCollapsedSecondary])
+    const primary = [...nextPrimary]
+    const secondary = [...nextSecondary]
+    if (areStringArraysEqual(primary, folds.primary) && areStringArraysEqual(secondary, folds.secondary)) return
+    onFoldsChange({ primary, secondary })
+  }, [folds, onFoldsChange])
 
   const requestPrimary = useCallback((primaryName: string, open: boolean, exclusive: boolean) => {
-    const nextPrimary = new Set(collapsedPrimary)
-    if (open) {
-      nextPrimary.delete(primaryName)
-      if (exclusive) {
-        for (const group of groups) if (group.name !== primaryName) nextPrimary.add(group.name)
-      }
-    } else {
-      nextPrimary.add(primaryName)
+    const nextPrimary = new Set(flippedPrimary)
+    setOpen(nextPrimary, primaryName, open, startsFolded)
+    if (open && exclusive) {
+      for (const group of groups) if (group.name !== primaryName) setOpen(nextPrimary, group.name, false, startsFolded)
     }
-    commit(nextPrimary, collapsedSecondary)
-  }, [collapsedPrimary, collapsedSecondary, commit, groups])
+    commit(nextPrimary, flippedSecondary)
+  }, [commit, flippedPrimary, flippedSecondary, groups, startsFolded])
 
   const requestSecondary = useCallback((primaryName: string, secondaryName: string, open: boolean, exclusive: boolean) => {
-    const key = secondaryKey(primaryName, secondaryName)
-    const nextSecondary = new Set(collapsedSecondary)
-    if (open) {
-      nextSecondary.delete(key)
-      if (exclusive) {
-        const siblings = groups.find((group) => group.name === primaryName)?.secondary ?? []
-        for (const sibling of siblings) {
-          if (sibling.name !== secondaryName && sibling.name !== GENERAL_SECONDARY_NAME) nextSecondary.add(secondaryKey(primaryName, sibling.name))
-        }
+    const nextSecondary = new Set(flippedSecondary)
+    setOpen(nextSecondary, secondaryKey(primaryName, secondaryName), open, startsFolded)
+    if (open && exclusive) {
+      const siblings = groups.find((group) => group.name === primaryName)?.secondary ?? []
+      for (const sibling of siblings) {
+        if (sibling.name !== secondaryName && sibling.name !== GENERAL_SECONDARY_NAME) setOpen(nextSecondary, secondaryKey(primaryName, sibling.name), false, startsFolded)
       }
-    } else {
-      nextSecondary.add(key)
     }
-    commit(collapsedPrimary, nextSecondary)
-  }, [collapsedPrimary, collapsedSecondary, commit, groups])
+    commit(flippedPrimary, nextSecondary)
+  }, [commit, flippedPrimary, flippedSecondary, groups, startsFolded])
 
   if (groups.length === 0) {
     return <div className="notes-empty-state">{emptyLabel}</div>
@@ -229,7 +86,7 @@ export function CategoryTree<T>({
           heading={<span className="options-music-song-heading">{primary.name}</span>}
           ariaLabel={primary.name}
           iconClass="fa-tag"
-          open={!collapsedPrimary.has(primary.name)}
+          open={isOpen(flippedPrimary, primary.name, startsFolded)}
           onRequestOpenChange={(open, exclusive) => requestPrimary(primary.name, open, exclusive)}
         >
           {/* The general group is the section's own contents, so it leads, under the heading. */}
@@ -243,7 +100,7 @@ export function CategoryTree<T>({
                 key={secondary.name}
                 label={secondary.name}
                 count={secondary.items.length}
-                open={!collapsedSecondary.has(secondaryKey(primary.name, secondary.name))}
+                open={isOpen(flippedSecondary, secondaryKey(primary.name, secondary.name), startsFolded)}
                 onRequestOpenChange={(open, exclusive) => requestSecondary(primary.name, secondary.name, open, exclusive)}
               >
                 <div className="options-curve-rows category-tree-rows">
@@ -264,3 +121,12 @@ const generalFirst = <T,>(secondary: TagPrimaryGroup<T>['secondary']) => [
 ]
 
 const secondaryKey = (primaryName: string, secondaryName: string) => `${primaryName}:${secondaryName}`
+
+function isOpen(flipped: Set<string>, key: string, startsFolded: boolean): boolean {
+  return flipped.has(key) === startsFolded
+}
+
+function setOpen(flipped: Set<string>, key: string, open: boolean, startsFolded: boolean): void {
+  if (open === startsFolded) flipped.add(key)
+  else flipped.delete(key)
+}

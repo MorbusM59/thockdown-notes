@@ -313,9 +313,9 @@ import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
-import { CategoryTree } from './components/CategoryTree'
+import { CategoryTree, type CategoryTreeFolds } from './components/CategoryTree'
 import { areStringArraysEqual } from './shared/stringArrays'
-import { buildTagHierarchy, tagHierarchyContains, type TagPrimaryGroup } from './shared/tagHierarchy'
+import { buildTagHierarchy, type TagPrimaryGroup } from './shared/tagHierarchy'
 import { registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
 import type { ImageLibraryView } from './imageLibrary/imageLibraryViews'
 import { armPointerDrag } from './shared/pointerDrag'
@@ -513,8 +513,8 @@ const DARK_MODE_PRESET_VALUES: Record<DarkModeKey, DarkModePresetValues> = {
 type SidebarViewState = {
   scrollTop: number
   page: number
-  collapsedPrimary: string[]
-  collapsedSecondary: string[]
+  unfoldedPrimary: string[]
+  unfoldedSecondary: string[]
 }
 
 type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
@@ -549,7 +549,7 @@ const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelecto
  */
 const NOTES_PER_PAGE = 50
 
-function sanitizeCollapsedList(input: unknown): string[] {
+function sanitizeUnfoldedList(input: unknown): string[] {
   if (!Array.isArray(input)) return []
   return Array.from(new Set(input.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)))
 }
@@ -565,8 +565,8 @@ function sanitizeSidebarViewState(value: PersistedSidebarViewState | undefined):
       typeof value?.page === 'number' && Number.isFinite(value.page)
         ? Math.max(1, Math.round(value.page))
         : 1,
-    collapsedPrimary: sanitizeCollapsedList(value?.collapsedPrimary),
-    collapsedSecondary: sanitizeCollapsedList(value?.collapsedSecondary),
+    unfoldedPrimary: sanitizeUnfoldedList(value?.unfoldedPrimary),
+    unfoldedSecondary: sanitizeUnfoldedList(value?.unfoldedSecondary),
   }
 }
 
@@ -1288,10 +1288,9 @@ const NoteListItem = memo(function NoteListItem({
 type CategoryTreeViewProps = {
   groups: PrimaryGroup[]
   activeNoteId: string | null
-  persistedCollapsedPrimary: string[]
-  persistedCollapsedSecondary: string[]
-  focusNoteRequestKey: number
-  onCollapseChange: (next: { collapsedPrimary: string[]; collapsedSecondary: string[] }) => void
+  persistedUnfoldedPrimary: string[]
+  persistedUnfoldedSecondary: string[]
+  onCollapseChange: (next: { unfoldedPrimary: string[]; unfoldedSecondary: string[] }) => void
   onSelect: (noteId: string) => void
   onPrimedLeftClick: (noteId: string) => void
   primedNoteActionById: Map<string, NotePrimedAction>
@@ -1305,9 +1304,8 @@ type CategoryTreeViewProps = {
 const CategoryTreeView = memo(function CategoryTreeView({
   groups,
   activeNoteId,
-  persistedCollapsedPrimary,
-  persistedCollapsedSecondary,
-  focusNoteRequestKey,
+  persistedUnfoldedPrimary,
+  persistedUnfoldedSecondary,
   onCollapseChange,
   onSelect,
   onPrimedLeftClick,
@@ -1382,32 +1380,27 @@ const CategoryTreeView = memo(function CategoryTreeView({
                     )
   }, [activeNoteId, archivedChaptersByParentId, expandedArchiveParentIds, onNoteMouseLeave, onNoteRightPressEnd, onNoteRightPressStart, onPrimedLeftClick, onSelect, primedNoteActionById, toggleArchivedChaptersFold])
 
+  // The Category and Archive trees start with every section and divider
+  // folded, so what they remember is what the reader unfolded.
+  const folds = useMemo(() => ({ primary: persistedUnfoldedPrimary, secondary: persistedUnfoldedSecondary }), [persistedUnfoldedPrimary, persistedUnfoldedSecondary])
+  const onFoldsChange = useCallback((next: CategoryTreeFolds) => onCollapseChange({ unfoldedPrimary: next.primary, unfoldedSecondary: next.secondary }), [onCollapseChange])
+
   return (
     <CategoryTree
       groups={groups}
-      itemId={noteIdOf}
-      itemSelector={noteTreeCardSelector}
       renderItem={renderItem}
-      activeItemId={activeNoteId}
-      persistedCollapsedPrimary={persistedCollapsedPrimary}
-      persistedCollapsedSecondary={persistedCollapsedSecondary}
-      focusRequestKey={focusNoteRequestKey}
-      onCollapseChange={onCollapseChange}
+      startsFolded
+      folds={folds}
+      onFoldsChange={onFoldsChange}
       emptyLabel="No notes available for this category view."
       ariaLabel="Category tree"
     />
   )
 })
 
-const noteIdOf = (note: NoteSummary) => note.id
-const noteTreeCardSelector = (id: string) => `.note-list-item.is-tree-card[data-note-id="${escapeAttributeSelectorValue(id)}"]`
 
 function compareNewestFirst(a: NoteSummary, b: NoteSummary): number {
   return b.updatedAtMs - a.updatedAtMs
-}
-
-function escapeAttributeSelectorValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
 function App() {
@@ -1783,12 +1776,10 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageJumpInput, setPageJumpInput] = useState('1')
   const [isPageJumpEditing, setIsPageJumpEditing] = useState(false)
-  const [categoryCollapsedPrimary, setCategoryCollapsedPrimary] = useState<string[]>([])
-  const [categoryCollapsedSecondary, setCategoryCollapsedSecondary] = useState<string[]>([])
-  const [archiveCollapsedPrimary, setArchiveCollapsedPrimary] = useState<string[]>([])
-  const [archiveCollapsedSecondary, setArchiveCollapsedSecondary] = useState<string[]>([])
-  const [categoryFocusRequestKey, setCategoryFocusRequestKey] = useState(0)
-  const [archiveFocusRequestKey, setArchiveFocusRequestKey] = useState(0)
+  const [categoryUnfoldedPrimary, setCategoryUnfoldedPrimary] = useState<string[]>([])
+  const [categoryUnfoldedSecondary, setCategoryUnfoldedSecondary] = useState<string[]>([])
+  const [archiveUnfoldedPrimary, setArchiveUnfoldedPrimary] = useState<string[]>([])
+  const [archiveUnfoldedSecondary, setArchiveUnfoldedSecondary] = useState<string[]>([])
   const [sidebarTreeScrollerEl, setSidebarTreeScrollerEl] = useState<HTMLDivElement | null>(null)
   // The sidebar's own scroller, as state as well as a ref: immersive mode
   // unmounts the sidebar and restores it with nothing else changed, so the
@@ -2390,11 +2381,6 @@ function App() {
   // queueAppStateSave (both still in App.tsx) also read/write these, and
   // the hook receives them as injected refs, same as latestEditorTextRef.
 
-  const dateFilteredNotesRef = useRef<NoteSummary[]>([])
-  const trashFilteredNotesRef = useRef<NoteSummary[]>([])
-  const externalFilteredNotesRef = useRef<NoteSummary[]>([])
-  const categoryTreeRef = useRef<PrimaryGroup[]>([])
-  const archiveTreeRef = useRef<PrimaryGroup[]>([])
   const externalOpenQueueRef = useRef<Promise<void>>(Promise.resolve())
   const pendingExternalImportPathsRef = useRef<Set<string>>(new Set())
   const sidebarTextureRef = useRef<HTMLDivElement | null>(null)
@@ -3219,7 +3205,6 @@ function App() {
   // keeps them current within the same render rather than one render behind.
   const queueAppStateSaveRef = useRef<(selectedNoteId: string | null) => void>(() => {})
   const updateActiveNoteTitlePreviewRef = useRef<(nextText: string) => void>(() => {})
-  const revealNoteInMenuRef = useRef<() => void>(() => {})
   // Same ref-proxy technique as the three above, for the same TDZ reason --
   // persistMenuStateNow is declared later than handleToggleDoubleSizeMode/
   // toggleSidebarVisible, which both need to call it. Unlike those three,
@@ -3264,7 +3249,6 @@ function App() {
 
   const queueAppStateSaveStable = useCallback((selectedNoteId: string | null) => queueAppStateSaveRef.current(selectedNoteId), [])
   const updateActiveNoteTitlePreviewStable = useCallback((nextText: string) => updateActiveNoteTitlePreviewRef.current(nextText), [])
-  const revealNoteInMenuStable = useCallback(() => revealNoteInMenuRef.current(), [])
 
 
   const buildMenuStateSnapshot = useCallback((overrides?: {
@@ -3407,13 +3391,13 @@ function App() {
         ...effectiveViewStateByMode,
         category: {
           ...effectiveViewStateByMode.category,
-          collapsedPrimary: categoryCollapsedPrimary,
-          collapsedSecondary: categoryCollapsedSecondary,
+          unfoldedPrimary: categoryUnfoldedPrimary,
+          unfoldedSecondary: categoryUnfoldedSecondary,
         },
         archive: {
           ...effectiveViewStateByMode.archive,
-          collapsedPrimary: archiveCollapsedPrimary,
-          collapsedSecondary: archiveCollapsedSecondary,
+          unfoldedPrimary: archiveUnfoldedPrimary,
+          unfoldedSecondary: archiveUnfoldedSecondary,
         },
       },
       features,
@@ -3450,10 +3434,10 @@ function App() {
       sidebarShowsImages: effectiveShowsImages,
     }
   }, [
-    archiveCollapsedPrimary,
-    archiveCollapsedSecondary,
-    categoryCollapsedPrimary,
-    categoryCollapsedSecondary,
+    archiveUnfoldedPrimary,
+    archiveUnfoldedSecondary,
+    categoryUnfoldedPrimary,
+    categoryUnfoldedSecondary,
     features,
     spellCheckDictionaries,
     typingTrailSettings,
@@ -3598,8 +3582,8 @@ function App() {
     const base: SidebarViewState = {
       scrollTop,
       page: baseline.page,
-      collapsedPrimary: baseline.collapsedPrimary,
-      collapsedSecondary: baseline.collapsedSecondary,
+      unfoldedPrimary: baseline.unfoldedPrimary,
+      unfoldedSecondary: baseline.unfoldedSecondary,
     }
 
     if (isPagedNoteSection(mode)) {
@@ -3607,21 +3591,21 @@ function App() {
     }
 
     if (mode === 'category') {
-      base.collapsedPrimary = categoryCollapsedPrimary
-      base.collapsedSecondary = categoryCollapsedSecondary
+      base.unfoldedPrimary = categoryUnfoldedPrimary
+      base.unfoldedSecondary = categoryUnfoldedSecondary
     }
 
     if (mode === 'archive') {
-      base.collapsedPrimary = archiveCollapsedPrimary
-      base.collapsedSecondary = archiveCollapsedSecondary
+      base.unfoldedPrimary = archiveUnfoldedPrimary
+      base.unfoldedSecondary = archiveUnfoldedSecondary
     }
 
     return base
   }, [
-    archiveCollapsedPrimary,
-    archiveCollapsedSecondary,
-    categoryCollapsedPrimary,
-    categoryCollapsedSecondary,
+    archiveUnfoldedPrimary,
+    archiveUnfoldedSecondary,
+    categoryUnfoldedPrimary,
+    categoryUnfoldedSecondary,
     currentPage,
     getSidebarScrollerForMode,
     sidebarViewStateByMode,
@@ -3642,13 +3626,13 @@ function App() {
     }
 
     if (mode === 'category') {
-      setCategoryCollapsedPrimary(snapshot.collapsedPrimary)
-      setCategoryCollapsedSecondary(snapshot.collapsedSecondary)
+      setCategoryUnfoldedPrimary(snapshot.unfoldedPrimary)
+      setCategoryUnfoldedSecondary(snapshot.unfoldedSecondary)
     }
 
     if (mode === 'archive') {
-      setArchiveCollapsedPrimary(snapshot.collapsedPrimary)
-      setArchiveCollapsedSecondary(snapshot.collapsedSecondary)
+      setArchiveUnfoldedPrimary(snapshot.unfoldedPrimary)
+      setArchiveUnfoldedSecondary(snapshot.unfoldedSecondary)
     }
   }, [])
 
@@ -3693,58 +3677,6 @@ function App() {
     sidebarViewStateByMode,
   ])
 
-  const focusActiveNoteInSidebarMode = useCallback((mode: SidebarMode): boolean => {
-    // menuIdentityNoteId, not activeNoteId directly -- a chapter is never in
-    // any of these menu-derived sources, so locating "the note this section
-    // is showing" here means its parent when a chapter is loaded.
-    const activeNoteId = getActiveSection()?.menuIdentityNoteId
-    if (!activeNoteId) {
-      return false
-    }
-
-    if (isPagedNoteSection(mode)) {
-      const source = mode === 'date' ? dateFilteredNotesRef.current
-        : mode === 'trash' ? trashFilteredNotesRef.current
-          : externalFilteredNotesRef.current
-      const noteIndex = source.findIndex((note) => note.id === activeNoteId)
-      if (noteIndex < 0) {
-        return false
-      }
-
-      setCurrentPage(Math.floor(noteIndex / NOTES_PER_PAGE) + 1)
-      // Once that page is drawn, the note's card is brought into the list's
-      // scroll box. Two frames: the first is the one a mode transition
-      // restores the section's saved scroll position in, which this follows.
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        sidebarContentRef.current
-          ?.querySelector('.notes-list.date-view .note-list-item.is-active')
-          ?.scrollIntoView({ block: 'nearest' })
-      }))
-      return true
-    }
-
-    if (mode === 'category' || mode === 'archive') {
-      const source = mode === 'category' ? categoryTreeRef.current : archiveTreeRef.current
-      const noteExists = source.some((primary) =>
-        tagHierarchyContains([primary], (note) => note.id === activeNoteId),
-      )
-
-      if (!noteExists) {
-        return false
-      }
-
-      if (mode === 'category') {
-        setCategoryFocusRequestKey((previous) => previous + 1)
-      } else {
-        setArchiveFocusRequestKey((previous) => previous + 1)
-      }
-
-      return true
-    }
-
-    return false
-  }, [getActiveSection])
-
   const runSidebarMenuTransition = useCallback((
     nextMode: SidebarMode,
     // Passed straight through to persistMenuStateOnce -- see its own doc
@@ -3774,11 +3706,6 @@ function App() {
     setSidebarMode(nextMode)
     restoreSidebarModeStateFrom(nextMode, nextSidebarViewStateByMode)
     void persistMenuStateOnce(nextMode, nextSidebarViewStateByMode, extraOverrides)
-    // Defer focus so the new mode's render (with updated filtered notes / tree
-    // state) has committed before we attempt to jump page or unfold the tree.
-    requestAnimationFrame(() => {
-      focusActiveNoteInSidebarMode(nextMode)
-    })
   }, [
     sidebarMode,
     sidebarShowsImages,
@@ -3786,7 +3713,6 @@ function App() {
     sidebarViewStateByMode,
     restoreSidebarModeStateFrom,
     persistMenuStateOnce,
-    focusActiveNoteInSidebarMode,
   ])
   // Plain assignment every render, like persistMenuStateNowRef's.
   runSidebarMenuTransitionRef.current = runSidebarMenuTransition
@@ -5120,7 +5046,6 @@ ${markdownHtml}
     }
 
     if (mode === sidebarMode) {
-      void focusActiveNoteInSidebarMode(mode)
       return
     }
 
@@ -5144,7 +5069,6 @@ ${markdownHtml}
     section?.clearTrashButtonArmTimer()
     runSidebarMenuTransition(mode)
   }, [
-    focusActiveNoteInSidebarMode,
     getActiveSection,
     runSidebarMenuTransition,
     sidebarMode,
@@ -5452,10 +5376,10 @@ ${markdownHtml}
             // Cursor appearance (color/size/speed) now lives in the active
             // UiLayoutLoadout, restored when that loadout is applied below.
             setCurrentPage(loadedSidebarViewState[appState.menu.sidebarMode].page)
-            setCategoryCollapsedPrimary(loadedSidebarViewState.category.collapsedPrimary)
-            setCategoryCollapsedSecondary(loadedSidebarViewState.category.collapsedSecondary)
-            setArchiveCollapsedPrimary(loadedSidebarViewState.archive.collapsedPrimary)
-            setArchiveCollapsedSecondary(loadedSidebarViewState.archive.collapsedSecondary)
+            setCategoryUnfoldedPrimary(loadedSidebarViewState.category.unfoldedPrimary)
+            setCategoryUnfoldedSecondary(loadedSidebarViewState.category.unfoldedSecondary)
+            setArchiveUnfoldedPrimary(loadedSidebarViewState.archive.unfoldedPrimary)
+            setArchiveUnfoldedSecondary(loadedSidebarViewState.archive.unfoldedSecondary)
             pendingSidebarScrollRestoreRef.current = {
               mode: appState.menu.sidebarMode,
               scrollTop: loadedSidebarViewState[appState.menu.sidebarMode].scrollTop,
@@ -6835,26 +6759,6 @@ ${markdownHtml}
     return buildHierarchyGroups(archiveEligibleNotes)
   }, [archiveEligibleNotes])
 
-  useEffect(() => {
-    dateFilteredNotesRef.current = dateFilteredNotes
-  }, [dateFilteredNotes])
-
-  useEffect(() => {
-    trashFilteredNotesRef.current = trashFilteredNotes
-  }, [trashFilteredNotes])
-
-  useEffect(() => {
-    externalFilteredNotesRef.current = externalFilteredNotes
-  }, [externalFilteredNotes])
-
-  useEffect(() => {
-    categoryTreeRef.current = categoryTree
-  }, [categoryTree])
-
-  useEffect(() => {
-    archiveTreeRef.current = archiveTree
-  }, [archiveTree])
-
 
 
   const visibleNotes = useMemo(() => {
@@ -6875,111 +6779,6 @@ ${markdownHtml}
 
   const totalPagedNotes = isPagedNoteSection(sidebarMode) ? visibleNotes.length : 0
 
-  // The menu is deliberately a stable "file cabinet," not something that
-  // chases the active note -- browsing the sidebar (changing a filter,
-  // switching views) never used to reach back into the editor and swap the
-  // active note out from under the user (that used to happen here; removed).
-  // The one deliberate exception is this: clicking an already-selected tab
-  // explicitly asks to locate that note in the menu. Reused wholesale:
-  // isDeletedNote/isArchivedNote for where a note lives, matchesNoteSearchQuery/
-  // matchesSelectedDateFilter for which filter (if any) is actually hiding it,
-  // and the existing runSidebarMenuTransition/focusActiveNoteInSidebarMode
-  // pair for switching view + unfolding tree branches + scrolling into view --
-  // all of which already exist and already operate on activeNoteId, which is
-  // exactly what this reveals (the note the section that triggered this was
-  // already showing).
-  const revealNoteInMenu = useCallback(() => {
-    const section = getActiveSection()
-    // menuIdentityNoteId/menuIdentityNoteSummary, not the true active note --
-    // chapters never appear in the menu, so revealing one means revealing
-    // its parent instead (see sectionRegistry.ts's SectionHandle doc comment).
-    const activeNoteId = section?.menuIdentityNoteId
-    const activeNoteSummary = section?.menuIdentityNoteSummary
-    if (!activeNoteId || !activeNoteSummary) return
-
-    // The User Guide's family is excluded from every sidebar list, upstream
-    // of all of them, so there is nowhere for this to reveal it TO -- and
-    // the clearing below would wipe the reader's month/year filters and
-    // search to go looking for a note that can never be listed. That is
-    // exactly what "the date view broke" was, reached through the guide
-    // appearing as an ordinary tab. The tab is gone with the orphan that
-    // produced it; this holds the rule where the rule actually lives.
-    if (HELP_GUIDE_NOTE_IDS.has(activeNoteId)) return
-
-    // Clear only whichever filter is actually hiding the note -- never one
-    // that isn't in the way.
-    if (isSidebarSearchActive && !matchesNoteSearchQuery(
-      { title: activeNoteSummary.title, fileName: activeNoteSummary.fileName, tags: activeNoteSummary.tags, contentText: readNoteContent(activeNoteSummary.id) },
-      searchQuery,
-      isSearchQueryCaseSensitive,
-    )) {
-      setSearchQuery('')
-    }
-    const isDeleted = isDeletedNote(activeNoteSummary)
-    const isArchived = isArchivedNote(activeNoteSummary)
-    const isExternal = isExternalNote(activeNoteSummary)
-
-    // The month/year filter never applies to trash (trashEligibleNotes skips
-    // it entirely) -- clearing it there would be an unrelated side effect,
-    // not "clearing whichever filter is actually hiding the note."
-    if (!isDeleted && hasDateFilter && !matchesSelectedDateFilter(activeNoteSummary.updatedAtMs)) {
-      setSelectedMonths(new Set())
-      setSelectedYears(new Set())
-    }
-
-    const targetMode: SidebarMode = isDeleted
-      ? 'trash'
-      : isArchived
-        ? 'archive'
-        // An external (file-backed) note is listed in the External section
-        // and nowhere else.
-        : isExternal
-          ? 'external'
-          : (sidebarMode === 'date' || sidebarMode === 'category')
-            ? sidebarMode
-            : 'category'
-
-    const staysInCurrentMode = targetMode === sidebarMode && !sidebarShowsImages
-    const needsDatePaginationPrep = !isDeleted && !isArchived && !isExternal && targetMode === 'category' && !staysInCurrentMode
-
-    // Deferred a frame: the filter-clearing state updates above need to
-    // commit (and dateFilteredNotes/categoryTree recompute) before switching
-    // mode / unfolding / paginating can find the note where it now is.
-    requestAnimationFrame(() => {
-      if (staysInCurrentMode) {
-        focusActiveNoteInSidebarMode(sidebarMode)
-      } else if (targetMode !== sidebarMode) {
-        // A note is revealed in the Notes view, whichever view was up.
-        if (sidebarShowsImages) setSidebarShowsImages(false)
-        runSidebarMenuTransition(targetMode, sidebarShowsImages ? { sidebarShowsImages: false } : undefined)
-      } else {
-        // The Images view on the very section the note is in: only the view
-        // changes, which is no mode transition.
-        setSidebarShowsImages(false)
-        persistMenuStateNowRef.current({ sidebarShowsImages: false })
-        requestAnimationFrame(() => focusActiveNoteInSidebarMode(targetMode))
-      }
-
-      // Silently prep date view's pagination so it's already positioned
-      // right if the user switches there by hand later -- without actually
-      // switching to date view now. This writes the *persisted* per-mode
-      // page (sidebarViewStateByMode.date.page), not the live currentPage,
-      // since currentPage only reflects whichever mode is presently active
-      // and would just get discarded the next time date mode is entered.
-      if (needsDatePaginationPrep) {
-        const noteIndex = dateFilteredNotesRef.current.findIndex((note) => note.id === activeNoteId)
-        if (noteIndex >= 0) {
-          const targetPage = Math.floor(noteIndex / NOTES_PER_PAGE) + 1
-
-          setSidebarViewStateByMode((previous) => ({
-            ...previous,
-            date: { ...previous.date, page: targetPage },
-          }))
-        }
-      }
-    })
-  }, [getActiveSection, focusActiveNoteInSidebarMode, hasDateFilter, isSearchQueryCaseSensitive, isSidebarSearchActive, matchesSelectedDateFilter, readNoteContent, runSidebarMenuTransition, searchQuery, sidebarMode, sidebarShowsImages])
-  revealNoteInMenuRef.current = revealNoteInMenu
 
   const totalPages = Math.max(1, Math.ceil(totalPagedNotes / NOTES_PER_PAGE))
   const effectiveCurrentPage = Math.min(Math.max(1, currentPage), totalPages)
@@ -7145,12 +6944,10 @@ ${markdownHtml}
   }, [liveImageUseText])
   // The view bar's Notes and Images buttons, and the toolbar's image button.
   // Each of the two views comes back on the section it was last left on.
-  // Pressing the view already on screen locates the active slot's note in it
-  // (Notes), or does nothing (Images).
+  // Pressing the view already on screen does nothing.
   const showSidebarListView = useCallback((view: SidebarListView) => {
     const showsImages = view === 'images'
     if (isSidebarListSection(sidebarMode) && showsImages === sidebarShowsImages) {
-      if (!showsImages) focusActiveNoteInSidebarMode(sidebarMode)
       return
     }
     const section = sidebarSections[view]
@@ -7164,7 +6961,7 @@ ${markdownHtml}
       setSidebarSections((previous) => rememberSidebarSection(previous, sidebarMode, sidebarShowsImages))
       persistMenuStateNowRef.current({ sidebarShowsImages: showsImages })
     }
-  }, [focusActiveNoteInSidebarMode, runSidebarMenuTransition, sidebarMode, sidebarSections, sidebarShowsImages])
+  }, [runSidebarMenuTransition, sidebarMode, sidebarSections, sidebarShowsImages])
   const showImageLibrary = useCallback(() => showSidebarListView('images'), [showSidebarListView])
 
   // A page of the Date section is fifty memoized cards: these three are
@@ -7242,44 +7039,44 @@ ${markdownHtml}
     setSelectedYears(new Set())
   }, [])
 
-  const handleCategoryCollapseChange = useCallback((next: { collapsedPrimary: string[]; collapsedSecondary: string[] }) => {
-    setCategoryCollapsedPrimary((previous) => (
-      areStringArraysEqual(previous, next.collapsedPrimary) ? previous : next.collapsedPrimary
+  const handleCategoryCollapseChange = useCallback((next: { unfoldedPrimary: string[]; unfoldedSecondary: string[] }) => {
+    setCategoryUnfoldedPrimary((previous) => (
+      areStringArraysEqual(previous, next.unfoldedPrimary) ? previous : next.unfoldedPrimary
     ))
-    setCategoryCollapsedSecondary((previous) => (
-      areStringArraysEqual(previous, next.collapsedSecondary) ? previous : next.collapsedSecondary
+    setCategoryUnfoldedSecondary((previous) => (
+      areStringArraysEqual(previous, next.unfoldedSecondary) ? previous : next.unfoldedSecondary
     ))
     setSidebarViewStateByMode((previous) => ({
       ...previous,
       category: {
         ...previous.category,
-        collapsedPrimary: areStringArraysEqual(previous.category.collapsedPrimary, next.collapsedPrimary)
-          ? previous.category.collapsedPrimary
-          : next.collapsedPrimary,
-        collapsedSecondary: areStringArraysEqual(previous.category.collapsedSecondary, next.collapsedSecondary)
-          ? previous.category.collapsedSecondary
-          : next.collapsedSecondary,
+        unfoldedPrimary: areStringArraysEqual(previous.category.unfoldedPrimary, next.unfoldedPrimary)
+          ? previous.category.unfoldedPrimary
+          : next.unfoldedPrimary,
+        unfoldedSecondary: areStringArraysEqual(previous.category.unfoldedSecondary, next.unfoldedSecondary)
+          ? previous.category.unfoldedSecondary
+          : next.unfoldedSecondary,
       },
     }))
   }, [])
 
-  const handleArchiveCollapseChange = useCallback((next: { collapsedPrimary: string[]; collapsedSecondary: string[] }) => {
-    setArchiveCollapsedPrimary((previous) => (
-      areStringArraysEqual(previous, next.collapsedPrimary) ? previous : next.collapsedPrimary
+  const handleArchiveCollapseChange = useCallback((next: { unfoldedPrimary: string[]; unfoldedSecondary: string[] }) => {
+    setArchiveUnfoldedPrimary((previous) => (
+      areStringArraysEqual(previous, next.unfoldedPrimary) ? previous : next.unfoldedPrimary
     ))
-    setArchiveCollapsedSecondary((previous) => (
-      areStringArraysEqual(previous, next.collapsedSecondary) ? previous : next.collapsedSecondary
+    setArchiveUnfoldedSecondary((previous) => (
+      areStringArraysEqual(previous, next.unfoldedSecondary) ? previous : next.unfoldedSecondary
     ))
     setSidebarViewStateByMode((previous) => ({
       ...previous,
       archive: {
         ...previous.archive,
-        collapsedPrimary: areStringArraysEqual(previous.archive.collapsedPrimary, next.collapsedPrimary)
-          ? previous.archive.collapsedPrimary
-          : next.collapsedPrimary,
-        collapsedSecondary: areStringArraysEqual(previous.archive.collapsedSecondary, next.collapsedSecondary)
-          ? previous.archive.collapsedSecondary
-          : next.collapsedSecondary,
+        unfoldedPrimary: areStringArraysEqual(previous.archive.unfoldedPrimary, next.unfoldedPrimary)
+          ? previous.archive.unfoldedPrimary
+          : next.unfoldedPrimary,
+        unfoldedSecondary: areStringArraysEqual(previous.archive.unfoldedSecondary, next.unfoldedSecondary)
+          ? previous.archive.unfoldedSecondary
+          : next.unfoldedSecondary,
       },
     }))
   }, [])
@@ -8923,9 +8720,8 @@ ${markdownHtml}
                         <CategoryTreeView
                           groups={sidebarMode === 'category' ? categoryTree : archiveTree}
                           activeNoteId={activeSection?.menuIdentityNoteId ?? null}
-                          persistedCollapsedPrimary={sidebarMode === 'category' ? categoryCollapsedPrimary : archiveCollapsedPrimary}
-                          persistedCollapsedSecondary={sidebarMode === 'category' ? categoryCollapsedSecondary : archiveCollapsedSecondary}
-                          focusNoteRequestKey={sidebarMode === 'category' ? categoryFocusRequestKey : archiveFocusRequestKey}
+                          persistedUnfoldedPrimary={sidebarMode === 'category' ? categoryUnfoldedPrimary : archiveUnfoldedPrimary}
+                          persistedUnfoldedSecondary={sidebarMode === 'category' ? categoryUnfoldedSecondary : archiveUnfoldedSecondary}
                           onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
                           onSelect={handleSelectNote}
                           onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
@@ -9358,7 +9154,6 @@ ${markdownHtml}
                   activeNoteExternalPathRef={activeNoteExternalPathRef}
                   queueAppStateSaveStable={queueAppStateSaveStable}
                   updateActiveNoteTitlePreviewStable={updateActiveNoteTitlePreviewStable}
-                  revealNoteInMenuStable={revealNoteInMenuStable}
                   saveSelectedNoteState={saveSelectedNoteState}
                   refreshNotes={refreshNotes}
                   noteTransitionLockRef={noteTransitionLockRef}

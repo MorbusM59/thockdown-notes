@@ -142,7 +142,6 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
 
   queueAppStateSaveStable: (selectedNoteId: string | null) => void
   updateActiveNoteTitlePreviewStable: (nextText: string) => void
-  revealNoteInMenuStable: () => void
 
   saveSelectedNoteState: (selectedNoteId: string | null) => Promise<void>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
@@ -245,7 +244,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
   activeNoteExternalPathRef,
   queueAppStateSaveStable,
   updateActiveNoteTitlePreviewStable,
-  revealNoteInMenuStable,
   saveSelectedNoteState,
   refreshNotes,
   noteTransitionLockRef,
@@ -1050,7 +1048,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     persistenceReady,
     activateNote,
     clearActiveNote,
-    revealNoteInMenu: revealNoteInMenuStable,
     flushPendingSaveNow,
     refreshNotes,
     noteTransitionLockRef,
