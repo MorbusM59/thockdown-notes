@@ -51,17 +51,36 @@ export function registerMusicLibraryPresenter(present: () => void): () => void {
   }
 }
 
+/** Marks a set's cell in the Music Library's selector: a drop on it adds to that set. */
+export const MUSIC_SET_DROP_SLOT_ATTRIBUTE = 'data-music-set-slot'
+/** Marks the selector itself: a drop on it anywhere but a set's cell (between cells, the plus) makes a new set. */
+export const MUSIC_SET_DROP_NEW_ATTRIBUTE = 'data-music-set-new'
+
 /**
- * Files and folders dropped from the file manager anywhere on the Music
- * Library (App.tsx's drop handler, which routes a drop over the sidebar's
- * content box here while the library is shown): added to the open set as the
- * row's two add buttons would add them, a folder searched through for its
- * audio files and anything else left out.
+ * Files and folders dropped from the file manager on the Music Library
+ * (App.tsx's drop handler, which routes a drop over the sidebar's content box
+ * here while the library is shown), added as the add buttons would add them,
+ * a folder searched through for its audio files and anything else left out.
+ * Where they go is decided by what they were dropped on: a set's cell in the
+ * selector adds to that set; the rest of the selector (between the cells, or
+ * the plus) to a NEW set, which is removed again if nothing in the drop was
+ * audio; anywhere else in the library to the open set.
  */
-export function addDroppedFilesToOpenMusicSet(files: readonly File[]): void {
+export async function addDroppedFilesToMusicLibrary(files: readonly File[], target: Element | null): Promise<void> {
   const nowPlaying = readNowPlaying()
+  const paths = files.map((file) => window.thockdownExternalFiles?.getPathForFile(file) ?? '').filter(Boolean)
+  if (paths.length === 0) return
+  const onSet = target?.closest(`[${MUSIC_SET_DROP_SLOT_ATTRIBUTE}]`)?.getAttribute(MUSIC_SET_DROP_SLOT_ATTRIBUTE)
+  if (onSet) {
+    await nowPlaying.addPathsToMusicSet(Number(onSet), paths)
+    return
+  }
+  if (target?.closest(`[${MUSIC_SET_DROP_NEW_ATTRIBUTE}]`)) {
+    const slot = await nowPlaying.createMusicSet()
+    if (slot !== null && !await nowPlaying.addPathsToMusicSet(slot, paths)) await nowPlaying.deleteMusicSet(slot)
+    return
+  }
   const pickedSlot = readMusicLibrarySlot()
   const set = nowPlaying.musicSets.find((candidate) => candidate.slot === pickedSlot) ?? nowPlaying.musicSets[0]
-  const paths = files.map((file) => window.thockdownExternalFiles?.getPathForFile(file) ?? '').filter(Boolean)
-  if (set && paths.length > 0) void nowPlaying.addPathsToMusicSet(set.slot, paths)
+  if (set) await nowPlaying.addPathsToMusicSet(set.slot, paths)
 }

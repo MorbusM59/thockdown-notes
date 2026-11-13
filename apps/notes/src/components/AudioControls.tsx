@@ -913,16 +913,18 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [handleSlotShiftRightClick, handleSlotRightClick])
 
-  const createMusicSet = useCallback(async () => {
+  const createMusicSet = useCallback(async (): Promise<PlaylistSlot | null> => {
     const audioPlayer = window.thockdownAudioPlayer
     if (!audioPlayer) {
       console.error('[music-sets] cannot create a set without the audio player bridge')
-      return
+      return null
     }
     selectionVersionRef.current += 1
     const next = await audioPlayer.createMusicSet()
     onMusicSetsChange(next)
     await keepOnlyQuickAccessSlots(next.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => set.slot))
+    // A new set is appended (databaseService.ts's createMusicSet), so it is the last.
+    return next.at(-1)?.slot ?? null
   }, [onMusicSetsChange, keepOnlyQuickAccessSlots])
 
   const renameMusicSet = useCallback(async (slot: PlaylistSlot, name: string) => {

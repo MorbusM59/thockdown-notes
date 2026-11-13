@@ -386,7 +386,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *What the sidebar shows, switched with one click.*
 
-- **Notes**, **Images** and the **Music Library** are the first three icons. Notes and Images each have four sections, picked in the row of icons at the top of their list; each view comes back on the section you left it on. Images is covered in [Images](${guideLink('TOOLBAR-FORMATTING', 'images')}); the Music Library lists the songs of a music set, one set per icon at its top (drag an icon to reorder the sets), and the search field filters them. Drop files or folders from your file manager anywhere on it to add their songs to the set shown.
+- **Notes**, **Images** and the **Music Library** are the first three icons. Notes and Images each have four sections, picked in the row of icons at the top of their list; each view comes back on the section you left it on. Images is covered in [Images](${guideLink('TOOLBAR-FORMATTING', 'images')}); the Music Library lists the songs of a music set, one set per icon at its top (drag an icon to reorder the sets), and the search field filters them. Drop files or folders from your file manager anywhere on it to add their songs to the set shown, on a set's icon to add them to that set, or between the icons or on the plus to make a new set of them.
 - The Notes sections:
 - **Date** — a flat, chronological list ordered by last-updated time, fifty notes to a page.
 - **Category** — notes grouped by primary tag, then by secondary tag, folded like the options' sections: a click opens a group and folds the others beside it, a right-click opens or folds just that one.

@@ -172,7 +172,7 @@ import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from '
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId } from './shared/optionsSections'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
-import { addDroppedFilesToOpenMusicSet, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
+import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel } from './sidebar/MusicLibraryPanel'
 import { TextButton } from './components/TextButton'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
@@ -4927,12 +4927,12 @@ ${markdownHtml}
       return
     }
 
-    // Files and folders dropped on the Music Library are songs for its open
-    // set, never notes to open.
+    // Files and folders dropped on the Music Library are songs for one of its
+    // sets (which one, musicLibraryView.ts decides), never notes to open.
     if (sidebarMode === 'songs' && (event.target as HTMLElement | null)?.closest('.sidebar-content')) {
       event.preventDefault()
       event.stopPropagation()
-      addDroppedFilesToOpenMusicSet(Array.from(event.dataTransfer.files ?? []))
+      void addDroppedFilesToMusicLibrary(Array.from(event.dataTransfer.files ?? []), event.target as Element | null)
       return
     }
 

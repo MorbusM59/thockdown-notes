@@ -9,7 +9,7 @@ import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { MusicSetRow } from './MusicSetsOptions'
 import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
-import { readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
+import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
 /** A set's mark: a factory set's icon, anyone else's initials (musicSetMark). */
 function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
@@ -30,12 +30,13 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
   const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
   return (
     <SelectorRows>
-    <div className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets">
+    <div className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets" {...{ [MUSIC_SET_DROP_NEW_ATTRIBUTE]: '' }}>
       {sets.map((candidate) => {
         const cell = reorder(String(candidate.slot))
         return (
           <button
             key={candidate.slot}
+            {...{ [MUSIC_SET_DROP_SLOT_ATTRIBUTE]: candidate.slot }}
             type="button"
             role="radio"
             className={`btn-icon options-color-swatch options-loadout-btn${candidate.slot === slot ? ' is-active' : ''}`}

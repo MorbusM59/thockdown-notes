@@ -28,7 +28,8 @@ export type NowPlaying = {
   playFromPool: (id: number) => void
   /** Select one set, or add it to the active selection, as the music bar does. */
   selectSlot: (slot: PlaylistSlot, additive: boolean) => void
-  createMusicSet: () => void
+  /** Create a set at the end of the list; the new set's slot, or null when none could be made. */
+  createMusicSet: () => Promise<PlaylistSlot | null>
   renameMusicSet: (slot: PlaylistSlot, name: string) => Promise<void>
   moveMusicSet: (draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot) => void
   deleteMusicSet: (slot: PlaylistSlot) => Promise<void>
@@ -55,7 +56,7 @@ let current: NowPlaying = {
   musicSets: [],
   playFromPool: () => {},
   selectSlot: () => {},
-  createMusicSet: () => {},
+  createMusicSet: async () => null,
   renameMusicSet: async () => {},
   moveMusicSet: () => {},
   deleteMusicSet: async () => {},
