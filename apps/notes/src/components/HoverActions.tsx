@@ -64,14 +64,17 @@ export function HoldIcon({ action, className = '' }: { action: HoverAction; clas
  * `rest`, and in its place while the host row is hovered, the actions. Both
  * stay in layout, stacked in one grid cell, so the row neither grows nor
  * moves when they swap. With `rest` null the actions show alone on hover and
- * take no room otherwise (a song's title then has the whole row).
+ * take no room otherwise (a song's title then has the whole row). `align`
+ * places the actions within the cell `rest` sizes: `end` (the default) for
+ * row meta at a row's right edge, `start` for a marker that reads from its
+ * left, such as a heading's (count), so the icon does not move with its width.
  */
-export function HoverActions({ rest, actions }: { rest: ReactNode; actions: readonly HoverAction[] }) {
+export function HoverActions({ rest, actions, align = 'end' }: { rest: ReactNode; actions: readonly HoverAction[]; align?: 'start' | 'end' }) {
   if (actions.length === 0) return <>{rest}</>
   const icons = actions.map((action) => <HoldIcon key={action.icon} action={action} />)
   if (rest === null) return <span className="hover-swap-actions is-alone">{icons}</span>
   return (
-    <span className="hover-swap">
+    <span className={align === 'start' ? 'hover-swap is-start' : 'hover-swap'}>
       <span className="hover-swap-rest">{rest}</span>
       <span className="hover-swap-actions">{icons}</span>
     </span>

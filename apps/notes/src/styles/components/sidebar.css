@@ -695,6 +695,10 @@
   justify-items:  end;
 }
 
+.hover-swap.is-start {
+  justify-items: start;
+}
+
 .hover-swap > * {
   grid-area: 1 / 1;
 }
