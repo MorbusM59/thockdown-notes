@@ -116,7 +116,7 @@ function sanitizeViewport(input: Partial<PersistedViewportState> | undefined): P
 }
 
 function sanitizeSidebarMode(input: unknown): SidebarMode {
-  if (input === 'date' || input === 'category' || input === 'archive' || input === 'trash' || input === 'external' || input === 'songs' || input === 'find') {
+  if (input === 'date' || input === 'category' || input === 'archive' || input === 'trash' || input === 'external' || input === 'songs' || input === 'soundscapes' || input === 'find') {
     return input;
   }
   return 'date';
@@ -358,6 +358,7 @@ function sanitizeSidebarViewState(
     trash: sanitizeSidebarViewStateEntry(input?.trash),
     external: sanitizeSidebarViewStateEntry(input?.external),
     songs: sanitizeSidebarViewStateEntry(input?.songs),
+    soundscapes: sanitizeSidebarViewStateEntry(input?.soundscapes),
     find: sanitizeSidebarViewStateEntry(input?.find),
   };
 }

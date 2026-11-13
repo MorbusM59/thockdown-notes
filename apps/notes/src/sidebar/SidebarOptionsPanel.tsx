@@ -6,7 +6,6 @@ import { AccordionGroup, AccordionSection } from '@thockdown/interaction/Accordi
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { UnsavedPresetButton } from '@thockdown/interaction/UnsavedPresetButton'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { SoundscapeOptions } from '@thockdown/soundscape/SoundscapeOptions'
 import { FontControls, FontSection } from './FontSection'
 import { OptionsSectionBar } from './OptionsSectionBar'
 import type { OptionsSectionId } from '../shared/optionsSections'
@@ -2639,15 +2638,6 @@ export function SidebarOptionsPanel({
             </OptionsSliderRows>
           </div>
       </AccordionSection>
-
-      </>) : null}
-
-      {showsSection('soundscapes') ? (<>
-      <SoundscapeOptions
-        preferences={soundscapePreferences}
-        onChange={onSoundscapePreferencesChange}
-        isSearching={isSearching}
-      />
 
       </>) : null}
 

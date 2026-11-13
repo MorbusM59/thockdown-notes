@@ -173,6 +173,7 @@ import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId 
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
 import { readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel } from './sidebar/MusicLibraryPanel'
+import { SoundscapeView } from '@thockdown/soundscape/SoundscapeOptions'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -578,6 +579,7 @@ function createDefaultSidebarViewStateByMode(): SidebarViewStateByMode {
     trash: sanitizeSidebarViewState(undefined),
     external: sanitizeSidebarViewState(undefined),
     songs: sanitizeSidebarViewState(undefined),
+    soundscapes: sanitizeSidebarViewState(undefined),
     find: sanitizeSidebarViewState(undefined),
     options: sanitizeSidebarViewState(undefined),
   }
@@ -1465,6 +1467,7 @@ function App() {
   // Songs view is up, separate from the note search's and not kept across a
   // restart.
   const [songsSearchQuery, setSongsSearchQuery] = useState('')
+  const [soundscapesSearchQuery, setSoundscapesSearchQuery] = useState('')
   const [optionsSection, setOptionsSection] = useState<OptionsSectionId>(DEFAULT_OPTIONS_SECTION)
   const [musicSetListGrouping, setMusicSetListGrouping] = useState<MusicSetListGrouping>(DEFAULT_MUSIC_SET_LIST_GROUPING)
   const musicLibrarySlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
@@ -3565,7 +3568,7 @@ function App() {
   const getSidebarScrollerForMode = useCallback((mode: SidebarMode): HTMLDivElement | null => {
     // Options and the Music Library scroll the sidebar's content box itself;
     // every list scrolls in its own box inside it.
-    if (mode === 'options' || mode === 'songs') {
+    if (mode === 'options' || mode === 'songs' || mode === 'soundscapes') {
       return sidebarContentEl
     }
 
@@ -5122,6 +5125,7 @@ ${markdownHtml}
               trash: sanitizeSidebarViewState(appState.menu.sidebarViewState?.trash),
               external: sanitizeSidebarViewState(appState.menu.sidebarViewState?.external),
               songs: sanitizeSidebarViewState(appState.menu.sidebarViewState?.songs),
+              soundscapes: sanitizeSidebarViewState(appState.menu.sidebarViewState?.soundscapes),
               find: sanitizeSidebarViewState(appState.menu.sidebarViewState?.find),
               options: sanitizeSidebarViewState(appState.menu.sidebarViewState?.options),
             }
@@ -6614,6 +6618,7 @@ ${markdownHtml}
   const isFindMode = sidebarMode === 'find'
   const isOptionsSearchMode = sidebarMode === 'options'
   const isSongsSearchMode = sidebarMode === 'songs'
+  const isSoundscapesSearchMode = sidebarMode === 'soundscapes'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
@@ -6795,7 +6800,7 @@ ${markdownHtml}
   // scrolls them itself. Every other mode is a list in a scroll box of its
   // own inside the content box (`setSidebarTreeScrollerEl`). Either way the
   // sidebar's own scrollbar beside the box is what shows and moves it.
-  const isSidebarPanelMode = sidebarMode === 'options' || sidebarMode === 'songs'
+  const isSidebarPanelMode = sidebarMode === 'options' || sidebarMode === 'songs' || sidebarMode === 'soundscapes'
   // Whether the two pages controls are needed at all: only the Date, Trash
   // and External sections of the Notes view are paged.
   const showPagination = !isImageLibraryShown && isPagedNoteSection(sidebarMode) && totalPages > 1
@@ -8171,8 +8176,8 @@ ${markdownHtml}
                   spellCheck={false}
                   autoCorrect="off"
                   autoCapitalize="off"
-                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : 'Search for content or #tag...'}
-                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : searchQuery}
+                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : isSoundscapesSearchMode ? 'Search soundscape options...' : 'Search for content or #tag...'}
+                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
                     if (isFindMode) {
@@ -8181,6 +8186,8 @@ ${markdownHtml}
                       setOptionsSearchQuery(value)
                     } else if (isSongsSearchMode) {
                       setSongsSearchQuery(value)
+                    } else if (isSoundscapesSearchMode) {
+                      setSoundscapesSearchQuery(value)
                     } else {
                       setSearchQuery(value)
                     }
@@ -8226,7 +8233,7 @@ ${markdownHtml}
                       Aa
                     </button>
                   </div>
-                ) : (isOptionsSearchMode || isSongsSearchMode) ? (
+                ) : (isOptionsSearchMode || isSongsSearchMode || isSoundscapesSearchMode) ? (
                   // The options search and the song filter are never case
                   // sensitive, so the toggle's place goes to clearing the
                   // term: back to the whole panel without reaching for the
@@ -8236,10 +8243,10 @@ ${markdownHtml}
                     className="btn-icon search-input-case-toggle"
                     data-tooltip="Clear search"
                     aria-label="Clear search"
-                    disabled={(isSongsSearchMode ? songsSearchQuery : optionsSearchQuery) === ''}
+                    disabled={(isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : optionsSearchQuery) === ''}
                     /* mouse-default: focus semantics, read by focusOwnership on mousedown */
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => (isSongsSearchMode ? setSongsSearchQuery('') : setOptionsSearchQuery(''))}
+                    onClick={() => (isSongsSearchMode ? setSongsSearchQuery('') : isSoundscapesSearchMode ? setSoundscapesSearchQuery('') : setOptionsSearchQuery(''))}
                   >
                     <span className="fa-solid fa-xmark" aria-hidden="true" />
                   </button>
@@ -8265,15 +8272,17 @@ ${markdownHtml}
                 </div>
               </div>
 
-              {/* The view bar: six cells, the fourth of them blank. Notes
+              {/* The view bar: six cells. Notes
                   and Images each hold four sections, chosen in the section
                   selector at the top of their list; Songs is the Music
-                  Library. */}
+                  Library and Soundscapes the soundscape's presets and
+                  controls. */}
               <div className="view-toggle" role="tablist" aria-label="Sidebar views">
                 {([
                   { view: 'notes', label: 'Notes', icon: 'fa-solid fa-file-lines' },
                   { view: 'images', label: 'Images', icon: 'fa-solid fa-image' },
                   { view: 'songs', label: 'Songs', icon: 'fa-solid fa-compact-disc' },
+                  { view: 'soundscapes', label: 'Soundscapes', icon: 'fa-solid fa-podcast' },
                 ] as const).map(({ view, label, icon }) => (
                   <button
                     key={view}
@@ -8287,20 +8296,13 @@ ${markdownHtml}
                       const section = getActiveSection()
                       section?.setIsTrashViewDeletePrimed(false)
                       section?.clearTrashButtonArmTimer()
-                      if (view === 'songs') handleViewModeButtonClick('songs')
+                      if (view === 'songs' || view === 'soundscapes') handleViewModeButtonClick(view)
                       else showSidebarListView(view)
                     }}
                   >
                     <span className={`view-toggle-glyph ${icon}`} aria-hidden="true" />
                   </button>
                 ))}
-                <button
-                  className="toggle-btn notes-mode-button icon-btn is-blank"
-                  type="button"
-                  disabled
-                  aria-hidden="true"
-                  tabIndex={-1}
-                />
                 <button
                   className={`toggle-btn notes-mode-button icon-btn btn-find${isFindMode ? ' is-active' : ''}`}
                   type="button"
@@ -8489,6 +8491,8 @@ ${markdownHtml}
                       </div>
                     ) : sidebarMode === 'songs' ? (
                       <MusicLibraryPanel grouping={musicSetListGrouping} filter={songsSearchQuery} />
+                    ) : sidebarMode === 'soundscapes' ? (
+                      <SoundscapeView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}

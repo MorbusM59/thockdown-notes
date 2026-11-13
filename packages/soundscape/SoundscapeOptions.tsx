@@ -1,6 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import { AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
+import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { UnsavedPresetButton } from '@thockdown/interaction/UnsavedPresetButton'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import {
@@ -524,31 +523,33 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
 }
 
 /**
- * The soundscape's controls in the desktop options panel's Soundscapes
- * section: the presets in an always-open subsection, then the environment and
- * the channels as collapsible subsections, the channel's own groups as
- * dividers inside the latter.
+ * The desktop sidebar's SOUNDSCAPES VIEW: the presets as the view's section
+ * selector, every soundscape shown (factory, reset, the reader's own, the
+ * unsaved one), then the environment and the channels as collapsible
+ * subsections, the channel's own groups as dividers inside the latter.
+ * `filter` is the sidebar's search field, searching the subsections the way
+ * the options search does; the selector steps aside while it is in force.
  */
-export function SoundscapeOptions({ isSearching, ...props }: SoundscapeOptionsProps & {
-  /** An options search is in force: the always-open presets step aside, as the panel's other fixed subsections do. */
-  isSearching: boolean
-}) {
+export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & { filter: string }) {
+  const isSearching = filter.trim() !== ''
   return (
     <SoundscapeParts
       {...props}
       arrangement="subsections"
       arrange={({ presets, environment, channels }) => (
-        <>
-          <OptionsFixedSection className="sidebar-options-section-soundscape-presets" heading="Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+        <div className="options-content sidebar-options-content" aria-label="Soundscapes">
+          <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
             {presets}
-          </OptionsFixedSection>
-          <AccordionSection className="sidebar-options-section-soundscape-environment" ariaLabel="Environment" heading="Environment" iconClass="fa-torii-gate">
-            {environment}
-          </AccordionSection>
-          <AccordionSection className="sidebar-options-section-soundscape-channels" ariaLabel="Channels" heading="Channels" iconClass="fa-chart-simple">
-            {channels}
-          </AccordionSection>
-        </>
+          </div>
+          <AccordionGroup filter={filter}>
+            <AccordionSection className="sidebar-options-section-soundscape-environment" ariaLabel="Environment" heading="Environment" iconClass="fa-torii-gate">
+              {environment}
+            </AccordionSection>
+            <AccordionSection className="sidebar-options-section-soundscape-channels" ariaLabel="Channels" heading="Channels" iconClass="fa-chart-simple">
+              {channels}
+            </AccordionSection>
+          </AccordionGroup>
+        </div>
       )}
     />
   )

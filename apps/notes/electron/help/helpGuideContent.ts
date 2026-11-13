@@ -782,7 +782,7 @@ ${shortcutTable()}
 > **Where?**
 > The cogwheel, the last of the sidebar's view icons.
 
-*The home for every appearance, sound, sync, and performance control in the app, in six sections: General, Layouts, Music, Soundscapes, Modules and Advanced.*
+*The home for every appearance, sound, sync, and performance control in the app, in five sections: General, Layouts, Music, Modules and Advanced. The soundscapes have a sidebar view of their own.*
 
 - The row of six buttons at the top picks the section; the panel reopens on the one you left. Each section holds collapsible subsections, and only Layouts belongs to the layout: everything else is the same for every layout. A search looks through every section.
 - Most controls apply live. Every subsection is shown, whichever mode you are in: where editor and reader differ, the editor's controls are headed "Editor" and the reader's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
@@ -954,7 +954,7 @@ ${shortcutTable()}
 ### [Soundscapes](#soundscapes)
 
 > **Where?**
-> The Soundscapes button in the music player turns them on or off, and scrolling over it sets their overall volume. It shows the icon of the soundscape it will play. Settings panel → Soundscapes adjusts the channels and chooses the soundscape.
+> The Soundscapes button in the music player turns them on or off, and scrolling over it sets their overall volume. It shows the icon of the soundscape it will play. The sidebar's Soundscapes view (the podcast icon) chooses the soundscape and adjusts the channels.
 
 *Generated sound — wind, surf, rain, thunder, running water, fire and wind chimes — that can play alongside the music player, all in one shared space and under one sky.*
 
