@@ -168,7 +168,7 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, expanded, pres
   isActive: boolean
   expanded: boolean
   press: CardPress
-  /** What takes the size's place on hover; none while the card is expanded. */
+  /** Shown at the end of the title row on hover; none while the card is expanded. */
   actions: readonly HoverAction[]
   /** The trash: the file's name on top and the id below it, as a note card names a note above its id. */
   nameFirst?: boolean
@@ -201,10 +201,13 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, expanded, pres
         <div className="note-list-column note-list-column-primary">
           {src ? <CardImage className="image-list-thumbnail" src={src} inset={part.inset} /> : null}
           <div className="note-list-content">
-            <div className="note-list-title">{title}</div>
+            <div className="note-list-title-row">
+              <div className="note-list-title">{title}</div>
+              <HoverActions rest={null} actions={expanded ? [] : actions} />
+            </div>
             <div className="note-list-meta-row">
               {metaLeft}
-              <span className="note-list-meta-right"><HoverActions rest={sizeLabel(part)} actions={expanded ? [] : actions} /></span>
+              <span className="note-list-meta-right">{sizeLabel(part)}</span>
             </div>
           </div>
         </div>

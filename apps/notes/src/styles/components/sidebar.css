@@ -796,6 +796,19 @@
   justify-content: space-between;
 }
 
+.note-list-title-row {
+  display:     flex;
+  align-items: center;
+  gap:         var(--spacing-regular);
+  min-width:   0;
+}
+
+/* A big card's title gives up the room its actions take while hovered. */
+.note-list-title-row > .note-list-title {
+  flex:      1 1 auto;
+  min-width: 0;
+}
+
 .note-list-title {
   font-size:     calc(12px * var(--ui-font-scale));
   color:         var(--color-text-base);

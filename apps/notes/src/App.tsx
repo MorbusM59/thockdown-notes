@@ -1101,7 +1101,10 @@ const NoteListItem = memo(function NoteListItem({
     () => noteRowActionList(note, actions, isModified, isFileConflict, isChapterParentUnavailable),
     [note, actions, isModified, isFileConflict, isChapterParentUnavailable],
   )
-  const modified = <span className="note-list-meta-right"><HoverActions rest={<ModifiedDateLabel timestampMs={note.updatedAtMs} />} actions={rowActions} /></span>
+  // A tree card's one row swaps its modified time for the actions on hover;
+  // a big card keeps the time in its meta row and shows the actions at the
+  // end of its title row instead (top right, where the hand goes first).
+  const modifiedLabel = <ModifiedDateLabel timestampMs={note.updatedAtMs} />
 
   return (
     <div
@@ -1121,19 +1124,22 @@ const NoteListItem = memo(function NoteListItem({
         <div className="note-list-content">
           <div className="note-list-meta-row note-tree-card-row">
             <span className="note-list-title">{displayTitle || 'Untitled'}</span>
-            {modified}
+            <span className="note-list-meta-right"><HoverActions rest={modifiedLabel} actions={rowActions} /></span>
           </div>
         </div>
       ) : (
         <div className="note-list-columns">
           <div className="note-list-column note-list-column-primary">
             <div className="note-list-content">
-              <div className="note-list-title">{displayTitle || 'Untitled'}</div>
+              <div className="note-list-title-row">
+                <div className="note-list-title">{displayTitle || 'Untitled'}</div>
+                <HoverActions rest={null} actions={rowActions} />
+              </div>
               <div className="note-list-meta-row">
                 <span className="note-list-meta-left">
                   {chapterMetadataText ?? (noteListMetaKind === 'id' ? formatIdWithSigil(note.assignedId, '$') : createdDate)}
                 </span>
-                {modified}
+                <span className="note-list-meta-right">{modifiedLabel}</span>
               </div>
             </div>
           </div>

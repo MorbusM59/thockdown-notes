@@ -496,7 +496,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Archiving and Trash](#archiving-and-trash)
 
 > **Where?**
-> The icons that take a note card's modified time while you hover it, in every Notes section.
+> The icons a note card shows while you hover it: at the end of its title on the large cards (By date, Trash), in place of its modified time on the one-line cards.
 
 *Moves a note out of your active list without deleting it outright.*
 
