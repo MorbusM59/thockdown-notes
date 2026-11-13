@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
-import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
+import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { TextButton } from '../components/TextButton'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
@@ -35,45 +34,6 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
   const sets = nowPlaying.musicSets
   const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
   const active = nowPlaying.pool?.active ?? []
-  // Sets join and leave the music pool the way soundscape channels are
-  // enabled and disabled (SoundscapeOptions.tsx): a left hold puts an
-  // inactive set into the pool, a right hold takes an active one out, and a
-  // right click (released before any hold completed) plays from that set
-  // alone, as soloing a channel does. A plain left click opens the set here.
-  const holdRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
-  const rightPressRef = useRef<{ pointerId: number; slot: PlaylistSlot } | null>(null)
-  /** Set when a hold completes; the click its release dispatches then opens nothing. */
-  const holdClaimedRef = useRef(false)
-  useEffect(() => () => holdRef.current?.cancel(), [])
-  const startHold = (slot: PlaylistSlot, isActive: boolean, button: number, pointerId: number) => {
-    if (button === 2) rightPressRef.current = { pointerId, slot }
-    if ((button === 0 && isActive) || (button === 2 && !isActive) || (button !== 0 && button !== 2)) return
-    holdRef.current?.cancel()
-    const cancel = armHold(() => {
-      holdRef.current = null
-      holdClaimedRef.current = true
-      if (button === 2) {
-        rightPressRef.current = null
-        void nowPlaying.leaveMusicSet(slot)
-      } else {
-        nowPlaying.selectSlot(slot, true)
-      }
-    }, HOLD_CONFIRM_MS)
-    holdRef.current = { pointerId, cancel }
-  }
-  /** `released` is a real release on the button; a cancel or the pointer leaving decides nothing. */
-  const endHold = (pointerId: number, released: boolean) => {
-    const hold = holdRef.current
-    if (hold && hold.pointerId === pointerId) {
-      hold.cancel()
-      holdRef.current = null
-    }
-    const rightPress = rightPressRef.current
-    if (rightPress && rightPress.pointerId === pointerId) {
-      rightPressRef.current = null
-      if (released) nowPlaying.selectSlot(rightPress.slot, false)
-    }
-  }
   return (
     <SelectorRows>
     <div className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets" {...{ [MUSIC_SET_DROP_NEW_ATTRIBUTE]: '' }}>
@@ -86,24 +46,21 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
             {...{ [MUSIC_SET_DROP_SLOT_ATTRIBUTE]: candidate.slot }}
             type="button"
             role="radio"
-            className={`btn-icon options-color-swatch options-loadout-btn soundscape-channel-selector-btn${candidate.slot === slot ? ' is-active' : ''}${isActive ? ' is-enabled' : ' is-disabled'}`}
+            // A set is pressed in while it plays in the pool and dashed while
+            // it is the set this view shows and edits. A left click plays from
+            // it alone and a Shift click adds it, as the music player's set
+            // buttons do; a right click opens it here.
+            className={`btn-icon options-color-swatch options-loadout-btn${isActive ? ' is-active' : ''}${candidate.slot === slot ? ' is-edited' : ''}`}
             data-tooltip={`${candidate.name}: ${nowPlaying.pool?.counts[candidate.slot] ?? 0} songs`}
             aria-label={`${candidate.name}, ${isActive ? 'playing in the pool' : 'not in the pool'}`}
             aria-checked={candidate.slot === slot}
             data-secondary-press="action"
-            onClick={() => { if (!holdClaimedRef.current) selectMusicLibrarySet(candidate.slot) }}
-            onPointerDown={(event) => {
-              holdClaimedRef.current = false
-              cell.onPointerDown(event)
-              startHold(candidate.slot, isActive, event.button, event.pointerId)
-            }}
-            onPointerUp={(event) => endHold(event.pointerId, true)}
-            onPointerCancel={(event) => endHold(event.pointerId, false)}
-            onPointerLeave={(event) => endHold(event.pointerId, false)}
+            onClick={(event) => nowPlaying.selectSlot(candidate.slot, event.shiftKey)}
+            onPointerDown={cell.onPointerDown}
             onContextMenu={(event) => {
-              // The solo itself is decided on the release (endHold).
               event.preventDefault()
               event.stopPropagation()
+              selectMusicLibrarySet(candidate.slot)
             }}
             {...cell.props}
           >

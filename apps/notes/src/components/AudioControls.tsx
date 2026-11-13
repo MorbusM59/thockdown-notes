@@ -35,7 +35,7 @@ import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
-import { openMusicLibrary, readMusicLibrarySlot, subscribeMusicLibrarySlot } from '../sidebar/musicLibraryView'
+import { openMusicLibrary } from '../sidebar/musicLibraryView'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
@@ -194,16 +194,9 @@ export const AudioControls = memo(function AudioControls({
   const swallowScrubClickRef = useRef(false)
   const activeRef = useRef(activeSlots)
   activeRef.current = activeSlots
-  // THE POOL is the ACTIVATED sets plus the set open in the Music Library,
-  // which plays while it is open there and leaves the pool when another set
-  // is opened, unless it was activated. Every pick and walk reads this; the
-  // activated sets alone are what is persisted and what the player lights.
-  const librarySlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
-  const openLibrarySlot = librarySlot !== null && musicSets.some((set) => set.slot === librarySlot) ? librarySlot : musicSets[0]?.slot ?? null
-  const poolSlots = useMemo(
-    () => (openLibrarySlot === null || activeSlots.includes(openLibrarySlot) ? activeSlots : [...activeSlots, openLibrarySlot]),
-    [activeSlots, openLibrarySlot],
-  )
+  // THE POOL is the activated sets: what the player and the Music Library
+  // light, what is persisted, and what every pick and walk reads.
+  const poolSlots = activeSlots
   const poolSlotsRef = useRef(poolSlots)
   poolSlotsRef.current = poolSlots
   // Written at once by setPoolFilter too, so a song chosen in the same
@@ -1030,7 +1023,6 @@ export const AudioControls = memo(function AudioControls({
       moveMusicSet: reorderMusicSets,
       deleteMusicSet,
       purgeMusicSet,
-      leaveMusicSet: leaveSet,
       removeFromMusicSet,
       addToMusicSet,
       addPathsToMusicSet,
@@ -1051,7 +1043,6 @@ export const AudioControls = memo(function AudioControls({
     reorderMusicSets,
     deleteMusicSet,
     purgeMusicSet,
-    leaveSet,
     removeFromMusicSet,
     addToMusicSet,
     addPathsToMusicSet,
