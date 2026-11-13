@@ -198,7 +198,6 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
             iconClass={grouping === 'folder' ? 'fa-folder' : 'fa-user'}
             marker={
               <HoverActions
-                align="start"
                 rest={<AccordionCount count={group.dividers.reduce((total, divider) => total + divider.songs.length, 0)} />}
                 actions={[{
                   icon: 'fa-xmark',
@@ -214,7 +213,7 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
                 marker={
                   <HoverActions
                     align="start"
-                rest={<AccordionCount count={divider.songs.length} />}
+                    rest={<AccordionCount count={divider.songs.length} />}
                     actions={[{
                       icon: 'fa-xmark',
                       label: `Remove them all from ${name}`,

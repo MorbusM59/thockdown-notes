@@ -65,9 +65,9 @@ export function HoldIcon({ action, className = '' }: { action: HoverAction; clas
  * stay in layout, stacked in one grid cell, so the row neither grows nor
  * moves when they swap. With `rest` null the actions show alone on hover and
  * take no room otherwise (a song's title then has the whole row). `align`
- * places the actions within the cell `rest` sizes: `end` (the default) for
- * row meta at a row's right edge, `start` for a marker that reads from its
- * left, such as a heading's (count), so the icon does not move with its width.
+ * places the actions within the cell `rest` sizes, matching how `rest` sits:
+ * `end` (the default) for right-aligned meta, `start` for a left-aligned one
+ * such as a divider's (count).
  */
 export function HoverActions({ rest, actions, align = 'end' }: { rest: ReactNode; actions: readonly HoverAction[]; align?: 'start' | 'end' }) {
   if (actions.length === 0) return <>{rest}</>
