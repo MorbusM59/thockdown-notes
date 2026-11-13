@@ -76,6 +76,7 @@ const DEFAULT_APP_STATE: AppState = {
       category: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
       archive: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
       trash: { page: 1, scrollTop: 0 },
+      external: { page: 1, scrollTop: 0 },
       find: { scrollTop: 0 },
     },
     features: DEFAULT_FEATURE_TOGGLES,
@@ -115,7 +116,7 @@ function sanitizeViewport(input: Partial<PersistedViewportState> | undefined): P
 }
 
 function sanitizeSidebarMode(input: unknown): SidebarMode {
-  if (input === 'date' || input === 'category' || input === 'archive' || input === 'trash' || input === 'songs' || input === 'find') {
+  if (input === 'date' || input === 'category' || input === 'archive' || input === 'trash' || input === 'external' || input === 'songs' || input === 'find') {
     return input;
   }
   return 'date';
@@ -355,6 +356,7 @@ function sanitizeSidebarViewState(
     category: sanitizeSidebarViewStateEntry(input?.category),
     archive: sanitizeSidebarViewStateEntry(input?.archive),
     trash: sanitizeSidebarViewStateEntry(input?.trash),
+    external: sanitizeSidebarViewStateEntry(input?.external),
     songs: sanitizeSidebarViewStateEntry(input?.songs),
     find: sanitizeSidebarViewStateEntry(input?.find),
   };

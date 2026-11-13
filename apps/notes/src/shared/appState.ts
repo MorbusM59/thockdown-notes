@@ -28,7 +28,7 @@ export const APP_STATE_CHANNELS = {
   saveWindowState: 'state:window:save',
 } as const satisfies InvokeChannels<AppStateApi>;
 
-export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'songs' | 'find' | 'options';
+export type SidebarMode = 'date' | 'category' | 'archive' | 'trash' | 'external' | 'songs' | 'find' | 'options';
 
 export interface PersistedSidebarViewState {
   scrollTop?: number;

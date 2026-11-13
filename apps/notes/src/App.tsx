@@ -48,7 +48,7 @@ import {
 } from './sound/TypingSoundManager'
 import type { PersistedMenuState, PersistedSidebarViewState, SidebarMode } from './shared/appState'
 import {
-  DEFAULT_SIDEBAR_SECTIONS, isSidebarListSection, rememberSidebarSection, sanitizeSidebarSections, sidebarListViewOf,
+  DEFAULT_SIDEBAR_SECTIONS, isPagedNoteSection, isSidebarListSection, rememberSidebarSection, sanitizeSidebarSections, sidebarListViewOf,
   type SidebarListSection, type SidebarListView, type SidebarSections,
 } from './shared/sidebarSections'
 import { SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
@@ -521,13 +521,14 @@ type SidebarViewStateByMode = Record<SidebarMode, SidebarViewState>
 
 const NO_IMAGE_USES: NoteImageUse[] = []
 
-/** The four sections of the Notes view and of the Images view, in the section selector's order (shared/sidebarSections.ts). */
+/** The sections of the Notes view and of the Images view, in the section selector's order (`SECTIONS_OF_VIEW`, shared/sidebarSections.ts). */
 const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelectorEntry<SidebarListSection>>> = {
   notes: [
     { id: 'date', label: 'Date', icon: 'fa-solid fa-clock' },
     { id: 'category', label: 'Category', icon: 'fa-solid fa-tags' },
     { id: 'archive', label: 'Archive', icon: 'fa-solid fa-box-archive' },
     { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
+    { id: 'external', label: 'External', icon: 'fa-solid fa-file-import' },
   ],
   images: [
     { id: 'date', label: 'Images in Order', icon: 'fa-solid fa-list-ol' },
@@ -538,7 +539,7 @@ const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelecto
 }
 
 /**
- * How many notes one page of the Date and Trash sections holds: page 1 is
+ * How many notes one page of the Date, Trash and External sections holds: page 1 is
  * notes 1 to 50, page 2 is 51 to 100, and so on. A page scrolls, so the
  * number does not depend on how many cards fit the window.
  */
@@ -571,6 +572,7 @@ function createDefaultSidebarViewStateByMode(): SidebarViewStateByMode {
     category: sanitizeSidebarViewState(undefined),
     archive: sanitizeSidebarViewState(undefined),
     trash: sanitizeSidebarViewState(undefined),
+    external: sanitizeSidebarViewState(undefined),
     songs: sanitizeSidebarViewState(undefined),
     find: sanitizeSidebarViewState(undefined),
     options: sanitizeSidebarViewState(undefined),
@@ -1396,12 +1398,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
 const noteIdOf = (note: NoteSummary) => note.id
 const noteTreeCardSelector = (id: string) => `.note-list-item.is-tree-card[data-note-id="${escapeAttributeSelectorValue(id)}"]`
 
-function compareExternalNotesFirst(a: NoteSummary, b: NoteSummary): number {
-  const aIsExternal = isExternalNote(a)
-  const bIsExternal = isExternalNote(b)
-  if (aIsExternal !== bIsExternal) {
-    return aIsExternal ? -1 : 1
-  }
+function compareNewestFirst(a: NoteSummary, b: NoteSummary): number {
   return b.updatedAtMs - a.updatedAtMs
 }
 
@@ -2391,6 +2388,7 @@ function App() {
 
   const dateFilteredNotesRef = useRef<NoteSummary[]>([])
   const trashFilteredNotesRef = useRef<NoteSummary[]>([])
+  const externalFilteredNotesRef = useRef<NoteSummary[]>([])
   const categoryTreeRef = useRef<PrimaryGroup[]>([])
   const archiveTreeRef = useRef<PrimaryGroup[]>([])
   const externalOpenQueueRef = useRef<Promise<void>>(Promise.resolve())
@@ -3600,7 +3598,7 @@ function App() {
       collapsedSecondary: baseline.collapsedSecondary,
     }
 
-    if (mode === 'date' || mode === 'trash') {
+    if (isPagedNoteSection(mode)) {
       base.page = Math.max(1, currentPage)
     }
 
@@ -3635,7 +3633,7 @@ function App() {
       scrollTop: snapshot.scrollTop,
     }
 
-    if (mode === 'date' || mode === 'trash') {
+    if (isPagedNoteSection(mode)) {
       setCurrentPage(Math.max(1, snapshot.page || 1))
     }
 
@@ -3700,8 +3698,10 @@ function App() {
       return false
     }
 
-    if (mode === 'date' || mode === 'trash') {
-      const source = mode === 'date' ? dateFilteredNotesRef.current : trashFilteredNotesRef.current
+    if (isPagedNoteSection(mode)) {
+      const source = mode === 'date' ? dateFilteredNotesRef.current
+        : mode === 'trash' ? trashFilteredNotesRef.current
+          : externalFilteredNotesRef.current
       const noteIndex = source.findIndex((note) => note.id === activeNoteId)
       if (noteIndex < 0) {
         return false
@@ -5192,6 +5192,7 @@ ${markdownHtml}
               category: sanitizeSidebarViewState(appState.menu.sidebarViewState?.category),
               archive: sanitizeSidebarViewState(appState.menu.sidebarViewState?.archive),
               trash: sanitizeSidebarViewState(appState.menu.sidebarViewState?.trash),
+              external: sanitizeSidebarViewState(appState.menu.sidebarViewState?.external),
               songs: sanitizeSidebarViewState(appState.menu.sidebarViewState?.songs),
               find: sanitizeSidebarViewState(appState.menu.sidebarViewState?.find),
               options: sanitizeSidebarViewState(appState.menu.sidebarViewState?.options),
@@ -6728,9 +6729,10 @@ ${markdownHtml}
     return searchedNotes.filter((note) => {
       if (isDeletedNote(note)) return false
       if (isArchivedNote(note)) return false
+      // An external note is listed in the External section alone.
+      if (isExternalNote(note)) return false
       // Chapters only ever exist to be shown through their parent's chapter
-      // bar -- excluded from 'date', unlike external notes (which still show
-      // there). The one exception is an active search: a chapter whose own
+      // bar -- excluded from 'date'. The one exception is an active search: a chapter whose own
       // content/title matched is surfaced like any other note (see
       // NoteListItem's chapterParentTitle, shown alongside -- not in place
       // of -- the chapter's own title). A deleted chapter is a second,
@@ -6747,7 +6749,7 @@ ${markdownHtml}
     // (see isChapterOnlyNote's other callers) -- surfacing it here would
     // just dump it into an untagged bucket with the wrong title. Chapters
     // stay search-only, in the flat 'date' list.
-    const categoryNotes = dateEligibleNotes.filter((note) => !isExternalNote(note) && !isChapterOnlyNote(note))
+    const categoryNotes = dateEligibleNotes.filter((note) => !isChapterOnlyNote(note))
     return filterNotesBySelectedDate(categoryNotes)
   }, [dateEligibleNotes, filterNotesBySelectedDate])
 
@@ -6807,8 +6809,15 @@ ${markdownHtml}
   }, [searchedNotes])
 
   const dateFilteredNotes = useMemo(() => {
-    return filterNotesBySelectedDate(dateEligibleNotes).sort(compareExternalNotesFirst)
+    return filterNotesBySelectedDate(dateEligibleNotes).sort(compareNewestFirst)
   }, [dateEligibleNotes, filterNotesBySelectedDate])
+
+  // Every note opened from a file outside the app that is not in the trash,
+  // newest first, under the same search and month/year filters as Date.
+  const externalFilteredNotes = useMemo(() => {
+    const externalNotes = searchedNotes.filter((note) => isExternalNote(note) && !isDeletedNote(note))
+    return filterNotesBySelectedDate(externalNotes).sort(compareNewestFirst)
+  }, [filterNotesBySelectedDate, searchedNotes])
 
   const trashFilteredNotes = useMemo(() => {
     return trashEligibleNotes
@@ -6831,6 +6840,10 @@ ${markdownHtml}
   }, [trashFilteredNotes])
 
   useEffect(() => {
+    externalFilteredNotesRef.current = externalFilteredNotes
+  }, [externalFilteredNotes])
+
+  useEffect(() => {
     categoryTreeRef.current = categoryTree
   }, [categoryTree])
 
@@ -6849,12 +6862,14 @@ ${markdownHtml}
       return trashFilteredNotes
     }
 
-    return []
-  }, [dateFilteredNotes, sidebarMode, trashFilteredNotes])
+    if (sidebarMode === 'external') {
+      return externalFilteredNotes
+    }
 
-  const totalPagedNotes = (sidebarMode === 'date' || sidebarMode === 'trash')
-    ? visibleNotes.length
-    : 0
+    return []
+  }, [dateFilteredNotes, externalFilteredNotes, sidebarMode, trashFilteredNotes])
+
+  const totalPagedNotes = isPagedNoteSection(sidebarMode) ? visibleNotes.length : 0
 
   // The menu is deliberately a stable "file cabinet," not something that
   // chases the active note -- browsing the sidebar (changing a filter,
@@ -6912,12 +6927,10 @@ ${markdownHtml}
       ? 'trash'
       : isArchived
         ? 'archive'
-        // Category/archive trees exclude external (filesystem-synced) notes
-        // entirely, regardless of any filter -- 'date' is the only view
-        // that can ever show one, so there's no "stay in category" option
-        // for it even if that's the current mode.
+        // An external (file-backed) note is listed in the External section
+        // and nowhere else.
         : isExternal
-          ? 'date'
+          ? 'external'
           : (sidebarMode === 'date' || sidebarMode === 'category')
             ? sidebarMode
             : 'category'
@@ -6980,9 +6993,9 @@ ${markdownHtml}
   // own inside the content box (`setSidebarTreeScrollerEl`). Either way the
   // sidebar's own scrollbar beside the box is what shows and moves it.
   const isSidebarPanelMode = sidebarMode === 'options' || sidebarMode === 'songs'
-  // Whether the two pages controls are needed at all: only the Date and
-  // Trash sections of the Notes view are paged.
-  const showPagination = !isImageLibraryShown && (sidebarMode === 'date' || sidebarMode === 'trash') && totalPages > 1
+  // Whether the two pages controls are needed at all: only the Date, Trash
+  // and External sections of the Notes view are paged.
+  const showPagination = !isImageLibraryShown && isPagedNoteSection(sidebarMode) && totalPages > 1
   const isMusicLibraryDocked = sidebarMode === 'songs'
   const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 
@@ -6993,7 +7006,7 @@ ${markdownHtml}
   const sidebarScrollerKey = useMemo(() => scrollerIdentity(sidebarScroller), [sidebarScroller])
 
   const pagedVisibleNotes = useMemo(() => {
-    if (sidebarMode !== 'date' && sidebarMode !== 'trash') {
+    if (!isPagedNoteSection(sidebarMode)) {
       return visibleNotes
     }
 
@@ -7004,7 +7017,7 @@ ${markdownHtml}
   // A new page starts at its top. A mode transition and a jump to the active
   // note both set the scroll position after this, in a later frame.
   useLayoutEffect(() => {
-    if (sidebarMode !== 'date' && sidebarMode !== 'trash') return
+    if (!isPagedNoteSection(sidebarMode)) return
     if (sidebarTreeScrollerEl) sidebarTreeScrollerEl.scrollTop = 0
     // Keyed on the page alone: entering the section keeps its saved position.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -7262,11 +7275,11 @@ ${markdownHtml}
 
 
   useLayoutEffect(() => {
-    // Only the Notes view's Date and Trash sections hold the note cards this
+    // Only the Notes view's paged sections hold the note cards this
     // floor is about -- in Options or Find, `.sidebar-content` is holding
     // something else entirely and would measure nonsense. Elsewhere the last
     // good measurement stands (or the arithmetic, if there hasn't been one yet).
-    if ((sidebarMode !== 'date' && sidebarMode !== 'trash') || isImageLibraryShown) return
+    if (!isPagedNoteSection(sidebarMode) || isImageLibraryShown) return
     const contentEl = sidebarContentEl
     const sidebarEl = contentEl?.closest('.notes-sidebar') as HTMLElement | null
     if (!contentEl || !sidebarEl) return
@@ -8534,7 +8547,7 @@ ${markdownHtml}
                         />
                         </div>
                       </div>
-                    ) : (sidebarMode === 'date' || sidebarMode === 'trash') ? (
+                    ) : isPagedNoteSection(sidebarMode) ? (
                       <div
                         className={`notes-list date-view thockdown-custom-scrollbar${hasDateFilter ? ' is-filtered' : ''}`}
                         ref={setSidebarTreeScrollerEl}
@@ -8598,7 +8611,11 @@ ${markdownHtml}
                           <div className="notes-empty-state">
                             {searchQuery.trim()
                               ? 'No notes match the current search.'
-                              : 'No notes match the current date filters.'}
+                              : hasDateFilter
+                                ? 'No notes match the current date filters.'
+                                : sidebarMode === 'external'
+                                  ? 'No notes opened from files.'
+                                  : sidebarMode === 'trash' ? 'The Trash is empty.' : 'No notes yet.'}
                           </div>
                         ) : null}
                         </div>
@@ -9041,7 +9058,7 @@ ${markdownHtml}
                 <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
               ) : null}
 
-              {(sidebarMode === 'date' || sidebarMode === 'trash' || isSidebarTreeMode) && !isImageLibraryShown ? (
+              {(isPagedNoteSection(sidebarMode) || isSidebarTreeMode) && !isImageLibraryShown ? (
                 <div className="date-filter-rail" aria-label="Date filters">
                   <div
                     className="date-filter-line"
