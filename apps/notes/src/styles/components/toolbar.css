@@ -526,7 +526,7 @@
   height:          100%;
   margin:          0;
   padding:         0;
-  border-radius:   var(--border-radius-regular);
+  border-radius:   var(--border-radius-small);
   color:           var(--color-text-80);
   font-size:       calc(9px * var(--ui-font-scale));
   line-height:     1;
@@ -570,7 +570,7 @@
    rather than wrapped when the column is too narrow. */
 .options-curve-button.text-button {
   padding:   0 0.6em;
-  font-size: calc(10px * var(--ui-font-scale));
+  font-size: calc(9px * var(--ui-font-scale));
 }
 
 .text-button-label {

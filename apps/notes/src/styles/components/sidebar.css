@@ -576,6 +576,7 @@
 
 .date-filter-line:last-child {
   margin-bottom: 0;
+  height: var(--entry-height);
 }
 
 /* Notes mode bar & quick actions */
