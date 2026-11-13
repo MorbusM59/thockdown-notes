@@ -227,11 +227,12 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
 
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
+      {/* An icon pick shows the icons alone, the set selector included. */}
+      {iconPick?.slot === slot ? <MusicSetIconPicker set={set} query={iconPick.query} /> : (
+      <>
       <div className="preset-section">
         <SetSelector slot={slot} />
       </div>
-      {iconPick?.slot === slot ? <MusicSetIconPicker set={set} query={iconPick.query} /> : (
-      <>
       {/* Keyed on the set shown and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${shownSlot}:${grouping}`}>
         {groups.map((group) => (

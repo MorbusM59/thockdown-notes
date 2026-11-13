@@ -6691,7 +6691,8 @@ ${markdownHtml}
   // Whether the two pages controls are needed at all: only the Date, Trash
   // and External sections of the Notes view are paged.
   const showPagination = !isImageLibraryShown && isPagedNoteSection(sidebarMode) && totalPages > 1
-  const isMusicLibraryDocked = sidebarMode === 'songs'
+  // An icon pick shows the icons alone: the dock goes with the set selector.
+  const isMusicLibraryDocked = sidebarMode === 'songs' && !isIconPickMode
   const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 
   // The sidebar's scroll box: the list's own scroller in a list view, the
