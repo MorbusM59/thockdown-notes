@@ -821,7 +821,7 @@
   box-sizing:             border-box;
   min-height:             var(--entry-height);
   margin:                 0;
-  padding:                0 var(--spacing-small);
+  padding:                0 var(--spacing-regular);
   border:                 1px solid var(--btn-border-default);
   border-radius:          var(--border-radius-regular);
   background:             var(--btn-bg-default);
@@ -1038,7 +1038,7 @@
   width: 100%;
   height: auto;
   /* The card's own side inset (.is-tree-card's padding) below it too. */
-  margin: var(--spacing-small) 0;
+  margin: var(--spacing-regular) 0;
   border-radius: var(--border-radius-small);
 }
 
