@@ -79,14 +79,13 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
       {sets.map((candidate) => {
         const cell = reorder(String(candidate.slot))
         const isActive = active.includes(candidate.slot)
-        const isSolo = isActive && active.length === 1
         return (
           <button
             key={candidate.slot}
             {...{ [MUSIC_SET_DROP_SLOT_ATTRIBUTE]: candidate.slot }}
             type="button"
             role="radio"
-            className={`btn-icon options-color-swatch options-loadout-btn soundscape-channel-selector-btn${candidate.slot === slot ? ' is-active' : ''}${isActive ? ' is-enabled' : ' is-disabled'}${isSolo ? ' is-solo' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn soundscape-channel-selector-btn${candidate.slot === slot ? ' is-active' : ''}${isActive ? ' is-enabled' : ' is-disabled'}`}
             data-tooltip={`${candidate.name}: ${nowPlaying.pool?.counts[candidate.slot] ?? 0} songs`}
             aria-label={`${candidate.name}, ${isActive ? 'playing in the pool' : 'not in the pool'}`}
             aria-checked={candidate.slot === slot}
