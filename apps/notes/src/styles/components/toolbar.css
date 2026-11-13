@@ -658,13 +658,6 @@
   gap:         var(--spacing-regular);
 }
 
-.options-curve-cell.hold-icon {
-  /* A held icon standing as a whole cell (the set row's delete): the glyph centred in it. */
-  display:         inline-flex;
-  align-items:     center;
-  justify-content: center;
-}
-
 .options-music-song-duration {
   font-variant-numeric: tabular-nums;
   opacity:              0.75;

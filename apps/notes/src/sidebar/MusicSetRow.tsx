@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
-import { HoldIcon } from '../components/HoverActions'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 
 function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; name: string; factory: boolean; takenNames: readonly string[]; onRename: (slot: number, name: string) => Promise<void> }) {
@@ -104,6 +104,13 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
 export function MusicSetRow({ set }: { set: MusicSet }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
+  const cancelHoldRef = useRef<(() => void) | null>(null)
+  const cancelHold = () => {
+    cancelHoldRef.current?.()
+    cancelHoldRef.current = null
+  }
+  useEffect(() => cancelHold, [])
+
   const factory = isFactoryMusicSet(set.slot)
   return (
     <div className="options-curve-row options-music-set-row">
@@ -141,14 +148,31 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
         <span className="fa-solid fa-folder-open" aria-hidden="true" />
       </button>
       {/* A factory set cannot be deleted, so the same hold empties it. */}
-      <HoldIcon
+      <button
+        type="button"
         className="options-curve-cell options-curve-button"
-        action={{
-          icon: 'fa-xmark',
-          label: factory ? `Empty ${set.name}` : `Delete ${set.name}`,
-          onHold: () => { void (factory ? nowPlaying.purgeMusicSet(set.slot) : nowPlaying.deleteMusicSet(set.slot)) },
+        data-tooltip={factory ? `Hold to empty ${set.name}` : `Hold to delete ${set.name}`}
+        aria-label={factory ? `Empty ${set.name}` : `Delete ${set.name}`}
+        data-secondary-press="none"
+        onPointerDown={(event) => {
+          event.stopPropagation()
+          if (event.button !== 0) return
+          cancelHold()
+          cancelHoldRef.current = armHold(() => {
+            cancelHoldRef.current = null
+            void (factory ? nowPlaying.purgeMusicSet(set.slot) : nowPlaying.deleteMusicSet(set.slot))
+          }, HOLD_CONFIRM_MS)
         }}
-      />
+        onPointerUp={cancelHold}
+        onPointerCancel={cancelHold}
+        onMouseLeave={cancelHold}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+      >
+        <span className="fa-solid fa-xmark" aria-hidden="true" />
+      </button>
     </div>
   )
 }
