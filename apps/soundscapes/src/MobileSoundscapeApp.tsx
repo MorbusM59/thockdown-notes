@@ -91,7 +91,8 @@ export function MobileSoundscapeApp() {
   const theme = useMemo(() => themeFrame(loadout, { isPreviewMode: false }), [loadout])
 
   // Every soundscape, factory (as the listener left it) and their own.
-  const presets = useMemo(() => soundscapePresets(preferences), [preferences.customPresets, preferences.factoryEdits])
+  const { customPresets, factoryEdits } = preferences
+  const presets = useMemo(() => soundscapePresets({ customPresets, factoryEdits }), [customPresets, factoryEdits])
   // Whether the native session plays (playbackMode.ts); the engine is not
   // started before that is settled, or its first start would open the web
   // playback instead.
