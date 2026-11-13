@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { TextButton } from '../components/TextButton'
 import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot, musicSetMark } from '../shared/audioPlayer'
@@ -29,23 +30,74 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
   const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
+  const active = nowPlaying.pool?.slots ?? []
+  // Sets join and leave the music pool the way soundscape channels are
+  // enabled and disabled (SoundscapeOptions.tsx): a left hold puts an
+  // inactive set into the pool, a right hold takes an active one out, and a
+  // right click (released before any hold completed) plays from that set
+  // alone, as soloing a channel does. A plain left click opens the set here.
+  const holdRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
+  const rightPressRef = useRef<{ pointerId: number; slot: PlaylistSlot } | null>(null)
+  useEffect(() => () => holdRef.current?.cancel(), [])
+  const startHold = (slot: PlaylistSlot, isActive: boolean, button: number, pointerId: number) => {
+    if (button === 2) rightPressRef.current = { pointerId, slot }
+    if ((button === 0 && isActive) || (button === 2 && !isActive) || (button !== 0 && button !== 2)) return
+    holdRef.current?.cancel()
+    const cancel = armHold(() => {
+      holdRef.current = null
+      if (button === 2) {
+        rightPressRef.current = null
+        void nowPlaying.leaveMusicSet(slot)
+      } else {
+        nowPlaying.selectSlot(slot, true)
+      }
+    }, HOLD_CONFIRM_MS)
+    holdRef.current = { pointerId, cancel }
+  }
+  /** `released` is a real release on the button; a cancel or the pointer leaving decides nothing. */
+  const endHold = (pointerId: number, released: boolean) => {
+    const hold = holdRef.current
+    if (hold && hold.pointerId === pointerId) {
+      hold.cancel()
+      holdRef.current = null
+    }
+    const rightPress = rightPressRef.current
+    if (rightPress && rightPress.pointerId === pointerId) {
+      rightPressRef.current = null
+      if (released) nowPlaying.selectSlot(rightPress.slot, false)
+    }
+  }
   return (
     <SelectorRows>
     <div className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets" {...{ [MUSIC_SET_DROP_NEW_ATTRIBUTE]: '' }}>
       {sets.map((candidate) => {
         const cell = reorder(String(candidate.slot))
+        const isActive = active.includes(candidate.slot)
+        const isSolo = isActive && active.length === 1
         return (
           <button
             key={candidate.slot}
             {...{ [MUSIC_SET_DROP_SLOT_ATTRIBUTE]: candidate.slot }}
             type="button"
             role="radio"
-            className={`btn-icon options-color-swatch options-loadout-btn${candidate.slot === slot ? ' is-active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn soundscape-channel-selector-btn${candidate.slot === slot ? ' is-active' : ''}${isActive ? ' is-enabled' : ' is-disabled'}${isSolo ? ' is-solo' : ''}`}
             data-tooltip={`${candidate.name}: ${nowPlaying.pool?.counts[candidate.slot] ?? 0} songs`}
-            aria-label={candidate.name}
+            aria-label={`${candidate.name}, ${isActive ? 'playing in the pool' : 'not in the pool'}`}
             aria-checked={candidate.slot === slot}
+            data-secondary-press="action"
             onClick={() => selectMusicLibrarySet(candidate.slot)}
-            onPointerDown={cell.onPointerDown}
+            onPointerDown={(event) => {
+              cell.onPointerDown(event)
+              startHold(candidate.slot, isActive, event.button, event.pointerId)
+            }}
+            onPointerUp={(event) => endHold(event.pointerId, true)}
+            onPointerCancel={(event) => endHold(event.pointerId, false)}
+            onPointerLeave={(event) => endHold(event.pointerId, false)}
+            onContextMenu={(event) => {
+              // The solo itself is decided on the release (endHold).
+              event.preventDefault()
+              event.stopPropagation()
+            }}
             {...cell.props}
           >
             <SetMark slot={candidate.slot} name={candidate.name} />

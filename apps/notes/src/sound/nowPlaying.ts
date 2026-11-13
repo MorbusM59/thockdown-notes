@@ -34,6 +34,8 @@ export type NowPlaying = {
   moveMusicSet: (draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot) => void
   deleteMusicSet: (slot: PlaylistSlot) => Promise<void>
   purgeMusicSet: (slot: PlaylistSlot) => Promise<void>
+  /** Take one set out of the active selection (the pool), moving on if the playing song leaves with it. */
+  leaveMusicSet: (slot: PlaylistSlot) => Promise<void>
   /** Take one song out of one set (the set list's remove button). */
   removeFromMusicSet: (slot: PlaylistSlot, songIds: number[]) => Promise<void>
   addToMusicSet: (slot: PlaylistSlot, source: 'files' | 'folder') => Promise<boolean>
@@ -61,6 +63,7 @@ let current: NowPlaying = {
   moveMusicSet: () => {},
   deleteMusicSet: async () => {},
   purgeMusicSet: async () => {},
+  leaveMusicSet: async () => {},
   removeFromMusicSet: async () => {},
   addToMusicSet: async () => false,
   addPathsToMusicSet: async () => false,
@@ -84,6 +87,7 @@ export function publishNowPlaying(next: NowPlaying): void {
     && next.moveMusicSet === current.moveMusicSet
     && next.deleteMusicSet === current.deleteMusicSet
     && next.purgeMusicSet === current.purgeMusicSet
+    && next.leaveMusicSet === current.leaveMusicSet
     && next.removeFromMusicSet === current.removeFromMusicSet
     && next.addToMusicSet === current.addToMusicSet
     && next.addPathsToMusicSet === current.addPathsToMusicSet
