@@ -70,8 +70,8 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
  * again whenever that set's count changes (a song added or removed, here or
  * anywhere else).
  */
-function useSetSongs(slot: PlaylistSlot, count: number | undefined): MusicSongEntry[] {
-  const [songs, setSongs] = useState<{ slot: PlaylistSlot; songs: MusicSongEntry[] }>({ slot, songs: [] })
+function useSetSongs(slot: PlaylistSlot, count: number | undefined): { slot: PlaylistSlot; songs: MusicSongEntry[] } | null {
+  const [songs, setSongs] = useState<{ slot: PlaylistSlot; songs: MusicSongEntry[] } | null>(null)
   useEffect(() => {
     let current = true
     void window.thockdownAudioPlayer?.getPlaylist(slot).then((loaded) => {
@@ -79,7 +79,11 @@ function useSetSongs(slot: PlaylistSlot, count: number | undefined): MusicSongEn
     })
     return () => { current = false }
   }, [slot, count])
-  return songs.slot === slot ? songs.songs : []
+  // The LAST LOADED set, not the one asked for: a switch of set keeps showing
+  // the old list until the new one has arrived and then swaps in one frame,
+  // where answering with nothing in between drew an empty list for the frames
+  // the read took and the sidebar's layout jumped twice.
+  return songs
 }
 
 /** The set the library is open on: the one last picked, or the first set when none was or that one is gone. */
@@ -109,16 +113,17 @@ export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetList
 function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string }) {
   const { slot, name } = set
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-  const songs = useSetSongs(slot, nowPlaying.pool?.counts[slot])
-  const groups = useMemo(() => groupMusicSetList(songs, grouping, filter), [songs, grouping, filter])
+  const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
+  const shownSlot = loaded?.slot ?? slot
+  const groups = useMemo(() => groupMusicSetList(loaded?.songs ?? [], grouping, filter), [loaded, grouping, filter])
 
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
       <div className="preset-section">
         <SetSelector slot={slot} />
       </div>
-      {/* Keyed on the set and the grouping, so a new list starts folded. */}
-      <AccordionGroup key={`${slot}:${grouping}`}>
+      {/* Keyed on the set shown and the grouping, so a new list starts folded. */}
+      <AccordionGroup key={`${shownSlot}:${grouping}`}>
         {groups.map((group) => (
           <AccordionSection
             key={group.key}
@@ -141,7 +146,7 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
                           className="options-curve-cell options-curve-button"
                           data-tooltip={`Remove from ${name}`}
                           aria-label={`Remove ${name} from ${name}`}
-                          onClick={() => { void nowPlaying.removeFromMusicSet(slot, song.id) }}
+                          onClick={() => { void nowPlaying.removeFromMusicSet(shownSlot, song.id) }}
                         >
                           <span className="fa-solid fa-xmark" aria-hidden="true" />
                         </button>
