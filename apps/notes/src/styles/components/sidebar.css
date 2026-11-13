@@ -336,8 +336,10 @@
    * so it grows/shrinks with the user's spacing setting like the rest of the
    * app. The slot itself (--sidebar-scrollbar-slot-width) grows by the same
    * amount, so the track/thumb always keep their full --canonical-scroll-
-   * thickness width regardless of spacing. */
-  padding:         0 0 0 var(--spacing-regular);
+   * thickness width regardless of spacing. The bottom padding, with the
+   * sidebar's own, keeps the track --spacing-large off the window's edge, as
+   * the date filter rail's padding keeps its chips. */
+  padding:         0 0 var(--spacing-regular) var(--spacing-regular);
   justify-content: flex-end;
 }
 
