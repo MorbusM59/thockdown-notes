@@ -7424,6 +7424,16 @@ ${markdownHtml}
         return
       }
 
+      // Ctrl+Enter in the replace field is Replace all, so a replace can be
+      // done start to finish from the keyboard; the field's own Enter below
+      // would otherwise take it.
+      if (isReplaceField && isReplaceMode && matchShortcut(event, 'replaceAll')) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        activeSection?.replaceAllDocumentFindHits()
+        return
+      }
+
       if (isEditorControlField && ['Escape', 'Enter', 'Tab'].includes(event.key)) {
         event.preventDefault()
         event.stopImmediatePropagation()
