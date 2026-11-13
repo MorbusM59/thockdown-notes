@@ -528,17 +528,17 @@ const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelecto
   notes: [
     { id: 'date', label: 'By date', icon: 'fa-solid fa-clock' },
     { id: 'category', label: 'By category', icon: 'fa-solid fa-tags' },
-    { id: 'archive', label: 'Note Archive', icon: 'fa-solid fa-box-archive' },
-    SECTION_SELECTOR_GAP,
     { id: 'external', label: 'External Files', icon: 'fa-solid fa-file-import' },
+    SECTION_SELECTOR_GAP,
+    { id: 'archive', label: 'Note Archive', icon: 'fa-solid fa-box-archive' },
     { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
   ],
   images: [
     { id: 'date', label: 'In note by order', icon: 'fa-solid fa-list-ol' },
     { id: 'category', label: 'In note by section', icon: 'fa-solid fa-bars-staggered' },
+    SECTION_SELECTOR_GAP,
+    SECTION_SELECTOR_GAP,
     { id: 'archive', label: 'Image Vault', icon: 'fa-solid fa-box-archive' },
-    SECTION_SELECTOR_GAP,
-    SECTION_SELECTOR_GAP,
     { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
   ],
 }
