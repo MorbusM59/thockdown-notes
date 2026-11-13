@@ -41,7 +41,3 @@ export function buildTagHierarchy<T>(items: readonly T[], tagsOf: (item: T) => r
     secondary: sorted(secondaryMap).map(([secondaryName, items]) => ({ name: secondaryName, items })),
   }))
 }
-
-export function tagHierarchyContains<T>(groups: readonly TagPrimaryGroup<T>[], matches: (item: T) => boolean): boolean {
-  return groups.some((primary) => primary.secondary.some((secondary) => secondary.items.some(matches)))
-}

@@ -35,8 +35,6 @@ export interface UseSectionTabsOptions {
   activateNote: (noteId: string) => Promise<void>
   /** Unloads this section's active note back to its blank, no-note-loaded state -- used whenever the active note's tab closes, instead of auto-selecting a neighboring tab. */
   clearActiveNote: () => Promise<void>
-  /** Locates this section's active note in the (deliberately stable, non-chasing) menu -- triggered by clicking a tab that's already selected. */
-  revealNoteInMenu: () => void
   flushPendingSaveNow: () => Promise<void>
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   /** Shared across every note-mutating operation in the app, not owned by this hook -- guards against overlapping note transitions. */
@@ -211,7 +209,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     persistenceReady,
     activateNote,
     clearActiveNote,
-    revealNoteInMenu,
     flushPendingSaveNow,
     refreshNotes,
     noteTransitionLockRef,
@@ -873,11 +870,10 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       return
     }
 
-    // A second click on the tab that's already selected doesn't reload it --
-    // the menu is deliberately stable and doesn't otherwise know or care
-    // which note is active, so this is the one explicit way to locate it.
+    // A second click on the tab that's already selected does nothing: it
+    // neither reloads the note nor moves the sidebar, which never follows
+    // the active note.
     if (noteId === activeNoteId) {
-      revealNoteInMenu()
       return
     }
 
@@ -891,7 +887,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
       ? tab.lastActiveChapterNoteId
       : noteId
     void activateNote(targetNoteId)
-  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activeNoteId, revealNoteInMenu, activateNote, notes])
+  }, [unpinPrimedTabNoteId, pinnedTabs, unpinNoteTab, dismissTempTab, activeNoteId, activateNote, notes])
 
   // Holding the left mouse button on the temp tab for TEMP_TAB_PIN_HOLD_MS
   // promotes it to a real, permanent pinned tab.

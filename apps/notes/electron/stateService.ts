@@ -73,8 +73,8 @@ const DEFAULT_APP_STATE: AppState = {
     scrollMaxDurationMultiplier: 4,
     sidebarViewState: {
       date: { page: 1, scrollTop: 0 },
-      category: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
-      archive: { scrollTop: 0, collapsedPrimary: [], collapsedSecondary: [] },
+      category: { scrollTop: 0, unfoldedPrimary: [], unfoldedSecondary: [] },
+      archive: { scrollTop: 0, unfoldedPrimary: [], unfoldedSecondary: [] },
       trash: { page: 1, scrollTop: 0 },
       external: { page: 1, scrollTop: 0 },
       find: { scrollTop: 0 },
@@ -325,7 +325,7 @@ function sanitizeTextureMaterials(input: unknown): TextureMaterialsBySurface {
   return next;
 }
 
-function sanitizeCollapsedList(input: unknown): string[] {
+function sanitizeUnfoldedList(input: unknown): string[] {
   if (!Array.isArray(input)) {
     return [];
   }
@@ -343,8 +343,8 @@ function sanitizeSidebarViewStateEntry(input: PersistedSidebarViewState | undefi
     page: typeof input?.page === 'number' && Number.isFinite(input.page)
       ? Math.max(1, Math.round(input.page))
       : 1,
-    collapsedPrimary: sanitizeCollapsedList(input?.collapsedPrimary),
-    collapsedSecondary: sanitizeCollapsedList(input?.collapsedSecondary),
+    unfoldedPrimary: sanitizeUnfoldedList(input?.unfoldedPrimary),
+    unfoldedSecondary: sanitizeUnfoldedList(input?.unfoldedSecondary),
   };
 }
 
