@@ -237,6 +237,7 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
       <AccordionGroup key={`${shownSlot}:${grouping}`}>
         {groups.map((group) => (
           <AccordionSection
+            lazy
             key={group.key}
             heading={<span className="options-music-song-heading">{group.label}</span>}
             ariaLabel={group.label}

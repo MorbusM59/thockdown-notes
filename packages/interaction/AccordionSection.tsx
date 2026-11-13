@@ -19,6 +19,7 @@
 // reader opened or closed since as it is.
 
 import { type MouseEvent, type ReactNode, type RefObject, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { AccordionSectionOpenContext } from './accordionSectionOpen'
 import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from './ScrollCurvePlan'
 import { type OptionsSearchSection, applyOptionsSelection, indexOptionsSection, selectOptions } from './optionsSearch'
@@ -167,7 +168,7 @@ interface FoldControl {
   onOpenChange?: (open: boolean) => void
 }
 
-function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = false, onOpenChange }: FoldControl) {
+function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = false, onOpenChange }: FoldControl, lazy = false) {
   const id = useId()
   const group = useContext(AccordionGroupContext)
   const isControlled = controlledOpen !== undefined
@@ -244,7 +245,12 @@ function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = fals
     if (!details || !content || (isOpen && !closing)) return
     const fromPx = closing ? content.getBoundingClientRect().height : 0
     details.open = true
-    setIsOpen(true)
+    // A lazy section's content is built by this very state change, and the
+    // unfold measures it on the next line: commit it first, or the fold
+    // opens to a height of nothing. (Never in a render or an effect: lazy
+    // sections are opened by a press, never by the group's search.)
+    if (lazy) flushSync(() => setIsOpen(true))
+    else setIsOpen(true)
     const naturalHeight = content.scrollHeight
     content.style.height = `${fromPx}px`
     content.style.overflow = 'hidden'
@@ -252,7 +258,7 @@ function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = fals
       content.style.height = ''
       content.style.overflow = ''
     })
-  }, [isOpen, animateTo])
+  }, [isOpen, animateTo, lazy])
 
   // A fold that starts open is drawn open at once. `open` is never a React
   // prop of the <details>: the fold animation sets it itself, at the end of
@@ -347,6 +353,24 @@ interface AccordionSectionProps extends FoldControl {
    * never holds an open state for a section that is gone.
    */
   onOpenChange?: (open: boolean) => void
+  /**
+   * Builds the content only once the section is first opened, so a long
+   * list of folded sections costs its headings and nothing more. Off by
+   * default, and must stay off wherever the group's filter is used: that
+   * filter searches the DOM text of folded sections (AccordionGroup).
+   */
+  lazy?: boolean
+}
+
+/**
+ * Whether content behind a fold should be in the DOM: always, or with `lazy`
+ * from the moment the fold first opens on (kept after, so folding it again
+ * animates real content and reopening costs nothing).
+ */
+function useMountedWhileFolded(lazy: boolean, isOpen: boolean): boolean {
+  const [opened, setOpened] = useState(isOpen)
+  if (isOpen && !opened) setOpened(true)
+  return !lazy || isOpen || opened
 }
 
 interface AnimState {
@@ -364,9 +388,11 @@ export function AccordionSection({
   ariaLabel,
   iconClass,
   marker,
+  lazy = false,
   ...fold
 }: AccordionSectionProps) {
-  const { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold)
+  const { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold, lazy)
+  const mounted = useMountedWhileFolded(lazy, isOpen)
   return (
     <section
       ref={sectionRef}
@@ -388,7 +414,7 @@ export function AccordionSection({
           {marker !== undefined && <span className="options-divider-count">{marker}</span>}
         </summary>
         <div ref={contentRef} className="sidebar-options-accordion-body">
-          <AccordionSectionOpenContext.Provider value={isOpen}>{children}</AccordionSectionOpenContext.Provider>
+          {mounted && <AccordionSectionOpenContext.Provider value={isOpen}>{children}</AccordionSectionOpenContext.Provider>}
         </div>
       </details>
     </section>
