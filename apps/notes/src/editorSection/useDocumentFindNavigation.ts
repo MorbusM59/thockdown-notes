@@ -74,6 +74,8 @@ export interface UseDocumentFindNavigationOptions {
   documentReplaceQuery: string
   isDocumentReplaceMode: boolean
   applyProgrammaticEditorText: (nextText: string, selectionStart: number, selectionEnd: number) => void
+  /** Gives this slot's editor the keyboard (edit view only; a no-op when it already has it). */
+  focusEditorInEditMode: (options?: { restoreSelection?: boolean }) => void
 }
 
 export interface UseDocumentFindNavigationResult {
@@ -90,6 +92,12 @@ export interface UseDocumentFindNavigationResult {
   handleJumpToDocumentFindHit: (hit: DocumentFindHit) => void
   replaceDocumentFindHit: (hit: DocumentFindHit) => void
   replaceAllDocumentFindHits: () => void
+  /**
+   * The find panel's Replace button: replaces the hit the editor's selection
+   * covers exactly; with no hit selected, marks the first hit from the caret
+   * on (wrapping to the first), so the next press replaces it.
+   */
+  replaceSelectedDocumentFindHit: () => void
 }
 
 /**
@@ -114,6 +122,7 @@ export function useDocumentFindNavigation({
   documentReplaceQuery,
   isDocumentReplaceMode,
   applyProgrammaticEditorText,
+  focusEditorInEditMode,
 }: UseDocumentFindNavigationOptions): UseDocumentFindNavigationResult {
   /**
    * Scrolls the rendered pane to a hit.
@@ -544,7 +553,13 @@ export function useDocumentFindNavigation({
     resolveHitRange,
   ])
 
+  // The hit last marked by a card, Enter or Replace. The reader view marks a
+  // hit in its pane and never in the editor's selection, so this is what its
+  // Replace button replaces.
+  const markedHitRef = useRef<DocumentFindHit | null>(null)
+
   const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
+    markedHitRef.current = hit
     if (isPreviewMode) {
       // A hit the reader can already see is not a journey. Travelling to it
       // would move the page under the very words they are reading to put them
@@ -579,6 +594,12 @@ export function useDocumentFindNavigation({
       && hitLine >= visibleLines.fromLine
       && hitLine <= visibleLines.toLine
 
+    // The selection IS the mark here, and the editor draws a selection only
+    // while it holds the keyboard -- so a card pressed with the keyboard
+    // elsewhere (the find field, another slot) must hand it to this editor
+    // first. Synchronous, not scheduled: a press does not move focus
+    // (focusOwnership.ts), so nothing the browser does afterwards undoes it.
+    focusEditorInEditMode({ restoreSelection: false })
     adapter.applySnapshot({
       selection: {
         anchor: hit.index,
@@ -589,7 +610,7 @@ export function useDocumentFindNavigation({
       },
       selectionScrollBehavior: isVisible ? 'preserve-scroll' : 'center-caged',
     })
-  }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef, markPreviewHitInPlace, readEditorText])
+  }, [isPreviewMode, jumpToPreviewDocumentFindHit, adapterRef, focusEditorInEditMode, markPreviewHitInPlace, readEditorText])
 
   const replaceDocumentFindHit = useCallback((hit: DocumentFindHit) => {
     const sourceText = readEditorText()
@@ -648,10 +669,30 @@ export function useDocumentFindNavigation({
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
   }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, isDocumentReplaceMode, preserveCase, readEditorText])
 
+  const replaceSelectedDocumentFindHit = useCallback(() => {
+    if (documentFindHits.length === 0) return
+    // Edit view: the selection. Reader view: the hit it last marked.
+    const marked = markedHitRef.current
+    const selection = isPreviewMode
+      ? (marked ? { start: marked.index, end: marked.index + marked.matchLength } : null)
+      : adapterRef.current?.getSnapshot()?.selection ?? null
+    const selected = selection && selection.end > selection.start
+      ? documentFindHits.find((hit) => hit.index === selection.start && hit.index + hit.matchLength === selection.end)
+      : undefined
+    if (selected) {
+      markedHitRef.current = null
+      replaceDocumentFindHit(selected)
+      return
+    }
+    const caret = selection?.end ?? 0
+    handleJumpToDocumentFindHit(documentFindHits.find((hit) => hit.index >= caret) ?? documentFindHits[0])
+  }, [adapterRef, documentFindHits, handleJumpToDocumentFindHit, isPreviewMode, replaceDocumentFindHit])
+
   return {
     visibleDocumentFindHitRange,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
+    replaceSelectedDocumentFindHit,
   }
 }

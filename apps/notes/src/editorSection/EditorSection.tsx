@@ -1629,6 +1629,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
+    replaceSelectedDocumentFindHit,
   } = useDocumentFindNavigation({
     previewBlockCount,
     previewScrollRef,
@@ -1647,6 +1648,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     documentReplaceQuery,
     isDocumentReplaceMode,
     applyProgrammaticEditorText,
+    focusEditorInEditMode: editorSectionMountRest.focusEditorInEditMode,
   })
 
   // The heading levels the app writes into this note (see
@@ -1932,6 +1934,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
+    replaceSelectedDocumentFindHit,
   }
 
   // Section-wide drop target: a tab dragged in from another section, or a

@@ -7427,6 +7427,14 @@ ${markdownHtml}
         event.preventDefault()
         event.stopImmediatePropagation()
         if (event.key === 'Escape') escapeConsumedByFieldRef.current = true
+        // Enter in the field the panel is waiting on -- the find field in
+        // Find, the replace field in Find & Replace -- marks the first hit,
+        // which is a card press on hit 1 and goes the same way in both views.
+        const firstHit = event.key === 'Enter'
+          && ((isSearchField && isFindMode && !isReplaceMode) || (isReplaceField && isReplaceMode))
+          ? activeSection?.documentFindHits[0]
+          : undefined
+        if (firstHit) activeSection?.handleJumpToDocumentFindHit(firstHit)
         activeSection?.scheduleFocusEditorInEditMode()
         return
       }
@@ -8771,6 +8779,43 @@ ${markdownHtml}
                           <div className="sidebar-options-accordion is-headerless">
                             <div className="sidebar-options-accordion-body">
                               <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
+                            </div>
+                          </div>
+                        </section>
+                      </div>
+                    </div>
+                  ) : null}
+                  {isReplaceMode ? (
+                    // Find & Replace's two actions, docked in the Music
+                    // Library's box and row.
+                    <div className="sidebar-color-picker-dock">
+                      <div className="sidebar-content-texture" />
+                      <div className="sidebar-color-picker-dock-content">
+                        <section className="options-section sidebar-options-section" aria-label="Replace controls">
+                          <div className="sidebar-options-accordion is-headerless">
+                            <div className="sidebar-options-accordion-body">
+                              <div className="options-curve-rows options-music-set-list-dock">
+                                <div className="options-curve-row options-music-set-list-dock-row">
+                                  <button
+                                    type="button"
+                                    className="options-curve-cell options-curve-button"
+                                    data-tooltip="Replace the marked occurrence"
+                                    onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
+                                    aria-label="Replace"
+                                  >
+                                    <span className="fa-solid fa-right-left" aria-hidden="true" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="options-curve-cell options-curve-button"
+                                    data-tooltip="Replace every occurrence"
+                                    onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
+                                    aria-label="Replace all"
+                                  >
+                                    <span className="fa-solid fa-list-check" aria-hidden="true" />
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </section>
