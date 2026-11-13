@@ -21,8 +21,8 @@ export const OPTIONS_SECTIONS: ReadonlyArray<{ id: OptionsSectionId; label: stri
   { id: 'layouts', label: 'Layouts', icon: 'fa-solid fa-rectangle-list' },
   { id: 'music', label: 'Music', icon: 'fa-solid fa-music' },
   { id: 'glitz', label: 'Glitz', icon: 'fa-solid fa-hand-sparkles' },
-  { id: 'tools', label: 'Tools', icon: 'fa-solid fa-screwdriver-wrench' },
-  { id: 'advanced', label: 'Advanced', icon: 'fa-solid fa-gears' },
+  { id: 'tools', label: 'Tools', icon: 'fa-solid fa-toolbox' },
+  { id: 'advanced', label: 'Advanced', icon: 'fa-solid fa-screwdriver' },
 ]
 
 export function sanitizeOptionsSection(value: unknown): OptionsSectionId {
