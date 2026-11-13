@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
-import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
+import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText, musicSetMark } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -1373,7 +1373,7 @@ export const AudioControls = memo(function AudioControls({
               >
                 {icon
                   ? <span className={icon} aria-hidden="true" />
-                  : <span className="audio-playlist-custom-label" aria-hidden="true">{set.name.slice(0, 2).toUpperCase()}</span>}
+                  : <span className="audio-playlist-custom-label" aria-hidden="true">{musicSetMark(set.name)}</span>}
               </button>
             )
           })}

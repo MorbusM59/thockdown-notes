@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { TextButton } from '../components/TextButton'
 import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
+import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot, musicSetMark } from '../shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
@@ -11,11 +11,11 @@ import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
 import { readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
-/** A set's mark: a factory set's icon, anyone else's first two letters (as in Music > Sets). */
+/** A set's mark: a factory set's icon, anyone else's initials (musicSetMark). */
 function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
   return isFactoryMusicSet(slot)
     ? <span className={PLAYLIST_SLOT_ICONS[slot]} aria-hidden="true" />
-    : <span aria-hidden="true">{name.slice(0, 2).toUpperCase()}</span>
+    : <span aria-hidden="true">{musicSetMark(name)}</span>
 }
 
 /**

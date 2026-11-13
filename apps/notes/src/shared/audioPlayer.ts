@@ -377,3 +377,15 @@ export function songArtistText(song: Pick<MusicSongEntry, 'artist'>): string {
 export function songAlbumText(song: Pick<MusicSongEntry, 'album'>): string {
   return songTagText(song.album) || 'no album';
 }
+
+/**
+ * A user set's two-letter mark, wherever a set is shown by a mark rather than
+ * by name (the music player's buttons, the Music Library's selector, Options >
+ * Music > Sets): the initials of its first two words, or the first two letters
+ * of a one-word name.
+ */
+export function musicSetMark(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean)
+  const mark = words.length >= 2 ? [...words[0]][0] + [...words[1]][0] : [...(words[0] ?? '')].slice(0, 2).join('')
+  return mark.toUpperCase()
+}

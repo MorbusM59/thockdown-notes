@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
-import { isFactoryMusicSet, MUSIC_SET_QUICK_ACCESS_COUNT, PLAYLIST_SLOT_ICONS, type MusicSet } from '../shared/audioPlayer'
+import { isFactoryMusicSet, MUSIC_SET_QUICK_ACCESS_COUNT, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
 import { armPointerDrag } from '../shared/pointerDrag'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { openMusicLibrary } from './musicLibraryView'
@@ -146,7 +146,7 @@ export function MusicSetRow({ set, inLibrary = false }: { set: MusicSet; inLibra
       <div className="options-curve-cell options-curve-display options-music-set-icon" aria-label={factory ? set.name : undefined}>
         {factory
           ? <span className={PLAYLIST_SLOT_ICONS[set.slot as keyof typeof PLAYLIST_SLOT_ICONS]} aria-hidden="true" />
-          : set.name.slice(0, 2).toUpperCase()}
+          : musicSetMark(set.name)}
       </div>
       <SetName slot={set.slot} name={set.name} factory={factory} takenNames={sets.map((other) => other.name)} onRename={nowPlaying.renameMusicSet} />
       {inLibrary ? (

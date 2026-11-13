@@ -45,3 +45,13 @@ describe('groupMusicSetList', () => {
     expect(sanitizeMusicSetListGrouping('x')).toBe('folder')
   })
 })
+
+describe('musicSetMark', () => {
+  it('takes the first two words\' initials, or a one-word name\'s first two letters', async () => {
+    const { musicSetMark } = await import('./audioPlayer')
+    expect(musicSetMark('late night drive')).toBe('LN')
+    expect(musicSetMark('  Chill   out ')).toBe('CO')
+    expect(musicSetMark('focus')).toBe('FO')
+    expect(musicSetMark('x')).toBe('X')
+  })
+})
