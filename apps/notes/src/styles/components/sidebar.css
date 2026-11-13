@@ -23,7 +23,7 @@
 }
 
 /* The sidebar's list and, while the options panel's Colors section is open,
- * the colour picker docked below it (.sidebar-color-picker-dock): a column
+ * the colour picker docked below it (.sidebar-plain-dock; Find & Replace's actions dock in the boxed .sidebar-color-picker-dock): a column
  * beside the scrollbar slot, which runs the height of both. The dock is
  * content-sized and the list takes what is left. */
 .sidebar-content-column {
@@ -40,7 +40,7 @@
 }
 
 /* The picker never squeezes the list to nothing on a short window. */
-.sidebar-content-column:has(> .sidebar-color-picker-dock) > .sidebar-wrapper {
+.sidebar-content-column:has(> .sidebar-plain-dock .options-color-picker-row) > .sidebar-wrapper {
   min-height: calc(var(--color-grid-cell) * 3);
 }
 
@@ -90,9 +90,9 @@
   position: absolute;
 }
 
-/* The Music Library's controls where the colour picker docks, straight on
-   the sidebar with no panel of their own, on the dock's gutter. */
-.sidebar-music-library-dock {
+/* A dock straight on the sidebar, with no panel of its own: the Music
+   Library's controls and the colour picker. */
+.sidebar-plain-dock {
   flex:    0 0 auto;
   padding: var(--spacing-small) 0 0 var(--spacing-large);
 }
@@ -1105,4 +1105,10 @@
 .sidebar-section-bar .options-loadout-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* Docked, the picker takes the sidebar's whole width, and what it gains goes
+   to the sliders alone: the swatch and the toggles keep their cells. */
+.sidebar-plain-dock > .options-color-picker-row {
+  grid-template-columns: repeat(2, var(--color-grid-cell)) repeat(4, minmax(var(--color-grid-cell), 1fr));
 }

@@ -8789,7 +8789,7 @@ ${markdownHtml}
                   {isMusicLibraryDocked ? (
                     // The Music Library's controls, docked where the colour
                     // picker docks but straight on the sidebar, with no box.
-                    <div className="sidebar-music-library-dock">
+                    <div className="sidebar-plain-dock">
                       <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
                     </div>
                   ) : null}
@@ -8825,22 +8825,12 @@ ${markdownHtml}
                     </div>
                   ) : null}
                   {isColorPickerDocked ? (
-                    // The Colors section's picker, docked below the list in a
-                    // box styled like it, so it stays in reach however far
-                    // down the section the reader is setting colours. A
-                    // headerless options section, so its insets are a
-                    // section's.
-                    <div className="sidebar-color-picker-dock">
-                      <div className="sidebar-content-texture" />
-                      <div className="sidebar-color-picker-dock-content">
-                        <section className="options-section sidebar-options-section" aria-label="Colour picker">
-                          <div className="sidebar-options-accordion is-headerless">
-                            <div className="sidebar-options-accordion-body">
-                              <ColorPickerRow />
-                            </div>
-                          </div>
-                        </section>
-                      </div>
+                    // The Colors section's picker, docked below the list so it
+                    // stays in reach however far down the section the reader
+                    // is setting colours, straight on the sidebar as the
+                    // Music Library's controls are.
+                    <div className="sidebar-plain-dock" aria-label="Colour picker">
+                      <ColorPickerRow />
                     </div>
                   ) : null}
                   </div>

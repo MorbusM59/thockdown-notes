@@ -8,7 +8,7 @@
  *   5-6  value over alpha
  *
  * Drawn once, docked below the sidebar while the Colors section is open
- * (App.tsx's .sidebar-color-picker-dock), so it stays in reach however far
+ * (App.tsx's .sidebar-plain-dock), so it stays in reach however far
  * down the section the reader is setting colours.
  *
  * A slider edits its channel whether or not the channel is in the mask; a
