@@ -420,7 +420,7 @@
 }
 
 .options-loadout-btn.primed {
-  filter: var(--filter-primed-delete);
+  filter: var(--filter-alert);
 }
 
 /* A drawn curve's editor (CurveEditor.tsx: the music EQ, the flashing curve). The graph is two
@@ -643,26 +643,25 @@
 
 /* The Music Library (sidebar/MusicLibraryPanel.tsx): a song's name and its remove button. */
 .options-music-song-row {
-  /* The remove button shows only on the hovered row; elsewhere the title takes the whole row. */
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   /* A long set is thousands of rows; only those on screen are painted. */
   content-visibility:    auto;
   contain-intrinsic-size: auto var(--entry-height);
 }
 
-.options-music-song-row:not([data-hovered]) > .options-music-song-remove {
-  display: none;
+/* A song is one cell: its title, cut with an ellipsis, and on hover its
+   remove action at the cell's end. */
+.options-music-song-row > .options-curve-display.options-music-set-name {
+  display:     flex;
+  align-items: center;
+  gap:         var(--spacing-regular);
 }
 
-.options-music-song-remove {
-  width: var(--entry-height);
-}
-
-/* A heading's or divider's count (HoldToDeleteCount): the figure, or the bare
-   xmark in its place while the heading is hovered. */
-[data-hovered] > .options-divider-count > .hold-delete-count > .hold-delete-count-figure,
-:not([data-hovered]) > .options-divider-count > .hold-delete-count > .hold-delete-count-icon {
-  display: none;
+.options-music-song-title {
+  flex:          1 1 auto;
+  min-width:     0;
+  overflow:      hidden;
+  text-overflow: ellipsis;
 }
 
 /* A folder's or artist's name, cut to the heading's width. */

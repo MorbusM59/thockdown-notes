@@ -377,6 +377,8 @@ export function AccordionSection({
         <summary
           ref={summaryRef}
           className={`sidebar-options-section-heading${marker !== undefined ? ' has-count' : ''}${headingClassName ? ` ${headingClassName}` : ''}`}
+          // A heading is a row whose marker may carry hover actions (apps/notes components/HoverActions.tsx).
+          data-hover-host=""
           onClick={handleClick}
           data-secondary-press="action"
           onContextMenu={handleContextMenu}
@@ -421,6 +423,7 @@ export function AccordionDivider({ label, marker, children, ariaLabel, ...fold }
         <summary
           ref={summaryRef}
           className="options-subsection-label options-divider-label"
+          data-hover-host=""
           onClick={handleClick}
           data-secondary-press="action"
           onContextMenu={handleContextMenu}

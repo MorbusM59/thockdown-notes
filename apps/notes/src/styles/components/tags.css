@@ -244,7 +244,7 @@
 }
 
 .tag-pill.is-active.primed {
-  filter: var(--filter-primed-delete);
+  filter: var(--filter-alert);
 }
 
 /* In-place tag rename (right-click an assigned tag pill), chapter-pill
@@ -436,7 +436,7 @@
 }
 
 .section-picker-item.deletion-primed {
-  filter: var(--filter-primed-delete);
+  filter: var(--filter-alert);
 }
 
 /* Tab mode: pinned note pills fill the whole bar. Padding is inherited
@@ -546,7 +546,7 @@
 }
 
 .note-tab-pill.unpin-primed {
-  filter: var(--filter-primed-delete);
+  filter: var(--filter-alert);
 }
 
 /* Temp/preview tab for the current unpinned note — italic to read as
@@ -673,13 +673,9 @@
   min-width: calc(11px * var(--ui-font-scale) * var(--ui-pill-line-height) + 2 * var(--spacing-regular) + 2px);
 }
 
-/* Same mask-icon technique as the sidebar's note-list-action-button-archive/
-   -trash (sidebar.css): a ::before pseudo-element masked to the same PNG
-   glyphs, so a user who already knows what these icons mean in the sidebar
-   recognizes them here instantly. inset uses --spacing-regular rather than
-   the sidebar's own hardcoded 6px -- this pill is smaller than the
-   sidebar's own note-list-column sizing, and a fixed 6px inset left too
-   little of the square for the icon at this size. */
+/* A ::before pseudo-element masked to the archived/deleted PNG glyphs
+   (assets/buttons), inset by --spacing-regular: a fixed 6px inset left too
+   little of this small square for the icon. */
 .chapter-pill-mini::before {
   content: '';
   position: absolute;

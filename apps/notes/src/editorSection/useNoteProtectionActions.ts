@@ -1,7 +1,6 @@
-import type { SidebarMode } from '../shared/appState'
 import { withExternalFileTurn } from './externalFileSync'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MouseEvent, MutableRefObject } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { MutableRefObject, PointerEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from '../shared/noteLifecycle'
 import { withSavedNote } from '../shared/noteContentStore'
@@ -10,14 +9,7 @@ import { sanitizeDocumentText } from '../shared/textSanitization'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import type { NoteDocumentStore } from './noteDocumentStore'
 
-// A right-press on a note, or on the trash-view button, that means "this
-// one" rather than the ordinary click -- the app's CONFIRM threshold
-// (`shared/holdTiming.ts`), which also announces the completion in the
-// cursor. Was 200ms of its own.
-const NOTE_RIGHT_CLICK_HOLD_MS = HOLD_CONFIRM_MS
-
-type NotePrimedAction = 'archive' | 'deletion'
-type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted' | null
+type ProtectedQuickReleaseAction = 'remove-archived' | 'remove-deleted'
 
 export interface UseNoteProtectionActionsOptions {
   notes: NoteSummary[]
@@ -34,7 +26,6 @@ export interface UseNoteProtectionActionsOptions {
   persistenceReady: boolean
   refreshNotes: (preferredId?: string | null) => Promise<string | null>
   noteTransitionLockRef: MutableRefObject<boolean>
-  sidebarMode: SidebarMode
   activeNoteExternalPathRef: MutableRefObject<string | null>
   externalNoteOriginalTextByIdRef: MutableRefObject<Map<string, string>>
   /** The open notes' live documents (noteDocumentStore.ts). */
@@ -48,53 +39,11 @@ export interface UseNoteProtectionActionsOptions {
 }
 
 /**
- * Archive/delete protection for sidebar note-list items -- the arm-and-hold
- * right-click gesture (with quick-release for already-archived/deleted
- * notes), the Empty Trash button's own arm-and-hold, and the underlying
- * tag-mutation + external-file-save actions they trigger. Extracted
- * verbatim from App.tsx with zero behavior change.
+ * The note actions a sidebar row offers (archive, trash, restore, delete for
+ * good, save and close for a note from a file), each carried out by a HOLD
+ * on its icon (components/HoverActions.tsx), and the Trash section button's
+ * hold that empties the trash. Nothing is primed: a hold is the decision.
  */
-/**
- * What a right press on a note row means -- the ONE statement of it, read
- * both by the row (to declare whether the gesture does anything at all, see
- * `shared/pressTracking.ts`) and by the handler below (to decide what to do).
- *
- * `hasOwnActionButtons` is the whole reason this takes an argument. The flat
- * note rows (Date, Find, Trash) carry archive and trash BUTTONS; the tree
- * cards (Category, Archive) do not, because there is no room for them. A
- * right-press-hold that archives or deletes is therefore a duplicate control
- * on one and the only control on the other -- and the duplicate is worse than
- * redundant: it has no visible affordance, so a stray right-click on a row
- * that already offers buttons could file a note away with nothing to say it
- * had happened.
- *
- * Restoring is not in that bargain and stays everywhere: no view renders a
- * restore BUTTON, so the quick right-click is the only way back out of Trash
- * or the Archive.
- */
-export type NoteRightPressAction = 'arm-removal' | 'restore'
-
-export function noteRightPressAction(
-  note: NoteSummary | undefined,
-  hasOwnActionButtons: boolean,
-): NoteRightPressAction | null {
-  if (!note || isExternalNote(note)) return null
-
-  const isNoteDeleted = isDeletedNote(note)
-  const isNoteArchived = isArchivedNote(note)
-  // Chapters have no tag life of their own -- archiving/deleting only makes
-  // sense on their parent note (see the tag-bar identity comment in
-  // useSectionTabs.ts). The exception is a chapter already sitting detached
-  // (Trash, or an Archive-tree fold-out row): it needs the same quick
-  // right-click restore a deleted/archived note gets, so only block chapters
-  // that are not currently protected either way. A plain, unprotected chapter
-  // can still surface here via search results.
-  if (isChapterOnlyNote(note) && !isNoteDeleted && !isNoteArchived) return null
-
-  if (isNoteDeleted || isNoteArchived) return 'restore'
-  return hasOwnActionButtons ? null : 'arm-removal'
-}
-
 export function useNoteProtectionActions({
   notes,
   activeNoteId,
@@ -108,7 +57,6 @@ export function useNoteProtectionActions({
   persistenceReady,
   refreshNotes,
   noteTransitionLockRef,
-  sidebarMode,
   activeNoteExternalPathRef,
   externalNoteOriginalTextByIdRef,
   noteDocuments,
@@ -116,29 +64,16 @@ export function useNoteProtectionActions({
   menuIdentityNoteId,
   refreshChapters,
 }: UseNoteProtectionActionsOptions) {
-  const [primedNoteActionState, setPrimedNoteActionState] = useState<{ noteId: string; action: NotePrimedAction } | null>(null)
-  const noteArmTimerRef = useRef<{ noteId: string; button: 0 | 2; cancelHold: () => void; quickReleaseAction: ProtectedQuickReleaseAction | null } | null>(null)
-  const [isTrashViewDeletePrimed, setIsTrashViewDeletePrimed] = useState(false)
-  const trashButtonArmTimerRef = useRef<(() => void) | null>(null)
+  const [isTrashViewHolding, setIsTrashViewHolding] = useState(false)
+  const trashButtonHoldRef = useRef<(() => void) | null>(null)
+  /** Set when the Trash button's hold completed: the click its release dispatches selects nothing. */
+  const trashButtonHoldClaimedRef = useRef(false)
 
-  const primedNoteActionById = useMemo(() => {
-    if (!primedNoteActionState) {
-      return new Map<string, NotePrimedAction>()
-    }
-
-    return new Map<string, NotePrimedAction>([[primedNoteActionState.noteId, primedNoteActionState.action]])
-  }, [primedNoteActionState])
-
-  const clearNoteArmTimer = useCallback(() => {
-    if (!noteArmTimerRef.current) return
-    noteArmTimerRef.current.cancelHold()
-    noteArmTimerRef.current = null
-  }, [])
-
-  const clearTrashButtonArmTimer = useCallback(() => {
-    if (trashButtonArmTimerRef.current === null) return
-    trashButtonArmTimerRef.current()
-    trashButtonArmTimerRef.current = null
+  const clearTrashButtonHold = useCallback(() => {
+    if (trashButtonHoldRef.current === null) return
+    trashButtonHoldRef.current()
+    trashButtonHoldRef.current = null
+    setIsTrashViewHolding(false)
   }, [])
 
   const applyProtectedNoteDestination = useCallback(async (noteId: string, destination: 'archived' | 'deleted') => {
@@ -440,50 +375,11 @@ export function useNoteProtectionActions({
     setNotes,
   ])
 
-  const executePrimedNoteAction = useCallback(async (noteId: string, action: NotePrimedAction) => {
-    if (!window.thockdownNotes) return
-    if (!persistenceReady) return
-    if (noteTransitionLockRef.current) return
-
-    const summary = notes.find((note) => note.id === noteId)
-    const isCurrentlyDeleted = summary ? isDeletedNote(summary) : false
-
-    noteTransitionLockRef.current = true
-    try {
-      await flushPendingSaveNow()
-
-      if (action === 'deletion' && isCurrentlyDeleted) {
-        await window.thockdownNotes.deleteNote({ id: noteId })
-        onNotePermanentlyDeleted?.(noteId)
-        await refreshNotes(activeNoteId === noteId ? null : activeNoteId)
-
-        if (activeNoteId === noteId) {
-          setActiveNoteId(null)
-          commitEditorText('')
-        }
-
-        return
-      }
-
-      if (action === 'archive') {
-        await applyProtectedNoteDestination(noteId, 'archived')
-      } else {
-        await applyProtectedNoteDestination(noteId, 'deleted')
-      }
-
-      await refreshNotes(activeNoteId ?? noteId)
-      if (activeNoteId === noteId) {
-        setActiveNoteId(null)
-        commitEditorText('')
-      }
-    } catch (error) {
-      console.error('Failed to apply note action', error)
-    } finally {
-      noteTransitionLockRef.current = false
-    }
-  }, [activeNoteId, applyProtectedNoteDestination, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
-
-  const applyQuickProtectedRightClickAction = useCallback(async (noteId: string, action: Exclude<ProtectedQuickReleaseAction, null>) => {
+  /** Out of the Trash or the Archive, back where it was (a chapter into its parent's family). */
+  const restoreNote = useCallback(async (noteId: string) => {
+    const restored = notes.find((note) => note.id === noteId)
+    if (!restored || (!isDeletedNote(restored) && !isArchivedNote(restored))) return
+    const action: ProtectedQuickReleaseAction = isDeletedNote(restored) ? 'remove-deleted' : 'remove-archived'
     if (!window.thockdownNotes) return
     if (!persistenceReady) return
     if (noteTransitionLockRef.current) return
@@ -512,7 +408,7 @@ export function useNoteProtectionActions({
         await activateNote(noteId)
       }
     } catch (error) {
-      console.error('Failed to apply protected right-click action', error)
+      console.error('Failed to restore note', error)
     } finally {
       noteTransitionLockRef.current = false
     }
@@ -522,8 +418,6 @@ export function useNoteProtectionActions({
     if (!window.thockdownNotes) return
 
     cancelPendingSave()
-
-    clearNoteArmTimer()
 
     externalNoteOriginalTextByIdRef.current.delete(noteId)
 
@@ -539,92 +433,7 @@ export function useNoteProtectionActions({
     } catch (error) {
       console.error('Failed to delete external temp note', error)
     }
-  }, [activeNoteId, cancelPendingSave, clearNoteArmTimer, externalNoteOriginalTextByIdRef, setNotes, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
-
-  const handleNoteRightPressStart = useCallback((
-    noteId: string,
-    hasOwnActionButtons: boolean,
-  ) => {
-    const summary = notes.find((note) => note.id === noteId)
-    const action = noteRightPressAction(summary, hasOwnActionButtons)
-    if (!action) return
-
-    clearNoteArmTimer()
-    if (action === 'restore') {
-      setPrimedNoteActionState(null)
-    } else {
-      setPrimedNoteActionState({ noteId, action: 'archive' })
-    }
-
-    const quickReleaseAction: ProtectedQuickReleaseAction = action === 'restore'
-      ? (summary && isDeletedNote(summary) ? 'remove-deleted' : 'remove-archived')
-      : null
-
-    // No hold at all in trash mode -- the gesture means something else
-    // there, so there is nothing to arm and nothing to acknowledge.
-    let cancelHold: () => void = () => {}
-    if (sidebarMode !== 'trash') {
-      cancelHold = armHold(() => {
-        setPrimedNoteActionState((previous) => {
-          if (quickReleaseAction) {
-            return {
-              noteId,
-              action: 'deletion',
-            }
-          }
-
-          if (!previous || previous.noteId !== noteId) {
-            return previous
-          }
-
-          return {
-            noteId,
-            action: 'deletion',
-          }
-        })
-
-        if (noteArmTimerRef.current?.noteId === noteId) {
-          noteArmTimerRef.current = null
-        }
-      }, NOTE_RIGHT_CLICK_HOLD_MS)
-    }
-
-    noteArmTimerRef.current = { noteId, button: 2, cancelHold, quickReleaseAction }
-  }, [clearNoteArmTimer, notes, sidebarMode])
-
-
-  const handleNoteRightPressEnd = useCallback((noteId: string) => {
-    const pendingArm = noteArmTimerRef.current
-    if (!pendingArm || pendingArm.noteId !== noteId) {
-      return
-    }
-
-    const quickReleaseAction = pendingArm.quickReleaseAction
-    clearNoteArmTimer()
-
-    if (quickReleaseAction) {
-      setPrimedNoteActionState(null)
-      void applyQuickProtectedRightClickAction(noteId, quickReleaseAction)
-    }
-  }, [applyQuickProtectedRightClickAction, clearNoteArmTimer])
-
-  const handleNoteMouseLeave = useCallback((noteId: string) => {
-    if (primedNoteActionState?.noteId === noteId) {
-      setPrimedNoteActionState(null)
-    }
-    clearNoteArmTimer()
-  }, [primedNoteActionState, clearNoteArmTimer])
-
-  const handlePrimedNoteLeftClick = useCallback((noteId: string) => {
-    const primed = primedNoteActionState
-    if (!primed || primed.noteId !== noteId) {
-      return
-    }
-
-    clearNoteArmTimer()
-    setPrimedNoteActionState(null)
-    void executePrimedNoteAction(noteId, primed.action)
-  }, [primedNoteActionState, clearNoteArmTimer, executePrimedNoteAction])
+  }, [activeNoteId, cancelPendingSave, externalNoteOriginalTextByIdRef, setNotes, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
 
   const handleSaveButtonClick = useCallback(async (noteId: string) => {
     if (!isExternalNote(notes.find((note) => note.id === noteId)!)) {
@@ -728,74 +537,40 @@ export function useNoteProtectionActions({
     }
   }, [activeNoteId, flushPendingSaveNow, notes, persistenceReady, refreshNotes, noteTransitionLockRef, setActiveNoteId, commitEditorText, onNotePermanentlyDeleted])
 
-  const handleTrashViewButtonPointerDown = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.stopPropagation()
-    clearTrashButtonArmTimer()
-    setIsTrashViewDeletePrimed(false)
+  /** The Trash section button: a held left press empties the trash. */
+  const handleTrashViewButtonPointerDown = useCallback((event: PointerEvent<HTMLButtonElement>) => {
+    trashButtonHoldClaimedRef.current = false
+    if (event.button !== 0 || !notes.some((note) => isDeletedNote(note))) return
+    clearTrashButtonHold()
+    setIsTrashViewHolding(true)
+    trashButtonHoldRef.current = armHold(() => {
+      trashButtonHoldRef.current = null
+      trashButtonHoldClaimedRef.current = true
+      setIsTrashViewHolding(false)
+      void purgeDeletedNotesPermanently()
+    }, HOLD_CONFIRM_MS)
+  }, [clearTrashButtonHold, notes, purgeDeletedNotesPermanently])
 
-    trashButtonArmTimerRef.current = armHold(() => {
-      setIsTrashViewDeletePrimed(true)
-      trashButtonArmTimerRef.current = null
-    }, NOTE_RIGHT_CLICK_HOLD_MS)
-  }, [clearTrashButtonArmTimer])
-
-  const handleTrashViewButtonPointerUp = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    if (event.button !== 2) return
-    event.preventDefault()
-    event.stopPropagation()
-
-    // Quick release before timeout should not arm the trash purge action.
-    if (trashButtonArmTimerRef.current !== null) {
-      clearTrashButtonArmTimer()
-      setIsTrashViewDeletePrimed(false)
-    }
-  }, [clearTrashButtonArmTimer])
-
-  const handleTrashViewButtonContextMenu = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
+  /** True once for the click that ends a completed hold, which then does nothing else. */
+  const consumeTrashViewHoldClick = useCallback(() => {
+    const claimed = trashButtonHoldClaimedRef.current
+    trashButtonHoldClaimedRef.current = false
+    return claimed
   }, [])
 
-  useEffect(() => {
-    if (!primedNoteActionState) return
-    if (!notes.some((note) => note.id === primedNoteActionState.noteId)) {
-      clearNoteArmTimer()
-      setPrimedNoteActionState(null)
-    }
-  }, [primedNoteActionState, clearNoteArmTimer, notes])
-
-  useEffect(() => {
-    if (!isTrashViewDeletePrimed) return
-    if (!notes.some((note) => isDeletedNote(note))) {
-      setIsTrashViewDeletePrimed(false)
-    }
-  }, [isTrashViewDeletePrimed, notes])
-
-  useEffect(() => {
-    return () => {
-      clearNoteArmTimer()
-      clearTrashButtonArmTimer()
-    }
-  }, [clearNoteArmTimer, clearTrashButtonArmTimer])
+  useEffect(() => clearTrashButtonHold, [clearTrashButtonHold])
 
   return {
-    primedNoteActionById,
-    isTrashViewDeletePrimed,
-    setIsTrashViewDeletePrimed,
-    clearTrashButtonArmTimer,
-    handleNoteRightPressStart,
-    handleNoteRightPressEnd,
-    handleNoteMouseLeave,
-    handlePrimedNoteLeftClick,
+    isTrashViewHolding,
+    clearTrashButtonHold,
+    consumeTrashViewHoldClick,
+    handleTrashViewButtonPointerDown,
+    restoreNote,
     handleSaveButtonClick,
     handleCloseButtonClick,
     handleArchiveClick,
     handleTrashClick,
     purgeDeletedNotesPermanently,
-    handleTrashViewButtonPointerDown,
-    handleTrashViewButtonPointerUp,
-    handleTrashViewButtonContextMenu,
   }
 }
 

@@ -1,6 +1,7 @@
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
-import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from 'react'
 import { CategoryTree, type CategoryTreeFolds } from '../components/CategoryTree'
+import { HoverActions, type HoverAction } from '../components/HoverActions'
 import { IMAGE_DRAG_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
 import { armPointerDrag } from '../shared/pointerDrag'
@@ -140,9 +141,6 @@ function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPres
   }
 }
 
-// A card's own buttons do nothing with a hold, so a press on one must not reach the card's.
-const stopCardPress = (event: PointerEvent) => event.stopPropagation()
-
 function dragImage(id: string) {
   return {
     // Dragged into a note, it is referenced there (CM6Editor's and the
@@ -157,33 +155,23 @@ function dragImage(id: string) {
   }
 }
 
-/** `inColumn`: in a card's action column, styled as a note card's buttons there are; otherwise a bare icon in a tree row. */
-function RemoveButton({ use, onRemove, inColumn = false }: { use: NoteImageUse; onRemove: (use: NoteImageUse) => void; inColumn?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={`image-card-remove fa-solid fa-xmark${inColumn ? ' btn-icon note-list-action-button' : ''}`}
-      aria-label="Take it out of the note"
-      data-tooltip="Take it out of the note"
-      onClick={(event) => { event.stopPropagation(); onRemove(use) }}
-      onPointerDown={stopCardPress}
-      data-secondary-press="none"
-    />
-  )
+/** Taking a use out of its note: the action of every card in a note's own image views. */
+function removeAction(use: NoteImageUse, onRemove: (use: NoteImageUse) => void): HoverAction {
+  return { icon: 'fa-xmark', label: 'Take it out of the note', tone: 'alert', onHold: () => onRemove(use) }
 }
 
 /** A card with the image behind its text: Images in Order and the trash. */
-const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expanded, press, actions, onPrimeEnd }: {
+const ImageCard = memo(function ImageCard({ image, use, isActive, expanded, press, actions, nameFirst = false }: {
   image: StoredImageSummary | null
   /** The image's place in the note; null in the trash. */
   use: NoteImageUse | null
   isActive: boolean
-  primed: boolean
   expanded: boolean
   press: CardPress
-  /** The buttons that appear on hover; none while the card is expanded. */
-  actions: ReactNode
-  onPrimeEnd: () => void
+  /** What takes the size's place on hover; none while the card is expanded. */
+  actions: readonly HoverAction[]
+  /** The trash: the file's name on top and the id below it, as a note card names a note above its id. */
+  nameFirst?: boolean
 }) {
   const handlers = useCardPress(press, image !== null)
   const remoteAllowed = useRemoteImagesAllowed()
@@ -193,64 +181,64 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, primed, expand
   const tooltip = !use ? `Click to see it, drag it into a note to put it there. Hold right-click to show it`
     : !image ? `${use.src}. Click to see it, right-click to go to it, hold to store it in the app`
     : `Click to see it, right-click to go to it. Hold right-click to show it`
+  const title = nameFirst && image ? <span data-tooltip={image.origin ?? 'Pasted from the clipboard'}>{originLabel(image)}</span> : <CardTitle image={image} />
+  const metaLeft = nameFirst && image ? <span className="note-list-meta-left">{image.id}</span>
+    : use ? <span className="note-list-meta-left">{use.alt}</span>
+    : image ? <span className="note-list-meta-left" data-tooltip={image.origin ?? 'Pasted from the clipboard'}>{originLabel(image)}</span> : null
   return (
     <div
-      className={`note-list-item image-list-item${isActive ? ' is-active' : ''}${primed ? ' is-primed-for-deletion' : ''}${expanded ? ' is-expanded' : ''}`}
+      className={`note-list-item image-list-item${isActive ? ' is-active' : ''}${expanded ? ' is-expanded' : ''}`}
       style={style}
       role="option"
       aria-selected={isActive}
       data-image-id={image?.id}
+      data-hover-host=""
       {...(image ? dragImage(image.id) : {})}
       {...handlers}
-      onMouseLeave={() => {
-        handlers.onMouseLeave()
-        if (primed) onPrimeEnd()
-      }}
       data-tooltip={tooltip}
     >
       <div className="note-list-columns">
         <div className="note-list-column note-list-column-primary">
           {src ? <CardImage className="image-list-thumbnail" src={src} inset={part.inset} /> : null}
           <div className="note-list-content">
-            <div className="note-list-title"><CardTitle image={image} /></div>
+            <div className="note-list-title">{title}</div>
             <div className="note-list-meta-row">
-              {use
-                ? <span className="note-list-meta-left">{use.alt}</span>
-                : image ? <span className="note-list-meta-left" data-tooltip={image.origin ?? 'Pasted from the clipboard'}>{originLabel(image)}</span> : null}
-              <span className="note-list-meta-right">{sizeLabel(part)}</span>
+              {metaLeft}
+              <span className="note-list-meta-right"><HoverActions rest={sizeLabel(part)} actions={expanded ? [] : actions} /></span>
             </div>
           </div>
         </div>
-        {expanded ? null : actions}
       </div>
     </div>
   )
 })
 
 /** A card in the two trees: the note tree's own card, the name on the left and the size on the right. */
-const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expanded, press, action }: {
+const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expanded, press, actions }: {
   image: StoredImageSummary | null
   use: NoteImageUse | null
   isActive: boolean
   /** Showing the image whole beneath the row (a click). */
   expanded: boolean
   press: CardPress
-  /** The button that takes the size's place on hover. */
-  action: ReactNode
+  /** What takes the size's place on hover; none while the image is shown beneath the row. */
+  actions: readonly HoverAction[]
 }) {
   const handlers = useCardPress(press, image !== null)
   const remoteAllowed = useRemoteImagesAllowed()
   const src = image ? image.src : use ? externalCardSrc(use.src, remoteAllowed) : null
   const part = shownPart(image, use)
+  const previewing = expanded && src !== null
   const tooltip = use
     ? `${use.alt ? `${use.alt}. ` : ''}${image ? 'Click to see it, right-click to go to it, hold right-click to show it' : `${use.src}. Click to see it, right-click to go to it, hold to store it in the app`}`
     : 'Click to see it, drag it into a note to put it there. Hold right-click to show it'
   return (
     <div
-      className={`note-list-item is-tree-card image-list-item${isActive ? ' is-active' : ''}${expanded && src ? ' is-previewing' : ''}`}
+      className={`note-list-item is-tree-card image-list-item${isActive ? ' is-active' : ''}${previewing ? ' is-previewing' : ''}`}
       role="option"
       aria-selected={isActive}
       data-image-id={image?.id}
+      data-hover-host=""
       {...(image ? dragImage(image.id) : {})}
       {...handlers}
       data-tooltip={tooltip}
@@ -258,10 +246,9 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
       <div className="note-list-content">
         <div className="note-list-meta-row image-tree-card-row">
           <span className="note-list-title"><CardTitle image={image} /></span>
-          <span className="note-list-meta-right">{sizeLabel(part)}</span>
-          {expanded && src ? null : action}
+          <span className="note-list-meta-right"><HoverActions rest={sizeLabel(part)} actions={previewing ? [] : actions} /></span>
         </div>
-        {expanded && src ? (
+        {previewing ? (
           <CardImage className="image-tree-card-preview" src={src} inset={part.inset} />
         ) : null}
       </div>
@@ -271,7 +258,6 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
 
 export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQuery, caseSensitive, uses, shownImageId, caretUseFrom, onReveal, onRemove, onStore, onOpen }: ImageLibraryListProps) {
   const { images, loaded } = useImageLibrary()
-  const [primedId, setPrimedId] = useState<string | null>(null)
   // One card at a time is expanded, in whichever view: expanding another folds it.
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const toggleExpanded = useCallback((key: string) => setExpandedKey((previous) => (previous === key ? null : key)), [])
@@ -309,7 +295,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       isActive={isActiveUse(card)}
       expanded={expandedKey === card.key}
       press={pressFor(card)}
-      action={<RemoveButton use={card.use} onRemove={onRemove} />}
+      actions={[removeAction(card.use, onRemove)]}
     />
   ), [expandedKey, isActiveUse, onRemove, pressFor])
   const renderImageTreeCard = useCallback((image: StoredImageSummary) => (
@@ -320,17 +306,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       isActive={image.id === shownImageId}
       expanded={expandedKey === image.id}
       press={{ onClick: () => toggleExpanded(image.id), onLeftHold: null, onRightTap: null, onRightHold: () => onOpen(image.id) }}
-      action={(
-        <button
-          type="button"
-          className="image-card-trash fa-solid fa-trash-can"
-          aria-label="Put in the trash"
-          data-tooltip="Put in the trash"
-          onClick={(event) => { event.stopPropagation(); void setImageTrashed(image.id, true) }}
-          onPointerDown={stopCardPress}
-          data-secondary-press="none"
-        />
-      )}
+      actions={[{ icon: 'fa-trash-can', label: 'Put in the trash', tone: 'alert', onHold: () => { void setImageTrashed(image.id, true) } }]}
     />
   ), [expandedKey, onOpen, shownImageId, toggleExpanded])
 
@@ -351,15 +327,9 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
             image={card.image}
             use={card.use}
             isActive={isActiveUse(card)}
-            primed={false}
             expanded={expandedKey === card.key}
             press={pressFor(card)}
-            actions={(
-              <div className="note-list-column note-list-column-action note-list-column-trash">
-                <RemoveButton use={card.use} onRemove={onRemove} inColumn />
-              </div>
-            )}
-            onPrimeEnd={noop}
+            actions={[removeAction(card.use, onRemove)]}
           />
         ))}
       </>
@@ -369,59 +339,22 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
     return (
       <>
         {libraryImages.map((image) => {
-          const primed = primedId === image.id
           // A trashed image a note still uses cannot be deleted: that note would break.
           const isUsed = image.useCount > 0
-          const purgeLabel = isUsed
-            ? `Used by ${image.useCount} note${image.useCount === 1 ? '' : 's'}: remove it there before deleting it`
-            : primed ? 'Click again: delete for good' : 'Delete for good'
+          const actions: HoverAction[] = [
+            { icon: 'fa-rotate-left', label: 'Take out of the trash', onHold: () => { void setImageTrashed(image.id, false) } },
+            ...(isUsed ? [] : [{ icon: 'fa-trash-can', label: 'Delete for good', tone: 'alert' as const, onHold: () => { void purgeImage(image.id) } }]),
+          ]
           return (
             <ImageCard
               key={image.id}
               image={image}
               use={null}
               isActive={image.id === shownImageId}
-              primed={primed}
               expanded={expandedKey === image.id}
               press={{ onClick: () => toggleExpanded(image.id), onLeftHold: null, onRightTap: null, onRightHold: () => onOpen(image.id) }}
-              onPrimeEnd={() => setPrimedId(null)}
-              actions={(
-                <>
-                  <div className="note-list-column note-list-column-action note-list-column-archive">
-                    <button
-                      type="button"
-                      className="note-list-action-button note-list-action-button-restore"
-                      aria-label="Take out of the trash"
-                      data-tooltip="Take out of the trash"
-                      onClick={(event) => { event.stopPropagation(); void setImageTrashed(image.id, false) }}
-                      onPointerDown={stopCardPress}
-                      data-secondary-press="none"
-                    >
-                      <span className="fa-solid fa-rotate-left" aria-hidden="true" />
-                    </button>
-                  </div>
-                  <div className="note-list-column note-list-column-action note-list-column-trash">
-                    <button
-                      type="button"
-                      disabled={isUsed}
-                      className="note-list-action-button note-list-action-button-trash"
-                      aria-label={purgeLabel}
-                      data-tooltip={purgeLabel}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        if (!primed) {
-                          setPrimedId(image.id)
-                          return
-                        }
-                        setPrimedId(null)
-                        void purgeImage(image.id)
-                      }}
-                      onPointerDown={stopCardPress}
-                      data-secondary-press="none"
-                    />
-                  </div>
-                </>
-              )}
+              actions={actions}
+              nameFirst
             />
           )
         })}
@@ -454,5 +387,4 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
   )
 })
 
-const noop = () => {}
 const NOTHING_FLIPPED: CategoryTreeFolds = { primary: [], secondary: [] }

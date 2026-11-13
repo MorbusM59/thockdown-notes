@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
-import { HoldToDeleteButton } from './HoldToDeleteButton'
+import { HoldIcon } from '../components/HoverActions'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 
 function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; name: string; factory: boolean; takenNames: readonly string[]; onRename: (slot: number, name: string) => Promise<void> }) {
@@ -141,10 +141,14 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
         <span className="fa-solid fa-folder-open" aria-hidden="true" />
       </button>
       {/* A factory set cannot be deleted, so the same hold empties it. */}
-      <HoldToDeleteButton
-        className="options-loadout-btn"
-        label={factory ? `empty ${set.name}` : `delete ${set.name}`}
-        onHold={() => { void (factory ? nowPlaying.purgeMusicSet(set.slot) : nowPlaying.deleteMusicSet(set.slot)) }}
+      <HoldIcon
+        className="options-curve-cell options-curve-button"
+        action={{
+          icon: 'fa-xmark',
+          label: factory ? `Empty ${set.name}` : `Delete ${set.name}`,
+          tone: 'alert',
+          onHold: () => { void (factory ? nowPlaying.purgeMusicSet(set.slot) : nowPlaying.deleteMusicSet(set.slot)) },
+        }}
       />
     </div>
   )

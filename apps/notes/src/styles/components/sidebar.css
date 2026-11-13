@@ -301,13 +301,12 @@
   font-size: calc(55cqw + 3*var(--spacing-small));
 }
 
-/* The Notes view's Trash section button, primed by a held right press: the
-   next click on it empties the trash. */
-.options-loadout-btn.is-primed-for-deletion,
-.options-loadout-btn.is-primed-for-deletion[data-hovered],
-.options-loadout-btn.is-primed-for-deletion.is-active,
-.options-loadout-btn.is-primed-for-deletion.is-active[data-hovered] {
-  filter: var(--filter-primed-delete);
+/* The Notes view's Trash section button while a held press is emptying the trash. */
+.options-loadout-btn.is-alert,
+.options-loadout-btn.is-alert[data-hovered],
+.options-loadout-btn.is-alert.is-active,
+.options-loadout-btn.is-alert.is-active[data-hovered] {
+  filter: var(--filter-alert);
   transition: all 300ms;
 }
 
@@ -684,131 +683,51 @@
   min-width: 0;
 }
 
-.note-list-column-action {
-  flex: 0 0 30px;
-  min-width: 30px;
-  max-width: 30px;
-  padding: 0;
-  display: none;
+/* THE WARNING AND ALERT LOOKS: what a held action would do to its row
+   (components/HoverActions.tsx). Warning files something away (archiving),
+   alert removes it (trash, delete, remove, close). */
+[data-hover-host]:has(.hold-icon[data-holding="warning"]) {
+  filter: var(--filter-warning);
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
 }
 
-.note-list-columns[data-hovered] .note-list-meta-right {
-  /* visibility, not display: none -- this row's title+meta stack is
-   * vertically centered as one block (.note-list-column's
-   * align-items: center), so removing this element from flow on hover
-   * shrinks that block by a hair and re-centers it, nudging the title down.
-   * Keeping the box in layout (just invisible) holds the block's height
-   * steady across hover. */
+[data-hover-host]:has(.hold-icon[data-holding="alert"]) {
+  filter: var(--filter-alert);
+  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
+}
+
+/* A row's information and, while the row is hovered, its actions in its
+   place: both in one grid cell, so the row keeps its size as they swap. */
+.hover-swap {
+  display:        inline-grid;
+  align-items:    center;
+  justify-items:  end;
+}
+
+.hover-swap > * {
+  grid-area: 1 / 1;
+}
+
+.hover-swap-actions {
+  display:     inline-flex;
+  align-items: center;
+  gap:         var(--spacing-regular);
+}
+
+[data-hover-host]:not([data-hovered]) .hover-swap-actions,
+[data-hover-host][data-hovered] .hover-swap-rest {
   visibility: hidden;
 }
 
-.note-list-columns[data-hovered] .note-list-column-action,
-.note-list-item.is-external.is-modified .note-list-column-save,
-.note-list-item.is-external .note-list-column-close {
-  display: flex;
-}
-
-.note-list-item.is-external .note-list-column-save {
+/* Actions with nothing in their place take no room until shown. */
+[data-hover-host]:not([data-hovered]) .hover-swap-actions.is-alone {
   display: none;
 }
 
-.btn-icon.note-list-action-button {
-  width: 100%;
-  height: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: inherit;
-}
-
-.note-list-item .note-list-column.note-list-column-primary {
-  box-shadow: var(--box-shadow-regular);
-  border: 1px solid var(--color-border-light-70);
-}
-
-.note-list-item.is-active .note-list-column.note-list-column-primary {
-  box-shadow: var(--box-shadow-inverted-harsh-active);
-  border: 1px solid var(--color-border-light-30);
-}
-
-.note-list-column.note-list-column-action {
-  box-shadow: none;
-  border: none;
-}
-
-.note-list-column.note-list-column-action .note-list-action-button {
-  box-shadow: var(--box-shadow-regular);
-  border: 1px solid var(--color-border-light-70);
-  background: none;
-  font-size: var(--btn-icon-size);
-  color: var(--color-text-80);
-}
-
-.note-list-column.note-list-column-action .note-list-action-button[data-pressed] {
-  box-shadow: var(--box-shadow-inverted-harsh-active);
-  border: 1px solid var(--color-border-light-70)
-}
-
-.note-list-column-action {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.note-list-item .note-list-action-button {
-  width: 100%;
-  height: 100%;
-}
-
-.note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-archive,
-.note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-trash {
-  background-image: none;
-}
-
-.note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-archive::before,
-.note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-trash::before {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  pointer-events: none;
-  background-color: var(--color-text-base);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
-}
-
-.note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-archive::before {
-  -webkit-mask-image: url('../../assets/buttons/archived.png');
-  mask-image: url('../../assets/buttons/archived.png');
-}
-
-.note-list-column.note-list-column-action .note-list-action-button.note-list-action-button-trash::before {
-  -webkit-mask-image: url('../../assets/buttons/deleted.png');
-  mask-image: url('../../assets/buttons/deleted.png');
-}
-
-/* Primed states */
-.note-list-item.is-primed-for-archiving.is-tree-card,
-.note-list-item.is-primed-for-archiving.is-tree-card[data-hovered],
-.note-list-item.is-primed-for-archiving.is-tree-card.is-active,
-.note-list-item.is-primed-for-archiving.is-tree-card.is-active[data-hovered] {
-  filter: var(--filter-primed-archive);
-  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
-  transition: none;
-}
-
-.note-list-item.is-primed-for-deletion.is-tree-card,
-.note-list-item.is-primed-for-deletion.is-tree-card[data-hovered],
-.note-list-item.is-primed-for-deletion.is-tree-card.is-active,
-.note-list-item.is-primed-for-deletion.is-tree-card.is-active[data-hovered] {
-  filter: var(--filter-primed-delete);
-  background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
-  transition: none;
+/* An action: the bare icon, held to act. */
+.hold-icon {
+  cursor:      default;
+  line-height: 1;
 }
 
 /* An item in a tag list (CategoryTree.tsx) is an ENTRY ROW of the options
@@ -998,8 +917,9 @@
   pointer-events: none;
 }
 
-/* A tree card: the id and the size on one line. */
-.image-tree-card-row {
+/* A tree card: the name and the size or modified time on one line. */
+.image-tree-card-row,
+.note-tree-card-row {
   align-items: baseline;
 }
 
@@ -1042,62 +962,21 @@
   border-radius: var(--border-radius-small);
 }
 
-/* A tree card's button (trash in the archive, remove in the note's views)
- * takes the size's place while the card is hovered. */
-.image-card-trash,
-.image-card-remove {
-  border: none;
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  font-size: 0.85em;
-}
-
-.image-list-item.is-tree-card .image-card-trash,
-.image-list-item.is-tree-card .image-card-remove {
-  display: none;
-}
-
-.image-list-item.is-tree-card[data-hovered] .image-card-trash,
-.image-list-item.is-tree-card[data-hovered] .image-card-remove {
-  display: inline-block;
-}
-
-/* While the image is previewed beneath the row there is no button to make room for. */
-.image-list-item.is-tree-card[data-hovered]:not(.is-previewing) .image-tree-card-row .note-list-meta-right {
-  display: none;
-}
-
-/* Images in Order's remove button fills the action column a note card's trash button uses. */
-.note-list-column-action .image-card-remove {
-  width: 100%;
-  height: 100%;
-}
-
 /* The Date and Trash cards, and the image cards of Images in Order and the
    image trash, are drawn as the box holding the section selector above them
    (toolbar.css's .preset-section): its fill, border, corner and shadow, and
    so are the buttons that replace the meta line on hover. An active card is
    pressed in, as an active button is. */
 .date-view .note-list-item .note-list-column.note-list-column-primary,
-.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-primary,
-.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button,
-.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-action .note-list-action-button {
+.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-primary {
   background:    #FFFFFF66;
   border:        1px solid var(--btn-border-default);
   border-radius: var(--border-radius-small);
   box-shadow:    var(--box-shadow-regular-light);
 }
 
-.date-view .note-list-item .note-list-column.note-list-column-action,
-.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-action {
-  background: none;
-}
-
 .date-view .note-list-item.is-active .note-list-column.note-list-column-primary,
-.image-library-view .note-list-item:not(.is-tree-card).is-active .note-list-column.note-list-column-primary,
-.date-view .note-list-item .note-list-column.note-list-column-action .note-list-action-button[data-pressed],
-.image-library-view .note-list-item:not(.is-tree-card) .note-list-column.note-list-column-action .note-list-action-button[data-pressed] {
+.image-library-view .note-list-item:not(.is-tree-card).is-active .note-list-column.note-list-column-primary {
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 

@@ -312,7 +312,7 @@ import {
 import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
 import { useTintedTexture } from './textures/useTintedTexture'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
-import { noteRightPressAction } from './editorSection/useNoteProtectionActions'
+import { HoverActions, type HoverAction } from './components/HoverActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
 import { CategoryTree, type CategoryTreeFolds } from './components/CategoryTree'
@@ -366,10 +366,6 @@ const SUB_PIXEL_QUANTUM_PX = 1 / 64
 // the handover doc's split-view design). Matches the same 300px figure the
 // main-process window-minimum-size IPC (Phase 1) uses per extra section.
 const SLOT_MIN_WIDTH_PX = 300
-// Stable fallback for when no section has registered yet (e.g. the very first
-// render, before <EditorSection> has mounted) -- a fresh Map() each render
-// would break memo'd children comparing this prop by identity.
-const EMPTY_MAP = new Map<string, NotePrimedAction>()
 const DEFAULT_BORDER_RADIUS_REGULAR_PX = 6
 const DEFAULT_BORDER_ALPHA_PERCENT = 100
 const DEFAULT_BOX_SHADOW_ALPHA_PERCENT = 100
@@ -464,7 +460,6 @@ const DEFAULT_EDITOR_TEXT_COLORS: Record<EditorTextColorTargetKey, string> = {
   editorRenderText: '#000000DD',
 }
 
-type NotePrimedAction = 'archive' | 'deletion'
 type ViewStyleKey =
   | 'modern'
   | 'narrow'
@@ -969,6 +964,56 @@ function ModifiedDateLabel({ timestampMs }: { timestampMs: number }) {
   )
 }
 
+/**
+ * What a note row can do, the same five callbacks for every row of every
+ * section: stable for the app's life (they reach the active slot when
+ * called), so a memoized row never redraws for them.
+ */
+type NoteRowActions = {
+  save: (noteId: string) => void
+  close: (noteId: string) => void
+  archive: (noteId: string) => void
+  trash: (noteId: string) => void
+  restore: (noteId: string) => void
+}
+
+/**
+ * A note row's hover actions (components/HoverActions.tsx), by the note's
+ * state. A note from a file is saved or closed; a trashed note is restored,
+ * archived or deleted for good; an archived one restored or trashed; any
+ * other archived or trashed. Chapters are archived and trashed from the
+ * chapter bar, so a chapter shown in a list (search) has nothing here; one
+ * already detached into the Trash or the Archive can be brought back, and
+ * from the Trash also archived (unless its parent is gone or trashed: it
+ * would have no row to be archived under) or deleted for good.
+ */
+function noteRowActionList(note: NoteSummary, actions: NoteRowActions, isModified: boolean, isFileConflict: boolean, isChapterParentUnavailable: boolean): HoverAction[] {
+  const id = note.id
+  const isChapter = Boolean(note.chapterOnly)
+  if (isExternalNote(note)) {
+    return [
+      ...(isModified ? [{
+        icon: 'fa-floppy-disk',
+        label: isFileConflict ? 'Save, overwriting the file that changed on disk (its version is on the Timeline)' : 'Save to the file',
+        onHold: () => actions.save(id),
+      }] : []),
+      { icon: 'fa-xmark', label: 'Close without saving', tone: 'alert' as const, onHold: () => actions.close(id) },
+    ]
+  }
+  const restore: HoverAction = { icon: 'fa-rotate-left', label: 'Restore', onHold: () => actions.restore(id) }
+  const archive: HoverAction = { icon: 'fa-box-archive', label: 'Archive', tone: 'warning', onHold: () => actions.archive(id) }
+  if (isDeletedNote(note)) {
+    return [
+      restore,
+      ...(isChapter && isChapterParentUnavailable ? [] : [archive]),
+      { icon: 'fa-trash-can', label: 'Delete for good', tone: 'alert', onHold: () => actions.trash(id) },
+    ]
+  }
+  const trash: HoverAction = { icon: 'fa-trash-can', label: 'Put in the trash', tone: 'alert', onHold: () => actions.trash(id) }
+  if (isArchivedNote(note)) return isChapter ? [restore] : [restore, trash]
+  return isChapter ? [] : [archive, trash]
+}
+
 type NoteListItemProps = {
   note: NoteSummary
   isActive: boolean
@@ -976,41 +1021,30 @@ type NoteListItemProps = {
   /** The note's file changed on disk while it held edits of its own (src/shared/externalFileReconcile.ts's `conflict`): a save overwrites that version, which is on the Timeline. */
   isFileConflict?: boolean
   onSelect: (noteId: string) => void
-  onPrimedLeftClick: (noteId: string) => void
-  onSaveClick?: (noteId: string) => void
-  onCloseClick?: (noteId: string) => void
-  onArchiveClick?: (noteId: string) => void
-  onTrashClick?: (noteId: string) => void
-  primedAction?: NotePrimedAction | null
-  onRightPressStart: (noteId: string, hasOwnActionButtons: boolean) => void
-  onRightPressEnd: (noteId: string) => void
-  onMouseLeave?: (noteId: string) => void
-  isTrashMode?: boolean
+  actions: NoteRowActions
   variant?: 'default' | 'tree'
   /** Set for a chapter (surfaced via search, or -- now that a chapter can carry its own 'archived'/'deleted' protected tag -- via trash/archive): the parent's own title, shown in the meta-left slot as "$ <parent title>" in place of the created-date/assignedId a regular note shows there, since a bare date is far less useful than knowing which note this chapter belongs to. */
   chapterParentTitle?: string
   /** Archive tree only: an archived chapter row nested under its non-self-archived parent's fold-out (see CategoryTreeView) -- indented an extra 2*var(--spacing-large) so it visibly reads as a child of the row above it. */
   isArchiveFoldOutChapter?: boolean
-  /** Set only for a chapter row: true when this chapter's parent is itself gone or in Trash, so archiving the chapter would file it under a parent the Archive tree can't show (archivedChaptersByParentId only ever renders under an archive-eligible parent). Disables the archive button for that row -- see isArchiveButtonDisabled. */
+  /** Set only for a chapter row: true when this chapter's parent is itself gone or in Trash, so archiving the chapter would file it under a parent the Archive tree can't show. */
   isChapterParentUnavailable?: boolean
 }
 
+/**
+ * A note in a list. The flat cards (Date, External, Trash, Find) show the
+ * title over the created date or id and the modified time; the tree cards
+ * (Category, Archive) the title with the modified time at the row's right
+ * end. Either way the modified time gives way to the note's actions while
+ * the card is hovered (`noteRowActionList`).
+ */
 const NoteListItem = memo(function NoteListItem({
   note,
   isActive,
   isModified = false,
   isFileConflict = false,
   onSelect,
-  onPrimedLeftClick,
-  onSaveClick,
-  onCloseClick,
-  onArchiveClick,
-  onTrashClick,
-  primedAction = null,
-  onRightPressStart,
-  onRightPressEnd,
-  onMouseLeave,
-  isTrashMode = false,
+  actions,
   variant = 'default',
   chapterParentTitle,
   isArchiveFoldOutChapter = false,
@@ -1019,16 +1053,7 @@ const NoteListItem = memo(function NoteListItem({
   const isTreeVariant = variant === 'tree'
   const createdDate = isTreeVariant ? '' : formatCreatedDate(note.createdAtMs)
 
-  const handleSelect = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (primedAction) {
-      event.preventDefault()
-      event.stopPropagation()
-      onPrimedLeftClick(note.id)
-      return
-    }
-
-    onSelect(note.id)
-  }, [primedAction, note.id, onPrimedLeftClick, onSelect])
+  const handleSelect = useCallback(() => onSelect(note.id), [note.id, onSelect])
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     // Plain Enter/Space only: a modified combo is an app-wide shortcut (Ctrl+Space
@@ -1040,30 +1065,6 @@ const NoteListItem = memo(function NoteListItem({
       onSelect(note.id)
     }
   }, [note.id, onSelect])
-
-  const handleSaveClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    onSaveClick?.(note.id)
-  }, [note.id, onSaveClick])
-
-  const handleCloseClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    onCloseClick?.(note.id)
-  }, [note.id, onCloseClick])
-
-  const handleArchiveClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    onArchiveClick?.(note.id)
-  }, [note.id, onArchiveClick])
-
-  const handleTrashClick = useCallback((event: MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-    onTrashClick?.(note.id)
-  }, [note.id, onTrashClick])
 
   const isExternal = isExternalNote(note)
   const isChapter = note.chapterOnly
@@ -1089,106 +1090,38 @@ const NoteListItem = memo(function NoteListItem({
     ? `$ ${chapterParentTitle ?? createdDate}`
     : null
 
-  // The flat rows carry archive/trash BUTTONS and the tree cards have no room
-  // for them, which is the whole of what decides whether a right press on a
-  // row means anything -- see `noteRightPressAction`, which both this and the
-  // handler read, so the declaration and the behaviour cannot disagree.
-  const hasActionColumns = !isTreeVariant
-  const rightPressAction = noteRightPressAction(note, hasActionColumns)
-
-  // One pointerdown for the row's two uses of a press: a left press arms a
-  // drag (shared/pointerDrag.ts), a right press starts the hold.
-  const handlePointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    armPointerDrag(event)
-    if (event.button !== 2) return
-
-    event.stopPropagation()
-    if (isExternal) return
-
-    onRightPressStart(note.id, hasActionColumns)
-  }, [note.id, onRightPressStart, isExternal, hasActionColumns])
-
-  const handlePointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 2) return
-
-    event.stopPropagation()
-    if (isExternal) return
-
-    onRightPressEnd(note.id)
-  }, [note.id, onRightPressEnd, isExternal])
-
-  const handleContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    event.stopPropagation()
-  }, [])
-
-  // The row's own buttons swallow a right press, which means nothing on them;
-  // a left press still reaches the row, so a row can be dragged by any part.
-  const stopRowRightPress = useCallback((event: PointerEvent<HTMLButtonElement>) => {
-    if (event.button === 2) event.stopPropagation()
-  }, [])
-
-  const handleMouseLeave = useCallback(() => {
-    onMouseLeave?.(note.id)
-  }, [note.id, onMouseLeave])
-
   const handleDragStart = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.dataTransfer.setData(NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload({ noteId: note.id, sourceSectionId: null }))
   }, [note.id])
 
-  const saveTooltip = !isModified
-    ? 'Save disabled'
-    : isFileConflict
-      ? 'The file changed on disk while you were editing. Saving overwrites it; its version is on the Timeline'
-      : 'Save external note'
-
-  const isArchived = isArchivedNote(note)
-  const isDeleted = isDeletedNote(note)
-  // A chapter can now carry its own 'archived'/'deleted' protected tag (see
-  // ChapterBar.tsx's archive/delete split pill -- the actual archive/delete
-  // *mechanics*, not yet wired here), but that's a deliberately different
-  // gesture from these per-row sidebar buttons/hold-gestures, which stay
-  // disabled/blocked for a chapter row wherever it's merely surfaced
-  // (search, archive) until that wiring exists. Trash mode is the one
-  // exception, so both chapter clauses below are scoped to !isTrashMode: a
-  // detached chapter sitting in Trash otherwise had no way out of its own
-  // row at all. There these two buttons mean 'permanently delete' and
-  // 'move to Archive' respectively, and both underlying paths already handle a
-  // detached chapter -- deleteNote sweeps it via detachedChapterParentId (see
-  // databaseService.ts), and applyProtectedTagDestination is explicitly shared
-  // with chapters, which keep detachedChapterParentId across the tag swap and
-  // so surface in the parent's Archive fold-out (archivedChaptersByParentId).
-  // The extra archive-side clause: a chapter can only be archived into its
-  // parent's Archive fold-out, so a chapter whose parent is gone or itself in
-  // Trash has nowhere to land and would vanish from every view until the
-  // parent came back. Purging it (the trash button) stays available.
-  const isArchiveButtonDisabled = !onArchiveClick || isArchived
-    || (!isTrashMode && (isDeleted || isChapter))
-    || (isChapter && isChapterParentUnavailable)
-  const isTrashButtonDisabled = !onTrashClick || (!isTrashMode && (isDeleted || isChapter))
-  const archiveButtonLabel = isArchiveButtonDisabled ? 'Archive disabled' : 'Archive note'
-  const trashButtonLabel = isTrashButtonDisabled
-    ? 'Trash disabled'
-    : isTrashMode && isDeleted ? 'Permanently delete note' : 'Trash note'
+  const rowActions = useMemo(
+    () => noteRowActionList(note, actions, isModified, isFileConflict, isChapterParentUnavailable),
+    [note, actions, isModified, isFileConflict, isChapterParentUnavailable],
+  )
+  const modified = <span className="note-list-meta-right"><HoverActions rest={<ModifiedDateLabel timestampMs={note.updatedAtMs} />} actions={rowActions} /></span>
 
   return (
     <div
-      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${primedAction === 'archive' ? ' is-primed-for-archiving' : ''}${primedAction === 'deletion' ? ' is-primed-for-deletion' : ''}${isArchiveFoldOutChapter ? ' is-archive-fold-out-chapter' : ''}`}
+      className={`note-list-item${isActive ? ' is-active' : ''}${isTreeVariant ? ' is-tree-card' : ''}${isModified ? ' is-modified' : ''}${isExternal ? ' is-external' : ''}${isArchiveFoldOutChapter ? ' is-archive-fold-out-chapter' : ''}`}
       data-note-id={note.id}
       role="option"
       aria-selected={isActive}
       data-drag-source=""
-      onPointerDown={handlePointerDown}
+      data-hover-host=""
+      onPointerDown={armPointerDrag}
       onDragStart={handleDragStart}
       onClick={handleSelect}
       onKeyDown={handleKeyDown}
-      onPointerUp={handlePointerUp}
-      onMouseLeave={handleMouseLeave}
-      data-secondary-press={rightPressAction ? 'action' : 'none'}
-      onContextMenu={handleContextMenu}
       tabIndex={0}
     >
-      {hasActionColumns ? (
+      {isTreeVariant ? (
+        <div className="note-list-content">
+          <div className="note-list-meta-row note-tree-card-row">
+            <span className="note-list-title">{displayTitle || 'Untitled'}</span>
+            {modified}
+          </div>
+        </div>
+      ) : (
         <div className="note-list-columns">
           <div className="note-list-column note-list-column-primary">
             <div className="note-list-content">
@@ -1197,91 +1130,10 @@ const NoteListItem = memo(function NoteListItem({
                 <span className="note-list-meta-left">
                   {chapterMetadataText ?? (noteListMetaKind === 'id' ? formatIdWithSigil(note.assignedId, '$') : createdDate)}
                 </span>
-                <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
+                {modified}
               </div>
             </div>
           </div>
-
-          {isExternal ? (
-            <>
-              <div className={`note-list-column note-list-column-action note-list-column-save${!isModified ? ' is-disabled' : ' is-modified'}`}>
-                <button
-                  type="button"
-                  className="note-list-action-button note-list-action-button-save"
-                  disabled={!isModified}
-                  aria-label={saveTooltip}
-                  data-tooltip={saveTooltip}
-                  onClick={handleSaveClick}
-                  onPointerDown={stopRowRightPress}
-                  onPointerUp={stopRowRightPress}
-                  data-secondary-press="none"
-                  onContextMenu={(event) => event.stopPropagation()}
-                >
-                  <span className="fa-solid fa-floppy-disk" aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className={`note-list-column note-list-column-action note-list-column-close${isModified ? ' is-modified' : ''}`}>
-                <button
-                  type="button"
-                  className="note-list-action-button note-list-action-button-close"
-                  disabled={!isExternal}
-                  aria-label="Close external note"
-                  data-tooltip="Close external note"
-                  onClick={handleCloseClick}
-                  onPointerDown={stopRowRightPress}
-                  onPointerUp={stopRowRightPress}
-                  data-secondary-press="none"
-                  onContextMenu={(event) => event.stopPropagation()}
-                >
-                  <span className="fa-solid fa-xmark" aria-hidden="true" />
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className={`note-list-column note-list-column-action note-list-column-archive${isArchiveButtonDisabled ? ' is-disabled' : ''}`}>
-                <button
-                  type="button"
-                  className="note-list-action-button note-list-action-button-archive"
-                  disabled={isArchiveButtonDisabled}
-                  aria-label={archiveButtonLabel}
-                  data-tooltip={archiveButtonLabel}
-                  onClick={handleArchiveClick}
-                  onPointerDown={stopRowRightPress}
-                  onPointerUp={stopRowRightPress}
-                  data-secondary-press="none"
-                  onContextMenu={(event) => event.stopPropagation()}
-                />
-              </div>
-
-              <div className={`note-list-column note-list-column-action note-list-column-trash${isTrashButtonDisabled ? ' is-disabled' : ''}`}>
-                <button
-                  type="button"
-                  className="note-list-action-button note-list-action-button-trash"
-                  disabled={isTrashButtonDisabled}
-                  aria-label={trashButtonLabel}
-                  data-tooltip={trashButtonLabel}
-                  onClick={handleTrashClick}
-                  onPointerDown={stopRowRightPress}
-                  onPointerUp={stopRowRightPress}
-                  data-secondary-press="none"
-                  onContextMenu={(event) => event.stopPropagation()}/>
-              </div>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="note-list-content">
-          <div className="note-list-title">{displayTitle || 'Untitled'}</div>
-          {isTreeVariant ? null : (
-            <div className="note-list-meta-row">
-              <span className="note-list-meta-left">
-                {chapterMetadataText ?? (noteListMetaKind === 'id' ? formatIdWithSigil(note.assignedId, '$') : createdDate)}
-              </span>
-              <span className="note-list-meta-right"><ModifiedDateLabel timestampMs={note.updatedAtMs} /></span>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -1295,11 +1147,7 @@ type CategoryTreeViewProps = {
   persistedUnfoldedSecondary: string[]
   onCollapseChange: (next: { unfoldedPrimary: string[]; unfoldedSecondary: string[] }) => void
   onSelect: (noteId: string) => void
-  onPrimedLeftClick: (noteId: string) => void
-  primedNoteActionById: Map<string, NotePrimedAction>
-  onNoteRightPressStart: (noteId: string, hasOwnActionButtons: boolean) => void
-  onNoteRightPressEnd: (noteId: string) => void
-  onNoteMouseLeave?: (noteId: string) => void
+  actions: NoteRowActions
   /** Archive mode only: a non-self-archived parent's own archived chapters, keyed by parent note id -- see App.tsx's own doc comment on the memo that builds this. Undefined in Category mode, where chapters never appear at all. */
   archivedChaptersByParentId?: Map<string, NoteSummary[]>
 }
@@ -1311,11 +1159,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
   persistedUnfoldedSecondary,
   onCollapseChange,
   onSelect,
-  onPrimedLeftClick,
-  primedNoteActionById,
-  onNoteRightPressStart,
-  onNoteRightPressEnd,
-  onNoteMouseLeave,
+  actions,
   archivedChaptersByParentId,
 }: CategoryTreeViewProps) {
   // Which non-self-archived parent rows currently have their own archived
@@ -1356,11 +1200,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
                           note={note}
                           isActive={note.id === activeNoteId}
                           onSelect={isFoldOutParent ? () => toggleArchivedChaptersFold(note.id) : onSelect}
-                          onPrimedLeftClick={onPrimedLeftClick}
-                          primedAction={primedNoteActionById.get(note.id) ?? null}
-                          onRightPressStart={onNoteRightPressStart}
-                          onRightPressEnd={onNoteRightPressEnd}
-                          onMouseLeave={onNoteMouseLeave}
+                          actions={actions}
                           variant="tree"
                         />
                         {isExpanded ? archivedChapters!.map((chapter) => (
@@ -1369,11 +1209,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
                             note={chapter}
                             isActive={chapter.id === activeNoteId}
                             onSelect={onSelect}
-                            onPrimedLeftClick={onPrimedLeftClick}
-                            primedAction={primedNoteActionById.get(chapter.id) ?? null}
-                            onRightPressStart={onNoteRightPressStart}
-                            onRightPressEnd={onNoteRightPressEnd}
-                            onMouseLeave={onNoteMouseLeave}
+                            actions={actions}
                             variant="tree"
                             chapterParentTitle={note.title}
                             isArchiveFoldOutChapter
@@ -1381,7 +1217,7 @@ const CategoryTreeView = memo(function CategoryTreeView({
                         )) : null}
                       </Fragment>
                     )
-  }, [activeNoteId, archivedChaptersByParentId, expandedArchiveParentIds, onNoteMouseLeave, onNoteRightPressEnd, onNoteRightPressStart, onPrimedLeftClick, onSelect, primedNoteActionById, toggleArchivedChaptersFold])
+  }, [activeNoteId, actions, archivedChaptersByParentId, expandedArchiveParentIds, onSelect, toggleArchivedChaptersFold])
 
   // The Category and Archive trees start with every section and divider
   // folded, so what they remember is what the reader unfolded.
@@ -5063,12 +4899,9 @@ ${markdownHtml}
 
   const handleViewModeButtonClick = useCallback((mode: SidebarMode) => {
     const section = getActiveSection()
-    if (mode === 'trash' && section?.isTrashViewDeletePrimed) {
-      section.setIsTrashViewDeletePrimed(false)
-      void section.purgeDeletedNotesPermanently()
-      runSidebarMenuTransition('trash')
-      return
-    }
+    // The click that ends the Trash button's completed hold (which emptied
+    // the trash) selects nothing.
+    if (mode === 'trash' && section?.consumeTrashViewHoldClick()) return
 
     if (mode === sidebarMode) {
       return
@@ -5080,8 +4913,6 @@ ${markdownHtml}
     }
 
     if (mode === 'find') {
-      section?.setIsTrashViewDeletePrimed(false)
-      section?.clearTrashButtonArmTimer()
       runSidebarMenuTransition('find')
       requestAnimationFrame(() => {
         sidebarSearchInputRef.current?.focus()
@@ -5090,8 +4921,6 @@ ${markdownHtml}
       return
     }
 
-    section?.setIsTrashViewDeletePrimed(false)
-    section?.clearTrashButtonArmTimer()
     runSidebarMenuTransition(mode)
   }, [
     getActiveSection,
@@ -7014,23 +6843,21 @@ ${markdownHtml}
   }, [runSidebarMenuTransition, sidebarMode, sidebarSections, sidebarShowsImages])
   const showImageLibrary = useCallback(() => showSidebarListView('images'), [showSidebarListView])
 
-  // A page of the Date section is fifty memoized cards: these three are
+  // A page of the Date section is fifty memoized cards: the row actions are
   // stable so that a render of the app that changes nothing about a card
   // does not redraw it.
-  const handleNotePrimedLeftClick = useCallback((noteId: string) => {
-    getActiveSection()?.handlePrimedNoteLeftClick(noteId)
-  }, [getActiveSection])
-  const handleNoteRightPressStart = useCallback((noteId: string, hasOwnActionButtons: boolean) => {
-    getActiveSection()?.handleNoteRightPressStart(noteId, hasOwnActionButtons)
-  }, [getActiveSection])
-  const handleNoteRightPressEnd = useCallback((noteId: string) => {
-    getActiveSection()?.handleNoteRightPressEnd(noteId)
-  }, [getActiveSection])
+  const noteRowActions = useMemo<NoteRowActions>(() => ({
+    save: (noteId) => { void getActiveSection()?.handleSaveButtonClick(noteId) },
+    close: (noteId) => { getActiveSection()?.handleCloseButtonClick(noteId) },
+    archive: (noteId) => { void getActiveSection()?.handleArchiveClick(noteId) },
+    trash: (noteId) => { void getActiveSection()?.handleTrashClick(noteId) },
+    restore: (noteId) => { void getActiveSection()?.restoreNote(noteId) },
+  }), [getActiveSection])
 
   // The section selector at the top of every Notes and Images list. The Notes
-  // view's Trash button is also where the trash is emptied: a held right
-  // press primes it, and a click on it while primed purges.
-  const isTrashSectionPrimed = Boolean(activeSection?.isTrashViewDeletePrimed)
+  // view's Trash button is also where the trash is emptied: a held left press,
+  // which shows the alert look while it is held.
+  const isTrashSectionHolding = Boolean(activeSection?.isTrashViewHolding)
   // External is greyed out while no note is open from a file (the search and
   // date filters aside, which only narrow what it lists), and a sidebar on
   // it when the last one closes moves to Date.
@@ -7050,16 +6877,12 @@ ${markdownHtml}
         onSelect={handleViewModeButtonClick}
         ariaLabel={sidebarShowsImages ? 'Image sections' : 'Note sections'}
         buttonProps={sidebarShowsImages ? undefined : (section) => (section === 'trash' ? {
-          className: isTrashSectionPrimed ? 'is-primed-for-deletion' : undefined,
-          'data-tooltip': isTrashSectionPrimed ? 'Click to empty the Trash' : 'Trash. Hold right-click to empty it',
-          'data-secondary-press': 'action',
-          onContextMenu: activeSection?.handleTrashViewButtonContextMenu,
+          className: isTrashSectionHolding ? 'is-alert' : undefined,
+          'data-tooltip': 'Trash. Hold to empty it',
           onPointerDown: activeSection?.handleTrashViewButtonPointerDown,
-          onPointerUp: activeSection?.handleTrashViewButtonPointerUp,
-          onMouseLeave: () => {
-            activeSection?.clearTrashButtonArmTimer()
-            activeSection?.setIsTrashViewDeletePrimed(false)
-          },
+          onPointerUp: activeSection?.clearTrashButtonHold,
+          onPointerCancel: activeSection?.clearTrashButtonHold,
+          onMouseLeave: activeSection?.clearTrashButtonHold,
         } : undefined)}
       />
     </div>
@@ -8361,9 +8184,6 @@ ${markdownHtml}
                     data-tooltip={label}
                     aria-label={label}
                     onClick={() => {
-                      const section = getActiveSection()
-                      section?.setIsTrashViewDeletePrimed(false)
-                      section?.clearTrashButtonArmTimer()
                       if (view === 'songs' || view === 'soundscapes') handleViewModeButtonClick(view)
                       else showSidebarListView(view)
                     }}
@@ -8478,16 +8298,7 @@ ${markdownHtml}
                               chapterParentTitle={chapterParentTitle}
                               isChapterParentUnavailable={isChapterParentUnavailable}
                               onSelect={handleSelectNote}
-                              onPrimedLeftClick={handleNotePrimedLeftClick}
-                              onSaveClick={activeSection?.handleSaveButtonClick}
-                              onCloseClick={activeSection?.handleCloseButtonClick}
-                              onArchiveClick={activeSection?.handleArchiveClick}
-                              onTrashClick={activeSection?.handleTrashClick}
-                              isTrashMode={sidebarMode === 'trash'}
-                              primedAction={activeSection?.primedNoteActionById.get(note.id) ?? null}
-                              onRightPressStart={handleNoteRightPressStart}
-                              onRightPressEnd={handleNoteRightPressEnd}
-                              onMouseLeave={activeSection?.handleNoteMouseLeave}
+                              actions={noteRowActions}
                             />
                           )
                         })}
@@ -8798,11 +8609,7 @@ ${markdownHtml}
                           persistedUnfoldedSecondary={sidebarMode === 'category' ? categoryUnfoldedSecondary : archiveUnfoldedSecondary}
                           onCollapseChange={sidebarMode === 'category' ? handleCategoryCollapseChange : handleArchiveCollapseChange}
                           onSelect={handleSelectNote}
-                          onPrimedLeftClick={(noteId) => getActiveSection()?.handlePrimedNoteLeftClick(noteId)}
-                          primedNoteActionById={activeSection?.primedNoteActionById ?? EMPTY_MAP}
-                          onNoteRightPressStart={(noteId, hasOwnActionButtons) => getActiveSection()?.handleNoteRightPressStart(noteId, hasOwnActionButtons)}
-                          onNoteRightPressEnd={(noteId) => getActiveSection()?.handleNoteRightPressEnd(noteId)}
-                          onNoteMouseLeave={activeSection?.handleNoteMouseLeave}
+                          actions={noteRowActions}
                           archivedChaptersByParentId={sidebarMode === 'archive' ? archivedChaptersByParentId : undefined}
                         />
                       </div>

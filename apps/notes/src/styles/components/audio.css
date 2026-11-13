@@ -71,7 +71,7 @@
 }
 
 .audio-ctrl-btn.is-primed {
-  filter: var(--filter-primed-delete);
+  filter: var(--filter-alert);
 }
 
 .audio-ctrl-btn.is-empty {

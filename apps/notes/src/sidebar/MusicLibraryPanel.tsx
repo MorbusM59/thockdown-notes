@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { TextButton } from '../components/TextButton'
-import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot, musicSetMark } from '../shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { HoldToDeleteButton, HoldToDeleteCount } from './HoldToDeleteButton'
+import { HoverActions } from '../components/HoverActions'
 import { MusicSetRow } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
@@ -188,10 +188,14 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
             ariaLabel={group.label}
             iconClass={grouping === 'folder' ? 'fa-folder' : 'fa-user'}
             marker={
-              <HoldToDeleteCount
-                count={group.dividers.reduce((total, divider) => total + divider.songs.length, 0)}
-                label={`remove them all from ${name}`}
-                onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, group.dividers.flatMap((divider) => divider.songs.map((song) => song.id))) }}
+              <HoverActions
+                rest={<AccordionCount count={group.dividers.reduce((total, divider) => total + divider.songs.length, 0)} />}
+                actions={[{
+                  icon: 'fa-xmark',
+                  label: `Remove them all from ${name}`,
+                  tone: 'alert',
+                  onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, group.dividers.flatMap((divider) => divider.songs.map((song) => song.id))) },
+                }]}
               />
             }
           >
@@ -199,10 +203,14 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
             {group.dividers.map((divider) => (
               <AccordionDivider key={divider.label} label={divider.label} defaultOpen
                 marker={
-                  <HoldToDeleteCount
-                    count={divider.songs.length}
-                    label={`remove them all from ${name}`}
-                    onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, divider.songs.map((song) => song.id)) }}
+                  <HoverActions
+                    rest={<AccordionCount count={divider.songs.length} />}
+                    actions={[{
+                      icon: 'fa-xmark',
+                      label: `Remove them all from ${name}`,
+                      tone: 'alert',
+                      onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, divider.songs.map((song) => song.id)) },
+                    }]}
                   />
                 }
               >
@@ -210,20 +218,22 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
                   {divider.songs.map((song) => {
                     const title = songListTitleText(song)
                     return (
+                      // One cell, as an image's card is one: a click plays the
+                      // song, and on hover its remove action takes the end of the row.
                       <div key={song.id} className="options-curve-row options-music-song-row">
-                        <button
-                          type="button"
+                        <div
+                          role="button"
                           className="options-curve-cell options-curve-display options-music-set-name"
+                          data-hover-host=""
                           data-tooltip={song.filePath}
                           onClick={() => nowPlaying.playFromPool(song.id, song)}
                         >
-                          {title}
-                        </button>
-                        <HoldToDeleteButton
-                          className="options-music-song-remove"
-                          label={`remove ${title} from ${name}`}
-                          onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) }}
-                        />
+                          <span className="options-music-song-title">{title}</span>
+                          <HoverActions
+                            rest={null}
+                            actions={[{ icon: 'fa-xmark', label: `Remove ${title} from ${name}`, tone: 'alert', onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) } }]}
+                          />
+                        </div>
                       </div>
                     )
                   })}
