@@ -90,6 +90,13 @@
   position: absolute;
 }
 
+/* The Music Library's controls where the colour picker docks, straight on
+   the sidebar with no panel of their own, on the dock's gutter. */
+.sidebar-music-library-dock {
+  flex:    0 0 auto;
+  padding: var(--spacing-large);
+}
+
 /* .sidebar-options-content's gutter, so the section lines up with the ones above. */
 .sidebar-color-picker-dock-content {
   position: relative;

@@ -8788,13 +8788,9 @@ ${markdownHtml}
                 </div>
                   {isMusicLibraryDocked ? (
                     // The Music Library's controls, docked where the colour
-                    // picker docks and in the same box.
-                    <div className="sidebar-color-picker-dock">
-                      <div className="sidebar-content-texture" />
-                      <div className="sidebar-color-picker-dock-content">
-                        {/* Straight on the dock's panel, with no subsection box of its own. */}
-                        <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
-                      </div>
+                    // picker docks but straight on the sidebar, with no box.
+                    <div className="sidebar-music-library-dock">
+                      <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
                     </div>
                   ) : null}
                   {isReplaceMode ? (
