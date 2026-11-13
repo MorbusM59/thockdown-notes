@@ -554,11 +554,15 @@
 }
 
 /* Date filter */
+/* The date filter rail: two rows in the sidebar docks' own metrics (the
+   Music Library's .options-curve-rows), so every dock below the list reads
+   as one family -- row height, row gap and cell gap alike. */
 .date-filter-rail {
+  --entry-height: var(--canonical-scroll-thickness);
   padding:        0 0 var(--spacing-regular) var(--spacing-large);
   display:        flex;
   flex-direction: column;
-  gap:            0;
+  gap:            var(--toolbar-options-gap);
 }
 
 .date-filter-rail.date-filter-rail-placeholder {
@@ -568,15 +572,10 @@
 }
 
 .date-filter-line {
-  display:       flex;
-  width:         100%;
-  gap:           var(--spacing-small);
-  margin-bottom: var(--spacing-regular);
-}
-
-.date-filter-line:last-child {
-  margin-bottom: 0;
-  height: var(--entry-height);
+  display: flex;
+  width:   100%;
+  height:  var(--entry-height);
+  gap:     var(--spacing-small);
 }
 
 /* Notes mode bar & quick actions */
