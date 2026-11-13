@@ -1827,7 +1827,9 @@ app.whenReady().then(async () => {
   await migrateVisualizerTuning(stateService!, databaseService).catch((error) => console.error('[state] visualizer migration failed', error))
   await ensureHelpGuide(databaseService, noteLifecycleService!)
   // Songs added before tags were read on import get them now, in the index
-  // worker, so nothing on the main thread ever opens a music file.
+  // worker, so nothing on the main thread ever opens a music file. A file
+  // that is missing is skipped and stays unread, so it is tried again (one
+  // failed stat) on the next start and gets its tags once it is back.
   const unreadTags = databaseService.songsWithUnreadTags()
   if (unreadTags.length > 0) {
     void indexMusicPaths(unreadTags)
