@@ -8696,33 +8696,8 @@ ${markdownHtml}
                       <ColorPickerRow />
                     </div>
                   ) : null}
-                  </div>
-
-                <aside
-                    className="sidebar-scrollbar-slot"
-                    aria-hidden="true"
-                    // The rail sits beside the scroller, not inside it, so a
-                    // wheel over any part of it would otherwise scroll
-                    // nothing. The same wheel is handed to the scroller, so
-                    // it gets the scroller's own notches and coast.
-                    onWheel={(event) => {
-                      if (!sidebarScroller || event.ctrlKey) return
-                      sidebarScroller.dispatchEvent(new WheelEvent('wheel', event.nativeEvent))
-                    }}
-                  >
-                    <div className="sidebar-scrollbar-slot-inner">
-                      <CanonicalScrollRail
-                        key={sidebarScrollerKey}
-                        className="sidebar-thockdown-scroll-rail"
-                        scroller={sidebarScroller}
-                        ownsKeyboard={false}
-                        layoutKey={`${sidebarMode}|${effectiveCurrentPage}`}
-                        textureRef={sidebarTextureRef}
-                      />
-                    </div>
-                  </aside>
-              </div>
-
+                  {/* Paging and the date filter sit in the column beside the
+                      scrollbar, as every dock does. */}
               {showPagination ? (
                 <div className="sidebar-pagination" aria-label="Sidebar pagination">
                   <button
@@ -8835,6 +8810,33 @@ ${markdownHtml}
                   </div>
                 </div>
               ) : null}
+                  </div>
+
+                <aside
+                    className="sidebar-scrollbar-slot"
+                    aria-hidden="true"
+                    // The rail sits beside the scroller, not inside it, so a
+                    // wheel over any part of it would otherwise scroll
+                    // nothing. The same wheel is handed to the scroller, so
+                    // it gets the scroller's own notches and coast.
+                    onWheel={(event) => {
+                      if (!sidebarScroller || event.ctrlKey) return
+                      sidebarScroller.dispatchEvent(new WheelEvent('wheel', event.nativeEvent))
+                    }}
+                  >
+                    <div className="sidebar-scrollbar-slot-inner">
+                      <CanonicalScrollRail
+                        key={sidebarScrollerKey}
+                        className="sidebar-thockdown-scroll-rail"
+                        scroller={sidebarScroller}
+                        ownsKeyboard={false}
+                        layoutKey={`${sidebarMode}|${effectiveCurrentPage}`}
+                        textureRef={sidebarTextureRef}
+                      />
+                    </div>
+                  </aside>
+              </div>
+
             </aside>
             ) : null}
 
