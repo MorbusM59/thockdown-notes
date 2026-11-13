@@ -336,6 +336,11 @@ interface AccordionSectionProps extends FoldControl {
   /** fa-solid icon class(es) for the heading, saying what the subsection is about, e.g. "fa-paint-roller". */
   iconClass: string
   /**
+   * How many entries the section holds. Given, it stands in place of the fold
+   * arrow, in the divider's count element (AccordionDivider).
+   */
+  count?: number
+  /**
    * Told when the section opens (as its unfold starts) and when it closes (as
    * its fold ends), and told `false` when it unmounts open, so a listener
    * never holds an open state for a section that is gone.
@@ -357,6 +362,7 @@ export function AccordionSection({
   headingClassName,
   ariaLabel,
   iconClass,
+  count,
   ...fold
 }: AccordionSectionProps) {
   const { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold)
@@ -369,13 +375,14 @@ export function AccordionSection({
       <details ref={detailsRef} className="sidebar-options-accordion">
         <summary
           ref={summaryRef}
-          className={`sidebar-options-section-heading${headingClassName ? ` ${headingClassName}` : ''}`}
+          className={`sidebar-options-section-heading${count !== undefined ? ' has-count' : ''}${headingClassName ? ` ${headingClassName}` : ''}`}
           onClick={handleClick}
           data-secondary-press="action"
           onContextMenu={handleContextMenu}
         >
           <span className={`fa-solid ${iconClass}`} aria-hidden="true" />
           {heading}
+          {count !== undefined && <span className="options-divider-count">({count})</span>}
         </summary>
         <div ref={contentRef} className="sidebar-options-accordion-body">
           <AccordionSectionOpenContext.Provider value={isOpen}>{children}</AccordionSectionOpenContext.Provider>

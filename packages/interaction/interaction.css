@@ -415,6 +415,22 @@
   visibility: hidden;
 }
 
+/* A section showing a count shows it in place of the arrow. The arrow keeps
+   its glyph's height, as in a fixed heading, but gives up its width. */
+.sidebar-options-section-heading.has-count::after {
+  visibility:    hidden;
+  width:         0;
+  padding-right: 0;
+  margin-left:   calc(-1 * var(--spacing-regular));  /* cancels the flex gap before it */
+}
+
+.sidebar-options-section-heading.has-count > .options-divider-count {
+  margin-right: 0;
+  margin-left:  auto;
+  padding-right: var(--spacing-regular);
+  flex-shrink:  0;
+}
+
 .sidebar-options-accordion:not([open]) > .sidebar-options-section-heading::after {
   transform: rotate(90deg);
 }

@@ -144,6 +144,7 @@ function MusicLibrarySet({ slot, name, grouping, filter }: { slot: PlaylistSlot;
             heading={<span className="options-music-song-heading">{group.label}</span>}
             ariaLabel={group.label}
             iconClass={grouping === 'folder' ? 'fa-folder' : 'fa-user'}
+            count={group.dividers.reduce((total, divider) => total + divider.songs.length, 0)}
           >
             <AccordionGroup>
             {group.dividers.map((divider) => (
