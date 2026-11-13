@@ -39,7 +39,7 @@ import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags
 import { ensureHelpGuide } from './help/helpGuideNote'
 import { installedUserDataPath } from './installedUserData'
 import { installNetworkIsolation, openExternalIfAllowed, setRemoteImagesAllowed } from './networkIsolation'
-import { indexMusicFiles, indexMusicFolder } from './musicIndexing'
+import { indexMusicPaths } from './musicIndexing'
 
 // Typed senders for the events the main process pushes to the window.
 const emitWindowEvent = eventEmitter<WindowEvents>(WINDOW_EVENT_CHANNELS)
@@ -1205,7 +1205,13 @@ function registerIpcHandlers() {
       return canceled || filePaths.length === 0 ? null : filePaths[0];
     },
     addFolder: async (_event, slot: PlaylistSlot, folderPath: string) => {
-      const indexedFiles = await indexMusicFolder(folderPath)
+      const indexedFiles = await indexMusicPaths([folderPath])
+      if (indexedFiles.length === 0) return 0
+      databaseService!.addMusicSongs(slot, indexedFiles)
+      return indexedFiles.length
+    },
+    addPaths: async (_event, slot: PlaylistSlot, paths: string[]) => {
+      const indexedFiles = await indexMusicPaths(paths)
       if (indexedFiles.length === 0) return 0
       databaseService!.addMusicSongs(slot, indexedFiles)
       return indexedFiles.length
@@ -1214,7 +1220,7 @@ function registerIpcHandlers() {
       return databaseService!.getMusicPlaylist(slot);
     },
     addSongs: async (_event, slot: PlaylistSlot, filePaths: string[]) => {
-      const indexedFiles = await indexMusicFiles(filePaths)
+      const indexedFiles = await indexMusicPaths(filePaths)
       return databaseService!.addMusicSongs(slot, indexedFiles)
     },
     removeFromSet: async (_event, slot: PlaylistSlot, songId: number) => {
@@ -1824,7 +1830,7 @@ app.whenReady().then(async () => {
   // worker, so nothing on the main thread ever opens a music file.
   const unreadTags = databaseService.songsWithUnreadTags()
   if (unreadTags.length > 0) {
-    void indexMusicFiles(unreadTags)
+    void indexMusicPaths(unreadTags)
       .then((files) => databaseService?.storeReadTags(files))
       .catch((error: unknown) => console.error('[music] reading tags failed', error))
   }

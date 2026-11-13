@@ -783,6 +783,14 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [onActiveSlotsChange, advanceToNextSong])
 
+  const addPathsToMusicSet = useCallback(async (slot: PlaylistSlot, paths: string[]): Promise<boolean> => {
+    if (paths.length === 0) return false
+    const indexedCount = await withMusicIndex(async () => window.thockdownAudioPlayer?.addPaths(slot, paths))
+    if (!indexedCount) return false
+    await refreshCountsRef.current()
+    return true
+  }, [])
+
   const addToMusicSet = useCallback(async (slot: PlaylistSlot, source: 'files' | 'folder'): Promise<boolean> => {
     if (source === 'files') {
       const files = await window.thockdownAudioPlayer?.pickFiles()
@@ -1033,6 +1041,7 @@ export const AudioControls = memo(function AudioControls({
       purgeMusicSet,
       removeFromMusicSet,
       addToMusicSet,
+      addPathsToMusicSet,
       setPoolFilter,
       levels: publishedLevels,
       setLevel: publishedSetLevel,
@@ -1051,6 +1060,7 @@ export const AudioControls = memo(function AudioControls({
     purgeMusicSet,
     removeFromMusicSet,
     addToMusicSet,
+    addPathsToMusicSet,
     setPoolFilter,
     publishedLevels,
     publishedSetLevel,

@@ -6,6 +6,7 @@ export const AUDIO_PLAYER_CHANNELS = {
   pickFiles:            'audio-player:pick-files',
   pickFolder:           'audio-player:pick-folder',
   addFolder:            'audio-player:add-folder',
+  addPaths:             'audio-player:add-paths',
   getPlaylist:          'audio-player:get-playlist',
   addSongs:             'audio-player:add-songs',
   clearPlaylist:        'audio-player:clear-playlist',
@@ -118,6 +119,8 @@ export type AudioPlayerApi = {
   pickFolder(): Promise<string | null>;
   /** Recursively index a folder and add its audio files; returns the number found. */
   addFolder(slot: PlaylistSlot, folderPath: string): Promise<number>;
+  /** Add files and folders alike (a drop from the file manager), each folder searched through; returns the number of audio files found. */
+  addPaths(slot: PlaylistSlot, paths: string[]): Promise<number>;
     /** Return all songs belonging to the given set. */
   getPlaylist(slot: PlaylistSlot): Promise<MusicSongEntry[]>;
     /** Add files to the given set. */

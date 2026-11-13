@@ -24,7 +24,7 @@ describe('music indexing', () => {
     writeFileSync(second, '')
     writeFileSync(path.join(nested, 'notes.txt'), '')
 
-    const indexed = await indexMusicRequest({ kind: 'folder', folderPath: directory })
+    const indexed = await indexMusicRequest({ paths: [directory] })
 
     expect(indexed.map(({ filePath }) => filePath).sort()).toEqual([first, second].sort())
     expect(indexed.every(({ title, artist, album }) => !title && !artist && !album)).toBe(true)
@@ -36,9 +36,22 @@ describe('music indexing', () => {
     writeFileSync(audioFile, '')
 
     await expect(indexMusicRequest({
-      kind: 'files',
-      filePaths: [audioFile, path.join(directory, 'readme.txt')],
+      paths: [audioFile, path.join(directory, 'readme.txt'), path.join(directory, 'missing.mp3')],
     })).resolves.toEqual([{ filePath: audioFile, title: '', artist: '', album: '' }])
+  })
+
+  it('takes files and folders together, as a drop from the file manager brings them', async () => {
+    directory = mkdtempSync(path.join(tmpdir(), 'thockdown-music-index-'))
+    const folder = path.join(directory, 'album')
+    mkdirSync(folder)
+    const inFolder = path.join(folder, 'one.mp3')
+    const loose = path.join(directory, 'two.wav')
+    writeFileSync(inFolder, '')
+    writeFileSync(loose, '')
+
+    const indexed = await indexMusicRequest({ paths: [folder, loose] })
+
+    expect(indexed.map(({ filePath }) => filePath)).toEqual([inFolder, loose])
   })
 
   it('skips a folder it cannot read and keeps the rest of the tree', async () => {
@@ -53,7 +66,7 @@ describe('music indexing', () => {
       target === locked ? Promise.reject(Object.assign(new Error('EACCES'), { code: 'EACCES' })) : readdir(target, options)
     )) as typeof fsPromises.readdir)
 
-    const indexed = await indexMusicRequest({ kind: 'folder', folderPath: directory })
+    const indexed = await indexMusicRequest({ paths: [directory] })
 
     expect(indexed.map(({ filePath }) => filePath)).toEqual([kept])
   })

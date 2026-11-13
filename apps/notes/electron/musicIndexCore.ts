@@ -5,14 +5,26 @@ import type { IndexedMusicFile } from '../src/shared/audioPlayer'
 import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import { readAudioTags } from './audioTags'
 
-export type MusicIndexRequest =
-  | { kind: 'files'; filePaths: string[] }
-  | { kind: 'folder'; folderPath: string }
+/**
+ * Paths to add to the library, files and folders alike, whichever way they
+ * arrived (the file dialog, the folder dialog, a drop from the file manager):
+ * a folder is searched through for its audio files, a file is taken if it is
+ * one, and a path that cannot be read is skipped.
+ */
+export type MusicIndexRequest = { paths: string[] }
 
 export async function indexMusicRequest(request: MusicIndexRequest): Promise<IndexedMusicFile[]> {
-  const filePaths = request.kind === 'folder'
-    ? await audioFilesIn(request.folderPath)
-    : request.filePaths.filter(isAudioFile)
+  const filePaths: string[] = []
+  for (const entry of request.paths) {
+    let stats
+    try {
+      stats = await fs.stat(entry)
+    } catch {
+      continue
+    }
+    if (stats.isDirectory()) filePaths.push(...await audioFilesIn(entry))
+    else if (stats.isFile() && isAudioFile(entry)) filePaths.push(entry)
+  }
 
   return filePaths.map((filePath) => ({
     filePath,

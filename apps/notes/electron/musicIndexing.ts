@@ -4,12 +4,9 @@ import { fileURLToPath } from 'node:url'
 import type { IndexedMusicFile } from '../src/shared/audioPlayer'
 import type { MusicIndexRequest } from './musicIndexCore'
 
-export function indexMusicFiles(filePaths: string[]): Promise<IndexedMusicFile[]> {
-  return runMusicIndex({ kind: 'files', filePaths })
-}
-
-export function indexMusicFolder(folderPath: string): Promise<IndexedMusicFile[]> {
-  return runMusicIndex({ kind: 'folder', folderPath })
+/** Index files and folders alike (musicIndexCore.ts's `MusicIndexRequest`), off the main thread. */
+export function indexMusicPaths(paths: string[]): Promise<IndexedMusicFile[]> {
+  return runMusicIndex({ paths })
 }
 
 function runMusicIndex(request: MusicIndexRequest): Promise<IndexedMusicFile[]> {

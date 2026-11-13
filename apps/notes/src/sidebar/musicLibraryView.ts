@@ -1,3 +1,4 @@
+import { readNowPlaying } from '../sound/nowPlaying'
 import type { PlaylistSlot } from '../shared/audioPlayer'
 
 /**
@@ -48,4 +49,19 @@ export function registerMusicLibraryPresenter(present: () => void): () => void {
   return () => {
     if (showLibrary === present) showLibrary = null
   }
+}
+
+/**
+ * Files and folders dropped from the file manager anywhere on the Music
+ * Library (App.tsx's drop handler, which routes a drop over the sidebar's
+ * content box here while the library is shown): added to the open set as the
+ * row's two add buttons would add them, a folder searched through for its
+ * audio files and anything else left out.
+ */
+export function addDroppedFilesToOpenMusicSet(files: readonly File[]): void {
+  const nowPlaying = readNowPlaying()
+  const pickedSlot = readMusicLibrarySlot()
+  const set = nowPlaying.musicSets.find((candidate) => candidate.slot === pickedSlot) ?? nowPlaying.musicSets[0]
+  const paths = files.map((file) => window.thockdownExternalFiles?.getPathForFile(file) ?? '').filter(Boolean)
+  if (set && paths.length > 0) void nowPlaying.addPathsToMusicSet(set.slot, paths)
 }

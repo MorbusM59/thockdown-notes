@@ -36,6 +36,8 @@ export type NowPlaying = {
   /** Take one song out of one set (the set list's remove button). */
   removeFromMusicSet: (slot: PlaylistSlot, songId: number) => Promise<void>
   addToMusicSet: (slot: PlaylistSlot, source: 'files' | 'folder') => Promise<boolean>
+  /** Add files and folders dropped from the file manager, as the two add buttons would. */
+  addPathsToMusicSet: (slot: PlaylistSlot, paths: string[]) => Promise<boolean>
   /** The music's volume, reverb amount and reverb room, each a fraction 0..1 (what is resumed while muted or bypassed). */
   levels: SoundLevels
   /** Set one of them, as the music bar's own controls do: adjusting a muted volume or a bypassed reverb turns it back on. */
@@ -60,6 +62,7 @@ let current: NowPlaying = {
   purgeMusicSet: async () => {},
   removeFromMusicSet: async () => {},
   addToMusicSet: async () => false,
+  addPathsToMusicSet: async () => false,
   setPoolFilter: () => {},
   levels: { volume: 0, reverb: 0, room: 0 },
   setLevel: () => {},
@@ -82,6 +85,7 @@ export function publishNowPlaying(next: NowPlaying): void {
     && next.purgeMusicSet === current.purgeMusicSet
     && next.removeFromMusicSet === current.removeFromMusicSet
     && next.addToMusicSet === current.addToMusicSet
+    && next.addPathsToMusicSet === current.addPathsToMusicSet
     && next.setPoolFilter === current.setPoolFilter
     && next.levels === current.levels
     && next.setLevel === current.setLevel
