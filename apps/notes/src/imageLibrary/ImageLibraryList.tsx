@@ -323,7 +323,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       action={(
         <button
           type="button"
-          className="image-card-trash fa-solid fa-trash"
+          className="image-card-trash fa-solid fa-trash-can"
           aria-label="Put in the trash"
           data-tooltip="Put in the trash"
           onClick={(event) => { event.stopPropagation(); void setImageTrashed(image.id, true) }}

@@ -532,7 +532,7 @@ const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelecto
     { id: 'external', label: 'External Files', icon: 'fa-solid fa-file-import' },
     SECTION_SELECTOR_GAP,
     { id: 'archive', label: 'Note Archive', icon: 'fa-solid fa-box-archive' },
-    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
+    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash-can' },
   ],
   images: [
     { id: 'date', label: 'In note by order', icon: 'fa-solid fa-list-ol' },
@@ -540,7 +540,7 @@ const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelecto
     SECTION_SELECTOR_GAP,
     SECTION_SELECTOR_GAP,
     { id: 'archive', label: 'Image Vault', icon: 'fa-solid fa-box-archive' },
-    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
+    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash-can' },
   ],
 }
 

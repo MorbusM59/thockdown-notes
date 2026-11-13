@@ -973,7 +973,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
               }}
               onContextMenu={(event) => event.preventDefault()}
             >
-              <span className="options-loadout-plus-glyph fa-solid fa-trash" aria-hidden="true" />
+              <span className="options-loadout-plus-glyph fa-solid fa-trash-can" aria-hidden="true" />
             </button>
           ) : isUnsavedShown ? (
             <UnsavedPresetButton

@@ -3328,7 +3328,7 @@ export function SidebarOptionsPanel({
             data-tooltip={clearAppStatePrimed ? 'Click again to reset UI settings to factory defaults and reload' : 'Reset UI settings to factory defaults and reload'}
             aria-label={clearAppStatePrimed ? 'Confirm resetting UI settings to factory defaults and reload' : 'Reset UI settings to factory defaults and reload'}
           >
-            <span className="fa-solid fa-trash" aria-hidden="true" />
+            <span className="fa-solid fa-trash-can" aria-hidden="true" />
           </button>
         </div>
       </AccordionSection>
