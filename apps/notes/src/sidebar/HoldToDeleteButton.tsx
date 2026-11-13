@@ -45,3 +45,49 @@ export function HoldToDeleteButton({ label, onHold, className = '' }: { label: s
     </button>
   )
 }
+
+/**
+ * A fold's count, "(3)", that turns into a bare xmark while its heading is
+ * hovered; holding it for HOLD_COMMIT_MS does `onHold`. Not a button: the
+ * icon stands in the text's place with no button styling, and a click on it
+ * is stopped so it does not fold the heading.
+ */
+export function HoldToDeleteCount({ count, label, onHold }: { count: number; label: string; onHold: () => void }) {
+  const cancelRef = useRef<(() => void) | null>(null)
+  const cancel = () => {
+    cancelRef.current?.()
+    cancelRef.current = null
+  }
+  useEffect(() => cancel, [])
+  return (
+    <span
+      className="hold-delete-count"
+      data-tooltip={`${count} songs. Hold to ${label}.`}
+      aria-label={`${count} songs; hold to ${label}`}
+      data-secondary-press="none"
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        if (event.button !== 0) return
+        cancel()
+        cancelRef.current = armHold(() => {
+          cancelRef.current = null
+          onHold()
+        }, HOLD_COMMIT_MS)
+      }}
+      onPointerUp={cancel}
+      onPointerCancel={cancel}
+      onMouseLeave={cancel}
+      onClick={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+    >
+      <span className="hold-delete-count-figure">({count})</span>
+      <span className="hold-delete-count-icon fa-solid fa-xmark" aria-hidden="true" />
+    </span>
+  )
+}

@@ -6,7 +6,7 @@ import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { HoldToDeleteButton } from './HoldToDeleteButton'
+import { HoldToDeleteButton, HoldToDeleteCount } from './HoldToDeleteButton'
 import { MusicSetRow } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
@@ -132,9 +132,9 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
             ariaLabel={group.label}
             iconClass={grouping === 'folder' ? 'fa-folder' : 'fa-user'}
             marker={
-              <HoldToDeleteButton
-                className="options-music-group-remove"
-                label={`remove every song under ${group.label} from ${name}`}
+              <HoldToDeleteCount
+                count={group.dividers.reduce((total, divider) => total + divider.songs.length, 0)}
+                label={`remove them all from ${name}`}
                 onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, group.dividers.flatMap((divider) => divider.songs.map((song) => song.id))) }}
               />
             }
@@ -143,9 +143,9 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
             {group.dividers.map((divider) => (
               <AccordionDivider key={divider.label} label={divider.label} defaultOpen
                 marker={
-                  <HoldToDeleteButton
-                    className="options-music-group-remove"
-                    label={`remove every song under ${divider.label} from ${name}`}
+                  <HoldToDeleteCount
+                    count={divider.songs.length}
+                    label={`remove them all from ${name}`}
                     onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, divider.songs.map((song) => song.id)) }}
                   />
                 }

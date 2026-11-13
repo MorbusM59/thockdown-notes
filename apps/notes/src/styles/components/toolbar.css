@@ -658,10 +658,11 @@
   width: var(--entry-height);
 }
 
-/* A heading's or divider's remove button, in place of its count: an icon, not a cell. */
-.options-music-group-remove {
-  height:  auto;
-  padding: 0 var(--spacing-small);
+/* A heading's or divider's count (HoldToDeleteCount): the figure, or the bare
+   xmark in its place while the heading is hovered. */
+[data-hovered] > .options-divider-count > .hold-delete-count > .hold-delete-count-figure,
+:not([data-hovered]) > .options-divider-count > .hold-delete-count > .hold-delete-count-icon {
+  display: none;
 }
 
 /* A folder's or artist's name, cut to the heading's width. */
