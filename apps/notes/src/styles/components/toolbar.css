@@ -611,22 +611,15 @@
 
 .options-music-set-row,
 .options-music-set-divider {
-  /* The icon and the name end where the Show songs button below ends (half
-     the row less half a gap), so the count starts where the add button
-     does. */
+  /* The count only as wide as its figures (.options-music-set-count), the
+     name taking the rest. */
   grid-template-columns:
-    var(--entry-height)
-    calc((100% - var(--toolbar-options-gap)) / 2 - var(--toolbar-options-gap) - var(--entry-height))
-    1fr var(--entry-height) var(--entry-height) var(--entry-height);
+    var(--entry-height) 1fr auto var(--entry-height) var(--entry-height) var(--entry-height);
 }
 
 /* The same row in the Music Library's dock, on narrower gaps. */
 .options-music-set-row.is-in-library {
   column-gap: var(--spacing-small);
-  grid-template-columns:
-    var(--entry-height)
-    calc((100% - var(--spacing-small)) / 2 - var(--spacing-small) - var(--entry-height))
-    1fr var(--entry-height) var(--entry-height) var(--entry-height);
 }
 
 /* Two buttons sharing the row: the top set's songs, and a new set. */
@@ -646,6 +639,10 @@
 
 .options-music-set-count {
   font-variant-numeric: tabular-nums;
+  /* As wide as the longest count in its list (--set-count-digits, set on the
+     list), so every row's count column is the same and names line up. */
+  min-width:     max(var(--entry-height), calc(var(--set-count-digits, 1) * 1ch + 2 * var(--spacing-regular)));
+  padding-inline: 0;
 }
 
 .options-music-set-divider {

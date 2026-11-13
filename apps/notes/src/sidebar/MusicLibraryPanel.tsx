@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { TextButton } from '../components/TextButton'
 import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot, musicSetMark } from '../shared/audioPlayer'
@@ -164,8 +164,12 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
  */
 export function MusicLibraryDock({ grouping, onGroupingChange }: { grouping: MusicSetListGrouping; onGroupingChange: (grouping: MusicSetListGrouping) => void }) {
   const set = useOpenMusicSet()
+  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   return (
-    <div className="options-curve-rows options-music-set-list-dock">
+    <div
+      className="options-curve-rows options-music-set-list-dock"
+      style={{ '--set-count-digits': String(set ? nowPlaying.pool?.counts[set.slot] ?? 0 : 0).length } as CSSProperties}
+    >
       {set ? <MusicSetRow set={set} inLibrary /> : null}
       <div className="options-curve-row options-music-set-list-dock-row" role="radiogroup" aria-label="Song grouping">
         {(['folder', 'artist'] as const).map((option) => (

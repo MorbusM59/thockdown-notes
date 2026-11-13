@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 import { isFactoryMusicSet, MUSIC_SET_QUICK_ACCESS_COUNT, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
@@ -249,7 +249,13 @@ export function MusicSetsOptions() {
   const laterSets = sets.slice(MUSIC_SET_QUICK_ACCESS_COUNT)
 
   return (
-    <div className="options-curve-rows options-music-set-rows" role="group" aria-label="Music sets">
+    <div
+      className="options-curve-rows options-music-set-rows"
+      role="group"
+      aria-label="Music sets"
+      // The count column is as wide as the longest count, the same on every row.
+      style={{ '--set-count-digits': Math.max(1, ...sets.map((set) => String(nowPlaying.pool?.counts[set.slot] ?? 0).length)) } as CSSProperties}
+    >
       {rows.map((set) => <MusicSetRow key={set.slot} set={set} />)}
       <div className="options-music-set-divider" aria-hidden="true" />
       {laterSets.map((set) => <MusicSetRow key={set.slot} set={set} />)}
