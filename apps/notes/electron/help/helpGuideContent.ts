@@ -240,7 +240,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Spell Check](#spell-check)
 
 > **Where?**
-> Settings panel → [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}); dictionaries under Modules → Spell Checking.
+> Settings panel → [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}); dictionaries under Tools → Spell Checking.
 
 *Outlines misspelled words, using dictionaries that ship with the app, so it works offline and the same on every computer.*
 
@@ -255,7 +255,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Typing Trail](#typing-trail)
 
 > **Where?**
-> Switched on in [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}), tuned in Settings panel → Modules → Typing Trail.
+> Switched on in [Quick Access](${guideLink('APPEARANCE-SETTINGS', 'quick-access')}), tuned in Settings panel → Glitz → Typing Trail.
 
 *A faint trail along the line you are typing in, so your eye always finds it.*
 
@@ -266,7 +266,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Visualizer](#visualizer)
 
 > **Where?**
-> Settings panel → Advanced → Beat Detection, Modules → Grid Beat, and Music → Visualizer.
+> Settings panel → Advanced → Beat Detection, Glitz → Grid Beat, and Music → Visualizer.
 
 *The caret, the active editor's edge and its pane follow the music you are playing.*
 
@@ -282,7 +282,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Speed Reading](#speed-reading)
 
 > **Where?**
-> \`F9\`, the book button beside a slot's view button, or the \`Esc\` menu. Settings panel → Modules → Speed Reading.
+> \`F9\`, the book button beside a slot's view button, or the \`Esc\` menu. Settings panel → Tools → Speed Reading.
 
 *Reads a note to you at a pace you set, from where you are.*
 
@@ -782,7 +782,7 @@ ${shortcutTable()}
 > **Where?**
 > The cogwheel, the last of the sidebar's view icons.
 
-*The home for every appearance, sound, sync, and performance control in the app, in five sections: General, Layouts, Music, Modules and Advanced. The soundscapes have a sidebar view of their own.*
+*The home for every appearance, sound, sync, and performance control in the app, in six sections: General, Layouts, Music, Glitz, Tools and Advanced. The soundscapes have a sidebar view of their own.*
 
 - The row of six buttons at the top picks the section; the panel reopens on the one you left. Each section holds collapsible subsections, and only Layouts belongs to the layout: everything else is the same for every layout. A search looks through every section.
 - Most controls apply live. Every subsection is shown, whichever mode you are in: where editor and reader differ, the editor's controls are headed "Editor" and the reader's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
@@ -891,7 +891,7 @@ ${shortcutTable()}
 ### [Speed Reading Settings](#speed-reading-settings)
 
 > **Where?**
-> Settings panel → Modules → Speed Reading.
+> Settings panel → Tools → Speed Reading.
 
 *The pace of [Speed Reading]($#speed-reading) and how it eases.*
 
@@ -942,7 +942,7 @@ ${shortcutTable()}
 ### [Keystroke Sounds](#keystroke-sounds)
 
 > **Where?**
-> Settings panel → Modules → Keystroke Sounds.
+> Settings panel → Glitz → Keystroke Sounds.
 
 *Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
 

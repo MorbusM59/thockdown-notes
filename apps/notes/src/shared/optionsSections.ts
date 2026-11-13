@@ -1,5 +1,5 @@
 /**
- * The options panel's SECTIONS: the five groups the section selector bar
+ * The options panel's SECTIONS: the six groups the section selector bar
  * switches between, one at a time (`sidebar/OptionsSectionBar.tsx`). Each
  * section holds subsections (the collapsible headings), and a subsection may
  * hold dividers (`OptionsSubsectionLabel`). Exactly one section is shown;
@@ -10,7 +10,7 @@
  * main process's `sanitizeMenu` can use it.
  */
 
-export const OPTIONS_SECTION_IDS = ['general', 'layouts', 'music', 'modules', 'advanced'] as const
+export const OPTIONS_SECTION_IDS = ['general', 'layouts', 'music', 'glitz', 'tools', 'advanced'] as const
 
 export type OptionsSectionId = typeof OPTIONS_SECTION_IDS[number]
 
@@ -20,8 +20,9 @@ export const OPTIONS_SECTIONS: ReadonlyArray<{ id: OptionsSectionId; label: stri
   { id: 'general', label: 'General', icon: 'fa-solid fa-house' },
   { id: 'layouts', label: 'Layouts', icon: 'fa-solid fa-rectangle-list' },
   { id: 'music', label: 'Music', icon: 'fa-solid fa-music' },
-  { id: 'modules', label: 'Modules', icon: 'fa-solid fa-cubes' },
-  { id: 'advanced', label: 'Advanced', icon: 'fa-solid fa-screwdriver-wrench' },
+  { id: 'glitz', label: 'Glitz', icon: 'fa-solid fa-hand-sparkles' },
+  { id: 'tools', label: 'Tools', icon: 'fa-solid fa-screwdriver-wrench' },
+  { id: 'advanced', label: 'Advanced', icon: 'fa-solid fa-gears' },
 ]
 
 export function sanitizeOptionsSection(value: unknown): OptionsSectionId {

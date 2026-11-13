@@ -1,7 +1,7 @@
 import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 
 /**
- * KEYSTROKE SOUNDS: named sets of how typing sounds (Options > Modules >
+ * KEYSTROKE SOUNDS: named sets of how typing sounds (Options > Glitz >
  * Keystroke Sounds). Pure, and shared with the main process's state
  * sanitizer. App-wide, never part of a layout.
  *
