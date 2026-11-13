@@ -75,6 +75,12 @@ export function SelectorRows({ children }: { children: ReactNode }) {
     '--selector-rows-fade-bottom': shownOffset < maxOffset ? `${geometry.cell / 3}px` : '0px',
   } as CSSProperties
 
-  return <div ref={viewportRef} className="selector-rows" style={style}>{children}</div>
+  // The window moves its grid by transform alone; a native scroll of the
+  // clipping box (a clipped cell being focused) would add to that, so it is undone.
+  return (
+    <div ref={viewportRef} className="selector-rows" style={style} onScroll={(event) => { event.currentTarget.scrollTop = 0 }}>
+      {children}
+    </div>
+  )
 }
 

@@ -711,6 +711,8 @@
    by a row per notch, the outer third of an edge row faded where more rows
    lie beyond it. */
 .selector-rows {
+  /* The offset parent of its cells, so a cell's offsetTop is its row's. */
+  position:   relative;
   overflow:   hidden;
   mask-image: linear-gradient(
     to bottom,
