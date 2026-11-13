@@ -32,7 +32,7 @@ import { computeWindowControlsWidthPx, DEFAULT_SPACING_REGULAR_PX } from '../src
 import { EDITOR_SECTIONS_CHANNELS, type EditorSectionsApi } from '../src/shared/sections'
 import { CHAPTER_CHANNELS, type ChaptersApi } from '../src/shared/chapters'
 import { REVIEW_FLAG_CHANNELS, type ReviewFlagsApi } from '../src/shared/reviewFlags'
-import { IMAGE_CHANNELS, IMAGE_SCHEME, type ImageImportRequest, type ImageSourceRequest, type ImageSourceResult, type ImagesApi, type ResolvedImage } from '../src/shared/images'
+import { IMAGE_CHANNELS, IMAGE_SCHEME, imageTagsFromFolders, type ImageImportRequest, type ImageSourceRequest, type ImageSourceResult, type ImagesApi, type ResolvedImage } from '../src/shared/images'
 import { fetchImageSource } from './imageFetch'
 import { EXPORT_CHANNELS, type ExportApi } from '../src/shared/exportApi'
 import type { ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags'
@@ -40,6 +40,7 @@ import { ensureHelpGuide } from './help/helpGuideNote'
 import { installedUserDataPath } from './installedUserData'
 import { installNetworkIsolation, openExternalIfAllowed, setRemoteImagesAllowed } from './networkIsolation'
 import { indexMusicPaths } from './musicIndexing'
+import { imageFilesIn } from './imageDrop'
 
 // Typed senders for the events the main process pushes to the window.
 const emitWindowEvent = eventEmitter<WindowEvents>(WINDOW_EVENT_CHANNELS)
@@ -1366,6 +1367,22 @@ function registerIpcHandlers() {
     setImageTrashed: async (_event, id: string, trashed: boolean) => databaseService!.setImageTrashed(id, trashed),
     purgeImage: async (_event, id: string) => databaseService!.purgeImage(id),
     renameImage: async (_event, request: { id: string; newId: string; openNoteIds: string[] }) => databaseService!.renameImage(request),
+    importImagePaths: async (_event, paths: string[]) => {
+      let imported = 0;
+      let failed = 0;
+      for (const { filePath, folders } of await imageFilesIn(paths)) {
+        const fetched = await fetchImageSource(filePath);
+        const result = fetched.ok ? databaseService!.importImage({ bytes: fetched.bytes, origin: filePath }) : fetched;
+        if (!result.ok) {
+          failed += 1;
+          continue;
+        }
+        imported += 1;
+        const tags = imageTagsFromFolders(folders);
+        if (tags.length > 0) databaseService!.setImageTags(result.id, tags);
+      }
+      return { imported, failed };
+    },
     storeImageSources: async (_event, requests: ImageSourceRequest[]) => {
       const results: Record<string, ImageSourceResult> = {};
       for (const { source, requestedId } of requests) {

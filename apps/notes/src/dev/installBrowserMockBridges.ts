@@ -2202,6 +2202,8 @@ function buildImagesBridge(): ImagesApi {
     })),
     // The mock has no main process to download through.
     storeImageSources: async (requests) => Object.fromEntries(requests.map(({ source }) => [source, { ok: false, reason: 'unsupported' }])),
+    // A browser page has no file paths to read.
+    importImagePaths: async (paths) => ({ imported: 0, failed: paths.length }),
   }
 }
 

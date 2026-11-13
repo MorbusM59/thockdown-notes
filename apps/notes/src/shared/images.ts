@@ -22,6 +22,7 @@ export const IMAGE_CHANNELS = {
   setImageTrashed: 'images:set-trashed',
   purgeImage: 'images:purge',
   renameImage: 'images:rename',
+  importImagePaths: 'images:import-paths',
 } as const satisfies InvokeChannels<ImagesApi>
 
 /** The scheme stored images are served under (electron/main.ts). */
@@ -117,6 +118,13 @@ export interface ImagesApi {
    * hold, which is the reader's consent to reach the web for these.
    */
   storeImageSources(requests: ImageSourceRequest[]): Promise<Record<string, ImageSourceResult>>
+  /**
+   * Stores the image files among files and folders dropped from the file
+   * manager, each folder searched through, and tags what came from a folder
+   * after the folders it was found in (`imageTagsFromFolders`). Answers how
+   * many were stored and how many could not be.
+   */
+  importImagePaths(paths: string[]): Promise<{ imported: number; failed: number }>
   /** Every stored image, newest first. */
   listImages(): Promise<StoredImageSummary[]>
   /** Replaces an image's tags (normalized like a note's, duplicates dropped); answers what was kept. */
@@ -254,6 +262,26 @@ export function imageMarkdown(alt: string, id: string): string {
 
 const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|avif|svg)$/i
 
+/** Whether a file's name is one of the image formats the store takes. */
+export function hasImageExtension(name: string): boolean {
+  return IMAGE_EXTENSION.test(name)
+}
+
+/**
+ * The tags an image dropped in a folder gets from the folders it was found
+ * in: `folders` runs from the dropped folder down to the one holding the
+ * file. The holding folder's parent is the PRIMARY tag and the holding folder
+ * the SECONDARY, never reaching above the dropped folder: a file straight in
+ * the dropped folder gets that folder's name alone. "pets/cats/a.jpg" dropped
+ * as "pets" is pets, cats; "cats/a.jpg" dropped as "cats" is cats. The names
+ * are made tags the way every tag is (`setImageTags` normalizes them).
+ */
+export function imageTagsFromFolders(folders: readonly string[]): string[] {
+  if (folders.length === 0) return []
+  if (folders.length === 1) return [folders[0]]
+  return [folders[folders.length - 2], folders[folders.length - 1]]
+}
+
 /**
  * Whether a dropped or pasted file should be offered to the image store.
  * The type the browser reports can be empty for a format it does not know
@@ -261,7 +289,7 @@ const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|avif|svg)$/i
  * the bytes either way (electron/imageSniff.ts).
  */
 export function isImageFile(file: { type: string; name: string }): boolean {
-  return file.type.startsWith('image/') || IMAGE_EXTENSION.test(file.name)
+  return file.type.startsWith('image/') || hasImageExtension(file.name)
 }
 
 /** One image in a note, in the order the note uses them. */

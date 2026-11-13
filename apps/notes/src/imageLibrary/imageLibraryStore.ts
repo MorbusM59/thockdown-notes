@@ -58,6 +58,19 @@ export function useLibraryImage(imageId: string | null): { image: StoredImageSum
   return { image: imageId ? images.find((each) => each.id === imageId) ?? null : null, loaded }
 }
 
+/**
+ * Files and folders dropped from the file manager on the Images view (App.tsx's
+ * drop handler, which also turns the view to the Image Vault): every image
+ * among them stored, a folder searched through and its images tagged after
+ * the folders they were found in (shared/images.ts's `imageTagsFromFolders`).
+ */
+export async function importDroppedImageFiles(files: readonly File[]): Promise<void> {
+  const paths = files.map((file) => window.thockdownExternalFiles?.getPathForFile(file) ?? '').filter(Boolean)
+  if (paths.length === 0) return
+  await window.thockdownImages?.importImagePaths(paths)
+  invalidateImageLibrary()
+}
+
 export async function setImageTags(id: string, tags: string[]): Promise<string[]> {
   const kept = (await window.thockdownImages?.setImageTags(id, tags)) ?? []
   invalidateImageLibrary()

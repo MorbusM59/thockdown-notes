@@ -318,7 +318,7 @@ import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
 import { CategoryTree, type CategoryTreeFolds } from './components/CategoryTree'
 import { areStringArraysEqual } from './shared/stringArrays'
 import { buildTagHierarchy, type TagPrimaryGroup } from './shared/tagHierarchy'
-import { registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
+import { importDroppedImageFiles, registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
 import type { ImageLibraryView } from './imageLibrary/imageLibraryViews'
 import { armPointerDrag } from './shared/pointerDrag'
 import { clamp } from '@thockdown/interaction/clamp'
@@ -4920,10 +4920,23 @@ ${markdownHtml}
   // after that insertion had already altered the note under the cursor, and
   // the import then opened the same content a second time as a new note.
   // Non-file drops return untouched and carry on to their own handlers.
+  // Declared further down; the drop handler reaches them through refs.
+  const isImageLibraryShownRef = useRef(false)
+  const handleViewModeButtonClickRef = useRef<(mode: SidebarMode) => void>(() => {})
   const handleAppDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     const types = Array.from(event.dataTransfer?.types ?? [])
     const isFileDrop = types.includes('Files')
     if (!isFileDrop) {
+      return
+    }
+
+    // Files and folders dropped on the Images view are images for the vault,
+    // which it turns to so the reader sees them arrive.
+    if (isImageLibraryShownRef.current && (event.target as HTMLElement | null)?.closest('.sidebar-content')) {
+      event.preventDefault()
+      event.stopPropagation()
+      handleViewModeButtonClickRef.current('archive')
+      void importDroppedImageFiles(Array.from(event.dataTransfer.files ?? []))
       return
     }
 
@@ -5086,6 +5099,7 @@ ${markdownHtml}
     runSidebarMenuTransition,
     sidebarMode,
   ])
+  handleViewModeButtonClickRef.current = handleViewModeButtonClick
 
   useEffect(() => {
     let disposed = false
@@ -6823,6 +6837,7 @@ ${markdownHtml}
   const shownImageId = activeOccupancy?.kind === 'image' ? activeOccupancy.imageId : null
   // The Images view is up: its four sections list stored images.
   const isImageLibraryShown = sidebarShowsImages && isSidebarListSection(sidebarMode)
+  isImageLibraryShownRef.current = isImageLibraryShown
   // The view the view bar marks as selected: a list section belongs to Notes
   // or to Images, and every other mode is a view of its own.
   const sidebarView = isSidebarListSection(sidebarMode) ? sidebarListViewOf(sidebarShowsImages) : sidebarMode
