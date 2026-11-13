@@ -96,7 +96,7 @@ export type MusicSongEntry = {
   durationSec: number;
 };
 
-export type IndexedMusicFile = Pick<MusicSongEntry, 'filePath' | 'title' | 'artist' | 'album'>;
+export type IndexedMusicFile = Pick<MusicSongEntry, 'filePath' | 'title' | 'artist' | 'album' | 'durationSec'>;
 
 export type PickNextSongResult = MusicSongEntry | null;
 

@@ -997,19 +997,19 @@ function noteRowActionList(note: NoteSummary, actions: NoteRowActions, isModifie
         label: isFileConflict ? 'Save, overwriting the file that changed on disk (its version is on the Timeline)' : 'Save to the file',
         onHold: () => actions.save(id),
       }] : []),
-      { icon: 'fa-xmark', label: 'Close without saving', tone: 'alert' as const, onHold: () => actions.close(id) },
+      { icon: 'fa-xmark', label: 'Close without saving', onHold: () => actions.close(id) },
     ]
   }
   const restore: HoverAction = { icon: 'fa-rotate-left', label: 'Restore', onHold: () => actions.restore(id) }
-  const archive: HoverAction = { icon: 'fa-box-archive', label: 'Archive', tone: 'warning', onHold: () => actions.archive(id) }
+  const archive: HoverAction = { icon: 'fa-box-archive', label: 'Archive', onHold: () => actions.archive(id) }
   if (isDeletedNote(note)) {
     return [
       restore,
       ...(isChapter && isChapterParentUnavailable ? [] : [archive]),
-      { icon: 'fa-trash-can', label: 'Delete for good', tone: 'alert', onHold: () => actions.trash(id) },
+      { icon: 'fa-trash-can', label: 'Delete for good', onHold: () => actions.trash(id) },
     ]
   }
-  const trash: HoverAction = { icon: 'fa-trash-can', label: 'Put in the trash', tone: 'alert', onHold: () => actions.trash(id) }
+  const trash: HoverAction = { icon: 'fa-trash-can', label: 'Put in the trash', onHold: () => actions.trash(id) }
   if (isArchivedNote(note)) return isChapter ? [restore] : [restore, trash]
   return isChapter ? [] : [archive, trash]
 }
@@ -6855,9 +6855,7 @@ ${markdownHtml}
   }), [getActiveSection])
 
   // The section selector at the top of every Notes and Images list. The Notes
-  // view's Trash button is also where the trash is emptied: a held left press,
-  // which shows the alert look while it is held.
-  const isTrashSectionHolding = Boolean(activeSection?.isTrashViewHolding)
+  // view's Trash button is also where the trash is emptied: a held left press.
   // External is greyed out while no note is open from a file (the search and
   // date filters aside, which only narrow what it lists), and a sidebar on
   // it when the last one closes moves to Date.
@@ -6877,7 +6875,6 @@ ${markdownHtml}
         onSelect={handleViewModeButtonClick}
         ariaLabel={sidebarShowsImages ? 'Image sections' : 'Note sections'}
         buttonProps={sidebarShowsImages ? undefined : (section) => (section === 'trash' ? {
-          className: isTrashSectionHolding ? 'is-alert' : undefined,
           'data-tooltip': 'Trash. Hold to empty it',
           onPointerDown: activeSection?.handleTrashViewButtonPointerDown,
           onPointerUp: activeSection?.clearTrashButtonHold,

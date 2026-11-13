@@ -157,7 +157,7 @@ function dragImage(id: string) {
 
 /** Taking a use out of its note: the action of every card in a note's own image views. */
 function removeAction(use: NoteImageUse, onRemove: (use: NoteImageUse) => void): HoverAction {
-  return { icon: 'fa-xmark', label: 'Take it out of the note', tone: 'alert', onHold: () => onRemove(use) }
+  return { icon: 'fa-xmark', label: 'Take it out of the note', onHold: () => onRemove(use) }
 }
 
 /** A card with the image behind its text: Images in Order and the trash. */
@@ -306,7 +306,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       isActive={image.id === shownImageId}
       expanded={expandedKey === image.id}
       press={{ onClick: () => toggleExpanded(image.id), onLeftHold: null, onRightTap: null, onRightHold: () => onOpen(image.id) }}
-      actions={[{ icon: 'fa-trash-can', label: 'Put in the trash', tone: 'alert', onHold: () => { void setImageTrashed(image.id, true) } }]}
+      actions={[{ icon: 'fa-trash-can', label: 'Put in the trash', onHold: () => { void setImageTrashed(image.id, true) } }]}
     />
   ), [expandedKey, onOpen, shownImageId, toggleExpanded])
 
@@ -343,7 +343,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
           const isUsed = image.useCount > 0
           const actions: HoverAction[] = [
             { icon: 'fa-rotate-left', label: 'Take out of the trash', onHold: () => { void setImageTrashed(image.id, false) } },
-            ...(isUsed ? [] : [{ icon: 'fa-trash-can', label: 'Delete for good', tone: 'alert' as const, onHold: () => { void purgeImage(image.id) } }]),
+            ...(isUsed ? [] : [{ icon: 'fa-trash-can', label: 'Delete for good', onHold: () => { void purgeImage(image.id) } }]),
           ]
           return (
             <ImageCard

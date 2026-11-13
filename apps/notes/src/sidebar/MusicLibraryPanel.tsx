@@ -13,6 +13,13 @@ import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
+/** A song's length as hh:mm:ss. */
+function formatSongDuration(seconds: number): string {
+  const total = Math.round(seconds)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`
+}
+
 /** A set's mark: a factory set's icon, anyone else's initials (musicSetMark). */
 function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
   return isFactoryMusicSet(slot)
@@ -193,7 +200,6 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
                 actions={[{
                   icon: 'fa-xmark',
                   label: `Remove them all from ${name}`,
-                  tone: 'alert',
                   onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, group.dividers.flatMap((divider) => divider.songs.map((song) => song.id))) },
                 }]}
               />
@@ -208,7 +214,6 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
                     actions={[{
                       icon: 'fa-xmark',
                       label: `Remove them all from ${name}`,
-                      tone: 'alert',
                       onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, divider.songs.map((song) => song.id)) },
                     }]}
                   />
@@ -230,8 +235,8 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
                         >
                           <span className="options-music-song-title">{title}</span>
                           <HoverActions
-                            rest={null}
-                            actions={[{ icon: 'fa-xmark', label: `Remove ${title} from ${name}`, tone: 'alert', onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) } }]}
+                            rest={song.durationSec > 0 ? <span className="options-music-song-duration">{formatSongDuration(song.durationSec)}</span> : null}
+                            actions={[{ icon: 'fa-xmark', label: `Remove ${title} from ${name}`, onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) } }]}
                           />
                         </div>
                       </div>

@@ -301,15 +301,6 @@
   font-size: calc(55cqw + 3*var(--spacing-small));
 }
 
-/* The Notes view's Trash section button while a held press is emptying the trash. */
-.options-loadout-btn.is-alert,
-.options-loadout-btn.is-alert[data-hovered],
-.options-loadout-btn.is-alert.is-active,
-.options-loadout-btn.is-alert.is-active[data-hovered] {
-  filter: var(--filter-alert);
-  transition: all 300ms;
-}
-
 /* The section selector at the top of a Notes or Images list. It is the first
    thing in the list's scroll box and scrolls with the list, as the options
    panel's selector does. No vertical auto margin: the list is a flex column
@@ -683,15 +674,15 @@
   min-width: 0;
 }
 
-/* THE WARNING AND ALERT LOOKS: what a held action would do to its row
-   (components/HoverActions.tsx). Warning files something away (archiving),
-   alert removes it (trash, delete, remove, close). */
-[data-hover-host]:has(.hold-icon[data-holding="warning"]) {
+/* THE WARNING AND ALERT LOOKS, kept for when a row needs to say what is
+   about to happen to it (warning: filed away, as archiving; alert: removed).
+   Nothing applies them at present. */
+.is-warning {
   filter: var(--filter-warning);
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
 }
 
-[data-hover-host]:has(.hold-icon[data-holding="alert"]) {
+.is-alert {
   filter: var(--filter-alert);
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
 }

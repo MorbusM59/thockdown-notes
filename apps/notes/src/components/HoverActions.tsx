@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 
 /**
@@ -9,14 +9,8 @@ import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
  * information's place as bare icons. Every action is a HOLD of
  * `HOLD_CONFIRM_MS` on its icon: a click does nothing, so a stray click
  * never files anything away, and nothing is ever primed.
- *
- * While an action is held its row shows what the action would do: the
- * WARNING look for one that files something away (archiving), the ALERT
- * look for one that removes it (trash, delete, remove, close). The row reads
- * that from the held icon (`[data-holding]`, matched with `:has()` in
- * sidebar.css), so no row has to track it.
+
  */
-export type HoverActionTone = 'warning' | 'alert'
 
 export interface HoverAction {
   /** Font Awesome class, e.g. "fa-box-archive". */
@@ -24,17 +18,14 @@ export interface HoverAction {
   /** What the hold does, as a tooltip and accessible name ("Archive note"). */
   label: string
   onHold: () => void
-  tone?: HoverActionTone
 }
 
 /** One action's icon: no button look, held to act. */
 export function HoldIcon({ action, className = '' }: { action: HoverAction; className?: string }) {
-  const [holding, setHolding] = useState(false)
   const cancelRef = useRef<(() => void) | null>(null)
   const cancel = () => {
     cancelRef.current?.()
     cancelRef.current = null
-    setHolding(false)
   }
   useEffect(() => () => cancelRef.current?.(), [])
   return (
@@ -43,17 +34,14 @@ export function HoldIcon({ action, className = '' }: { action: HoverAction; clas
       role="button"
       aria-label={action.label}
       data-tooltip={`Hold to ${action.label.charAt(0).toLowerCase()}${action.label.slice(1)}`}
-      data-holding={holding ? action.tone ?? 'plain' : undefined}
       data-secondary-press="none"
       onPointerDown={(event) => {
         // The row's own press (select, drag, fold) is not this one's.
         event.stopPropagation()
         if (event.button !== 0) return
         cancel()
-        setHolding(true)
         cancelRef.current = armHold(() => {
           cancelRef.current = null
-          setHolding(false)
           action.onHold()
         }, HOLD_CONFIRM_MS)
       }}

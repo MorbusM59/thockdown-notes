@@ -6,7 +6,7 @@ import path from 'node:path'
 import { DatabaseService } from './databaseService'
 import { EMPTY_POOL_FILTER, FACTORY_MUSIC_SETS } from '../src/shared/audioPlayer'
 
-const indexedFile = (filePath: string) => ({ filePath, title: '', artist: '', album: '' })
+const indexedFile = (filePath: string) => ({ filePath, title: '', artist: '', album: '', durationSec: 0 })
 
 describe('DatabaseService music sets', () => {
   let dataRoot: string

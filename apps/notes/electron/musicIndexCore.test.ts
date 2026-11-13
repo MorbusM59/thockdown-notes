@@ -37,7 +37,7 @@ describe('music indexing', () => {
 
     await expect(indexMusicRequest({
       paths: [audioFile, path.join(directory, 'readme.txt'), path.join(directory, 'missing.mp3')],
-    })).resolves.toEqual([{ filePath: audioFile, title: '', artist: '', album: '' }])
+    })).resolves.toEqual([{ filePath: audioFile, title: '', artist: '', album: '', durationSec: 0 }])
   })
 
   it('takes files and folders together, as a drop from the file manager brings them', async () => {

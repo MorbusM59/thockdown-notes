@@ -649,12 +649,17 @@
   contain-intrinsic-size: auto var(--entry-height);
 }
 
-/* A song is one cell: its title, cut with an ellipsis, and on hover its
-   remove action at the cell's end. */
+/* A song is one cell: its title, cut with an ellipsis, and its duration at
+   the cell's end, which its remove action replaces on hover. */
 .options-music-song-row > .options-curve-display.options-music-set-name {
   display:     flex;
   align-items: center;
   gap:         var(--spacing-regular);
+}
+
+.options-music-song-duration {
+  font-variant-numeric: tabular-nums;
+  opacity:              0.75;
 }
 
 .options-music-song-title {

@@ -1,5 +1,5 @@
 import { withExternalFileTurn } from './externalFileSync'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { MutableRefObject, PointerEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from '../shared/noteLifecycle'
@@ -64,7 +64,6 @@ export function useNoteProtectionActions({
   menuIdentityNoteId,
   refreshChapters,
 }: UseNoteProtectionActionsOptions) {
-  const [isTrashViewHolding, setIsTrashViewHolding] = useState(false)
   const trashButtonHoldRef = useRef<(() => void) | null>(null)
   /** Set when the Trash button's hold completed: the click its release dispatches selects nothing. */
   const trashButtonHoldClaimedRef = useRef(false)
@@ -73,7 +72,6 @@ export function useNoteProtectionActions({
     if (trashButtonHoldRef.current === null) return
     trashButtonHoldRef.current()
     trashButtonHoldRef.current = null
-    setIsTrashViewHolding(false)
   }, [])
 
   const applyProtectedNoteDestination = useCallback(async (noteId: string, destination: 'archived' | 'deleted') => {
@@ -542,11 +540,9 @@ export function useNoteProtectionActions({
     trashButtonHoldClaimedRef.current = false
     if (event.button !== 0 || !notes.some((note) => isDeletedNote(note))) return
     clearTrashButtonHold()
-    setIsTrashViewHolding(true)
     trashButtonHoldRef.current = armHold(() => {
       trashButtonHoldRef.current = null
       trashButtonHoldClaimedRef.current = true
-      setIsTrashViewHolding(false)
       void purgeDeletedNotesPermanently()
     }, HOLD_CONFIRM_MS)
   }, [clearTrashButtonHold, notes, purgeDeletedNotesPermanently])
@@ -567,7 +563,6 @@ export function useNoteProtectionActions({
   useEffect(() => clearTrashButtonHold, [clearTrashButtonHold])
 
   return {
-    isTrashViewHolding,
     clearTrashButtonHold,
     consumeTrashViewHoldClick,
     leaveTrashViewButton,

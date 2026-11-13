@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { IndexedMusicFile } from '../src/shared/audioPlayer'
 import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
+import { readAudioDuration } from './audioDuration'
 import { readAudioTags } from './audioTags'
 
 /**
@@ -29,6 +30,8 @@ export async function indexMusicRequest(request: MusicIndexRequest): Promise<Ind
   return filePaths.map((filePath) => ({
     filePath,
     ...readAudioTags(filePath),
+    // 0 when the file does not say (`MusicSongEntry.durationSec`).
+    durationSec: readAudioDuration(filePath) ?? 0,
   }))
 }
 

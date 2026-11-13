@@ -1220,7 +1220,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
   }, [menuIdentityNoteId, restingChapterBarMode, setChapterBarMode])
 
   const {
-    isTrashViewHolding,
     clearTrashButtonHold,
     consumeTrashViewHoldClick,
     leaveTrashViewButton,
@@ -1895,7 +1894,6 @@ export function EditorSection(rawProps: EditorSectionProps) {
     applyTable,
     insertTableOfContents,
     toggleTableOfContents,
-    isTrashViewHolding,
     clearTrashButtonHold,
     consumeTrashViewHoldClick,
     leaveTrashViewButton,

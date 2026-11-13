@@ -146,7 +146,6 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
         action={{
           icon: 'fa-xmark',
           label: factory ? `Empty ${set.name}` : `Delete ${set.name}`,
-          tone: 'alert',
           onHold: () => { void (factory ? nowPlaying.purgeMusicSet(set.slot) : nowPlaying.deleteMusicSet(set.slot)) },
         }}
       />

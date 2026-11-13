@@ -641,6 +641,13 @@ function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
   return parts;
 }
 
+/**
+ * What a song row's `tagsRead` counts: which facts read from the file it
+ * holds. 1 is its tags; 2 its tags and its duration (electron/audioDuration.ts).
+ * A row below this is read again at start-up (`songsWithUnreadTags`).
+ */
+const MUSIC_FILE_FACTS_VERSION = 2
+
 export class DatabaseService {
   private readonly dataRoot: string;
   private readonly dbPath: string;
@@ -3498,17 +3505,17 @@ export class DatabaseService {
       ), '') AS setIds`;
   }
 
-  /** Paths of the songs whose tags have never been read (rows from before tags were read on import). */
+  /** Paths of the songs whose file facts are older than this build reads (`MUSIC_FILE_FACTS_VERSION`). */
   songsWithUnreadTags(): string[] {
-    return (this.requireDb().prepare('SELECT filePath FROM music_songs WHERE tagsRead = 0').all() as Array<{ filePath: string }>)
+    return (this.requireDb().prepare('SELECT filePath FROM music_songs WHERE tagsRead < ?').all(MUSIC_FILE_FACTS_VERSION) as Array<{ filePath: string }>)
       .map(({ filePath }) => filePath);
   }
 
   /** Stores tags read off the main process (`musicIndexing.ts`) for songs already in the library. */
   storeReadTags(files: IndexedMusicFile[]): void {
     const db = this.requireDb();
-    const update = db.prepare('UPDATE music_songs SET title = ?, artist = ?, album = ?, tagsRead = 1 WHERE filePath = ?');
-    db.transaction(() => { for (const file of files) update.run(file.title, file.artist, file.album, file.filePath); })();
+    const update = db.prepare('UPDATE music_songs SET title = ?, artist = ?, album = ?, durationSec = ?, tagsRead = ? WHERE filePath = ?');
+    db.transaction(() => { for (const file of files) update.run(file.title, file.artist, file.album, file.durationSec, MUSIC_FILE_FACTS_VERSION, file.filePath); })();
   }
 
   getMusicSets(): MusicSet[] {
@@ -3594,8 +3601,8 @@ export class DatabaseService {
       AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase()),
     );
     const insertSong = db.prepare(`
-      INSERT INTO music_songs (filePath, title, artist, album, tagsRead)
-      VALUES (?, ?, ?, ?, 1)
+      INSERT INTO music_songs (filePath, title, artist, album, durationSec, tagsRead)
+      VALUES (?, ?, ?, ?, ?, ${MUSIC_FILE_FACTS_VERSION})
       ON CONFLICT(filePath) DO NOTHING
     `);
     const findSong = db.prepare('SELECT id FROM music_songs WHERE filePath = ?');
@@ -3604,7 +3611,7 @@ export class DatabaseService {
     );
     const tx = db.transaction(() => {
       for (const song of songs) {
-        insertSong.run(song.filePath, song.title, song.artist, song.album);
+        insertSong.run(song.filePath, song.title, song.artist, song.album, song.durationSec);
         const row = findSong.get(song.filePath) as { id: number } | undefined;
         if (!row) throw new Error(`Music song insert did not produce a row for ${song.filePath}`);
         addMembership.run(slot, row.id);
