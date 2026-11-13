@@ -1188,6 +1188,7 @@ function registerIpcHandlers() {
     getMusicSets: async () => databaseService!.getMusicSets(),
     createMusicSet: async () => databaseService!.createMusicSet(),
     renameMusicSet: async (_event, slot, name) => databaseService!.renameMusicSet(slot, name),
+    setMusicSetIcon: async (_event, slot, icon) => databaseService!.setMusicSetIcon(slot, icon),
     moveMusicSet: async (_event, draggedSlot, targetSlot) => databaseService!.moveMusicSet(draggedSlot, targetSlot),
     deleteMusicSet: async (_event, slot) => databaseService!.deleteMusicSet(slot),
     pickFiles: async () => {

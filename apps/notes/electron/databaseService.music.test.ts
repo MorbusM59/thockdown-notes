@@ -55,6 +55,15 @@ describe('DatabaseService music sets', () => {
 
   })
 
+  it('stores a picked icon per set, refuses a malformed one and restores the default', async () => {
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    const factory = db.getMusicSets()[0]
+    expect(db.setMusicSetIcon(factory.slot, 'fa-guitar')[0].icon).toBe('fa-guitar')
+    expect(db.setMusicSetIcon(factory.slot, 'fa-solid fa-x" onerror')[0].icon).toBe('fa-guitar')
+    expect(db.setMusicSetIcon(factory.slot, null)[0].icon).toBeNull()
+  })
+
   it('allows one song to belong to multiple sets without duplicate pool rows', async () => {
     db = new DatabaseService(dataRoot)
     await db.initialize()

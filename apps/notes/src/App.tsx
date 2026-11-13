@@ -174,6 +174,7 @@ import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId 
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
 import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel } from './sidebar/MusicLibraryPanel'
+import { closeMusicSetIconPick, readMusicSetIconPick, setMusicSetIconQuery, subscribeMusicSetIconPick } from './sidebar/iconPicker/musicSetIconPicker'
 import { TextButton } from './components/TextButton'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
@@ -6470,6 +6471,18 @@ ${markdownHtml}
   const isFindMode = sidebarMode === 'find'
   const isOptionsSearchMode = sidebarMode === 'options'
   const isSongsSearchMode = sidebarMode === 'songs'
+  // While a set's icon is being picked (sidebar/iconPicker), the Songs view's
+  // filter field filters the icons, with a query of the picker's own: the
+  // song filter is left as it was and is simply back when the picker closes.
+  const musicSetIconPick = useSyncExternalStore(subscribeMusicSetIconPick, readMusicSetIconPick)
+  const isIconPickMode = isSongsSearchMode && musicSetIconPick !== null
+  const songsFieldQuery = isIconPickMode ? musicSetIconPick.query : songsSearchQuery
+  const setSongsFieldQuery = isIconPickMode ? setMusicSetIconQuery : setSongsSearchQuery
+  // A pick belongs to the Songs view: leaving it by any route ends the pick,
+  // so an open pick always means the picker is on screen (Escape relies on it).
+  useEffect(() => {
+    if (sidebarMode !== 'songs') closeMusicSetIconPick()
+  }, [sidebarMode])
   const isSoundscapesSearchMode = sidebarMode === 'soundscapes'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
 
@@ -7186,6 +7199,14 @@ ${markdownHtml}
       // claims its own before this listener sees it), so its release never
       // also switches the hidden note's view.
       if (isVisualizerMode && event.key === 'Escape') escapeConsumedByFieldRef.current = true
+      // Escape closes an icon pick and does nothing else: its release must
+      // not also switch the note's view, nor its hold raise the ring.
+      if (event.key === 'Escape' && readMusicSetIconPick() !== null) {
+        escapeConsumedByFieldRef.current = true
+        event.preventDefault()
+        if (!event.repeat) closeMusicSetIconPick()
+        return
+      }
       if (event.defaultPrevented) return
 
       // F5 enters and leaves the visualizer from anywhere, a filter field
@@ -8064,8 +8085,8 @@ ${markdownHtml}
                   spellCheck={false}
                   autoCorrect="off"
                   autoCapitalize="off"
-                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : isSoundscapesSearchMode ? 'Search soundscape options...' : 'Search for content or #tag...'}
-                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery}
+                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isIconPickMode ? 'Filter icons...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : isSoundscapesSearchMode ? 'Search soundscape options...' : 'Search for content or #tag...'}
+                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsFieldQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery}
                   onChange={(event) => {
                     const value = event.target.value
                     if (isFindMode) {
@@ -8073,7 +8094,7 @@ ${markdownHtml}
                     } else if (isOptionsSearchMode) {
                       setOptionsSearchQuery(value)
                     } else if (isSongsSearchMode) {
-                      setSongsSearchQuery(value)
+                      setSongsFieldQuery(value)
                     } else if (isSoundscapesSearchMode) {
                       setSoundscapesSearchQuery(value)
                     } else {
@@ -8131,10 +8152,10 @@ ${markdownHtml}
                     className="btn-icon search-input-case-toggle"
                     data-tooltip="Clear search"
                     aria-label="Clear search"
-                    disabled={(isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : optionsSearchQuery) === ''}
+                    disabled={(isSongsSearchMode ? songsFieldQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : optionsSearchQuery) === ''}
                     /* mouse-default: focus semantics, read by focusOwnership on mousedown */
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => (isSongsSearchMode ? setSongsSearchQuery('') : isSoundscapesSearchMode ? setSoundscapesSearchQuery('') : setOptionsSearchQuery(''))}
+                    onClick={() => (isSongsSearchMode ? setSongsFieldQuery('') : isSoundscapesSearchMode ? setSoundscapesSearchQuery('') : setOptionsSearchQuery(''))}
                   >
                     <span className="fa-solid fa-xmark" aria-hidden="true" />
                   </button>
@@ -8165,7 +8186,8 @@ ${markdownHtml}
                   selector at the top of their list; Songs is the Music
                   Library and Soundscapes the soundscape's presets and
                   controls. */}
-              <div className="view-toggle" role="tablist" aria-label="Sidebar views">
+              {/* A press on any view, the Songs view's own included, ends an icon pick. */}
+              <div className="view-toggle" role="tablist" aria-label="Sidebar views" onClickCapture={closeMusicSetIconPick}>
                 {([
                   { view: 'notes', label: 'Notes', icon: 'fa-solid fa-file-lines' },
                   { view: 'images', label: 'Images', icon: 'fa-solid fa-image' },

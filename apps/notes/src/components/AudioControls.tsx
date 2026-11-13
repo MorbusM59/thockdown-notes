@@ -1,13 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
 import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
-import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText, musicSetMark } from '../shared/audioPlayer'
+import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText, musicSetMarkOf } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
   getNextActiveSlotsForSelection,
   isFactoryMusicSet,
-  PLAYLIST_SLOT_ICONS,
   MUSIC_SET_QUICK_ACCESS_COUNT,
 } from '../shared/audioPlayer'
 import { adjacentSongInPool } from '../shared/musicPool'
@@ -921,6 +920,12 @@ export const AudioControls = memo(function AudioControls({
     onMusicSetsChange(await audioPlayer.renameMusicSet(slot, nextName))
   }, [onMusicSetsChange])
 
+  const setMusicSetIcon = useCallback(async (slot: PlaylistSlot, icon: string | null) => {
+    const audioPlayer = window.thockdownAudioPlayer
+    if (!audioPlayer) return
+    onMusicSetsChange(await audioPlayer.setMusicSetIcon(slot, icon))
+  }, [onMusicSetsChange])
+
   const reorderMusicSets = useCallback(async (draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot) => {
     const audioPlayer = window.thockdownAudioPlayer
     if (!audioPlayer) {
@@ -1021,6 +1026,7 @@ export const AudioControls = memo(function AudioControls({
       selectSlot: publishedSelectSlot,
       createMusicSet,
       renameMusicSet,
+      setMusicSetIcon,
       moveMusicSet: reorderMusicSets,
       deleteMusicSet,
       purgeMusicSet,
@@ -1041,6 +1047,7 @@ export const AudioControls = memo(function AudioControls({
     publishedSelectSlot,
     createMusicSet,
     renameMusicSet,
+    setMusicSetIcon,
     reorderMusicSets,
     deleteMusicSet,
     purgeMusicSet,
@@ -1347,7 +1354,7 @@ export const AudioControls = memo(function AudioControls({
             const count = counts[slot] ?? 0
             const isEmpty = count === 0
             const isActive = activeSlots.includes(slot)
-            const icon = isFactoryMusicSet(slot) ? PLAYLIST_SLOT_ICONS[slot] : null
+            const mark = musicSetMarkOf(set)
             return (
               <button
                 key={slot}
@@ -1368,9 +1375,9 @@ export const AudioControls = memo(function AudioControls({
                 onPointerCancel={cancelSlotHold}
                 onMouseLeave={cancelSlotHold}
               >
-                {icon
-                  ? <span className={icon} aria-hidden="true" />
-                  : <span className="audio-playlist-custom-label" aria-hidden="true">{musicSetMark(set.name)}</span>}
+                {'iconClass' in mark
+                  ? <span className={mark.iconClass} aria-hidden="true" />
+                  : <span className="audio-playlist-custom-label" aria-hidden="true">{mark.letters}</span>}
               </button>
             )
           })}

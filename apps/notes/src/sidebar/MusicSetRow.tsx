@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
-import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
+import { isFactoryMusicSet, type MusicSet, musicSetMarkOf } from '../shared/audioPlayer'
+import { readMusicSetIconPick, subscribeMusicSetIconPick, toggleMusicSetIconPick } from './iconPicker/musicSetIconPicker'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 
@@ -95,6 +96,69 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
   )
 }
 
+/** A set's mark (musicSetMarkOf): its icon, or its initials. */
+export function SetMark({ set }: { set: MusicSet }) {
+  const mark = musicSetMarkOf(set)
+  return 'iconClass' in mark
+    ? <span className={mark.iconClass} aria-hidden="true" />
+    : <span aria-hidden="true">{mark.letters}</span>
+}
+
+/**
+ * The set's mark as a button: a click opens the icon picker for the set (and
+ * closes it again), a held click gives the set back its default mark.
+ */
+function SetIconButton({ set }: { set: MusicSet }) {
+  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  const pick = useSyncExternalStore(subscribeMusicSetIconPick, readMusicSetIconPick)
+  const cancelHoldRef = useRef<(() => void) | null>(null)
+  /** Set when the hold completes; the click its release dispatches then opens nothing. */
+  const holdClaimedRef = useRef(false)
+  const cancelHold = () => {
+    cancelHoldRef.current?.()
+    cancelHoldRef.current = null
+  }
+  useEffect(() => cancelHold, [])
+  const picking = pick?.slot === set.slot
+  return (
+    <button
+      type="button"
+      className={`options-curve-cell options-curve-button options-music-set-icon${picking ? ' is-active' : ''}`}
+      data-tooltip={`Pick an icon for ${set.name}; hold for its default`}
+      aria-label={`Pick an icon for ${set.name}`}
+      aria-pressed={picking}
+      data-secondary-press="none"
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        if (event.button !== 0) return
+        holdClaimedRef.current = false
+        cancelHold()
+        cancelHoldRef.current = armHold(() => {
+          cancelHoldRef.current = null
+          holdClaimedRef.current = true
+          void nowPlaying.setMusicSetIcon(set.slot, null)
+        }, HOLD_CONFIRM_MS)
+      }}
+      onPointerUp={cancelHold}
+      onPointerCancel={cancelHold}
+      onMouseLeave={cancelHold}
+      onClick={() => {
+        if (holdClaimedRef.current) {
+          holdClaimedRef.current = false
+          return
+        }
+        toggleMusicSetIconPick(set.slot)
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+    >
+      <SetMark set={set} />
+    </button>
+  )
+}
+
 /**
  * The open set's row in the Music Library's dock, over its groupings: its
  * mark, its name (renamed by right-click), its song count as a plain figure
@@ -114,11 +178,7 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
   const factory = isFactoryMusicSet(set.slot)
   return (
     <div className="options-curve-row options-music-set-row">
-      <div className="options-curve-cell options-curve-display options-music-set-icon" aria-label={factory ? set.name : undefined}>
-        {factory
-          ? <span className={PLAYLIST_SLOT_ICONS[set.slot as keyof typeof PLAYLIST_SLOT_ICONS]} aria-hidden="true" />
-          : musicSetMark(set.name)}
-      </div>
+      <SetIconButton set={set} />
       <SetName slot={set.slot} name={set.name} factory={factory} takenNames={sets.map((other) => other.name)} onRename={nowPlaying.renameMusicSet} />
       <div
         className="options-curve-cell options-curve-display options-music-set-count"

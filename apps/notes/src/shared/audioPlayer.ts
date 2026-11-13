@@ -27,6 +27,7 @@ export const AUDIO_PLAYER_CHANNELS = {
   renameMusicSet:       'audio-player:rename-music-set',
   moveMusicSet:         'audio-player:move-music-set',
   deleteMusicSet:       'audio-player:delete-music-set',
+  setMusicSetIcon:      'audio-player:set-music-set-icon',
 } as const satisfies InvokeChannels<AudioPlayerApi>;
 
 /** A persisted music set's numeric id; factory ids retain their historical slot values. */
@@ -45,6 +46,25 @@ export const MAX_FACTORY_PLAYLIST_SLOT = 6;
 export interface MusicSet {
   slot: PlaylistSlot;
   name: string;
+  /**
+   * The Font Awesome solid icon the reader picked for the set (`fa-guitar`),
+   * or null for its default: a factory set's own icon, anyone else's initials
+   * (musicSetMarkOf).
+   */
+  icon: string | null;
+}
+
+/** A solid icon's name as a set stores it: `fa-` and the icon's id. */
+export const MUSIC_SET_ICON_PATTERN = /^fa-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/**
+ * What a set's mark is: an icon's class, or the set's initials. Every place
+ * that draws a set reads it here, so a picked icon reaches all of them.
+ */
+export function musicSetMarkOf(set: MusicSet): { iconClass: string } | { letters: string } {
+  if (set.icon) return { iconClass: `fa-solid ${set.icon}` };
+  if (isFactoryMusicSet(set.slot)) return { iconClass: PLAYLIST_SLOT_ICONS[set.slot] };
+  return { letters: musicSetMark(set.name) };
 }
 
 /**
@@ -113,6 +133,8 @@ export type AudioPlayerApi = {
   moveMusicSet(draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot): Promise<MusicSet[]>;
   /** Purge memberships and orphan songs, then delete a user-created set. */
   deleteMusicSet(slot: PlaylistSlot): Promise<MusicSet[]>;
+  /** Give a set a solid icon (`fa-guitar`), or null to restore its default. */
+  setMusicSetIcon(slot: PlaylistSlot, icon: string | null): Promise<MusicSet[]>;
   /** Open a multi-select file dialog; returns an array of chosen file paths. */
   pickFiles(): Promise<string[]>;
   /** Open a folder dialog; returns the chosen folder path or null. */
@@ -210,6 +232,7 @@ export const PLAYLIST_SLOT_THEMES: Record<PlaylistButtonSlot, string> = {
 export const FACTORY_MUSIC_SETS: readonly MusicSet[] = PLAYLIST_BUTTON_SLOTS.map((slot) => ({
   slot,
   name: PLAYLIST_SLOT_THEMES[slot],
+  icon: null,
 }));
 
 const FACTORY_SET_BY_SLOT = new Map(FACTORY_MUSIC_SETS.map((set) => [set.slot, set]));

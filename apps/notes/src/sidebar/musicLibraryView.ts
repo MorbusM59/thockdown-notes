@@ -1,5 +1,6 @@
 import { readNowPlaying } from '../sound/nowPlaying'
 import type { PlaylistSlot } from '../shared/audioPlayer'
+import { closeMusicSetIconPick } from './iconPicker/musicSetIconPicker'
 
 /**
  * Which music set the MUSIC LIBRARY shows. The Music Library is the sidebar's
@@ -30,6 +31,8 @@ export function subscribeMusicLibrarySlot(listener: () => void): () => void {
 export function selectMusicLibrarySet(next: PlaylistSlot | null): void {
   if (next === slot) return
   slot = next
+  // An icon being picked is for the set that was open.
+  closeMusicSetIconPick()
   for (const listener of listeners) listener()
 }
 

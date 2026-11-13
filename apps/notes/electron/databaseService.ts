@@ -86,6 +86,7 @@ import {
   isFactoryMusicSet,
   isPlaylistSlot,
   isPoolFilterEmpty,
+  MUSIC_SET_ICON_PATTERN,
   createPoolFilterMatcher,
   sanitizePoolFilter,
 } from '../src/shared/audioPlayer';
@@ -3520,9 +3521,16 @@ export class DatabaseService {
 
   getMusicSets(): MusicSet[] {
     const rows = this.requireDb().prepare(
-      'SELECT id, name FROM music_sets ORDER BY position ASC, id ASC'
-    ).all() as Array<{ id: number; name: string }>;
-    return rows.map(({ id, name }) => ({ slot: id, name }));
+      'SELECT id, name, icon FROM music_sets ORDER BY position ASC, id ASC'
+    ).all() as Array<{ id: number; name: string; icon: string | null }>;
+    return rows.map(({ id, name, icon }) => ({ slot: id, name, icon: icon || null }));
+  }
+
+  /** A malformed name is refused rather than stored; null restores the default. */
+  setMusicSetIcon(slot: PlaylistSlot, icon: string | null): MusicSet[] {
+    if (icon !== null && !MUSIC_SET_ICON_PATTERN.test(icon)) return this.getMusicSets();
+    this.requireDb().prepare('UPDATE music_sets SET icon = ? WHERE id = ?').run(icon, slot);
+    return this.getMusicSets();
   }
 
   createMusicSet(): MusicSet[] {
@@ -3952,7 +3960,8 @@ export class DatabaseService {
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         name      TEXT NOT NULL,
         position  INTEGER NOT NULL,
-        createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+        createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+        icon      TEXT
       );
 
       CREATE TABLE IF NOT EXISTS music_set_songs (
@@ -4220,6 +4229,7 @@ export class DatabaseService {
     // Older databases may not yet have these tag columns.
     this.ensureMusicSongsColumn('album', "TEXT NOT NULL DEFAULT ''");
     this.ensureMusicSongsColumn('tagsRead', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureMusicSetsColumn('icon', 'TEXT');
     this.migrateStoredContentOutOfFts();
     this.purgeParentlessChapters();
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
@@ -4342,6 +4352,16 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE music_songs ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureMusicSetsColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(music_sets)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) {
+      return;
+    }
+
+    db.exec(`ALTER TABLE music_sets ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureChaptersColumn(columnName: string, columnDefinition: string): void {

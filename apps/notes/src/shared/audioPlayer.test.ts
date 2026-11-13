@@ -36,7 +36,7 @@ describe('audio set selection', () => {
 
 describe('music sets', () => {
   it('continues generated names beyond Z', () => {
-    expect(defaultMusicSetName(Array.from({ length: 26 }, (_, index) => ({ slot: index + 10, name: `Set ${String.fromCharCode(65 + index)}` }))))
+    expect(defaultMusicSetName(Array.from({ length: 26 }, (_, index) => ({ slot: index + 10, name: `Set ${String.fromCharCode(65 + index)}`, icon: null }))))
       .toBe('Set AA')
   })
 

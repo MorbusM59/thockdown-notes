@@ -2,14 +2,15 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSPro
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { TextButton } from '../components/TextButton'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot, musicSetMark } from '../shared/audioPlayer'
+import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { HoverActions } from '../components/HoverActions'
-import { MusicSetRow } from './MusicSetRow'
+import { MusicSetRow, SetMark } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
+import { closeMusicSetIconPick, filterSolidIcons, readMusicSetIconPick, subscribeMusicSetIconPick } from './iconPicker/musicSetIconPicker'
 import { useSelectorReorder } from './useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
@@ -20,13 +21,6 @@ function formatSongDuration(seconds: number): string {
   const minutes = Math.floor(total / 60) % 60
   const pad = (value: number) => String(value).padStart(2, '0')
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(total % 60)}` : `${minutes}:${pad(total % 60)}`
-}
-
-/** A set's mark: a factory set's icon, anyone else's initials (musicSetMark). */
-function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
-  return isFactoryMusicSet(slot)
-    ? <span className={PLAYLIST_SLOT_ICONS[slot]} aria-hidden="true" />
-    : <span aria-hidden="true">{musicSetMark(name)}</span>
 }
 
 /**
@@ -113,7 +107,7 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
             }}
             {...cell.props}
           >
-            <SetMark slot={candidate.slot} name={candidate.name} />
+            <SetMark set={candidate} />
           </button>
         )
       })}
@@ -176,8 +170,56 @@ export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetList
   return <MusicLibrarySet set={set} grouping={grouping} filter={filter} />
 }
 
+type SolidIconCatalog = ReadonlyArray<readonly [string, string]>
+let catalogLoad: Promise<SolidIconCatalog> | null = null
+/** The catalog is 180 KB, so it is its own chunk, fetched when a picker first opens. */
+function loadSolidIconCatalog(): Promise<SolidIconCatalog> {
+  catalogLoad ??= import('./iconPicker/solidIconCatalog.json').then((module) => module.default as unknown as SolidIconCatalog)
+  return catalogLoad
+}
+
+/**
+ * Every solid icon, in one unfolded section in place of the set's songs,
+ * filtered by the sidebar's filter field (musicSetIconPicker.ts). A press
+ * gives the set that icon and closes the picker.
+ */
+function MusicSetIconPicker({ set, query }: { set: MusicSet; query: string }) {
+  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  const [catalog, setCatalog] = useState<SolidIconCatalog | null>(null)
+  useEffect(() => {
+    let live = true
+    void loadSolidIconCatalog().then((loaded) => { if (live) setCatalog(loaded) })
+    return () => { live = false }
+  }, [])
+  const names = useMemo(() => (catalog ? filterSolidIcons(catalog, query) : []), [catalog, query])
+  return (
+    <div className="preset-section">
+      <div className="options-loadout-grid music-set-icon-grid" role="listbox" aria-label={`Icons for ${set.name}`}>
+        {names.map((name) => (
+          <button
+            key={name}
+            type="button"
+            role="option"
+            aria-selected={set.icon === `fa-${name}`}
+            className={`btn-icon options-color-swatch options-loadout-btn${set.icon === `fa-${name}` ? ' is-active' : ''}`}
+            data-tooltip={name.replace(/-/g, ' ')}
+            aria-label={name.replace(/-/g, ' ')}
+            onClick={() => {
+              closeMusicSetIconPick()
+              void nowPlaying.setMusicSetIcon(set.slot, `fa-${name}`)
+            }}
+          >
+            <span className={`fa-solid fa-${name}`} aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string }) {
   const { slot, name } = set
+  const iconPick = useSyncExternalStore(subscribeMusicSetIconPick, readMusicSetIconPick)
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
   const shownSlot = loaded?.slot ?? slot
@@ -188,6 +230,8 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
       <div className="preset-section">
         <SetSelector slot={slot} />
       </div>
+      {iconPick?.slot === slot ? <MusicSetIconPicker set={set} query={iconPick.query} /> : (
+      <>
       {/* Keyed on the set shown and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${shownSlot}:${grouping}`}>
         {groups.map((group) => (
@@ -252,6 +296,8 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
           </AccordionSection>
         ))}
       </AccordionGroup>
+      </>
+      )}
     </div>
   )
 }

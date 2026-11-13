@@ -33,6 +33,8 @@ export type NowPlaying = {
   renameMusicSet: (slot: PlaylistSlot, name: string) => Promise<void>
   moveMusicSet: (draggedSlot: PlaylistSlot, targetSlot: PlaylistSlot) => void
   deleteMusicSet: (slot: PlaylistSlot) => Promise<void>
+  /** A solid icon for a set (`fa-guitar`), or null for its default. */
+  setMusicSetIcon: (slot: PlaylistSlot, icon: string | null) => Promise<void>
   purgeMusicSet: (slot: PlaylistSlot) => Promise<void>
   /** Take one set out of the active selection (the pool), moving on if the playing song leaves with it. */
   leaveMusicSet: (slot: PlaylistSlot) => Promise<void>
@@ -62,6 +64,7 @@ let current: NowPlaying = {
   renameMusicSet: async () => {},
   moveMusicSet: () => {},
   deleteMusicSet: async () => {},
+  setMusicSetIcon: async () => {},
   purgeMusicSet: async () => {},
   leaveMusicSet: async () => {},
   removeFromMusicSet: async () => {},
@@ -86,6 +89,7 @@ export function publishNowPlaying(next: NowPlaying): void {
     && next.renameMusicSet === current.renameMusicSet
     && next.moveMusicSet === current.moveMusicSet
     && next.deleteMusicSet === current.deleteMusicSet
+    && next.setMusicSetIcon === current.setMusicSetIcon
     && next.purgeMusicSet === current.purgeMusicSet
     && next.leaveMusicSet === current.leaveMusicSet
     && next.removeFromMusicSet === current.removeFromMusicSet
