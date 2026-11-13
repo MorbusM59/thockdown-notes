@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
+import { HoldToDeleteButton } from './HoldToDeleteButton'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 
 function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; name: string; factory: boolean; takenNames: readonly string[]; onRename: (slot: number, name: string) => Promise<void> }) {
@@ -104,13 +104,6 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
 export function MusicSetRow({ set }: { set: MusicSet }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
-  const cancelHoldRef = useRef<(() => void) | null>(null)
-  const cancelHold = () => {
-    cancelHoldRef.current?.()
-    cancelHoldRef.current = null
-  }
-  useEffect(() => cancelHold, [])
-
   const factory = isFactoryMusicSet(set.slot)
   return (
     <div className="options-curve-row options-music-set-row">
@@ -147,36 +140,12 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
       >
         <span className="fa-solid fa-folder-open" aria-hidden="true" />
       </button>
-      <button
-        type="button"
-        className={`options-curve-cell options-curve-button options-loadout-btn${factory ? ' is-disabled' : ''}`}
-        data-tooltip={
-          factory
-            ? 'Factory sets cannot be deleted'
-            : `Hold to delete ${set.name}`
-        }
-        aria-label={factory ? `${set.name} cannot be deleted` : `Delete ${set.name}`}
-        data-secondary-press="none"
-        onPointerDown={(event) => {
-          event.stopPropagation()
-          // Deleting cannot be undone, so it is a hold (HOLD_COMMIT_MS).
-          if (event.button !== 0 || factory) return
-          cancelHold()
-          cancelHoldRef.current = armHold(() => {
-            cancelHoldRef.current = null
-            void nowPlaying.deleteMusicSet(set.slot)
-          }, HOLD_COMMIT_MS)
-        }}
-        onPointerUp={() => { cancelHold() }}
-        onPointerCancel={() => { cancelHold() }}
-        onMouseLeave={() => { cancelHold() }}
-        onContextMenu={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-        }}
-      >
-        <span className="fa-solid fa-xmark" aria-hidden="true" />
-      </button>
+      {/* A factory set cannot be deleted, so the same hold empties it. */}
+      <HoldToDeleteButton
+        className="options-loadout-btn"
+        label={factory ? `empty ${set.name}` : `delete ${set.name}`}
+        onHold={() => { void (factory ? nowPlaying.purgeMusicSet(set.slot) : nowPlaying.deleteMusicSet(set.slot)) }}
+      />
     </div>
   )
 }

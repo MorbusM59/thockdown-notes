@@ -35,7 +35,7 @@ export type NowPlaying = {
   deleteMusicSet: (slot: PlaylistSlot) => Promise<void>
   purgeMusicSet: (slot: PlaylistSlot) => Promise<void>
   /** Take one song out of one set (the set list's remove button). */
-  removeFromMusicSet: (slot: PlaylistSlot, songId: number) => Promise<void>
+  removeFromMusicSet: (slot: PlaylistSlot, songIds: number[]) => Promise<void>
   addToMusicSet: (slot: PlaylistSlot, source: 'files' | 'folder') => Promise<boolean>
   /** Add files and folders dropped from the file manager, as the two add buttons would. */
   addPathsToMusicSet: (slot: PlaylistSlot, paths: string[]) => Promise<boolean>

@@ -643,10 +643,25 @@
 
 /* The Music Library (sidebar/MusicLibraryPanel.tsx): a song's name and its remove button. */
 .options-music-song-row {
-  grid-template-columns: 1fr var(--entry-height);
+  /* The remove button shows only on the hovered row; elsewhere the title takes the whole row. */
+  grid-template-columns: 1fr auto;
   /* A long set is thousands of rows; only those on screen are painted. */
   content-visibility:    auto;
   contain-intrinsic-size: auto var(--entry-height);
+}
+
+.options-music-song-row:not([data-hovered]) > .options-music-song-remove {
+  display: none;
+}
+
+.options-music-song-remove {
+  width: var(--entry-height);
+}
+
+/* A heading's or divider's remove button, in place of its count: an icon, not a cell. */
+.options-music-group-remove {
+  height:  auto;
+  padding: 0 var(--spacing-small);
 }
 
 /* A folder's or artist's name, cut to the heading's width. */

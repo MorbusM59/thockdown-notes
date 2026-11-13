@@ -1224,8 +1224,8 @@ function registerIpcHandlers() {
       const indexedFiles = await indexMusicPaths(filePaths)
       return databaseService!.addMusicSongs(slot, indexedFiles)
     },
-    removeFromSet: async (_event, slot: PlaylistSlot, songId: number) => {
-      databaseService!.removeSongFromMusicSet(slot, songId);
+    removeFromSet: async (_event, slot: PlaylistSlot, songIds: number[]) => {
+      databaseService!.removeSongsFromMusicSet(slot, songIds);
     },
     clearPlaylist: async (_event, slot: PlaylistSlot) => {
       databaseService!.clearMusicPlaylist(slot);

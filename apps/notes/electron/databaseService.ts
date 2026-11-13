@@ -3629,12 +3629,16 @@ export class DatabaseService {
     })();
   }
 
-  /** One song out of one set; a song that is then in no set leaves the library (the rule `clearMusicPlaylist` follows). */
-  removeSongFromMusicSet(slot: PlaylistSlot, songId: number): void {
+  /** Songs out of one set; a song that is then in no set leaves the library (the rule `clearMusicPlaylist` follows). */
+  removeSongsFromMusicSet(slot: PlaylistSlot, songIds: number[]): void {
     const db = this.requireDb();
+    const unlink = db.prepare('DELETE FROM music_set_songs WHERE setId = ? AND songId = ?');
+    const drop = db.prepare('DELETE FROM music_songs WHERE id = ? AND NOT EXISTS (SELECT 1 FROM music_set_songs WHERE songId = ?)');
     db.transaction(() => {
-      db.prepare('DELETE FROM music_set_songs WHERE setId = ? AND songId = ?').run(slot, songId);
-      db.prepare('DELETE FROM music_songs WHERE id = ? AND NOT EXISTS (SELECT 1 FROM music_set_songs WHERE songId = ?)').run(songId, songId);
+      for (const songId of songIds) {
+        unlink.run(slot, songId);
+        drop.run(songId, songId);
+      }
     })();
   }
 

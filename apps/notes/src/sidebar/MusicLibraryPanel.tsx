@@ -6,6 +6,7 @@ import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { HoldToDeleteButton } from './HoldToDeleteButton'
 import { MusicSetRow } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
@@ -130,26 +131,36 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
             heading={<span className="options-music-song-heading">{group.label}</span>}
             ariaLabel={group.label}
             iconClass={grouping === 'folder' ? 'fa-folder' : 'fa-user'}
-            count={group.dividers.reduce((total, divider) => total + divider.songs.length, 0)}
+            marker={
+              <HoldToDeleteButton
+                className="options-music-group-remove"
+                label={`remove every song under ${group.label} from ${name}`}
+                onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, group.dividers.flatMap((divider) => divider.songs.map((song) => song.id))) }}
+              />
+            }
           >
             <AccordionGroup>
             {group.dividers.map((divider) => (
-              <AccordionDivider key={divider.label} label={divider.label} count={divider.songs.length} defaultOpen>
+              <AccordionDivider key={divider.label} label={divider.label} defaultOpen
+                marker={
+                  <HoldToDeleteButton
+                    className="options-music-group-remove"
+                    label={`remove every song under ${divider.label} from ${name}`}
+                    onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, divider.songs.map((song) => song.id)) }}
+                  />
+                }
+              >
                 <div className="options-curve-rows">
                   {divider.songs.map((song) => {
-                    const name = songListTitleText(song)
+                    const title = songListTitleText(song)
                     return (
                       <div key={song.id} className="options-curve-row options-music-song-row">
-                        <div className="options-curve-cell options-curve-display options-music-set-name" data-tooltip={song.filePath}>{name}</div>
-                        <button
-                          type="button"
-                          className="options-curve-cell options-curve-button"
-                          data-tooltip={`Remove from ${name}`}
-                          aria-label={`Remove ${name} from ${name}`}
-                          onClick={() => { void nowPlaying.removeFromMusicSet(shownSlot, song.id) }}
-                        >
-                          <span className="fa-solid fa-xmark" aria-hidden="true" />
-                        </button>
+                        <div className="options-curve-cell options-curve-display options-music-set-name" data-tooltip={song.filePath}>{title}</div>
+                        <HoldToDeleteButton
+                          className="options-music-song-remove"
+                          label={`remove ${title} from ${name}`}
+                          onHold={() => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) }}
+                        />
                       </div>
                     )
                   })}

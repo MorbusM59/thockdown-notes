@@ -128,7 +128,7 @@ export type AudioPlayerApi = {
   /** Remove a set's memberships and permanently purge songs with no remaining memberships. */
   clearPlaylist(slot: PlaylistSlot): Promise<void>;
   /** Take one song out of one set; a song left in no set leaves the library, as clearing a set does. */
-  removeFromSet(slot: PlaylistSlot, songId: number): Promise<void>;
+  removeFromSet(slot: PlaylistSlot, songIds: number[]): Promise<void>;
   /** Remove a single song by its DB id. */
   removeSong(id: number): Promise<void>;
   /** Pick the next song to play from the pool `query` describes. */

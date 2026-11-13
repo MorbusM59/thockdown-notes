@@ -861,14 +861,14 @@ export const AudioControls = memo(function AudioControls({
   }, [onActiveSlotsChange, advanceToNextSong])
 
   /**
-   * One song out of one set. If it is the playing song and no active set
+   * Songs out of one set. If the playing song is among them and no active set
    * holds it any more, it stops and the next is picked, as `leaveSet` does.
    */
-  const removeFromMusicSet = useCallback(async (slot: PlaylistSlot, songId: number) => {
-    await window.thockdownAudioPlayer?.removeFromSet(slot, songId)
+  const removeFromMusicSet = useCallback(async (slot: PlaylistSlot, songIds: number[]) => {
+    await window.thockdownAudioPlayer?.removeFromSet(slot, songIds)
     await refreshCountsRef.current()
     const currentSong = currentSongRef.current
-    if (currentSong?.id !== songId) return
+    if (!currentSong || !songIds.includes(currentSong.id)) return
     const remaining = currentSong.setIds.filter((setId) => setId !== slot)
     setCurrentSong({ ...currentSong, setIds: remaining })
     if (!remaining.some((setId) => activeRef.current.includes(setId))) {

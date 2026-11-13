@@ -336,10 +336,11 @@ interface AccordionSectionProps extends FoldControl {
   /** fa-solid icon class(es) for the heading, saying what the subsection is about, e.g. "fa-paint-roller". */
   iconClass: string
   /**
-   * How many entries the section holds. Given, it stands in place of the fold
-   * arrow, in the divider's count element (AccordionDivider).
+   * What stands in place of the fold arrow, in the divider's marker slot
+   * (AccordionDivider): a count (`AccordionCount`), or a control acting on
+   * the whole section. A control there must stop its own click, or it folds.
    */
-  count?: number
+  marker?: ReactNode
   /**
    * Told when the section opens (as its unfold starts) and when it closes (as
    * its fold ends), and told `false` when it unmounts open, so a listener
@@ -362,7 +363,7 @@ export function AccordionSection({
   headingClassName,
   ariaLabel,
   iconClass,
-  count,
+  marker,
   ...fold
 }: AccordionSectionProps) {
   const { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold)
@@ -375,14 +376,14 @@ export function AccordionSection({
       <details ref={detailsRef} className="sidebar-options-accordion">
         <summary
           ref={summaryRef}
-          className={`sidebar-options-section-heading${count !== undefined ? ' has-count' : ''}${headingClassName ? ` ${headingClassName}` : ''}`}
+          className={`sidebar-options-section-heading${marker !== undefined ? ' has-count' : ''}${headingClassName ? ` ${headingClassName}` : ''}`}
           onClick={handleClick}
           data-secondary-press="action"
           onContextMenu={handleContextMenu}
         >
           <span className={`fa-solid ${iconClass}`} aria-hidden="true" />
           {heading}
-          {count !== undefined && <span className="options-divider-count">({count})</span>}
+          {marker !== undefined && <span className="options-divider-count">{marker}</span>}
         </summary>
         <div ref={contentRef} className="sidebar-options-accordion-body">
           <AccordionSectionOpenContext.Provider value={isOpen}>{children}</AccordionSectionOpenContext.Provider>
@@ -401,10 +402,15 @@ export function AccordionSection({
  * section that wants its dividers to close one another wraps them in a group
  * of their own.
  */
-export function AccordionDivider({ label, count, children, ariaLabel, ...fold }: FoldControl & {
+/** How many entries a section or divider folds, as its marker. */
+export function AccordionCount({ count }: { count: number }) {
+  return <>({count})</>
+}
+
+export function AccordionDivider({ label, marker, children, ariaLabel, ...fold }: FoldControl & {
   label: ReactNode
-  /** How many entries the divider folds, shown at the line's open end. */
-  count: number
+  /** What the line's open end shows: how many entries it folds (`AccordionCount`), or a control acting on them all. */
+  marker: ReactNode
   children: ReactNode
   ariaLabel?: string
 }) {
@@ -419,7 +425,7 @@ export function AccordionDivider({ label, count, children, ariaLabel, ...fold }:
           data-secondary-press="action"
           onContextMenu={handleContextMenu}
         >
-          <span className="options-divider-count">({count})</span>
+          <span className="options-divider-count">{marker}</span>
           {label}
         </summary>
         <div ref={contentRef} className="options-divider-body">{children}</div>

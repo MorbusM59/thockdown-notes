@@ -1,5 +1,5 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
-import { AccordionDivider, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { AccordionCount, AccordionDivider, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { areStringArraysEqual } from '../shared/stringArrays'
 import { GENERAL_SECONDARY_NAME, type TagPrimaryGroup } from '../shared/tagHierarchy'
 
@@ -99,7 +99,7 @@ export function CategoryTree<T>({
               <AccordionDivider
                 key={secondary.name}
                 label={secondary.name}
-                count={secondary.items.length}
+                marker={<AccordionCount count={secondary.items.length} />}
                 open={isOpen(flippedSecondary, secondaryKey(primary.name, secondary.name), startsFolded)}
                 onRequestOpenChange={(open, exclusive) => requestSecondary(primary.name, secondary.name, open, exclusive)}
               >
