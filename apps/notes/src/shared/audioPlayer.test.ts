@@ -10,7 +10,6 @@ import {
   PLAYLIST_BUTTON_SLOTS,
   PLAYLIST_SLOT_THEMES,
   sanitizePoolFilter,
-  shouldStopCurrentSongAfterSlotSelection,
 } from './audioPlayer'
 
 describe('audio player set layout', () => {
@@ -33,21 +32,6 @@ describe('audio set selection', () => {
     expect(getNextActiveSlotsForSelection([1, 3], 2, true)).toEqual([1, 3, 2])
   })
 
-  it('stops the current song only when all of its sets leave the selection', () => {
-    expect(
-      shouldStopCurrentSongAfterSlotSelection({
-        currentSongSetIds: [2],
-        nextActiveSlots: [1, 3],
-      })
-    ).toBe(true)
-
-    expect(
-      shouldStopCurrentSongAfterSlotSelection({
-        currentSongSetIds: [2, 7],
-        nextActiveSlots: [1, 7, 3],
-      })
-    ).toBe(false)
-  })
 })
 
 describe('music sets', () => {

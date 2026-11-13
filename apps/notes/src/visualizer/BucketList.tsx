@@ -98,7 +98,7 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
         }
 
         const set = entry.kind === 'item' ? entry.value : null
-        const active = set !== null && (pool?.slots.includes(set.slot) ?? false)
+        const active = set !== null && (pool?.active.includes(set.slot) ?? false)
         const name = set?.name ?? '...'
         const key = entry.kind === 'ellipsis' ? 'ellipsis' : `${set?.slot}:${name}:${active}`
         if (key === cells.shown) continue

@@ -30,7 +30,7 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
   const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
-  const active = nowPlaying.pool?.slots ?? []
+  const active = nowPlaying.pool?.active ?? []
   // Sets join and leave the music pool the way soundscape channels are
   // enabled and disabled (SoundscapeOptions.tsx): a left hold puts an
   // inactive set into the pool, a right hold takes an active one out, and a
@@ -38,6 +38,8 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
   // alone, as soloing a channel does. A plain left click opens the set here.
   const holdRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   const rightPressRef = useRef<{ pointerId: number; slot: PlaylistSlot } | null>(null)
+  /** Set when a hold completes; the click its release dispatches then opens nothing. */
+  const holdClaimedRef = useRef(false)
   useEffect(() => () => holdRef.current?.cancel(), [])
   const startHold = (slot: PlaylistSlot, isActive: boolean, button: number, pointerId: number) => {
     if (button === 2) rightPressRef.current = { pointerId, slot }
@@ -45,6 +47,7 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
     holdRef.current?.cancel()
     const cancel = armHold(() => {
       holdRef.current = null
+      holdClaimedRef.current = true
       if (button === 2) {
         rightPressRef.current = null
         void nowPlaying.leaveMusicSet(slot)
@@ -85,8 +88,9 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
             aria-label={`${candidate.name}, ${isActive ? 'playing in the pool' : 'not in the pool'}`}
             aria-checked={candidate.slot === slot}
             data-secondary-press="action"
-            onClick={() => selectMusicLibrarySet(candidate.slot)}
+            onClick={() => { if (!holdClaimedRef.current) selectMusicLibrarySet(candidate.slot) }}
             onPointerDown={(event) => {
+              holdClaimedRef.current = false
               cell.onPointerDown(event)
               startHold(candidate.slot, isActive, event.button, event.pointerId)
             }}
@@ -207,7 +211,14 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
                     const title = songListTitleText(song)
                     return (
                       <div key={song.id} className="options-curve-row options-music-song-row">
-                        <div className="options-curve-cell options-curve-display options-music-set-name" data-tooltip={song.filePath}>{title}</div>
+                        <button
+                          type="button"
+                          className="options-curve-cell options-curve-display options-music-set-name"
+                          data-tooltip={song.filePath}
+                          onClick={() => nowPlaying.playFromPool(song.id, song)}
+                        >
+                          {title}
+                        </button>
                         <HoldToDeleteButton
                           className="options-music-song-remove"
                           label={`remove ${title} from ${name}`}

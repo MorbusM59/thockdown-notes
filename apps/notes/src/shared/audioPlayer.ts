@@ -184,17 +184,6 @@ export function getNextActiveSlotsForSelection(
   return activeSlots.includes(selectedSlot) ? activeSlots : [...activeSlots, selectedSlot]
 }
 
-export function shouldStopCurrentSongAfterSlotSelection({
-  currentSongSetIds,
-  nextActiveSlots,
-}: {
-  currentSongSetIds: readonly PlaylistSlot[] | undefined;
-  nextActiveSlots: readonly PlaylistSlot[];
-}): boolean {
-  return currentSongSetIds !== undefined
-    && !currentSongSetIds.some((slot) => nextActiveSlots.includes(slot))
-}
-
 /** Supported audio file extensions that can be added to playlists. */
 export const AUDIO_EXTENSIONS = new Set([
   '.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.opus', '.weba', '.webm',

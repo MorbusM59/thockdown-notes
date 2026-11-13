@@ -21,11 +21,11 @@ export type NowPlaying = {
    * write to it: a song finishing, being skipped or (un)favourited always
    * hands over a new `song`.
    */
-  pool: { slots: readonly PlaylistSlot[]; counts: PlaylistCountsResult; filter: MusicPoolFilter } | null
+  pool: { slots: readonly PlaylistSlot[]; active: readonly PlaylistSlot[]; counts: PlaylistCountsResult; filter: MusicPoolFilter } | null
   /** The user's ordered sets; the first five are quick access in the player. */
   musicSets: readonly MusicSet[]
   /** Play a song of the pool now, rotating the pool's order to it (`shared/musicPool.ts`). */
-  playFromPool: (id: number) => void
+  playFromPool: (id: number, entry?: MusicSongEntry) => void
   /** Select one set, or add it to the active selection, as the music bar does. */
   selectSlot: (slot: PlaylistSlot, additive: boolean) => void
   /** Create a set at the end of the list; the new set's slot, or null when none could be made. */

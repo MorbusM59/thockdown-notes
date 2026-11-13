@@ -9,7 +9,6 @@ import {
   isFactoryMusicSet,
   PLAYLIST_SLOT_ICONS,
   MUSIC_SET_QUICK_ACCESS_COUNT,
-  shouldStopCurrentSongAfterSlotSelection,
 } from '../shared/audioPlayer'
 import { adjacentSongInPool } from '../shared/musicPool'
 import { FACTORY_SOUNDSCAPE_ICONS, SOUNDSCAPE_FACTORY_PRESETS, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
@@ -36,7 +35,7 @@ import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
-import { openMusicLibrary } from '../sidebar/musicLibraryView'
+import { openMusicLibrary, readMusicLibrarySlot, subscribeMusicLibrarySlot } from '../sidebar/musicLibraryView'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
@@ -195,6 +194,18 @@ export const AudioControls = memo(function AudioControls({
   const swallowScrubClickRef = useRef(false)
   const activeRef = useRef(activeSlots)
   activeRef.current = activeSlots
+  // THE POOL is the ACTIVATED sets plus the set open in the Music Library,
+  // which plays while it is open there and leaves the pool when another set
+  // is opened, unless it was activated. Every pick and walk reads this; the
+  // activated sets alone are what is persisted and what the player lights.
+  const librarySlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
+  const openLibrarySlot = librarySlot !== null && musicSets.some((set) => set.slot === librarySlot) ? librarySlot : musicSets[0]?.slot ?? null
+  const poolSlots = useMemo(
+    () => (openLibrarySlot === null || activeSlots.includes(openLibrarySlot) ? activeSlots : [...activeSlots, openLibrarySlot]),
+    [activeSlots, openLibrarySlot],
+  )
+  const poolSlotsRef = useRef(poolSlots)
+  poolSlotsRef.current = poolSlots
   // Written at once by setPoolFilter too, so a song chosen in the same
   // gesture that committed a filter is looked up in that filter's pool.
   const filterRef = useRef(poolFilter)
@@ -308,7 +319,7 @@ export const AudioControls = memo(function AudioControls({
     slotsOverride?: PlaylistSlot[],
     startAtSec = 0,
   ) => {
-    const slots = slotsOverride ?? activeRef.current
+    const slots = slotsOverride ?? poolSlotsRef.current
     if (slots.length === 0) {
       setIsPlaying(false)
       setCurrentSong(null)
@@ -574,7 +585,7 @@ export const AudioControls = memo(function AudioControls({
    * same list, so the walk is bounded by the pool itself and never re-reads it.
    */
   const playAdjacentSong = useCallback(async (direction: SeekDirection) => {
-    const query = { slots: activeRef.current, filter: filterRef.current }
+    const query = { slots: poolSlotsRef.current, filter: filterRef.current }
     const pool = await window.thockdownAudioPlayer?.getPool(query) ?? []
     const currentId = currentSongRef.current?.id
     let purgedMissingSong = false
@@ -616,16 +627,19 @@ export const AudioControls = memo(function AudioControls({
   }, [playAdjacentSong])
 
   /**
-   * Play a song chosen from the pool (the visualizer's song list). The pool's
-   * order is rotated to it first (`shared/musicPool.ts`), so the song that was
-   * playing and those skipped over keep their places in the ring; nothing is
-   * counted as played, which is why there is no afterPlay here.
+   * Play a song chosen from the pool (the visualizer's song list, a song
+   * clicked in the Music Library). The pool's order is rotated to it first
+   * (`shared/musicPool.ts`), so the song that was playing and those skipped
+   * over keep their places in the ring; nothing is counted as played, which
+   * is why there is no afterPlay here. A song the pool does not hold (the
+   * filter leaves it out) is played as given: the song playing belongs to the
+   * pool while it plays, and the next pick comes from the pool as usual.
    */
-  const playFromPool = useCallback(async (id: number) => {
+  const playFromPool = useCallback(async (id: number, entry?: MusicSongEntry) => {
     if (isCrossingSongRef.current || currentSongRef.current?.id === id) return
     isCrossingSongRef.current = true
     try {
-      const song = await window.thockdownAudioPlayer?.rotatePoolTo({ slots: activeRef.current, filter: filterRef.current }, id)
+      const song = await window.thockdownAudioPlayer?.rotatePoolTo({ slots: poolSlotsRef.current, filter: filterRef.current }, id) ?? entry
       if (!song) return
       try {
         await playSong(song)
@@ -750,23 +764,16 @@ export const AudioControls = memo(function AudioControls({
 
   // ---------------------------------------------------------------- playlist buttons
 
-  /** Change the selected sets; a song outside every active set stops and the next is picked. */
+  /**
+   * Change the activated sets. The song playing plays on whatever the change:
+   * it belongs to the pool while it plays, and the next pick reads the new pool.
+   */
   const selectSlot = useCallback(async (slot: PlaylistSlot, additive: boolean) => {
     const next = getNextActiveSlotsForSelection(activeSlotsRef.current, slot, additive)
     selectionVersionRef.current += 1
     activeSlotsRef.current = next
     onActiveSlotsChange(next)
-
-    if (shouldStopCurrentSongAfterSlotSelection({
-      currentSongSetIds: currentSongRef.current?.setIds,
-      nextActiveSlots: next,
-    })) {
-      musicPlayerService.stop()
-      setIsPlaying(false)
-      setCurrentSong(null)
-      await advanceToNextSong(next)
-    }
-  }, [onActiveSlotsChange, advanceToNextSong])
+  }, [onActiveSlotsChange])
 
   const keepOnlyQuickAccessSlots = useCallback(async (quickAccessSlots: readonly PlaylistSlot[]) => {
     const quick = new Set(quickAccessSlots)
@@ -775,13 +782,7 @@ export const AudioControls = memo(function AudioControls({
     activeSlotsRef.current = nextActiveSlots
     activeRef.current = nextActiveSlots
     onActiveSlotsChange(nextActiveSlots)
-    if (currentSongRef.current && !currentSongRef.current.setIds.some((slot) => quick.has(slot))) {
-      musicPlayerService.stop()
-      setIsPlaying(false)
-      setCurrentSong(null)
-      await advanceToNextSong(nextActiveSlots)
-    }
-  }, [onActiveSlotsChange, advanceToNextSong])
+  }, [onActiveSlotsChange])
 
   const addPathsToMusicSet = useCallback(async (slot: PlaylistSlot, paths: string[]): Promise<boolean> => {
     if (paths.length === 0) return false
@@ -841,9 +842,8 @@ export const AudioControls = memo(function AudioControls({
   }, [])
 
   /**
-   * After a set lost its songs (purged) or ceased to exist (deleted): take it
-   * out of the selection, refresh the counts, and if the playing song now
-   * belongs to no active set, stop it and pick the next one.
+   * Take a set out of the activated sets (deactivated, purged or deleted) and
+   * refresh the counts. The song playing plays on.
    */
   const leaveSet = useCallback(async (slot: PlaylistSlot) => {
     const nextActiveSlots = activeSlotsRef.current.filter((activeSlot) => activeSlot !== slot)
@@ -851,33 +851,16 @@ export const AudioControls = memo(function AudioControls({
     activeRef.current = nextActiveSlots
     onActiveSlotsChange(nextActiveSlots)
     await refreshCountsRef.current()
-    const currentSong = currentSongRef.current
-    if (currentSong && !currentSong.setIds.some((setId) => setId !== slot && nextActiveSlots.includes(setId))) {
-      musicPlayerService.stop()
-      setIsPlaying(false)
-      setCurrentSong(null)
-      await advanceToNextSong(nextActiveSlots)
-    }
-  }, [onActiveSlotsChange, advanceToNextSong])
+  }, [onActiveSlotsChange])
 
-  /**
-   * Songs out of one set. If the playing song is among them and no active set
-   * holds it any more, it stops and the next is picked, as `leaveSet` does.
-   */
+  /** Songs out of one set. The song playing plays on, even when it was among them. */
   const removeFromMusicSet = useCallback(async (slot: PlaylistSlot, songIds: number[]) => {
     await window.thockdownAudioPlayer?.removeFromSet(slot, songIds)
     await refreshCountsRef.current()
     const currentSong = currentSongRef.current
     if (!currentSong || !songIds.includes(currentSong.id)) return
-    const remaining = currentSong.setIds.filter((setId) => setId !== slot)
-    setCurrentSong({ ...currentSong, setIds: remaining })
-    if (!remaining.some((setId) => activeRef.current.includes(setId))) {
-      musicPlayerService.stop()
-      setIsPlaying(false)
-      setCurrentSong(null)
-      await advanceToNextSong()
-    }
-  }, [advanceToNextSong])
+    setCurrentSong({ ...currentSong, setIds: currentSong.setIds.filter((setId) => setId !== slot) })
+  }, [])
 
   const purgeMusicSet = useCallback(async (slot: PlaylistSlot) => {
     const audioPlayer = window.thockdownAudioPlayer
@@ -1014,7 +997,7 @@ export const AudioControls = memo(function AudioControls({
   // now-playing strip (sound/nowPlaying.ts). Through the ref, so the action
   // published once stays current.
   const publishedJumpSong = useCallback((direction: -1 | 1) => { void mediaActionsRef.current.jumpSong(direction) }, [])
-  const publishedPlayFromPool = useCallback((id: number) => { void mediaActionsRef.current.playFromPool(id) }, [])
+  const publishedPlayFromPool = useCallback((id: number, entry?: MusicSongEntry) => { void mediaActionsRef.current.playFromPool(id, entry) }, [])
   const publishedSelectSlot = useCallback((slot: PlaylistSlot, additive: boolean) => {
     void mediaActionsRef.current.selectSlot(slot, additive)
   }, [])
@@ -1025,7 +1008,7 @@ export const AudioControls = memo(function AudioControls({
     onPoolFilterChange(filter)
   }, [onPoolFilterChange])
   const isPoolFiltered = !samePoolFilter(poolFilter, EMPTY_POOL_FILTER)
-  const publishedPool = useMemo(() => ({ slots: activeSlots, counts, filter: poolFilter }), [activeSlots, counts, poolFilter])
+  const publishedPool = useMemo(() => ({ slots: poolSlots, active: activeSlots, counts, filter: poolFilter }), [poolSlots, activeSlots, counts, poolFilter])
   const publishedLevels = useMemo(() => ({ volume, reverb: reverbAmount, room: reverbRoom }), [volume, reverbAmount, reverbRoom])
   const publishedSetLevel = useCallback((level: keyof SoundLevels, fraction: number) => { mediaActionsRef.current.setLevel(level, fraction) }, [])
   useEffect(() => {
