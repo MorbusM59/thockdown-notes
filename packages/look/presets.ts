@@ -229,8 +229,7 @@ export const DARK_PRESET_THEMES: string[] = [
 export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
   // Layout 1: Light (default)
   buildPreset({
-    borderAlphaPercent: 74,
-    boxShadowAlphaPercent: 58,
+    boxShadowAlphaPercent: 80,
     cursorDotColor: 'rgba(0, 0, 0, 0.85)',
     cursorTrailColor: 'rgba(255, 255, 255, 1)',
     cursorHaloColor: 'rgba(255, 255, 255, 1)',
@@ -253,6 +252,7 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
       "base": "rgba(221, 208, 208, 1)",
       "bottomBackground": "rgba(0, 0, 0, 0)",
       "caret": "rgba(0, 0, 0, 0.037)",
+      "flowTrail": "rgba(122, 103, 100, 0.8)",
       "grid": "rgba(221, 208, 208, 1)",
       "gridOutline": "rgba(255, 255, 255, 0.234)",
       "inputFields": "rgba(235, 228, 223, 1)",
@@ -278,42 +278,52 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
     textureMaterials: {
       "appGrid": {
         "color": {
-          "a": 0.1176,
+          "a": 0.118,
           "h": 0,
           "s": 0.0275,
-          "v": 0.4196,
+          "v": 1,
         },
         "granularity": 1,
-        "seed": 211,
-        "vSteps": 7,
+        "seed": 0,
+        "textureStrength": 0,
+        "vSteps": 1,
       },
       "editorEditText": {
         "color": {
-          "a": 0,
-          "h": 47,
-          "s": 0.0706,
+          "a": 0.118,
+          "h": 0,
+          "s": 0.0275,
           "v": 1,
         },
+        "granularity": 1,
+        "seed": 0,
         "textureStrength": 0,
+        "vSteps": 1,
       },
       "editorRenderText": {
         "color": {
-          "a": 0.2902,
-          "h": 47,
-          "s": 0.0706,
+          "a": 0.118,
+          "h": 0,
+          "s": 0.0275,
           "v": 1,
         },
+        "granularity": 1,
+        "seed": 0,
         "textureStrength": 0,
+        "vSteps": 1,
       },
       "sidebarContent": {
         "color": {
-          "a": 0.3176,
-          "h": 47,
-          "s": 0.0706,
-          "v": 1,
+          "a": 0.02,
+          "h": 0,
+          "s": 0,
+          "v": 0,
         },
+        "granularity": 1,
+        "seed": 0,
         "textureStrength": 0,
-      },
+        "vSteps": 1,
+      }
     },
   }),
   // Layout 2: Sand
