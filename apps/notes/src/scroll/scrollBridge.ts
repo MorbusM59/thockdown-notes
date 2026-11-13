@@ -84,6 +84,42 @@ export interface ScrollBridgeSurface {
   readStyle: () => ScrollBridgeStyle | null
 }
 
+/** One tile of a curtain: the image the band repeats, and its height. */
+export interface CurtainTile {
+  dataUri: string
+  heightPx: number
+}
+
+/**
+ * What a curtain is drawn from, read fresh each journey. `key` names
+ * everything the tile depends on, so a tile is drawn again only when one of
+ * those changed; `draw` draws it. The text bridge derives one from the
+ * pane's typography (readStyle); another pane draws its own rows
+ * (sidebar/songListCurtain.ts).
+ */
+export interface CurtainSource {
+  key: string
+  draw: () => CurtainTile | null
+  rowGrid?: { heightPx: number; phasePx: number }
+}
+
+/**
+ * A pane that can raise a curtain: the non-scrolling box to draw into, the
+ * layer clipped away where the band covers it (both as on ScrollBridgeSurface),
+ * and the tile, for the pane's width.
+ */
+export interface CurtainSurface {
+  host: HTMLElement
+  /** Read when a journey begins, for a pane whose content layer can remount. */
+  readTextLayer: () => HTMLElement | null
+  readTile: (widthPx: number) => CurtainSource | null
+}
+
+/** Attaches a curtain of any kind to a scroller. Returns a function that detaches it. */
+export function registerScrollCurtain(scroller: HTMLElement, surface: CurtainSurface): () => void {
+  return provideScrollBridge(scroller, () => openScrollBridge(surface))
+}
+
 /**
  * Attaches a bridge surface to a scroller. Returns a function that detaches it.
  *
@@ -92,7 +128,35 @@ export interface ScrollBridgeSurface {
  * it with that package's registry, so the engines never import editor code.
  */
 export function registerScrollBridge(scroller: HTMLElement, surface: ScrollBridgeSurface): () => void {
-  return provideScrollBridge(scroller, () => openScrollBridge(surface))
+  return registerScrollCurtain(scroller, {
+    host: surface.host,
+    readTextLayer: () => surface.textLayer,
+    readTile: (widthPx) => {
+      const style = surface.readStyle()
+      if (!style) return null
+      return {
+        key: [
+          widthPx, style.lineHeightPx, style.fontPx, style.fontFamily,
+          style.color, style.paddingLeftPx, style.paddingRightPx, style.charsPerLine,
+          style.cellWidthPx,
+          style.text.length,
+        ].join('|'),
+        draw: () => drawBridgeTile({
+          rhythm: sampleDocumentLineRhythm({ text: style.text, charsPerLine: style.charsPerLine }),
+          widthPx,
+          lineHeightPx: style.lineHeightPx,
+          fontPx: style.fontPx,
+          fontFamily: style.fontFamily,
+          color: style.color,
+          paddingLeftPx: style.paddingLeftPx,
+          paddingRightPx: style.paddingRightPx,
+          cellWidthPx: style.cellWidthPx,
+          devicePixelRatio: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
+        }),
+        rowGrid: style.rowGrid,
+      }
+    },
+  })
 }
 
 interface TileCache {
@@ -113,7 +177,7 @@ const tiles = new WeakMap<HTMLElement, TileCache>()
 const MINIMUM_SWEEP_VIEWPORTS = 3
 
 /** Opens a bridge over `surface`. */
-function openScrollBridge(surface: ScrollBridgeSurface): ScrollBridge | null {
+function openScrollBridge(surface: CurtainSurface): ScrollBridge | null {
 
   let root: HTMLElement | null = null
   let band: HTMLElement | null = null
@@ -127,6 +191,7 @@ function openScrollBridge(surface: ScrollBridgeSurface): ScrollBridge | null {
   let lastTravelledPx: number | null = null
   let wasCovering = false
   let tileHeightForTrace = 1
+  let textLayer: HTMLElement | null = null
 
   /**
    * Where the band may actually sit.
@@ -163,7 +228,7 @@ function openScrollBridge(surface: ScrollBridgeSurface): ScrollBridge | null {
     root = null
     band = null
     // Whatever happened, the reader gets their whole document back.
-    surface.textLayer.style.clipPath = ''
+    if (textLayer) textLayer.style.clipPath = ''
   }
 
   return {
@@ -176,34 +241,23 @@ function openScrollBridge(surface: ScrollBridgeSurface): ScrollBridge | null {
         return null
       }
 
-      const style = surface.readStyle()
-      if (!style) {
-        traceScroll(() => 'bridge DECLINED readStyle() returned null')
+      const nextTextLayer = surface.readTextLayer()
+      if (!nextTextLayer) {
+        traceScroll(() => 'bridge DECLINED no text layer to clip')
+        return null
+      }
+      const source = surface.readTile(widthPx)
+      if (!source) {
+        traceScroll(() => 'bridge DECLINED readTile() returned null')
         return null
       }
 
-      const key = [
-        widthPx, style.lineHeightPx, style.fontPx, style.fontFamily,
-        style.color, style.paddingLeftPx, style.paddingRightPx, style.charsPerLine,
-        style.cellWidthPx,
-        style.text.length,
-      ].join('|')
+      const key = `${widthPx}|${source.key}`
       let tile = tiles.get(host)
       if (!tile || tile.key !== key) {
-        const drawn = drawBridgeTile({
-          rhythm: sampleDocumentLineRhythm({ text: style.text, charsPerLine: style.charsPerLine }),
-          widthPx,
-          lineHeightPx: style.lineHeightPx,
-          fontPx: style.fontPx,
-          fontFamily: style.fontFamily,
-          color: style.color,
-          paddingLeftPx: style.paddingLeftPx,
-          paddingRightPx: style.paddingRightPx,
-          cellWidthPx: style.cellWidthPx,
-          devicePixelRatio: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
-        })
+        const drawn = source.draw()
         if (!drawn) {
-          traceScroll(() => 'bridge DECLINED drawBridgeTile() returned null')
+          traceScroll(() => 'bridge DECLINED the tile could not be drawn')
           return null
         }
         tile = { key, dataUri: drawn.dataUri, heightPx: drawn.heightPx }
@@ -211,12 +265,13 @@ function openScrollBridge(surface: ScrollBridgeSurface): ScrollBridge | null {
       }
       tileHeightForTrace = Math.max(1, tile.heightPx)
 
-      rowGrid = style.rowGrid && style.rowGrid.heightPx > 0 ? style.rowGrid : null
+      rowGrid = source.rowGrid && source.rowGrid.heightPx > 0 ? source.rowGrid : null
       direction = nextDirection
       sweepDistancePx = Math.max(requestedDistancePx, viewportHeightPx * MINIMUM_SWEEP_VIEWPORTS)
       bandHeightPx = sweepDistancePx - viewportHeightPx
 
       teardown()
+      textLayer = nextTextLayer
       root = document.createElement('div')
       root.className = 'scroll-bridge'
       root.setAttribute('aria-hidden', 'true')
@@ -306,7 +361,7 @@ function openScrollBridge(surface: ScrollBridgeSurface): ScrollBridge | null {
       // edges rather than per direction, so a journey up the document and one
       // down it are the same arithmetic.
       const bottomPx = topPx + bandHeightPx
-      surface.textLayer.style.clipPath = topPx > 0
+      if (textLayer) textLayer.style.clipPath = topPx > 0
         ? `inset(0px 0px ${Math.max(0, viewportHeightPx - topPx)}px 0px)`
         : `inset(${Math.max(0, bottomPx)}px 0px 0px 0px)`
     },

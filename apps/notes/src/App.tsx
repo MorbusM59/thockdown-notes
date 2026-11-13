@@ -174,6 +174,8 @@ import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId 
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
 import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from './sidebar/MusicLibraryPanel'
+import { readSongListCurtain } from './sidebar/songListCurtain'
+import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
 import { TextButton } from './components/TextButton'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
@@ -6700,6 +6702,23 @@ ${markdownHtml}
   // panel otherwise. Its rail is remounted when the box is replaced, because
   // the shared scroller binds its listeners to the box it mounted with.
   const sidebarScroller = sidebarTreeScrollerEl || sidebarContentEl
+  // A long track journey through the song list is cut under a curtain of the
+  // list's own closed headings (sidebar/songListCurtain.ts), as a note's is
+  // under spoof text; without one the scroll engine arrives instantly.
+  useEffect(() => {
+    if (sidebarMode !== 'songs' || !sidebarContentEl) return
+    const host = sidebarContentEl.parentElement
+    if (!host) return
+    const readList = () => sidebarContentEl.querySelector<HTMLElement>(':scope > .options-content')
+    return registerScrollCurtain(sidebarContentEl, {
+      host,
+      readTextLayer: readList,
+      readTile: (widthPx) => {
+        const list = readList()
+        return list ? readSongListCurtain(list, host, widthPx) : null
+      },
+    })
+  }, [sidebarMode, sidebarContentEl])
   const sidebarScrollerKey = useMemo(() => scrollerIdentity(sidebarScroller), [sidebarScroller])
 
   const pagedVisibleNotes = useMemo(() => {
