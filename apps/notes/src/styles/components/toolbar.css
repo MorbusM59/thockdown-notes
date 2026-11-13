@@ -700,7 +700,7 @@
    centred. */
 .options-curve-display:not(.options-curve-header):not(.options-music-set-icon) {
   display:       block;
-  padding:       0 var(--spacing-small);
+  padding:       0 var(--spacing-regular);
   text-align:    center;
   white-space:   nowrap;
   overflow:      hidden;
