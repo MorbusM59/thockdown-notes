@@ -415,6 +415,13 @@ interface SoundscapeControlsProps extends SoundscapeOptionsProps {
    * does by touch is not what it does by mouse.
    */
   help?: (heading: string) => readonly string[] | null
+  /**
+   * The presets grid's frame, which a host may supply: the desktop's
+   * Soundscapes view shows it in a window of whole rows that scrolls once the
+   * reader's own soundscapes outgrow it (the app's SelectorRows). Without
+   * one, the grid grows with what it holds (the mobile app).
+   */
+  framePresets?: (grid: ReactNode) => ReactNode
 }
 
 /**
@@ -530,7 +537,7 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
  * `filter` is the sidebar's search field, searching the subsections the way
  * the options search does; the selector steps aside while it is in force.
  */
-export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & { filter: string }) {
+export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & { filter: string; framePresets?: (grid: ReactNode) => ReactNode }) {
   const isSearching = filter.trim() !== ''
   return (
     <SoundscapeParts
@@ -595,7 +602,7 @@ interface SoundscapePartsProps extends SoundscapeControlsProps {
 }
 
 /** The soundscape's controls and their state, laid out by the host (`arrange`). */
-function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickPreset, help, arrangement, arrange }: SoundscapePartsProps) {
+function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickPreset, help, framePresets = (grid) => grid, arrangement, arrange }: SoundscapePartsProps) {
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
@@ -848,7 +855,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
         {presetsHelp !== null ? <SubsectionHelp paragraphs={presetsHelp} /> : (<>
         {/* One grid: the factory soundscapes, then the reader's own, then the
             save button, flowing on from wherever the last of them ends. */}
-        <div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Soundscapes">
+        {framePresets(<div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Soundscapes">
           {SOUNDSCAPE_FACTORY_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -963,7 +970,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
               onSave={savePreset}
             />
           ) : null}
-        </div>
+        </div>)}
         </>)}
     </>),
     environment: (<>

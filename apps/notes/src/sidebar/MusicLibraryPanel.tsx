@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { TextButton } from '../components/TextButton'
 import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
-
-import { createWheelNotchState, resolveWheelEventUnits } from '../scroll/wheelNotch'
-
 import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, songListTitleText, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
 import {
-  groupMusicSetList, maxMusicSetSelectorOffset, musicSetSelectorCells, musicSetSelectorOffsetShowing, type MusicSetListGrouping,
+  groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { SelectorRows } from './SelectorRows'
 import { readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
 /** A set's mark: a factory set's icon, anyone else's first two letters (as in Music > Sets). */
@@ -19,59 +16,14 @@ function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
     : <span aria-hidden="true">{name.slice(0, 2).toUpperCase()}</span>
 }
 
-/**
- * The selector bar: six cells over the sets. With more sets than cells, an
- * end cell with sets beyond it is a step that way (one set per click) instead
- * of its set, and the wheel over the bar steps the same way, up towards the
- * beginning and down towards the end.
- */
+/** The selector bar: every set, six to a row, in a window of whole rows (SelectorRows). */
 function SetSelector({ slot }: { slot: PlaylistSlot }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
-  const [offset, setOffset] = useState(0)
-  const step = useCallback((direction: -1 | 1) => {
-    const max = maxMusicSetSelectorOffset(readNowPlaying().musicSets.length)
-    setOffset((current) => Math.min(Math.max(0, Math.min(current, max) + direction), max))
-  }, [])
-
-  // The open set is brought into the window when the library opens on it or
-  // the sets change; stepping afterwards may take it out of sight again.
-  const openIndex = sets.findIndex((candidate) => candidate.slot === slot)
-  useEffect(() => {
-    if (openIndex >= 0) setOffset((current) => musicSetSelectorOffsetShowing(sets.length, current, openIndex))
-  }, [openIndex, sets.length])
-
-  // One notch is one step, whatever its size: the dial's rule
-  // (EscapeHoldPanel.tsx), through the app's one notch resolver.
-  const barRef = useRef<HTMLDivElement | null>(null)
-  const wheelNotchStateRef = useRef(createWheelNotchState())
-  const handleWheel = useCallback((event: WheelEvent) => {
-    event.preventDefault()
-    const units = resolveWheelEventUnits(event, wheelNotchStateRef.current, performance.now())
-    if (units !== 0) step(units < 0 ? -1 : 1)
-  }, [step])
-  useNonPassiveWheel(barRef, handleWheel)
-
   return (
-    <div ref={barRef} className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets">
-      {musicSetSelectorCells(sets.length, offset).map((cell) => {
-        if (cell.kind !== 'set') {
-          const earlier = cell.kind === 'earlier'
-          return (
-            <button
-              key={cell.kind}
-              type="button"
-              className="btn-icon options-color-swatch options-loadout-btn"
-              data-tooltip={earlier ? 'Earlier sets' : 'Later sets'}
-              aria-label={earlier ? 'Earlier sets' : 'Later sets'}
-              onClick={() => step(earlier ? -1 : 1)}
-            >
-              <span className={earlier ? 'fa-solid fa-caret-left' : 'fa-solid fa-caret-right'} aria-hidden="true" />
-            </button>
-          )
-        }
-        const candidate = sets[cell.index]
-        return (
+    <SelectorRows>
+    <div className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets">
+      {sets.map((candidate) => (
           <button
             key={candidate.slot}
             type="button"
@@ -84,9 +36,9 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
           >
             <SetMark slot={candidate.slot} name={candidate.name} />
           </button>
-        )
-      })}
+      ))}
     </div>
+    </SelectorRows>
   )
 }
 

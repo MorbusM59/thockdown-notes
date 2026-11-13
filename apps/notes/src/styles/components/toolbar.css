@@ -706,3 +706,21 @@
 .options-music-song-row > .options-curve-display {
   text-align: left;
 }
+
+/* A growing selector's window (sidebar/SelectorRows.tsx): whole rows, moved
+   by a row per notch, the outer third of an edge row faded where more rows
+   lie beyond it. */
+.selector-rows {
+  overflow:   hidden;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--selector-rows-fade-top, 0px),
+    #000 calc(100% - var(--selector-rows-fade-bottom, 0px)),
+    transparent 100%
+  );
+}
+
+.selector-rows > .options-loadout-grid {
+  transform: translateY(var(--selector-rows-shift, 0px));
+}

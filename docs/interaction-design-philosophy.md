@@ -45,9 +45,11 @@ thumb arithmetic in `packages/interaction/`):
   `trackRightHold.ts` for a right hold on the track and
   `scrollThumbRubberBand.ts` for the thumb across a bridged journey, and
   `scrollTrackHold.ts` for click-travels, hold-snaps.
-- **Not scrollers**: the escape ring and the Music Library's set list step
-  by notch DIRECTION (`wheelNotch.ts` only), because a notch there is one
-  choice. The Soundscapes app's `PageScrollbar.tsx` is a touch page's only
+- **Not scrollers**: the escape ring and the growing section selectors (the
+  Music Library's sets and the Soundscapes view's presets, both in
+  `sidebar/SelectorRows.tsx`: three rows shown, one row per notch, the edge
+  row's outer third faded where rows lie beyond) step by notch DIRECTION
+  (`wheelNotch.ts` only), because a notch there is one choice. The Soundscapes app's `PageScrollbar.tsx` is a touch page's only
   scroll, worked from its whole column, and shares the thumb arithmetic
   (`scrollTrackGeometry.ts`) rather than the desktop's gestures.
 A new scroll box picks a driver and a bar from this list; a second copy of

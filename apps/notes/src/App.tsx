@@ -52,6 +52,7 @@ import {
   type SidebarListSection, type SidebarListView, type SidebarSections,
 } from './shared/sidebarSections'
 import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
+import { SelectorRows } from './sidebar/SelectorRows'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -8539,7 +8540,7 @@ ${markdownHtml}
                     ) : sidebarMode === 'songs' ? (
                       <MusicLibraryPanel grouping={musicSetListGrouping} filter={songsSearchQuery} />
                     ) : sidebarMode === 'soundscapes' ? (
-                      <SoundscapeView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
+                      <SoundscapeView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} framePresets={(grid) => <SelectorRows>{grid}</SelectorRows>} />
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
