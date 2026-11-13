@@ -227,7 +227,7 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
 
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
-      {/* An icon pick shows the icons alone, the set selector included. */}
+      {/* An icon pick shows the icons without the set selector; the dock stays, naming the set they are for. */}
       {iconPick?.slot === slot ? <MusicSetIconPicker set={set} query={iconPick.query} /> : (
       <>
       <div className="preset-section">
