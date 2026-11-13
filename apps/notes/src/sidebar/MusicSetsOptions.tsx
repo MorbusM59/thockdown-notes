@@ -127,14 +127,17 @@ export function MusicSetRow({ set, inLibrary = false }: { set: MusicSet; inLibra
         armPointerDrag(event)
       }}
       onDragStart={(event) => {
+        if (inLibrary) return
         event.dataTransfer?.setData('text/plain', String(set.slot))
         if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
       }}
       onDragOver={(event) => {
+        if (inLibrary) return
         event.preventDefault()
         if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
       }}
       onDrop={(event) => {
+        if (inLibrary) return
         event.preventDefault()
         const draggedSlot = Number(event.dataTransfer?.getData('text/plain'))
         if (Number.isSafeInteger(draggedSlot) && draggedSlot > 0) nowPlaying.moveMusicSet(draggedSlot, set.slot)
