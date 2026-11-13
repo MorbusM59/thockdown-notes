@@ -551,6 +551,12 @@ export function useNoteProtectionActions({
     }, HOLD_CONFIRM_MS)
   }, [clearTrashButtonHold, notes, purgeDeletedNotesPermanently])
 
+  /** Leaving the button ends a hold, and a completed one's release then dispatches no click to swallow. */
+  const leaveTrashViewButton = useCallback(() => {
+    clearTrashButtonHold()
+    trashButtonHoldClaimedRef.current = false
+  }, [clearTrashButtonHold])
+
   /** True once for the click that ends a completed hold, which then does nothing else. */
   const consumeTrashViewHoldClick = useCallback(() => {
     const claimed = trashButtonHoldClaimedRef.current
@@ -564,6 +570,7 @@ export function useNoteProtectionActions({
     isTrashViewHolding,
     clearTrashButtonHold,
     consumeTrashViewHoldClick,
+    leaveTrashViewButton,
     handleTrashViewButtonPointerDown,
     restoreNote,
     handleSaveButtonClick,

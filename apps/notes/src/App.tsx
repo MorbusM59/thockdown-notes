@@ -6882,7 +6882,7 @@ ${markdownHtml}
           onPointerDown: activeSection?.handleTrashViewButtonPointerDown,
           onPointerUp: activeSection?.clearTrashButtonHold,
           onPointerCancel: activeSection?.clearTrashButtonHold,
-          onMouseLeave: activeSection?.clearTrashButtonHold,
+          onMouseLeave: activeSection?.leaveTrashViewButton,
         } : undefined)}
       />
     </div>
