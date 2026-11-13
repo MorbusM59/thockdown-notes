@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type HTMLAttributes, type PointerEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { UnsavedPresetButton } from '@thockdown/interaction/UnsavedPresetButton'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
@@ -13,6 +13,7 @@ import {
   SOUNDSCAPE_CHIME_TUBES_MIN,
   FACTORY_SOUNDSCAPE_ICONS,
   SOUNDSCAPE_FACTORY_PRESETS,
+  orderedSoundscapePresets,
   SOUNDSCAPE_FIRE_PERIOD_MAX_SEC,
   SOUNDSCAPE_FIRE_PERIOD_MIN_SEC,
   SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ,
@@ -422,6 +423,13 @@ interface SoundscapeControlsProps extends SoundscapeOptionsProps {
    * one, the grid grows with what it holds (the mobile app).
    */
   framePresets?: (grid: ReactNode) => ReactNode
+  /**
+   * Dragging a soundscape to reorder it, which a host may offer (the desktop's
+   * Soundscapes view, through its selector's drag): per soundscape, the press
+   * that arms the drag and what makes the button a source and a target. The
+   * order itself is `presetOrder`, moved by `moveSoundscapePreset`.
+   */
+  presetReorder?: (presetId: string) => { onPointerDown: (event: PointerEvent<HTMLElement>) => void; props: HTMLAttributes<HTMLElement> }
 }
 
 /**
@@ -537,7 +545,7 @@ function ControlGroups({ idPrefix, groups, values, defaults, disabled, name, onC
  * `filter` is the sidebar's search field, searching the subsections the way
  * the options search does; the selector steps aside while it is in force.
  */
-export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & { filter: string; framePresets?: (grid: ReactNode) => ReactNode }) {
+export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & Pick<SoundscapeControlsProps, 'framePresets' | 'presetReorder'> & { filter: string }) {
   const isSearching = filter.trim() !== ''
   return (
     <SoundscapeParts
@@ -602,7 +610,7 @@ interface SoundscapePartsProps extends SoundscapeControlsProps {
 }
 
 /** The soundscape's controls and their state, laid out by the host (`arrange`). */
-function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickPreset, help, framePresets = (grid) => grid, arrangement, arrange }: SoundscapePartsProps) {
+function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickPreset, help, framePresets = (grid) => grid, presetReorder, arrangement, arrange }: SoundscapePartsProps) {
   const [pendingDeletePresetId, setPendingDeletePresetId] = useState<string | null>(null)
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
@@ -853,10 +861,13 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
     channelsLabel: <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>,
     presets: (<>
         {presetsHelp !== null ? <SubsectionHelp paragraphs={presetsHelp} /> : (<>
-        {/* One grid: the factory soundscapes, then the reader's own, then the
-            save button, flowing on from wherever the last of them ends. */}
+        {/* One grid: the soundscapes in the listener's order, then Reset and
+            the save button, flowing on from wherever the last of them ends. */}
         {framePresets(<div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Soundscapes">
-          {SOUNDSCAPE_FACTORY_PRESETS.map((preset) => (
+          {orderedSoundscapePresets(preferences).map((preset) => {
+            const index = preferences.customPresets.indexOf(preset)
+            const reorder = presetReorder?.(preset.id)
+            if (index < 0) return (
             <button
               key={preset.id}
               type="button"
@@ -868,8 +879,10 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
               data-secondary-press="none"
               onClick={() => { if (!swallowsClick()) activatePreset(preset) }}
               onPointerDown={(event) => {
+                reorder?.onPointerDown(event)
                 if (event.pointerType === 'touch' && onPickPreset) startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => onPickPreset(preset.id))
               }}
+              {...reorder?.props}
               onPointerUp={(event) => endTouchHold(event.pointerId)}
               onPointerCancel={(event) => endTouchHold(event.pointerId)}
               onPointerLeave={(event) => endTouchHold(event.pointerId)}
@@ -877,20 +890,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
             >
               <span className={`fa-solid ${FACTORY_SOUNDSCAPE_ICONS[preset.id]}`} aria-hidden="true" />
             </button>
-          ))}
-          <button
-            type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn soundscape-reset-btn${isResetActive ? ' is-active' : ''}`}
-            aria-label="Reset: every channel at its defaults and off"
-            aria-pressed={isResetActive}
-            data-tooltip="Reset\nEvery channel at its defaults and off."
-            data-secondary-press="none"
-            onClick={() => { if (!swallowsClick()) selectReset() }}
-            onContextMenu={(event) => event.preventDefault()}
-          >
-            <span className="fa-solid fa-rotate-left" aria-hidden="true" />
-          </button>
-          {preferences.customPresets.map((preset, index) => {
+            )
             const number = index + 1
             const isPrimed = pendingDeletePresetId === preset.id
             const label = `Custom soundscape ${number}`
@@ -905,7 +905,9 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                 data-tooltip={isPrimed ? `Click to delete ${label}` : `${label}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
                 data-secondary-press="action"
                 onClick={() => { if (!swallowsClick()) activatePreset(preset) }}
+                {...reorder?.props}
                 onPointerDown={(event) => {
+                  reorder?.onPointerDown(event)
                   if (event.pointerType === 'touch') {
                     startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => (onPickPreset ? onPickPreset(preset.id) : setPendingDeletePresetId(preset.id)))
                     return
@@ -946,6 +948,18 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
               </button>
             )
           })}
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn soundscape-reset-btn${isResetActive ? ' is-active' : ''}`}
+            aria-label="Reset: every channel at its defaults and off"
+            aria-pressed={isResetActive}
+            data-tooltip="Reset\nEvery channel at its defaults and off."
+            data-secondary-press="none"
+            onClick={() => { if (!swallowsClick()) selectReset() }}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <span className="fa-solid fa-rotate-left" aria-hidden="true" />
+          </button>
           {pickedCustomPreset ? (
             <button
               type="button"

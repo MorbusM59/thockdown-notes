@@ -52,7 +52,7 @@ import {
   type SidebarListSection, type SidebarListView, type SidebarSections,
 } from './shared/sidebarSections'
 import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
-import { SelectorRows } from './sidebar/SelectorRows'
+import { SoundscapesView } from './sidebar/SoundscapesView'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -175,7 +175,6 @@ import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type Mus
 import { readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel } from './sidebar/MusicLibraryPanel'
 import { TextButton } from './components/TextButton'
-import { SoundscapeView } from '@thockdown/soundscape/SoundscapeOptions'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -8540,7 +8539,7 @@ ${markdownHtml}
                     ) : sidebarMode === 'songs' ? (
                       <MusicLibraryPanel grouping={musicSetListGrouping} filter={songsSearchQuery} />
                     ) : sidebarMode === 'soundscapes' ? (
-                      <SoundscapeView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} framePresets={(grid) => <SelectorRows>{grid}</SelectorRows>} />
+                      <SoundscapesView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}

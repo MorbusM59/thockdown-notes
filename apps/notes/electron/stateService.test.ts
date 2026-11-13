@@ -104,6 +104,7 @@ describe('StateService app-state field round-trip', () => {
       settings,
       unsaved: settings,
       activePresetId: 'night-rain',
+      presetOrder: ['night-rain'],
       customPresets: [{
         id: 'night-rain',
         name: 'Night rain',

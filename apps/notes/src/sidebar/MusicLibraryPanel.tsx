@@ -7,6 +7,7 @@ import {
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { SelectorRows } from './SelectorRows'
+import { useSelectorReorder } from './useSelectorReorder'
 import { readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
 /** A set's mark: a factory set's icon, anyone else's first two letters (as in Music > Sets). */
@@ -16,14 +17,21 @@ function SetMark({ slot, name }: { slot: PlaylistSlot; name: string }) {
     : <span aria-hidden="true">{name.slice(0, 2).toUpperCase()}</span>
 }
 
-/** The selector bar: every set, six to a row, in a window of whole rows (SelectorRows). */
+/**
+ * The selector bar: every set, six to a row, in a window of whole rows
+ * (SelectorRows), reordered by dragging (useSelectorReorder). The order is the
+ * sets' one order, the music player's buttons included.
+ */
 function SetSelector({ slot }: { slot: PlaylistSlot }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
+  const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
   return (
     <SelectorRows>
     <div className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets">
-      {sets.map((candidate) => (
+      {sets.map((candidate) => {
+        const cell = reorder(String(candidate.slot))
+        return (
           <button
             key={candidate.slot}
             type="button"
@@ -33,10 +41,13 @@ function SetSelector({ slot }: { slot: PlaylistSlot }) {
             aria-label={candidate.name}
             aria-checked={candidate.slot === slot}
             onClick={() => selectMusicLibrarySet(candidate.slot)}
+            onPointerDown={cell.onPointerDown}
+            {...cell.props}
           >
             <SetMark slot={candidate.slot} name={candidate.name} />
           </button>
-      ))}
+        )
+      })}
     </div>
     </SelectorRows>
   )

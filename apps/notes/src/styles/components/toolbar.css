@@ -726,3 +726,14 @@
 .selector-rows > .options-loadout-grid {
   transform: translateY(var(--selector-rows-shift, 0px));
 }
+
+/* A selector cell being dragged to a new place (sidebar/useSelectorReorder.ts):
+   the one picked up is dimmed, the one it would land on is framed. */
+.selector-rows [data-drag-state='source'] {
+  opacity: 0.4;
+}
+
+.selector-rows [data-drag-state='target'] {
+  outline:        2px solid var(--color-accent);
+  outline-offset: -2px;
+}

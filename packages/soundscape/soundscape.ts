@@ -392,6 +392,14 @@ export interface SoundscapePreferences {
   activePresetId: string | null;
   customPresets: SoundscapePreset[];
   /**
+   * The order the listener put the soundscapes in, factory and their own
+   * alike, as preset ids: the order every list of soundscapes shows them in
+   * (`orderedSoundscapePresets`). An id it does not name follows the ones it
+   * does, factory before custom, so a new soundscape lands at the end and an
+   * empty order is the natural one.
+   */
+  presetOrder: string[];
+  /**
    * The UNSAVED soundscape: the settings as the listener last edited them.
    * Every edit writes it (`SoundscapeOptions.tsx`'s `withSettings`) and
    * selecting a preset leaves it alone, so the plus after the presets brings
@@ -758,6 +766,7 @@ export const DEFAULT_SOUNDSCAPE_PREFERENCES: SoundscapePreferences = {
   settings: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
   activePresetId: SOUNDSCAPE_FACTORY_PRESETS[0].id,
   customPresets: [],
+  presetOrder: [],
   unsaved: cloneSettings(DEFAULT_SOUNDSCAPE_SETTINGS),
 };
 
@@ -939,8 +948,36 @@ export function sanitizeSoundscapePreferences(input: unknown): SoundscapePrefere
     settings,
     activePresetId,
     customPresets,
+    presetOrder: Array.isArray(source.presetOrder)
+      ? [...new Set(source.presetOrder.filter((id): id is string => typeof id === 'string'))]
+      : [],
     unsaved: source.unsaved === undefined ? cloneSettings(settings) : sanitizeSoundscapeSettings(source.unsaved),
   };
+}
+
+/** Every soundscape, factory and custom, in the listener's order (`presetOrder`). */
+export function orderedSoundscapePresets(preferences: SoundscapePreferences): SoundscapePreset[] {
+  const natural = [...SOUNDSCAPE_FACTORY_PRESETS, ...preferences.customPresets];
+  const rank = new Map(preferences.presetOrder.map((id, index) => [id, index]));
+  return natural
+    .map((preset, index) => ({ preset, key: rank.get(preset.id) ?? preferences.presetOrder.length + index }))
+    .sort((a, b) => a.key - b.key)
+    .map(({ preset }) => preset);
+}
+
+/**
+ * Move a dragged soundscape to where `targetId` stands, the way every
+ * reorder in the app works: dropped further on, the target and everything
+ * between move one place towards the start; dropped further back, the target
+ * and everything after it up to the dragged one move one place towards the end.
+ */
+export function moveSoundscapePreset(preferences: SoundscapePreferences, draggedId: string, targetId: string): SoundscapePreferences {
+  const ids = orderedSoundscapePresets(preferences).map((preset) => preset.id);
+  const from = ids.indexOf(draggedId);
+  const to = ids.indexOf(targetId);
+  if (from < 0 || to < 0 || from === to) return preferences;
+  ids.splice(to, 0, ...ids.splice(from, 1));
+  return { ...preferences, presetOrder: ids };
 }
 
 /**
