@@ -565,6 +565,21 @@
   font-size: calc(9px * var(--ui-font-scale));
 }
 
+/* A text button (components/TextButton.tsx): a micro button's height, its
+   column's width, and a few words in place of an icon, cut with an ellipsis
+   rather than wrapped when the column is too narrow. */
+.options-curve-button.text-button {
+  padding:   0 0.6em;
+  font-size: calc(10px * var(--ui-font-scale));
+}
+
+.text-button-label {
+  min-width:     0;
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
 .options-curve-header {
   width:                 100%;
   height:                var(--entry-height);

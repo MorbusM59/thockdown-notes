@@ -173,6 +173,7 @@ import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId 
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
 import { readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel } from './sidebar/MusicLibraryPanel'
+import { TextButton } from './components/TextButton'
 import { SoundscapeView } from '@thockdown/soundscape/SoundscapeOptions'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
@@ -8796,24 +8797,18 @@ ${markdownHtml}
                             <div className="sidebar-options-accordion-body">
                               <div className="options-curve-rows options-music-set-list-dock">
                                 <div className="options-curve-row options-music-set-list-dock-row">
-                                  <button
-                                    type="button"
-                                    className="options-curve-cell options-curve-button"
+                                  <TextButton
                                     data-tooltip="Replace the marked occurrence"
                                     onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
-                                    aria-label="Replace"
                                   >
-                                    <span className="fa-solid fa-right-left" aria-hidden="true" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="options-curve-cell options-curve-button"
+                                    Replace
+                                  </TextButton>
+                                  <TextButton
                                     data-tooltip="Replace every occurrence"
                                     onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
-                                    aria-label="Replace all"
                                   >
-                                    <span className="fa-solid fa-list-check" aria-hidden="true" />
-                                  </button>
+                                    Replace all
+                                  </TextButton>
                                 </div>
                               </div>
                             </div>

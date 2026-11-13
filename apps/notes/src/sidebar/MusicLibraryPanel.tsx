@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { TextButton } from '../components/TextButton'
 import { AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 
@@ -185,18 +186,16 @@ export function MusicLibraryDock({ grouping, onGroupingChange }: { grouping: Mus
     <div className="options-curve-rows options-music-set-list-dock" role="radiogroup" aria-label="Song grouping">
       <div className="options-curve-row options-music-set-list-dock-row">
         {(['folder', 'artist'] as const).map((option) => (
-          <button
+          <TextButton
             key={option}
-            type="button"
             role="radio"
             aria-checked={grouping === option}
-            className={`options-curve-cell options-curve-button${grouping === option ? ' is-active' : ''}`}
-            data-tooltip={option === 'folder' ? 'By folder' : 'By artist'}
-            aria-label={option === 'folder' ? 'Group by folder' : 'Group by artist'}
+            isActive={grouping === option}
+            data-tooltip={option === 'folder' ? 'Group the songs by folder' : 'Group the songs by artist'}
             onClick={() => onGroupingChange(option)}
           >
-            <span className={option === 'folder' ? 'fa-solid fa-folder' : 'fa-solid fa-user'} aria-hidden="true" />
-          </button>
+            {option === 'folder' ? 'By folder...' : 'By artist...'}
+          </TextButton>
         ))}
       </div>
     </div>
