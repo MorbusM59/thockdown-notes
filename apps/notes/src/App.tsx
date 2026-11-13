@@ -3770,9 +3770,8 @@ function App() {
     showSidebarInMode('options')
   }, [lastSidebarModeBeforeOptions, runSidebarMenuTransition, showSidebarInMode, sidebarMode])
 
-  // The Music Library is asked for from outside the sidebar (the count
-  // buttons in Options > Music > Sets, a held right press on a set button of
-  // the music player): this is how such a request shows the Songs view,
+  // The Music Library is asked for from outside the sidebar (a held right
+  // press on a set button of the music player): this is how such a request shows the Songs view,
   // bringing the sidebar up if it is hidden.
   const showSidebarInModeRef = useRef(showSidebarInMode)
   showSidebarInModeRef.current = showSidebarInMode

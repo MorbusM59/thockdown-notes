@@ -6,7 +6,7 @@ import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { MusicSetRow } from './MusicSetsOptions'
+import { MusicSetRow } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
 import { useSelectorReorder } from './useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
@@ -176,7 +176,7 @@ export function MusicLibraryDock({ grouping, onGroupingChange }: { grouping: Mus
       className="options-curve-rows options-music-set-list-dock"
       style={{ '--set-count-digits': String(set ? nowPlaying.pool?.counts[set.slot] ?? 0 : 0).length } as CSSProperties}
     >
-      {set ? <MusicSetRow set={set} inLibrary /> : null}
+      {set ? <MusicSetRow set={set} /> : null}
       <div className="options-curve-row options-music-set-list-dock-row" role="radiogroup" aria-label="Song grouping">
         {(['folder', 'artist'] as const).map((option) => (
           <TextButton

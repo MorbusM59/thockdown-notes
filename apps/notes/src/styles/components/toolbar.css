@@ -609,23 +609,15 @@
   grid-template-columns: var(--entry-height) 1fr var(--entry-height) var(--entry-height);
 }
 
-.options-music-set-row,
-.options-music-set-divider {
+.options-music-set-row {
   /* The count only as wide as its figures (.options-music-set-count), the
      name taking the rest. */
   grid-template-columns:
     var(--entry-height) 1fr auto var(--entry-height) var(--entry-height) var(--entry-height);
-}
-
-/* The same row in the Music Library's dock, on narrower gaps. */
-.options-music-set-row.is-in-library {
+  /* The dock's narrower gaps. */
   column-gap: var(--spacing-small);
 }
 
-/* Two buttons sharing the row: the top set's songs, and a new set. */
-.options-music-set-add-row {
-  grid-template-columns: 1fr 1fr;
-}
 
 .options-music-set-name {
   overflow:      hidden;
@@ -639,18 +631,9 @@
 
 .options-music-set-count {
   font-variant-numeric: tabular-nums;
-  /* As wide as the longest count in its list (--set-count-digits, set on the
-     list), so every row's count column is the same and names line up. */
+  /* As wide as its figures (--set-count-digits, set by the dock), the name taking the rest. */
   min-width:     max(var(--entry-height), calc(var(--set-count-digits, 1) * 1ch + 2 * var(--spacing-regular)));
   padding-inline: 0;
-}
-
-.options-music-set-divider {
-  margin: var(--spacing-small);
-  box-sizing:            border-box;
-  height:                1px;
-  border: none;
-  background-color: var(--btn-border-default);
 }
 
 .options-dictionary-toggle.is-active {

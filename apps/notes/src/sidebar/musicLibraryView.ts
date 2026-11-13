@@ -5,8 +5,8 @@ import type { PlaylistSlot } from '../shared/audioPlayer'
  * Which music set the MUSIC LIBRARY shows. The Music Library is the sidebar's
  * Songs view (MusicLibraryPanel.tsx): the music sets as its sections and the
  * open set's songs below them. A module store because the things that pick a
- * set sit in three different parts of the tree: the library's own selector,
- * the count buttons in Options > Music > Sets, and a held right press on a
+ * set sit in two different parts of the tree: the library's own selector,
+ * and a held right press on a
  * set button of the music player.
  *
  * `null` means no set was ever picked; the library then shows the first set,

@@ -15,7 +15,6 @@ import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_N
 import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
 import { readNowPlaying } from '../sound/nowPlaying'
 import { SoundstageOptions } from './SoundstageOptions'
-import { MusicSetsOptions } from './MusicSetsOptions'
 import type { EqPoint } from '../shared/musicEqCurve'
 import { EqCurveEditor } from './EqCurveEditor'
 import { type ActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from '../shared/soundstages'
@@ -2349,15 +2348,6 @@ export function SidebarOptionsPanel({
             />
           </OptionsSliderRows>
         </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-music-sets"
-        ariaLabel="Sets"
-        heading="Sets"
-        iconClass="fa-folder-tree"
-      >
-        <MusicSetsOptions />
       </AccordionSection>
 
       <AccordionSection

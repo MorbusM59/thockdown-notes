@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
-import { isFactoryMusicSet, MUSIC_SET_QUICK_ACCESS_COUNT, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
-import { armPointerDrag } from '../shared/pointerDrag'
+import { isFactoryMusicSet, PLAYLIST_SLOT_ICONS, type MusicSet, musicSetMark } from '../shared/audioPlayer'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { openMusicLibrary } from './musicLibraryView'
 
 function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; name: string; factory: boolean; takenNames: readonly string[]; onRename: (slot: number, name: string) => Promise<void> }) {
   const [editing, setEditing] = useState(false)
@@ -98,14 +96,12 @@ function SetName({ slot, name, factory, takenNames, onRename }: { slot: number; 
 }
 
 /**
- * One set's row as Options > Music > Sets lists it: its mark, its name (renamed
- * by right-click), its song count, adding files or a folder, and deleting it.
- * `inLibrary` is the same row in the Music Library's dock, over its groupings, which
- * already lists the set's songs: the count there is a plain figure rather than
- * the way to them (and the hold that empties the set), and the row is not
- * dragged, the selector above it being where sets are reordered.
+ * The open set's row in the Music Library's dock, over its groupings: its
+ * mark, its name (renamed by right-click), its song count as a plain figure
+ * (the groupings below already list the songs), adding files or a folder, and
+ * deleting it. Sets are reordered in the selector above it, not here.
  */
-export function MusicSetRow({ set, inLibrary = false }: { set: MusicSet; inLibrary?: boolean }) {
+export function MusicSetRow({ set }: { set: MusicSet }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
   const cancelHoldRef = useRef<(() => void) | null>(null)
@@ -117,76 +113,20 @@ export function MusicSetRow({ set, inLibrary = false }: { set: MusicSet; inLibra
 
   const factory = isFactoryMusicSet(set.slot)
   return (
-    <div
-      className={`options-curve-row options-music-set-row${inLibrary ? ' is-in-library' : ''}`}
-      {...(inLibrary ? {} : { 'data-drag-source': '' })}
-      onPointerDown={(event) => {
-        if (inLibrary) return
-        const target = event.target
-        if (target instanceof Element && target.closest('button, input')) return
-        armPointerDrag(event)
-      }}
-      onDragStart={(event) => {
-        if (inLibrary) return
-        event.dataTransfer?.setData('text/plain', String(set.slot))
-        if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
-      }}
-      onDragOver={(event) => {
-        if (inLibrary) return
-        event.preventDefault()
-        if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
-      }}
-      onDrop={(event) => {
-        if (inLibrary) return
-        event.preventDefault()
-        const draggedSlot = Number(event.dataTransfer?.getData('text/plain'))
-        if (Number.isSafeInteger(draggedSlot) && draggedSlot > 0) nowPlaying.moveMusicSet(draggedSlot, set.slot)
-      }}
-    >
+    <div className="options-curve-row options-music-set-row">
       <div className="options-curve-cell options-curve-display options-music-set-icon" aria-label={factory ? set.name : undefined}>
         {factory
           ? <span className={PLAYLIST_SLOT_ICONS[set.slot as keyof typeof PLAYLIST_SLOT_ICONS]} aria-hidden="true" />
           : musicSetMark(set.name)}
       </div>
       <SetName slot={set.slot} name={set.name} factory={factory} takenNames={sets.map((other) => other.name)} onRename={nowPlaying.renameMusicSet} />
-      {inLibrary ? (
-        <div
-          className="options-curve-cell options-curve-display options-music-set-count"
-          data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
-          aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
-        >
-          {nowPlaying.pool?.counts[set.slot] ?? 0}
-        </div>
-      ) : (
-        <button
-          type="button"
-          className="options-curve-cell options-curve-display options-music-set-count"
-          data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs. Click to list them; hold right-click to empty ${set.name}.`}
-          aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
-          data-secondary-press="action"
-          onClick={() => openMusicLibrary(set.slot)}
-          onPointerDown={(event) => {
-            event.stopPropagation()
-            if (event.button !== 2) return
-            // Emptying a set cannot be undone, so it is a hold (HOLD_COMMIT_MS).
-            event.preventDefault()
-            cancelHold()
-            cancelHoldRef.current = armHold(() => {
-              cancelHoldRef.current = null
-              void nowPlaying.purgeMusicSet(set.slot)
-            }, HOLD_COMMIT_MS)
-          }}
-          onPointerUp={() => { cancelHold() }}
-          onPointerCancel={() => { cancelHold() }}
-          onMouseLeave={() => { cancelHold() }}
-          onContextMenu={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-          }}
-        >
-          {nowPlaying.pool?.counts[set.slot] ?? 0}
-        </button>
-      )}
+      <div
+        className="options-curve-cell options-curve-display options-music-set-count"
+        data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
+        aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
+      >
+        {nowPlaying.pool?.counts[set.slot] ?? 0}
+      </div>
       <button
         type="button"
         className="options-curve-cell options-curve-button"
@@ -237,49 +177,6 @@ export function MusicSetRow({ set, inLibrary = false }: { set: MusicSet; inLibra
       >
         <span className="fa-solid fa-xmark" aria-hidden="true" />
       </button>
-    </div>
-  )
-}
-
-export function MusicSetsOptions() {
-  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
-
-  const sets = nowPlaying.musicSets
-  const rows = sets.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT)
-  const laterSets = sets.slice(MUSIC_SET_QUICK_ACCESS_COUNT)
-
-  return (
-    <div
-      className="options-curve-rows options-music-set-rows"
-      role="group"
-      aria-label="Music sets"
-      // The count column is as wide as the longest count, the same on every row.
-      style={{ '--set-count-digits': Math.max(1, ...sets.map((set) => String(nowPlaying.pool?.counts[set.slot] ?? 0).length)) } as CSSProperties}
-    >
-      {rows.map((set) => <MusicSetRow key={set.slot} set={set} />)}
-      <div className="options-music-set-divider" aria-hidden="true" />
-      {laterSets.map((set) => <MusicSetRow key={set.slot} set={set} />)}
-      <div className="options-curve-row options-music-set-add-row">
-        <button
-          type="button"
-          className={`options-curve-cell options-curve-button options-music-set-show${sets.length === 0 ? ' is-disabled' : ''}`}
-          data-tooltip={sets.length > 0 ? 'Open the Music Library' : undefined}
-          aria-label="Open the Music Library"
-          disabled={sets.length === 0}
-          onClick={() => openMusicLibrary()}
-        >
-          Show songs
-        </button>
-        <button
-          type="button"
-          className="options-curve-cell options-curve-button options-music-set-add"
-          data-tooltip="Add a music set"
-          aria-label="Add a music set"
-          onClick={nowPlaying.createMusicSet}
-        >
-          <span className="fa-solid fa-plus" aria-hidden="true" />
-        </button>
-      </div>
     </div>
   )
 }
