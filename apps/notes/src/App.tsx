@@ -525,18 +525,20 @@ const NO_IMAGE_USES: NoteImageUse[] = []
 const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelectorEntry<SidebarListSection> | typeof SECTION_SELECTOR_GAP>> = {
   // The fourth cell is left empty, so External and Trash sit at the row's end.
   notes: [
-    { id: 'date', label: 'Date', icon: 'fa-solid fa-clock' },
-    { id: 'category', label: 'Category', icon: 'fa-solid fa-tags' },
-    { id: 'archive', label: 'Archive', icon: 'fa-solid fa-box-archive' },
+    { id: 'date', label: 'By date', icon: 'fa-solid fa-clock' },
+    { id: 'category', label: 'By category', icon: 'fa-solid fa-tags' },
+    { id: 'archive', label: 'Note Archive', icon: 'fa-solid fa-box-archive' },
     SECTION_SELECTOR_GAP,
-    { id: 'external', label: 'External', icon: 'fa-solid fa-file-import' },
+    { id: 'external', label: 'External Files', icon: 'fa-solid fa-file-import' },
     { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
   ],
   images: [
-    { id: 'date', label: 'Images in Order', icon: 'fa-solid fa-list-ol' },
-    { id: 'category', label: 'Images by Section', icon: 'fa-solid fa-tags' },
-    { id: 'archive', label: 'Image Archive', icon: 'fa-solid fa-box-archive' },
-    { id: 'trash', label: 'Image Trash', icon: 'fa-solid fa-trash' },
+    { id: 'date', label: 'In note by order', icon: 'fa-solid fa-list-ol' },
+    { id: 'category', label: 'In note by section', icon: 'fa-solid fa-bars-staggered' },
+    { id: 'archive', label: 'Image Vault', icon: 'fa-solid fa-box-archive' },
+    SECTION_SELECTOR_GAP,
+    SECTION_SELECTOR_GAP,
+    { id: 'trash', label: 'Trash', icon: 'fa-solid fa-trash' },
   ],
 }
 
@@ -8474,7 +8476,7 @@ ${markdownHtml}
                 {([
                   { view: 'notes', label: 'Notes', icon: 'fa-solid fa-file-lines' },
                   { view: 'images', label: 'Images', icon: 'fa-solid fa-image' },
-                  { view: 'songs', label: 'Music Library', icon: 'fa-solid fa-music' },
+                  { view: 'songs', label: 'Songs', icon: 'fa-solid fa-compact-disc' },
                 ] as const).map(({ view, label, icon }) => (
                   <button
                     key={view}

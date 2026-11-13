@@ -199,7 +199,7 @@ export const AUDIO_EXTENSIONS = new Set([
 
 /** FA icon classes used for each visible playlist button (bottom row). */
 export const PLAYLIST_SLOT_ICONS: Record<PlaylistButtonSlot, string> = {
-  2: 'fa-solid fa-compact-disc',
+  2: 'fa-solid fa-radio',
   3: 'fa-solid fa-om',
   4: 'fa-solid fa-bolt',
   5: 'fa-solid fa-microchip',
