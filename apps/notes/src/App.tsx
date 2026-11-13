@@ -7446,6 +7446,12 @@ ${markdownHtml}
           ? activeSection?.documentFindHits[0]
           : undefined
         if (firstHit) activeSection?.handleJumpToDocumentFindHit(firstHit)
+        // Leave the field NOW, in either view: scheduling the editor's focus
+        // alone left the keyboard in the field whenever that schedule
+        // declined (the reader view, a slot with no note). Blurred, the focus
+        // reconciler hands the keyboard to the active slot's surface, whatever
+        // that is; the editor's own schedule still follows for the edit view.
+        if (document.activeElement === target) target?.blur()
         activeSection?.scheduleFocusEditorInEditMode()
         return
       }
