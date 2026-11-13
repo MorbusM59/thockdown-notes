@@ -6620,6 +6620,27 @@ ${markdownHtml}
   const isSongsSearchMode = sidebarMode === 'songs'
   const isSoundscapesSearchMode = sidebarMode === 'soundscapes'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
+
+  // Ctrl+F / Ctrl+H ask for the find panel's keyboard before the panel they
+  // asked for is necessarily on screen: the replace row appears only once the
+  // active slot has reported its replace mode back, a render after the
+  // keypress. The request is parked here and taken by the first commit that
+  // shows the panel it names -- immediately, when that is already the case.
+  // Ctrl+H focuses the replace field when the find field already holds a
+  // search (what is left to type is the replacement), the find field otherwise.
+  const pendingFindFocusRef = useRef<'find' | 'replace' | null>(null)
+  const takePendingFindFocus = useCallback(() => {
+    const pending = pendingFindFocusRef.current
+    if (!pending || !isFindMode || isReplaceMode !== (pending === 'replace')) return
+    const findInput = sidebarSearchInputRef.current
+    if (!findInput) return
+    pendingFindFocusRef.current = null
+    const replaceInput = documentReplaceInputRef.current
+    const focusTarget = pending === 'replace' && findInput.value && replaceInput ? replaceInput : findInput
+    focusTarget.focus()
+    focusTarget.select()
+  }, [isFindMode, isReplaceMode])
+  useLayoutEffect(takePendingFindFocus)
   const hasMonthFilter = selectedMonths.size > 0
   const hasYearFilter = selectedYears.size > 0
   const hasDateFilter = hasMonthFilter || hasYearFilter
@@ -7463,10 +7484,8 @@ ${markdownHtml}
         }
         getActiveSection()?.setIsDocumentReplaceMode(wantsReplace)
         showSidebarInMode('find')
-        requestAnimationFrame(() => {
-          sidebarSearchInputRef.current?.focus()
-          sidebarSearchInputRef.current?.select()
-        })
+        pendingFindFocusRef.current = findShortcut
+        takePendingFindFocus()
         return
       }
 
@@ -7723,6 +7742,7 @@ ${markdownHtml}
     isFindMode,
     isImmersiveMode,
     isReplaceMode,
+    takePendingFindFocus,
     isSidebarShown,
     isVisualizerMode,
     markSectionActive,
