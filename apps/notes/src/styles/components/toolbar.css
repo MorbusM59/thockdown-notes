@@ -573,7 +573,12 @@
   font-size: calc(9px * var(--ui-font-scale));
 }
 
+/* overflow: hidden clips at the label's own box, and the cell's line-height
+   of 1 makes that box one em tall, shorter than the glyphs: accents and
+   descenders were cut. A normal line height makes the box hold the glyphs;
+   the cell's flex centring still centres the box vertically. */
 .text-button-label {
+  line-height:   normal;
   min-width:     0;
   white-space:   nowrap;
   overflow:      hidden;
