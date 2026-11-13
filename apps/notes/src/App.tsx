@@ -8304,7 +8304,7 @@ ${markdownHtml}
                   </button>
                 ))}
                 <button
-                  className={`toggle-btn notes-mode-button icon-btn btn-find${isFindMode ? ' is-active' : ''}`}
+                  className={`toggle-btn notes-mode-button icon-btn btn-glyph${isFindMode ? ' is-active' : ''}`}
                   type="button"
                   role="tab"
                   aria-selected={isFindMode}
@@ -8313,7 +8313,9 @@ ${markdownHtml}
                   onClick={() => handleViewModeButtonClick('find')}
                   data-secondary-press="action"
                   onContextMenu={handleFindViewButtonContextMenu}
-                />
+                >
+                  <span className="view-toggle-glyph fa-solid fa-microscope" aria-hidden="true" />
+                </button>
                 <button
                   className={`toggle-btn notes-mode-button icon-btn btn-glyph${sidebarMode === 'options' ? ' is-active' : ''}`}
                   type="button"

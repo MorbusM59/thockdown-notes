@@ -271,35 +271,12 @@
   font-size: var(--btn-icon-size);
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-find {
-  background-image: none;
-}
-
 .notes-sidebar .view-toggle .icon-btn.is-active {
   box-shadow: var(--box-shadow-inverted-harsh-active);
 }
 
-.notes-sidebar .view-toggle .icon-btn.btn-find::before {
-  content: '';
-  position: absolute;
-  inset: 6px;
-  pointer-events: none;
-  background-color: var(--color-text-base);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: contain;
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
-}
-
-.notes-sidebar .view-toggle .icon-btn.btn-find::before {
-  -webkit-mask-image: url('../../assets/buttons/find.png');
-  mask-image: url('../../assets/buttons/find.png');
-}
-
-/* A view button holding a glyph (the Notes, Images and Music Library icons,
-   the options gear) rather than Find's ::before mask icon. The button is
+/* A view button holding a glyph (every view button: the Notes, Images,
+   Music Library and Find icons, the options gear). The button is
    dynamically sized (flex: 1 1 0, see the .view-toggle comment above), so a
    flat px/em font-size would not track it. container-type: inline-size turns
    the button into a query container, and the glyph is sized in cqw (% of the
