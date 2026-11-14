@@ -700,11 +700,6 @@
   column-gap: var(--spacing-small);
 }
 
-/* A lone text button in a dock row takes the whole row. */
-.options-music-set-list-dock-row > .text-button.is-wide {
-  grid-column: 1 / -1;
-}
-
 /* An icon in a micro cell leaves the cell's frame visible around it, as the
    colour picker's channel letters do; a set's initials are two glyphs. */
 .options-curve-cell > .fa-solid {
@@ -768,3 +763,30 @@
   outline:        1px dashed var(--btn-border-default);
   outline-offset: -3px;
   }
+
+/* The Find dock (App.tsx): one row of square chips, the find & replace
+   toggle taking what the row leaves. In replace mode two more chips join it
+   and the toggle narrows by their width. */
+.options-curve-row.find-dock-row {
+  grid-template-columns: 1fr repeat(4, var(--entry-height));
+}
+
+.options-curve-row.find-dock-row.is-replace-mode {
+  grid-template-columns: 1fr repeat(6, var(--entry-height));
+}
+
+/* Turned a quarter counter-clockwise, then mirrored top to bottom (the
+   rightmost transform applies first). */
+.find-dock-mode-icon {
+  transform: scaleY(-1) rotate(-90deg);
+}
+
+.find-dock-replace-icon {
+  transform: rotate(-90deg);
+}
+
+/* "Aa" is a word, set in the UI font rather than drawn as an icon. */
+.options-curve-button.find-dock-case {
+  font-family: var(--ui-font-family);
+  font-weight: 700;
+}

@@ -178,7 +178,6 @@ import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from './sideb
 import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
-import { TextButton } from './components/TextButton'
 import { FieldActionButton } from './components/FieldActionButton'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
@@ -8685,66 +8684,82 @@ ${markdownHtml}
                     // case and whole words, the way into replace mode, and --
                     // there -- its two actions.
                     <div className="sidebar-plain-dock">
-                      <div className="options-curve-rows options-music-set-list-dock" aria-label="Find options">
-                        <div className="options-curve-row options-music-set-list-dock-row">
-                          <TextButton
-                            data-tooltip="Previous occurrence"
-                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(-1))}
-                          >
-                            Previous
-                          </TextButton>
-                          <TextButton
-                            data-tooltip="Next occurrence"
-                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(1))}
-                          >
-                            Next
-                          </TextButton>
-                        </div>
-                        <div className="options-curve-row options-music-set-list-dock-row">
-                          <TextButton
-                            aria-pressed={activeSection?.isDocumentFindCaseSensitive}
-                            isActive={Boolean(activeSection?.isDocumentFindCaseSensitive)}
-                            data-tooltip={isReplaceMode ? 'Re-case each replacement to match what it replaces' : 'Match letter case'}
-                            onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
-                          >
-                            {isReplaceMode ? 'Keep case' : 'Match case'}
-                          </TextButton>
-                          <TextButton
-                            aria-pressed={activeSection?.isDocumentFindWholeWord}
-                            isActive={Boolean(activeSection?.isDocumentFindWholeWord)}
-                            data-tooltip="Match whole words only"
-                            onClick={() => getActiveSection()?.setIsDocumentFindWholeWord((previous: boolean) => !previous)}
-                          >
-                            Whole word
-                          </TextButton>
-                        </div>
-                        <div className="options-curve-row options-music-set-list-dock-row">
-                          <TextButton
-                            className="is-wide"
+                      <div className="options-curve-rows options-music-set-list-dock">
+                        {/* One row of chips: the mode toggle takes what the
+                            row leaves, replace mode's two actions beside it,
+                            then the square toggles and the stepping. */}
+                        <div className={`options-curve-row find-dock-row${isReplaceMode ? ' is-replace-mode' : ''}`}>
+                          <button
+                            type="button"
+                            className={`options-curve-cell options-curve-button options-dock-entry-icon${isReplaceMode ? ' is-active' : ''}`}
                             aria-pressed={isReplaceMode}
-                            isActive={isReplaceMode}
+                            aria-label="Find and replace"
                             data-tooltip={isReplaceMode ? 'Back to find only' : 'Find and replace'}
                             onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
                           >
-                            Replace...
-                          </TextButton>
+                            <span className="fa-solid fa-arrow-down-up-across-line find-dock-mode-icon" aria-hidden="true" />
+                          </button>
+                          {isReplaceMode ? (
+                            <>
+                              <button
+                                type="button"
+                                className="options-curve-cell options-curve-button options-dock-entry-icon"
+                                aria-label="Replace"
+                                data-tooltip="Replace the marked occurrence"
+                                onClick={() => showFindHitPage(getActiveSection()?.replaceSelectedDocumentFindHit())}
+                              >
+                                <span className="fa-solid fa-arrow-turn-down find-dock-replace-icon" aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                className="options-curve-cell options-curve-button options-dock-entry-icon"
+                                aria-label="Replace all"
+                                data-tooltip="Replace every occurrence"
+                                onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
+                              >
+                                <span className="fa-solid fa-arrows-turn-right" aria-hidden="true" />
+                              </button>
+                            </>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={`options-curve-cell options-curve-button options-dock-entry-icon${activeSection?.isDocumentFindWholeWord ? ' is-active' : ''}`}
+                            aria-pressed={Boolean(activeSection?.isDocumentFindWholeWord)}
+                            aria-label="Whole word"
+                            data-tooltip="Match whole words only"
+                            onClick={() => getActiveSection()?.setIsDocumentFindWholeWord((previous: boolean) => !previous)}
+                          >
+                            <span className="fa-solid fa-arrows-left-right-to-line" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className={`options-curve-cell options-curve-button options-dock-entry-icon find-dock-case${activeSection?.isDocumentFindCaseSensitive ? ' is-active' : ''}`}
+                            aria-pressed={Boolean(activeSection?.isDocumentFindCaseSensitive)}
+                            aria-label={isReplaceMode ? 'Keep case' : 'Match case'}
+                            data-tooltip={isReplaceMode ? 'Keep the case of what is replaced' : 'Match case'}
+                            onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
+                          >
+                            Aa
+                          </button>
+                          <button
+                            type="button"
+                            className="options-curve-cell options-curve-button options-dock-entry-icon"
+                            aria-label="Previous occurrence"
+                            data-tooltip="Previous occurrence"
+                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(-1))}
+                          >
+                            <span className="fa-solid fa-caret-left" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="options-curve-cell options-curve-button options-dock-entry-icon"
+                            aria-label="Next occurrence"
+                            data-tooltip="Next occurrence"
+                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(1))}
+                          >
+                            <span className="fa-solid fa-caret-right" aria-hidden="true" />
+                          </button>
                         </div>
-                        {isReplaceMode ? (
-                          <div className="options-curve-row options-music-set-list-dock-row">
-                            <TextButton
-                              data-tooltip="Replace the marked occurrence"
-                              onClick={() => showFindHitPage(getActiveSection()?.replaceSelectedDocumentFindHit())}
-                            >
-                              Replace
-                            </TextButton>
-                            <TextButton
-                              data-tooltip="Replace every occurrence"
-                              onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
-                            >
-                              Replace all
-                            </TextButton>
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   ) : null}

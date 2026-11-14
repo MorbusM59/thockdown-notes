@@ -650,14 +650,14 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Finds and optionally replaces text within the single open note.*
 
-- \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode, or the dock's **Replace...** below the list.
+- \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode, or the wide button in the dock below the list.
 - \`Enter\` in the find field (or, in replace mode, the replace field) marks the first match.
 - \`Tab\` moves between the find and replace fields.
-- \`Ctrl+Enter\` replaces every match at once, as do the dock's **Replace all** and a right-click on the sidebar's Find icon; **Replace** replaces the marked match, or marks the next one.
-- The dock's **Match case** means "case-sensitive" in plain find mode; in replace mode it reads **Keep case**, searching case-insensitively but re-casing each replacement to match what it's replacing.
-- **Whole word** finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
-- **Previous** and **Next** step through the matches, wrapping at either end.
-- Past 100 matches the list is shown a page at a time; **Previous** and **Next** turn the page as they go.
+- \`Ctrl+Enter\` replaces every match at once, as do the dock's replace-all button and a right-click on the sidebar's Find icon; its replace button replaces the marked match, or marks the next one.
+- The dock's **Aa** means "case-sensitive" in plain find mode; in replace mode it means *keep case*, searching case-insensitively but re-casing each replacement to match what it's replacing.
+- Its whole-word toggle finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
+- Its two arrows step through the matches, wrapping at either end.
+- Past 100 matches the list is shown a page at a time; the arrows turn the page as they go.
 - What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,
