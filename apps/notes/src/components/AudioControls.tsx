@@ -1059,7 +1059,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn audio-wide-btn${isPlaying ? ' is-active' : ''}`}
-          data-tooltip={`${songLabel}\n[Right] Skip ${MUSIC_SKIP_SEC / 60} minutes, or the next song near the end\n[Hold right] Next song`}
+          data-tooltip={`${songLabel}\n[Right] Skip forward\n[Hold right] Next song`}
           aria-label={isPlaying ? 'Pause music' : 'Play music'}
           aria-pressed={isPlaying}
           onClick={() => {
