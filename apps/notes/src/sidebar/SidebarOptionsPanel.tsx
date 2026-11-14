@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BUNDLED_DICTIONARIES, type SpellCheckDictionary } from '../shared/spellCheck'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
-import { UnsavedPresetButton } from '@thockdown/interaction/UnsavedPresetButton'
+import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { FontControls, FontSection } from './FontSection'
 import { OptionsSectionBar } from './OptionsSectionBar'
@@ -220,8 +220,7 @@ import {
   DEFAULT_GLAZE_SETTINGS,
   type GlazeSettings,
 } from '@thockdown/look/glaze'
-import { LOADOUT_FIRST_CUSTOM_ID_ABS, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
-import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
+import { idKind, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
 import { KEYSTROKE_SOUND_RANGES, type ActiveKeystrokeSound, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
 import { KeystrokeSoundOptions } from './KeystrokeSoundOptions'
@@ -457,16 +456,10 @@ export interface SidebarOptionsPanelProps {
   activeEntryForCurrentMode: UiLoadoutEntry | null
   selectLoadoutPreset: (id: number) => Promise<void>
   customSlotEntriesForCurrentMode: UiLoadoutEntry[]
-  primedCustomLayoutId: number | null
-  handleCustomLoadoutSlotClick: (id: number) => void
+  createLoadout: () => Promise<void>
   handleCustomLoadoutSlotRightPointerDown: (event: PointerEvent<HTMLButtonElement>, id: number) => void
-  handleCustomLoadoutSlotRightPointerUp: (event: PointerEvent<HTMLButtonElement>, id: number) => void
-  handleCustomLoadoutSlotPointerLeave: () => void
+  cancelCustomLoadoutExportHold: () => void
   handleCustomLoadoutSlotContextMenu: (event: MouseEvent<HTMLButtonElement>) => void
-  hasUnsavedUiLoadoutChanges: boolean
-  saveCustomLoadout: () => Promise<void>
-  isUnsavedLoadoutShown: boolean
-  selectUnsavedLoadout: () => void
 
   highlightColors: HighlightColors
   setHighlightColorCss: (key: HighlightColorKey, css: string) => void
@@ -710,16 +703,10 @@ export function SidebarOptionsPanel({
   activeEntryForCurrentMode,
   selectLoadoutPreset,
   customSlotEntriesForCurrentMode,
-  primedCustomLayoutId,
-  handleCustomLoadoutSlotClick,
+  createLoadout,
   handleCustomLoadoutSlotRightPointerDown,
-  handleCustomLoadoutSlotRightPointerUp,
-  handleCustomLoadoutSlotPointerLeave,
+  cancelCustomLoadoutExportHold,
   handleCustomLoadoutSlotContextMenu,
-  hasUnsavedUiLoadoutChanges,
-  saveCustomLoadout,
-  isUnsavedLoadoutShown,
-  selectUnsavedLoadout,
   highlightColors,
   setHighlightColorCss,
   setEditorTextColorCss,
@@ -1371,60 +1358,40 @@ export function SidebarOptionsPanel({
           the saved layouts, then the unsaved changes while there are any. */}
       <OptionsFixedSection className="sidebar-options-section-layout-presets" heading="Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
         <div className="options-loadout-grid" role="group" aria-label="Layout presets">
-          {factoryPresetEntriesForCurrentMode.map((entry) => {
-            const presetIcons = uiMode === 'dark' ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS
-            const presetThemes = uiMode === 'dark' ? DARK_PRESET_THEMES : LIGHT_PRESET_THEMES
-            const icon = presetIcons[Math.abs(entry.id) - 1] ?? 'fa-solid fa-circle'
-            const theme = presetThemes[Math.abs(entry.id) - 1] ?? 'None'
+          {[...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode].map((entry) => {
+            const isCustom = idKind(entry.id) === 'custom'
             return (
               <button
-                key={`preset-${entry.id}`}
+                key={entry.id}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id && !hasUnsavedUiLoadoutChanges ? ' is-active' : ''}`}
-                data-tooltip={theme}
-                aria-label={theme}
+                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
+                data-tooltip={isCustom ? `${entry.name}\nHold right-click to export.` : entry.name}
+                aria-label={entry.name}
+                aria-pressed={activeEntryForCurrentMode?.id === entry.id}
                 onClick={() => void selectLoadoutPreset(entry.id)}
-              >
-                <span className={icon} aria-hidden="true" />
-              </button>
-            )
-          })}
-          {customSlotEntriesForCurrentMode.map((entry) => {
-            const number = Math.abs(entry.id) - LOADOUT_FIRST_CUSTOM_ID_ABS + 1
-            return (
-              <button
-                key={`custom-${entry.id}`}
-                type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id && !hasUnsavedUiLoadoutChanges ? ' is-active' : ''}${primedCustomLayoutId === entry.id ? ' primed' : ''}`}
-                aria-label={primedCustomLayoutId === entry.id ? `Delete Layout ${number}` : `Layout ${number}`}
-                data-tooltip={primedCustomLayoutId === entry.id ? `Click to delete Layout ${number}` : `Layout ${number}\nRight-click to mark for deletion, then click.\nHold right-click to export.`}
-                onClick={() => {
-                  handleCustomLoadoutSlotClick(entry.id)
-                }}
-                onPointerDown={(event) => {
-                  handleCustomLoadoutSlotRightPointerDown(event, entry.id)
-                }}
-                onPointerUp={(event) => {
-                  handleCustomLoadoutSlotRightPointerUp(event, entry.id)
-                }}
-                onPointerCancel={handleCustomLoadoutSlotPointerLeave}
-                onPointerLeave={handleCustomLoadoutSlotPointerLeave}
-                data-secondary-press="action"
+                {...(isCustom ? {
+                  onPointerDown: (event: PointerEvent<HTMLButtonElement>) => handleCustomLoadoutSlotRightPointerDown(event, entry.id),
+                  onPointerUp: cancelCustomLoadoutExportHold,
+                  onPointerCancel: cancelCustomLoadoutExportHold,
+                  onPointerLeave: cancelCustomLoadoutExportHold,
+                } : {})}
+                data-secondary-press={isCustom ? 'action' : 'none'}
                 onContextMenu={handleCustomLoadoutSlotContextMenu}
               >
-                <span className="options-loadout-index">{number}</span>
+                <PresetMark preset={entry} />
               </button>
             )
           })}
-          {isUnsavedLoadoutShown ? (
-            <UnsavedPresetButton
-              active={hasUnsavedUiLoadoutChanges}
-              noun="layout"
-              canSave={customSlotEntriesForCurrentMode.length < LOADOUT_MAX_CUSTOM_SLOTS}
-              onSelect={selectUnsavedLoadout}
-              onSave={() => void saveCustomLoadout()}
-            />
-          ) : null}
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus"
+            aria-label="Create a layout"
+            data-tooltip={customSlotEntriesForCurrentMode.length < LOADOUT_MAX_CUSTOM_SLOTS ? 'Create a layout\nA copy of the one in use.' : 'No room for another layout.'}
+            disabled={customSlotEntriesForCurrentMode.length >= LOADOUT_MAX_CUSTOM_SLOTS}
+            onClick={() => void createLoadout()}
+          >
+            <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
+          </button>
         </div>
       </OptionsFixedSection>
 

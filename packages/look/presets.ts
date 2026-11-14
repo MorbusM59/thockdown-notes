@@ -194,7 +194,7 @@ export const LIGHT_PRESET_ICONS: string[] = [
   'fa-solid fa-sun',
   'fa-solid fa-mound',
   'fa-solid fa-cloud',
-  'fa-regular fa-file',
+  'fa-solid fa-file-lines',
   'fa-solid fa-ring',
 ]
 
@@ -222,6 +222,18 @@ export const DARK_PRESET_THEMES: string[] = [
   'Bubblegum',
   'Metal',
 ]
+
+/** A factory layout's shipped name, by its signed id ("(Default)" left off). */
+export function factoryLayoutName(id: number): string {
+  const names = id > 0 ? LIGHT_PRESET_THEMES : DARK_PRESET_THEMES
+  return (names[Math.abs(id) - 1] ?? 'Layout').replace(/ \(Default\)$/, '')
+}
+
+/** A factory layout's shipped icon, by its signed id, without its style class (`fa-sun`). */
+export function factoryLayoutIcon(id: number): string | null {
+  const icons = id > 0 ? LIGHT_PRESET_ICONS : DARK_PRESET_ICONS
+  return icons[Math.abs(id) - 1]?.replace(/^fa-solid /, '') ?? null
+}
 
 // --- Placeholder factory presets -------------------------------------------
 // Each preset is based on neutral base with only changed values specified.

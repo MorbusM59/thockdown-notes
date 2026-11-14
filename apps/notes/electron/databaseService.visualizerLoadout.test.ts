@@ -48,8 +48,8 @@ describe('DatabaseService visualizer loadout', () => {
   })
 
   it('round-trips the visualizer through a real restart', async () => {
-    db.updatePendingUiLoadout('light', layout)
-    db.saveCustomUiLoadout('light')
+    db.createUiLoadout('light')
+    db.editActiveUiLoadout('light', layout)
     db.close()
     const reopened = new DatabaseService(dataRoot)
     await reopened.initialize()
@@ -62,8 +62,8 @@ describe('DatabaseService visualizer loadout', () => {
   })
 
   it('carries the visualizer through a .tdl export/import cycle', async () => {
-    db.updatePendingUiLoadout('light', layout)
-    db.saveCustomUiLoadout('light')
+    db.createUiLoadout('light')
+    db.editActiveUiLoadout('light', layout)
     const tdl = db.buildTdlContent()
     const freshRoot = mkdtempSync(path.join(tmpdir(), 'thockdown-visualizer-tdl-test-'))
     const fresh = new DatabaseService(freshRoot)
@@ -87,8 +87,8 @@ describe('DatabaseService visualizer loadout', () => {
       pane: { effect: 0.5, mix: { thump: 0, pierce: 0.3, tick: 1 }, shape: 0.7, fallSec: 1.2, color: 'rgba(200, 100, 50, 0.25)' },
       immersive: { glazeStrength: 0.15, waveColor: 'rgba(10, 200, 90, 0.3)', waveBoxes: 40, pulseColor: 'rgba(1, 2, 3, 0.4)', accentColor: '', letterboxColor: 'rgba(5, 6, 7, 1)' },
     }
-    db.updatePendingUiLoadout('light', layout)
-    db.saveCustomUiLoadout('light')
+    db.createUiLoadout('light')
+    db.editActiveUiLoadout('light', layout)
     // Written raw, as such a row sits in an existing database: the normalizer would drop the legacy field on any write.
     const { visualizerColors: _colors, ...withoutNew } = NEUTRAL_BASE
     const activeId = db.listUiLoadouts().entries.find((row) => row.id > 0 && row.isActive)!.id

@@ -790,12 +790,12 @@ ${shortcutTable()}
 > **Where?**
 > Settings panel → Layouts → Presets.
 
-*The built-in light and dark presets, then your own saved layouts, in one list.*
+*The built-in light and dark presets, then your own layouts, in one list.*
 
-- Change anything and a **plus** appears at the end of the list: that is your unsaved layout. You can try another preset and click the plus to come back to it.
-- Hold the plus to save it as a new numbered layout, which takes its place.
-- Right-click a saved layout to arm it for deletion, then click it to delete; hold right-click to export it. Deleting the layout you are using keeps it on screen as unsaved changes.
-- Music and Keystroke Sounds have Presets that work the same way. Soundscapes work differently: see Soundscapes.
+- **There is nothing to save**: anything you change is kept in the layout you are using, built-in ones included. The plus makes a new layout of your own, a copy of the one in use.
+- The row at the bottom of the sidebar is the layout in use, and works as the Soundscapes one does: click its icon to pick another, right-click its name to rename it, click the turning arrow to reset it to the neutral layout, and hold the last button to trash one of your own or restore a built-in one as shipped.
+- Hold right-click on one of your own layouts to export it.
+- Soundstages work the same way.
 
 ### [Quick Access](#quick-access)
 

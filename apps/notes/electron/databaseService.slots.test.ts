@@ -4,10 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
-import { DatabaseService } from './databaseService'
+import { DatabaseService, normalizeUiLayoutLoadout } from './databaseService'
+import { stableStringify } from '@thockdown/soundscape/presetFile'
 import { DEFAULT_EDITOR_SECTION_ID } from '../src/shared/sections'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
-import { unsavedLoadoutEntry } from '@thockdown/look/loadouts'
 
 /**
  * Slot geometry (docs/user-workflow-design.md §1.4): a slot is the
@@ -200,7 +200,8 @@ describe('DatabaseService editor slots', () => {
     db.addNoteTab(namedSection.id, 'named-note')
     db.addNoteTab(transientSection.id, 'transient-note')
     db.addNoteTab(transientSection.id, 'default-note')
-    db.updatePendingUiLoadout('light', { ...LIGHT_FACTORY_PRESETS[0], borderRadiusRegularPx: 19 })
+    db.editActiveUiLoadout('light', { ...LIGHT_FACTORY_PRESETS[0], borderRadiusRegularPx: 19 })
+    db.renameUiLoadout(1, 'Mine')
 
     db.close()
     const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
@@ -257,8 +258,8 @@ describe('DatabaseService editor slots', () => {
     expect(loadouts.entries.find((entry) => entry.id === 1)?.isActive).toBe(true)
     expect(loadouts.entries.find((entry) => entry.id === 1)?.payload).toEqual(LIGHT_FACTORY_PRESETS[0])
     expect(loadouts.entries.some((entry) => Math.abs(entry.id) === 6)).toBe(false)
-    expect(unsavedLoadoutEntry(loadouts.entries, 'light')).toBeNull()
-    expect(loadouts.entries.find((entry) => entry.id === 7)?.isActive).toBe(false)
+    expect(loadouts.entries.find((entry) => entry.id === 1)).toMatchObject({ edited: false, name: 'Light', icon: 'fa-sun' })
+    expect(loadouts.entries.some((entry) => Math.abs(entry.id) === 7)).toBe(false)
     expect(loadouts.entries.find((entry) => entry.id === -1)?.isActive).toBe(true)
     expect(loadouts.entries.find((entry) => entry.id === -1)?.payload).toEqual(DARK_FACTORY_PRESETS[0])
   })
@@ -280,39 +281,56 @@ describe('DatabaseService editor slots', () => {
     })
   })
 
-  it('keeps the unsaved changes as their own preset until they are saved', () => {
+  it('writes edits into the layout in use, keeps a factory edit until restored, and copies the one in use', async () => {
     const edited = { ...LIGHT_FACTORY_PRESETS[0], borderRadiusRegularPx: 19, filterContrast: 1.9 }
-    const shown = () => unsavedLoadoutEntry(db.listUiLoadouts().entries, 'light')
-    const active = () => db.listUiLoadouts().entries.find((entry) => entry.id > 0 && entry.isActive)!.id
+    const entry = (id: number) => db.listUiLoadouts().entries.find((row) => row.id === id)!
+    const active = () => db.listUiLoadouts().entries.find((row) => row.id > 0 && row.isActive)!.id
 
-    expect(shown()).toBeNull()
-    db.updatePendingUiLoadout('light', edited)
-    expect(shown()?.payload).toEqual(edited)
-    expect(active()).toBe(7)
+    db.editActiveUiLoadout('light', edited)
+    expect(entry(1)).toMatchObject({ payload: edited, edited: true, name: 'Light' })
 
-    // Trying another preset keeps them, and they can be selected again.
-    db.setActiveUiLoadout(2)
-    expect(shown()?.payload).toEqual(edited)
-    db.setActiveUiLoadout(7)
-    expect(active()).toBe(7)
+    // An edited factory layout survives a restart; an unedited one is rewritten.
+    db.close()
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    expect(entry(1).payload).toEqual(edited)
 
-    // Editing back to a preset: that preset is active and nothing is unsaved.
-    db.updatePendingUiLoadout('light', LIGHT_FACTORY_PRESETS[2])
-    expect(active()).toBe(3)
-    expect(shown()).toBeNull()
-
-    // Saving takes the plus's place, active, and the plus goes.
-    db.updatePendingUiLoadout('light', edited)
-    db.saveCustomUiLoadout('light')
+    // The plus copies the layout in use under the first free name, active.
+    db.createUiLoadout('light')
     expect(active()).toBe(8)
-    expect(shown()).toBeNull()
-    // Nothing unsaved: a second save adds nothing.
-    db.saveCustomUiLoadout('light')
-    expect(db.listUiLoadouts().entries.filter((entry) => entry.id >= 8)).toHaveLength(1)
+    expect(entry(8)).toMatchObject({ payload: edited, name: 'Layout A', icon: null, edited: false })
+    db.createUiLoadout('light')
+    expect(entry(9).name).toBe('Layout B')
 
-    // Deleting the layout on screen keeps the screen: it becomes unsaved.
-    db.deleteCustomUiLoadout(8)
-    expect(active()).toBe(7)
-    expect(shown()?.payload).toEqual(edited)
+    // Names are unique per mode, case aside.
+    db.renameUiLoadout(9, 'layout a')
+    expect(entry(9).name).toBe('Layout B')
+    db.renameUiLoadout(9, 'Night')
+    db.setUiLoadoutIcon(9, 'fa-moon')
+    expect(entry(9)).toMatchObject({ name: 'Night', icon: 'fa-moon' })
+
+    // Deleting the layout in use makes the one before it active.
+    db.deleteCustomUiLoadout(9)
+    expect(active()).toBe(8)
+
+    // Restoring brings a factory layout back as shipped.
+    db.restoreFactoryUiLoadout(1)
+    expect(entry(1)).toMatchObject({ payload: LIGHT_FACTORY_PRESETS[0], edited: false, name: 'Light', icon: 'fa-sun' })
+  })
+
+  it('retires the old unsaved-changes row, keeping its look as a layout of the reader\'s own when it was in use', async () => {
+    const look = { ...LIGHT_FACTORY_PRESETS[0], borderRadiusRegularPx: 17 }
+    const normalized = normalizeUiLayoutLoadout(look)!
+    db.close()
+    const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
+    rawDb.prepare('UPDATE ui_loadout_entries SET isActive = 0 WHERE id > 0').run()
+    rawDb.prepare('INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt) VALUES (7, 1, ?, ?, 0)')
+      .run(stableStringify(normalized), JSON.stringify(normalized))
+    rawDb.close()
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    const entries = db.listUiLoadouts().entries
+    expect(entries.some((row) => row.id === 7)).toBe(false)
+    expect(entries.find((row) => row.id > 0 && row.isActive)).toMatchObject({ id: 8, name: 'Layout A', payload: normalized })
   })
 })

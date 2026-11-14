@@ -24,7 +24,7 @@ import {
   idMode,
   modeSign,
   LOADOUT_FACTORY_PRESET_COUNT,
-  LOADOUT_PENDING_ID_ABS,
+  LOADOUT_RETIRED_PENDING_ID_ABS,
   LOADOUT_FIRST_CUSTOM_ID_ABS,
   LOADOUT_MAX_CUSTOM_SLOTS,
   FALLBACK_SPELL_CHECK_COLOR,
@@ -34,7 +34,10 @@ import {
   DARK_FACTORY_PRESETS,
   NEUTRAL_BASE,
   NEUTRAL_LOADOUT,
+  factoryLayoutIcon,
+  factoryLayoutName,
 } from '@thockdown/look/presets';
+import { firstFreePresetName, PRESET_ICON_PATTERN, PRESET_NAME_MAX_LENGTH } from '@thockdown/interaction/presetList';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel } from '@thockdown/look/boxBevel';
 import { defaultVisualizerColors, sanitizeVisualizerColors } from '@thockdown/look/visualizer';
@@ -385,7 +388,13 @@ type UiLoadoutEntryRow = {
   signature: string;
   payloadJson: string;
   updatedAt: number;
+  /** Null on a factory row as shipped: its name and icon are presets.ts's. */
+  name: string | null;
+  icon: string | null;
+  edited: number;
 };
+
+const LOADOUT_ROW_COLUMNS = 'id, isActive, signature, payloadJson, updatedAt, name, icon, edited';
 
 function normalizeTextureCacheRequest(request: TextureCacheRequest): NormalizedTextureCacheRequest {
   return {
@@ -1697,14 +1706,14 @@ export class DatabaseService {
       const payloadJson = JSON.stringify(normalized);
       const sign = modeSign(mode);
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
+      // The factory layouts go back to as shipped with everything else.
+      db.prepare(`UPDATE ui_loadout_entries SET edited = 0, name = NULL, icon = NULL WHERE ABS(id) <= ?`)
+        .run(LOADOUT_FACTORY_PRESET_COUNT);
       db.prepare(`
         UPDATE ui_loadout_entries
         SET isActive = 1, signature = ?, payloadJson = ?, updatedAt = ?
         WHERE id = ?
       `).run(signature, payloadJson, timestamp, id);
-      // The unsaved changes go with everything else: equal to the preset.
-      db.prepare(`UPDATE ui_loadout_entries SET signature = ?, payloadJson = ?, updatedAt = ? WHERE id = ?`)
-        .run(signature, payloadJson, timestamp, LOADOUT_PENDING_ID_ABS * sign);
     };
 
     activateFactoryPreset('light', LIGHT_FACTORY_PRESETS[0], 1);
@@ -2993,12 +3002,6 @@ export class DatabaseService {
 
       LIGHT_FACTORY_PRESETS.forEach((preset, index) => seedRow(index + 1, preset, index === 0));
       DARK_FACTORY_PRESETS.forEach((preset, index) => seedRow(-(index + 1), preset, index === 0));
-
-      // The unsaved row starts as a copy of the first preset, which it
-      // therefore matches: no unsaved changes are shown until something
-      // differs from every row (see loadouts.ts, "unsaved").
-      seedRow(LOADOUT_PENDING_ID_ABS, LIGHT_FACTORY_PRESETS[0], false);
-      seedRow(-LOADOUT_PENDING_ID_ABS, DARK_FACTORY_PRESETS[0], false);
     });
 
     tx();
@@ -3008,14 +3011,14 @@ export class DatabaseService {
   private refreshHardcodedLoadoutRows(): void {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, signature, payloadJson
+      SELECT id, signature, payloadJson, edited
       FROM ui_loadout_entries
       WHERE ABS(id) <= ?
-    `).all(LOADOUT_FACTORY_PRESET_COUNT) as Array<{ id: number; signature: string; payloadJson: string }>;
+    `).all(LOADOUT_FACTORY_PRESET_COUNT) as Array<{ id: number; signature: string; payloadJson: string; edited: number }>;
 
-    const existing = new Map<number, { signature: string; payloadJson: string }>();
+    const existing = new Map<number, { signature: string; payloadJson: string; edited: number }>();
     for (const row of rows) {
-      existing.set(row.id, { signature: row.signature, payloadJson: row.payloadJson });
+      existing.set(row.id, { signature: row.signature, payloadJson: row.payloadJson, edited: row.edited });
     }
 
     const updateStmt = db.prepare(`
@@ -3042,7 +3045,8 @@ export class DatabaseService {
 
         const row = existing.get(id);
         if (row) {
-          if (row.signature !== signature || row.payloadJson !== payloadJson) {
+          // An edited factory layout is the reader's until restored.
+          if (row.edited !== 1 && (row.signature !== signature || row.payloadJson !== payloadJson)) {
             updateStmt.run(signature, payloadJson, timestamp, id);
           }
           continue;
@@ -3054,6 +3058,66 @@ export class DatabaseService {
 
     upsert();
     this.retireDefaultCustomRows();
+    this.retirePendingRows();
+  }
+
+  /**
+   * Rows +/-7 held the unsaved changes, which the preset list no longer has.
+   * A database that still has them loses them here: an active one whose look
+   * equals another row of its mode activates that row, and one that equals
+   * none becomes a layout of the reader's own, so the screen does not change.
+   */
+  private retirePendingRows(): void {
+    const db = this.requireDb();
+    const retired = db.prepare(`SELECT id, isActive, signature, payloadJson FROM ui_loadout_entries WHERE ABS(id) = ?`)
+      .all(LOADOUT_RETIRED_PENDING_ID_ABS) as Array<{ id: number; isActive: number; signature: string; payloadJson: string }>;
+    if (retired.length === 0) return;
+    const tx = db.transaction(() => {
+      for (const row of retired) {
+        db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(row.id);
+        if (row.isActive !== 1) continue;
+        const sign = row.id > 0 ? 1 : -1;
+        const match = db.prepare(`SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 ORDER BY ABS(id) LIMIT 1`)
+          .get(row.signature, sign) as { id: number } | undefined;
+        if (match) {
+          db.prepare(`UPDATE ui_loadout_entries SET isActive = 1 WHERE id = ?`).run(match.id);
+          continue;
+        }
+        const id = this.nextCustomLoadoutId(sign);
+        if (id === null) {
+          db.prepare(`UPDATE ui_loadout_entries SET isActive = 1 WHERE id = ?`).run(sign);
+          continue;
+        }
+        db.prepare(`
+          INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt, name)
+          VALUES (?, 1, ?, ?, ?, ?)
+        `).run(id, row.signature, row.payloadJson, Date.now(), this.defaultLoadoutName(sign));
+      }
+    });
+    tx();
+  }
+
+  /** The first free custom id of a mode, or null when the list is full. */
+  private nextCustomLoadoutId(sign: 1 | -1): number | null {
+    const used = new Set((this.requireDb().prepare(`
+      SELECT id FROM ui_loadout_entries WHERE id * ? > 0 AND ABS(id) >= ?
+    `).all(sign, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number }[]).map((row) => Math.abs(row.id)));
+    if (used.size >= LOADOUT_MAX_CUSTOM_SLOTS) return null;
+    let abs = LOADOUT_FIRST_CUSTOM_ID_ABS;
+    while (used.has(abs)) abs += 1;
+    return abs * sign;
+  }
+
+  /** Every layout name of a mode, as shown. */
+  private loadoutNames(sign: 1 | -1, exceptId?: number): string[] {
+    return this.buildListResult().entries
+      .filter((entry) => entry.id * sign > 0 && entry.id !== exceptId)
+      .map((entry) => entry.name);
+  }
+
+  /** The first free "Layout A", "Layout B", ... of a mode. */
+  private defaultLoadoutName(sign: 1 | -1): string {
+    return firstFreePresetName('Layout', this.loadoutNames(sign));
   }
 
   /**
@@ -3078,7 +3142,7 @@ export class DatabaseService {
             normalized = DEFAULT_UI_LAYOUT_LOADOUT;
           }
           db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, signature = ?, payloadJson = ? WHERE id = ?`)
-            .run(stableStringify(normalized), JSON.stringify(normalized), LOADOUT_PENDING_ID_ABS * sign);
+            .run(stableStringify(normalized), JSON.stringify(normalized), LOADOUT_RETIRED_PENDING_ID_ABS * sign);
         }
         db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(row.id);
       }
@@ -3155,7 +3219,7 @@ export class DatabaseService {
   private readLoadoutRow(id: number): UiLoadoutEntry | null {
     const db = this.requireDb();
     const row = db.prepare(`
-      SELECT id, isActive, signature, payloadJson, updatedAt
+      SELECT ${LOADOUT_ROW_COLUMNS}
       FROM ui_loadout_entries WHERE id = ?
     `).get(id) as UiLoadoutEntryRow | undefined;
     if (!row) return null;
@@ -3175,13 +3239,16 @@ export class DatabaseService {
       signature: stableStringify(payload),
       payload,
       updatedAt: row.updatedAt,
+      name: row.name ?? factoryLayoutName(row.id),
+      icon: row.name === null && row.icon === null && idKind(row.id) === 'factory' ? factoryLayoutIcon(row.id) : row.icon,
+      edited: idKind(row.id) === 'factory' && row.edited === 1,
     };
   }
 
   private buildListResult(): UiLoadoutListResult {
     const db = this.requireDb();
     const rows = db.prepare(`
-      SELECT id, isActive, signature, payloadJson, updatedAt
+      SELECT ${LOADOUT_ROW_COLUMNS}
       FROM ui_loadout_entries
       ORDER BY id ASC
     `).all() as UiLoadoutEntryRow[];
@@ -3200,104 +3267,65 @@ export class DatabaseService {
     this.ensureLoadoutsSeeded();
     const db = this.requireDb();
     const targetId = typeof id === 'number' && Number.isInteger(id) ? id : null;
-    if (targetId === null) return this.buildListResult();
-
-    const existing = this.readLoadoutRow(targetId);
-    if (!existing) return this.buildListResult();
-
-    const mode: UiLoadoutMode = idMode(targetId);
-    const sign = modeSign(mode);
-    const timestamp = Date.now();
-
+    if (targetId === null || !this.readLoadoutRow(targetId)) return this.buildListResult();
+    const sign = modeSign(idMode(targetId));
     const tx = db.transaction(() => {
       db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
-      // The unsaved row is left as it is: its button stays, so the reader
-      // can go back to those changes.
-      db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, targetId);
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(Date.now(), targetId);
     });
-
     tx();
     return this.buildListResult();
   }
 
-  updatePendingUiLoadout(mode: unknown, loadout: unknown): UiLoadoutListResult {
+  /** The active row of a mode (one always is; the first factory row otherwise). */
+  private activeLoadoutId(sign: 1 | -1): number {
+    const row = this.requireDb().prepare(`SELECT id FROM ui_loadout_entries WHERE isActive = 1 AND id * ? > 0 LIMIT 1`)
+      .get(sign) as { id: number } | undefined;
+    return row?.id ?? sign;
+  }
+
+  /** Marks a row changed by the reader: a factory row keeps its name and icon from now on. */
+  private markLoadoutEdited(id: number): void {
+    if (idKind(id) !== 'factory') return;
+    const entry = this.readLoadoutRow(id);
+    if (!entry || entry.edited) return;
+    this.requireDb().prepare(`UPDATE ui_loadout_entries SET edited = 1, name = ?, icon = ? WHERE id = ?`)
+      .run(entry.name, entry.icon, id);
+  }
+
+  editActiveUiLoadout(mode: unknown, loadout: unknown): UiLoadoutListResult {
     this.ensureLoadoutsSeeded();
-    const db = this.requireDb();
-    const normalizedMode: UiLoadoutMode = mode === 'dark' ? 'dark' : 'light';
     const normalized = normalizeUiLayoutLoadout(loadout);
     if (!normalized) return this.buildListResult();
-
-    const sign = modeSign(normalizedMode);
-    const pendingId = LOADOUT_PENDING_ID_ABS * sign;
+    const sign = modeSign(mode === 'dark' ? 'dark' : 'light');
+    const id = this.activeLoadoutId(sign);
     const signature = stableStringify(normalized);
-    const payloadJson = JSON.stringify(normalized);
-    const timestamp = Date.now();
-
+    if (this.readLoadoutRow(id)?.signature === signature) return this.buildListResult();
+    const db = this.requireDb();
     const tx = db.transaction(() => {
-      // Does this payload match an existing row for this mode? If so,
-      // collapse into that match instead of treating it as new pending data.
-      const match = db.prepare(`
-        SELECT id FROM ui_loadout_entries
-        WHERE signature = ? AND id * ? > 0 AND ABS(id) != ?
-        ORDER BY ABS(id) ASC
-        LIMIT 1
-      `).get(signature, sign, LOADOUT_PENDING_ID_ABS) as { id: number } | undefined;
-
-      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
-
-      // The live settings always become the unsaved row; where they match
-      // another row, that row is the active one and the unsaved row, being
-      // equal to it, is not shown.
-      db.prepare(`
-        UPDATE ui_loadout_entries
-        SET signature = ?, payloadJson = ?, updatedAt = ?
-        WHERE id = ?
-      `).run(signature, payloadJson, timestamp, pendingId);
-      db.prepare(`UPDATE ui_loadout_entries SET isActive = 1, updatedAt = ? WHERE id = ?`).run(timestamp, match?.id ?? pendingId);
+      this.markLoadoutEdited(id);
+      db.prepare(`UPDATE ui_loadout_entries SET signature = ?, payloadJson = ?, updatedAt = ? WHERE id = ?`)
+        .run(signature, JSON.stringify(normalized), Date.now(), id);
     });
-
     tx();
     return this.buildListResult();
   }
 
-  saveCustomUiLoadout(mode: unknown): UiLoadoutListResult {
+  createUiLoadout(mode: unknown): UiLoadoutListResult {
     this.ensureLoadoutsSeeded();
+    const sign = modeSign(mode === 'dark' ? 'dark' : 'light');
     const db = this.requireDb();
-    const normalizedMode: UiLoadoutMode = mode === 'dark' ? 'dark' : 'light';
-    const sign = modeSign(normalizedMode);
-    const pendingId = LOADOUT_PENDING_ID_ABS * sign;
-
-    const pendingRow = this.readLoadoutRow(pendingId);
-    if (!pendingRow) return this.buildListResult();
-    const duplicate = db.prepare(`
-      SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 AND ABS(id) != ? LIMIT 1
-    `).get(pendingRow.signature, sign, LOADOUT_PENDING_ID_ABS);
-    // No unsaved changes (the row equals another), or the list is full.
-    if (duplicate) return this.buildListResult();
-
-    const timestamp = Date.now();
     const tx = db.transaction(() => {
-      const existingCustomIds = (db.prepare(`
-        SELECT id FROM ui_loadout_entries WHERE id * ? > 0 AND ABS(id) >= ?
-      `).all(sign, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number }[]).map((r) => Math.abs(r.id));
-
-      if (existingCustomIds.length >= LOADOUT_MAX_CUSTOM_SLOTS) return;
-      let nextAbs = LOADOUT_FIRST_CUSTOM_ID_ABS;
-      while (existingCustomIds.includes(nextAbs)) nextAbs += 1;
-      const newId = nextAbs * sign;
-
-      // The new row takes the unsaved row's place, active if it was. The
-      // unsaved row keeps its payload, now equal to the new row, so it is
-      // no longer shown.
-      if (pendingRow.isActive) {
-        db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
-      }
+      const id = this.nextCustomLoadoutId(sign);
+      const active = this.readLoadoutRow(this.activeLoadoutId(sign));
+      if (id === null || !active) return;
+      const name = this.defaultLoadoutName(sign);
+      db.prepare(`UPDATE ui_loadout_entries SET isActive = 0 WHERE id * ? > 0`).run(sign);
       db.prepare(`
-        INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(newId, pendingRow.isActive ? 1 : 0, pendingRow.signature, JSON.stringify(pendingRow.payload), timestamp);
+        INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt, name)
+        VALUES (?, 1, ?, ?, ?, ?)
+      `).run(id, active.signature, JSON.stringify(active.payload), Date.now(), name);
     });
-
     tx();
     return this.buildListResult();
   }
@@ -3307,27 +3335,21 @@ export class DatabaseService {
     const db = this.requireDb();
     const targetId = typeof id === 'number' && Number.isInteger(id) ? id : null;
     if (targetId === null || idKind(targetId) !== 'custom') return this.buildListResult();
-
     const existing = this.readLoadoutRow(targetId);
     if (!existing) return this.buildListResult();
-
-    const mode: UiLoadoutMode = idMode(targetId);
-    const sign = modeSign(mode);
-    const timestamp = Date.now();
-
+    const sign = modeSign(idMode(targetId));
     const targetAbs = Math.abs(targetId);
 
     const tx = db.transaction(() => {
       db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(targetId);
-
-      // Deleting the layout on screen keeps the screen as it is: its look
-      // becomes the unsaved changes, which a hold on the plus saves again.
+      // Deleting the active layout activates the one before it in the list,
+      // which, a factory row always coming first, there always is.
       if (existing.isActive) {
-        db.prepare(`
-          UPDATE ui_loadout_entries SET isActive = 1, signature = ?, payloadJson = ?, updatedAt = ? WHERE id = ?
-        `).run(existing.signature, JSON.stringify(existing.payload), timestamp, LOADOUT_PENDING_ID_ABS * sign);
+        const previous = db.prepare(`
+          SELECT id FROM ui_loadout_entries WHERE id * ? > 0 AND ABS(id) < ? ORDER BY ABS(id) DESC LIMIT 1
+        `).get(sign, targetAbs) as { id: number } | undefined;
+        db.prepare(`UPDATE ui_loadout_entries SET isActive = 1 WHERE id = ?`).run(previous?.id ?? sign);
       }
-
       // Close the gap: every remaining custom slot with a higher number in
       // this mode shifts down by one so the numbering stays contiguous.
       const shiftRows = (db.prepare(`
@@ -3335,13 +3357,55 @@ export class DatabaseService {
         WHERE id * ? > 0 AND ABS(id) > ? AND ABS(id) >= ?
         ORDER BY ABS(id) ASC
       `).all(sign, targetAbs, LOADOUT_FIRST_CUSTOM_ID_ABS) as { id: number }[]);
-
       for (const row of shiftRows) {
         db.prepare(`UPDATE ui_loadout_entries SET id = ? WHERE id = ?`).run(row.id - sign, row.id);
       }
-
     });
+    tx();
+    return this.buildListResult();
+  }
 
+  restoreFactoryUiLoadout(id: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const targetId = typeof id === 'number' && Number.isInteger(id) ? id : null;
+    if (targetId === null || idKind(targetId) !== 'factory') return this.buildListResult();
+    const shipped = (targetId > 0 ? LIGHT_FACTORY_PRESETS : DARK_FACTORY_PRESETS)[Math.abs(targetId) - 1];
+    if (!shipped) return this.buildListResult();
+    const normalized = normalizeUiLayoutLoadout(shipped) ?? DEFAULT_UI_LAYOUT_LOADOUT;
+    this.requireDb().prepare(`
+      UPDATE ui_loadout_entries SET signature = ?, payloadJson = ?, updatedAt = ?, name = NULL, icon = NULL, edited = 0 WHERE id = ?
+    `).run(stableStringify(normalized), JSON.stringify(normalized), Date.now(), targetId);
+    return this.buildListResult();
+  }
+
+  renameUiLoadout(id: unknown, name: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const targetId = typeof id === 'number' && Number.isInteger(id) ? id : null;
+    const next = typeof name === 'string' ? name.trim().slice(0, PRESET_NAME_MAX_LENGTH) : '';
+    const entry = targetId === null ? null : this.readLoadoutRow(targetId);
+    if (!entry || !next || next === entry.name) return this.buildListResult();
+    const sign = modeSign(idMode(entry.id));
+    if (this.loadoutNames(sign, entry.id).some((taken) => taken.toLowerCase() === next.toLowerCase())) return this.buildListResult();
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      this.markLoadoutEdited(entry.id);
+      db.prepare(`UPDATE ui_loadout_entries SET name = ? WHERE id = ?`).run(next, entry.id);
+    });
+    tx();
+    return this.buildListResult();
+  }
+
+  setUiLoadoutIcon(id: unknown, icon: unknown): UiLoadoutListResult {
+    this.ensureLoadoutsSeeded();
+    const targetId = typeof id === 'number' && Number.isInteger(id) ? id : null;
+    const next = icon === null ? null : typeof icon === 'string' && PRESET_ICON_PATTERN.test(icon) ? icon : undefined;
+    const entry = targetId === null ? null : this.readLoadoutRow(targetId);
+    if (!entry || next === undefined || next === entry.icon) return this.buildListResult();
+    const db = this.requireDb();
+    const tx = db.transaction(() => {
+      this.markLoadoutEdited(entry.id);
+      db.prepare(`UPDATE ui_loadout_entries SET icon = ? WHERE id = ?`).run(next, entry.id);
+    });
     tx();
     return this.buildListResult();
   }
@@ -3444,8 +3508,8 @@ export class DatabaseService {
 
         // Skip if this exact signature already exists for this mode
         const existing = db.prepare(`
-          SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 AND ABS(id) != ? LIMIT 1
-        `).get(signature, sign, LOADOUT_PENDING_ID_ABS) as { id: number } | undefined;
+          SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 LIMIT 1
+        `).get(signature, sign) as { id: number } | undefined;
         if (existing) continue;
 
         // Find the next free custom slot ID for this mode
@@ -3460,9 +3524,9 @@ export class DatabaseService {
         const newId = nextAbs * sign;
 
         db.prepare(`
-          INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt)
-          VALUES (?, 0, ?, ?, ?)
-        `).run(newId, signature, JSON.stringify(normalized), timestamp);
+          INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt, name)
+          VALUES (?, 0, ?, ?, ?, ?)
+        `).run(newId, signature, JSON.stringify(normalized), timestamp, this.defaultLoadoutName(sign));
       }
     });
 
@@ -3926,7 +3990,10 @@ export class DatabaseService {
         isActive INTEGER NOT NULL DEFAULT 0,
         signature TEXT NOT NULL,
         payloadJson TEXT NOT NULL,
-        updatedAt INTEGER NOT NULL
+        updatedAt INTEGER NOT NULL,
+        name TEXT,
+        icon TEXT,
+        edited INTEGER NOT NULL DEFAULT 0
       );
 
       CREATE INDEX IF NOT EXISTS idx_ui_loadout_entries_signature ON ui_loadout_entries(signature);
@@ -4229,6 +4296,9 @@ export class DatabaseService {
     this.ensureMusicSongsColumn('album', "TEXT NOT NULL DEFAULT ''");
     this.ensureMusicSongsColumn('tagsRead', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureMusicSetsColumn('icon', 'TEXT');
+    this.ensureLoadoutColumn('name', 'TEXT');
+    this.ensureLoadoutColumn('icon', 'TEXT');
+    this.ensureLoadoutColumn('edited', 'INTEGER NOT NULL DEFAULT 0');
     this.migrateStoredContentOutOfFts();
     this.purgeParentlessChapters();
     this.ensureNoteSnapshotsColumn('anchorBlockIndex', 'INTEGER');
@@ -4351,6 +4421,13 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE music_songs ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureLoadoutColumn(columnName: string, columnDefinition: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(ui_loadout_entries)').all() as Array<{ name: string }>;
+    if (columns.some((column) => column.name === columnName)) return;
+    db.exec(`ALTER TABLE ui_loadout_entries ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 
   private ensureMusicSetsColumn(columnName: string, columnDefinition: string): void {

@@ -1109,15 +1109,12 @@ function registerIpcHandlers() {
     setActive: async (_event, id) => {
       return databaseService!.setActiveUiLoadout(id);
     },
-    updatePending: async (_event, mode, loadout) => {
-      return databaseService!.updatePendingUiLoadout(mode, loadout);
-    },
-    saveCustom: async (_event, mode) => {
-      return databaseService!.saveCustomUiLoadout(mode);
-    },
-    deleteCustom: async (_event, id) => {
-      return databaseService!.deleteCustomUiLoadout(id);
-    },
+    editActive: async (_event, mode, loadout) => databaseService!.editActiveUiLoadout(mode, loadout),
+    create: async (_event, mode) => databaseService!.createUiLoadout(mode),
+    deleteCustom: async (_event, id) => databaseService!.deleteCustomUiLoadout(id),
+    restoreFactory: async (_event, id) => databaseService!.restoreFactoryUiLoadout(id),
+    rename: async (_event, id, name) => databaseService!.renameUiLoadout(id, name),
+    setIcon: async (_event, id, icon) => databaseService!.setUiLoadoutIcon(id, icon),
     exportTdl: async () => {
       const content = databaseService!.buildTdlContent();
       const { filePath, canceled } = await dialog.showSaveDialog({

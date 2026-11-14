@@ -57,18 +57,18 @@ describe('DatabaseService caret loadout fields', () => {
     rmSync(dataRoot, { recursive: true, force: true })
   })
 
-  it('keeps unsaved changes when another entry is selected', () => {
-    db.updatePendingUiLoadout('light', pendingLightPayload())
-    const pendingId = db.listUiLoadouts().entries.find((row) => row.id > 0 && row.isActive)!.id
-    db.setActiveUiLoadout(1)
-    const pending = db.listUiLoadouts().entries.find((row) => row.id === pendingId)!
-    expect(pending.isActive).toBe(false)
-    expect(pending.payload).toMatchObject(caretOverrides)
+  it('keeps an edit in the layout it was made in when another is selected', () => {
+    db.editActiveUiLoadout('light', pendingLightPayload())
+    db.setActiveUiLoadout(2)
+    const edited = db.listUiLoadouts().entries.find((row) => row.id === 1)!
+    expect(edited.isActive).toBe(false)
+    expect(edited.edited).toBe(true)
+    expect(edited.payload).toMatchObject(caretOverrides)
   })
 
   it('round-trips every caret field through a real restart', async () => {
-    db.updatePendingUiLoadout('light', pendingLightPayload())
-    db.saveCustomUiLoadout('light')
+    db.createUiLoadout('light')
+    db.editActiveUiLoadout('light', pendingLightPayload())
     db.close()
 
     const reopened = new DatabaseService(dataRoot)
@@ -83,14 +83,14 @@ describe('DatabaseService caret loadout fields', () => {
   })
 
   it('clamps out-of-range caret values instead of storing them verbatim', async () => {
-    db.updatePendingUiLoadout('light', {
+    db.createUiLoadout('light')
+    db.editActiveUiLoadout('light', {
       ...NEUTRAL_BASE,
       caretSizeDeviationPx: 99,
       caretOutlineWidthPx: -12,
       caretHaloSpreadPx: 5000,
       caretHaloBlurPx: -4,
     })
-    db.saveCustomUiLoadout('light')
 
     const stored = activeLightLoadout(db)
     expect(stored.caretSizeDeviationPx).toBe(5)
@@ -110,8 +110,8 @@ describe('DatabaseService caret loadout fields', () => {
   })
 
   it('carries every caret field through a .tdl export/import cycle', async () => {
-    db.updatePendingUiLoadout('light', pendingLightPayload())
-    db.saveCustomUiLoadout('light')
+    db.createUiLoadout('light')
+    db.editActiveUiLoadout('light', pendingLightPayload())
 
     const tdl = db.buildTdlContent()
     // Each caret field differs from NEUTRAL_BASE, so each must appear as a

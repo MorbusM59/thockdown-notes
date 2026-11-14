@@ -5,13 +5,16 @@ import {
   idKind,
   idMode,
   modeSign,
-  LOADOUT_PENDING_ID_ABS,
   LOADOUT_FIRST_CUSTOM_ID_ABS,
+  LOADOUT_MAX_CUSTOM_SLOTS,
 } from '@thockdown/look/loadouts'
 import {
   LIGHT_FACTORY_PRESETS,
   DARK_FACTORY_PRESETS,
+  factoryLayoutIcon,
+  factoryLayoutName,
 } from '@thockdown/look/presets'
+import { firstFreePresetName } from '@thockdown/interaction/presetList'
 import type { TextureCacheApi, TextureCacheHit, TextureCachePurgeRequest, TextureCacheRequest } from '../shared/textures'
 import type { FileSyncApi } from '../shared/fileSync'
 import type {
@@ -309,14 +312,11 @@ function seedUiLoadoutEntries(): { entries: UiLoadoutEntry[] } {
   const entries: UiLoadoutEntry[] = []
 
   const push = (id: number, payload: UiLayoutLoadout, isActive: boolean) => {
-    entries.push({ id, isActive, signature: stableStringify(payload), payload: clone(payload), updatedAt: now })
+    entries.push({ id, isActive, signature: stableStringify(payload), payload: clone(payload), updatedAt: now, name: factoryLayoutName(id), icon: factoryLayoutIcon(id), edited: false })
   }
 
   LIGHT_FACTORY_PRESETS.forEach((preset, index) => push(index + 1, preset, index === 0))
   DARK_FACTORY_PRESETS.forEach((preset, index) => push(-(index + 1), preset, index === 0))
-
-  push(LOADOUT_PENDING_ID_ABS, LIGHT_FACTORY_PRESETS[0], false)
-  push(-LOADOUT_PENDING_ID_ABS, DARK_FACTORY_PRESETS[0], false)
 
   return { entries }
 }
@@ -556,11 +556,7 @@ function resetBrowserMockWorkspaceToFactoryDefaults(store: BrowserMockStore): vo
       ? LIGHT_FACTORY_PRESETS[0]
       : entry.id === -1
         ? DARK_FACTORY_PRESETS[0]
-        : entry.id === LOADOUT_PENDING_ID_ABS
-          ? LIGHT_FACTORY_PRESETS[0]
-          : entry.id === -LOADOUT_PENDING_ID_ABS
-            ? DARK_FACTORY_PRESETS[0]
-            : undefined
+        : undefined
     return {
       ...entry,
       isActive: entry.id === 1 || entry.id === -1,
@@ -1081,61 +1077,40 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
       })
     },
 
-    async updatePending(mode: UiLoadoutMode, loadout: UiLayoutLoadout): Promise<UiLoadoutListResult> {
+    async editActive(mode: UiLoadoutMode, loadout: UiLayoutLoadout): Promise<UiLoadoutListResult> {
       return mutate((store) => {
         const sign = modeSign(mode)
-        const pendingId = LOADOUT_PENDING_ID_ABS * sign
+        const active = store.uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
         const signature = stableStringify(loadout)
-
-        const match = store.uiLoadoutEntries.find(
-          (entry) => entry.id * sign > 0 && entry.id !== pendingId && entry.signature === signature,
-        )
-
-        deactivateMode(store, sign)
-
-        const pending = findEntry(store, pendingId)
-        if (pending) {
-          pending.signature = signature
-          pending.payload = clone(loadout)
-          pending.updatedAt = Date.now()
-        }
-        const active = match ?? pending
-        if (active) active.isActive = true
-
+        if (!active || active.signature === signature) return snapshot(store)
+        active.signature = signature
+        active.payload = clone(loadout)
+        active.updatedAt = Date.now()
+        if (idKind(active.id) === 'factory') active.edited = true
         return snapshot(store)
       })
     },
 
-    async saveCustom(mode: UiLoadoutMode): Promise<UiLoadoutListResult> {
+    async create(mode: UiLoadoutMode): Promise<UiLoadoutListResult> {
       return mutate((store) => {
         const sign = modeSign(mode)
-        const pendingId = LOADOUT_PENDING_ID_ABS * sign
-        const pending = findEntry(store, pendingId)
-        if (!pending) return snapshot(store)
-        if (store.uiLoadoutEntries.some((entry) => entry.id * sign > 0 && entry.id !== pendingId && entry.signature === pending.signature)) {
-          return snapshot(store)
-        }
-
-        const existingAbs = store.uiLoadoutEntries
-          .filter((entry) => entry.id * sign > 0 && Math.abs(entry.id) >= LOADOUT_FIRST_CUSTOM_ID_ABS)
-          .map((entry) => Math.abs(entry.id))
-
+        const active = store.uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
+        const ofMode = store.uiLoadoutEntries.filter((entry) => entry.id * sign > 0)
+        const usedAbs = ofMode.filter((entry) => idKind(entry.id) === 'custom').map((entry) => Math.abs(entry.id))
+        if (!active || usedAbs.length >= LOADOUT_MAX_CUSTOM_SLOTS) return snapshot(store)
         let nextAbs = LOADOUT_FIRST_CUSTOM_ID_ABS
-        while (existingAbs.includes(nextAbs)) nextAbs += 1
-        const newId = nextAbs * sign
-
-        const wasActive = pending.isActive
-        if (wasActive) deactivateMode(store, sign)
-
+        while (usedAbs.includes(nextAbs)) nextAbs += 1
+        deactivateMode(store, sign)
         store.uiLoadoutEntries.push({
-          id: newId,
-          isActive: wasActive,
-          signature: pending.signature,
-          payload: clone(pending.payload),
+          id: nextAbs * sign,
+          isActive: true,
+          signature: active.signature,
+          payload: clone(active.payload),
           updatedAt: Date.now(),
+          name: firstFreePresetName('Layout', ofMode.map((entry) => entry.name)),
+          icon: null,
+          edited: false,
         })
-
-
         return snapshot(store)
       })
     },
@@ -1143,26 +1118,52 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
     async deleteCustom(id: number): Promise<UiLoadoutListResult> {
       return mutate((store) => {
         if (idKind(id) !== 'custom') return snapshot(store)
-
         const index = store.uiLoadoutEntries.findIndex((entry) => entry.id === id)
         if (index < 0) return snapshot(store)
-
         const [removed] = store.uiLoadoutEntries.splice(index, 1)
-        const mode: UiLoadoutMode = idMode(id)
-        const sign = modeSign(mode)
+        const sign = modeSign(idMode(id))
         if (removed?.isActive) {
-          const pending = findEntry(store, LOADOUT_PENDING_ID_ABS * sign)
-          if (pending) {
-            pending.isActive = true
-            pending.signature = removed.signature
-            pending.payload = clone(removed.payload)
-          }
+          const previous = store.uiLoadoutEntries
+            .filter((entry) => entry.id * sign > 0 && Math.abs(entry.id) < Math.abs(id))
+            .sort((a, b) => Math.abs(b.id) - Math.abs(a.id))[0]
+          if (previous) previous.isActive = true
         }
         // Close the gap, as the database does.
         for (const entry of store.uiLoadoutEntries) {
           if (entry.id * sign > 0 && Math.abs(entry.id) > Math.abs(id)) entry.id -= sign
         }
+        return snapshot(store)
+      })
+    },
 
+    async restoreFactory(id: number): Promise<UiLoadoutListResult> {
+      return mutate((store) => {
+        const target = findEntry(store, id)
+        const shipped = (id > 0 ? LIGHT_FACTORY_PRESETS : DARK_FACTORY_PRESETS)[Math.abs(id) - 1]
+        if (!target || idKind(id) !== 'factory' || !shipped) return snapshot(store)
+        Object.assign(target, { signature: stableStringify(shipped), payload: clone(shipped), name: factoryLayoutName(id), icon: factoryLayoutIcon(id), edited: false })
+        return snapshot(store)
+      })
+    },
+
+    async rename(id: number, name: string): Promise<UiLoadoutListResult> {
+      return mutate((store) => {
+        const target = findEntry(store, id)
+        const next = name.trim()
+        const sign = modeSign(idMode(id))
+        if (!target || !next || store.uiLoadoutEntries.some((entry) => entry.id !== id && entry.id * sign > 0 && entry.name.toLowerCase() === next.toLowerCase())) return snapshot(store)
+        target.name = next
+        if (idKind(id) === 'factory') target.edited = true
+        return snapshot(store)
+      })
+    },
+
+    async setIcon(id: number, icon: string | null): Promise<UiLoadoutListResult> {
+      return mutate((store) => {
+        const target = findEntry(store, id)
+        if (!target) return snapshot(store)
+        target.icon = icon
+        if (idKind(id) === 'factory') target.edited = true
         return snapshot(store)
       })
     },

@@ -55,6 +55,7 @@ import {
 import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
 import { SoundscapeDock, SoundscapeIconPicker, SoundscapesView } from './sidebar/SoundscapesView'
 import { SoundstageDock, SoundstageIconPicker } from './sidebar/SoundstageOptions'
+import { LayoutDock, LayoutIconPicker } from './sidebar/LayoutDock'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -63,15 +64,14 @@ import {
 } from '@thockdown/look/glaze'
 import { DEFAULT_BOX_BEVEL, onScreenBoxBevel, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 import { publishBoxBevel } from './shared/boxBevelStore'
-import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutMode } from '@thockdown/look/loadouts'
+import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
   idKind,
   idMode,
   modeSign,
-  unsavedLoadoutEntry,
   LOADOUT_FACTORY_PRESET_COUNT,
-  LOADOUT_PENDING_ID_ABS,
 } from '@thockdown/look/loadouts'
+import { NEUTRAL_LOADOUT } from '@thockdown/look/presets'
 import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
@@ -426,7 +426,8 @@ function resolvePersistedFontSizesByMode(menu: PersistedMenuState): FontSizesByM
     },
   }
 }
-const PENDING_UPDATE_DEBOUNCE_MS = 400
+/** How long the live layout rests before an edit is written into the active layout. */
+const LAYOUT_EDIT_DEBOUNCE_MS = 400
 const DEFAULT_HIGHLIGHT_COLORS: HighlightColors = {
   caret: 'rgba(120, 115, 112, 0.8)',
   search: 'rgba(255, 221, 105, 0.55)',
@@ -2182,7 +2183,7 @@ function App() {
     positionSec: 0,
     wasPlaying: false,
   })
-  const pendingUpdateDebounceRef = useRef<number | null>(null)
+  const layoutEditDebounceRef = useRef<number | null>(null)
   const appStateSaveTimerRef = useRef<number | null>(null)
   const resettingAppStateRef = useRef(false)
   const noteTransitionLockRef = useRef(false)
@@ -2769,14 +2770,6 @@ function App() {
     [entriesForCurrentMode],
   )
 
-  // True once the live captured state has drifted from whatever entry is
-  // marked active for this mode â€” i.e. there are unsaved pending changes.
-  const hasUnsavedUiLoadoutChanges = useMemo(() => {
-    if (!activeEntryForCurrentMode) return false
-    if (idKind(activeEntryForCurrentMode.id) === 'pending') return true
-    return activeEntryForCurrentMode.signature !== currentUiLoadoutSignature
-  }, [activeEntryForCurrentMode, currentUiLoadoutSignature])
-
   const factoryPresetEntriesForCurrentMode = useMemo(() => {
     const byAbsId = new Map<number, UiLoadoutEntry>(
       entriesForCurrentMode.map((entry) => [Math.abs(entry.id), entry]),
@@ -2796,14 +2789,10 @@ function App() {
     [entriesForCurrentMode],
   )
 
-  // The unsaved changes' button (the plus after the saved layouts): shown
-  // while the unsaved row differs from every other row, or while the live
-  // settings have drifted and are about to be written to it.
-  const unsavedEntryForCurrentMode = useMemo(
-    () => unsavedLoadoutEntry(uiLoadoutEntries, uiMode),
-    [uiLoadoutEntries, uiMode],
+  const layoutEntriesForCurrentMode = useMemo(
+    () => [...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode],
+    [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode],
   )
-  const isUnsavedLoadoutShown = unsavedEntryForCurrentMode !== null || hasUnsavedUiLoadoutChanges
 
   // --- Loadout actions --------------------------------------------------
 
@@ -2824,37 +2813,46 @@ function App() {
     }
   }, [applyEntryToLiveState])
 
-  const selectUnsavedLoadout = useCallback(() => {
-    void selectLoadoutPreset(LOADOUT_PENDING_ID_ABS * modeSign(uiMode))
-  }, [selectLoadoutPreset, uiMode])
+  /**
+   * The live settings not yet written into the active layout (the debounce
+   * below) are written now, so what a create copies, or an action reads, is
+   * what is on screen.
+   */
+  const flushLayoutEdit = useCallback(async () => {
+    if (layoutEditDebounceRef.current === null || !window.thockdownLoadouts) return
+    window.clearTimeout(layoutEditDebounceRef.current)
+    layoutEditDebounceRef.current = null
+    const result = await window.thockdownLoadouts.editActive(uiMode, capturedUiLayoutLoadout)
+    setUiLoadoutEntries(result.entries)
+  }, [uiMode, capturedUiLayoutLoadout])
 
-  const saveCustomLoadout = useCallback(async () => {
-    if (!window.thockdownLoadouts) return
+  /**
+   * Every layout action goes through here: the rows change, and when the
+   * mode's active layout is no longer what is on screen (another one became
+   * active, or the active one was restored or reset), it is applied.
+   */
+  const changeLoadouts = useCallback(async (action: (api: NonNullable<typeof window.thockdownLoadouts>) => Promise<UiLoadoutListResult>) => {
+    const api = window.thockdownLoadouts
+    if (!api) return
     try {
-      // Live settings not yet written to the unsaved row (the debounce below)
-      // are written first, so what is saved is what is on screen.
-      if (hasUnsavedUiLoadoutChanges) {
-        if (pendingUpdateDebounceRef.current !== null) {
-          window.clearTimeout(pendingUpdateDebounceRef.current)
-          pendingUpdateDebounceRef.current = null
-        }
-        await window.thockdownLoadouts.updatePending(uiMode, capturedUiLayoutLoadout)
-      }
-      const result = await window.thockdownLoadouts.saveCustom(uiMode)
+      await flushLayoutEdit()
+      const result = await action(api)
       setUiLoadoutEntries(result.entries)
+      const sign = modeSign(uiMode)
+      const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
+      if (active && active.signature !== currentUiLoadoutSignature) applyEntryToLiveState(active)
     } catch (error) {
-      console.error('Failed to save custom UI loadout', error)
+      console.error('Failed to change UI layouts', error)
     }
-  }, [uiMode, hasUnsavedUiLoadoutChanges, capturedUiLayoutLoadout])
+  }, [flushLayoutEdit, uiMode, currentUiLoadoutSignature, applyEntryToLiveState])
 
-  const [primedCustomLayoutId, setPrimedCustomLayoutId] = useState<number | null>(null)
-  // Holding right-click on a custom layout exports it; a short right-click
-  // primes it for deletion. The hold is armHold's (so it announces itself on
-  // the cursor, at the threshold every "I mean it" hold uses), on pointer
-  // events, and which of the two it was is decided on the RELEASE: the
-  // contextmenu event is no guide, since Chromium fires it on the press on
-  // some platforms and on the release on others. The soundscape buttons
-  // (SoundscapeOptions.tsx) do the same gesture the same way.
+  const createLoadout = useCallback(() => changeLoadouts((api) => api.create(uiMode)), [changeLoadouts, uiMode])
+  /** The dock's reset: the active layout becomes NEUTRAL_BASE, as an edit like any other. */
+  const resetActiveLoadout = useCallback(() => changeLoadouts((api) => api.editActive(uiMode, NEUTRAL_LOADOUT)), [changeLoadouts, uiMode])
+
+  // Holding right-click on a layout of the reader's own exports it. The hold
+  // is armHold's (so it announces itself on the cursor, at the threshold
+  // every "I mean it" hold uses), on pointer events.
   const customLoadoutExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
 
   const cancelCustomLoadoutExportHold = useCallback(() => {
@@ -2862,58 +2860,14 @@ function App() {
     customLoadoutExportHoldRef.current = null
   }, [])
 
-  const triggerCustomLoadoutExport = useCallback(async (entryId: number) => {
-    if (!window.thockdownLoadouts) return
-    setPrimedCustomLayoutId(null)
-    try {
-      await window.thockdownLoadouts.exportTdlEntry(entryId)
-    } catch (error) {
-      console.error('Failed to export custom UI loadout', error)
-    }
-  }, [])
-
-  const handleDeleteCustomLoadout = useCallback(async (entryId: number) => {
-    if (!window.thockdownLoadouts) return
-    try {
-      const result = await window.thockdownLoadouts.deleteCustom(entryId)
-      setUiLoadoutEntries(result.entries)
-      setPrimedCustomLayoutId(null)
-    } catch (error) {
-      console.error('Failed to delete custom UI loadout', error)
-    }
-  }, [])
-
-  const handleCustomLoadoutSlotClick = useCallback((entryId: number) => {
-    if (primedCustomLayoutId === entryId) {
-      void handleDeleteCustomLoadout(entryId)
-      return
-    }
-
-    setPrimedCustomLayoutId(null)
-    void selectLoadoutPreset(entryId)
-  }, [primedCustomLayoutId, handleDeleteCustomLoadout, selectLoadoutPreset])
-
   const handleCustomLoadoutSlotRightPointerDown = useCallback((event: PointerEvent<HTMLButtonElement>, entryId: number) => {
     if (event.button !== 2) return
-    setPrimedCustomLayoutId(null)
     cancelCustomLoadoutExportHold()
     const cancel = armHold(() => {
       customLoadoutExportHoldRef.current = null
-      void triggerCustomLoadoutExport(entryId)
+      void window.thockdownLoadouts?.exportTdlEntry(entryId).catch((error) => console.error('Failed to export custom UI loadout', error))
     }, HOLD_COMMIT_MS)
     customLoadoutExportHoldRef.current = { pointerId: event.pointerId, cancel }
-  }, [cancelCustomLoadoutExportHold, triggerCustomLoadoutExport])
-
-  const handleCustomLoadoutSlotRightPointerUp = useCallback((event: PointerEvent<HTMLButtonElement>, entryId: number) => {
-    if (event.button !== 2 || customLoadoutExportHoldRef.current?.pointerId !== event.pointerId) return
-    // Released before the hold completed: a short click, which primes deletion.
-    cancelCustomLoadoutExportHold()
-    setPrimedCustomLayoutId(entryId)
-  }, [cancelCustomLoadoutExportHold])
-
-  const handleCustomLoadoutSlotPointerLeave = useCallback(() => {
-    cancelCustomLoadoutExportHold()
-    setPrimedCustomLayoutId(null)
   }, [cancelCustomLoadoutExportHold])
 
   // The right press is the button's own gesture; no menu ever follows it.
@@ -2959,24 +2913,19 @@ function App() {
   /**
    * Steps the current mode's layout to the next (+1) or previous (-1) preset,
    * wrapping, in the order the options panel lists them: the factory presets,
-   * then the saved custom slots, then the unsaved changes while they are
-   * shown. Selecting goes
+   * then the reader's own. Selecting goes
    * through `selectLoadoutPreset`, the same path as pressing the preset's
    * button, so the choice is persisted the same way.
    */
   const stepLayoutPreset = useCallback((direction: 1 | -1) => {
-    const cycle = [
-      ...factoryPresetEntriesForCurrentMode,
-      ...customSlotEntriesForCurrentMode,
-      ...(unsavedEntryForCurrentMode ? [unsavedEntryForCurrentMode] : []),
-    ]
+    const cycle = [...factoryPresetEntriesForCurrentMode, ...customSlotEntriesForCurrentMode]
     if (cycle.length === 0) return
     const current = cycle.findIndex((entry) => entry.id === activeEntryForCurrentMode?.id)
     const next = current < 0
       ? (direction > 0 ? 0 : cycle.length - 1)
       : (current + direction + cycle.length) % cycle.length
     void selectLoadoutPreset(cycle[next].id)
-  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, unsavedEntryForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
+  }, [factoryPresetEntriesForCurrentMode, customSlotEntriesForCurrentMode, activeEntryForCurrentMode, selectLoadoutPreset])
 
   // Runs once persistence has fully restored appState (including uiMode,
   // set deep inside the bootstrap effect further below). Firing this on
@@ -3017,32 +2966,27 @@ function App() {
   }, [persistenceReady])
 
   // Debounced: whenever the live captured state drifts from the active entry
-  // for the current mode, push it to the pending row (+/-7) on the backend.
+  // for the current mode, it is written into that entry: an edit.
   useEffect(() => {
     if (!window.thockdownLoadouts) return
     if (!activeEntryForCurrentMode) return
     if (activeEntryForCurrentMode.signature === currentUiLoadoutSignature) return
 
-    if (pendingUpdateDebounceRef.current !== null) {
-      window.clearTimeout(pendingUpdateDebounceRef.current)
+    if (layoutEditDebounceRef.current !== null) {
+      window.clearTimeout(layoutEditDebounceRef.current)
     }
 
-    pendingUpdateDebounceRef.current = window.setTimeout(() => {
-      pendingUpdateDebounceRef.current = null
-      void window.thockdownLoadouts?.updatePending(uiMode, capturedUiLayoutLoadout)
-        .then((result) => {
-          if (!result) return
-          setUiLoadoutEntries(result.entries)
-          })
-        .catch((error) => {
-          console.error('Failed to update pending UI loadout', error)
-        })
-    }, PENDING_UPDATE_DEBOUNCE_MS)
+    layoutEditDebounceRef.current = window.setTimeout(() => {
+      layoutEditDebounceRef.current = null
+      void window.thockdownLoadouts?.editActive(uiMode, capturedUiLayoutLoadout)
+        .then((result) => setUiLoadoutEntries(result.entries))
+        .catch((error) => console.error('Failed to edit the active UI layout', error))
+    }, LAYOUT_EDIT_DEBOUNCE_MS)
 
     return () => {
-      if (pendingUpdateDebounceRef.current !== null) {
-        window.clearTimeout(pendingUpdateDebounceRef.current)
-        pendingUpdateDebounceRef.current = null
+      if (layoutEditDebounceRef.current !== null) {
+        window.clearTimeout(layoutEditDebounceRef.current)
+        layoutEditDebounceRef.current = null
       }
     }
   }, [activeEntryForCurrentMode, currentUiLoadoutSignature, uiMode, capturedUiLayoutLoadout])
@@ -8467,7 +8411,9 @@ ${markdownHtml}
                         ? <SoundscapeIconPicker preferences={soundscapePreferences} onChange={setSoundscapePreferences} query={iconPickQuery} />
                         : <SoundscapesView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
                     ) : sidebarMode === 'options' && isIconPickMode ? (
-                      <SoundstageIconPicker preferences={soundstagePreferences} onChange={changeSoundstages} query={iconPickQuery} />
+                      iconPick?.target.kind === 'layout'
+                        ? <LayoutIconPicker entries={layoutEntriesForCurrentMode} change={changeLoadouts} query={iconPickQuery} />
+                        : <SoundstageIconPicker preferences={soundstagePreferences} onChange={changeSoundstages} query={iconPickQuery} />
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
@@ -8502,16 +8448,10 @@ ${markdownHtml}
                         activeEntryForCurrentMode={activeEntryForCurrentMode}
                         selectLoadoutPreset={selectLoadoutPreset}
                         customSlotEntriesForCurrentMode={customSlotEntriesForCurrentMode}
-                        primedCustomLayoutId={primedCustomLayoutId}
-                        handleCustomLoadoutSlotClick={handleCustomLoadoutSlotClick}
+                        createLoadout={createLoadout}
                         handleCustomLoadoutSlotRightPointerDown={handleCustomLoadoutSlotRightPointerDown}
-                        handleCustomLoadoutSlotRightPointerUp={handleCustomLoadoutSlotRightPointerUp}
-                        handleCustomLoadoutSlotPointerLeave={handleCustomLoadoutSlotPointerLeave}
+                        cancelCustomLoadoutExportHold={cancelCustomLoadoutExportHold}
                         handleCustomLoadoutSlotContextMenu={handleCustomLoadoutSlotContextMenu}
-                        hasUnsavedUiLoadoutChanges={hasUnsavedUiLoadoutChanges}
-                        saveCustomLoadout={saveCustomLoadout}
-                        isUnsavedLoadoutShown={isUnsavedLoadoutShown}
-                        selectUnsavedLoadout={selectUnsavedLoadout}
                         setHighlightColorCss={setHighlightColorCss}
                         setEditorTextColorCss={setEditorTextColorCss}
                         setTextureMaterial={setTextureMaterial}
@@ -8712,6 +8652,12 @@ ${markdownHtml}
                     // picker docks but straight on the sidebar, with no box.
                     <div className="sidebar-plain-dock">
                       <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && optionsSection === 'layouts' ? (
+                    // The layout in use, docked as the soundscapes' is.
+                    <div className="sidebar-plain-dock">
+                      <LayoutDock entries={layoutEntriesForCurrentMode} change={changeLoadouts} onReset={() => void resetActiveLoadout()} />
                     </div>
                   ) : null}
                   {sidebarMode === 'options' && optionsSection === 'music' ? (

@@ -566,7 +566,7 @@ transitional by design.
 `renameSoundscape`, `setSoundscapeIcon`, `createSoundscape`,
 `deleteSoundscape`, `restoreFactorySoundscape` and `factoryEdits`: the rule
 `packages/interaction/presetList.ts` now states generically for soundstages
-(and, next, layouts). Two copies of one rule is how one of them drifts.
+(and the layouts' database rows follow by hand). Two copies of one rule is how one of them drifts.
 
 **To remove.** Soundscape preferences become a `PresetList` plus their
 soundscape-only fields (enabled, preset order), the functions above become

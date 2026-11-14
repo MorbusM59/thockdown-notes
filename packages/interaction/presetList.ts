@@ -93,9 +93,9 @@ export function defaultPresetIcon<S>(kind: PresetKind<S>, id: string): string | 
   return kind.factory.find((preset) => preset.id === id)?.icon ?? null
 }
 
-/** The first free "<Noun> A", "<Noun> B", ... "<Noun> AA". */
-export function defaultPresetName<S>(kind: PresetKind<S>, list: Pick<PresetList<S>, 'custom' | 'factoryEdits'>): string {
-  const used = new Set(presetsOf(kind, list).map((preset) => preset.name.trim().toLowerCase()))
+/** The first free "<Noun> A", "<Noun> B", ... "<Noun> AA" among `names`, case aside. */
+export function firstFreePresetName(noun: string, names: Iterable<string>): string {
+  const used = new Set([...names].map((name) => name.trim().toLowerCase()))
   for (let index = 1; ; index += 1) {
     let value = index
     let letters = ''
@@ -104,9 +104,14 @@ export function defaultPresetName<S>(kind: PresetKind<S>, list: Pick<PresetList<
       letters = String.fromCharCode(65 + (value % 26)) + letters
       value = Math.floor(value / 26)
     }
-    const name = `${kind.noun} ${letters}`
+    const name = `${noun} ${letters}`
     if (!used.has(name.toLowerCase())) return name
   }
+}
+
+/** The first free "<Noun> A", "<Noun> B", ... "<Noun> AA". */
+export function defaultPresetName<S>(kind: PresetKind<S>, list: Pick<PresetList<S>, 'custom' | 'factoryEdits'>): string {
+  return firstFreePresetName(kind.noun, presetsOf(kind, list).map((preset) => preset.name))
 }
 
 /** One preset replaced, wherever it is kept: a factory one becomes (or stays) an edit. */
