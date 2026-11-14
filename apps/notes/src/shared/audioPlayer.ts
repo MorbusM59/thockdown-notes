@@ -68,7 +68,7 @@ export function musicSetMarkOf(set: MusicSet): { iconClass: string } | { letters
 
 /**
  * Column count of the player's button grid: Music (two columns),
- * Soundstages, Filter and Soundscape (two columns); the second row's
+ * Filter, Soundstages and Soundscape (two columns); the second row's
  * sliders, stages or filter fill the same width.
  *
  * This is a LAYOUT measurement, not just a render detail, and three places

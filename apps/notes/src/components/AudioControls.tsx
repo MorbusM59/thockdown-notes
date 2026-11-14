@@ -25,6 +25,7 @@ import {
   useHoldToAdjust,
   type HoldToAdjustKeyboardController,
 } from '../shared/useHoldToAdjust'
+import { openMusicLibrary } from '../sidebar/musicLibraryView'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
 import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
@@ -199,9 +200,28 @@ export const AudioControls = memo(function AudioControls({
   // crossing and race the others to set the current song.
   const isCrossingSongRef = useRef(false)
 
+  // AN EMPTY SET IS NEVER ACTIVE, and a set becomes active when its first
+  // song arrives. Every change to a set's songs ends in a count refresh, so
+  // the rule is applied here, against the counts before and after, and
+  // nowhere else. The first read (on mount) has no "before": it only takes
+  // the empty sets out of what the last session left active.
+  const countsRef = useRef<PlaylistCountsResult | null>(null)
+  const onActiveSlotsChangeRef = useRef(onActiveSlotsChange)
+  onActiveSlotsChangeRef.current = onActiveSlotsChange
   const refreshCountsRef = useRef(async () => {
     const c = await window.thockdownAudioPlayer?.getPlaylistCounts()
-    if (c) setCounts(c)
+    if (!c) return
+    const before = countsRef.current
+    countsRef.current = c
+    setCounts(c)
+    const active = activeSlotsRef.current
+    const filled = before
+      ? (Object.keys(c).map(Number) as PlaylistSlot[]).filter((slot) => (c[slot] ?? 0) > 0 && (before[slot] ?? 0) === 0 && !active.includes(slot))
+      : []
+    const next = [...active.filter((slot) => (c[slot] ?? 0) > 0), ...filled]
+    if (next.length === active.length && next.every((slot, index) => slot === active[index])) return
+    activeSlotsRef.current = next
+    onActiveSlotsChangeRef.current(next)
   })
 
   // Sync player config whenever props change. The mute/bypass flags are
@@ -222,9 +242,7 @@ export const AudioControls = memo(function AudioControls({
 
   // Refresh playlist counts on mount.
   useEffect(() => {
-    void window.thockdownAudioPlayer?.getPlaylistCounts().then((c) => {
-      if (c) setCounts(c)
-    })
+    void refreshCountsRef.current()
   }, [])
 
   // Keep currentSongRef in sync so the onEnded closure can read it without going stale.
@@ -641,6 +659,8 @@ export const AudioControls = memo(function AudioControls({
    * it belongs to the pool while it plays, and the next pick reads the new pool.
    */
   const selectSlot = useCallback(async (slot: PlaylistSlot, selection: SetSelection) => {
+    // An empty set cannot be active (see refreshCountsRef).
+    if ((countsRef.current?.[slot] ?? 0) === 0) return
     const next = getNextActiveSlotsForSelection(activeSlotsRef.current, slot, selection)
     selectionVersionRef.current += 1
     activeSlotsRef.current = next
@@ -1018,8 +1038,8 @@ export const AudioControls = memo(function AudioControls({
   }, [isVisualizerMode, handlePlayToggle, startSeekHold, stopSeekScrub, jumpSong, handleSeekActivate])
 
   // ---------------------------------------------------------------- render
-  // Two rows of six. The top row is fixed: Music (two columns), Soundstages,
-  // Filters, Soundscape (two columns). The second row shows the two volume
+  // Two rows of six. The top row is fixed: Music (two columns), Filter,
+  // Soundstages, Soundscape (two columns). The second row shows the two volume
   // sliders, or in their place the stages or the pool filter: the two toggles
   // both claim it, so pressing one replaces the other, and pressing the one
   // that is showing gives the row back to the sliders.
@@ -1042,7 +1062,11 @@ export const AudioControls = memo(function AudioControls({
           data-tooltip={`${songLabel}\n[Right] Skip ${MUSIC_SKIP_SEC / 60} minutes, or the next song near the end\n[Hold right] Next song`}
           aria-label={isPlaying ? 'Pause music' : 'Play music'}
           aria-pressed={isPlaying}
-          onClick={() => { void handlePlayToggle() }}
+          onClick={() => {
+            // Nothing to play from: show the Songs view, where sets are filled and chosen.
+            if (!isPlaying && activeSlots.length === 0) openMusicLibrary()
+            else void handlePlayToggle()
+          }}
           data-secondary-press="action"
           onContextMenu={(event) => event.preventDefault()}
           onPointerDown={handleMusicPointerDown}
@@ -1055,17 +1079,6 @@ export const AudioControls = memo(function AudioControls({
 
         <button
           type="button"
-          className={`audio-ctrl-btn${barRow === 'soundstages' ? ' is-active' : ''}`}
-          data-tooltip="Soundstages"
-          aria-label="Soundstages"
-          aria-pressed={barRow === 'soundstages'}
-          onClick={() => toggleRow('soundstages')}
-        >
-          <span className="fa-solid fa-headphones" aria-hidden="true" />
-        </button>
-
-        <button
-          type="button"
           className={`audio-ctrl-btn${barRow === 'filter' ? ' is-active' : ''}`}
           data-tooltip={filterQuery ? `Filter: ${filterQuery}` : 'Filter'}
           aria-label="Filter songs"
@@ -1073,6 +1086,17 @@ export const AudioControls = memo(function AudioControls({
           onClick={() => toggleRow('filter')}
         >
           <span className="fa-solid fa-filter" aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          className={`audio-ctrl-btn${barRow === 'soundstages' ? ' is-active' : ''}`}
+          data-tooltip="Soundstages"
+          aria-label="Soundstages"
+          aria-pressed={barRow === 'soundstages'}
+          onClick={() => toggleRow('soundstages')}
+        >
+          <span className="fa-solid fa-headphones" aria-hidden="true" />
         </button>
 
         <button
