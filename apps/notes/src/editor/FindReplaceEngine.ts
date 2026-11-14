@@ -23,10 +23,25 @@ export type FindMatching = {
   readonly wholeWord: boolean;
 };
 
-const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+// Letters, digits and underscore, matched per code point. (Combining marks
+// never reach here: normalizeInternalText keeps text single-cell.)
+const WORD_CHARACTER = /^[\p{L}\p{N}_]$/u;
 
-function isWordCharacter(character: string | undefined): boolean {
-  return character !== undefined && WORD_CHARACTER.test(character);
+function isWordCharacter(character: string): boolean {
+  return character !== '' && WORD_CHARACTER.test(character);
+}
+
+/** The whole code point ending just before `index` (a surrogate pair is one character). */
+function codePointBefore(text: string, index: number): string {
+  if (index <= 0) return '';
+  const pair = index >= 2 ? text.slice(index - 2, index) : '';
+  return pair.length === 2 && pair.codePointAt(0)! > 0xffff ? pair : text.slice(index - 1, index);
+}
+
+/** The whole code point starting at `index`. */
+function codePointAt(text: string, index: number): string {
+  const codePoint = text.codePointAt(index);
+  return codePoint === undefined ? '' : String.fromCodePoint(codePoint);
 }
 
 /**
@@ -37,8 +52,8 @@ function isWordCharacter(character: string | undefined): boolean {
  */
 export function isWholeWordMatch(text: string, index: number, needle: string): boolean {
   const end = index + needle.length;
-  if (isWordCharacter(needle[0]) && isWordCharacter(text[index - 1])) return false;
-  if (isWordCharacter(needle[needle.length - 1]) && isWordCharacter(text[end])) return false;
+  if (isWordCharacter(codePointAt(needle, 0)) && isWordCharacter(codePointBefore(text, index))) return false;
+  if (isWordCharacter(codePointBefore(needle, needle.length)) && isWordCharacter(codePointAt(text, end))) return false;
   return true;
 }
 

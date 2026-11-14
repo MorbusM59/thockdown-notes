@@ -157,9 +157,9 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
   sidebarMode: SidebarMode
 
   restoredDocumentFindCaseSensitive: boolean | null
-  documentFindCaseSensitiveRef: MutableRefObject<boolean>
+  /** Reports this slot's find options up, to be saved. */
+  onDocumentFindOptionsChange: (options: { caseSensitive: boolean; wholeWord: boolean }) => void
   restoredDocumentFindWholeWord: boolean | null
-  documentFindWholeWordRef: MutableRefObject<boolean>
 
   editorRuntimeMetrics: EditorRuntimeMetrics
   visualizerFont: VisualizerFont
@@ -256,9 +256,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
   chapterBarModeRef,
   sidebarMode,
   restoredDocumentFindCaseSensitive,
-  documentFindCaseSensitiveRef,
+  onDocumentFindOptionsChange,
   restoredDocumentFindWholeWord,
-  documentFindWholeWordRef,
   editorRuntimeMetrics,
   visualizerFont,
   noteSizeThresholdBlocks,
@@ -1509,12 +1508,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
   })
 
   useEffect(() => {
-    documentFindCaseSensitiveRef.current = isDocumentFindCaseSensitive
-  }, [isDocumentFindCaseSensitive, documentFindCaseSensitiveRef])
-
-  useEffect(() => {
-    documentFindWholeWordRef.current = isDocumentFindWholeWord
-  }, [isDocumentFindWholeWord, documentFindWholeWordRef])
+    onDocumentFindOptionsChange({ caseSensitive: isDocumentFindCaseSensitive, wholeWord: isDocumentFindWholeWord })
+  }, [isDocumentFindCaseSensitive, isDocumentFindWholeWord, onDocumentFindOptionsChange])
 
   // Mirrors SectionEditorArea.tsx's own editorReadOnly expression (its
   // negation) -- see usePreviewMarkdownRendering's isActiveNoteEditable doc

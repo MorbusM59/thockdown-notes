@@ -713,12 +713,10 @@ export function useDocumentFindNavigation({
     if (!selection) {
       target = direction === 1 ? documentFindHits[0] : documentFindHits[count - 1]
     } else if (direction === 1) {
-      // A collapsed caret steps to a hit starting at it; a selection (a hit
-      // already marked) steps past its own start.
-      const isAfter = selection.end > selection.start
-        ? (hit: DocumentFindHit) => hit.index > selection.start
-        : (hit: DocumentFindHit) => hit.index >= selection.end
-      target = documentFindHits.find(isAfter) ?? documentFindHits[0]
+      // Past the selection's end: a marked hit steps to the one after it, a
+      // caret to a hit starting at it. (Hits never overlap, so a hit ending
+      // at selection.end cannot start at or after it.)
+      target = documentFindHits.find((hit) => hit.index >= selection.end) ?? documentFindHits[0]
     } else {
       target = [...documentFindHits].reverse().find((hit) => hit.index < selection.start) ?? documentFindHits[count - 1]
     }

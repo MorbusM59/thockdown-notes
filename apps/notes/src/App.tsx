@@ -1327,13 +1327,11 @@ function App() {
   // Whether the options panel's Colors section is open, which docks its colour picker below the sidebar.
   const [isColorsSectionOpen, setIsColorsSectionOpen] = useState(false)
   const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
-  // Mirrors useDocumentFind's isDocumentFindCaseSensitive so
-  // buildMenuStateSnapshot (defined earlier than the hook call can be) can
-  // read the latest value without a definition-order cycle -- same pattern
-  // as chapterBarModeRef.
-  const documentFindCaseSensitiveRef = useRef(false)
+  // The find options last set in any slot (useDocumentFind's toggles),
+  // reported up by the sections. State rather than a ref so that a toggle
+  // changes buildMenuStateSnapshot and the debounced save follows it.
+  const [documentFindOptions, setDocumentFindOptions] = useState({ caseSensitive: false, wholeWord: false })
   const [restoredDocumentFindCaseSensitive, setRestoredDocumentFindCaseSensitive] = useState<boolean | null>(null)
-  const documentFindWholeWordRef = useRef(false)
   const [restoredDocumentFindWholeWord, setRestoredDocumentFindWholeWord] = useState<boolean | null>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
@@ -3074,8 +3072,8 @@ function App() {
         effectiveShowsImages,
       ),
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
-      documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
-      documentFindWholeWord: documentFindWholeWordRef.current,
+      documentFindCaseSensitive: documentFindOptions.caseSensitive,
+      documentFindWholeWord: documentFindOptions.wholeWord,
       isPreviewMode: getActiveSection()?.isPreviewMode,
       viewStyle,
       viewFontSize: fontSizesByMode.regular.viewFontSize,
@@ -3224,6 +3222,7 @@ function App() {
       sidebarShowsImages: effectiveShowsImages,
     }
   }, [
+    documentFindOptions,
     archiveUnfoldedPrimary,
     archiveUnfoldedSecondary,
     categoryUnfoldedPrimary,
@@ -9151,9 +9150,8 @@ ${markdownHtml}
                   chapterBarModeRef={chapterBarModeRef}
                   sidebarMode={sidebarMode}
                   restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
-                  documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
+                  onDocumentFindOptionsChange={setDocumentFindOptions}
                   restoredDocumentFindWholeWord={restoredDocumentFindWholeWord}
-                  documentFindWholeWordRef={documentFindWholeWordRef}
                   editorRuntimeMetrics={editorRuntimeMetrics}
                   noteSizeThresholdBlocks={noteSizeThresholdBlocks}
                   forceCharacterScrollbarThumb={forceCharacterScrollbarThumb}

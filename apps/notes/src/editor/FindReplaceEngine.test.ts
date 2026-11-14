@@ -57,6 +57,10 @@ describe('whole word', () => {
     expect(buildDocumentFindHits('foo-bar foo-', 'foo-', wholeWord).map((hit) => hit.index)).toEqual([0, 8]);
   });
 
+  it('reads a character outside the BMP as one character', () => {
+    expect(buildDocumentFindHits('\u{1D400}x\u{1D400} x', 'x', wholeWord).map((hit) => hit.index)).toEqual([6]);
+  });
+
   it('applies in render view too', () => {
     const hits = buildPreviewVisibleDocumentFindHits('**cat** catalog', 'cat', wholeWord);
     expect(hits).toHaveLength(1);
