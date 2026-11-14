@@ -266,7 +266,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Visualizer](#visualizer)
 
 > **Where?**
-> Settings panel → Advanced → Beat Detection, Glitz → Grid Beat, and Music → Visualizer.
+> Settings panel → Advanced → Beat Detection, Glitz → Grid Beat and Glitz → Visualizer.
 
 *The caret, the active editor's edge and its pane follow the music you are playing.*
 

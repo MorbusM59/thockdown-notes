@@ -2350,6 +2350,161 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
+      </>) : null}
+
+      {showsSection('glitz') ? (<>
+      <AccordionSection
+        className="sidebar-options-section-audio"
+        ariaLabel="Keystroke Sounds"
+        heading="Keystroke Sounds"
+        iconClass="fa-keyboard"
+      >
+        <div className="utility-setting-slider-stack" aria-label="Keystroke sound controls">
+          <KeystrokeSoundOptions
+            preferences={keystrokeSoundPreferences}
+            setPreferences={setKeystrokeSoundPreferences}
+            active={activeKeystrokeSound}
+            apply={applyKeystrokeSound}
+          />
+          <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
+          <KeystrokeChannelOptions settings={keystrokeSound} onChange={(channels) => setKeystrokeSound({ channels })} />
+          <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
+          {/* What every channel goes through together: level and pitch, then the space. */}
+          <OptionsSliderRows rows={[3, 3]}>
+            <CompactScrollbarSlider
+              id="keystroke-volume"
+              min={KEYSTROKE_SOUND_RANGES.volume[0]}
+              max={KEYSTROKE_SOUND_RANGES.volume[1]}
+              step={0.01}
+              value={keystrokeSound.volume}
+              trackLabel="volume"
+              ariaLabel="Keystroke volume, all channels"
+              defaultValue={1}
+              onCommit={(value) => setKeystrokeSound({ volume: clamp(value, KEYSTROKE_SOUND_RANGES.volume[0], KEYSTROKE_SOUND_RANGES.volume[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="keystroke-pitch"
+              min={KEYSTROKE_SOUND_RANGES.pitch[0]}
+              max={KEYSTROKE_SOUND_RANGES.pitch[1]}
+              step={1}
+              value={keystrokeSound.pitch}
+              trackLabel="pitch"
+              ariaLabel="Pitch of every channel"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ pitch: clamp(value, KEYSTROKE_SOUND_RANGES.pitch[0], KEYSTROKE_SOUND_RANGES.pitch[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="keystroke-variance"
+              min={KEYSTROKE_SOUND_RANGES.variance[0]}
+              max={KEYSTROKE_SOUND_RANGES.variance[1]}
+              step={0.005}
+              value={keystrokeSound.variance}
+              trackLabel="variance"
+              tooltipLabel="variance: how far each key is pitched apart from the others, fixed per key"
+              ariaLabel="How far each key is pitched apart from the others, fixed per key"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ variance: clamp(value, KEYSTROKE_SOUND_RANGES.variance[0], KEYSTROKE_SOUND_RANGES.variance[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="keystroke-reverb"
+              min={KEYSTROKE_SOUND_RANGES.reverb[0]}
+              max={KEYSTROKE_SOUND_RANGES.reverb[1]}
+              step={0.01}
+              value={keystrokeSound.reverb}
+              trackLabel="reverb"
+              ariaLabel="Reverb strength"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ reverb: clamp(value, KEYSTROKE_SOUND_RANGES.reverb[0], KEYSTROKE_SOUND_RANGES.reverb[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="keystroke-room"
+              min={KEYSTROKE_SOUND_RANGES.room[0]}
+              max={KEYSTROKE_SOUND_RANGES.room[1]}
+              step={0.01}
+              value={keystrokeSound.room}
+              trackLabel="room"
+              ariaLabel="Reverb space"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ room: clamp(value, KEYSTROKE_SOUND_RANGES.room[0], KEYSTROKE_SOUND_RANGES.room[1]) })}
+            />
+            <CompactScrollbarSlider
+              id="keystroke-spatial"
+              min={KEYSTROKE_SOUND_RANGES.spatial[0]}
+              max={KEYSTROKE_SOUND_RANGES.spatial[1]}
+              step={1}
+              value={keystrokeSound.spatial}
+              trackLabel="spatial"
+              ariaLabel="Stereo spatial mode: left of center pans by keyboard key position, right of center pans by caret position on the line"
+              defaultValue={0}
+              onCommit={(value) => setKeystrokeSound({ spatial: clamp(value, KEYSTROKE_SOUND_RANGES.spatial[0], KEYSTROKE_SOUND_RANGES.spatial[1]) })}
+            />
+          </OptionsSliderRows>
+        </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-typing-trail"
+        ariaLabel="Typing Trail"
+        heading="Typing Trail"
+        iconClass="fa-wand-sparkles"
+      >
+          <div className="utility-setting-slider-stack" aria-label="Typing trail settings">
+            {/* How a trail mark fades (fade, shape) and how many characters the trail takes to reach full strength (gain); typingTrail/typingTrail.ts. */}
+            <OptionsSliderRows rows={[3]}>
+              <CompactScrollbarSlider
+                id="typing-trail-fade-time"
+                min={TRAIL_FADE_MAX_TIME_MIN}
+                max={TRAIL_FADE_MAX_TIME_MAX}
+                step={0.1}
+                value={typingTrailSettings.fadeMaxTime}
+                trackLabel="fade"
+                tooltipLabel="Seconds a trail mark, and the caret's hold after a typed letter, take to fade out"
+                ariaLabel="How long a typing trail mark takes to fade out, in seconds"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeMaxTime}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeMaxTime: value }))}
+              />
+              <CompactScrollbarSlider
+                id="typing-trail-fade-shape"
+                min={TRAIL_FADE_SHAPE_MIN}
+                max={TRAIL_FADE_SHAPE_MAX}
+                step={0.1}
+                value={typingTrailSettings.fadeShape}
+                trackLabel="shape"
+                tooltipLabel="Fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
+                ariaLabel="Shape of the typing trail's fade"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeShape}
+                formatValue={(value) => value.toFixed(1)}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeShape: value }))}
+              />
+              <CompactScrollbarSlider
+                id="typing-trail-gain"
+                min={TRAIL_GAIN_PERCENT_MIN}
+                max={TRAIL_GAIN_PERCENT_MAX}
+                step={1}
+                value={typingTrailSettings.gainPercent}
+                trackLabel="gain"
+                tooltipLabel="Percent of the trail's full colour each typed letter adds on top of what the last mark has faded to (the colour is in Colors, Boxes)"
+                ariaLabel="Percent of the typing trail's full strength each letter adds"
+                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gainPercent}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, gainPercent: Math.round(value) }))}
+              />
+            </OptionsSliderRows>
+          </div>
+      </AccordionSection>
+
+      <AccordionSection
+        className="sidebar-options-section-grid-beat"
+        ariaLabel="Grid Beat"
+        heading="Grid Beat"
+        iconClass="fa-table-cells"
+      >
+          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
+          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
+          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
+      </AccordionSection>
+
       <AccordionSection
         className="sidebar-options-section-visualizer"
         ariaLabel="Visualizer"
@@ -2627,161 +2782,6 @@ export function SidebarOptionsPanel({
               />
             </OptionsSliderRows>
           </div>
-      </AccordionSection>
-
-      </>) : null}
-
-      {showsSection('glitz') ? (<>
-      <AccordionSection
-        className="sidebar-options-section-audio"
-        ariaLabel="Keystroke Sounds"
-        heading="Keystroke Sounds"
-        iconClass="fa-keyboard"
-      >
-        <div className="utility-setting-slider-stack" aria-label="Keystroke sound controls">
-          <KeystrokeSoundOptions
-            preferences={keystrokeSoundPreferences}
-            setPreferences={setKeystrokeSoundPreferences}
-            active={activeKeystrokeSound}
-            apply={applyKeystrokeSound}
-          />
-          <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
-          <KeystrokeChannelOptions settings={keystrokeSound} onChange={(channels) => setKeystrokeSound({ channels })} />
-          <OptionsSubsectionLabel>Mix</OptionsSubsectionLabel>
-          {/* What every channel goes through together: level and pitch, then the space. */}
-          <OptionsSliderRows rows={[3, 3]}>
-            <CompactScrollbarSlider
-              id="keystroke-volume"
-              min={KEYSTROKE_SOUND_RANGES.volume[0]}
-              max={KEYSTROKE_SOUND_RANGES.volume[1]}
-              step={0.01}
-              value={keystrokeSound.volume}
-              trackLabel="volume"
-              ariaLabel="Keystroke volume, all channels"
-              defaultValue={1}
-              onCommit={(value) => setKeystrokeSound({ volume: clamp(value, KEYSTROKE_SOUND_RANGES.volume[0], KEYSTROKE_SOUND_RANGES.volume[1]) })}
-            />
-            <CompactScrollbarSlider
-              id="keystroke-pitch"
-              min={KEYSTROKE_SOUND_RANGES.pitch[0]}
-              max={KEYSTROKE_SOUND_RANGES.pitch[1]}
-              step={1}
-              value={keystrokeSound.pitch}
-              trackLabel="pitch"
-              ariaLabel="Pitch of every channel"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ pitch: clamp(value, KEYSTROKE_SOUND_RANGES.pitch[0], KEYSTROKE_SOUND_RANGES.pitch[1]) })}
-            />
-            <CompactScrollbarSlider
-              id="keystroke-variance"
-              min={KEYSTROKE_SOUND_RANGES.variance[0]}
-              max={KEYSTROKE_SOUND_RANGES.variance[1]}
-              step={0.005}
-              value={keystrokeSound.variance}
-              trackLabel="variance"
-              tooltipLabel="variance: how far each key is pitched apart from the others, fixed per key"
-              ariaLabel="How far each key is pitched apart from the others, fixed per key"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ variance: clamp(value, KEYSTROKE_SOUND_RANGES.variance[0], KEYSTROKE_SOUND_RANGES.variance[1]) })}
-            />
-            <CompactScrollbarSlider
-              id="keystroke-reverb"
-              min={KEYSTROKE_SOUND_RANGES.reverb[0]}
-              max={KEYSTROKE_SOUND_RANGES.reverb[1]}
-              step={0.01}
-              value={keystrokeSound.reverb}
-              trackLabel="reverb"
-              ariaLabel="Reverb strength"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ reverb: clamp(value, KEYSTROKE_SOUND_RANGES.reverb[0], KEYSTROKE_SOUND_RANGES.reverb[1]) })}
-            />
-            <CompactScrollbarSlider
-              id="keystroke-room"
-              min={KEYSTROKE_SOUND_RANGES.room[0]}
-              max={KEYSTROKE_SOUND_RANGES.room[1]}
-              step={0.01}
-              value={keystrokeSound.room}
-              trackLabel="room"
-              ariaLabel="Reverb space"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ room: clamp(value, KEYSTROKE_SOUND_RANGES.room[0], KEYSTROKE_SOUND_RANGES.room[1]) })}
-            />
-            <CompactScrollbarSlider
-              id="keystroke-spatial"
-              min={KEYSTROKE_SOUND_RANGES.spatial[0]}
-              max={KEYSTROKE_SOUND_RANGES.spatial[1]}
-              step={1}
-              value={keystrokeSound.spatial}
-              trackLabel="spatial"
-              ariaLabel="Stereo spatial mode: left of center pans by keyboard key position, right of center pans by caret position on the line"
-              defaultValue={0}
-              onCommit={(value) => setKeystrokeSound({ spatial: clamp(value, KEYSTROKE_SOUND_RANGES.spatial[0], KEYSTROKE_SOUND_RANGES.spatial[1]) })}
-            />
-          </OptionsSliderRows>
-        </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-typing-trail"
-        ariaLabel="Typing Trail"
-        heading="Typing Trail"
-        iconClass="fa-wand-sparkles"
-      >
-          <div className="utility-setting-slider-stack" aria-label="Typing trail settings">
-            {/* How a trail mark fades (fade, shape) and how many characters the trail takes to reach full strength (gain); typingTrail/typingTrail.ts. */}
-            <OptionsSliderRows rows={[3]}>
-              <CompactScrollbarSlider
-                id="typing-trail-fade-time"
-                min={TRAIL_FADE_MAX_TIME_MIN}
-                max={TRAIL_FADE_MAX_TIME_MAX}
-                step={0.1}
-                value={typingTrailSettings.fadeMaxTime}
-                trackLabel="fade"
-                tooltipLabel="Seconds a trail mark, and the caret's hold after a typed letter, take to fade out"
-                ariaLabel="How long a typing trail mark takes to fade out, in seconds"
-                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeMaxTime}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeMaxTime: value }))}
-              />
-              <CompactScrollbarSlider
-                id="typing-trail-fade-shape"
-                min={TRAIL_FADE_SHAPE_MIN}
-                max={TRAIL_FADE_SHAPE_MAX}
-                step={0.1}
-                value={typingTrailSettings.fadeShape}
-                trackLabel="shape"
-                tooltipLabel="Fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
-                ariaLabel="Shape of the typing trail's fade"
-                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeShape}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, fadeShape: value }))}
-              />
-              <CompactScrollbarSlider
-                id="typing-trail-gain"
-                min={TRAIL_GAIN_PERCENT_MIN}
-                max={TRAIL_GAIN_PERCENT_MAX}
-                step={1}
-                value={typingTrailSettings.gainPercent}
-                trackLabel="gain"
-                tooltipLabel="Percent of the trail's full colour each typed letter adds on top of what the last mark has faded to (the colour is in Colors, Boxes)"
-                ariaLabel="Percent of the typing trail's full strength each letter adds"
-                defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gainPercent}
-                formatValue={(value) => String(Math.round(value))}
-                onCommit={(value) => setTypingTrailSettings((prev) => ({ ...prev, gainPercent: Math.round(value) }))}
-              />
-            </OptionsSliderRows>
-          </div>
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-grid-beat"
-        ariaLabel="Grid Beat"
-        heading="Grid Beat"
-        iconClass="fa-table-cells"
-      >
-          {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
-          {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
-          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
       </AccordionSection>
       </>) : null}
 
