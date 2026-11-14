@@ -926,3 +926,21 @@
   white-space:   nowrap;
   text-overflow: ellipsis;
 }
+
+/* A label on the thumb (CanonicalScrollRail's thumbLabel): centred both ways,
+   in the pager readout's font and size, free to overhang a narrow thumb. */
+.thockdown-scroll-thumb {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+.thockdown-scroll-thumb-label {
+  font-size:      calc(9px * var(--ui-font-scale));
+  font-weight:    600;
+  line-height:    1;
+  color:          var(--color-text-80);
+  white-space:    nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}

@@ -18,6 +18,7 @@ export function CanonicalScrollRail({
   layoutKey,
   textureRef,
   className,
+  thumbLabel,
 }: {
   scroller: HTMLElement | null
   /** Whether PageUp/PageDown from the keyboard scroll this box. */
@@ -27,6 +28,8 @@ export function CanonicalScrollRail({
   /** A texture layer that scrolls with the box, when it has one. */
   textureRef?: MutableRefObject<HTMLDivElement | null>
   className?: string
+  /** Text drawn on the thumb, centred (a paged list's page number). */
+  thumbLabel?: string
 }) {
   const scrollerRef = useRef<HTMLElement | null>(scroller)
   scrollerRef.current = scroller
@@ -62,7 +65,9 @@ export function CanonicalScrollRail({
           ref={scrollbarThumbRef}
           className={`thockdown-scroll-thumb${isDraggingThumb ? ' is-dragging' : ''}${isThumbActive ? '' : ' is-inactive'}`}
           onPointerDown={handleThumbPointerDown}
-        />
+        >
+          {thumbLabel ? <span className="thockdown-scroll-thumb-label">{thumbLabel}</span> : null}
+        </div>
       </div>
     </div>
   )
