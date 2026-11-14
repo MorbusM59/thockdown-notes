@@ -179,6 +179,7 @@ import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
 import { FieldActionButton } from './components/FieldActionButton'
+import { Pager } from './components/Pager'
 import { MAX_FIND_HITS } from './editor/FindReplaceEngine'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
@@ -1270,7 +1271,6 @@ function App() {
   const optionsContentRef = useRef<HTMLDivElement | null>(null)
   const sidebarSearchInputRef = useRef<HTMLInputElement | null>(null)
   const documentReplaceInputRef = useRef<HTMLInputElement | null>(null)
-  const pageJumpInputRef = useRef<HTMLInputElement | null>(null)
   const glazeLinearSeedInputRef = useRef<HTMLInputElement | null>(null)
   const glazeRadialSeedInputRef = useRef<HTMLInputElement | null>(null)
   const [notes, setNoteSummaries] = useState<NoteSummary[]>([])
@@ -1621,8 +1621,6 @@ function App() {
   const [selectedYears, setSelectedYears] = useState<Set<number | 'older'>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
   const [findPage, setFindPage] = useState(1)
-  const [pageJumpInput, setPageJumpInput] = useState('1')
-  const [isPageJumpEditing, setIsPageJumpEditing] = useState(false)
   const [categoryUnfoldedPrimary, setCategoryUnfoldedPrimary] = useState<string[]>([])
   const [categoryUnfoldedSecondary, setCategoryUnfoldedSecondary] = useState<string[]>([])
   const [archiveUnfoldedPrimary, setArchiveUnfoldedPrimary] = useState<string[]>([])
@@ -6717,20 +6715,12 @@ ${markdownHtml}
   useEffect(() => {
     setFindPage(1)
   }, [findPageResetKey])
-  // The page-jump editor belongs to whichever list was paged when it opened.
-  useEffect(() => {
-    setIsPageJumpEditing(false)
-  }, [isFindMode])
   // The find view pages its hits as the note sections page their notes, with
   // the same control: whichever list is up drives it.
   const findHitCount = isFindMode ? (activeSectionSnapshot?.documentFindHits.length ?? 0) : 0
   const findTotalPages = Math.max(1, Math.ceil(findHitCount / FIND_HITS_PER_PAGE))
   const effectiveFindPage = Math.min(Math.max(1, findPage), findTotalPages)
-  const pager = isFindMode
-    ? { page: effectiveFindPage, total: findTotalPages, setPage: setFindPage }
-    : { page: effectiveCurrentPage, total: totalPages, setPage: setCurrentPage }
-  const { page: pagerPage, total: pagerTotal, setPage: setPagerPage } = pager
-  const showPagination = pager.total > 1 && (isFindMode || (!isImageLibraryShown && isPagedNoteSection(sidebarMode)))
+  const showPagination = !isImageLibraryShown && isPagedNoteSection(sidebarMode) && totalPages > 1
   const isMusicLibraryDocked = sidebarMode === 'songs'
   const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 
@@ -7112,12 +7102,6 @@ ${markdownHtml}
   }, [currentPage, totalPages])
 
   useEffect(() => {
-    if (!isPageJumpEditing) {
-      setPageJumpInput(String(pager.page))
-    }
-  }, [pager.page, isPageJumpEditing])
-
-  useEffect(() => {
     if (!isGlazeLinearSeedEditing) {
       setGlazeLinearSeedInput(String(glazeSettings.linearSeed))
     }
@@ -7128,35 +7112,6 @@ ${markdownHtml}
       setGlazeRadialSeedInput(String(glazeSettings.radialSeed))
     }
   }, [glazeSettings.radialSeed, isGlazeRadialSeedEditing])
-
-  const commitPageJump = useCallback(() => {
-    const parsed = Number.parseInt(pageJumpInput.trim(), 10)
-    const safePage = Number.isFinite(parsed)
-      ? clamp(parsed, 1, pagerTotal)
-      : pagerPage
-
-    setPagerPage(safePage)
-    setPageJumpInput(String(safePage))
-    setIsPageJumpEditing(false)
-  }, [pagerPage, setPagerPage, pageJumpInput, pagerTotal])
-
-  const startPageJumpEdit = useCallback(() => {
-    setPageJumpInput(String(pager.page))
-    setIsPageJumpEditing(true)
-  }, [pager.page])
-
-  const cancelPageJumpEdit = useCallback(() => {
-    setPageJumpInput(String(pager.page))
-    setIsPageJumpEditing(false)
-  }, [pager.page])
-
-  useEffect(() => {
-    if (!isPageJumpEditing) return
-    window.requestAnimationFrame(() => {
-      pageJumpInputRef.current?.focus()
-      pageJumpInputRef.current?.select()
-    })
-  }, [isPageJumpEditing])
 
   const commitGlazeLinearSeedEdit = useCallback(() => {
     const parsed = Number.parseInt(glazeLinearSeedInput.trim(), 10)
@@ -7318,10 +7273,10 @@ ${markdownHtml}
       const isSearchField = target === sidebarSearchInputRef.current
       const isReplaceField = target === documentReplaceInputRef.current
       const isTagField = target === activeSection?.tagInputRef.current
-      const isPageJumpField = target === pageJumpInputRef.current
+      const isPagerField = Boolean(target?.closest('.pager-field'))
       const isGlazeLinearSeedField = target === glazeLinearSeedInputRef.current
       const isGlazeRadialSeedField = target === glazeRadialSeedInputRef.current
-      const isEditorControlField = isSearchField || isReplaceField || isTagField || isPageJumpField || isGlazeLinearSeedField || isGlazeRadialSeedField
+      const isEditorControlField = isSearchField || isReplaceField || isTagField || isPagerField || isGlazeLinearSeedField || isGlazeRadialSeedField
 
       // THE FIND/REPLACE PAIR IS THE ONE PLACE TAB STEPS SIDEWAYS, and it
       // now does so by NAME rather than by riding the browser's tab order.
@@ -8692,9 +8647,9 @@ ${markdownHtml}
                     // there -- its two actions.
                     <div className="sidebar-plain-dock">
                       <div className="options-curve-rows options-music-set-list-dock">
-                        {/* One row of chips: the mode toggle, replace mode's
-                            two actions beside it, the square toggles, then the
-                            two arrows sharing what the row leaves. */}
+                        {/* One row: the mode toggle, replace mode's two actions
+                            beside it, the square toggles, then the pager
+                            filling what the row leaves. */}
                         <div className={`options-curve-row find-dock-row${isReplaceMode ? ' is-replace-mode' : ''}`}>
                           <button
                             type="button"
@@ -8748,28 +8703,20 @@ ${markdownHtml}
                           >
                             Aa
                           </button>
-                          <button
-                            type="button"
-                            className="options-curve-cell options-curve-button options-dock-entry-icon"
-                            aria-label="Previous occurrence"
-                            data-tooltip="Previous occurrence"
-                            onClick={() => getActiveSection()?.stepDocumentFindHit(-1)}
-                          >
-                            <span className="fa-solid fa-caret-left" aria-hidden="true" />
-                          </button>
-                          {/* Which hit is marked, of how many: a readout, not a control. */}
-                          <span className="options-curve-cell options-curve-display find-dock-count" aria-live="polite">
-                            {`${markedFindHitPosition === null ? '-' : (markedFindHitPosition + 1).toLocaleString()} of ${findHitCount.toLocaleString()}${activeSection?.isDocumentFindTruncated ? '+' : ''}`}
-                          </span>
-                          <button
-                            type="button"
-                            className="options-curve-cell options-curve-button options-dock-entry-icon"
-                            aria-label="Next occurrence"
-                            data-tooltip="Next occurrence"
-                            onClick={() => getActiveSection()?.stepDocumentFindHit(1)}
-                          >
-                            <span className="fa-solid fa-caret-right" aria-hidden="true" />
-                          </button>
+                          <Pager
+                            hits={{
+                              current: markedFindHitPosition,
+                              total: findHitCount,
+                              isTotalOpen: Boolean(activeSection?.isDocumentFindTruncated),
+                              onGo: (position) => getActiveSection()?.jumpToDocumentFindHitAt(position),
+                              onStep: (direction) => { getActiveSection()?.stepDocumentFindHit(direction) },
+                            }}
+                            pages={findTotalPages > 1 ? {
+                              current: effectiveFindPage - 1,
+                              total: findTotalPages,
+                              onGo: (page) => setFindPage(page + 1),
+                            } : undefined}
+                          />
                         </div>
                       </div>
                     </div>
@@ -8786,70 +8733,14 @@ ${markdownHtml}
                   {/* Paging and the date filter sit in the column beside the
                       scrollbar, as every dock does. */}
               {showPagination ? (
-                <div className="sidebar-pagination" aria-label="Sidebar pagination">
-                  <button
-                    type="button"
-                    className="sidebar-page-btn"
-                    disabled={pager.page === 1}
-                    onClick={() => pager.setPage(Math.max(1, pager.page - 1))}
-                  >
-                    &lt;
-                  </button>
-                  {isPageJumpEditing ? (
-                    <label className="sidebar-page-number-btn" aria-label="Jump to page">
-                      <input
-                        ref={pageJumpInputRef}
-                        type="number"
-                        min={1}
-                        max={pager.total}
-                        step={1}
-                        inputMode="numeric"
-                        className="sidebar-page-number-input sidebar-page-number-input--edit"
-                        value={pageJumpInput}
-                        onChange={(event) => {
-                          setPageJumpInput(event.target.value.replace(/[^0-9]/g, ''))
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            commitPageJump()
-                            getActiveSection()?.scheduleFocusEditorInEditMode()
-                            return
-                          }
-
-                          if (event.key === 'Escape' || event.key === 'Tab') {
-                            event.preventDefault()
-                            cancelPageJumpEdit()
-                            getActiveSection()?.scheduleFocusEditorInEditMode()
-                          }
-                        }}
-                        onBlur={() => {
-                          window.setTimeout(() => {
-                            if (!isTextEntryElement(document.activeElement)) {
-                              getActiveSection()?.scheduleFocusEditorInEditMode()
-                            }
-                          }, 0)
-                        }}
-                      />
-                    </label>
-                  ) : (
-                    <button
-                      type="button"
-                      className="sidebar-page-number-btn sidebar-page-number-display"
-                      aria-label={`Current page ${pager.page} of ${pager.total}. Click to edit.`}
-                      onClick={startPageJumpEdit}
-                    >
-                      {`${pager.page} / ${pager.total}`}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="sidebar-page-btn"
-                    disabled={pager.page === pager.total}
-                    onClick={() => pager.setPage(Math.min(pager.total, pager.page + 1))}
-                  >
-                    &gt;
-                  </button>
+                <div className="sidebar-pagination">
+                  <Pager
+                    pages={{
+                      current: effectiveCurrentPage - 1,
+                      total: totalPages,
+                      onGo: (page) => setCurrentPage(page + 1),
+                    }}
+                  />
                 </div>
               ) : null}
 

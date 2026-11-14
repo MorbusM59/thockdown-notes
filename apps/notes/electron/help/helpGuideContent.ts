@@ -402,7 +402,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Steps through a long, flat list of notes a page at a time.*
 
-- Click the page number to type a specific page and jump to it directly.
+- The arrows turn the page; holding one goes to the first or last page.
+- Right-click the page number to type a page and jump to it.
 
 ### [Search](#search)
 
@@ -656,8 +657,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - \`Ctrl+Enter\` replaces every match at once, as do the dock's replace-all button and a right-click on the sidebar's Find icon; its replace button replaces the marked match, or marks the next one.
 - The dock's **Aa** means "case-sensitive" in plain find mode; in replace mode it means *keep case*, searching case-insensitively but re-casing each replacement to match what it's replacing.
 - Its whole-word toggle finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
-- Its two arrows step through the matches, wrapping at either end.
-- Past 100 matches the list is shown a page at a time; the arrows turn the page as they go. At most the first 10,000 matches are listed; replacing all still replaces every one.
+- The pager at the dock's end shows the marked match and the count, \`12 | 544\`. Its carets step through the matches, wrapping at either end; holding one goes to the first or last match. Right-click the count to type a match number.
+- Past 100 matches the list is shown a page at a time, and the pager reads \`12[1] | 544[6]\`, page numbers in brackets; its outer arrows turn the page, and the list follows the marked match. At most the first 10,000 matches are listed; replacing all still replaces every one.
 - What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,

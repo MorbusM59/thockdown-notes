@@ -93,6 +93,7 @@ export interface UseDocumentFindNavigationResult {
   visibleDocumentFindHitRange: { from: number; to: number } | null
   /** The marked hit's position in the hit list, or null when none is marked. */
   markedFindHitPosition: number | null
+  jumpToDocumentFindHitAt: (position: number) => void
   handleJumpToDocumentFindHit: (hit: DocumentFindHit) => void
   replaceDocumentFindHit: (hit: DocumentFindHit) => void
   replaceAllDocumentFindHits: () => void
@@ -771,9 +772,16 @@ export function useDocumentFindNavigation({
     return position
   }, [adapterRef, documentFindHits, handleJumpToDocumentFindHit, isPreviewMode])
 
+  /** Marks the hit at a position in the list (the pager's typed number, its holds). */
+  const jumpToDocumentFindHitAt = useCallback((position: number) => {
+    const hit = documentFindHits[position]
+    if (hit) handleJumpToDocumentFindHit(hit)
+  }, [documentFindHits, handleJumpToDocumentFindHit])
+
   return {
     visibleDocumentFindHitRange,
     markedFindHitPosition,
+    jumpToDocumentFindHitAt,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,

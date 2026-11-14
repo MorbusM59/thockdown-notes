@@ -448,92 +448,17 @@
   font-weight: 700;
 }
 
-/* Pagination controls */
+/* The notes list's pager (components/Pager.tsx), a row in the docks'
+   metrics like the date filter below it. */
 .sidebar-pagination {
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-  gap:             var(--spacing-large);
-  padding:         0;
-  margin:          0;
-  background:      transparent;
-  border:          none;
+  --entry-height: var(--canonical-scroll-thickness);
+  display:        flex;
+  height:         var(--entry-height);
+  padding:        0 0 0 var(--spacing-large);
 }
 
-.sidebar-page-btn {
-  width:           auto;
-  min-width:       20px;
-  height:          20px;
-  padding:         0 var(--spacing-regular);
-  border-radius:   var(--border-radius-small);
-  font-size:       calc(10px * var(--ui-font-scale));
-  font-weight:     500;
-  color:           var(--color-text-60);
-  display:         inline-flex;
-  align-items:     center;
-  justify-content: center;
-  text-shadow:
-    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
-    0 1px 0px var(--text-shadow-emboss-ui-main);
-}
-
-.sidebar-page-btn:disabled {
-  opacity: 0;
-}
-
-.sidebar-page-number-btn {
-  min-width:       52px;
-  height:          20px;
-  padding:         0 var(--spacing-regular);
-  border:          1px solid var(--btn-border-default);
-  border-radius:   var(--border-radius-small);
-  background:      var(--btn-bg-default);
-  display:         inline-flex;
-  align-items:     center;
-  justify-content: center;
-  box-shadow: var(--box-shadow-inverted-light);
-}
-
-.sidebar-page-number-btn:focus-within {
-  border-color: var(--btn-border-active);
-  box-shadow:   var(--box-shadow-inverted);
-}
-
-.sidebar-page-number-display {
-  color:       var(--color-text-80);
-  font-size:   calc(10px * var(--ui-font-scale));
-  font-weight: 600;
-  cursor:      text;
-}
-
-.sidebar-page-number-input {
-  width:       100%;
-  max-width:   72px;
-  height:      100%;
-  border:      none;
-  background:  transparent;
-  color:       var(--color-text-80);
-  font-size:   calc(10px * var(--ui-font-scale));
-  font-weight: 600;
-  text-align:  center;
-  outline:     none;
-  padding:     0;
-  margin:      0;
-}
-
-.sidebar-page-number-input--edit {
-  cursor: text;
-}
-
-.sidebar-page-number-input::-webkit-outer-spin-button,
-.sidebar-page-number-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.sidebar-page-number-input[type='number'] {
-  -moz-appearance: textfield;
-  appearance:      textfield;
+.sidebar-pagination > .pager {
+  flex: 1 1 auto;
 }
 
 /* Date filter */
