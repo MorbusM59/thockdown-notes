@@ -6716,6 +6716,10 @@ ${markdownHtml}
   useEffect(() => {
     setFindPage(1)
   }, [findPageResetKey])
+  // The page-jump editor belongs to whichever list was paged when it opened.
+  useEffect(() => {
+    setIsPageJumpEditing(false)
+  }, [isFindMode])
   // The find view pages its hits as the note sections page their notes, with
   // the same control: whichever list is up drives it.
   const findHitCount = isFindMode ? (activeSectionSnapshot?.documentFindHits.length ?? 0) : 0
