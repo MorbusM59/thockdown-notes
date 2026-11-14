@@ -8,9 +8,9 @@ import {
 } from './keystrokeSounds'
 
 describe('keystroke sound presets', () => {
-  it('has ten distinct factory presets with distinct ids and bare icons', () => {
-    expect(FACTORY_KEYSTROKE_SOUNDS).toHaveLength(10)
-    expect(new Set(FACTORY_KEYSTROKE_SOUNDS.map((entry) => entry.id)).size).toBe(10)
+  it('has six distinct factory presets with distinct ids and bare icons', () => {
+    expect(FACTORY_KEYSTROKE_SOUNDS).toHaveLength(6)
+    expect(new Set(FACTORY_KEYSTROKE_SOUNDS.map((entry) => entry.id)).size).toBe(6)
     for (const [i, a] of FACTORY_KEYSTROKE_SOUNDS.entries()) {
       expect(a.icon).toMatch(/^fa-[a-z0-9-]+$/)
       for (const b of FACTORY_KEYSTROKE_SOUNDS.slice(i + 1)) expect(sameKeystrokeSound(a.settings, b.settings)).toBe(false)

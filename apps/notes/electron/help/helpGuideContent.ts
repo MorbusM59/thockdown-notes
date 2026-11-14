@@ -934,7 +934,7 @@ ${shortcutTable()}
 
 *Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
 
-- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (one per factory layout, then your own) work like [layout presets]($#presets), without export.
+- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (six built-in ones, Off first, then your own) work like [layout presets]($#presets), without export.
 - A keystroke is made of **channels**, layered: four click sets (Pops, Pins, Creamy, Forge) plus Bass and Treble. They work like soundscape channels: click one to show its **volume** , **jitter** (how far each press is pitched up or down at random) and **pitch**, hold it to turn it on, hold right-click to turn it off, and scroll over it to change its volume.
 - **Mix** acts on all channels together: volume, pitch, **variance** (how far each key is pitched apart from the others; a key always keeps its own sound), reverb and room.
 - **Spatial** slider adds stereo panning, centered (off) by default. Left of center pans by keyboard key position (left-hand keys sound from the left, right-hand keys from the right, non-character keys like arrows/Tab/Backspace stay centered); right of center pans by where the caret sits on the current line (line start sounds left, the far edge before an automatic wrap sounds right). The two modes don't blend — the slider picks one or the other by which side of center it's on, with distance from center setting how strong the effect is.

@@ -1,5 +1,4 @@
 import { emptyPresetList, sanitizePresetList, type Preset, type PresetKind, type PresetList } from '@thockdown/interaction/presetList'
-import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 
 /**
  * KEYSTROKE SOUNDS: named sets of how typing sounds (Options > Glitz >
@@ -7,9 +6,7 @@ import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET
  * sanitizer. App-wide, never part of a layout.
  *
  * They are a PRESET LIST (`packages/interaction/presetList.ts`), as
- * soundstages are: ten FACTORY presets, one per factory layout and named
- * after it (the sounds those layouts carried while sounds were part of a
- * layout), then the reader's own. One is always active and the live
+ * soundstages are: six FACTORY presets, then the reader's own. One is always active and the live
  * settings ARE its settings: an edit is written into it. Persisted as the
  * menu's `keystrokeSoundPresets`.
  */
@@ -89,39 +86,23 @@ const preset = (channels: ChannelOverrides, globals: Partial<Omit<KeystrokeSound
   channels: Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, { ...DEFAULT_KEYSTROKE_CHANNEL, ...(channels[id] ? { on: true, ...channels[id] } : {}) }])) as Record<KeystrokeChannelId, KeystrokeChannelSettings>,
 })
 
-/**
- * In the factory layouts' order, light then dark, under their names and
- * icons: the sounds those layouts carried while sounds were part of a layout,
- * the one sound set as its channel and the bass and treble layers as theirs,
- * each with what was then the one jitter.
- */
-const FACTORY_SETTINGS: readonly KeystrokeSoundSettings[] = [
-  preset({ creamy: { jitter: 0.05 }, bass: { volume: 0.2, jitter: 0.05 } }, { variance: 0.05 }),
-  preset({ bass: { volume: 0.33, jitter: 0.05 }, treble: { volume: 0.13, jitter: 0.05 } }, { variance: 0.3, pitch: -50, reverb: 0.25, room: 0.8 }),
-  preset({ pops: { volume: 0.2 }, treble: { volume: 0.22 } }, { reverb: 0.13, room: 0.85 }),
-  preset({ pops: {}, bass: { volume: 0.07 }, treble: { volume: 0.09 } }),
-  preset({ creamy: {}, bass: { volume: 0.2 } }, { reverb: 0.11, room: 1 }),
-  preset({ bass: { volume: 0.2, jitter: 0.05 }, treble: { volume: 0.2, jitter: 0.05 } }, { variance: 0.05, pitch: 20, reverb: 0.1 }),
-  preset({ pins: {} }),
-  preset({ creamy: {}, bass: { volume: 0.07 } }, { reverb: 0.29 }),
-  preset({ pops: { volume: 0.15 }, bass: { volume: 0.32 }, treble: { volume: 0.03 } }, { reverb: 0.14 }),
-  preset({ pins: { volume: 0.52 }, bass: { volume: 0.17 }, treble: { volume: 0.29 } }, { reverb: 0.13 }),
-]
-const FACTORY_NAMES = [...LIGHT_PRESET_THEMES, ...DARK_PRESET_THEMES].map((name) => name.replace(/ \(Default\)$/, ''))
-const FACTORY_ICONS = [...LIGHT_PRESET_ICONS, ...DARK_PRESET_ICONS].map((icon) => icon.replace(/^fa-solid /, ''))
-
-export const FACTORY_KEYSTROKE_SOUNDS: readonly Preset<KeystrokeSoundSettings>[] = FACTORY_SETTINGS.map((settings, index) => ({
-  id: FACTORY_NAMES[index].toLowerCase(),
-  name: FACTORY_NAMES[index],
-  icon: FACTORY_ICONS[index],
-  settings,
-}))
-
-/** A fresh install sounds like the default light layout did. */
-export const DEFAULT_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = FACTORY_SETTINGS[0]
-
-/** What the dock's reset writes into the active preset: every channel off, the mix neutral. */
+/** Off: every channel off, the mix neutral. Also what the dock's reset writes into the active preset. */
 export const NEUTRAL_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = preset({})
+
+const VANILLA = preset({ creamy: { jitter: 0.05 }, bass: { volume: 0.2, jitter: 0.05 } }, { variance: 0.05 })
+
+/** The factory presets, in the order the grid shows them. */
+export const FACTORY_KEYSTROKE_SOUNDS: readonly Preset<KeystrokeSoundSettings>[] = [
+  { id: 'off', name: 'Off', icon: 'fa-ban', settings: NEUTRAL_KEYSTROKE_SOUND },
+  { id: 'vanilla', name: 'Vanilla', icon: 'fa-ice-cream', settings: VANILLA },
+  { id: 'footsteps', name: 'Footsteps', icon: 'fa-shoe-prints', settings: preset({ bass: { volume: 0.2, jitter: 0.05, pitch: -100 }, treble: { volume: 0.2, jitter: 0.05, pitch: 100 } }, { variance: 0.2, pitch: 20, reverb: 0.1 }) },
+  { id: 'vestiges', name: 'Vestiges', icon: 'fa-archway', settings: preset({ creamy: {}, bass: { volume: 0.07 } }, { reverb: 0.29 }) },
+  { id: 'bubblegum', name: 'Bubblegum', icon: 'fa-burst', settings: preset({ pops: { volume: 0.15, jitter: 0.1 }, creamy: { volume: 0.15, jitter: 0.3, pitch: -100 }, bass: { volume: 0.3 }, treble: { volume: 0.05, jitter: 0.1, pitch: 100 } }, { reverb: 0.14 }) },
+  { id: 'needles', name: 'Needles', icon: 'fa-map-pin', settings: preset({ pins: { volume: 0.52 }, bass: { volume: 0.17 }, treble: { volume: 0.29 } }, { reverb: 0.13 }) },
+]
+
+/** A fresh install plays Vanilla. */
+export const DEFAULT_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = VANILLA
 
 export function cloneKeystrokeSound(settings: KeystrokeSoundSettings): KeystrokeSoundSettings {
   return { ...settings, channels: Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, { ...settings.channels[id] }])) as Record<KeystrokeChannelId, KeystrokeChannelSettings> }
@@ -144,7 +125,7 @@ export function sanitizeKeystrokeSoundSettings(value: unknown, fallback: Keystro
 
 export const KEYSTROKE_SOUND_KIND: PresetKind<KeystrokeSoundSettings> = {
   factory: FACTORY_KEYSTROKE_SOUNDS,
-  defaultId: FACTORY_KEYSTROKE_SOUNDS[0].id,
+  defaultId: 'vanilla',
   noun: 'Keystroke Sound',
   maxCustom: 100,
   clone: cloneKeystrokeSound,
