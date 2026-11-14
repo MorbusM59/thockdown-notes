@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
+import { pagerFigure } from '../shared/pagerFigure'
 
-/** The largest number a pager, or a paged list's thumb, writes out. */
-export const PAGER_MAX_FIGURE = 99
-
-/** A count as the pager writes it: plain figures up to PAGER_MAX_FIGURE, "..." past it. */
-export function pagerFigure(value: number): string {
-  return value > PAGER_MAX_FIGURE ? '...' : String(value)
-}
 
 /**
  * One axis a pager moves along: the hits of a search, or the pages of a list.
