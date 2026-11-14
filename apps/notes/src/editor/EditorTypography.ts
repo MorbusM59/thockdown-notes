@@ -19,7 +19,7 @@ export type EditorRuntimeMetrics = {
   cellWidthPx: number;
 };
 
-export const DEFAULT_EDITOR_STYLE: EditorStyleKey = 'sharetech';
+export const DEFAULT_EDITOR_STYLE: EditorStyleKey = 'novamono';
 
 export const EDITOR_STYLE_OPTIONS: Array<{ key: EditorStyleKey; label: string; family: string }> = [
   { key: 'syne', label: 'Syne', family: "'Syne Mono', 'Menlo', 'Monaco', monospace" },

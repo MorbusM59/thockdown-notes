@@ -834,7 +834,7 @@ ${shortcutTable()}
 
 *Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the note fonts under [Editor Font]($#editor-font).*
 
-- Twelve bundled UI fonts, from the general-purpose IBM Plex Sans to full-personality display fonts, alongside the app's default system font.
+- Twelve bundled UI fonts, from the general-purpose IBM Plex Sans to full-personality display fonts; Geo is the default.
 - The size slider scales UI text only; icons and button sizing stay fixed.
 
 ### [Glaze](#glaze)
