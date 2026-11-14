@@ -204,7 +204,13 @@ export class NoteLifecycleService {
 
   async loadNote(input: LoadNoteInput): Promise<NoteDocument> {
     const record = this.databaseService.getNoteRecord(input.id);
-    if (!record) throw new Error(`Note ${input.id} does not exist`);
+    if (!record) {
+      // Whoever asked still believes in this note (a stale list entry, a
+      // restored slot). Announcing it as deleted lets the window let go of it
+      // everywhere, so the request is not repeated.
+      this.announceDeleted(input.id);
+      throw new Error(`Note ${input.id} does not exist`);
+    }
     const fileName = this.fileNameOf(record);
     let rawText = this.databaseService.readStoredNoteContent(input.id);
     // A note opened from a file whose stored copy was never written: the
@@ -1088,12 +1094,16 @@ export class NoteLifecycleService {
       this.databaseService.deleteNote(input.id);
     }
     if (!record) return;
+    this.announceDeleted(input.id);
+  }
+
+  private announceDeleted(id: string): void {
     // The row is already gone: a listener failing must not make the deletion
-    // itself look failed to the caller.
+    // (or the failed load) look like something else to the caller.
     try {
-      this.onNoteDeleted(input.id);
+      this.onNoteDeleted(id);
     } catch (error) {
-      console.error('[notes] failed to announce a deleted note', { id: input.id, error });
+      console.error('[notes] failed to announce a deleted note', { id, error });
     }
   }
 

@@ -38,6 +38,11 @@ describe('NoteLifecycleService deletion', () => {
     expect([...deleted].sort()).toEqual([note.id, ...chapterIds].sort())
   })
 
+  it('announces an id it is asked to load and does not have, so a stale reference is let go of', async () => {
+    await expect(lifecycle.loadNote({ id: 'never-existed' })).rejects.toThrow('does not exist')
+    expect(deleted).toEqual(['never-existed'])
+  })
+
   it('refuses a save that arrives after the note was deleted', async () => {
     const note = await lifecycle.createNote({ initialText: 'gone soon' })
     await lifecycle.deleteNote({ id: note.id })

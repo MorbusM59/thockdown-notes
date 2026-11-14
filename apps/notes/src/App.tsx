@@ -1306,8 +1306,18 @@ function App() {
   }))
   // A deleted note is let go of wherever it is open, however it was deleted
   // (a purge, a chapter merged away, a parent taking its chapters with it, an
-  // empty Open Items chapter removed by a save).
-  useEffect(() => window.thockdownNotes?.onNoteDeleted((payload) => noteDocuments.remove(payload.id)), [noteDocuments])
+  // empty Open Items chapter removed by a save) -- and that includes the
+  // notes list: a caller that refreshes the list after its own delete covers
+  // only its own delete, and every path that did not left a sidebar entry
+  // pointing at no note (the main process also announces an id it was asked
+  // to load and does not have, so an entry gone stale any other way heals on
+  // the first press).
+  useEffect(() => window.thockdownNotes?.onNoteDeleted((payload) => {
+    noteDocuments.remove(payload.id)
+    setNotes((previous) => (previous.some((note) => note.id === payload.id)
+      ? previous.filter((note) => note.id !== payload.id)
+      : previous))
+  }), [noteDocuments, setNotes])
   const notesRef = useRef<NoteSummary[]>([])
 
   useEffect(() => {
