@@ -181,6 +181,7 @@ import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscrib
 import { FieldActionButton } from './components/FieldActionButton'
 import { Pager } from './components/Pager'
 import { pagerFigure } from './shared/pagerFigure'
+import { useFieldDraft } from './shared/useFieldDraft'
 import { MAX_FIND_HITS } from './editor/FindReplaceEngine'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
@@ -6462,8 +6463,12 @@ ${markdownHtml}
   // Which of the search bar's two fields holds the keyboard: their action
   // buttons (FieldActionButton) submit while it does and clear while it
   // does not.
-  const sidebarSearchValue = isFindMode ? (activeSectionSnapshot?.documentFindQuery ?? '') : isIconPickMode ? iconPickQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery
   const [focusedSidebarField, setFocusedSidebarField] = useState<'search' | 'replace' | null>(null)
+  // The find and replace terms live in the active slot and reach App a render
+  // late; the two fields show their own drafts while typed in (useFieldDraft).
+  const [findFieldValue, setFindFieldDraft] = useFieldDraft(activeSectionSnapshot?.documentFindQuery ?? '', isFindMode && focusedSidebarField === 'search')
+  const [replaceFieldValue, setReplaceFieldDraft] = useFieldDraft(activeSectionSnapshot?.documentReplaceQuery ?? '', focusedSidebarField === 'replace')
+  const sidebarSearchValue = isFindMode ? findFieldValue : isIconPickMode ? iconPickQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery
 
   /**
    * SUBMITTING a search-bar field, by the Enter key or by its action button:
@@ -8081,6 +8086,7 @@ ${markdownHtml}
                     onChange={(event) => {
                       const value = event.target.value
                       if (isFindMode) {
+                        setFindFieldDraft(value)
                         getActiveSection()?.setDocumentFindQuery(value)
                       } else if (isIconPickMode) {
                         setIconPickQuery(value)
@@ -8124,8 +8130,11 @@ ${markdownHtml}
                       autoCorrect="off"
                       autoCapitalize="off"
                       placeholder="Replace..."
-                      value={activeSection?.documentReplaceQuery ?? ''}
-                      onChange={(event) => getActiveSection()?.setDocumentReplaceQuery(event.target.value)}
+                      value={replaceFieldValue}
+                      onChange={(event) => {
+                        setReplaceFieldDraft(event.target.value)
+                        getActiveSection()?.setDocumentReplaceQuery(event.target.value)
+                      }}
                       onFocus={() => setFocusedSidebarField('replace')}
                       onBlur={() => {
                         setFocusedSidebarField(null)
@@ -8141,7 +8150,7 @@ ${markdownHtml}
                       icon="fa-magnifying-glass"
                       submitLabel="Search"
                       isFieldFocused={focusedSidebarField === 'replace'}
-                      hasValue={(activeSection?.documentReplaceQuery ?? '') !== ''}
+                      hasValue={replaceFieldValue !== ''}
                       onSubmit={() => submitSidebarField('replace')}
                       onClear={() => clearSidebarField('replace')}
                     />
