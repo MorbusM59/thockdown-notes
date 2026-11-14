@@ -159,16 +159,12 @@ export function createPreset<S>(kind: PresetKind<S>, list: PresetList<S>, id: st
 
 /**
  * Delete one of the reader's own presets. When it is the active one, the
- * preset before it becomes active (the next, when it was first); the caller
- * applies the new active preset's settings.
+ * kind's default preset becomes active; the caller applies its settings.
  */
 export function deletePreset<S>(kind: PresetKind<S>, list: PresetList<S>, id: string): PresetList<S> {
   if (!list.custom.some((preset) => preset.id === id)) return list
-  const order = presetsOf(kind, list)
-  const index = order.findIndex((preset) => preset.id === id)
   const next = { ...list, custom: list.custom.filter((preset) => preset.id !== id) }
-  if (list.activeId !== id) return next
-  return { ...next, activeId: (order[index - 1] ?? order[index + 1]).id }
+  return list.activeId === id ? { ...next, activeId: kind.defaultId } : next
 }
 
 /** A factory preset as shipped again: name, icon and settings. The caller applies it when it is active. */

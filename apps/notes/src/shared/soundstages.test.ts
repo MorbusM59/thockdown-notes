@@ -4,7 +4,6 @@ import { createPreset, deletePreset, editActivePreset, selectPreset } from '@tho
 import {
   activeSoundstage,
   DEFAULT_SOUNDSTAGE_PREFERENCES,
-  FACTORY_SOUNDSTAGES,
   sanitizeSoundstagePreferences,
   SOUNDSTAGE_KIND,
   steppedFactorySoundstage,
@@ -31,7 +30,7 @@ describe('soundstages', () => {
     expect(activeSoundstage(mine).name).toBe('Soundstage A')
     const deleted = withActiveSoundstage(mine, deletePreset(SOUNDSTAGE_KIND, mine, 'mine'))
     expect(deleted.lastCustom).toBeNull()
-    expect(deleted.activeId).toBe(FACTORY_SOUNDSTAGES[FACTORY_SOUNDSTAGES.length - 1].id)
+    expect(deleted.activeId).toBe('neutral')
   })
 
   it('steps the factory stages in the solids\' order and stops at the ends', () => {

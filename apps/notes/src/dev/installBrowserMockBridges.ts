@@ -1123,10 +1123,8 @@ function buildLoadoutBridge(storeRef: { current: BrowserMockStore }): UiLoadoutA
         const [removed] = store.uiLoadoutEntries.splice(index, 1)
         const sign = modeSign(idMode(id))
         if (removed?.isActive) {
-          const previous = store.uiLoadoutEntries
-            .filter((entry) => entry.id * sign > 0 && Math.abs(entry.id) < Math.abs(id))
-            .sort((a, b) => Math.abs(b.id) - Math.abs(a.id))[0]
-          if (previous) previous.isActive = true
+          const fallback = findEntry(store, sign)
+          if (fallback) fallback.isActive = true
         }
         // Close the gap, as the database does.
         for (const entry of store.uiLoadoutEntries) {

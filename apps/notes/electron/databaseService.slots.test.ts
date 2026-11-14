@@ -308,9 +308,9 @@ describe('DatabaseService editor slots', () => {
     db.setUiLoadoutIcon(9, 'fa-moon')
     expect(entry(9)).toMatchObject({ name: 'Night', icon: 'fa-moon' })
 
-    // Deleting the layout in use makes the one before it active.
+    // Deleting the layout in use makes the default (Light) active.
     db.deleteCustomUiLoadout(9)
-    expect(active()).toBe(8)
+    expect(active()).toBe(1)
 
     // Restoring brings a factory layout back as shipped.
     db.restoreFactoryUiLoadout(1)

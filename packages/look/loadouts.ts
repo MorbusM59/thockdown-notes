@@ -192,7 +192,7 @@ export interface UiLoadoutApi {
   // mode's first free "Layout A/B/..." name, made active. No-op when full.
   create(mode: UiLoadoutMode): Promise<UiLoadoutListResult>;
   // Deletes one of the reader's own layouts (abs id >= 8). If it was
-  // active, the layout before it becomes active (the caller applies it).
+  // active, the mode's default (Light or Dark) becomes active (the caller applies it).
   deleteCustom(id: number): Promise<UiLoadoutListResult>;
   // A factory row as shipped again: payload, name and icon.
   restoreFactory(id: number): Promise<UiLoadoutListResult>;

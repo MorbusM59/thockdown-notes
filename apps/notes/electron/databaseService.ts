@@ -3305,13 +3305,9 @@ export class DatabaseService {
 
     const tx = db.transaction(() => {
       db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(targetId);
-      // Deleting the active layout activates the one before it in the list,
-      // which, a factory row always coming first, there always is.
+      // Deleting the active layout activates the mode's default (Light or Dark).
       if (existing.isActive) {
-        const previous = db.prepare(`
-          SELECT id FROM ui_loadout_entries WHERE id * ? > 0 AND ABS(id) < ? ORDER BY ABS(id) DESC LIMIT 1
-        `).get(sign, targetAbs) as { id: number } | undefined;
-        db.prepare(`UPDATE ui_loadout_entries SET isActive = 1 WHERE id = ?`).run(previous?.id ?? sign);
+        db.prepare(`UPDATE ui_loadout_entries SET isActive = 1 WHERE id = ?`).run(sign);
       }
       // Close the gap: every remaining custom slot with a higher number in
       // this mode shifts down by one so the numbering stays contiguous.
