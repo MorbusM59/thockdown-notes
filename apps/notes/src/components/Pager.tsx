@@ -57,7 +57,7 @@ export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: Pa
   // "...", which keeps the readout one width however large the list.
   const show = (axis: PagerAxis) => (axis.current === null ? '-' : pagerFigure(axis.current + 1))
   const showTotal = (axis: PagerAxis) => (axis.isTotalOpen ? '...' : pagerFigure(axis.total))
-  const readout = hits ? `${show(hits)} | ${showTotal(hits)}` : null
+  const readout = !hits ? null : hits.total === 0 ? 'no results' : `${show(hits)} | ${showTotal(hits)}`
 
   const commit = () => {
     if (draft === null || !entryAxis) return

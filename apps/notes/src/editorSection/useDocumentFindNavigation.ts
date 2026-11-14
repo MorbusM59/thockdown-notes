@@ -590,7 +590,7 @@ export function useDocumentFindNavigation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentFindHits, markedHitVersion])
 
-  const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
+  const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit, { takeKeyboard = true }: { takeKeyboard?: boolean } = {}) => {
     markedHitRef.current = hit
     setMarkedHitVersion((version) => version + 1)
     if (isPreviewMode) {
@@ -632,7 +632,10 @@ export function useDocumentFindNavigation({
     // elsewhere (the find field, another slot) must hand it to this editor
     // first. Synchronous, not scheduled: a press does not move focus
     // (focusOwnership.ts), so nothing the browser does afterwards undoes it.
-    focusEditorInEditMode({ restoreSelection: false })
+    // A search marking its first hit by itself leaves the keyboard in the
+    // field being typed in: the selection waits, and shows once the editor
+    // has the keyboard back.
+    if (takeKeyboard) focusEditorInEditMode({ restoreSelection: false })
     adapter.applySnapshot({
       selection: {
         anchor: hit.index,
@@ -771,6 +774,22 @@ export function useDocumentFindNavigation({
     handleJumpToDocumentFindHit(documentFindHits[position])
     return position
   }, [adapterRef, documentFindHits, handleJumpToDocumentFindHit, isPreviewMode])
+
+  // EVERY SEARCH MARKS ITS FIRST HIT, as soon as its hits are in (the
+  // reader's arrive from the worker). Keyed on the search itself -- the term,
+  // the matching, the slot's mode -- so an edit that rebuilds the hit list
+  // under the same search does not move the mark, and a search with no hits
+  // marks one when a later hit list has some.
+  const searchKey = `${documentFindDirective.findText}|${findMatching.caseSensitive}|${findMatching.wholeWord}|${isPreviewMode}`
+  const unmarkedSearchKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    unmarkedSearchKeyRef.current = documentFindDirective.findText ? searchKey : null
+  }, [searchKey, documentFindDirective.findText])
+  useEffect(() => {
+    if (unmarkedSearchKeyRef.current !== searchKey || documentFindHits.length === 0) return
+    unmarkedSearchKeyRef.current = null
+    handleJumpToDocumentFindHit(documentFindHits[0], { takeKeyboard: false })
+  }, [searchKey, documentFindHits, handleJumpToDocumentFindHit])
 
   /** Marks the hit at a position in the list (the pager's typed number, its holds). */
   const jumpToDocumentFindHitAt = useCallback((position: number) => {

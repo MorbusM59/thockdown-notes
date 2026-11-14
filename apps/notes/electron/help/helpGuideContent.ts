@@ -652,7 +652,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Finds and optionally replaces text within the single open note.*
 
 - \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode, or the wide button in the dock below the list.
-- \`Enter\` in the find field (or, in replace mode, the replace field) marks the first match.
+- Every search marks its first match as soon as it finds one; \`Enter\` in the find field (or, in replace mode, the replace field) takes you there.
 - \`Tab\` moves between the find and replace fields.
 - \`Ctrl+Enter\` replaces every match at once, as do the dock's replace-all button and a right-click on the sidebar's Find icon; its replace button replaces the marked match, or marks the next one.
 - The dock's **Aa** means "case-sensitive" in plain find mode; in replace mode it means *keep case*, searching case-insensitively but re-casing each replacement to match what it's replacing.
