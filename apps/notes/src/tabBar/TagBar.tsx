@@ -290,7 +290,7 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
                           data-secondary-press="action"
                           onContextMenu={(event) => handleTagContextMenu(event, tagName)}
                           onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                          data-tooltip={deletePrimedTagName === tagName ? 'Delete tag?' : 'Delete tag'}
+                          data-tooltip={deletePrimedTagName === tagName ? 'Confirm delete' : 'Delete tag'}
                         >
                           <span className="tag-pill-label">{tagName}</span>
                         </div>

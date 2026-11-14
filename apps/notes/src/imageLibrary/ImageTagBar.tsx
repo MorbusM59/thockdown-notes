@@ -121,7 +121,7 @@ export function ImageTagBar({ imageId }: { imageId: string }) {
                 onDragStart={(event) => { event.dataTransfer.setData('text/plain', tag); setDraggedIndex(index) }}
                 onDragEnd={() => setDraggedIndex(null)}
                 onDrop={(event) => dropTag(event, index)}
-                data-tooltip={primedTag === tag ? `Remove ${tag}?` : `Remove ${tag}`}
+                data-tooltip={primedTag === tag ? `Confirm removing ${tag}` : `Remove ${tag}`}
                 onMouseLeave={() => { if (primedTag === tag) setPrimedTag(null) }}
                 onClick={() => {
                   if (primedTag !== tag) {
