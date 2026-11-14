@@ -14,7 +14,7 @@ import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages
 import { useStoredImage } from '../shared/storedImages'
 import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { GROUP_MARKER_PREFIX, GROUP_MARKER_SUFFIX } from '../shared/openItemsText'
-import { createFindScanner, type FindMatching } from './FindReplaceEngine'
+import { createFindScanner, MAX_FIND_HITS, type FindMatching } from './FindReplaceEngine'
 
 // The rehype plugins below walk/splice hast trees generically across
 // root/element/text nodes without narrowing to hast's discriminated union,
@@ -563,8 +563,6 @@ export function createPreviewMarkdownComponents(
   } as const
 }
 
-const MAX_SEARCH_HIGHLIGHT_MATCHES_PER_TEXT_NODE = 32
-
 export function createPreviewSearchHighlightRehypePlugin(needle: string, matching: FindMatching) {
   if (!needle) {
     return () => () => {}
@@ -589,24 +587,20 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, matchin
           const haystack = scanner.fold(textValue)
           const needleLength = scanner.length
 
-          // A single short query can match a large section of text dozens or
-          // hundreds of times. Replacing every match with inline span nodes is
-          // fundamentally just styling, not geometry, and it causes the preview
-          // tree to balloon without giving any meaningful UX benefit. Once a
-          // node gets dense enough to require a large amount of extra markup,
-          // leave it untouched and let the search-hit list remain the source of
-          // truth for the actual match navigation. This is a deliberate
-          // fail-safe: the preview still highlights normal cases, but the render
-          // path no longer churns layout on pathological repeated words.
+          // Every match is highlighted: the span is also what a jump marks,
+          // so a match without one could be listed but never marked (a cap
+          // of 32 per text node once left whole paragraphs of a search for
+          // a space unhighlighted, and Next stuck at their first hit). The
+          // markup is bounded by the hit list's own bound instead: no text
+          // node gets more spans than the list can hold hits, and past that
+          // it is the list that says matches were left out.
           let cursor = 0
           const replacements: RehypeAstNode[] = []
           let matchIndex = scanner.next(textValue, haystack, cursor)
           let matchCount = 0
 
           while (matchIndex >= 0) {
-            if (matchCount >= MAX_SEARCH_HIGHLIGHT_MATCHES_PER_TEXT_NODE) {
-              return
-            }
+            if (matchCount >= MAX_FIND_HITS) break
 
             if (matchIndex > cursor) {
               replacements.push({ type: 'text', value: textValue.slice(cursor, matchIndex) })
