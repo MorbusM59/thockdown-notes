@@ -799,7 +799,7 @@
 .note-list-title-row {
   display:     flex;
   align-items: center;
-  gap:         var(--spacing-regular);
+  gap:         var(--spacing-extra-large);
   min-width:   0;
 }
 
@@ -807,6 +807,12 @@
 .note-list-title-row > .note-list-title {
   flex:      1 1 auto;
   min-width: 0;
+}
+
+.note-list-title-row .hold-icon {
+  font-size:     calc(10px * var(--ui-font-scale));
+  color:         var(--color-text-60);
+  opacity:       0.75;
 }
 
 .note-list-title {
