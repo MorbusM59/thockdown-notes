@@ -41,7 +41,7 @@ const TEXTURE_SEED_MAX = 1000000
 const SURFACES: ReadonlyArray<{ surface: TextureSurfaceKey; glyph: string; name: string }> = [
   { surface: 'appGrid', glyph: 'fa-solid fa-table-columns', name: 'Chrome' },
   { surface: 'editorEditText', glyph: 'fa-solid fa-pen', name: 'Editor' },
-  { surface: 'sidebarContent', glyph: 'fa-solid fa-list', name: 'Back Panel' },
+  { surface: 'sidebarContent', glyph: 'fa-solid fa-mattress-pillow fa-rotate-270', name: 'Back Panel' },
   { surface: 'editorRenderText', glyph: 'fa-solid fa-book-open', name: 'Reader' },
 ]
 

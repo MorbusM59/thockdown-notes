@@ -406,7 +406,7 @@ const HIGHLIGHT_COLOR_ICONS: Record<HighlightColorKey, string> = {
   warningLine: 'fa-solid fa-triangle-exclamation',
   lineNumber: 'fa-solid fa-hashtag',
   base: 'fa-solid fa-display',
-  inputFields: 'fa-solid fa-pen-to-square',
+  inputFields: 'fa-solid fa-film fa-rotate-90',
   appButtons: 'fa-solid fa-hockey-puck',
   markdownHeadline: 'fa-solid fa-heading',
   markdownList: 'fa-solid fa-list-ul',

@@ -75,7 +75,7 @@ export function LayoutDock({ entries, change, onReset }: LayoutHostProps & { onR
           onPointerDown={(event) => event.stopPropagation()}
           onClick={onReset}
         >
-          <span className="fa-solid fa-rotate-left" aria-hidden="true" />
+          <span className="fa-solid fa-circle-notch" aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -101,7 +101,7 @@ export function LayoutDock({ entries, change, onReset }: LayoutHostProps & { onR
             event.stopPropagation()
           }}
         >
-          <span className={`fa-solid ${factory ? 'fa-clock-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
+          <span className={`fa-solid ${factory ? 'fa-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
         </button>
       </DockEntryRow>
     </div>

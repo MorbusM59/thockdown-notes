@@ -102,7 +102,7 @@ export function SoundscapeDock({ preferences, onChange }: SoundscapeHostProps) {
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onChange(editSoundscape(preferences, neutralSoundscape()))}
         >
-          <span className="fa-solid fa-rotate-left" aria-hidden="true" />
+          <span className="fa-solid fa-circle-notch" aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -128,7 +128,7 @@ export function SoundscapeDock({ preferences, onChange }: SoundscapeHostProps) {
             event.stopPropagation()
           }}
         >
-          <span className={`fa-solid ${factory ? 'fa-clock-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
+          <span className={`fa-solid ${factory ? 'fa-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
         </button>
       </DockEntryRow>
     </div>
