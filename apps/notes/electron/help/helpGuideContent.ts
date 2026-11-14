@@ -658,7 +658,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - The dock's **Aa** means "case-sensitive" in plain find mode; in replace mode it means *keep case*, searching case-insensitively but re-casing each replacement to match what it's replacing.
 - Its whole-word toggle finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
 - The pager at the dock's end shows the marked match and the count, \`12 | 544\`. Its carets step through the matches, wrapping at either end; holding one goes to the first or last match. Right-click the count to type a match number.
-- Past 100 matches the list is shown a page at a time, the page number shows on the scrollbar's thumb, and the pager's outer arrows turn the page, and the list follows the marked match. At most the first 9999 matches are listed, and the count then reads *many*; replacing all still replaces every one.
+- Past 100 matches the list is shown a page at a time, the page number shows on the scrollbar's thumb, and the pager's outer arrows turn the page, and the list follows the marked match. At most the first 9999 matches are listed; replacing all still replaces every one.
 - What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,

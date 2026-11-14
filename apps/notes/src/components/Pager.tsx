@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 
-/** The largest number the readout writes out; anything larger reads "many". */
-export const PAGER_MAX_FIGURE = 9999
+/** The largest number a pager, or a paged list's thumb, writes out. */
+export const PAGER_MAX_FIGURE = 99
+
+/** A count as the pager writes it: plain figures up to PAGER_MAX_FIGURE, "..." past it. */
+export function pagerFigure(value: number): string {
+  return value > PAGER_MAX_FIGURE ? '...' : String(value)
+}
 
 /**
  * One axis a pager moves along: the hits of a search, or the pages of a list.
@@ -12,7 +17,7 @@ export interface PagerAxis {
   /** Where on the axis we are, or null when nowhere (no hit marked yet). */
   current: number | null
   total: number
-  /** More exist than are counted: the total reads "many". */
+  /** More exist than are counted: the total reads "...". */
   isTotalOpen?: boolean
   /** Go to a position, already clamped to the axis. */
   onGo: (position: number) => void
@@ -54,11 +59,10 @@ export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: Pa
   // The page is not written here: a paged list shows it on its scrollbar's
   // thumb. The readout is the hits', and only typed into when there are hits.
   const entryAxis = hits
-  // Plain figures, no thousands separator; past four digits a number reads
-  // "many", which keeps the readout one width however large the list.
-  const figure = (value: number) => (value > PAGER_MAX_FIGURE ? 'many' : String(value))
-  const show = (axis: PagerAxis) => (axis.current === null ? '-' : figure(axis.current + 1))
-  const showTotal = (axis: PagerAxis) => (axis.isTotalOpen ? 'many' : figure(axis.total))
+  // Plain figures, no thousands separator; past two digits a number reads
+  // "...", which keeps the readout one width however large the list.
+  const show = (axis: PagerAxis) => (axis.current === null ? '-' : pagerFigure(axis.current + 1))
+  const showTotal = (axis: PagerAxis) => (axis.isTotalOpen ? '...' : pagerFigure(axis.total))
   const readout = hits ? `${show(hits)} | ${showTotal(hits)}` : null
 
   const commit = () => {

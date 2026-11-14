@@ -8,8 +8,7 @@ const DEFAULT_SNIPPET_RADIUS = 50;
  * single letter, in a novel) would otherwise build hundreds of thousands of
  * hits, each with a snippet -- in the edit view on the main thread, in the
  * reader in the worker and then again in the copy handed back -- which no
- * reader can use and which made the app stall. It is the pager's largest
- * figure (components/Pager.tsx), so a list it cut reads "many". The hit builders stop one
+ * reader can use and which made the app stall. The hit builders stop one
  * past it, so `hits.length > MAX_FIND_HITS` says there were more. Replace all
  * is not a list and is not bounded by it (it scans on its own).
  */

@@ -179,7 +179,7 @@ import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
 import { FieldActionButton } from './components/FieldActionButton'
-import { Pager } from './components/Pager'
+import { Pager, pagerFigure } from './components/Pager'
 import { MAX_FIND_HITS } from './editor/FindReplaceEngine'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
@@ -8815,7 +8815,7 @@ ${markdownHtml}
                         ownsKeyboard={false}
                         layoutKey={`${sidebarMode}|${effectiveCurrentPage}`}
                         textureRef={sidebarTextureRef}
-                        thumbLabel={sidebarThumbPage === null ? undefined : sidebarThumbPage > 99 ? '...' : String(sidebarThumbPage)}
+                        thumbLabel={sidebarThumbPage === null ? undefined : pagerFigure(sidebarThumbPage)}
                       />
                     </div>
                   </aside>
