@@ -8094,7 +8094,7 @@ ${markdownHtml}
                     spellCheck={false}
                     autoCorrect="off"
                     autoCapitalize="off"
-                    placeholder={isReplaceMode ? 'Find...' : isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isIconPickMode ? 'Filter icons...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : isSoundscapesSearchMode ? 'Search soundscape options...' : 'Search for content or #tag...'}
+                    placeholder={isReplaceMode ? 'Find...' : isFindMode ? 'Find in active note...' : isOptionsSearchMode ? 'Find...' : isIconPickMode ? 'Find...' : isSongsSearchMode ? 'Find...' : isSoundscapesSearchMode ? 'Find...' : 'Find...'}
                     value={sidebarSearchValue}
                     onChange={(event) => {
                       const value = event.target.value
