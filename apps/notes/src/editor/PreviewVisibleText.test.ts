@@ -7,7 +7,7 @@ import {
   projectionNeedsWholeDocumentParse,
 } from './PreviewVisibleText'
 import { buildPreviewVisibleTextProjection, mapVisibleOffsetToSourceOffset } from './PreviewVisibleText'
-import { buildDocumentFindHits, buildPreviewVisibleDocumentFindHits } from './FindReplaceEngine'
+import { buildDocumentFindHits, buildPreviewVisibleDocumentFindHits, MAX_FIND_HITS } from './FindReplaceEngine'
 import { createPreviewSearchHighlightRehypePlugin, type RehypeAstNode } from './PreviewMarkdown'
 
 describe('buildPreviewVisibleTextProjection', () => {
@@ -53,14 +53,23 @@ describe('buildPreviewVisibleTextProjection', () => {
 })
 
 describe('createPreviewSearchHighlightRehypePlugin', () => {
-  it('caps expensive DOM splitting when a single text node has too many matches', () => {
-    const text = 'a'.repeat(300)
-    const tree: RehypeAstNode = { type: 'root', children: [{ type: 'text', value: text }] }
+  it('highlights every match in a dense text node, so every listed hit has a span to mark', () => {
+    const tree: RehypeAstNode = { type: 'root', children: [{ type: 'text', value: 'a '.repeat(300) }] }
+
+    createPreviewSearchHighlightRehypePlugin(' ', { caseSensitive: false, wholeWord: false })()(tree)
+
+    const spans = (tree.children ?? []).filter((node) => node.type === 'element')
+    expect(spans).toHaveLength(300)
+  })
+
+  it('stops at the hit list bound rather than dropping the whole node', () => {
+    const tree: RehypeAstNode = { type: 'root', children: [{ type: 'text', value: 'a'.repeat(MAX_FIND_HITS + 5) }] }
 
     createPreviewSearchHighlightRehypePlugin('a', { caseSensitive: false, wholeWord: false })()(tree)
 
-    expect(tree.children).toHaveLength(1)
-    expect(tree.children?.[0]).toEqual({ type: 'text', value: text })
+    const spans = (tree.children ?? []).filter((node) => node.type === 'element')
+    expect(spans).toHaveLength(MAX_FIND_HITS)
+    expect(tree.children?.at(-1)).toEqual({ type: 'text', value: 'a'.repeat(5) })
   })
 })
 
