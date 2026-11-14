@@ -1304,6 +1304,13 @@ function App() {
       setNotes((previous) => withSavedNote(previous, saved, text))
     },
   }))
+  /**
+   * Counts note listings asked for and deletions announced. A listing's
+   * result is merged only if nothing was asked or deleted after it was
+   * requested: two refreshes in flight can answer out of order, and a
+   * listing taken before a deletion re-adds the deleted note.
+   */
+  const noteListingEpochRef = useRef(0)
   // A deleted note is let go of wherever it is open, however it was deleted
   // (a purge, a chapter merged away, a parent taking its chapters with it, an
   // empty Open Items chapter removed by a save) -- and that includes the
@@ -1313,6 +1320,7 @@ function App() {
   // to load and does not have, so an entry gone stale any other way heals on
   // the first press).
   useEffect(() => window.thockdownNotes?.onNoteDeleted((payload) => {
+    noteListingEpochRef.current += 1
     noteDocuments.remove(payload.id)
     setNotes((previous) => (previous.some((note) => note.id === payload.id)
       ? previous.filter((note) => note.id !== payload.id)
@@ -3968,8 +3976,13 @@ ${markdownHtml}
   const refreshNotes = useCallback(async (preferredId?: string | null) => {
     if (!window.thockdownNotes) return null
 
+    const issued = ++noteListingEpochRef.current
     const listed = await window.thockdownNotes.listNotes()
-    setNotes((previous) => mergeNoteSummaries(previous, listed))
+    // A listing asked for before a deletion (or before a later listing) is
+    // stale, and merging it would put the deleted note back in the list.
+    if (issued === noteListingEpochRef.current) {
+      setNotes((previous) => mergeNoteSummaries(previous, listed))
+    }
     if (listed.length === 0) {
       return null
     }
