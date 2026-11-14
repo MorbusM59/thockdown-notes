@@ -86,14 +86,13 @@ const preset = (channels: ChannelOverrides, globals: Partial<Omit<KeystrokeSound
   channels: Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, { ...DEFAULT_KEYSTROKE_CHANNEL, ...(channels[id] ? { on: true, ...channels[id] } : {}) }])) as Record<KeystrokeChannelId, KeystrokeChannelSettings>,
 })
 
-/** Off: every channel off, the mix neutral. Also what the dock's reset writes into the active preset. */
+/** Every channel off, the mix neutral. Also what the dock's reset writes into the active preset. */
 export const NEUTRAL_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = preset({})
 
 const VANILLA = preset({ creamy: { jitter: 0.05 }, bass: { volume: 0.2, jitter: 0.05 } }, { variance: 0.05 })
 
 /** The factory presets, in the order the grid shows them. */
 export const FACTORY_KEYSTROKE_SOUNDS: readonly Preset<KeystrokeSoundSettings>[] = [
-  { id: 'off', name: 'Off', icon: 'fa-ban', settings: NEUTRAL_KEYSTROKE_SOUND },
   { id: 'vanilla', name: 'Vanilla', icon: 'fa-ice-cream', settings: VANILLA },
   { id: 'footsteps', name: 'Footsteps', icon: 'fa-shoe-prints', settings: preset({ bass: { volume: 0.2, jitter: 0.05, pitch: -100 }, treble: { volume: 0.2, jitter: 0.05, pitch: 100 } }, { variance: 0.2, pitch: 20, reverb: 0.1 }) },
   { id: 'vestiges', name: 'Vestiges', icon: 'fa-archway', settings: preset({ creamy: {}, bass: { volume: 0.07 } }, { reverb: 0.29 }) },

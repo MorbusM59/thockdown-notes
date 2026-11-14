@@ -73,7 +73,7 @@ import {
 import { ColorTargetButton } from '../colorPicker/ColorTargetButton'
 import { SurfaceTexturePicker } from '../colorPicker/SurfaceTexturePicker'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
-import { SOUNDSCAPE_DEFAULT_MASTER_VOLUME, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
+import { type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import type { HighlightColorKey, HighlightColors } from '../shared/highlightColors'
 import type { FeatureToggles } from '../shared/features'
@@ -533,7 +533,6 @@ export interface SidebarOptionsPanelProps {
   setMusicReverbFoliage: (value: number) => void
   musicStereoWidth: number
   setMusicStereoWidth: (value: number) => void
-  musicVolume: number
   musicReverbAmount: number
   musicReverbRoom: number
   musicEqCurve: EqPoint[]
@@ -771,7 +770,6 @@ export function SidebarOptionsPanel({
   setMusicReverbFoliage,
   musicStereoWidth,
   setMusicStereoWidth,
-  musicVolume,
   musicReverbAmount,
   musicReverbRoom,
   musicEqCurve,
@@ -1175,38 +1173,8 @@ export function SidebarOptionsPanel({
       </div>
       <AccordionGroup filter={searchQuery}>
       {showsSection('general') ? (<>
-      <OptionsFixedSection className="sidebar-options-section-quick-toggles" heading="Quick Access" iconClass="fa-toggle-on" hiddenWhileSearching={isSearching}>
+      <OptionsFixedSection className="sidebar-options-section-quick-toggles" heading="Feature Toggles" iconClass="fa-toggle-on" hiddenWhileSearching={isSearching}>
         <FeatureToggleBar features={features} setFeatures={setFeatures} />
-        {/* The two volumes. Music goes through the music bar's own rule
-            (adjusting a muted volume unmutes it), so the two places cannot
-            disagree; the soundscape's is its master volume, which the music
-            bar's soundscape button otherwise reaches only by the wheel. */}
-        <div className="utility-setting-slider-stack" aria-label="Volumes">
-          <OptionsSliderRows rows={[2]}>
-            <CompactScrollbarSlider
-              id="music-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={musicVolume}
-              trackLabel="Music"
-              ariaLabel="Music volume"
-              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.volume}
-              onCommit={(value) => readNowPlaying().setLevel('volume', value)}
-            />
-            <CompactScrollbarSlider
-              id="soundscape-volume"
-              min={0}
-              max={1}
-              step={0.01}
-              value={soundscapePreferences.masterVolume}
-              trackLabel="Soundscape"
-              ariaLabel="Soundscape volume"
-              defaultValue={SOUNDSCAPE_DEFAULT_MASTER_VOLUME}
-              onCommit={(value) => onSoundscapePreferencesChange({ ...soundscapePreferences, masterVolume: clamp(value, 0, 1) })}
-            />
-          </OptionsSliderRows>
-        </div>
       </OptionsFixedSection>
 
       <FontSection
@@ -2752,7 +2720,7 @@ export function SidebarOptionsPanel({
       >
         {/* The dictionaries, each one a toggle: a word is correct when any
             active dictionary accepts it (spellCheck/spellCheckClient.ts). The
-            checker itself is switched in Quick Access. */}
+            checker itself is switched in Feature Toggles. */}
         <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
         <div className="options-curve-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
           {availableDictionaries.map((dictionary) => {

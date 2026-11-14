@@ -39,7 +39,6 @@ export type PlaylistSlot = number;
  */
 export const PLAYLIST_BUTTON_SLOTS = [2, 4, 5, 6, 3] as const satisfies readonly PlaylistSlot[];
 export type PlaylistButtonSlot = (typeof PLAYLIST_BUTTON_SLOTS)[number];
-export const MUSIC_SET_QUICK_ACCESS_COUNT = PLAYLIST_BUTTON_SLOTS.length;
 
 export const MAX_FACTORY_PLAYLIST_SLOT = 6;
 
@@ -68,8 +67,9 @@ export function musicSetMarkOf(set: MusicSet): { iconClass: string } | { letters
 }
 
 /**
- * Column count of the player's button grid: five visible music sets plus
- * the Soundscapes toggle. The top row fills the same width (play spans two).
+ * Column count of the player's button grid: Music (two columns),
+ * Soundstages, Filter and Soundscape (two columns); the second row's
+ * sliders, stages or filter fill the same width.
  *
  * This is a LAYOUT measurement, not just a render detail, and three places
  * need it in agreement or the player visibly breaks:
@@ -85,7 +85,7 @@ export function musicSetMarkOf(set: MusicSet): { iconClass: string } | { letters
  * (3) cannot import from here at the time it is needed, so it stays a mirrored
  * literal -- its comment carries the arithmetic and names this constant.
  */
-export const AUDIO_GRID_COLUMNS = PLAYLIST_BUTTON_SLOTS.length + 1;
+export const AUDIO_GRID_COLUMNS = 6;
 
 /** Narrowing guard for values arriving from persisted state or the database. */
 export function isPlaylistSlot(value: unknown): value is PlaylistSlot {

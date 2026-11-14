@@ -2,7 +2,7 @@ import { FEATURE_IDS, type FeatureId, type FeatureToggles } from '../shared/feat
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 
 /**
- * The row of quick switches at the top of Options (Quick Access): the
+ * The row of quick switches at the top of Options (Feature Toggles): the
  * features (shared/features.ts). A feature switched off stops running, and so
  * stops costing anything, and that is all: its Options subsection stays, so it
  * can be tuned while off; the tooltip

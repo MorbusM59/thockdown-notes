@@ -17,7 +17,6 @@ import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import {
   EMPTY_POOL_FILTER,
   FACTORY_MUSIC_SETS,
-  MUSIC_SET_QUICK_ACCESS_COUNT,
   sanitizePoolFilter,
   type MusicBarRow,
   type MusicPoolFilter,
@@ -5079,8 +5078,8 @@ ${markdownHtml}
             soundscapeEngine.fadeInNextStart(RESTORE_FADE_IN_SEC)
             setSoundscapePreferences(sanitizeSoundscapePreferences(appState.menu.soundscapes))
             if (Array.isArray(appState.menu.musicActiveSlots)) {
-              const quickAccessSlots = new Set(restoredMusicSets.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => set.slot))
-              setMusicActiveSlots((appState.menu.musicActiveSlots as number[]).filter((slot) => quickAccessSlots.has(slot)))
+              const existingSlots = new Set(restoredMusicSets.map((set) => set.slot))
+              setMusicActiveSlots((appState.menu.musicActiveSlots as number[]).filter((slot) => existingSlots.has(slot)))
             }
             if (appState.menu.musicPoolFilter) setMusicPoolFilter(sanitizePoolFilter(appState.menu.musicPoolFilter))
             setSoundstagePreferences(sanitizeSoundstagePreferences(appState.menu.musicSoundstages))
@@ -8511,7 +8510,6 @@ ${markdownHtml}
                         setMusicReverbFoliage={setMusicReverbFoliage}
                         musicStereoWidth={musicStereoWidth}
                         setMusicStereoWidth={setMusicStereoWidth}
-                        musicVolume={musicVolume}
                         musicReverbAmount={musicReverbAmount}
                         musicReverbRoom={musicReverbRoom}
                         musicEqCurve={musicEqCurve}

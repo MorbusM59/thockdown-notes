@@ -7,7 +7,6 @@ import {
   getNextActiveSlotsForSelection,
   type SetSelection,
   isFactoryMusicSet,
-  MUSIC_SET_QUICK_ACCESS_COUNT,
 } from '../shared/audioPlayer'
 import { adjacentSongInPool } from '../shared/musicPool'
 import { activeSoundscape, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
@@ -648,15 +647,6 @@ export const AudioControls = memo(function AudioControls({
     onActiveSlotsChange(next)
   }, [onActiveSlotsChange])
 
-  const keepOnlyQuickAccessSlots = useCallback(async (quickAccessSlots: readonly PlaylistSlot[]) => {
-    const quick = new Set(quickAccessSlots)
-    const nextActiveSlots = activeSlotsRef.current.filter((slot) => quick.has(slot))
-    if (nextActiveSlots.length === activeSlotsRef.current.length) return
-    activeSlotsRef.current = nextActiveSlots
-    activeRef.current = nextActiveSlots
-    onActiveSlotsChange(nextActiveSlots)
-  }, [onActiveSlotsChange])
-
   const addPathsToMusicSet = useCallback(async (slot: PlaylistSlot, paths: string[]): Promise<boolean> => {
     if (paths.length === 0) return false
     const indexedCount = await withMusicIndex(async () => window.thockdownAudioPlayer?.addPaths(slot, paths))
@@ -729,10 +719,9 @@ export const AudioControls = memo(function AudioControls({
     selectionVersionRef.current += 1
     const next = await audioPlayer.createMusicSet()
     onMusicSetsChange(next)
-    await keepOnlyQuickAccessSlots(next.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => set.slot))
     // A new set is appended (databaseService.ts's createMusicSet), so it is the last.
     return next.at(-1)?.slot ?? null
-  }, [onMusicSetsChange, keepOnlyQuickAccessSlots])
+  }, [onMusicSetsChange])
 
   const renameMusicSet = useCallback(async (slot: PlaylistSlot, name: string) => {
     const nextName = name.trim().slice(0, 64)
@@ -759,8 +748,7 @@ export const AudioControls = memo(function AudioControls({
     selectionVersionRef.current += 1
     const next = await audioPlayer.moveMusicSet(draggedSlot, targetSlot)
     onMusicSetsChange(next)
-    await keepOnlyQuickAccessSlots(next.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => set.slot))
-  }, [onMusicSetsChange, keepOnlyQuickAccessSlots])
+  }, [onMusicSetsChange])
 
   const deleteMusicSet = useCallback(async (slot: PlaylistSlot) => {
     if (isFactoryMusicSet(slot)) return
