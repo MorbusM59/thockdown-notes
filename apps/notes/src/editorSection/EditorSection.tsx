@@ -158,6 +158,8 @@ export interface EditorSectionProps extends Omit<SectionEditorAreaProps,
 
   restoredDocumentFindCaseSensitive: boolean | null
   documentFindCaseSensitiveRef: MutableRefObject<boolean>
+  restoredDocumentFindWholeWord: boolean | null
+  documentFindWholeWordRef: MutableRefObject<boolean>
 
   editorRuntimeMetrics: EditorRuntimeMetrics
   visualizerFont: VisualizerFont
@@ -255,6 +257,8 @@ export function EditorSection(rawProps: EditorSectionProps) {
   sidebarMode,
   restoredDocumentFindCaseSensitive,
   documentFindCaseSensitiveRef,
+  restoredDocumentFindWholeWord,
+  documentFindWholeWordRef,
   editorRuntimeMetrics,
   visualizerFont,
   noteSizeThresholdBlocks,
@@ -1487,7 +1491,9 @@ export function EditorSection(rawProps: EditorSectionProps) {
     setIsDocumentReplaceMode,
     isDocumentFindCaseSensitive,
     setIsDocumentFindCaseSensitive,
-    effectiveCaseSensitive,
+    isDocumentFindWholeWord,
+    setIsDocumentFindWholeWord,
+    findMatching,
     preserveCase,
     documentFindDirective,
     documentFindHits,
@@ -1498,12 +1504,17 @@ export function EditorSection(rawProps: EditorSectionProps) {
     readSourceText: readEditorText,
     sourceTextVersion: editorTextVersion,
     initialCaseSensitive: restoredDocumentFindCaseSensitive,
+    initialWholeWord: restoredDocumentFindWholeWord,
     isPreviewMode,
   })
 
   useEffect(() => {
     documentFindCaseSensitiveRef.current = isDocumentFindCaseSensitive
   }, [isDocumentFindCaseSensitive, documentFindCaseSensitiveRef])
+
+  useEffect(() => {
+    documentFindWholeWordRef.current = isDocumentFindWholeWord
+  }, [isDocumentFindWholeWord, documentFindWholeWordRef])
 
   // Mirrors SectionEditorArea.tsx's own editorReadOnly expression (its
   // negation) -- see usePreviewMarkdownRendering's isActiveNoteEditable doc
@@ -1542,7 +1553,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     isPreviewMode,
     adapterRef,
     documentFindDirective,
-    isDocumentFindCaseSensitive: effectiveCaseSensitive,
+    findMatching,
     isSearchHighlightActive: isFindActive,
     readDisplayedText,
     displayedTextKey,
@@ -1623,6 +1634,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
     replaceSelectedDocumentFindHit,
+    stepDocumentFindHit,
   } = useDocumentFindNavigation({
     previewBlockCount,
     previewScrollRef,
@@ -1631,7 +1643,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     travelPreviewToRatio,
     documentFindDirective,
     documentFindHits,
-    effectiveCaseSensitive,
+    findMatching,
     preserveCase,
     readEditorText,
     syncPreviewCustomScrollbar,
@@ -1912,7 +1924,9 @@ export function EditorSection(rawProps: EditorSectionProps) {
     setIsDocumentReplaceMode,
     isDocumentFindCaseSensitive,
     setIsDocumentFindCaseSensitive,
-    effectiveCaseSensitive,
+    isDocumentFindWholeWord,
+    setIsDocumentFindWholeWord,
+    findMatching,
     preserveCase,
     documentFindDirective,
     documentFindHits,
@@ -1922,6 +1936,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
     replaceSelectedDocumentFindHit,
+    stepDocumentFindHit,
   }
 
   // Section-wide drop target: a tab dragged in from another section, or a

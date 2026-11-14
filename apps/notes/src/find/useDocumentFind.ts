@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-import type { DocumentFindDirective, DocumentFindHit } from '../editor/FindReplaceEngine'
+import type { DocumentFindDirective, DocumentFindHit, FindMatching } from '../editor/FindReplaceEngine'
 import {
   resolveDocumentFindDirective,
   buildDocumentFindHits,
@@ -58,6 +58,8 @@ export interface UseDocumentFindOptions {
   sourceTextVersion: number
   /** Applied once (e.g. after the persisted app-state round-trip resolves); null/omitted leaves the default (case-insensitive). */
   initialCaseSensitive?: boolean | null
+  /** The same one-time hand-off for the whole-word toggle; null/omitted leaves it off. */
+  initialWholeWord?: boolean | null
   /**
    * Whether the section is currently showing the rendered pane. Switches the
    * search from the markdown source to what that pane actually displays --
@@ -77,13 +79,17 @@ export interface UseDocumentFindResult {
   setDocumentReplaceQuery: Dispatch<SetStateAction<string>>
   isDocumentReplaceMode: boolean
   setIsDocumentReplaceMode: Dispatch<SetStateAction<boolean>>
-  /** Raw state behind the "Aa" toggle button -- means "case sensitive" in
-   * plain find mode, but "keep case" (case-insensitive search + preserve-case
-   * replace) once replace mode is active. Use `effectiveCaseSensitive` /
-   * `preserveCase` below to read its meaning for the current mode. */
+  /** Raw state behind the dock's case toggle -- means "match case" in plain
+   * find mode, but "keep case" (case-insensitive search + preserve-case
+   * replace) once replace mode is active. Read `findMatching` / `preserveCase`
+   * for its meaning in the current mode. */
   isDocumentFindCaseSensitive: boolean
   setIsDocumentFindCaseSensitive: Dispatch<SetStateAction<boolean>>
-  effectiveCaseSensitive: boolean
+  /** The dock's "Whole word" toggle: a match must not continue a word on either side. */
+  isDocumentFindWholeWord: boolean
+  setIsDocumentFindWholeWord: Dispatch<SetStateAction<boolean>>
+  /** How the hits are matched, for every scanner that must agree with the hit list (the reader's highlight and jump, replace). */
+  findMatching: FindMatching
   preserveCase: boolean
   documentFindDirective: DocumentFindDirective
   documentFindHits: DocumentFindHit[]
@@ -109,7 +115,7 @@ export interface UseDocumentFindResult {
  * `documentFindDirective` back out to drive them.
  */
 export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFindResult {
-  const { sectionId, readSourceText, sourceTextVersion, initialCaseSensitive, isPreviewMode, isFindActive } = options
+  const { sectionId, readSourceText, sourceTextVersion, initialCaseSensitive, initialWholeWord, isPreviewMode, isFindActive } = options
   void sectionId
 
   const [documentFindQuery, setDocumentFindQuery] = useState('')
@@ -139,11 +145,22 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // controlled prop.
   }, [initialCaseSensitive])
 
+  const [isDocumentFindWholeWord, setIsDocumentFindWholeWord] = useState(false)
+  useEffect(() => {
+    if (initialWholeWord !== undefined && initialWholeWord !== null) {
+      setIsDocumentFindWholeWord(initialWholeWord)
+    }
+  }, [initialWholeWord])
+
   // In replace mode the same toggle is repurposed as "keep case" (VSCode's
   // preserve-case): off means case-sensitive find + literal replace, on
   // means case-insensitive find + recase the replacement per match.
   const effectiveCaseSensitive = isDocumentReplaceMode ? !isDocumentFindCaseSensitive : isDocumentFindCaseSensitive
   const preserveCase = isDocumentReplaceMode && isDocumentFindCaseSensitive
+  const findMatching = useMemo<FindMatching>(
+    () => ({ caseSensitive: effectiveCaseSensitive, wholeWord: isDocumentFindWholeWord }),
+    [effectiveCaseSensitive, isDocumentFindWholeWord],
+  )
 
   // Debounced at 1/(character count) seconds: 1s of no further typing after
   // the 1st character before the search runs, 500ms after the 2nd, ~333ms
@@ -202,7 +219,7 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
   const [previewAnswer, setPreviewAnswer] = useState<{
     sourceTextVersion: number
     query: string
-    caseSensitive: boolean
+    matching: FindMatching
     hits: DocumentFindHit[]
   } | null>(null)
 
@@ -211,22 +228,22 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // Cheap per call, but it is a whole-document scan and it re-runs on every
     // keystroke -- there is no reason to pay it for a panel nobody is looking
     // at either.
-    return buildDocumentFindHits(readSourceText(), documentFindDirective.findText, effectiveCaseSensitive)
+    return buildDocumentFindHits(readSourceText(), documentFindDirective.findText, findMatching)
     // sourceTextVersion is not read: it is the signal that readSourceText's
     // answer changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isFindActive, readSourceText, sourceTextVersion, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
+  }, [isFindActive, readSourceText, sourceTextVersion, documentFindDirective.findText, findMatching, isPreviewMode])
 
   useEffect(() => {
     if (!isFindActive || !isPreviewMode || !documentFindDirective.findText) return
     let cancelled = false
-    void requestPreviewFindHits(readSourceText(), documentFindDirective.findText, effectiveCaseSensitive)
+    void requestPreviewFindHits(readSourceText(), documentFindDirective.findText, findMatching)
       .then((hits: DocumentFindHit[]) => {
         if (cancelled) return
         setPreviewAnswer({
           sourceTextVersion,
           query: documentFindDirective.findText,
-          caseSensitive: effectiveCaseSensitive,
+          matching: findMatching,
           hits,
         })
       })
@@ -234,12 +251,12 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     // showing it would make the list flicker backwards through superseded
     // queries on a slow note.
     return () => { cancelled = true }
-  }, [isFindActive, readSourceText, sourceTextVersion, documentFindDirective.findText, effectiveCaseSensitive, isPreviewMode])
+  }, [isFindActive, readSourceText, sourceTextVersion, documentFindDirective.findText, findMatching, isPreviewMode])
 
   const previewAnswerIsCurrent = previewAnswer !== null
     && previewAnswer.sourceTextVersion === sourceTextVersion
     && previewAnswer.query === documentFindDirective.findText
-    && previewAnswer.caseSensitive === effectiveCaseSensitive
+    && previewAnswer.matching === findMatching
 
   // Not searching while on ice, however stale the last answer is: saying
   // "Searching this note..." about a search that is not running would be the
@@ -266,7 +283,9 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     setIsDocumentReplaceMode,
     isDocumentFindCaseSensitive,
     setIsDocumentFindCaseSensitive,
-    effectiveCaseSensitive,
+    isDocumentFindWholeWord,
+    setIsDocumentFindWholeWord,
+    findMatching,
     preserveCase,
     documentFindDirective,
     documentFindHits,

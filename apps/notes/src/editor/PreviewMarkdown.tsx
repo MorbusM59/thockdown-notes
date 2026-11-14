@@ -14,6 +14,7 @@ import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages
 import { useStoredImage } from '../shared/storedImages'
 import { parseInternalNoteLink, type ParsedInternalNoteLink } from '../shared/internalNoteLinks'
 import { GROUP_MARKER_PREFIX, GROUP_MARKER_SUFFIX } from '../shared/openItemsText'
+import { createFindScanner, type FindMatching } from './FindReplaceEngine'
 
 // The rehype plugins below walk/splice hast trees generically across
 // root/element/text nodes without narrowing to hast's discriminated union,
@@ -564,12 +565,12 @@ export function createPreviewMarkdownComponents(
 
 const MAX_SEARCH_HIGHLIGHT_MATCHES_PER_TEXT_NODE = 32
 
-export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseSensitive: boolean) {
-  const normalizedNeedle = isCaseSensitive ? needle : needle.toLocaleLowerCase()
-  if (!normalizedNeedle) {
+export function createPreviewSearchHighlightRehypePlugin(needle: string, matching: FindMatching) {
+  if (!needle) {
     return () => () => {}
   }
 
+  const scanner = createFindScanner(needle, matching)
   return () => {
     return (tree: RehypeAstNode) => {
       const transformNode = (node: RehypeAstNode, parent: RehypeAstNode | null, index: number | null) => {
@@ -585,8 +586,8 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
 
         if (node.type === 'text' && typeof node.value === 'string') {
           const textValue = node.value
-          const haystack = isCaseSensitive ? textValue : textValue.toLocaleLowerCase()
-          const needleLength = normalizedNeedle.length
+          const haystack = scanner.fold(textValue)
+          const needleLength = scanner.length
 
           // A single short query can match a large section of text dozens or
           // hundreds of times. Replacing every match with inline span nodes is
@@ -599,7 +600,7 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
           // path no longer churns layout on pathological repeated words.
           let cursor = 0
           const replacements: RehypeAstNode[] = []
-          let matchIndex = haystack.indexOf(normalizedNeedle, cursor)
+          let matchIndex = scanner.next(textValue, haystack, cursor)
           let matchCount = 0
 
           while (matchIndex >= 0) {
@@ -617,7 +618,7 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, isCaseS
               children: [{ type: 'text', value: textValue.slice(matchIndex, matchIndex + needleLength) }],
             })
             cursor = matchIndex + needleLength
-            matchIndex = haystack.indexOf(normalizedNeedle, cursor)
+            matchIndex = scanner.next(textValue, haystack, cursor)
             matchCount += 1
           }
 

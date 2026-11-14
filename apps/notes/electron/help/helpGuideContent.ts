@@ -655,6 +655,8 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - \`Tab\` moves between the find and replace fields.
 - \`Ctrl+Enter\` replaces every match at once, as do the dock's **Replace all** and a right-click on the sidebar's Find icon; **Replace** replaces the marked match, or marks the next one.
 - The dock's **Match case** means "case-sensitive" in plain find mode; in replace mode it reads **Keep case**, searching case-insensitively but re-casing each replacement to match what it's replacing.
+- **Whole word** finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
+- **Previous** and **Next** step through the matches, wrapping at either end.
 - What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,

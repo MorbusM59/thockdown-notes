@@ -20,7 +20,7 @@
 // objects.
 
 import type { PersistedPreviewBlockCache } from '../shared/noteLifecycle'
-import type { DocumentFindHit } from './FindReplaceEngine'
+import type { DocumentFindHit, FindMatching } from './FindReplaceEngine'
 import type { DocumentImage } from './DocumentImages'
 
 /** Correlates a reply with its request; a stale reply is dropped, not applied. */
@@ -44,7 +44,7 @@ export interface SplitRequest extends RequestEnvelope {
 export interface PreviewFindRequest extends RequestEnvelope {
   kind: 'find'
   query: string
-  caseSensitive: boolean
+  matching: FindMatching
 }
 
 /** The images the document holds (DocumentImages.ts), for the store/restore toggle. */

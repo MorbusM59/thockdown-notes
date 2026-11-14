@@ -32,7 +32,7 @@ import type {
   SplitRangesMessage,
   PreviewFindHitsMessage,
 } from './documentFactsMessages'
-import { buildPreviewVisibleDocumentFindHits, type DocumentFindHit } from './FindReplaceEngine'
+import { buildPreviewVisibleDocumentFindHits, type DocumentFindHit, type FindMatching } from './FindReplaceEngine'
 import type { PersistedPreviewBlockCache } from '../shared/noteLifecycle'
 import { documentImagesIn, type DocumentImage } from './DocumentImages'
 import { beginBackgroundWork, type BackgroundWorkHandle } from '../shared/backgroundWork'
@@ -241,16 +241,16 @@ export function requestFullBlockSplit(
 export function requestPreviewFindHits(
   text: string,
   query: string,
-  caseSensitive: boolean,
+  matching: FindMatching,
 ): Promise<DocumentFindHit[]> {
   const active = ensureWorker()
-  if (!active) return Promise.resolve(buildPreviewVisibleDocumentFindHits(text, query, caseSensitive))
+  if (!active) return Promise.resolve(buildPreviewVisibleDocumentFindHits(text, query, matching))
 
   const id = nextRequestId
   nextRequestId += 1
   return new Promise<DocumentFindHit[]>((resolve) => {
     pendingFinds.set(id, { resolve, work: beginBackgroundWork('document-find') })
-    const request: DocumentFactsRequest = { kind: 'find', id, text, query, caseSensitive }
+    const request: DocumentFactsRequest = { kind: 'find', id, text, query, matching }
     active.postMessage(request)
   })
 }

@@ -6,6 +6,9 @@ import {
   resolveDocumentFindDirective,
   buildDocumentFindHits,
   applyPreserveCase,
+  createFindScanner,
+  isWholeWordMatch,
+  type FindMatching,
   type DocumentFindDirective,
   type DocumentFindHit,
 } from '../editor/FindReplaceEngine'
@@ -56,7 +59,7 @@ export interface UseDocumentFindNavigationOptions {
   travelPreviewToRatio: (ratio: number) => boolean
   documentFindDirective: DocumentFindDirective
   documentFindHits: DocumentFindHit[]
-  effectiveCaseSensitive: boolean
+  findMatching: FindMatching
   preserveCase: boolean
   /**
    * How many blocks the rendered pane has. Not used for anything except as a
@@ -98,6 +101,8 @@ export interface UseDocumentFindNavigationResult {
    * on (wrapping to the first), so the next press replaces it.
    */
   replaceSelectedDocumentFindHit: () => void
+  /** Marks the next (1) or previous (-1) hit, wrapping at either end. */
+  stepDocumentFindHit: (direction: 1 | -1) => void
 }
 
 /**
@@ -112,7 +117,7 @@ export function useDocumentFindNavigation({
   travelPreviewToRatio,
   documentFindDirective,
   documentFindHits,
-  effectiveCaseSensitive,
+  findMatching,
   preserveCase,
   readEditorText,
   syncPreviewCustomScrollbar,
@@ -343,9 +348,9 @@ export function useDocumentFindNavigation({
       hit,
       hits: documentFindHits,
       needle: normalizedNeedle,
-      caseSensitive: effectiveCaseSensitive,
+      matching: findMatching,
     })
-  }, [readEditorText, documentFindDirective.findText, documentFindHits, effectiveCaseSensitive, previewScrollRef])
+  }, [readEditorText, documentFindDirective.findText, documentFindHits, findMatching, previewScrollRef])
 
   /**
    * The `.search-hit` span a hit is rendered as.
@@ -622,11 +627,13 @@ export function useDocumentFindNavigation({
       return
     }
 
+    // The hit must still be a match under the same rule that found it (case
+    // and whole word alike); if content shifted since the hits were computed,
+    // jump instead so a non-match is never replaced.
     const selectedText = sourceText.slice(hit.index, hit.index + hit.matchLength)
-    const selectedComparable = effectiveCaseSensitive ? selectedText : selectedText.toLowerCase()
-    const findComparable = effectiveCaseSensitive ? directive.findText : directive.findText.toLowerCase()
-    if (selectedComparable !== findComparable) {
-      // If content shifted since hit computation, just jump to keep behavior predictable.
+    const scanner = createFindScanner(directive.findText, findMatching)
+    if (scanner.fold(selectedText) !== scanner.fold(directive.findText)
+      || (findMatching.wholeWord && !isWholeWordMatch(sourceText, hit.index, directive.findText))) {
       handleJumpToDocumentFindHit(hit)
       return
     }
@@ -635,7 +642,7 @@ export function useDocumentFindNavigation({
     const nextText = `${sourceText.slice(0, hit.index)}${replacementText}${sourceText.slice(hit.index + hit.matchLength)}`
     const replacementEnd = hit.index + replacementText.length
     applyProgrammaticEditorText(nextText, hit.index, replacementEnd)
-  }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, handleJumpToDocumentFindHit, isDocumentReplaceMode, preserveCase, readEditorText])
+  }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, findMatching, handleJumpToDocumentFindHit, isDocumentReplaceMode, preserveCase, readEditorText])
 
   const replaceAllDocumentFindHits = useCallback(() => {
     const sourceText = readEditorText()
@@ -644,7 +651,7 @@ export function useDocumentFindNavigation({
       return
     }
 
-    const hits = buildDocumentFindHits(sourceText, directive.findText, effectiveCaseSensitive)
+    const hits = buildDocumentFindHits(sourceText, directive.findText, findMatching)
     if (hits.length === 0) {
       return
     }
@@ -667,7 +674,7 @@ export function useDocumentFindNavigation({
     const firstHitStart = hits[0]?.index ?? 0
     const firstHitEnd = firstHitStart + firstReplacementLength
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
-  }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, effectiveCaseSensitive, isDocumentReplaceMode, preserveCase, readEditorText])
+  }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, findMatching, isDocumentReplaceMode, preserveCase, readEditorText])
 
   const replaceSelectedDocumentFindHit = useCallback(() => {
     if (documentFindHits.length === 0) return
@@ -688,11 +695,42 @@ export function useDocumentFindNavigation({
     handleJumpToDocumentFindHit(documentFindHits.find((hit) => hit.index >= caret) ?? documentFindHits[0])
   }, [adapterRef, documentFindHits, handleJumpToDocumentFindHit, isPreviewMode, replaceDocumentFindHit])
 
+  /**
+   * Steps to the next (1) or previous (-1) hit, wrapping at either end. The
+   * position stepped from is the same one Replace reads: the selection in the
+   * edit view, the last marked hit in the reader view. A selection that is
+   * not itself a hit steps from its edge, so Next goes to the first hit after
+   * the caret and Previous to the last one before it.
+   */
+  const stepDocumentFindHit = useCallback((direction: 1 | -1) => {
+    if (documentFindHits.length === 0) return
+    const marked = markedHitRef.current
+    const selection = isPreviewMode
+      ? (marked ? { start: marked.index, end: marked.index + marked.matchLength } : null)
+      : adapterRef.current?.getSnapshot()?.selection ?? null
+    const count = documentFindHits.length
+    let target: DocumentFindHit | undefined
+    if (!selection) {
+      target = direction === 1 ? documentFindHits[0] : documentFindHits[count - 1]
+    } else if (direction === 1) {
+      // A collapsed caret steps to a hit starting at it; a selection (a hit
+      // already marked) steps past its own start.
+      const isAfter = selection.end > selection.start
+        ? (hit: DocumentFindHit) => hit.index > selection.start
+        : (hit: DocumentFindHit) => hit.index >= selection.end
+      target = documentFindHits.find(isAfter) ?? documentFindHits[0]
+    } else {
+      target = [...documentFindHits].reverse().find((hit) => hit.index < selection.start) ?? documentFindHits[count - 1]
+    }
+    if (target) handleJumpToDocumentFindHit(target)
+  }, [adapterRef, documentFindHits, handleJumpToDocumentFindHit, isPreviewMode])
+
   return {
     visibleDocumentFindHitRange,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
     replaceSelectedDocumentFindHit,
+    stepDocumentFindHit,
   }
 }

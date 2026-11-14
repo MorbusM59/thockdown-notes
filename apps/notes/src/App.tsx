@@ -1333,6 +1333,8 @@ function App() {
   // as chapterBarModeRef.
   const documentFindCaseSensitiveRef = useRef(false)
   const [restoredDocumentFindCaseSensitive, setRestoredDocumentFindCaseSensitive] = useState<boolean | null>(null)
+  const documentFindWholeWordRef = useRef(false)
+  const [restoredDocumentFindWholeWord, setRestoredDocumentFindWholeWord] = useState<boolean | null>(null)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingMd, setIsExportingMd] = useState(false)
   const [exportFolder, setExportFolder] = useState<string | null>(null)
@@ -3073,6 +3075,7 @@ function App() {
       ),
       searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: documentFindCaseSensitiveRef.current,
+      documentFindWholeWord: documentFindWholeWordRef.current,
       isPreviewMode: getActiveSection()?.isPreviewMode,
       viewStyle,
       viewFontSize: fontSizesByMode.regular.viewFontSize,
@@ -4954,6 +4957,7 @@ ${markdownHtml}
             setSidebarSections(sanitizeSidebarSections(appState.menu.sidebarSections))
             setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
+            setRestoredDocumentFindWholeWord(appState.menu.documentFindWholeWord ?? false)
             getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
             setViewStyle(appState.menu.viewStyle ?? 'calibrilight')
             setViewSpacing(resolvePersistedLineHeightMultiplier(appState.menu.viewSpacing, DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER))
@@ -8653,8 +8657,9 @@ ${markdownHtml}
                   {isFindMode || isNoteSearchMode ? (
                     // The search's options, docked below the list in the
                     // Music Library dock's box and rows: what used to sit in
-                    // the field (letter case), the way into Find & Replace,
-                    // and -- in Find & Replace -- its two actions.
+                    // the field (letter case), whole words, stepping through
+                    // the hits, the way into Find & Replace, and -- in Find &
+                    // Replace -- its two actions.
                     <div className="sidebar-color-picker-dock">
                       <div className="sidebar-content-texture" />
                       <div className="sidebar-color-picker-dock-content">
@@ -8662,17 +8667,23 @@ ${markdownHtml}
                           <div className="sidebar-options-accordion is-headerless">
                             <div className="sidebar-options-accordion-body">
                               <div className="options-curve-rows options-music-set-list-dock">
-                                <div className="options-curve-row options-music-set-list-dock-row">
-                                  {isFindMode ? (
+                                {isFindMode ? (
+                                  <div className="options-curve-row options-music-set-list-dock-row">
                                     <TextButton
-                                      aria-pressed={isReplaceMode}
-                                      isActive={isReplaceMode}
-                                      data-tooltip={isReplaceMode ? 'Back to find only' : 'Find and replace'}
-                                      onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
+                                      data-tooltip="Previous occurrence"
+                                      onClick={() => getActiveSection()?.stepDocumentFindHit(-1)}
                                     >
-                                      Replace...
+                                      Previous
                                     </TextButton>
-                                  ) : null}
+                                    <TextButton
+                                      data-tooltip="Next occurrence"
+                                      onClick={() => getActiveSection()?.stepDocumentFindHit(1)}
+                                    >
+                                      Next
+                                    </TextButton>
+                                  </div>
+                                ) : null}
+                                <div className="options-curve-row options-music-set-list-dock-row">
                                   <TextButton
                                     className={isFindMode ? undefined : 'is-wide'}
                                     aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
@@ -8688,7 +8699,30 @@ ${markdownHtml}
                                   >
                                     {isReplaceMode ? 'Keep case' : 'Match case'}
                                   </TextButton>
+                                  {isFindMode ? (
+                                    <TextButton
+                                      aria-pressed={activeSection?.isDocumentFindWholeWord}
+                                      isActive={Boolean(activeSection?.isDocumentFindWholeWord)}
+                                      data-tooltip="Match whole words only"
+                                      onClick={() => getActiveSection()?.setIsDocumentFindWholeWord((previous: boolean) => !previous)}
+                                    >
+                                      Whole word
+                                    </TextButton>
+                                  ) : null}
                                 </div>
+                                {isFindMode ? (
+                                  <div className="options-curve-row options-music-set-list-dock-row">
+                                    <TextButton
+                                      className="is-wide"
+                                      aria-pressed={isReplaceMode}
+                                      isActive={isReplaceMode}
+                                      data-tooltip={isReplaceMode ? 'Back to find only' : 'Find and replace'}
+                                      onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
+                                    >
+                                      Replace...
+                                    </TextButton>
+                                  </div>
+                                ) : null}
                                 {isReplaceMode ? (
                                   <div className="options-curve-row options-music-set-list-dock-row">
                                     <TextButton
@@ -9118,6 +9152,8 @@ ${markdownHtml}
                   sidebarMode={sidebarMode}
                   restoredDocumentFindCaseSensitive={restoredDocumentFindCaseSensitive}
                   documentFindCaseSensitiveRef={documentFindCaseSensitiveRef}
+                  restoredDocumentFindWholeWord={restoredDocumentFindWholeWord}
+                  documentFindWholeWordRef={documentFindWholeWordRef}
                   editorRuntimeMetrics={editorRuntimeMetrics}
                   noteSizeThresholdBlocks={noteSizeThresholdBlocks}
                   forceCharacterScrollbarThumb={forceCharacterScrollbarThumb}

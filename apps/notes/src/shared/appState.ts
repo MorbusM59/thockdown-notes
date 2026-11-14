@@ -55,6 +55,7 @@ export interface PersistedMenuState {
   sidebarSections?: SidebarSections;
   searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
+  documentFindWholeWord?: boolean;
   isPreviewMode?: boolean;
   viewStyle?:
     | 'modern'

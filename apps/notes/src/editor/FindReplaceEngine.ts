@@ -11,6 +11,64 @@ type BuildSnippetResult = {
   hasSnippetSuffixEllipsis: boolean;
 };
 
+/**
+ * HOW A FIND MATCHES: the options of the find panel's dock, as one value so
+ * every scanner reads them the same way (the edit-mode and reader hit lists,
+ * the reader's highlight and the jump to a hit all used to repeat their own
+ * indexOf loop with their own case fold).
+ */
+export type FindMatching = {
+  readonly caseSensitive: boolean;
+  /** A match must not continue a word on either side: "cat" does not match in "concatenate". */
+  readonly wholeWord: boolean;
+};
+
+const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
+
+function isWordCharacter(character: string | undefined): boolean {
+  return character !== undefined && WORD_CHARACTER.test(character);
+}
+
+/**
+ * Whether the match of `needle` at `index` in `text` stands as a whole word:
+ * where the needle begins with a word character, the character before the
+ * match must not be one, and likewise at its end. An edge of the needle that
+ * is itself not a word character ("foo." or " bar") is its own boundary.
+ */
+export function isWholeWordMatch(text: string, index: number, needle: string): boolean {
+  const end = index + needle.length;
+  if (isWordCharacter(needle[0]) && isWordCharacter(text[index - 1])) return false;
+  if (isWordCharacter(needle[needle.length - 1]) && isWordCharacter(text[end])) return false;
+  return true;
+}
+
+/**
+ * THE ONE SCANNER every find path uses. `fold` puts a text into the form the
+ * needle is compared in (lower case unless the find is case sensitive), and
+ * `next` returns the first match at or after `from` in a text and its folded
+ * form, or -1. Folding is left to the caller because the callers fold once
+ * and scan many times. Lower-casing is assumed to keep a text's length, as
+ * every offset in the find code already does.
+ */
+export function createFindScanner(needle: string, matching: FindMatching) {
+  const fold = (value: string) => (matching.caseSensitive ? value : value.toLocaleLowerCase());
+  const foldedNeedle = fold(needle);
+  return {
+    length: needle.length,
+    fold,
+    next(text: string, folded: string, from: number): number {
+      let cursor = from;
+      while (cursor <= folded.length - foldedNeedle.length) {
+        const found = folded.indexOf(foldedNeedle, cursor);
+        if (found < 0) return -1;
+        if (!matching.wholeWord || isWholeWordMatch(text, found, needle)) return found;
+        cursor = found + 1;
+      }
+      return -1;
+    },
+  };
+}
+
 export type DocumentFindDirective = {
   findText: string;
   replaceText: string;
@@ -103,7 +161,7 @@ function capitalizeFirstLetter(text: string): string {
 export function buildDocumentFindHits(
   text: string,
   query: string,
-  caseSensitive: boolean,
+  matching: FindMatching,
   snippetRadius = DEFAULT_SNIPPET_RADIUS,
 ): DocumentFindHit[] {
   // Check the (short) query before touching `text` -- this recomputes on
@@ -119,14 +177,14 @@ export function buildDocumentFindHits(
 
   const normalizedText = normalizeInternalText(text);
 
-  const haystack = caseSensitive ? normalizedText : normalizedText.toLocaleLowerCase();
-  const needle = caseSensitive ? normalizedQuery : normalizedQuery.toLocaleLowerCase();
+  const scanner = createFindScanner(normalizedQuery, matching);
+  const haystack = scanner.fold(normalizedText);
 
   const hits: DocumentFindHit[] = [];
   let searchStart = 0;
 
-  while (searchStart <= haystack.length - needle.length) {
-    const foundIndex = haystack.indexOf(needle, searchStart);
+  for (;;) {
+    const foundIndex = scanner.next(normalizedText, haystack, searchStart);
     if (foundIndex < 0) {
       break;
     }
@@ -157,7 +215,7 @@ export function buildDocumentFindHits(
 export function buildPreviewVisibleDocumentFindHits(
   text: string,
   query: string,
-  caseSensitive: boolean,
+  matching: FindMatching,
   snippetRadius = DEFAULT_SNIPPET_RADIUS,
 ): DocumentFindHit[] {
   // Same query-first ordering as buildDocumentFindHits, and for a stronger
@@ -172,14 +230,14 @@ export function buildPreviewVisibleDocumentFindHits(
   const projection = getPreviewVisibleTextProjection(normalizedText);
   const visibleText = projection.visibleText;
 
-  const haystack = caseSensitive ? visibleText : visibleText.toLocaleLowerCase();
-  const needle = caseSensitive ? normalizedQuery : normalizedQuery.toLocaleLowerCase();
+  const scanner = createFindScanner(normalizedQuery, matching);
+  const haystack = scanner.fold(visibleText);
 
   const hits: DocumentFindHit[] = [];
   let searchStart = 0;
 
-  while (searchStart <= haystack.length - needle.length) {
-    const foundIndex = haystack.indexOf(needle, searchStart);
+  for (;;) {
+    const foundIndex = scanner.next(visibleText, haystack, searchStart);
     if (foundIndex < 0) {
       break;
     }

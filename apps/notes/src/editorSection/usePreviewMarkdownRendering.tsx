@@ -9,7 +9,7 @@ import ReactMarkdown from 'react-markdown'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import { resolveLinkedChapterId, resolveLinkedNoteId } from '../shared/assignedIds'
 import type { EditorAdapter } from '../editor/EditorContract'
-import type { DocumentFindDirective } from '../editor/FindReplaceEngine'
+import type { DocumentFindDirective, FindMatching } from '../editor/FindReplaceEngine'
 import {
   type ParsedInternalPreviewLink,
   normalizeInternalIdForLookup,
@@ -210,7 +210,7 @@ export interface UsePreviewMarkdownRenderingOptions {
   /** The section's editor, for the edit-mode half of anchor navigation. */
   adapterRef: MutableRefObject<EditorAdapter | null>
   documentFindDirective: DocumentFindDirective
-  isDocumentFindCaseSensitive: boolean
+  findMatching: FindMatching
   /**
    * Whether the find panel is actually on screen (sidebar visible, showing
    * find). Render view highlights EVERY hit, so a query left behind in a
@@ -384,7 +384,7 @@ export function usePreviewMarkdownRendering({
   isPreviewMode,
   adapterRef,
   documentFindDirective,
-  isDocumentFindCaseSensitive,
+  findMatching,
   isSearchHighlightActive,
   readDisplayedText,
   displayedTextKey,
@@ -1375,8 +1375,8 @@ export function usePreviewMarkdownRendering({
   // isSearchHighlightActive for why a hidden find panel highlights nothing.
   const highlightFindText = isSearchHighlightActive ? documentFindDirective.findText : ''
   const previewSearchHighlightPlugin = useMemo(
-    () => createPreviewSearchHighlightRehypePlugin(highlightFindText, isDocumentFindCaseSensitive),
-    [highlightFindText, isDocumentFindCaseSensitive],
+    () => createPreviewSearchHighlightRehypePlugin(highlightFindText, findMatching),
+    [highlightFindText, findMatching],
   )
 
   // ---------------------------------------------------------------------

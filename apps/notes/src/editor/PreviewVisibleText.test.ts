@@ -57,7 +57,7 @@ describe('createPreviewSearchHighlightRehypePlugin', () => {
     const text = 'a'.repeat(300)
     const tree: RehypeAstNode = { type: 'root', children: [{ type: 'text', value: text }] }
 
-    createPreviewSearchHighlightRehypePlugin('a', false)()(tree)
+    createPreviewSearchHighlightRehypePlugin('a', { caseSensitive: false, wholeWord: false })()(tree)
 
     expect(tree.children).toHaveLength(1)
     expect(tree.children?.[0]).toEqual({ type: 'text', value: text })
@@ -68,9 +68,9 @@ describe('createPreviewSearchHighlightRehypePlugin', () => {
 describe('buildPreviewVisibleDocumentFindHits', () => {
   it('reports one hit where the source has two, for a self-referential anchor link', () => {
     const source = 'See the [anchor](#anchor) below.\n'
-    expect(buildDocumentFindHits(source, 'anchor', false)).toHaveLength(2)
+    expect(buildDocumentFindHits(source, 'anchor', { caseSensitive: false, wholeWord: false })).toHaveLength(2)
 
-    const previewHits = buildPreviewVisibleDocumentFindHits(source, 'anchor', false)
+    const previewHits = buildPreviewVisibleDocumentFindHits(source, 'anchor', { caseSensitive: false, wholeWord: false })
     expect(previewHits).toHaveLength(1)
     expect(source.slice(previewHits[0].index, previewHits[0].index + previewHits[0].matchLength)).toBe('anchor')
   })
@@ -85,7 +85,7 @@ describe('buildPreviewVisibleDocumentFindHits', () => {
       '',
     ].join('\n')
 
-    const previewHits = buildPreviewVisibleDocumentFindHits(source, 'anchor', false)
+    const previewHits = buildPreviewVisibleDocumentFindHits(source, 'anchor', { caseSensitive: false, wholeWord: false })
     // Heading, link label, plain word -- not the link target, not twice.
     expect(previewHits).toHaveLength(3)
     previewHits.forEach((hit) => {
@@ -99,18 +99,18 @@ describe('buildPreviewVisibleDocumentFindHits', () => {
 
   it('builds snippets out of rendered text, without markdown syntax', () => {
     const source = 'The **quick** [anchor](#anchor) jumped.\n'
-    const [hit] = buildPreviewVisibleDocumentFindHits(source, 'anchor', false)
+    const [hit] = buildPreviewVisibleDocumentFindHits(source, 'anchor', { caseSensitive: false, wholeWord: false })
     expect(`${hit.snippetBefore}${hit.snippetMatch}${hit.snippetAfter}`.trim()).toBe('The quick anchor jumped.')
   })
 
   it('respects case sensitivity', () => {
     const source = 'Anchor and [anchor](#anchor).\n'
-    expect(buildPreviewVisibleDocumentFindHits(source, 'anchor', true)).toHaveLength(1)
-    expect(buildPreviewVisibleDocumentFindHits(source, 'anchor', false)).toHaveLength(2)
+    expect(buildPreviewVisibleDocumentFindHits(source, 'anchor', { caseSensitive: true, wholeWord: false })).toHaveLength(1)
+    expect(buildPreviewVisibleDocumentFindHits(source, 'anchor', { caseSensitive: false, wholeWord: false })).toHaveLength(2)
   })
 
   it('returns nothing for an empty query without parsing the document', () => {
-    expect(buildPreviewVisibleDocumentFindHits('# anything', '   ', false)).toEqual([])
+    expect(buildPreviewVisibleDocumentFindHits('# anything', '   ', { caseSensitive: false, wholeWord: false })).toEqual([])
   })
 })
 

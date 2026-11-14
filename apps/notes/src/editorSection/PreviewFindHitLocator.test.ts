@@ -66,7 +66,7 @@ describe('resolvePreviewHitRange', () => {
     '',
   ].join('\n')
 
-  const hits = buildPreviewVisibleDocumentFindHits(source, 'anchor', false)
+  const hits = buildPreviewVisibleDocumentFindHits(source, 'anchor', { caseSensitive: false, wholeWord: false })
 
   const mountAll = () => mountPreview([
     { html: '<h1>The anchor chapter</h1>', startLine: 0 },
@@ -91,7 +91,7 @@ describe('resolvePreviewHitRange', () => {
   it('resolves each hit to its own block', () => {
     const scroller = mountAll()
     const blocks = hits.map((hit) => {
-      const range = resolvePreviewHitRange({ scroller, sourceText: source, hit, hits, needle: 'anchor', caseSensitive: false })
+      const range = resolvePreviewHitRange({ scroller, sourceText: source, hit, hits, needle: 'anchor', matching: { caseSensitive: false, wholeWord: false } })
       return range ? rangeTextContext(range) : null
     })
     expect(blocks[0]).toBe('The anchor chapter')
@@ -105,8 +105,8 @@ describe('resolvePreviewHitRange', () => {
     const labelHit = hits[1]
     const repeatHit = hits[2]
 
-    const labelRange = resolvePreviewHitRange({ scroller, sourceText: source, hit: labelHit, hits, needle: 'anchor', caseSensitive: false })
-    const repeatRange = resolvePreviewHitRange({ scroller, sourceText: source, hit: repeatHit, hits, needle: 'anchor', caseSensitive: false })
+    const labelRange = resolvePreviewHitRange({ scroller, sourceText: source, hit: labelHit, hits, needle: 'anchor', matching: { caseSensitive: false, wholeWord: false } })
+    const repeatRange = resolvePreviewHitRange({ scroller, sourceText: source, hit: repeatHit, hits, needle: 'anchor', matching: { caseSensitive: false, wholeWord: false } })
 
     // The first lands inside the anchor-marker span (the link label), the
     // second on the plain repeat after it -- not both on the same one, and
@@ -121,13 +121,13 @@ describe('resolvePreviewHitRange', () => {
   it('returns null when the hit\'s own block is not mounted', () => {
     const scroller = mountPreview([{ html: '<h1>The anchor chapter</h1>', startLine: 0 }])
     const laterHit = hits[3]
-    expect(resolvePreviewHitRange({ scroller, sourceText: source, hit: laterHit, hits, needle: 'anchor', caseSensitive: false })).toBeNull()
+    expect(resolvePreviewHitRange({ scroller, sourceText: source, hit: laterHit, hits, needle: 'anchor', matching: { caseSensitive: false, wholeWord: false } })).toBeNull()
   })
 
   it('does not mistake a mounted neighbour for the hit\'s own block', () => {
     // Only the later paragraph is mounted -- a hit belonging to the heading
     // must not resolve into it just because the needle appears there too.
     const scroller = mountPreview([{ html: '<p>A much later anchor paragraph.</p>', startLine: 4 }])
-    expect(resolvePreviewHitRange({ scroller, sourceText: source, hit: hits[0], hits, needle: 'anchor', caseSensitive: false })).toBeNull()
+    expect(resolvePreviewHitRange({ scroller, sourceText: source, hit: hits[0], hits, needle: 'anchor', matching: { caseSensitive: false, wholeWord: false } })).toBeNull()
   })
 })

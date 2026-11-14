@@ -466,6 +466,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     sidebarSections: sanitizeSidebarSections(input?.sidebarSections),
     searchQueryCaseSensitive: Boolean(input?.searchQueryCaseSensitive),
     documentFindCaseSensitive: Boolean(input?.documentFindCaseSensitive),
+    documentFindWholeWord: Boolean(input?.documentFindWholeWord),
     isPreviewMode: Boolean(input?.isPreviewMode),
     viewStyle: sanitizeViewStyle(input?.viewStyle),
     viewFontSize: sanitizeFontSizePx(input?.viewFontSize),

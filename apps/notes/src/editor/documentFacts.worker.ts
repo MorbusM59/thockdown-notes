@@ -19,7 +19,7 @@
 // the same frame as the keystroke. Only whole-document work comes here.
 
 import { splitPreviewBlockRangesProgressively } from './PreviewBlockSplit'
-import { buildPreviewVisibleDocumentFindHits } from './FindReplaceEngine'
+import { buildPreviewVisibleDocumentFindHits, type FindMatching } from './FindReplaceEngine'
 import { collectDocumentImages, documentImagesIn, type DocumentImage } from './DocumentImages'
 import {
   appendProjectionNodes,
@@ -92,13 +92,13 @@ function handleSplit(id: number, text: string): void {
   workerScope.postMessage(complete)
 }
 
-function handleFind(id: number, text: string, query: string, caseSensitive: boolean): void {
+function handleFind(id: number, text: string, query: string, matching: FindMatching): void {
   // The projection this builds is memoized inside PreviewVisibleText, so a
   // second query against the same note is a string scan rather than a parse.
   // That memo is the reason searching feels instant after the first term --
   // and, when it lived on the main thread and held exactly one document, the
   // reason switching notes and coming back froze the app all over again.
-  const hits = buildPreviewVisibleDocumentFindHits(text, query, caseSensitive)
+  const hits = buildPreviewVisibleDocumentFindHits(text, query, matching)
   const response: DocumentFactsResponse = { kind: 'find', id, hits }
   workerScope.postMessage(response)
 }
@@ -123,5 +123,5 @@ workerScope.onmessage = (event: MessageEvent<DocumentFactsRequest>) => {
     handleImages(request.id, request.text)
     return
   }
-  handleFind(request.id, request.text, request.query, request.caseSensitive)
+  handleFind(request.id, request.text, request.query, request.matching)
 }

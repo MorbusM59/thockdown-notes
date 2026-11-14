@@ -1,4 +1,4 @@
-import type { DocumentFindHit } from '../editor/FindReplaceEngine'
+import { createFindScanner, type DocumentFindHit, type FindMatching } from '../editor/FindReplaceEngine'
 import { clamp } from '@thockdown/interaction/clamp'
 
 /**
@@ -106,7 +106,7 @@ export interface ResolvePreviewHitRangeOptions {
   /** The full preview hit list, used to work out which occurrence within its own block this hit is. */
   hits: DocumentFindHit[]
   needle: string
-  caseSensitive: boolean
+  matching: FindMatching
 }
 
 /**
@@ -133,11 +133,11 @@ export function resolvePreviewHitRange({
   hit,
   hits,
   needle,
-  caseSensitive,
+  matching,
 }: ResolvePreviewHitRangeOptions): Range | null {
   if (!needle) return null
 
-  const compareNeedle = caseSensitive ? needle : needle.toLocaleLowerCase()
+  const scanner = createFindScanner(needle, matching)
   const hitVisibleIndex = hit.visibleIndex ?? hit.index
   const sourceLine = resolveSourceLineForOffset(sourceText, hit.index)
 
@@ -153,23 +153,23 @@ export function resolvePreviewHitRange({
 
     const { text, segments } = collectPreviewElementVisibleText(element)
     if (segments.length === 0) continue
-    const haystack = caseSensitive ? text : text.toLocaleLowerCase()
+    const haystack = scanner.fold(text)
 
     let occurrence = -1
     let cursor = 0
     let found = true
     for (let index = 0; index <= localOrdinal; index += 1) {
-      const foundIndex = haystack.indexOf(compareNeedle, cursor)
+      const foundIndex = scanner.next(text, haystack, cursor)
       if (foundIndex < 0) {
         found = false
         break
       }
       occurrence = foundIndex
-      cursor = foundIndex + Math.max(1, compareNeedle.length)
+      cursor = foundIndex + Math.max(1, scanner.length)
     }
     if (!found || occurrence < 0) continue
 
-    const occurrenceEnd = occurrence + Math.max(1, compareNeedle.length)
+    const occurrenceEnd = occurrence + Math.max(1, scanner.length)
     const startSegment = segments.find((segment) => occurrence >= segment.start && occurrence < segment.end)
     if (!startSegment) continue
     const endSegment = segments.find((segment) => occurrenceEnd > segment.start && occurrenceEnd <= segment.end) ?? startSegment
