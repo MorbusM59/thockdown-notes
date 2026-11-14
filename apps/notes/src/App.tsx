@@ -8647,6 +8647,14 @@ ${markdownHtml}
                       <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
                     </div>
                   ) : null}
+                  {isColorPickerDocked ? (
+                    // The Colors subsection's picker, docked directly above the
+                    // layout's dock row so it stays in reach however far down
+                    // the subsection the reader is setting colours.
+                    <div className="sidebar-plain-dock" aria-label="Colour picker">
+                      <ColorPickerRow />
+                    </div>
+                  ) : null}
                   {sidebarMode === 'options' && optionsSection === 'layouts' ? (
                     // The layout in use, docked as the soundscapes' is.
                     <div className="sidebar-plain-dock">
@@ -8754,15 +8762,6 @@ ${markdownHtml}
                           />
                         </div>
                       </div>
-                    </div>
-                  ) : null}
-                  {isColorPickerDocked ? (
-                    // The Colors section's picker, docked below the list so it
-                    // stays in reach however far down the section the reader
-                    // is setting colours, straight on the sidebar as the
-                    // Music Library's controls are.
-                    <div className="sidebar-plain-dock" aria-label="Colour picker">
-                      <ColorPickerRow />
                     </div>
                   ) : null}
                   {/* Paging and the date filter sit in the column beside the
