@@ -6,6 +6,7 @@ import { installPressTracking } from '@thockdown/interaction/pressTracking'
 import { installTouchInput } from '@thockdown/interaction/touchInput'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
 import { installEntryFieldOutsidePress } from './sidebar/entryFieldOutsidePress'
+import { installFieldRightClickSelection } from './shared/fieldRightClickSelection'
 import './fonts.css'
 import './index.css'
 import '@fortawesome/fontawesome-free/css/all.min.css'
@@ -17,6 +18,7 @@ installPressTracking()
 installHoverTracking()
 installScrollTrackTokens(1)
 installEntryFieldOutsidePress()
+installFieldRightClickSelection()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <App />,

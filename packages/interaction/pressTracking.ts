@@ -106,7 +106,7 @@ const SECONDARY_PRESS_SELECTOR = `[${SECONDARY_PRESS_ATTRIBUTE}]`
  * archive buttons sit inside it and deliberately swallow the gesture. Reading
  * "is there an `action` anywhere above me" would light exactly those.
  */
-function secondaryPressMeaning(target: EventTarget | null): string | null {
+export function secondaryPressMeaning(target: EventTarget | null): string | null {
   if (!(target instanceof Element)) return null
   return target.closest(SECONDARY_PRESS_SELECTOR)?.getAttribute(SECONDARY_PRESS_ATTRIBUTE) ?? null
 }
