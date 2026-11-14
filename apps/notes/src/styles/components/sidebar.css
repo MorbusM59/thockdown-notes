@@ -638,7 +638,7 @@
 
 /* An item in a tag list (CategoryTree.tsx) is an ENTRY ROW of the options
    panel's language, as a song is in the music set list: one display cell
-   (toolbar.css's .options-curve-display) as tall as the entry height, its
+   (interaction.css's .options-curve-display) as tall as the entry height, its
    title from the left and cut with an ellipsis. The active item is drawn as
    an active button is, a hovered one as a hovered button. Off-screen rows
    are not painted, as in the song list. */

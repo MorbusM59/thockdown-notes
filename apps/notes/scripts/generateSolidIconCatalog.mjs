@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 export const METADATA_PATH = resolve(here, '../../../node_modules/@fortawesome/fontawesome-free/metadata/icon-families.json')
-export const CATALOG_PATH = resolve(here, '../src/sidebar/iconPicker/solidIconCatalog.json')
+export const CATALOG_PATH = resolve(here, '../../../packages/interaction/iconPicker/solidIconCatalog.json')
 
 /**
  * The catalog: `[name, words]` per icon, sorted by name. `words` is the

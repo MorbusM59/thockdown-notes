@@ -487,83 +487,6 @@
   border-color: rgba(81, 73, 66, 0.8);
 }
 
-/* Track-styled rows shared by the curve editor and dictionary list. */
-/* ENTRY LISTS: the curve editors' points, the dictionaries, the music sets
-   and a set's songs. Every cell is a slider track's height
-   (--entry-height, the track thickness, which grows with the UI font), the
-   rows and columns as far apart as stacked tracks are, and is one of three
-   kinds, named by its class:
-   - a FIELD (.options-curve-field) can be clicked into to change its text,
-     and is drawn as a micro slider track;
-   - a DISPLAY cell (.options-curve-display) only shows its text, and is
-     drawn as a button of any width;
-   - a BUTTON (.options-curve-button) is square, drawn as the colour
-     picker's micro channel toggles. Its column in a row's template is
-     var(--entry-height) wide, which is what makes it square.
-   A display cell renamed by a right-click keeps its look while it is
-   edited (.options-curve-input). */
-.options-curve-rows {
-  --entry-height: var(--canonical-scroll-thickness);
-}
-
-.options-curve-rows {
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--toolbar-options-gap);
-  margin-top:     var(--toolbar-options-gap);
-}
-
-.options-curve-row {
-  display:               grid;
-  grid-template-columns: 0.8fr 1.5fr 1.5fr 1.1fr var(--entry-height) var(--entry-height);
-  column-gap:            var(--toolbar-options-gap);
-  height:                var(--entry-height);
-}
-
-.options-curve-cell {
-  box-sizing:      border-box;
-  min-width:       0;
-  height:          100%;
-  margin:          0;
-  padding:         0;
-  border-radius:   var(--border-radius-small);
-  color:           var(--color-text-80);
-  font-size:       calc(9px * var(--ui-font-scale));
-  line-height:     1;
-  text-align:      center;
-  display:         flex;
-  align-items:     center;
-  justify-content: center;
-}
-
-.options-curve-field {
-  border:      var(--backdrop-surface-border);
-  background:  var(--backdrop-surface-background);
-  box-shadow:  var(--backdrop-surface-shadow);
-}
-
-/* A field looks the same while it is being typed into. A display cell that
-   a right-click turns into an input (.options-curve-input) keeps the display
-   look while it is edited. */
-.options-curve-field,
-.options-curve-input {
-  outline:     none;
-  font-family: inherit;
-}
-
-/* A button's own rules (look.css) already draw a <button> this way; a
-   display cell that is not a button takes the same resting look. */
-.options-curve-display,
-.options-curve-button {
-  border:     1px solid var(--btn-border-default);
-  background: var(--btn-bg-default);
-  font-weight: 600;
-}
-
-.options-curve-button {
-  width:  100%;
-  font-size: calc(9px * var(--ui-font-scale));
-}
 
 /* A text button (components/TextButton.tsx): a micro button's height, its
    column's width, and a few words in place of an icon, cut with an ellipsis
@@ -605,9 +528,6 @@
   box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
-.options-curve-button.is-disabled {
-  opacity: 0.4;
-}
 
 /* A dictionary row: the EQ point row's cells, as toggle, name, remove, install. */
 .options-dictionary-row {
@@ -624,16 +544,6 @@
 }
 
 
-/* A preset dock (soundscapes, soundstages, layouts): mark, name,
-   reset, and trash or restore. */
-.preset-dock-row {
-  grid-template-columns: var(--entry-height) 1fr var(--entry-height) var(--entry-height);
-  column-gap: var(--spacing-small);
-}
-
-.options-dock-rows {
-  margin-top: 0;
-}
 
 .options-music-set-name {
   overflow:      hidden;
@@ -700,26 +610,7 @@
   column-gap: var(--spacing-small);
 }
 
-/* An icon in a micro cell leaves the cell's frame visible around it, as the
-   colour picker's channel letters do; a set's initials are two glyphs. */
-.options-curve-cell > .fa-solid {
-  font-size: calc(var(--entry-height) * 0.55);
-}
 
-/* A display cell that shows text is centred, cut with an ellipsis where it
-   does not fit (a song in the Music Library reads from the left). A block rather than a flex box, because
-   text-overflow applies to a block's own line; the line box is the cell's
-   inner height, so the text centres vertically without flex. The column
-   headers stay centred. */
-.options-curve-display:not(.options-curve-header) {
-  display:       block;
-  padding:       0 var(--spacing-regular);
-  text-align:    center;
-  white-space:   nowrap;
-  overflow:      hidden;
-  text-overflow: ellipsis;
-  line-height:   calc(var(--entry-height) - 2px);
-}
 
 .options-music-song-row > .options-curve-display.options-music-set-name {
   /* As specific as the rule above, so it wins by coming later. */

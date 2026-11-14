@@ -35,7 +35,6 @@ import {
   soundscapePartDb,
   applySoundscapePreset,
   createSoundscape,
-  deleteSoundscape,
   editSoundscape,
   soundscapeMarkOf,
   chimeSemitoneHz,
@@ -395,14 +394,11 @@ interface SoundscapeOptionsProps {
 /**
  * PICKING UP a soundscape, which a host may offer (the mobile app does, for
  * its schedule): on touch, a long press on a soundscape picks it up without
- * playing it, and a tap on the picked-up one puts it down. While one of the
- * user's own soundscapes is picked up, the save button becomes a DELETE
- * button for it -- which replaces the touch long-press that otherwise marks
- * a custom soundscape for deletion. What a picked-up soundscape is FOR is
- * the host's business, and so is putting it down when the reader presses
- * something else; the controls that act ON it (the picked-up button itself,
- * the delete button) carry `data-pick-target` so the host can tell them
- * apart.
+ * playing it, and a tap on the picked-up one puts it down. Deleting is the
+ * dock's (SoundscapeDock), on every platform. What a picked-up soundscape is
+ * FOR is the host's business, and so is putting it down when the reader
+ * presses something else; the control that acts ON it (the picked-up button
+ * itself) carries `data-pick-target` so the host can tell it apart.
  */
 interface SoundscapeControlsProps extends SoundscapeOptionsProps {
   pickedPresetId?: string | null
@@ -567,7 +563,7 @@ export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & Pi
  * controls as its whole interface, where a heading would have nothing to
  * collapse against.
  */
-export function SoundscapeControls(props: SoundscapeControlsProps) {
+export function SoundscapeControls({ presetsDock, ...props }: SoundscapeControlsProps & { presetsDock?: ReactNode }) {
   return (
     <SoundscapeParts
       {...props}
@@ -576,6 +572,9 @@ export function SoundscapeControls(props: SoundscapeControlsProps) {
         <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
           {presetsLabel}
           {presets}
+          {/* The dock for the soundscape that plays (SoundscapeDock), which
+              the desktop keeps below its view instead. Help covers it. */}
+          {props.help?.('Presets') ? null : presetsDock}
           {environment}
           {channelsLabel}
           {channels}
@@ -612,11 +611,10 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   // start of every hold-to-disable.
   const channelRightPressRef = useRef<{ pointerId: number; channelId: string } | null>(null)
   const [selectedId, setSelectedId] = useState<string>(() => SOUNDSCAPE_CHANNEL_ROSTER[0].id)
-  // Holding right-click on a custom soundscape exports it, as it does on a
-  // custom layout; a short right-click primes it for deletion instead. Which
-  // one is decided on the RELEASE (the hold still pending there is a short
-  // click), never by the contextmenu event, which Chromium fires on the press
-  // on some platforms and on the release on others.
+  // Holding right-click on a soundscape exports it. A release before the
+  // hold completes cancels it; the contextmenu event decides nothing, since
+  // Chromium fires it on the press on some platforms and on the release on
+  // others.
   const presetExportHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   // TOUCH has one button where a mouse has two, so each right-button gesture
   // above has a touch equivalent instead (`pointerType === 'touch'`, so a
@@ -624,12 +622,11 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   // - a channel: a long press turns it on or off (either way, where a mouse
   //   holds the left button to turn on and the right to turn off), a double
   //   tap solos it (a right-click);
-  // - a custom soundscape: a long press marks it for deletion (a right-click);
-  //   then a tap deletes it, as a click does. Exporting one alone has no
-  //   touch gesture: the mobile app exports them all from its own controls;
-  // - the save button: a long press resets every channel (a right-hold).
+  // - a soundscape: a long press picks it up, where the host offers that
+  //   (onPickPreset); exporting one alone has no touch gesture: the mobile
+  //   app exports them all from its own controls;
   // A long press is followed by a click when the finger lifts, which must
-  // not also act (it would select, delete or save), so a completed touch
+  // not also act (it would select or create), so a completed touch
   // hold swallows the next click. Every touch press clears that first, so a
   // hold whose finger slid off and produced no click cannot swallow a later
   // tap.
@@ -787,7 +784,6 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
 
   const presetsHelp = help?.('Presets') ?? null
   const channelsHelp = help?.('Channels') ?? null
-  const pickedCustomPreset = preferences.customPresets.find((preset) => preset.id === pickedPresetId) ?? null
 
   const rosterEntry = SOUNDSCAPE_CHANNEL_ROSTER.find((entry) => entry.id === selectedChannel?.id)
   const layerName = rosterEntry ? `${KIND_LOOK[rosterEntry.kind].label} layer ${rosterEntry.number}` : ''
@@ -854,22 +850,6 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
               </button>
             )
           })}
-          {pickedCustomPreset ? (
-            <button
-              type="button"
-              className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus soundscape-custom-preset-plus primed"
-              aria-label={`Delete ${pickedCustomPreset.name}`}
-              data-pick-target=""
-              data-secondary-press="none"
-              onClick={() => {
-                onChange(deleteSoundscape(preferences, pickedCustomPreset.id))
-                onPickPreset?.(null)
-              }}
-              onContextMenu={(event) => event.preventDefault()}
-            >
-              <span className="options-loadout-plus-glyph fa-solid fa-trash-can" aria-hidden="true" />
-            </button>
-          ) : (
             <button
               type="button"
               className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus"
@@ -880,7 +860,6 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
             >
               <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
             </button>
-          )}
         </div>)}
         </>)}
     </>),

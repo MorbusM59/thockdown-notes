@@ -18,6 +18,7 @@ import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
+  setSoundscapeIcon,
   soundscapePresets,
   type SoundscapePreferences,
 } from '@thockdown/soundscape/soundscape'
@@ -55,6 +56,8 @@ import { ScheduleGrid } from './ScheduleGrid'
 import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
+import { SoundscapeDock } from '@thockdown/soundscape/SoundscapeDock'
+import { IconPickerGrid } from '@thockdown/interaction/iconPicker/IconPicker'
 import { PageScrollbar } from './PageScrollbar'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
@@ -108,6 +111,12 @@ export function MobileSoundscapeApp() {
   // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
   const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
   const pageScrollerRef = useRef<HTMLDivElement | null>(null)
+  // The ICON PICKER for the soundscape that plays, opened from the dock's
+  // mark as on the desktop: while it is open it stands in for the presets
+  // grid, with its own filter field above it, and the dock stays below to
+  // name the soundscape. Not persisted; a pick, the mark again, or another
+  // soundscape coming to play closes it.
+  const [iconQuery, setIconQuery] = useState<string | null>(null)
   // HELP MODE: every subsection shows an explanation in place of its
   // controls (helpText.ts). Nothing on the page acts while it is up, so the
   // page scrolls under a finger like any page (`is-help`), and the system's
@@ -170,6 +179,9 @@ export function MobileSoundscapeApp() {
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
   }, [native, schedule.enabled, events, presets, preferences.masterVolume])
+
+  const activeId = activeSoundscape(preferences).id
+  useEffect(() => setIconQuery(null), [activeId])
 
   // What the media controls step through, published whenever it changes.
   const entries = useMemo(() => sessionEntries(presets), [presets])
@@ -451,6 +463,38 @@ export function MobileSoundscapeApp() {
                   pickedPresetId={pickedPresetId}
                   onPickPreset={setPickedPresetId}
                   help={help}
+                  framePresets={(grid) => (iconQuery === null ? grid : (<>
+                    <div className="options-curve-rows options-dock-rows">
+                      <div className="options-curve-row mobile-icon-filter-row">
+                        <span className="options-curve-cell options-curve-display" aria-hidden="true">
+                          <span className="fa-solid fa-magnifying-glass" />
+                        </span>
+                        <input
+                          className="options-curve-cell options-curve-field"
+                          aria-label="Filter the icons"
+                          value={iconQuery}
+                          onChange={(event) => setIconQuery(event.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <IconPickerGrid
+                      label={activeSoundscape(preferences).name}
+                      current={activeSoundscape(preferences).icon}
+                      query={iconQuery}
+                      onPick={(icon) => {
+                        setIconQuery(null)
+                        setPreferences((current) => setSoundscapeIcon(current, activeSoundscape(current).id, icon))
+                      }}
+                    />
+                  </>))}
+                  presetsDock={(
+                    <SoundscapeDock
+                      preferences={preferences}
+                      onChange={setPreferences}
+                      picking={iconQuery !== null}
+                      onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
+                    />
+                  )}
                 />
               </div>
             </div>

@@ -21,7 +21,7 @@ import {
   type PresetList,
 } from '@thockdown/interaction/presetList'
 
-import { IconPicker } from './iconPicker/IconPicker'
+import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
 
 /** The icon picker target kinds whose entries are a PRESET LIST in Options. */

@@ -6,7 +6,8 @@ import { armHold, HOLD_CONFIRM_MS } from './holdTiming'
  * entry it is open on (a music set, a soundscape). Its mark is a button: a
  * click opens the icon picker for the entry (and closes it again), a held
  * click gives the entry back its default mark. Its name is renamed by a
- * right-click. What follows is the host's own cells (`children`), and the
+ * right-click, or by a finger held still on it (a finger has no right
+ * button; the phone app has only fingers). What follows is the host's own cells (`children`), and the
  * row's columns are the host's too (`className`).
  */
 export interface DockEntryRowProps {
@@ -90,6 +91,17 @@ function EntryName({ name, takenNames, onRename }: { name: string; takenNames: r
   const [draft, setDraft] = useState(name)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const cancelTouchHoldRef = useRef<(() => void) | null>(null)
+  const cancelTouchHold = () => {
+    cancelTouchHoldRef.current?.()
+    cancelTouchHoldRef.current = null
+  }
+  useEffect(() => cancelTouchHold, [])
+  const startEditing = () => {
+    setDraft(name)
+    setError(null)
+    setEditing(true)
+  }
 
   useEffect(() => {
     if (!editing) return
@@ -158,13 +170,23 @@ function EntryName({ name, takenNames, onRename }: { name: string; takenNames: r
       data-tooltip="Rename"
       aria-label={`${name}; right-click to rename`}
       data-secondary-press="action"
-      onPointerDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => {
+        event.stopPropagation()
+        if (event.pointerType !== 'touch') return
+        cancelTouchHold()
+        cancelTouchHoldRef.current = armHold(() => {
+          cancelTouchHoldRef.current = null
+          startEditing()
+        }, HOLD_CONFIRM_MS)
+      }}
+      onPointerUp={cancelTouchHold}
+      onPointerCancel={cancelTouchHold}
       onContextMenu={(event) => {
         event.preventDefault()
         event.stopPropagation()
-        setDraft(name)
-        setError(null)
-        setEditing(true)
+        // A touch long press may also raise a contextmenu; the hold above
+        // has already opened the field, and opening it twice is harmless.
+        startEditing()
       }}
     >
       {name}

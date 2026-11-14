@@ -121,3 +121,19 @@ body {
   justify-content: center;
   pointer-events: none;
 }
+
+/* Entry rows (the soundscape dock, the icon filter): a finger's height
+   rather than the desktop's slider-track height, and text to match. */
+.mobile-app-shell .options-curve-rows {
+  --entry-height: 44px;
+}
+
+.mobile-app-shell .options-curve-cell {
+  font-size: 15px;
+}
+
+/* The icon picker's filter: a magnifier, then the field. */
+.mobile-icon-filter-row {
+  grid-template-columns: var(--entry-height) 1fr;
+  column-gap: var(--spacing-small);
+}

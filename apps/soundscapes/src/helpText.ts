@@ -24,7 +24,9 @@ const HELP: Record<string, string[]> = {
   Presets: [
     'Soundscapes: Tap one to play it. Hold one to pick it up for the schedule.',
     'Plus button: Makes a new soundscape of your own, a copy of the one playing. Changes you make go straight into the soundscape that plays, factory ones included.',
-    'Deleting: When one of your own soundscapes is picked up, the plus button turns into a bin. Tap it to delete that soundscape.',
+    'The row below: It always shows the soundscape that plays. Tap its icon to choose another icon, or hold it to go back to the original one. Hold the name to rename it.',
+    'Reset button: Turns every channel off and puts the environment back to normal, for building a soundscape from scratch.',
+    'Bin and undo button: Hold the bin to delete one of your own soundscapes. On a factory soundscape it is an undo arrow instead: hold it to bring the soundscape back the way it shipped.',
   ],
   Environment: [
     'Volume: How loud this soundscape is overall.',
