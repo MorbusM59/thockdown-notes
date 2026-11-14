@@ -259,6 +259,7 @@ import {
   liveOccupancy,
   planOverlayClose,
   planOverlayOpen,
+  sameOccupancy,
   sectionShowingOverlay,
   type SlotOccupancy,
   type SlotOverlay,
@@ -1875,10 +1876,7 @@ function App() {
   ) => {
     setOccupancyBySectionId((previous) => {
       const existing = previous[sectionId]
-      const sameNote =
-        (existing && 'noteId' in existing ? existing.noteId : null) ===
-        ('noteId' in occupancy ? occupancy.noteId : null)
-      if (existing && existing.kind === occupancy.kind && sameNote) return previous
+      if (existing && sameOccupancy(existing, occupancy)) return previous
       return { ...previous, [sectionId]: occupancy }
     })
 

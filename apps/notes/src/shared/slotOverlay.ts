@@ -84,6 +84,14 @@ export type SlotOccupancy =
 
 export const PLAIN_NOTE_OCCUPANCY: SlotOccupancy = { kind: 'note' }
 
+/** Whether two occupancies say the same thing: the kind and whatever it names. */
+export function sameOccupancy(a: SlotOccupancy, b: SlotOccupancy): boolean {
+  if (a.kind !== b.kind) return false
+  if (a.kind === 'undocked') return a.noteId === (b as typeof a).noteId
+  if (a.kind === 'image') return a.imageId === (b as typeof a).imageId
+  return true
+}
+
 /**
  * THE derivation. Every consumer -- the window control's lit state, the tab
  * bar's identity pill, the editor's chrome -- asks this and nothing else,
