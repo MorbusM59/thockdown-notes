@@ -1060,7 +1060,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn audio-wide-btn${isPlaying ? ' is-active' : ''}`}
-          data-tooltip={`${songLabel}\n[Right] Skip forward\n[Hold right] Next song`}
+          data-tooltip={songLabel}
           aria-label={isPlaying ? 'Pause music' : 'Play music'}
           aria-pressed={isPlaying}
           onClick={() => {
@@ -1103,7 +1103,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn audio-wide-btn${soundscapePreferences.enabled ? ' is-active' : ''}`}
-          data-tooltip={`Soundscape: ${soundscape.name}\n[Right] ${nextSoundscape.name}`}
+          data-tooltip={`Soundscape: ${soundscape.name}`}
           aria-label={soundscapePreferences.enabled ? 'Stop the soundscape' : 'Play the soundscape'}
           aria-pressed={soundscapePreferences.enabled}
           onClick={() => onSoundscapePreferencesChange({ ...soundscapePreferences, enabled: !soundscapePreferences.enabled })}

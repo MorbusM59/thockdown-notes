@@ -228,7 +228,7 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
                 event.preventDefault()
                 toggleSuggestedTagsExpanded()
               }}
-              data-tooltip="Right-click to show suggested tags"
+              data-tooltip="Tags"
             >
               {/* The icon IS the label, the same convention each bar's leading
                   create button uses: it says "tags" before anything is typed
@@ -290,7 +290,7 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
                           data-secondary-press="action"
                           onContextMenu={(event) => handleTagContextMenu(event, tagName)}
                           onMouseLeave={() => handleTagChipMouseLeave(tagName)}
-                          data-tooltip={deletePrimedTagName === tagName ? 'Click again to delete or move cursor away to cancel' : 'Click to arm deletion, right-click to rename'}
+                          data-tooltip={deletePrimedTagName === tagName ? 'Delete tag?' : 'Delete tag'}
                         >
                           <span className="tag-pill-label">{tagName}</span>
                         </div>

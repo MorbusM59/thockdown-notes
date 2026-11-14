@@ -712,7 +712,7 @@ export function SectionEditorArea({
               className={`chapter-toggle-button btn-icon${(showLineNumbers || showReviewFlags) ? ' is-active' : ''}`}
               aria-label="Toggle line numbers and review flags (right-click to toggle review flags only)"
               aria-pressed={showLineNumbers || showReviewFlags}
-              data-tooltip="Left-click: toggle line numbers + review flags. Right-click: toggle review flags only."
+              data-tooltip="Line numbers and review flags"
               onClick={onToggleReviewGutter}
               data-secondary-press="action"
               onContextMenu={(event) => {
@@ -727,7 +727,7 @@ export function SectionEditorArea({
         <div className="wordcount-panel" aria-live="polite">
           {activeNoteId ? (
             <WordCountOrPace active={isSectionActive}>
-              <span data-tooltip="Words, then characters, in this note">
+              <span data-tooltip="Words and characters">
                 <b className="readout-figure">{activeNoteDocumentStats.wordCount.toLocaleString()}</b>
                 <span className="readout-separator">{'  |  '}</span>
                 <span className="readout-figure">{activeNoteDocumentStats.characterCount.toLocaleString()}</span>

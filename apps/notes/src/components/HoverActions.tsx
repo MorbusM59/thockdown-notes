@@ -33,7 +33,7 @@ export function HoldIcon({ action, className = '' }: { action: HoverAction; clas
       className={`hold-icon bare-icon fa-solid ${action.icon}${className ? ` ${className}` : ''}`}
       role="button"
       aria-label={action.label}
-      data-tooltip={`Hold to ${action.label.charAt(0).toLowerCase()}${action.label.slice(1)}`}
+      data-tooltip={action.label}
       data-secondary-press="none"
       onPointerDown={(event) => {
         // The row's own press (select, drag, fold) is not this one's.

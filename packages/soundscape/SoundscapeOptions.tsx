@@ -211,7 +211,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
       controls: [
         VOLUME,
         unit('colour', 'colour', 'The noise itself: deep brown, balanced pink, bright white, and every blend between', (value) => formatScale(value, COLOUR_POINTS)),
-        { key: 'brightnessHz', track: 'bright', tooltip: 'Where the filter sits: the cutoff of a darkening low-pass, or the pitch of the band when focused', min: SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ, max: SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ, log: true, format: (value) => (value >= SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ * 0.99 ? 'Open' : formatHz(value)) },
+        { key: 'brightnessHz', track: 'bright', tooltip: 'Filter position', min: SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ, max: SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ, log: true, format: (value) => (value >= SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ * 0.99 ? 'Open' : formatHz(value)) },
         unit('focus', 'focus', 'A gentle low-pass to a narrow resonant band: a whistle at the brightness', (value) => formatAmount(value, 'Broad', 'Whistle')),
       ],
     },
@@ -221,8 +221,8 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
         unit('depth', 'depth', 'How far the level rises and falls over a cycle', (value) => formatAmount(value, 'Steady')),
         { key: 'periodSec', track: 'period', tooltip: 'Seconds per cycle', min: SOUNDSCAPE_PERIOD_MIN_SEC, max: SOUNDSCAPE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
         unit('curve', 'curve', 'A broad plateau with brief dips, a sine, or long quiet with a short swell', (value) => (Math.abs(value - 0.5) < 0.005 ? 'Sine' : value < 0.5 ? `Plateau ${Math.round(((0.5 - value) / 0.5) * 100)}%` : `Swell ${Math.round(((value - 0.5) / 0.5) * 100)}%`)),
-        { key: 'skew', track: 'skew', tooltip: 'Where the peak falls: a fast rise and slow fall (a wave), or a slow build and sudden drop', min: SOUNDSCAPE_SKEW_MIN, max: SOUNDSCAPE_SKEW_MAX, format: (value) => (Math.abs(value - 0.5) < 0.005 ? 'Even' : value < 0.5 ? `Fast rise ${Math.round(((0.5 - value) / 0.4) * 100)}%` : `Fast fall ${Math.round(((value - 0.5) / 0.4) * 100)}%`) },
-        { key: 'sweep', track: 'sweep', tooltip: 'How far the filter follows the swell: opening as it rises (a gust whistling higher, a wave brightening as it breaks), or closing', min: -1, max: 1, format: (value) => (Math.abs(value) < 0.005 ? 'Fixed' : `${value > 0 ? 'Opens' : 'Closes'} ${(Math.abs(value) * SOUNDSCAPE_NOISE_SWEEP_OCTAVES).toFixed(1)} oct`) },
+        { key: 'skew', track: 'skew', tooltip: 'Peak position', min: SOUNDSCAPE_SKEW_MIN, max: SOUNDSCAPE_SKEW_MAX, format: (value) => (Math.abs(value - 0.5) < 0.005 ? 'Even' : value < 0.5 ? `Fast rise ${Math.round(((0.5 - value) / 0.4) * 100)}%` : `Fast fall ${Math.round(((value - 0.5) / 0.4) * 100)}%`) },
+        { key: 'sweep', track: 'sweep', tooltip: 'Filter sweep', min: -1, max: 1, format: (value) => (Math.abs(value) < 0.005 ? 'Fixed' : `${value > 0 ? 'Opens' : 'Closes'} ${(Math.abs(value) * SOUNDSCAPE_NOISE_SWEEP_OCTAVES).toFixed(1)} oct`) },
         unit('variation', 'vary', 'How much each cycle departs from the last in length and height', (value) => formatAmount(value, 'Regular')),
       ],
     },
@@ -275,9 +275,9 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
       controls: [
         VOLUME,
         { key: 'share', track: 'share', tooltip: 'Rumbling to silence', min: 0, max: 1, step: 0.005, format: formatThunderShare },
-        { key: 'lengthSec', track: 'length', tooltip: 'How long a peal rolls', min: SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC, max: SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC, step: 1, format: formatSeconds },
+        { key: 'lengthSec', track: 'length', tooltip: 'Peal length', min: SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC, max: SOUNDSCAPE_THUNDER_LENGTH_MAX_SEC, step: 1, format: formatSeconds },
         unit('character', 'character', 'How the boom under the rumble breaks up: a smooth swell or a choppy growl', (value) => formatAmount(value, 'Smooth', 'Harsh')),
-        { key: 'contrast', track: 'contrast', tooltip: 'Loud and quiet pushed apart, or drawn together', min: -1, max: 1, format: (value) => (Math.abs(value) < 0.005 ? 'Off' : `${value > 0 ? '+' : '−'}${percent(Math.abs(value))}`) },
+        { key: 'contrast', track: 'contrast', tooltip: 'Contrast', min: -1, max: 1, format: (value) => (Math.abs(value) < 0.005 ? 'Off' : `${value > 0 ? '+' : '−'}${percent(Math.abs(value))}`) },
         unit('randomness', 'random', 'How much each peal varies around these settings', (value) => (value < 0.005 ? 'Off' : `±${Math.round(value * SOUNDSCAPE_THUNDER_JITTER * 100)}%`)),
       ],
     },
@@ -287,7 +287,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
         DISTANCE,
         PAN,
         unit('spread', 'spread', 'How much of the field a peal fills around its pan', (value) => formatAmount(value, 'Point', 'Wide')),
-        { ...WEATHER, tooltip: 'How much gusts bring the next peal sooner' },
+        { ...WEATHER, tooltip: 'Gusts hasten peals' },
       ],
     },
   ],
@@ -335,11 +335,11 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
         unit('sizzleLevel', 'level', 'How loud the sizzle is', formatPartLevel),
         unit('sizzleTone', 'tone', 'The pitch of the sizzle and its texture: low is frazzled, crackling with sparse bursts; high is a smooth hiss', (value) => `around ${formatHz(4000 * (2 ** value))}`),
         unit('flicker', 'flicker', 'How far the roar swings as the flames move: a steady burn, or surging and faltering', (value) => formatAmount(value, 'Steady', 'Guttering')),
-        { key: 'flickerPeriodSec', track: 'period', tooltip: 'The average length of one movement of the flames', min: SOUNDSCAPE_FIRE_PERIOD_MIN_SEC, max: SOUNDSCAPE_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
+        { key: 'flickerPeriodSec', track: 'period', tooltip: 'Flicker period', min: SOUNDSCAPE_FIRE_PERIOD_MIN_SEC, max: SOUNDSCAPE_FIRE_PERIOD_MAX_SEC, log: true, format: formatSeconds },
         unit('flickerDynamics', 'dynamics', 'Soft swells at an even pace, or sudden lurches at an uneven one', (value) => formatAmount(value, 'Gentle', 'Wild')),
       ],
     },
-    { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much the wind fans the flames' }] },
+    { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'Wind fans the flames' }] },
   ],
   chimes: [
     {
@@ -349,18 +349,18 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
       rows: [3, 3, 3, 1],
       controls: [
         VOLUME,
-        { key: 'pitchHz', track: 'pitch', tooltip: 'The lowest tube, in semitones from A440; the rest climb the scale', min: SOUNDSCAPE_CHIME_PITCH_MIN_HZ, max: SOUNDSCAPE_CHIME_PITCH_MAX_HZ, semitones: true, format: formatPitch },
+        { key: 'pitchHz', track: 'pitch', tooltip: 'Lowest tube', min: SOUNDSCAPE_CHIME_PITCH_MIN_HZ, max: SOUNDSCAPE_CHIME_PITCH_MAX_HZ, semitones: true, format: formatPitch },
         unit('width', 'width', 'The tubes hanging together at the pan and distance, to each at its own place across the stereo image the pan allows and across near and far', (value) => formatAmount(value, 'Together', 'Everywhere')),
-        { key: 'ringSec', track: 'ring', tooltip: 'How long a struck tube rings (for metal; wood knocks far shorter, glass a little shorter, the veil longer)', min: SOUNDSCAPE_CHIME_RING_MIN_SEC, max: SOUNDSCAPE_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
+        { key: 'ringSec', track: 'ring', tooltip: 'Ring length', min: SOUNDSCAPE_CHIME_RING_MIN_SEC, max: SOUNDSCAPE_CHIME_RING_MAX_SEC, log: true, format: formatSeconds },
         unit('material', 'material', 'What the tubes are made of: wood (bamboo), metal, glass, and a veil of shimmering, swelling tones, and every blend between', (value) => formatScale(value, MATERIAL_POINTS)),
         unit('hardness', 'hardness', 'A soft striker, warm and round, to a hard one, bright with a tick', (value) => formatAmount(value, 'Soft', 'Hard')),
         unit('unison', 'unison', 'How much the chimes sound together: single notes, or the striker rebounding across the ring into a cascade', (value) => formatAmount(value, 'Single', 'Cascade')),
         unit('activity', 'activity', 'How often the striker is set moving, before the wind has any say', (value) => `${chimeStrikesPerSecond(value).toFixed(chimeStrikesPerSecond(value) < 1 ? 2 : 1)} / s`),
-        { key: 'tubes', track: 'tubes', tooltip: 'How many tubes', min: SOUNDSCAPE_CHIME_TUBES_MIN, max: SOUNDSCAPE_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
-        { key: 'scale', track: 'scale', tooltip: 'The scale the tubes are tuned to', min: 0, max: CHIME_SCALES.length - 1, step: 1, steps: CHIME_SCALE_STEPS, format: (value) => chimeScaleOf(value).name },
+        { key: 'tubes', track: 'tubes', tooltip: 'Tubes', min: SOUNDSCAPE_CHIME_TUBES_MIN, max: SOUNDSCAPE_CHIME_TUBES_MAX, step: 1, format: (value) => `${Math.round(value)} tubes` },
+        { key: 'scale', track: 'scale', tooltip: 'Scale', min: 0, max: CHIME_SCALES.length - 1, step: 1, steps: CHIME_SCALE_STEPS, format: (value) => chimeScaleOf(value).name },
       ],
     },
-    { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'How much gusts set the striker moving, harder and into more of the ring' }] },
+    { label: 'Place', controls: [DISTANCE, PAN, { ...WEATHER, tooltip: 'Gusts strike the chimes' }] },
   ],
 }
 
@@ -381,7 +381,7 @@ const ENVIRONMENT_CONTROLS: ControlGroup[] = [{
     unit('brilliance', 'brilliance', 'How sharply it is all heard: soft and warm, neutral in the middle, or crisp, sparkling and full-bodied', formatBrilliance),
     unit('amount', 'amount', 'How much of the space is heard', (value) => formatAmount(value, 'Dry', 'Full')),
     unit('gustiness', 'gusts', 'Calm to squally: how far a gust or a lull moves every layer that follows the weather', (value) => formatAmount(value, 'Calm', 'Squally')),
-    { key: 'paceSec', track: 'pace', tooltip: 'Average seconds from one gust or lull to the next', min: SOUNDSCAPE_WEATHER_PACE_MIN_SEC, max: SOUNDSCAPE_WEATHER_PACE_MAX_SEC, log: true, format: formatSeconds },
+    { key: 'paceSec', track: 'pace', tooltip: 'Gust pace', min: SOUNDSCAPE_WEATHER_PACE_MIN_SEC, max: SOUNDSCAPE_WEATHER_PACE_MAX_SEC, log: true, format: formatSeconds },
   ],
 }]
 
@@ -811,7 +811,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                 aria-label={isPicked ? `${preset.name}, picked up` : preset.name}
                 data-pick-target={isPicked ? '' : undefined}
                 aria-pressed={selectedPresetId === preset.id}
-                data-tooltip={`${preset.name}\nHold right-click to export.`}
+                data-tooltip={preset.name}
                 data-secondary-press="action"
                 onClick={() => { if (!swallowsClick()) activatePreset(preset) }}
                 {...reorder?.props}
@@ -874,7 +874,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
               type="button"
               className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus"
               aria-label="Create a soundscape"
-              data-tooltip={canCreate ? 'Create a soundscape\nA copy of the one playing.' : 'No room for another soundscape.'}
+              data-tooltip={canCreate ? 'New soundscape' : 'No room for another soundscape'}
               disabled={!canCreate}
               onClick={() => { if (!swallowsClick()) createPreset() }}
             >

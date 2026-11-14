@@ -166,7 +166,7 @@ export function SurfaceTexturePicker({ materials, onWrite }: {
             type="button"
             className="options-seed-btn"
             disabled={!shown}
-            data-live-tooltip={shown ? `Seed: ${shown.seed}\nClick: random. Right click: type one in` : 'Select a surface'}
+            data-live-tooltip={shown ? `Seed: ${shown.seed}` : 'Select a surface'}
             aria-label={shown ? `Texture seed ${shown.seed}` : 'Texture seed'}
             onClick={() => {
               if (active) edit(active, (current) => ({ ...current, seed: Math.floor(Math.random() * (TEXTURE_SEED_MAX + 1)) }))

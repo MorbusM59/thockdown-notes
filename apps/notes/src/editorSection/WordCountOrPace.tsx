@@ -41,7 +41,7 @@ export function WordCountOrPace({ active, children }: { active: boolean; childre
 
   return (
     <>
-      <span ref={paceRef} hidden data-tooltip="Speed reading: words per minute (Left / Right) | time left in the note at this pace">
+      <span ref={paceRef} hidden data-tooltip="Words per minute | time left">
         <b ref={paceFigureRef} className="readout-figure" /> | <b ref={timeLeftRef} className="readout-figure" />
       </span>
       <span ref={countRef}>{children}</span>

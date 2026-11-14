@@ -70,7 +70,7 @@ export function LayoutDock({ entries, change, onReset }: LayoutHostProps & { onR
         <button
           type="button"
           className="options-curve-cell options-curve-button"
-          data-tooltip={`Reset ${entry.name} to the neutral layout`}
+          data-tooltip={`Reset ${entry.name}`}
           aria-label={`Reset ${entry.name}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={onReset}
@@ -80,7 +80,7 @@ export function LayoutDock({ entries, change, onReset }: LayoutHostProps & { onR
         <button
           type="button"
           className="options-curve-cell options-curve-button"
-          data-tooltip={factory ? `Hold to restore ${entry.name} as shipped` : `Hold to trash ${entry.name}`}
+          data-tooltip={factory ? `Restore ${entry.name}` : `Trash ${entry.name}`}
           aria-label={factory ? `Restore ${entry.name} as shipped` : `Trash ${entry.name}`}
           data-secondary-press="none"
           disabled={factory && !entry.edited}

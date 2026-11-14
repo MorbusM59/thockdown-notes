@@ -72,7 +72,7 @@ export function ColorPickerRow() {
             key={channel}
             type="button"
             className={`btn-icon options-color-picker-toggle${mask[channel] && !allActive ? ' is-active' : ''}`}
-            data-tooltip={`${CHANNEL_NAMES[channel]} only. Shift: add or remove`}
+            data-tooltip={`${CHANNEL_NAMES[channel]} only`}
             aria-pressed={mask[channel]}
             onPointerDown={(event) => {
               pointerTypeRef.current = event.pointerType

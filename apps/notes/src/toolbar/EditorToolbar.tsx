@@ -168,8 +168,8 @@ export function EditorToolbar({
           <button
             type="button"
             className={`btn-icon display-modes-split-btn dark-mode${uiMode === 'dark' ? ' is-active' : ''}`}
-            data-tooltip="Toggle dark mode"
-            aria-label="Toggle dark mode"
+            data-tooltip="Dark mode"
+            aria-label="Dark mode"
             aria-pressed={uiMode === 'dark'}
             onClick={toggleUiMode}
           >
@@ -282,15 +282,15 @@ export function EditorToolbar({
             <button
               type="button"
               className="btn-icon"
-              data-tooltip="Image: then click one in the sidebar"
+              data-tooltip="Insert image"
               aria-label="Image"
               onClick={() => { showImageLibrary(); inEditMode(insertImagePlaceholder)() }}
               disabled={formattingDisabled}
             >
               <span className="fa-solid fa-image" aria-hidden="true" />
             </button>
-            <button type="button" className="btn-icon" data-tooltip="Link (Ctrl+L)" onClick={inEditMode(applyLink)} disabled={formattingDisabled}><span className="fa-solid fa-link" aria-hidden="true" /></button>
-            <button type="button" className="btn-icon" data-tooltip="Set anchor (Shift+Ctrl+L)" onClick={inEditMode(applyAnchor)} disabled={formattingDisabled}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
+            <button type="button" className="btn-icon" data-tooltip="Link" onClick={inEditMode(applyLink)} disabled={formattingDisabled}><span className="fa-solid fa-link" aria-hidden="true" /></button>
+            <button type="button" className="btn-icon" data-tooltip="Anchor" onClick={inEditMode(applyAnchor)} disabled={formattingDisabled}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
           </div>
           <div className="toolbar-group chapter-group">
             <button

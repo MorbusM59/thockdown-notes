@@ -193,7 +193,7 @@ export function SectionTabBar({
         <button
           type="button"
           className={`btn-icon sidebar-toggle${isSidebarVisible ? ' is-active' : ''}`}
-          data-tooltip={isSidebarVisible ? 'Hide sidebar (Ctrl+Space)' : 'Show sidebar (Ctrl+Space)'}
+          data-tooltip={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           aria-label={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           onClick={toggleSidebarVisible}
         >
@@ -288,7 +288,7 @@ export function SectionTabBar({
                       type="button"
                       className="tag-pill section-picker-item section-picker-create"
                       onClick={onSectionPickerClearClick}
-                      data-tooltip="New collection in this slot (no note, no tabs, no name)"
+                      data-tooltip="New collection"
                       aria-label="New collection in this slot"
                     >
                       <span className="fa-solid fa-book" aria-hidden="true" />
@@ -320,7 +320,7 @@ export function SectionTabBar({
                         data-secondary-press="action"
                         onContextMenu={(event) => onSectionPickerCandidateContextMenu(event, candidate.id)}
                         onMouseLeave={() => onSectionPickerCandidateMouseLeave(candidate.id)}
-                        data-tooltip={isDeletionPrimed ? `Click again to permanently delete "${candidate.name}"` : `Swap in "${candidate.name}" — right-click to delete`}
+                        data-tooltip={isDeletionPrimed ? `Delete "${candidate.name}" for good?` : `Open "${candidate.name}"`}
                       >
                         <span className="tag-pill-label">{candidate.name}</span>
                       </button>
@@ -464,7 +464,7 @@ export function SectionTabBar({
         <button
           type="button"
           className={`btn-icon section-render-mode-toggle${isSpeedReading ? ' is-active' : ''}`}
-          data-tooltip={isSpeedReading ? 'Stop speed reading (F9)' : 'Speed reading (F9)'}
+          data-tooltip={isSpeedReading ? 'Stop speed reading' : 'Speed reading'}
           aria-label={isSpeedReading ? 'Stop speed reading' : 'Speed reading'}
           aria-pressed={isSpeedReading}
           onClick={onToggleSpeedReading}
@@ -476,7 +476,7 @@ export function SectionTabBar({
         <button
           type="button"
           className="btn-icon section-render-mode-toggle section-overlay-exit"
-          data-tooltip="Close this and go back (Esc)"
+          data-tooltip="Back"
           aria-label="Close this and go back"
           onClick={exitSlotOverlay}
         >

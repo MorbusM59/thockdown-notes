@@ -61,8 +61,8 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
       <button
         type="button"
         className="options-curve-cell options-curve-button"
-        data-tooltip={`Add audio files to ${set.name}`}
-        aria-label={`Add audio files to ${set.name}`}
+        data-tooltip={`Add songs`}
+        aria-label={`Add songs`}
         onClick={() => { void nowPlaying.addToMusicSet(set.slot, 'files') }}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -71,8 +71,8 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
       <button
         type="button"
         className="options-curve-cell options-curve-button"
-        data-tooltip={`Add a folder of audio files to ${set.name}`}
-        aria-label={`Add a folder of audio files to ${set.name}`}
+        data-tooltip={`Add a folder`}
+        aria-label={`Add a folder`}
         onClick={() => { void nowPlaying.addToMusicSet(set.slot, 'folder') }}
         onPointerDown={(event) => event.stopPropagation()}
       >
@@ -82,7 +82,7 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
       <button
         type="button"
         className="options-curve-cell options-curve-button"
-        data-tooltip={factory ? `Hold to restore ${set.name} as shipped: empty, with its own name and icon` : `Hold to delete ${set.name}`}
+        data-tooltip={factory ? `Restore ${set.name}` : `Delete ${set.name}`}
         aria-label={factory ? `Restore ${set.name}` : `Delete ${set.name}`}
         data-secondary-press="none"
         onPointerDown={(event) => {

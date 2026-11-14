@@ -50,7 +50,7 @@ function MarkButton({ name, mark, picking, onToggle, onReset }: { name: string; 
     <button
       type="button"
       className={`options-curve-cell options-curve-button options-dock-entry-icon${picking ? ' is-active' : ''}`}
-      data-tooltip={`Pick an icon for ${name}; hold for its default`}
+      data-tooltip={`Change icon`}
       aria-label={`Pick an icon for ${name}`}
       aria-pressed={picking}
       data-secondary-press="none"
@@ -155,7 +155,7 @@ function EntryName({ name, takenNames, onRename }: { name: string; takenNames: r
     <button
       type="button"
       className="options-curve-cell options-curve-display options-dock-entry-name"
-      data-tooltip="Right-click to rename"
+      data-tooltip="Rename"
       aria-label={`${name}; right-click to rename`}
       data-secondary-press="action"
       onPointerDown={(event) => event.stopPropagation()}

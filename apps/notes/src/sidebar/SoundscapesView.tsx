@@ -97,7 +97,7 @@ export function SoundscapeDock({ preferences, onChange }: SoundscapeHostProps) {
         <button
           type="button"
           className="options-curve-cell options-curve-button"
-          data-tooltip={`Reset ${preset.name}: every channel off at its defaults, the environment at its defaults`}
+          data-tooltip={`Reset ${preset.name}`}
           aria-label={`Reset ${preset.name}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onChange(editSoundscape(preferences, neutralSoundscape()))}
@@ -107,7 +107,7 @@ export function SoundscapeDock({ preferences, onChange }: SoundscapeHostProps) {
         <button
           type="button"
           className="options-curve-cell options-curve-button"
-          data-tooltip={factory ? `Hold to restore ${preset.name} as shipped` : `Hold to trash ${preset.name}`}
+          data-tooltip={factory ? `Restore ${preset.name}` : `Trash ${preset.name}`}
           aria-label={factory ? `Restore ${preset.name} as shipped` : `Trash ${preset.name}`}
           data-secondary-press="none"
           disabled={unchanged}

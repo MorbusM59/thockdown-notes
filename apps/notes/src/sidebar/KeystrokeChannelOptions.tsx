@@ -145,7 +145,7 @@ export function KeystrokeChannelOptions({ settings, onChange }: KeystrokeChannel
         step={0.01}
         value={selected.jitter}
         trackLabel="jitter"
-        tooltipLabel={`${selectedName} jitter: how far each press is pitched up or down at random`}
+        tooltipLabel={`${selectedName} jitter`}
         ariaLabel={`${selectedName} pitch jitter`}
         defaultValue={DEFAULT_KEYSTROKE_CHANNEL.jitter}
         disabled={!selected.on}
@@ -158,7 +158,7 @@ export function KeystrokeChannelOptions({ settings, onChange }: KeystrokeChannel
         step={1}
         value={selected.pitch}
         trackLabel="pitch"
-        tooltipLabel={`${selectedName} pitch: 100 is an octave up, -100 an octave down`}
+        tooltipLabel={`${selectedName} pitch`}
         ariaLabel={`${selectedName} pitch`}
         defaultValue={DEFAULT_KEYSTROKE_CHANNEL.pitch}
         disabled={!selected.on}

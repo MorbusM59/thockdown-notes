@@ -935,7 +935,7 @@ export function SidebarOptionsPanel({
         step={Math.log(defaults.fallSec / FALL_MIN_SEC) / 90}
         value={Math.log(fall.fallSec)}
         trackLabel="fall"
-        tooltipLabel={`Milliseconds: how long ${what} takes to fall to nothing. A hit always lands at once`}
+        tooltipLabel={`Fall time of ${what} (ms)`}
         ariaLabel={`${ariaPrefix}: fall in milliseconds`}
         defaultValue={Math.log(defaults.fallSec)}
         formatValue={(value) => Math.round(Math.exp(value) * 1000).toString()}
@@ -962,7 +962,7 @@ export function SidebarOptionsPanel({
           step={0.01}
           value={mix[field]}
           trackLabel={field}
-          tooltipLabel={`How much ${what} drives it, 0 to 100. Contributions add up, and the response is capped at a full one`}
+          tooltipLabel={`Share of ${what}`}
           ariaLabel={`${label}: contribution of ${field}, 0 to 100`}
           defaultValue={defaults[field]}
           formatValue={percent}
@@ -991,7 +991,7 @@ export function SidebarOptionsPanel({
                   step={0.01}
                   value={trackers[key].contrast}
                   trackLabel="contrast"
-                  tooltipLabel="How strong a hit must be, against the others around it, before it responds: higher keeps only the strongest, and only what is mostly this"
+                  tooltipLabel="Hit threshold"
                   ariaLabel={`${label}: contrast`}
                   defaultValue={visualizerDefaults.trackers[key].contrast}
                   onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], contrast: value } } }))}
@@ -1070,7 +1070,7 @@ export function SidebarOptionsPanel({
                     step={1}
                     value={edge.spreadPx}
                     trackLabel="spread"
-                    tooltipLabel="Pixels: how far the edge reaches in from the editor's edges before it starts to fade"
+                    tooltipLabel="Edge reach (px)"
                     ariaLabel={`${label}: spread in pixels`}
                     defaultValue={edgeDefaults.spreadPx}
                     onCommit={(value) => setEdge({ spreadPx: Math.round(value) })}
@@ -1083,7 +1083,7 @@ export function SidebarOptionsPanel({
                     step={1}
                     value={edge.blurPx}
                     trackLabel="blur"
-                    tooltipLabel="Pixels: how soft the edge fades inward; 0 is a hard line"
+                    tooltipLabel="Edge softness (px)"
                     ariaLabel={`${label}: blur in pixels`}
                     defaultValue={edgeDefaults.blurPx}
                     onCommit={(value) => setEdge({ blurPx: Math.round(value) })}
@@ -1329,7 +1329,7 @@ export function SidebarOptionsPanel({
                 key={entry.id}
                 type="button"
                 className={`btn-icon options-color-swatch options-loadout-btn${activeEntryForCurrentMode?.id === entry.id ? ' is-active' : ''}`}
-                data-tooltip={isCustom ? `${entry.name}\nHold right-click to export.` : entry.name}
+                data-tooltip={isCustom ? entry.name : entry.name}
                 aria-label={entry.name}
                 aria-pressed={activeEntryForCurrentMode?.id === entry.id}
                 onClick={() => void selectLoadoutPreset(entry.id)}
@@ -1350,7 +1350,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus"
             aria-label="Create a layout"
-            data-tooltip={customSlotEntriesForCurrentMode.length < LOADOUT_MAX_CUSTOM_SLOTS ? 'Create a layout\nA copy of the one in use.' : 'No room for another layout.'}
+            data-tooltip={customSlotEntriesForCurrentMode.length < LOADOUT_MAX_CUSTOM_SLOTS ? 'New layout' : 'No room for another layout'}
             disabled={customSlotEntriesForCurrentMode.length >= LOADOUT_MAX_CUSTOM_SLOTS}
             onClick={() => void createLoadout()}
           >
@@ -1487,7 +1487,7 @@ export function SidebarOptionsPanel({
                   type="button"
                   className="options-seed-btn"
                   aria-label={`Linear glaze seed ${glazeSettings.linearSeed}. Left click to randomize. Right click to edit.`}
-                  data-tooltip="Left click: random seed. Right click: edit seed."
+                  data-tooltip="Seed"
                   onClick={randomizeGlazeLinearSeed}
                   data-secondary-press="action"
                   onContextMenu={(event) => {
@@ -1504,8 +1504,8 @@ export function SidebarOptionsPanel({
             <button
               type="button"
               className={`btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' is-active' : ''}`}
-              aria-label={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
-              data-tooltip={glazeSettings.radialAboveLinear ? 'Display flair above glare.' : 'Display flair above glare.'}
+              aria-label={glazeSettings.radialAboveLinear ? 'Flair above glare' : 'Flair above glare'}
+              data-tooltip={glazeSettings.radialAboveLinear ? 'Flair above glare' : 'Flair above glare'}
               onClick={() => {
                 setGlazeSettings((current) => ({
                   ...current,
@@ -1564,7 +1564,7 @@ export function SidebarOptionsPanel({
                   type="button"
                   className="options-seed-btn"
                   aria-label={`Radial glaze seed ${glazeSettings.radialSeed}. Left click to randomize. Right click to edit.`}
-                  data-tooltip="Left click: random seed. Right click: edit seed."
+                  data-tooltip="Seed"
                   onClick={randomizeGlazeRadialSeed}
                   data-secondary-press="action"
                   onContextMenu={(event) => {
@@ -2323,7 +2323,7 @@ export function SidebarOptionsPanel({
               step={0.005}
               value={keystrokeSound.variance}
               trackLabel="variance"
-              tooltipLabel="variance: how far each key is pitched apart from the others, fixed per key"
+              tooltipLabel="Variance"
               ariaLabel="How far each key is pitched apart from the others, fixed per key"
               defaultValue={0}
               onCommit={(value) => setKeystrokeSound({ variance: clamp(value, KEYSTROKE_SOUND_RANGES.variance[0], KEYSTROKE_SOUND_RANGES.variance[1]) })}
@@ -2384,7 +2384,7 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={typingTrailSettings.fadeMaxTime}
                 trackLabel="fade"
-                tooltipLabel="Seconds a trail mark, and the caret's hold after a typed letter, take to fade out"
+                tooltipLabel="Fade time (s)"
                 ariaLabel="How long a typing trail mark takes to fade out, in seconds"
                 defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeMaxTime}
                 formatValue={(value) => value.toFixed(1)}
@@ -2397,7 +2397,7 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={typingTrailSettings.fadeShape}
                 trackLabel="shape"
-                tooltipLabel="Fade shape: 0 fades evenly, higher drops early, lower holds and drops late"
+                tooltipLabel="Fade shape"
                 ariaLabel="Shape of the typing trail's fade"
                 defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.fadeShape}
                 formatValue={(value) => value.toFixed(1)}
@@ -2410,7 +2410,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={typingTrailSettings.gainPercent}
                 trackLabel="gain"
-                tooltipLabel="Percent of the trail's full colour each typed letter adds on top of what the last mark has faded to (the colour is in Colors, Boxes)"
+                tooltipLabel="Gain per letter (%)"
                 ariaLabel="Percent of the typing trail's full strength each letter adds"
                 defaultValue={DEFAULT_TYPING_TRAIL_SETTINGS.gainPercent}
                 formatValue={(value) => String(Math.round(value))}
@@ -2488,7 +2488,7 @@ export function SidebarOptionsPanel({
                 step={0.005}
                 value={visualizer.immersive.glazeStrength}
                 trackLabel="glaze"
-                tooltipLabel="Strength of the glaze that sways in the visualizer mode (F5): every linear and radial layer of this layout's glaze, at this strength"
+                tooltipLabel="Glaze strength"
                 ariaLabel="Immersive: strength of the visualizer's glaze"
                 defaultValue={visualizerDefaults.immersive.glazeStrength}
                 formatValue={(value) => value.toFixed(3)}
@@ -2514,7 +2514,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.swayRangePx}
                 trackLabel="range"
-                tooltipLabel="px the nearest glaze layer sways from rest in the visualizer mode, at the music's usual loudness (louder passages widen it, silence calms it)"
+                tooltipLabel="Sway range (px)"
                 ariaLabel="Immersive: how far the nearest glaze layer sways, in pixels"
                 defaultValue={visualizerDefaults.immersive.swayRangePx}
                 formatValue={(value) => Math.round(value).toString()}
@@ -2540,7 +2540,7 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={visualizer.immersive.swayPush}
                 trackLabel="push"
-                tooltipLabel="px each hit of the glaze's mix above pushes the glaze's light stripes across them, for the nearest: right of centre forward, left of centre in reverse, 0 at the centre not at all"
+                tooltipLabel="Push per hit (px)"
                 ariaLabel="Immersive: how far each hit of the glaze mix pushes the glaze stripes, pixels"
                 defaultValue={visualizerDefaults.immersive.swayPush}
                 formatValue={(value) => value.toFixed(1)}
@@ -2553,7 +2553,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={visualizer.immersive.swayReturn}
                 trackLabel="return"
-                tooltipLabel="How far the glaze slides back after a push, in percent, on the wave's fall: 0 keeps the whole push, 100 returns it to where it was"
+                tooltipLabel="Push return (%)"
                 ariaLabel="Immersive: share of each push the glaze slides back, percent"
                 defaultValue={visualizerDefaults.immersive.swayReturn}
                 formatValue={(value) => String(Math.round(value * 100))}
@@ -2587,7 +2587,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.waveBoxes}
                 trackLabel="wave"
-                tooltipLabel="Boxes from one band of the grid wave to the next, in the visualizer mode (F5)"
+                tooltipLabel="Wave length (boxes)"
                 ariaLabel="Immersive: grid wave length in boxes"
                 defaultValue={visualizerDefaults.immersive.waveBoxes}
                 formatValue={(value) => Math.round(value).toString()}
@@ -2600,7 +2600,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.waveBeats}
                 trackLabel="travel"
-                tooltipLabel="Beats a band of the grid wave takes to travel one wave length (at 120 BPM while no beat is found)"
+                tooltipLabel="Beats per wave"
                 ariaLabel="Immersive: beats the grid wave takes to travel one wave length"
                 defaultValue={visualizerDefaults.immersive.waveBeats}
                 formatValue={(value) => Math.round(value).toString()}
@@ -2613,7 +2613,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.waveTurn}
                 trackLabel="turn"
-                tooltipLabel="Beats per turn of the grid wave's fastest pivot, with the music's beat: the centre holds it still, right turns it clockwise and left counter-clockwise (shown negative), at 16, 8, 4, 2 and 1 beats towards either end. Three pivots turn together (the screen's centre, a quarter of the screen to its left and a quarter to its right), the outer two 16 and 4 times slower"
+                tooltipLabel="Beats per turn"
                 ariaLabel="Immersive: beats per turn of the grid wave's fastest pivot, negative counter-clockwise, 0 still"
                 defaultValue={visualizerDefaults.immersive.waveTurn}
                 formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}
@@ -2635,7 +2635,7 @@ export function SidebarOptionsPanel({
                 step={1}
                 value={visualizer.immersive.pulseSpeed}
                 trackLabel="pulse"
-                tooltipLabel="Starting speed of the centre pulse, in grid boxes per second: the ring that leaves the centre on each hit of its mix"
+                tooltipLabel="Pulse speed (boxes/s)"
                 ariaLabel="Immersive: centre pulse starting speed, boxes per second"
                 defaultValue={visualizerDefaults.immersive.pulseSpeed}
                 formatValue={(value) => String(Math.round(value))}
@@ -2661,7 +2661,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={visualizer.immersive.pulseBoost}
                 trackLabel="boost"
-                tooltipLabel="Signal boost of the centre pulse, in percent: at 100 every hit sends a full ring and thump, at 0 each is as strong as the hit that set it off"
+                tooltipLabel="Pulse boost (%)"
                 ariaLabel="Immersive: centre pulse signal boost, percent"
                 defaultValue={visualizerDefaults.immersive.pulseBoost}
                 formatValue={(value) => String(Math.round(value * 100))}
@@ -2674,7 +2674,7 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={visualizer.immersive.pulseFadeSec}
                 trackLabel="fade"
-                tooltipLabel="How long each centre pulse takes to fade from full to nothing, in milliseconds"
+                tooltipLabel="Pulse fade (ms)"
                 ariaLabel="Immersive: centre pulse fade duration, milliseconds"
                 defaultValue={visualizerDefaults.immersive.pulseFadeSec}
                 formatValue={(value) => String(Math.round(value * 1000))}
@@ -2687,7 +2687,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={visualizer.immersive.pulseSoftness}
                 trackLabel="soft"
-                tooltipLabel="How softly the centre pulse's ring fades at its edges, in percent: 0 is a band with hard edges, 100 a smooth swell with no flat middle"
+                tooltipLabel="Ring softness (%)"
                 ariaLabel="Immersive: centre pulse edge softness, percent"
                 defaultValue={visualizerDefaults.immersive.pulseSoftness}
                 formatValue={(value) => String(Math.round(value * 100))}
@@ -2700,7 +2700,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={visualizer.immersive.cutoutRound}
                 trackLabel="round"
-                tooltipLabel="How round the centre panel's corners are, in percent: 0 square, 100 a circle. The grid around it stays whole boxes either way"
+                tooltipLabel="Corner roundness (%)"
                 ariaLabel="Immersive: centre panel corner roundness, percent"
                 defaultValue={visualizerDefaults.immersive.cutoutRound}
                 formatValue={(value) => String(Math.round(value * 100))}
@@ -2753,7 +2753,7 @@ export function SidebarOptionsPanel({
                 <button
                   type="button"
                   className="options-curve-cell options-curve-button"
-                  data-tooltip="Install dictionaries: a .dic with its .aff, or an .oxt, .xpi or .zip holding them"
+                  data-tooltip="Install dictionaries"
                   aria-label="Install dictionaries"
                   onClick={() => void installSpellCheckDictionary()}
                 >
@@ -2788,7 +2788,7 @@ export function SidebarOptionsPanel({
               step={SPEED_READING_WPM_STEP}
               value={speedReadingSettings.editWpm}
               trackLabel="editor"
-              tooltipLabel="Editor: words per minute a held Space reads on at (Left / Right while reading)"
+              tooltipLabel="Editor pace (wpm)"
               ariaLabel="Editor speed reading pace in words per minute"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.editWpm}
               formatValue={(value) => String(Math.round(value))}
@@ -2801,7 +2801,7 @@ export function SidebarOptionsPanel({
               step={1}
               value={speedReadingSettings.rowWidth}
               trackLabel="row"
-              tooltipLabel="Editor: the reading row's width in boxes; each chunk is as many words as fit"
+              tooltipLabel="Reading row width"
               ariaLabel="Width of the editor's reading row in boxes"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.rowWidth}
               formatValue={(value) => String(Math.round(value))}
@@ -2832,7 +2832,7 @@ export function SidebarOptionsPanel({
               step={SPEED_READING_WPM_STEP}
               value={speedReadingSettings.renderWpm}
               trackLabel="reader"
-              tooltipLabel="Reader: words per minute the page scrolls at (Left / Right while reading)"
+              tooltipLabel="Reader pace (wpm)"
               ariaLabel="Reader speed reading pace in words per minute"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.renderWpm}
               formatValue={(value) => String(Math.round(value))}
@@ -2850,7 +2850,7 @@ export function SidebarOptionsPanel({
               step={0.05}
               value={speedReadingSettings.curveRamp}
               trackLabel="ramp"
-              tooltipLabel="Speed curve ramp, as in Animations: how a held Space eases into the pace (editor) or a pause eases out of it and back (reader)"
+              tooltipLabel="Speed curve ramp"
               ariaLabel="Speed reading curve dynamic"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveRamp}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveRamp: value }))}
@@ -2862,7 +2862,7 @@ export function SidebarOptionsPanel({
               step={0.01}
               value={speedReadingSettings.curveShape}
               trackLabel="shape"
-              tooltipLabel="Speed curve shape, as in Animations: the share of the curve spent speeding up, the rest slowing down"
+              tooltipLabel="Speed curve shape"
               ariaLabel="Speed reading curve skew"
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveShape}
               onCommit={(value) => setSpeedReadingSettings((prev) => ({ ...prev, curveShape: value }))}
@@ -2874,7 +2874,7 @@ export function SidebarOptionsPanel({
               step={0.05}
               value={speedReadingSettings.curveSpeedSec}
               trackLabel="speed"
-              tooltipLabel="Speed curve time in seconds, as in Animations: speeding up and slowing down together"
+              tooltipLabel="Speed curve time (s)"
               ariaLabel="Speed reading curve total time in seconds"
               reverseScale
               defaultValue={DEFAULT_SPEED_READING_SETTINGS.curveSpeedSec}
@@ -3137,7 +3137,7 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={backupDatabase}
-            data-tooltip="Back up all notes: saves a copy of the database and shows it in the file explorer"
+            data-tooltip="Back up all notes"
             aria-label="Back up all notes"
           >
             <span className="fa-solid fa-database" aria-hidden="true" />
@@ -3255,8 +3255,8 @@ export function SidebarOptionsPanel({
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => window.windowControls?.toggleDevTools()}
-            data-tooltip="Open DevTools (detached window)"
-            aria-label="Open DevTools (detached window)"
+            data-tooltip="Open DevTools"
+            aria-label="Open DevTools"
           >
             <span className="fa-solid fa-code" aria-hidden="true" />
           </button>
@@ -3264,8 +3264,8 @@ export function SidebarOptionsPanel({
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn${clearAppStatePrimed ? ' primed' : ''}`}
             onClick={clearAppState}
-            data-tooltip={clearAppStatePrimed ? 'Click again to reset UI settings to factory defaults and reload' : 'Reset UI settings to factory defaults and reload'}
-            aria-label={clearAppStatePrimed ? 'Confirm resetting UI settings to factory defaults and reload' : 'Reset UI settings to factory defaults and reload'}
+            data-tooltip={clearAppStatePrimed ? 'Reset UI settings?' : 'Reset UI settings'}
+            aria-label={clearAppStatePrimed ? 'Confirm resetting UI settings to factory defaults and reload' : 'Reset UI settings'}
           >
             <span className="fa-solid fa-trash-can" aria-hidden="true" />
           </button>
@@ -3301,7 +3301,7 @@ export function SidebarOptionsPanel({
               step={PROGRESSION_STEP}
               value={adventureSettings.progression}
               trackLabel="difficulty"
-              tooltipLabel="thockquest: how fast monsters outgrow you"
+              tooltipLabel="Difficulty"
               ariaLabel="ThockQuest difficulty"
               defaultValue={DEFAULT_PROGRESSION}
               formatValue={(value) => `+${Math.round((value - 1) * 100)}% a level`}
@@ -3322,7 +3322,7 @@ export function SidebarOptionsPanel({
               step={0.05}
               value={adventureSettings.successAdjust}
               trackLabel="luckiness"
-              tooltipLabel="thockquest: the thumb on the scale"
+              tooltipLabel="Luckiness"
               ariaLabel="ThockQuest luckiness"
               defaultValue={0}
               formatValue={(value) => `${Math.round(value * 100)}%`}
@@ -3344,7 +3344,7 @@ export function SidebarOptionsPanel({
               step={1}
               value={indexOfScope(adventureSettings.autoAdvanceScope)}
               trackLabel="auto advance"
-              tooltipLabel="thockquest: how far holding space carries"
+              tooltipLabel="Auto-advance reach"
               ariaLabel="ThockQuest auto advance"
               defaultValue={indexOfScope(DEFAULT_AUTO_ADVANCE_SCOPE)}
               formatValue={(value) => AUTO_ADVANCE_LABELS[scopeAtIndex(value)]}
@@ -3363,7 +3363,7 @@ export function SidebarOptionsPanel({
               step={AUTO_ADVANCE_STEP_MS}
               value={adventureSettings.autoAdvanceMs}
               trackLabel="auto speed"
-              tooltipLabel="thockquest: time between auto-advanced choices"
+              tooltipLabel="Auto-advance speed"
               ariaLabel="ThockQuest auto speed"
               defaultValue={DEFAULT_AUTO_ADVANCE_MS}
               disabled={adventureSettings.autoAdvanceScope === 'nothing'}

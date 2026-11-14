@@ -6970,7 +6970,7 @@ ${markdownHtml}
         onSelect={handleViewModeButtonClick}
         ariaLabel={sidebarShowsImages ? 'Image sections' : 'Note sections'}
         buttonProps={sidebarShowsImages ? undefined : (section) => (section === 'trash' ? {
-          'data-tooltip': 'Trash. Hold to empty it',
+          'data-tooltip': 'Trash',
           onPointerDown: activeSection?.handleTrashViewButtonPointerDown,
           onPointerUp: activeSection?.clearTrashButtonHold,
           onPointerCancel: activeSection?.clearTrashButtonHold,
@@ -8664,17 +8664,17 @@ ${markdownHtml}
                   {sidebarMode === 'options' && optionsSection === 'music' && openPresetSubsection === 'soundstages' ? (
                     // The playing soundstage's row, docked as the soundscapes' is, while its subsection is open.
                     <div className="sidebar-plain-dock">
-                      <PresetDock kind={SOUNDSTAGE_KIND} list={soundstagePreferences} onChange={changeSoundstageList} pickKind="soundstage" resetTo={NEUTRAL_SOUNDSTAGE} resetTooltip="the EQ flat, the room and width at their defaults" />
+                      <PresetDock kind={SOUNDSTAGE_KIND} list={soundstagePreferences} onChange={changeSoundstageList} pickKind="soundstage" resetTo={NEUTRAL_SOUNDSTAGE} />
                     </div>
                   ) : null}
                   {sidebarMode === 'options' && optionsSection === 'music' && openPresetSubsection === 'keystrokeSounds' ? (
                     <div className="sidebar-plain-dock">
-                      <PresetDock kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" resetTo={NEUTRAL_KEYSTROKE_SOUND} resetTooltip="every channel off, the mix neutral" />
+                      <PresetDock kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" resetTo={NEUTRAL_KEYSTROKE_SOUND} />
                     </div>
                   ) : null}
                   {sidebarMode === 'options' && optionsSection === 'advanced' && openPresetSubsection === 'flashing' ? (
                     <div className="sidebar-plain-dock">
-                      <PresetDock kind={FLASH_SHAPE_KIND} list={flashShapePreferences} onChange={setFlashShapePreferences} pickKind="flashing" resetTo={NEUTRAL_FLASH_SHAPE} resetTooltip="steady, not flashing" />
+                      <PresetDock kind={FLASH_SHAPE_KIND} list={flashShapePreferences} onChange={setFlashShapePreferences} pickKind="flashing" resetTo={NEUTRAL_FLASH_SHAPE} />
                     </div>
                   ) : null}
                   {sidebarMode === 'soundscapes' ? (
@@ -9035,7 +9035,7 @@ ${markdownHtml}
                     onPointerDown={handleDividerPointerDown(editorSections[index - 1].id, entry.id)}
                     data-secondary-press="action"
                     onContextMenu={handleDividerContextMenu(editorSections[index - 1].id, entry.id)}
-                    data-tooltip="Drag to resize — right-click to split evenly"
+                    data-tooltip="Resize slots"
                   />
                 ) : null}
                 <div

@@ -89,7 +89,7 @@ export function ImageTagBar({ imageId }: { imageId: string }) {
               setRenameProblem(null)
               setRenameDraft(imageId)
             }}
-            data-tooltip={renameProblem ?? `Image ${imageId}. Right-click to rename it in every note that uses it`}
+            data-tooltip={renameProblem ?? `Image ${imageId}`}
           >
             <span className="tag-pill-label">{imageId}</span>
           </button>
@@ -121,7 +121,7 @@ export function ImageTagBar({ imageId }: { imageId: string }) {
                 onDragStart={(event) => { event.dataTransfer.setData('text/plain', tag); setDraggedIndex(index) }}
                 onDragEnd={() => setDraggedIndex(null)}
                 onDrop={(event) => dropTag(event, index)}
-                data-tooltip={primedTag === tag ? `Click again to remove ${tag}` : `Click twice to remove ${tag}, drag to reorder`}
+                data-tooltip={primedTag === tag ? `Remove ${tag}?` : `Remove ${tag}`}
                 onMouseLeave={() => { if (primedTag === tag) setPrimedTag(null) }}
                 onClick={() => {
                   if (primedTag !== tag) {

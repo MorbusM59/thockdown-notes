@@ -78,7 +78,7 @@ export function FlashingOptions({ flashing, editShape, setMatching, beatAvailabl
         columnHeaders={['#', 'pos.', '%', 'shape']}
         pointLabel={(index) => String(index)}
         ariaLabel="Flashing curve"
-        tooltip={'Flashing curve: the opacity over one cycle, drawn on a bar of twelve (dashed on the beats). The end runs on into the start, so the two are one point'}
+        tooltip={'Flashing curve'}
       />
       <div className="utility-setting-slider-stack" aria-label="Flashing timing">
         <OptionsSliderRows rows={[2]}>
@@ -89,7 +89,7 @@ export function FlashingOptions({ flashing, editShape, setMatching, beatAvailabl
             step={FLASH_CYCLE_STEP_MS}
             value={flashing.cycleMs}
             trackLabel="cycle"
-            tooltipLabel="Milliseconds: how long one cycle takes when it is not following the music"
+            tooltipLabel="Cycle length (ms)"
             ariaLabel="Length of one flashing cycle in milliseconds"
             defaultValue={DEFAULT_FLASHING_SETTINGS.cycleMs}
             onCommit={(value) => editShape({ cycleMs: Math.max(FLASH_CYCLE_MIN_MS, Math.min(FLASH_CYCLE_MAX_MS, Math.round(value / FLASH_CYCLE_STEP_MS) * FLASH_CYCLE_STEP_MS)) })}

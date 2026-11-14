@@ -394,8 +394,8 @@ export function ChapterBar({
         <button
           type="button"
           className="btn-icon chapter-collapse-button"
-          data-tooltip="Collapse this chapter into the previous one"
-          aria-label="Collapse this chapter into the previous one"
+          data-tooltip="Merge into previous chapter"
+          aria-label="Merge into previous chapter"
           disabled={!hasCurrentChapter}
           onClick={onCollapseChapterIntoPrevious}
         >
@@ -407,8 +407,8 @@ export function ChapterBar({
         <button
           type="button"
           className="btn-icon chapter-extract-button"
-          data-tooltip="Cut the selection (or everything after the caret) into a new chapter right behind this one"
-          aria-label="Cut the selection (or everything after the caret) into a new chapter right behind this one"
+          data-tooltip="Split into a new chapter"
+          aria-label="Split into a new chapter"
           onClick={onExtractSelectionToChapter}
         >
           <span className="fa-solid fa-scissors" aria-hidden="true" />

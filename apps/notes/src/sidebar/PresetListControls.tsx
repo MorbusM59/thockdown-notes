@@ -71,7 +71,7 @@ export function PresetGrid<S>({ kind, list, onChange, idPrefix, label, plural }:
         type="button"
         className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus"
         aria-label={`Create ${plural}`}
-        data-tooltip={canCreate ? `Create ${plural}\nA copy of the one in use.` : `No room for another ${kind.noun.toLowerCase()}.`}
+        data-tooltip={canCreate ? `New ${kind.noun.toLowerCase()}` : `No room for another ${kind.noun.toLowerCase()}`}
         disabled={!canCreate}
         onClick={() => {
           const created = createPreset(kind, list, newPresetId(idPrefix))
@@ -105,12 +105,11 @@ export function PresetIconPicker<S>({ kind, list, onChange, pickKind, query }: P
 
 /**
  * The active entry's dock. `resetTo` is what the reset writes into it (as an
- * edit like any other), and `resetTooltip` says what that is in words.
+ * edit like any other).
  */
-export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo, resetTooltip }: PresetListHostProps<S> & {
+export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo }: PresetListHostProps<S> & {
   pickKind: PresetPickKind
   resetTo: S
-  resetTooltip: string
 }) {
   const pick = useSyncExternalStore(subscribeIconPick, readIconPick)
   const preset = activePreset(kind, list)
@@ -138,7 +137,7 @@ export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo, resetTo
         <button
           type="button"
           className="options-curve-cell options-curve-button"
-          data-tooltip={`Reset ${preset.name}: ${resetTooltip}`}
+          data-tooltip={`Reset ${preset.name}`}
           aria-label={`Reset ${preset.name}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => onChange(editActivePreset(kind, list, resetTo))}
@@ -148,7 +147,7 @@ export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo, resetTo
         <button
           type="button"
           className="options-curve-cell options-curve-button"
-          data-tooltip={factory ? `Hold to restore ${preset.name} as shipped` : `Hold to trash ${preset.name}`}
+          data-tooltip={factory ? `Restore ${preset.name}` : `Trash ${preset.name}`}
           aria-label={factory ? `Restore ${preset.name} as shipped` : `Trash ${preset.name}`}
           data-secondary-press="none"
           disabled={unchanged}

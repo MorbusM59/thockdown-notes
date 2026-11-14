@@ -75,7 +75,7 @@ export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: Pa
       {readout === null ? null : draft === null ? (
         <span
           className="pager-readout"
-          data-tooltip={hits ? 'Right-click to go to a match' : 'Right-click to go to a page'}
+          data-tooltip={hits ? 'Go to a match' : 'Go to a page'}
           data-secondary-press="action"
           onContextMenu={(event) => {
             event.preventDefault()

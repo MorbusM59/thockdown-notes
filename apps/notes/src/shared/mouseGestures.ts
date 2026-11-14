@@ -11,10 +11,9 @@ import type { ShortcutSectionId } from './keyboardShortcuts'
 // colour swatches, the music player, the soundscape channels) are left out:
 // the reference is for what a reader uses while writing.
 //
-// Only gestures a reader cannot discover are listed. A control whose tooltip
-// already says what a right-click or a hold does (a tab, the identity tab,
-// the gutter toggle, the timeline's zoom) is left to its tooltip, which is
-// where the reader is looking when they need it.
+// Only gestures a reader cannot discover are listed. Tooltips name what a
+// control is FOR and never how it is worked (no "right-click to", no "hold
+// to"), so a gesture a reader needs while writing is listed here instead.
 
 export type MouseAction = 'click' | 'hold' | 'drag' | 'wheel'
 export type MouseButton = 'left' | 'right'
@@ -40,12 +39,18 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { section: 'scrollbar', action: 'click', button: 'right', label: 'page scroll' },
   { section: 'scrollbar', action: 'hold', button: 'left', label: 'instant scroll' },
 
-  { section: 'tabBar', action: 'drag', button: 'left', label: 'reorder tabs' },
+  { section: 'layout', action: 'click', button: 'right', label: 'on slot divider: split evenly' },
+
+  { section: 'tabBar', action: 'drag', button: 'left', label: 'reorder tabs and tags' },
+  { section: 'tabBar', action: 'click', button: 'right', label: 'on tag: rename' },
+  { section: 'tabBar', action: 'click', button: 'right', label: 'on tag bar: suggested tags' },
+  { section: 'tabBar', action: 'click', button: 'right', label: 'on collection: delete' },
 
   { section: 'chapterBar', action: 'drag', button: 'left', label: 'reorder chapters' },
   { section: 'chapterBar', action: 'click', button: 'right', label: 'assign id' },
   { section: 'chapterBar', action: 'hold', button: 'right', label: 'archive/delete' },
 
+  { section: 'timeline', action: 'wheel', label: 'zoom' },
   { section: 'timeline', action: 'hold', button: 'right', label: 'on present: merge snapshots' },
   { section: 'timeline', action: 'hold', button: 'right', label: 'on mark: new note from mark' },
 
@@ -54,18 +59,19 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   { section: 'tables', action: 'hold', button: 'left', label: 'on divider: delete column' },
 
   { section: 'images', action: 'click', button: 'right', label: 'select alt text, id, image' },
+  { section: 'images', action: 'click', button: 'right', label: 'on image id pill: rename everywhere' },
   { section: 'images', action: 'drag', button: 'left', modifiers: ['Ctrl'], label: 'reader: move to a block, align by drop side' },
   { section: 'images', action: 'drag', button: 'left', modifiers: ['Shift'], label: 'reader: resize, keep proportions' },
   { section: 'images', action: 'drag', button: 'left', modifiers: ['Ctrl', 'Shift'], label: 'reader: resize width and height' },
 
   { section: 'gutter', action: 'click', button: 'left', label: 'mark ? / !' },
   { section: 'gutter', action: 'click', button: 'right', label: 'clear mark' },
+  { section: 'gutter', action: 'click', button: 'right', label: 'on gutter toggle: review flags only' },
 
   { section: 'find', action: 'click', button: 'right', label: "on Find icon: replace all" },
 
-  // editorSection/useNoteProtectionActions.ts: a press arms archiving, a hold arms deletion.
-  { section: 'category', action: 'click', button: 'right', label: 'prime for archiving' },
-  { section: 'category', action: 'hold', button: 'right', label: 'prime for deletion' },
+  // components/HoverActions.tsx: every row action icon (archive, trash, close) is a short hold; a click does nothing.
+  { section: 'category', action: 'hold', button: 'left', label: 'on a row icon: archive, trash, close' },
 
   { section: 'menu', action: 'wheel', label: 'turn dial' },
   { section: 'menu', action: 'click', button: 'left', label: 'select choice' },
