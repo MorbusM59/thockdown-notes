@@ -1737,14 +1737,13 @@ export function usePreviewMarkdownRendering({
       // because this branch has already decided none is needed. The question
       // is not "is it mounted" but "can a plain scroll get there", and only
       // the second one is a question about `scrollTop`.
-      const mounted = previewWindow.api.resolveCharOffsetPx(charOffset)
-      const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      const reachable = mounted !== null && mounted >= 0 && mounted <= maxScrollTopPx
+      // The rule itself lives in the window (resolveReachableCharPx), shared
+      // with the instant landing, so the two cannot disagree about it.
+      const reachablePx = previewWindow.api.resolveReachableCharPx(charOffset)
       traceScroll(() => `route   char=${charOffset}`
-        + ` mounted=${mounted === null ? 'not in window' : Math.round(mounted)}`
-        + ` max=${Math.round(maxScrollTopPx)}`
-        + ` -> ${reachable ? 'plain scroll' : 'BRIDGE'}`)
-      if (reachable) return scrollToNonQuantizedSmooth(scroller, mounted)
+        + ` reachable=${reachablePx === null ? 'no' : Math.round(reachablePx)}`
+        + ` -> ${reachablePx !== null ? 'plain scroll' : 'BRIDGE'}`)
+      if (reachablePx !== null) return scrollToNonQuantizedSmooth(scroller, reachablePx)
 
       const viewport = previewWindow.api.readCharViewport()
       const startChar = viewport?.startChar ?? 0

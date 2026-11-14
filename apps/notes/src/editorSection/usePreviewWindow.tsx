@@ -117,11 +117,20 @@ export interface PreviewWindowApi {
    */
   landOnChar: (charOffset: number) => number | null
   /**
-   * The window-local pixel offset for `charOffset`, or null when that
-   * character is not mounted. For a caller that needs a pixel it can animate
-   * to rather than a place to be put.
+   * The window-local scrollTop that puts `charOffset` at the top of the pane,
+   * or null when a plain scroll cannot get there and the window has to be
+   * re-anchored instead. For a caller that needs a pixel it can animate to
+   * rather than a place to be put.
+   *
+   * Reachable means mounted AND inside `0..maxScrollTop` -- except where the
+   * mounted run already ends at the document's last block: past `maxScrollTop`
+   * there is no more document to mount, so the clamp IS the destination and
+   * the answer is `maxScrollTop`. Treating that as unreachable sent every
+   * travel to a target in the document's last screenful (a find hit a few
+   * lines below the view, a track click near the bottom) through the
+   * re-anchoring curtain, for a hop of a few lines.
    */
-  resolveCharOffsetPx: (charOffset: number) => number | null
+  resolveReachableCharPx: (charOffset: number) => number | null
   /**
    * How many characters the document's last screenful holds.
    *
@@ -860,6 +869,17 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     return measurement.start + (measurement.size * target.fraction)
   }, [resolveCharTarget])
 
+  const resolveReachableCharPx = useCallback((charOffset: number): number | null => {
+    const scroller = previewScrollRef.current
+    const target = resolveCharTarget(charOffset)
+    if (!scroller || !target || !isWithinPreviewWindow(rangeRef.current, target.blockIndex)) return null
+    const px = resolveCharOffsetPx(charOffset)
+    if (px === null || px < 0) return null
+    const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    if (px <= maxScrollTopPx) return px
+    return rangeRef.current.endIndex >= previewBlocksRef.current.length - 1 ? maxScrollTopPx : null
+  }, [resolveCharTarget, resolveCharOffsetPx, previewScrollRef])
+
   const scrollToChar = useCallback((charOffset: number) => {
     const target = resolveCharTarget(charOffset)
     if (!target) return
@@ -873,36 +893,33 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     // pixel clamps and lands short. Anything the scroller cannot reach is
     // re-anchored instead, which is the same rule the animated path follows
     // (usePreviewMarkdownRendering's smoothScrollToChar).
-    if (isWithinPreviewWindow(rangeRef.current, target.blockIndex)) {
-      const px = resolveCharOffsetPx(charOffset)
-      const maxScrollTopPx = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
-      if (px !== null && px >= 0 && px <= maxScrollTopPx) {
-        // A landing overrides a carry -- the same rule anchorWindowOn states
-        // below, which until now only the re-anchoring branch obeyed. A carry
-        // exists to hold the reader still across a window move they did not
-        // ask for; this IS the reader being moved on purpose, so a carry
-        // queued before it is compensating for a position that no longer
-        // means anything.
-        //
-        // Without this, a move committed just before a landing applied its
-        // carry just after, re-anchoring on the block the reader was at
-        // BEFORE the landing and quietly undoing it. Measured on a note
-        // switch into a windowed note: the restore landed block 120 at the
-        // top, the in-flight carry then put block 127 there, and the next
-        // capture recorded 127 as the new position -- so every switch walked
-        // the note forward by eight paragraphs, compounding. The landing was
-        // never wrong; it was overwritten a commit later.
-        pendingAnchorRef.current = null
-        const previousBehavior = scroller.style.scrollBehavior
-        scroller.style.scrollBehavior = 'auto'
-        scroller.scrollTop = px
-        scroller.style.scrollBehavior = previousBehavior
-        adjust()
-        return
-      }
+    const px = resolveReachableCharPx(charOffset)
+    if (px !== null) {
+      // A landing overrides a carry -- the same rule anchorWindowOn states
+      // below, which until now only the re-anchoring branch obeyed. A carry
+      // exists to hold the reader still across a window move they did not
+      // ask for; this IS the reader being moved on purpose, so a carry
+      // queued before it is compensating for a position that no longer
+      // means anything.
+      //
+      // Without this, a move committed just before a landing applied its
+      // carry just after, re-anchoring on the block the reader was at
+      // BEFORE the landing and quietly undoing it. Measured on a note
+      // switch into a windowed note: the restore landed block 120 at the
+      // top, the in-flight carry then put block 127 there, and the next
+      // capture recorded 127 as the new position -- so every switch walked
+      // the note forward by eight paragraphs, compounding. The landing was
+      // never wrong; it was overwritten a commit later.
+      pendingAnchorRef.current = null
+      const previousBehavior = scroller.style.scrollBehavior
+      scroller.style.scrollBehavior = 'auto'
+      scroller.scrollTop = px
+      scroller.style.scrollBehavior = previousBehavior
+      adjust()
+      return
     }
     anchorWindowOn(target.blockIndex, target.fraction, true)
-  }, [resolveCharTarget, resolveCharOffsetPx, previewScrollRef, adjust, anchorWindowOn])
+  }, [resolveCharTarget, resolveReachableCharPx, previewScrollRef, adjust, anchorWindowOn])
 
   /**
    * Runs adjustment passes until the window stops changing.
@@ -947,12 +964,12 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     readMeasurements,
     scrollToChar,
     landOnChar,
-    resolveCharOffsetPx,
+    resolveReachableCharPx,
     readLastScreenChars,
     readContinuousScrollOffsetPx,
     isAtDocumentEdge,
     isRunAtDocumentStart,
-  }), [readCharViewport, readMeasurements, scrollToChar, landOnChar, resolveCharOffsetPx, readLastScreenChars, readContinuousScrollOffsetPx, isAtDocumentEdge, isRunAtDocumentStart])
+  }), [readCharViewport, readMeasurements, scrollToChar, landOnChar, resolveReachableCharPx, readLastScreenChars, readContinuousScrollOffsetPx, isAtDocumentEdge, isRunAtDocumentStart])
 
   const element = useMemo(() => {
     if (!enabled) return null
