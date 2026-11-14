@@ -20,7 +20,8 @@ import { readSelectionLineRects } from '../editor/SelectionRects';
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming';
 import { isOffsetInFencedCodeBlock } from '../editor/MarkdownContext';
 import { isTableCellDragStart, resolveTableCellDrop, resolveTableSelectionStep } from '../editor/MarkdownTableTransforms';
-import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images';
+import { imageMarkdown, isImageFile } from '../shared/images';
+import { droppedLibraryImage } from '../imageLibrary/imageLibraryStore';
 import { malformedImageTitlesOnLine, resolveImageSelectionStep } from '../editor/MarkdownImageTransforms';
 import { hasTravelledDragThreshold } from '../shared/pointerDrag';
 import { createRowWheel } from '../scroll/rowWheel';
@@ -4137,13 +4138,24 @@ export function CM6Editor({
         // editor). Anything else dropped keeps CM6's handling.
         drop: (event, view) => {
           // An image card from the library: already stored, so only referenced.
-          const libraryImageId = event.dataTransfer?.getData(IMAGE_DRAG_MIME_TYPE);
-          if (libraryImageId) {
+          const library = droppedLibraryImage(event.dataTransfer);
+          if (library) {
             event.preventDefault();
             if (view.state.readOnly) return true;
             const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
-            insertImageMarkdown(view, pos, imageMarkdown('', libraryImageId));
-            view.focus();
+            const insert = () => {
+              insertImageMarkdown(view, pos, imageMarkdown('', library.id));
+              view.focus();
+            };
+            if (!library.ready) {
+              insert();
+              return true;
+            }
+            // Out of the trash first; inserted only where it was dropped.
+            const docAtDrop = view.state.doc;
+            void library.ready.then(() => {
+              if (view.state.doc === docAtDrop && !view.state.readOnly) insert();
+            });
             return true;
           }
           const files = imageFilesOf(event.dataTransfer);

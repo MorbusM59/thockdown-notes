@@ -254,6 +254,8 @@ export function renameImageReferences(text: string, fromId: string, toId: string
 
 /** The drag payload of an image card from the library (imageLibrary/): the image's id. */
 export const IMAGE_DRAG_MIME_TYPE = 'application/x-thockdown-image'
+/** Set beside IMAGE_DRAG_MIME_TYPE when the card dragged is in the trash. */
+export const IMAGE_DRAG_TRASHED_MIME_TYPE = 'application/x-thockdown-image-trashed'
 
 /** The Markdown a newly stored image is inserted as. */
 export function imageMarkdown(alt: string, id: string): string {

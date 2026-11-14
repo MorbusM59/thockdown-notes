@@ -1,15 +1,17 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react'
 import type { EditorAdapter } from '../editor/EditorContract'
-import { insertAtBlockStart, locateImage, insertBeside, moveImage, moveImageBeside, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
+import { insertAtBlockStart, locateImage, insertBeside, moveImage, moveImageBeside, removeImage, reshapeImage, sameAlt, type ImageEdit } from '../editor/ImagePlacement'
 import { cssInset, type ImageAlignment, type ImageInset, type ImageLayout, type ImageLength } from '../shared/imageLayout'
 import { IMAGE_DRAG_MIME_TYPE, imageMarkdown, isImageFile } from '../shared/images'
 import { importImageFilesAsMarkdown } from '../shared/storedImages'
+import { droppedLibraryImage } from '../imageLibrary/imageLibraryStore'
 
 // SHAPING AN IMAGE IN THE RENDER VIEW, with the pointer:
 //
 //   Ctrl + drag          move it to the start of the block it is dropped on,
 //                        aligned by where across the page it lands (left
-//                        third, middle, right third)
+//                        third, middle, right third); dropped outside
+//                        its slot, it is taken out of the note
 //   Shift + drag         resize, keeping its proportions (the longer of the
 //                        two movements decides; down grows, and across, a
 //                        drag away from the side the image is aligned to
@@ -268,6 +270,11 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
         }
         if (!commit || !moved || readEditorText() !== text) return
         if (mode === 'move') {
+          const slot = (scroller.closest<HTMLElement>('[data-section-id]') ?? scroller).getBoundingClientRect()
+          if (up.clientX < slot.left || up.clientX > slot.right || up.clientY < slot.top || up.clientY > slot.bottom) {
+            apply(text, removeImage(text, image))
+            return
+          }
           const onto = imageFrameAt(frame, up.clientX, up.clientY)
           const at = onto && addressOf(scroller, onto.frame)
           const other = at && locateImage(text, at.line0, at.ordinal, at.drawn)
@@ -348,12 +355,22 @@ export function useImagePreviewGestures({ activeNoteId, scrollerRef, adapterRef,
     }
     const handleDrop = (event: DragEvent) => {
       // An image card from the library: already stored, so only referenced.
-      const libraryImageId = event.dataTransfer?.getData(IMAGE_DRAG_MIME_TYPE)
-      if (libraryImageId) {
+      const library = droppedLibraryImage(event.dataTransfer)
+      if (library) {
         event.preventDefault()
         event.stopPropagation()
         const text = readEditorText()
-        apply(text, insertAt(text, event.clientX, event.clientY, imageMarkdown('', libraryImageId)))
+        const { clientX, clientY } = event
+        const insert = () => apply(text, insertAt(text, clientX, clientY, imageMarkdown('', library.id)))
+        if (!library.ready) {
+          insert()
+          return
+        }
+        // Out of the trash first; inserted only where it was dropped.
+        const droppedOn = noteRef.current
+        void library.ready.then(() => {
+          if (noteRef.current === droppedOn && canEditRef.current && readEditorText() === text) insert()
+        })
         return
       }
       const files = Array.from(event.dataTransfer?.files ?? []).filter(isImageFile)

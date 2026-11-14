@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from 'react'
-import { imageReferenceRenameEdits, normalizeImageId, type ImageRenameResult, type StoredImageSummary } from '../shared/images'
+import { IMAGE_DRAG_MIME_TYPE, IMAGE_DRAG_TRASHED_MIME_TYPE, imageReferenceRenameEdits, normalizeImageId, type ImageRenameResult, type StoredImageSummary } from '../shared/images'
 import { invalidateStoredImage, onStoredImagesChanged } from '../shared/storedImages'
 
 // THE IMAGE LIBRARY'S LIST: every stored image, as the main process answers
@@ -81,6 +81,17 @@ export async function setImageTrashed(id: string, trashed: boolean): Promise<voi
   await window.thockdownImages?.setImageTrashed(id, trashed)
   invalidateStoredImage(id)
   invalidateImageLibrary()
+}
+
+/**
+ * The library image a drop carries, read while the drop event lasts, and
+ * when it may be referenced: at once, or once an image dragged out of the
+ * trash has been taken out of it, so the note never points at a trashed image.
+ */
+export function droppedLibraryImage(data: DataTransfer | null): { id: string; ready: Promise<void> | null } | null {
+  const id = data?.getData(IMAGE_DRAG_MIME_TYPE)
+  if (!id) return null
+  return { id, ready: data?.types.includes(IMAGE_DRAG_TRASHED_MIME_TYPE) ? setImageTrashed(id, false) : null }
 }
 
 export async function purgeImage(id: string): Promise<boolean> {

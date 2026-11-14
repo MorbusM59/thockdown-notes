@@ -157,6 +157,11 @@ export function insertBeside(target: LocatedImage, markdown: string, side: 'befo
 
 // What removing the image does to its own line: a line that held only the
 // image goes with its newline, otherwise one neighbouring space goes with it.
+/** Takes the image out of the note; a line it leaves holding only whitespace goes too. */
+export function removeImage(text: string, image: LocatedImage): ImageEdit {
+  return removalOf(text, image)
+}
+
 function removalOf(text: string, image: LocatedImage): ImageEdit {
   const before = text.slice(image.lineFrom, image.from)
   const after = text.slice(image.to, image.lineTo)

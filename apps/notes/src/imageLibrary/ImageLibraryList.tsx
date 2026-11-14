@@ -2,7 +2,7 @@ import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from 'react'
 import { CategoryTree, type CategoryTreeFolds } from '../components/CategoryTree'
 import { HoverActions, type HoverAction } from '../components/HoverActions'
-import { IMAGE_DRAG_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
+import { IMAGE_DRAG_MIME_TYPE, IMAGE_DRAG_TRASHED_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
 import { armPointerDrag } from '../shared/pointerDrag'
 import { localImageSrc } from '../shared/localImages'
@@ -92,23 +92,21 @@ interface CardPress {
   /** A left click (not one that ended a left hold). */
   onClick: (() => void) | null
   onLeftHold: (() => void) | null
-  onRightTap: (() => void) | null
-  onRightHold: (() => void) | null
+  /** A right click: in every view, shows the image whole in the card or folds it again. */
+  onRightTap: () => void
 }
 
 /**
  * A card's presses: a left click, or a left hold of HOLD_CONFIRM_MS instead;
- * a right tap, or a right hold instead. A hold that completed leaves its
- * release, and the click that follows a left one, doing nothing more.
+ * and a right click. A completed hold leaves the click its release
+ * dispatches doing nothing more.
  */
-function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPress, draggable: boolean) {
+function useCardPress({ onClick, onLeftHold, onRightTap }: CardPress, draggable: boolean) {
   const cancelRef = useRef<(() => void) | null>(null)
   const heldRef = useRef(false)
-  const end = (button: number | null) => {
-    if (!cancelRef.current) return
-    cancelRef.current()
+  const cancel = () => {
+    cancelRef.current?.()
     cancelRef.current = null
-    if (button === 2 && !heldRef.current) onRightTap?.()
   }
   return {
     // One pointerdown for the card's two uses of a press: arming a drag of the
@@ -116,31 +114,34 @@ function useCardPress({ onClick, onLeftHold, onRightTap, onRightHold }: CardPres
     // spread onto one element would silently keep only the second.
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
       if (draggable) armPointerDrag(event)
-      const onHold = event.button === 0 ? onLeftHold : event.button === 2 ? onRightHold : null
-      if (event.button === 0) heldRef.current = false
-      if (!onHold && !(event.button === 2 && onRightTap)) return
-      end(null)
+      if (event.button !== 0) return
       heldRef.current = false
+      cancel()
+      if (!onLeftHold) return
       cancelRef.current = armHold(() => {
+        cancelRef.current = null
         heldRef.current = true
-        onHold?.()
+        onLeftHold()
       }, HOLD_CONFIRM_MS)
     },
-    onPointerUp: (event: PointerEvent) => end(event.button),
-    onPointerCancel: () => end(null),
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
     // Leaving is the hover vocabulary, not the press one: a finger lifting
     // fires pointerleave, which would end every prime the moment it was set.
-    onMouseLeave: () => end(null),
+    onMouseLeave: cancel,
     onClick: () => {
       if (heldRef.current) return
       onClick?.()
     },
-    onContextMenu: (event: MouseEvent) => event.preventDefault(),
-    'data-secondary-press': onRightTap || onRightHold ? 'action' as const : 'none' as const,
+    onContextMenu: (event: MouseEvent) => {
+      event.preventDefault()
+      onRightTap()
+    },
+    'data-secondary-press': 'action' as const,
   }
 }
 
-function dragImage(id: string) {
+function dragImage(image: StoredImageSummary) {
   return {
     // Dragged into a note, it is referenced there (CM6Editor's and the
     // render view's drop handlers); nothing is stored again.
@@ -148,7 +149,8 @@ function dragImage(id: string) {
     // A card is too large to carry about: the cursor shows the drag instead.
     'data-drag-picture': 'cursor',
     onDragStart: (event: DragEvent) => {
-      event.dataTransfer.setData(IMAGE_DRAG_MIME_TYPE, id)
+      event.dataTransfer.setData(IMAGE_DRAG_MIME_TYPE, image.id)
+      if (image.trashedAt) event.dataTransfer.setData(IMAGE_DRAG_TRASHED_MIME_TYPE, '')
       event.dataTransfer.effectAllowed = 'copy'
     },
   }
@@ -157,6 +159,15 @@ function dragImage(id: string) {
 /** Taking a use out of its note: the action of every card in a note's own image views. */
 function removeAction(use: NoteImageUse, onRemove: (use: NoteImageUse) => void): HoverAction {
   return { icon: 'fa-xmark', label: 'Take it out of the note', onHold: () => onRemove(use) }
+}
+
+/** A use's actions: edit its stored image in the active slot (an external one has none), then remove. */
+function actionsForUse(card: ImageUseCard, onOpen: (id: string) => void, onRemove: (use: NoteImageUse) => void): HoverAction[] {
+  const image = card.image
+  return [
+    ...(image ? [{ icon: 'fa-pen-to-square', label: 'Edit image', onHold: () => onOpen(image.id) }] : []),
+    removeAction(card.use, onRemove),
+  ]
 }
 
 /** A card with the image behind its text: Images in Order and the trash. */
@@ -192,7 +203,7 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, expanded, pres
       aria-selected={isActive}
       data-image-id={image?.id}
       data-hover-host=""
-      {...(image ? dragImage(image.id) : {})}
+      {...(image ? dragImage(image) : {})}
       {...handlers}
       data-tooltip={tooltip}
     >
@@ -241,7 +252,7 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
       aria-selected={isActive}
       data-image-id={image?.id}
       data-hover-host=""
-      {...(image ? dragImage(image.id) : {})}
+      {...(image ? dragImage(image) : {})}
       {...handlers}
       data-tooltip={tooltip}
     >
@@ -270,16 +281,21 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
   const isActiveUse = useCallback((card: ImageUseCard) => (
     caretUseFrom !== null ? card.use.from === caretUseFrom : card.image !== null && card.image.id === shownImageId
   ), [caretUseFrom, shownImageId])
-  // In every section a click shows the image whole in the card, and a second
-  // folds it again; an image goes into a note only by being dragged there
-  // (dragImage). A card of the note's own images goes to the image's place
-  // in the note on a right-click.
+  // In every section a right-click shows the image whole in the card, and a
+  // second folds it again; an image goes into a note only by being dragged
+  // there (dragImage). A card of the note's own images goes to the image's
+  // place in the note on a click; a library card opens its image in the
+  // active slot for editing.
   const pressFor = useCallback((card: ImageUseCard): CardPress => ({
-    onClick: () => toggleExpanded(card.key),
+    onClick: () => onReveal(card.use),
     onLeftHold: card.image ? null : () => onStore(card.use),
-    onRightTap: () => onReveal(card.use),
-    onRightHold: card.image ? () => onOpen(card.image!.id) : null,
-  }), [onOpen, onReveal, onStore, toggleExpanded])
+    onRightTap: () => toggleExpanded(card.key),
+  }), [onReveal, onStore, toggleExpanded])
+  const libraryPress = useCallback((id: string): CardPress => ({
+    onClick: () => onOpen(id),
+    onLeftHold: null,
+    onRightTap: () => toggleExpanded(id),
+  }), [onOpen, toggleExpanded])
 
   const sectionGroups = useMemo(() => (view === 'category' ? groupCardsBySection(cards) : null), [cards, view])
   // The archive is the notes' tree: an image sits in one place, by the order of its tags.
@@ -297,9 +313,9 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       isActive={isActiveUse(card)}
       expanded={expandedKey === card.key}
       press={pressFor(card)}
-      actions={[removeAction(card.use, onRemove)]}
+      actions={actionsForUse(card, onOpen, onRemove)}
     />
-  ), [expandedKey, isActiveUse, onRemove, pressFor])
+  ), [expandedKey, isActiveUse, onOpen, onRemove, pressFor])
   const renderImageTreeCard = useCallback((image: StoredImageSummary) => (
     <ImageTreeCard
       key={image.id}
@@ -307,10 +323,10 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
       use={null}
       isActive={image.id === shownImageId}
       expanded={expandedKey === image.id}
-      press={{ onClick: () => toggleExpanded(image.id), onLeftHold: null, onRightTap: null, onRightHold: () => onOpen(image.id) }}
+      press={libraryPress(image.id)}
       actions={[{ icon: 'fa-trash-can', label: 'Put in the trash', onHold: () => { void setImageTrashed(image.id, true) } }]}
     />
-  ), [expandedKey, onOpen, shownImageId, toggleExpanded])
+  ), [expandedKey, libraryPress, shownImageId])
 
   if (!loaded) return null
   if ((isNoteView ? cards.length : libraryImages.length) === 0) {
@@ -331,7 +347,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
             isActive={isActiveUse(card)}
             expanded={expandedKey === card.key}
             press={pressFor(card)}
-            actions={[removeAction(card.use, onRemove)]}
+            actions={actionsForUse(card, onOpen, onRemove)}
           />
         ))}
       </>
@@ -354,7 +370,7 @@ export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQue
               use={null}
               isActive={image.id === shownImageId}
               expanded={expandedKey === image.id}
-              press={{ onClick: () => toggleExpanded(image.id), onLeftHold: null, onRightTap: null, onRightHold: () => onOpen(image.id) }}
+              press={libraryPress(image.id)}
               actions={actions}
               nameFirst
             />
