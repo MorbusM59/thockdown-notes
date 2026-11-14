@@ -8685,9 +8685,9 @@ ${markdownHtml}
                     // there -- its two actions.
                     <div className="sidebar-plain-dock">
                       <div className="options-curve-rows options-music-set-list-dock">
-                        {/* One row of chips: the mode toggle takes what the
-                            row leaves, replace mode's two actions beside it,
-                            then the square toggles and the stepping. */}
+                        {/* One row of chips: the mode toggle, replace mode's
+                            two actions beside it, the square toggles, then the
+                            two arrows sharing what the row leaves. */}
                         <div className={`options-curve-row find-dock-row${isReplaceMode ? ' is-replace-mode' : ''}`}>
                           <button
                             type="button"

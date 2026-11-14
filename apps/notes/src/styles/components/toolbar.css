@@ -764,15 +764,15 @@
   outline-offset: -3px;
   }
 
-/* The Find dock (App.tsx): one row of square chips, the find & replace
-   toggle taking what the row leaves. In replace mode two more chips join it
-   and the toggle narrows by their width. */
+/* The Find dock (App.tsx): one row of square chips, previous and next
+   sharing what the row leaves. In replace mode two more chips join and the
+   two arrows narrow by their width. */
 .options-curve-row.find-dock-row {
-  grid-template-columns: 1fr repeat(4, var(--entry-height));
+  grid-template-columns: repeat(3, var(--entry-height)) 1fr 1fr;
 }
 
 .options-curve-row.find-dock-row.is-replace-mode {
-  grid-template-columns: 1fr repeat(6, var(--entry-height));
+  grid-template-columns: repeat(5, var(--entry-height)) 1fr 1fr;
 }
 
 /* Turned a quarter counter-clockwise, then mirrored top to bottom (the
