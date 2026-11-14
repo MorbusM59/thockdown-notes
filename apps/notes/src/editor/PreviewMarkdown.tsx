@@ -571,15 +571,18 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, matchin
   const scanner = createFindScanner(needle, matching)
   return () => {
     return (tree: RehypeAstNode) => {
-      const transformNode = (node: RehypeAstNode, parent: RehypeAstNode | null, index: number | null) => {
-        if (!node || typeof node !== 'object') return
+      // Returns how many nodes now stand where `node` stood, so the walk over
+      // a parent's children steps past what a split inserted rather than
+      // searching the text it left after the last highlighted match again.
+      const transformNode = (node: RehypeAstNode, parent: RehypeAstNode | null, index: number | null): number => {
+        if (!node || typeof node !== 'object') return 1
 
         if (node.type === 'element') {
           const className = node.properties?.className
           const hasSearchHitClass = Array.isArray(className)
             ? className.includes('search-hit')
             : className === 'search-hit'
-          if (hasSearchHitClass) return
+          if (hasSearchHitClass) return 1
         }
 
         if (node.type === 'text' && typeof node.value === 'string') {
@@ -622,16 +625,18 @@ export function createPreviewSearchHighlightRehypePlugin(needle: string, matchin
             }
             if (parent && Array.isArray(parent.children) && typeof index === 'number') {
               parent.children.splice(index, 1, ...replacements)
+              return replacements.length
             }
-            return
+            return 1
           }
         }
 
         if (Array.isArray(node.children)) {
-          for (let childIndex = 0; childIndex < node.children.length; childIndex += 1) {
-            transformNode(node.children[childIndex], node, childIndex)
+          for (let childIndex = 0; childIndex < node.children.length;) {
+            childIndex += transformNode(node.children[childIndex], node, childIndex)
           }
         }
+        return 1
       }
 
       transformNode(tree, null, null)
