@@ -6837,11 +6837,14 @@ ${markdownHtml}
   // The note the image views follow: the active slot's, or -- while that
   // slot shows an image rather than a note -- the last note it showed, so
   // opening an image from Images in Order does not empty the list.
-  const [imageViewsNoteId, setImageViewsNoteId] = useState<string | null>(null)
+  // Remembered only for that: a slot showing neither a note nor an image
+  // lists nothing, so the list can never describe a note no slot holds.
+  const [lastImageViewsNoteId, setLastImageViewsNoteId] = useState<string | null>(null)
   const activeSectionNoteId = activeSection?.activeNoteId ?? null
   useEffect(() => {
-    if (activeSectionNoteId) setImageViewsNoteId(activeSectionNoteId)
+    if (activeSectionNoteId) setLastImageViewsNoteId(activeSectionNoteId)
   }, [activeSectionNoteId])
+  const imageViewsNoteId = activeSectionNoteId ?? (shownImageId ? lastImageViewsNoteId : null)
   const imageViewsFollowLiveText = activeSectionNoteId !== null && activeSectionNoteId === imageViewsNoteId
   const activeSectionTextVersion = activeSection?.editorTextVersion
   const readActiveSectionText = activeSection?.readEditorText
