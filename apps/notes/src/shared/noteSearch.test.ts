@@ -21,8 +21,8 @@ describe('matchesNoteSearchQuery', () => {
       sizeBytes: 0,
     }
 
-    expect(matchesNoteSearchQuery(note, 'secret phrase', false)).toBe(true)
-    expect(matchesNoteSearchQuery(note, 'Secret Phrase', false)).toBe(true)
+    expect(matchesNoteSearchQuery(note, 'secret phrase')).toBe(true)
+    expect(matchesNoteSearchQuery(note, 'Secret Phrase')).toBe(true)
   })
 
   it('matches tags when the query starts with #', () => {
@@ -37,6 +37,6 @@ describe('matchesNoteSearchQuery', () => {
       sizeBytes: 0,
     }
 
-    expect(matchesNoteSearchQuery(note, '#project', false)).toBe(true)
+    expect(matchesNoteSearchQuery(note, '#project')).toBe(true)
   })
 })

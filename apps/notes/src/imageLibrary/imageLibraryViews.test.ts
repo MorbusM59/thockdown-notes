@@ -17,16 +17,16 @@ describe('image library views', () => {
     image('&LOGO'),
   ]
   it('archives every image outside the trash', () => {
-    expect(imagesInView(all, 'archive', '', false).map((i) => i.id)).toEqual(['&1', '&2', '&LOGO'])
-    expect(imagesInView(all, 'trash', '', false).map((i) => i.id)).toEqual(['&3'])
-    expect(imagesInView(all, 'archive', 'tom', false).map((i) => i.id)).toEqual(['&1'])
-    expect(imagesInView(all, 'archive', '#dog', false).map((i) => i.id)).toEqual(['&2'])
+    expect(imagesInView(all, 'archive', '').map((i) => i.id)).toEqual(['&1', '&2', '&LOGO'])
+    expect(imagesInView(all, 'trash', '').map((i) => i.id)).toEqual(['&3'])
+    expect(imagesInView(all, 'archive', 'tom').map((i) => i.id)).toEqual(['&1'])
+    expect(imagesInView(all, 'archive', '#dog').map((i) => i.id)).toEqual(['&2'])
   })
   it('lists a card per use, in order, searchable by alt text', () => {
     const uses = [use('&2', 'lead', null, null, 0), use('&9', 'gone', 'A', null, 5), use('&2', 'again', 'A', 'B', 9), { ...use('x', 'web', 'A', 'B', 20), id: null, src: 'https://e.com/a.png' }]
-    expect(imageUseCards(uses, all, '', false).map((card) => card.use.alt)).toEqual(['lead', 'again', 'web'])
-    expect(imageUseCards(uses, all, 'again', false).map((card) => card.use.alt)).toEqual(['again'])
-    expect(groupCardsBySection(imageUseCards(uses, all, '', false)).map((group) => [group.name, group.secondary.map((s) => s.name)]))
+    expect(imageUseCards(uses, all, '').map((card) => card.use.alt)).toEqual(['lead', 'again', 'web'])
+    expect(imageUseCards(uses, all, 'again').map((card) => card.use.alt)).toEqual(['again'])
+    expect(groupCardsBySection(imageUseCards(uses, all, '')).map((group) => [group.name, group.secondary.map((s) => s.name)]))
       .toEqual([[BEFORE_FIRST_SECTION, [GENERAL_SECONDARY_NAME]], ['A', ['B']]])
   })
 })

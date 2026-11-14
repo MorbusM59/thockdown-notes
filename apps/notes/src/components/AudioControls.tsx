@@ -1210,11 +1210,13 @@ function MusicBarFilter() {
           }
         }}
       />
-      {/* The row's sixth column: the field's Enter while it is being typed
+      {/* The row's sixth column: applying the filter while it is being typed
           in, and clearing the applied filter (committed at once, the field
           left alone) while it is not. */}
       <FieldActionButton
         className="audio-ctrl-btn"
+        icon="fa-filter"
+        submitLabel="Filter"
         isFieldFocused={isFocused}
         hasValue={filter.query !== ''}
         onSubmit={() => inputRef.current?.blur()}

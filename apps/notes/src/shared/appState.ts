@@ -53,7 +53,6 @@ export interface PersistedMenuState {
   musicLibrarySlot?: number;
   /** The section the Notes and Images views were each last on (shared/sidebarSections.ts). */
   sidebarSections?: SidebarSections;
-  searchQueryCaseSensitive?: boolean;
   documentFindCaseSensitive?: boolean;
   documentFindWholeWord?: boolean;
   isPreviewMode?: boolean;

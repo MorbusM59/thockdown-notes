@@ -23,7 +23,7 @@
 }
 
 /* The sidebar's list and, while the options panel's Colors section is open,
- * the colour picker docked below it (.sidebar-plain-dock; Find & Replace's actions dock in the boxed .sidebar-color-picker-dock): a column
+ * the docks below it (.sidebar-plain-dock): a column
  * beside the scrollbar slot, which runs the height of both. The dock is
  * content-sized and the list takes what is left. */
 .sidebar-content-column {
@@ -44,9 +44,8 @@
   min-height: calc(var(--color-grid-cell) * 3);
 }
 
-/* The box both share: one rule, so the dock cannot drift from the list. */
-.sidebar-content,
-.sidebar-color-picker-dock {
+/* The list's box. */
+.sidebar-content {
   position:   relative;
   isolation:  isolate;
   margin:     0;
@@ -65,8 +64,7 @@
  * (z-index 1) hid it when it was drawn on the box. The list's overlay hangs
  * off the non-scrolling .sidebar-wrapper so it does not scroll away with the
  * list; it covers the same box, since .sidebar-content fills the wrapper. */
-.sidebar-wrapper::after,
-.sidebar-color-picker-dock::after {
+.sidebar-wrapper::after {
   content:        '';
   position:       absolute;
   inset:          0;
@@ -82,26 +80,11 @@
   box-shadow:     var(--backdrop-surface-shadow);
 }
 
-.sidebar-color-picker-dock {
-  flex: 0 0 auto;
-}
-
-.sidebar-color-picker-dock > .sidebar-content-texture {
-  position: absolute;
-}
-
 /* A dock straight on the sidebar, with no panel of its own: the Music
-   Library's controls and the colour picker. */
+   Library's controls, the find options and the colour picker. */
 .sidebar-plain-dock {
   flex:    0 0 auto;
   padding: var(--spacing-small) 0 0 var(--spacing-large);
-}
-
-/* .sidebar-options-content's gutter, so the section lines up with the ones above. */
-.sidebar-color-picker-dock-content {
-  position: relative;
-  z-index:  2;
-  padding:  var(--spacing-large);
 }
 
 .sidebar-content {

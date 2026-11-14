@@ -100,9 +100,10 @@ export interface UseDocumentFindNavigationResult {
    * covers exactly; with no hit selected, marks the first hit from the caret
    * on (wrapping to the first), so the next press replaces it.
    */
-  replaceSelectedDocumentFindHit: () => void
-  /** Marks the next (1) or previous (-1) hit, wrapping at either end. */
-  stepDocumentFindHit: (direction: 1 | -1) => void
+  /** Replaces the marked hit, or marks the next one; returns the position in the hit list of the hit it marked, if any, so a paged list can follow it. */
+  replaceSelectedDocumentFindHit: () => number | null
+  /** Marks the next (1) or previous (-1) hit, wrapping at either end; returns its position in the hit list. */
+  stepDocumentFindHit: (direction: 1 | -1) => number | null
 }
 
 /**
@@ -676,8 +677,8 @@ export function useDocumentFindNavigation({
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
   }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, findMatching, isDocumentReplaceMode, preserveCase, readEditorText])
 
-  const replaceSelectedDocumentFindHit = useCallback(() => {
-    if (documentFindHits.length === 0) return
+  const replaceSelectedDocumentFindHit = useCallback((): number | null => {
+    if (documentFindHits.length === 0) return null
     // Edit view: the selection. Reader view: the hit it last marked.
     const marked = markedHitRef.current
     const selection = isPreviewMode
@@ -689,10 +690,12 @@ export function useDocumentFindNavigation({
     if (selected) {
       markedHitRef.current = null
       replaceDocumentFindHit(selected)
-      return
+      return null
     }
     const caret = selection?.end ?? 0
-    handleJumpToDocumentFindHit(documentFindHits.find((hit) => hit.index >= caret) ?? documentFindHits[0])
+    const position = Math.max(0, documentFindHits.findIndex((hit) => hit.index >= caret))
+    handleJumpToDocumentFindHit(documentFindHits[position])
+    return position
   }, [adapterRef, documentFindHits, handleJumpToDocumentFindHit, isPreviewMode, replaceDocumentFindHit])
 
   /**
@@ -702,25 +705,38 @@ export function useDocumentFindNavigation({
    * not itself a hit steps from its edge, so Next goes to the first hit after
    * the caret and Previous to the last one before it.
    */
-  const stepDocumentFindHit = useCallback((direction: 1 | -1) => {
-    if (documentFindHits.length === 0) return
+  const stepDocumentFindHit = useCallback((direction: 1 | -1): number | null => {
+    if (documentFindHits.length === 0) return null
     const marked = markedHitRef.current
     const selection = isPreviewMode
       ? (marked ? { start: marked.index, end: marked.index + marked.matchLength } : null)
       : adapterRef.current?.getSnapshot()?.selection ?? null
     const count = documentFindHits.length
-    let target: DocumentFindHit | undefined
+    // The first hit starting at or past `offset`, or `count` when none does
+    // (hits are in document order, so a binary search).
+    const firstAtOrAfter = (offset: number) => {
+      let low = 0
+      let high = count
+      while (low < high) {
+        const middle = (low + high) >>> 1
+        if (documentFindHits[middle].index < offset) low = middle + 1
+        else high = middle
+      }
+      return low
+    }
+    let position: number
     if (!selection) {
-      target = direction === 1 ? documentFindHits[0] : documentFindHits[count - 1]
+      position = direction === 1 ? 0 : count - 1
     } else if (direction === 1) {
       // Past the selection's end: a marked hit steps to the one after it, a
       // caret to a hit starting at it. (Hits never overlap, so a hit ending
       // at selection.end cannot start at or after it.)
-      target = documentFindHits.find((hit) => hit.index >= selection.end) ?? documentFindHits[0]
+      position = firstAtOrAfter(selection.end) % count
     } else {
-      target = [...documentFindHits].reverse().find((hit) => hit.index < selection.start) ?? documentFindHits[count - 1]
+      position = (firstAtOrAfter(selection.start) - 1 + count) % count
     }
-    if (target) handleJumpToDocumentFindHit(target)
+    handleJumpToDocumentFindHit(documentFindHits[position])
+    return position
   }, [adapterRef, documentFindHits, handleJumpToDocumentFindHit, isPreviewMode])
 
   return {

@@ -407,13 +407,13 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Search](#search)
 
 > **Where?**
-> The search field at the top of the sidebar, in the Notes view. (In the Find view the same field searches inside the open note instead, in the Music Library it filters the songs, and in the options it filters the settings down to the ones that mention your term.) The button at the field's end is its Enter while you type, and clears the field once you have left it.
+> The search field at the top of the sidebar, in the Notes view. (In the Find view the same field searches inside the open note instead, in the Music Library it filters the songs, and in the options it filters the settings down to the ones that mention your term.) The button at the field's end searches while you type, and clears the field once you have left it.
 
 *Filters your notes by title, content, filename, or tag as you type.*
 
 - Plain text matches a note's title, filename, content, and tags.
 - Prefixing the query with \`#\` searches tags only — \`#project\` matches any note tagged \`project\`, or with \`project\` anywhere in a tag name.
-- **Match case**, docked below the list, toggles case-sensitive matching.
+- Letter case never matters.
 `,
   `## Split View & Tabs
 
@@ -657,6 +657,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - The dock's **Match case** means "case-sensitive" in plain find mode; in replace mode it reads **Keep case**, searching case-insensitively but re-casing each replacement to match what it's replacing.
 - **Whole word** finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
 - **Previous** and **Next** step through the matches, wrapping at either end.
+- Past 100 matches the list is shown a page at a time; **Previous** and **Next** turn the page as they go.
 - What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,

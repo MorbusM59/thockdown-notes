@@ -551,6 +551,9 @@ const LIST_SECTION_ENTRIES: Record<SidebarListView, ReadonlyArray<SectionSelecto
  * number does not depend on how many cards fit the window.
  */
 const NOTES_PER_PAGE = 50
+// Find hits shown at once: past this the hit list is paged, so a search that
+// matches everywhere (a space, in a novel) never builds thousands of cards.
+const FIND_HITS_PER_PAGE = 100
 
 function sanitizeUnfoldedList(input: unknown): string[] {
   if (!Array.isArray(input)) return []
@@ -1326,7 +1329,6 @@ function App() {
   const musicLibrarySlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
   // Whether the options panel's Colors section is open, which docks its colour picker below the sidebar.
   const [isColorsSectionOpen, setIsColorsSectionOpen] = useState(false)
-  const [isSearchQueryCaseSensitive, setIsSearchQueryCaseSensitive] = useState(false)
   // The find options last set in any slot (useDocumentFind's toggles),
   // reported up by the sections. State rather than a ref so that a toggle
   // changes buildMenuStateSnapshot and the debounced save follows it.
@@ -1618,6 +1620,7 @@ function App() {
   const [selectedMonths, setSelectedMonths] = useState<Set<number>>(new Set())
   const [selectedYears, setSelectedYears] = useState<Set<number | 'older'>>(new Set())
   const [currentPage, setCurrentPage] = useState(1)
+  const [findPage, setFindPage] = useState(1)
   const [pageJumpInput, setPageJumpInput] = useState('1')
   const [isPageJumpEditing, setIsPageJumpEditing] = useState(false)
   const [categoryUnfoldedPrimary, setCategoryUnfoldedPrimary] = useState<string[]>([])
@@ -3071,7 +3074,6 @@ function App() {
         overrides?.sidebarMode ?? sidebarMode,
         effectiveShowsImages,
       ),
-      searchQueryCaseSensitive: isSearchQueryCaseSensitive,
       documentFindCaseSensitive: documentFindOptions.caseSensitive,
       documentFindWholeWord: documentFindOptions.wholeWord,
       isPreviewMode: getActiveSection()?.isPreviewMode,
@@ -3288,7 +3290,6 @@ function App() {
     textureMaterials,
     highlightColors,
     editorTextColors,
-    isSearchQueryCaseSensitive,
     searchQuery,
     optionsSearchQuery,
     optionsSection,
@@ -4954,7 +4955,6 @@ ${markdownHtml}
             setMusicSetListGrouping(sanitizeMusicSetListGrouping(appState.menu.musicSetListGrouping))
             selectMusicLibrarySet(appState.menu.musicLibrarySlot ?? null)
             setSidebarSections(sanitizeSidebarSections(appState.menu.sidebarSections))
-            setIsSearchQueryCaseSensitive(appState.menu.searchQueryCaseSensitive ?? false)
             setRestoredDocumentFindCaseSensitive(appState.menu.documentFindCaseSensitive ?? false)
             setRestoredDocumentFindWholeWord(appState.menu.documentFindWholeWord ?? false)
             getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode ?? false)
@@ -6438,9 +6438,8 @@ ${markdownHtml}
           contentText: readNoteContent(note.id),
         },
         searchQuery,
-        isSearchQueryCaseSensitive,
       ))
-  }, [isSearchQueryCaseSensitive, readNoteContent, searchQuery, sortedNotes])
+  }, [readNoteContent, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
   const isSongsSearchMode = sidebarMode === 'songs'
@@ -6461,13 +6460,9 @@ ${markdownHtml}
   }, [sidebarMode, iconPickView])
   const isSoundscapesSearchMode = sidebarMode === 'soundscapes'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
-  // The note lists' content search: every sidebar view whose field is not a
-  // find, an options/soundscape search, a song filter or an icon filter.
-  const isNoteSearchMode = !isFindMode && !isOptionsSearchMode && !isIconPickMode && !isSongsSearchMode && !isSoundscapesSearchMode
-
   // Which of the search bar's two fields holds the keyboard: their action
-  // buttons (FieldActionButton) are an Enter while it does and a clear while
-  // it does not.
+  // buttons (FieldActionButton) submit while it does and clear while it
+  // does not.
   const sidebarSearchValue = isFindMode ? (activeSectionSnapshot?.documentFindQuery ?? '') : isIconPickMode ? iconPickQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery
   const [focusedSidebarField, setFocusedSidebarField] = useState<'search' | 'replace' | null>(null)
 
@@ -6488,7 +6483,10 @@ ${markdownHtml}
     const firstHit = (field === 'search' && isFindMode && !isReplaceMode) || (field === 'replace' && isReplaceMode)
       ? section?.documentFindHits[0]
       : undefined
-    if (firstHit) section?.handleJumpToDocumentFindHit(firstHit)
+    if (firstHit) {
+      section?.handleJumpToDocumentFindHit(firstHit)
+      setFindPage(1)
+    }
     if (input && document.activeElement === input) input.blur()
     section?.scheduleFocusEditorInEditMode()
   }, [getActiveSection, isFindMode, isReplaceMode])
@@ -6709,7 +6707,25 @@ ${markdownHtml}
   const isSidebarPanelMode = sidebarMode === 'options' || sidebarMode === 'songs' || sidebarMode === 'soundscapes'
   // Whether the two pages controls are needed at all: only the Date, Trash
   // and External sections of the Notes view are paged.
-  const showPagination = !isImageLibraryShown && isPagedNoteSection(sidebarMode) && totalPages > 1
+  // The page holding a hit the dock just marked, so the list follows it.
+  const showFindHitPage = useCallback((position: number | null | undefined) => {
+    if (position !== null && position !== undefined) setFindPage(Math.floor(position / FIND_HITS_PER_PAGE) + 1)
+  }, [])
+  // A new search starts on its first page.
+  const findPageResetKey = `${activeSectionId}|${activeSectionSnapshot?.documentFindQuery ?? ''}|${activeSectionSnapshot?.isDocumentFindCaseSensitive}|${activeSectionSnapshot?.isDocumentFindWholeWord}|${activeSectionSnapshot?.isDocumentReplaceMode}`
+  useEffect(() => {
+    setFindPage(1)
+  }, [findPageResetKey])
+  // The find view pages its hits as the note sections page their notes, with
+  // the same control: whichever list is up drives it.
+  const findHitCount = isFindMode ? (activeSectionSnapshot?.documentFindHits.length ?? 0) : 0
+  const findTotalPages = Math.max(1, Math.ceil(findHitCount / FIND_HITS_PER_PAGE))
+  const effectiveFindPage = Math.min(Math.max(1, findPage), findTotalPages)
+  const pager = isFindMode
+    ? { page: effectiveFindPage, total: findTotalPages, setPage: setFindPage }
+    : { page: effectiveCurrentPage, total: totalPages, setPage: setCurrentPage }
+  const { page: pagerPage, total: pagerTotal, setPage: setPagerPage } = pager
+  const showPagination = pager.total > 1 && (isFindMode || (!isImageLibraryShown && isPagedNoteSection(sidebarMode)))
   const isMusicLibraryDocked = sidebarMode === 'songs'
   const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 
@@ -7002,7 +7018,7 @@ ${markdownHtml}
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [isSearchQueryCaseSensitive, selectedMonths, selectedYears, searchQuery])
+  }, [selectedMonths, selectedYears, searchQuery])
 
 
   useLayoutEffect(() => {
@@ -7092,9 +7108,9 @@ ${markdownHtml}
 
   useEffect(() => {
     if (!isPageJumpEditing) {
-      setPageJumpInput(String(effectiveCurrentPage))
+      setPageJumpInput(String(pager.page))
     }
-  }, [effectiveCurrentPage, isPageJumpEditing])
+  }, [pager.page, isPageJumpEditing])
 
   useEffect(() => {
     if (!isGlazeLinearSeedEditing) {
@@ -7111,23 +7127,23 @@ ${markdownHtml}
   const commitPageJump = useCallback(() => {
     const parsed = Number.parseInt(pageJumpInput.trim(), 10)
     const safePage = Number.isFinite(parsed)
-      ? clamp(parsed, 1, totalPages)
-      : effectiveCurrentPage
+      ? clamp(parsed, 1, pagerTotal)
+      : pagerPage
 
-    setCurrentPage(safePage)
+    setPagerPage(safePage)
     setPageJumpInput(String(safePage))
     setIsPageJumpEditing(false)
-  }, [effectiveCurrentPage, pageJumpInput, totalPages])
+  }, [pagerPage, setPagerPage, pageJumpInput, pagerTotal])
 
   const startPageJumpEdit = useCallback(() => {
-    setPageJumpInput(String(effectiveCurrentPage))
+    setPageJumpInput(String(pager.page))
     setIsPageJumpEditing(true)
-  }, [effectiveCurrentPage])
+  }, [pager.page])
 
   const cancelPageJumpEdit = useCallback(() => {
-    setPageJumpInput(String(effectiveCurrentPage))
+    setPageJumpInput(String(pager.page))
     setIsPageJumpEditing(false)
-  }, [effectiveCurrentPage])
+  }, [pager.page])
 
   useEffect(() => {
     if (!isPageJumpEditing) return
@@ -8124,6 +8140,8 @@ ${markdownHtml}
                   />
                   <FieldActionButton
                     className="btn-icon search-input-action"
+                    icon="fa-magnifying-glass"
+                    submitLabel="Search"
                     isFieldFocused={focusedSidebarField === 'search'}
                     hasValue={sidebarSearchValue !== ''}
                     onSubmit={() => submitSidebarField('search')}
@@ -8154,6 +8172,8 @@ ${markdownHtml}
                     />
                     <FieldActionButton
                       className="btn-icon search-input-action"
+                      icon="fa-magnifying-glass"
+                      submitLabel="Search"
                       isFieldFocused={focusedSidebarField === 'replace'}
                       hasValue={(activeSection?.documentReplaceQuery ?? '') !== ''}
                       onSubmit={() => submitSidebarField('replace')}
@@ -8242,7 +8262,6 @@ ${markdownHtml}
                         <ImageLibraryList
                           view={sidebarMode as ImageLibraryView}
                           searchQuery={searchQuery}
-                          caseSensitive={isSearchQueryCaseSensitive}
                           uses={imageUses}
                           shownImageId={shownImageId}
                           caretUseFrom={caretUseFrom}
@@ -8322,7 +8341,10 @@ ${markdownHtml}
                         className="notes-list find-view thockdown-custom-scrollbar"
                         ref={setSidebarTreeScrollerEl}
                       >
-                        {(activeSection?.documentFindHits ?? []).map((hit, index) => {
+                        {(activeSection?.documentFindHits ?? [])
+                          .slice((effectiveFindPage - 1) * FIND_HITS_PER_PAGE, effectiveFindPage * FIND_HITS_PER_PAGE)
+                          .map((hit, indexOnPage) => {
+                          const index = (effectiveFindPage - 1) * FIND_HITS_PER_PAGE + indexOnPage
                           // Hits are in document order and the viewport is one
                           // stretch of it, so "on screen" is a range rather
                           // than a per-card lookup -- see
@@ -8653,95 +8675,72 @@ ${markdownHtml}
                       <SoundscapeDock preferences={soundscapePreferences} onChange={setSoundscapePreferences} />
                     </div>
                   ) : null}
-                  {isFindMode || isNoteSearchMode ? (
-                    // The search's options, docked below the list in the
-                    // Music Library dock's box and rows: what used to sit in
-                    // the field (letter case), whole words, stepping through
-                    // the hits, the way into Find & Replace, and -- in Find &
-                    // Replace -- its two actions.
-                    <div className="sidebar-color-picker-dock">
-                      <div className="sidebar-content-texture" />
-                      <div className="sidebar-color-picker-dock-content">
-                        <section className="options-section sidebar-options-section" aria-label="Search options">
-                          <div className="sidebar-options-accordion is-headerless">
-                            <div className="sidebar-options-accordion-body">
-                              <div className="options-curve-rows options-music-set-list-dock">
-                                {isFindMode ? (
-                                  <div className="options-curve-row options-music-set-list-dock-row">
-                                    <TextButton
-                                      data-tooltip="Previous occurrence"
-                                      onClick={() => getActiveSection()?.stepDocumentFindHit(-1)}
-                                    >
-                                      Previous
-                                    </TextButton>
-                                    <TextButton
-                                      data-tooltip="Next occurrence"
-                                      onClick={() => getActiveSection()?.stepDocumentFindHit(1)}
-                                    >
-                                      Next
-                                    </TextButton>
-                                  </div>
-                                ) : null}
-                                <div className="options-curve-row options-music-set-list-dock-row">
-                                  <TextButton
-                                    className={isFindMode ? undefined : 'is-wide'}
-                                    aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
-                                    isActive={Boolean(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive)}
-                                    data-tooltip={isReplaceMode ? 'Re-case each replacement to match what it replaces' : 'Match letter case'}
-                                    onClick={() => {
-                                      if (isFindMode) {
-                                        getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)
-                                      } else {
-                                        setIsSearchQueryCaseSensitive((previous) => !previous)
-                                      }
-                                    }}
-                                  >
-                                    {isReplaceMode ? 'Keep case' : 'Match case'}
-                                  </TextButton>
-                                  {isFindMode ? (
-                                    <TextButton
-                                      aria-pressed={activeSection?.isDocumentFindWholeWord}
-                                      isActive={Boolean(activeSection?.isDocumentFindWholeWord)}
-                                      data-tooltip="Match whole words only"
-                                      onClick={() => getActiveSection()?.setIsDocumentFindWholeWord((previous: boolean) => !previous)}
-                                    >
-                                      Whole word
-                                    </TextButton>
-                                  ) : null}
-                                </div>
-                                {isFindMode ? (
-                                  <div className="options-curve-row options-music-set-list-dock-row">
-                                    <TextButton
-                                      className="is-wide"
-                                      aria-pressed={isReplaceMode}
-                                      isActive={isReplaceMode}
-                                      data-tooltip={isReplaceMode ? 'Back to find only' : 'Find and replace'}
-                                      onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
-                                    >
-                                      Replace...
-                                    </TextButton>
-                                  </div>
-                                ) : null}
-                                {isReplaceMode ? (
-                                  <div className="options-curve-row options-music-set-list-dock-row">
-                                    <TextButton
-                                      data-tooltip="Replace the marked occurrence"
-                                      onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
-                                    >
-                                      Replace
-                                    </TextButton>
-                                    <TextButton
-                                      data-tooltip="Replace every occurrence"
-                                      onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
-                                    >
-                                      Replace all
-                                    </TextButton>
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
+                  {isFindMode ? (
+                    // Find & Replace's options, straight on the sidebar as the
+                    // Music Library's dock is: stepping through the hits, letter
+                    // case and whole words, the way into replace mode, and --
+                    // there -- its two actions.
+                    <div className="sidebar-plain-dock">
+                      <div className="options-curve-rows options-music-set-list-dock" aria-label="Find options">
+                        <div className="options-curve-row options-music-set-list-dock-row">
+                          <TextButton
+                            data-tooltip="Previous occurrence"
+                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(-1))}
+                          >
+                            Previous
+                          </TextButton>
+                          <TextButton
+                            data-tooltip="Next occurrence"
+                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(1))}
+                          >
+                            Next
+                          </TextButton>
+                        </div>
+                        <div className="options-curve-row options-music-set-list-dock-row">
+                          <TextButton
+                            aria-pressed={activeSection?.isDocumentFindCaseSensitive}
+                            isActive={Boolean(activeSection?.isDocumentFindCaseSensitive)}
+                            data-tooltip={isReplaceMode ? 'Re-case each replacement to match what it replaces' : 'Match letter case'}
+                            onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
+                          >
+                            {isReplaceMode ? 'Keep case' : 'Match case'}
+                          </TextButton>
+                          <TextButton
+                            aria-pressed={activeSection?.isDocumentFindWholeWord}
+                            isActive={Boolean(activeSection?.isDocumentFindWholeWord)}
+                            data-tooltip="Match whole words only"
+                            onClick={() => getActiveSection()?.setIsDocumentFindWholeWord((previous: boolean) => !previous)}
+                          >
+                            Whole word
+                          </TextButton>
+                        </div>
+                        <div className="options-curve-row options-music-set-list-dock-row">
+                          <TextButton
+                            className="is-wide"
+                            aria-pressed={isReplaceMode}
+                            isActive={isReplaceMode}
+                            data-tooltip={isReplaceMode ? 'Back to find only' : 'Find and replace'}
+                            onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
+                          >
+                            Replace...
+                          </TextButton>
+                        </div>
+                        {isReplaceMode ? (
+                          <div className="options-curve-row options-music-set-list-dock-row">
+                            <TextButton
+                              data-tooltip="Replace the marked occurrence"
+                              onClick={() => showFindHitPage(getActiveSection()?.replaceSelectedDocumentFindHit())}
+                            >
+                              Replace
+                            </TextButton>
+                            <TextButton
+                              data-tooltip="Replace every occurrence"
+                              onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
+                            >
+                              Replace all
+                            </TextButton>
                           </div>
-                        </section>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
@@ -8761,8 +8760,8 @@ ${markdownHtml}
                   <button
                     type="button"
                     className="sidebar-page-btn"
-                    disabled={effectiveCurrentPage === 1}
-                    onClick={() => setCurrentPage((previous) => Math.max(1, previous - 1))}
+                    disabled={pager.page === 1}
+                    onClick={() => pager.setPage(Math.max(1, pager.page - 1))}
                   >
                     &lt;
                   </button>
@@ -8772,7 +8771,7 @@ ${markdownHtml}
                         ref={pageJumpInputRef}
                         type="number"
                         min={1}
-                        max={totalPages}
+                        max={pager.total}
                         step={1}
                         inputMode="numeric"
                         className="sidebar-page-number-input sidebar-page-number-input--edit"
@@ -8807,17 +8806,17 @@ ${markdownHtml}
                     <button
                       type="button"
                       className="sidebar-page-number-btn sidebar-page-number-display"
-                      aria-label={`Current page ${effectiveCurrentPage} of ${totalPages}. Click to edit.`}
+                      aria-label={`Current page ${pager.page} of ${pager.total}. Click to edit.`}
                       onClick={startPageJumpEdit}
                     >
-                      {`${effectiveCurrentPage} / ${totalPages}`}
+                      {`${pager.page} / ${pager.total}`}
                     </button>
                   )}
                   <button
                     type="button"
                     className="sidebar-page-btn"
-                    disabled={effectiveCurrentPage === totalPages}
-                    onClick={() => setCurrentPage((previous) => Math.min(totalPages, previous + 1))}
+                    disabled={pager.page === pager.total}
+                    onClick={() => pager.setPage(Math.min(pager.total, pager.page + 1))}
                   >
                     &gt;
                   </button>

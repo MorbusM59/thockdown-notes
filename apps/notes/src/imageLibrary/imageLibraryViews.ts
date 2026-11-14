@@ -28,12 +28,12 @@ export interface ImageUseCard {
 /** The group of the uses before a note's first `##` heading. */
 export const BEFORE_FIRST_SECTION = 'Opening'
 
-export function matchesImageSearch(image: StoredImageSummary, query: string, caseSensitive: boolean, alt = ''): boolean {
-  return matchesNoteSearchQuery({ title: `${image.id} ${alt}`, fileName: image.origin ?? '', tags: image.tags }, query, caseSensitive)
+export function matchesImageSearch(image: StoredImageSummary, query: string, alt = ''): boolean {
+  return matchesNoteSearchQuery({ title: `${image.id} ${alt}`, fileName: image.origin ?? '', tags: image.tags }, query)
 }
 
-export function imagesInView(images: readonly StoredImageSummary[], view: 'archive' | 'trash', query: string, caseSensitive: boolean): StoredImageSummary[] {
-  const shown = images.filter((image) => (image.trashedAt !== null) === (view === 'trash') && matchesImageSearch(image, query, caseSensitive))
+export function imagesInView(images: readonly StoredImageSummary[], view: 'archive' | 'trash', query: string): StoredImageSummary[] {
+  const shown = images.filter((image) => (image.trashedAt !== null) === (view === 'trash') && matchesImageSearch(image, query))
   if (view === 'trash') return shown.sort((a, b) => (b.trashedAt ?? '').localeCompare(a.trashedAt ?? ''))
   return shown
 }
@@ -43,7 +43,7 @@ export function imagesInView(images: readonly StoredImageSummary[], view: 'archi
  * search, in the note's order. A stored id with nothing behind it is left
  * out: the render view already says it is missing.
  */
-export function imageUseCards(uses: readonly NoteImageUse[], images: readonly StoredImageSummary[], query: string, caseSensitive: boolean): ImageUseCard[] {
+export function imageUseCards(uses: readonly NoteImageUse[], images: readonly StoredImageSummary[], query: string): ImageUseCard[] {
   const byId = new Map(images.map((image) => [image.id, image]))
   const seen = new Map<string, number>()
   return uses.flatMap<ImageUseCard>((use) => {
@@ -51,10 +51,10 @@ export function imageUseCards(uses: readonly NoteImageUse[], images: readonly St
     seen.set(use.src, ordinal + 1)
     const key = `${use.src}#${ordinal}`
     if (use.id === null) {
-      return matchesNoteSearchQuery({ title: use.alt, fileName: use.src, tags: [] }, query, caseSensitive) ? [{ use, image: null, key }] : []
+      return matchesNoteSearchQuery({ title: use.alt, fileName: use.src, tags: [] }, query) ? [{ use, image: null, key }] : []
     }
     const image = byId.get(use.id)
-    return image && matchesImageSearch(image, query, caseSensitive, use.alt) ? [{ use, image, key }] : []
+    return image && matchesImageSearch(image, query, use.alt) ? [{ use, image, key }] : []
   })
 }
 

@@ -29,7 +29,6 @@ import { purgeImage, setImageTrashed, useImageLibrary } from './imageLibraryStor
 interface ImageLibraryListProps {
   view: ImageLibraryView
   searchQuery: string
-  caseSensitive: boolean
   /** The current note's images (shared/images.ts's imageUsesIn). */
   uses: readonly NoteImageUse[]
   /** The image the active slot shows, if it shows one. */
@@ -259,14 +258,14 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
   )
 })
 
-export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQuery, caseSensitive, uses, shownImageId, caretUseFrom, onReveal, onRemove, onStore, onOpen }: ImageLibraryListProps) {
+export const ImageLibraryList = memo(function ImageLibraryList({ view, searchQuery, uses, shownImageId, caretUseFrom, onReveal, onRemove, onStore, onOpen }: ImageLibraryListProps) {
   const { images, loaded } = useImageLibrary()
   // One card at a time is expanded, in whichever view: expanding another folds it.
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const toggleExpanded = useCallback((key: string) => setExpandedKey((previous) => (previous === key ? null : key)), [])
   const isNoteView = view === 'date' || view === 'category'
-  const cards = useMemo(() => (isNoteView ? imageUseCards(uses, images, searchQuery, caseSensitive) : []), [isNoteView, uses, images, searchQuery, caseSensitive])
-  const libraryImages = useMemo(() => (isNoteView ? [] : imagesInView(images, view, searchQuery, caseSensitive)), [isNoteView, images, view, searchQuery, caseSensitive])
+  const cards = useMemo(() => (isNoteView ? imageUseCards(uses, images, searchQuery) : []), [isNoteView, uses, images, searchQuery])
+  const libraryImages = useMemo(() => (isNoteView ? [] : imagesInView(images, view, searchQuery)), [isNoteView, images, view, searchQuery])
   // A use is highlighted when the caret is in it; anything else by the image the slot shows.
   const isActiveUse = useCallback((card: ImageUseCard) => (
     caretUseFrom !== null ? card.use.from === caretUseFrom : card.image !== null && card.image.id === shownImageId
