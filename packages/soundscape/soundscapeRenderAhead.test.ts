@@ -46,6 +46,8 @@ function countingGenerator(): HostedGenerator {
 const identityMix: MixStage = {
   setSpace: () => {},
   roomPending: false,
+  roomPrepared: true,
+  prepareRoom: () => {},
   buildRoom: () => {},
   process: (direct, _send, out) => { out[0].set(direct[0]); out[1].set(direct[1]); },
   snapshot: () => null,
@@ -343,6 +345,8 @@ describe('render ahead', () => {
     const roomMix: MixStage = {
       setSpace: (space) => { pending = space.size === built ? null : space.size; },
       get roomPending() { return pending !== null; },
+      roomPrepared: true,
+      prepareRoom: () => {},
       buildRoom: () => {
         if (pending === null) return;
         // What the output still holds: everything sent, a splice's chunk not having replaced any of it yet.
@@ -384,5 +388,46 @@ describe('render ahead', () => {
       expect(roomAt.get(frame), `frame ${frame}`).toBe(frame < spliceAt(playedAt) ? CONFIGURE.space.size : newRoom);
     }
     expect(sent.length).toBeGreaterThan(firstAfter);
+  });
+  it('installs a room only after the output reports its playhead again, so the splice never lands in audio already heard', () => {
+    // Preparing a room takes long enough for the output to play on; a splice
+    // placed from the playhead known before it could fall behind the real one.
+    let built: number | null = null;
+    let pending: number | null = null;
+    let prepared: number | null = null;
+    const roomAt = new Map<number, number | null>();
+    const roomMix: MixStage = {
+      setSpace: (space) => { pending = space.size === built ? null : space.size; },
+      get roomPending() { return pending !== null; },
+      get roomPrepared() { return pending === null || prepared === pending; },
+      prepareRoom: () => { prepared = pending; },
+      buildRoom: () => { if (pending !== null) { built = pending; pending = null; } },
+      process: (direct, send, out) => { roomAt.set(direct[0][0], built); identityMix.process(direct, send, out); },
+      snapshot: () => ({ built, pending }),
+      restore: (snapshot) => ({ built, pending } = snapshot as { built: number | null; pending: number | null }),
+    };
+    const sent: RenderedChunk[] = [];
+    const tasks: Array<() => void> = [];
+    const renderer = new RenderAhead(countingGenerator(), roomMix, SAMPLE_RATE, MARGIN_SEC, (chunk) => sent.push(chunk), (work) => tasks.push(work));
+    const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
+    renderer.configure(CONFIGURE);
+    drain();
+    renderer.played(4 * RENDER_CHUNK_FRAMES);
+    drain();
+    const newRoom = CONFIGURE.space.size + 0.1;
+    renderer.configure({ ...CONFIGURE, space: { ...CONFIGURE.space, size: newRoom } });
+    drain();
+    // Prepared, not installed: everything queued is still the old room.
+    expect(prepared).toBe(newRoom);
+    expect(built).toBe(CONFIGURE.space.size);
+    // The output has moved on meanwhile; the install splices from where it is now.
+    const playedAt = 9 * RENDER_CHUNK_FRAMES;
+    renderer.played(playedAt);
+    drain();
+    expect(built).toBe(newRoom);
+    const end = Math.max(...sent.map((chunk) => chunk.startFrame));
+    for (let frame = playedAt; frame <= end; frame += RENDER_CHUNK_FRAMES) {
+      expect(roomAt.get(frame), `frame ${frame}`).toBe(frame < spliceAt(playedAt) ? CONFIGURE.space.size : newRoom);
+    }
   });
 });

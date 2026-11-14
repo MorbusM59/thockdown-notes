@@ -60,12 +60,12 @@ function noiseLoopsFor(sampleRate: number) {
 
 
 /** An equal-power fade, 0 to 1 (or 1 to 0), as a gain curve. */
-function equalPowerCurve(rising: boolean): Float32Array {
+function equalPowerCurve(rising: boolean, from: number): Float32Array {
   const points = 64;
   const curve = new Float32Array(points);
   for (let index = 0; index < points; index += 1) {
     const t = index / (points - 1);
-    curve[index] = rising ? Math.sin(t * Math.PI * 0.5) : Math.cos(t * Math.PI * 0.5);
+    curve[index] = rising ? from + ((1 - from) * Math.sin(t * Math.PI * 0.5)) : from * Math.cos(t * Math.PI * 0.5);
   }
   return curve;
 }
@@ -121,11 +121,18 @@ class Voice {
     this.room.setRoom(space);
   }
 
-  /** Fade this voice's gain in or out, equal-power, over `seconds` from now. */
-  fade(rising: boolean, seconds: number): void {
+  /**
+   * Fade this voice's gain in or out, equal-power, over `seconds` from now,
+   * starting from `from` (by default wherever its gain is): a voice switched away from while it
+   * is still fading in leaves from that level. Cancelling its curve without
+   * holding made the gain snap back to the curve's start (full) for the
+   * render quantum before the new curve began.
+   */
+  fade(rising: boolean, seconds: number, from = this.gain.gain.value): void {
     const now = this.context.currentTime;
-    this.gain.gain.cancelScheduledValues(now);
-    this.gain.gain.setValueCurveAtTime(equalPowerCurve(rising), now, seconds);
+    const param = this.gain.gain;
+    param.cancelAndHoldAtTime(now);
+    param.setValueCurveAtTime(equalPowerCurve(rising, from), now, seconds);
   }
 
   /** Stop the generator and take the voice down. `stop` is what lets the audio thread drop the processor. */
@@ -187,7 +194,7 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
       const old = voice;
       voice = new Voice(context, mixGain, fail);
       voice.configure(configuration);
-      voice.fade(true, transitionSec);
+      voice.fade(true, transitionSec, 0);
       old.fade(false, transitionSec);
       leaving.set(old, window.setTimeout(() => {
         leaving.delete(old);

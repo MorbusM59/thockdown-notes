@@ -75,6 +75,11 @@
  * past the margin. So the mix only RECORDS a new room (MixStage.roomPending)
  * and this renderer builds it when it can afford to: once at least
  * ROOM_BUILD_LEAD_SEC is queued again, which is more than the build takes.
+ * The build is in two halves: preparing the response (the expensive part,
+ * MixStage.prepareRoom) and installing it. Between them the renderer waits
+ * for the output to report its playhead again, because the output played on
+ * while the response was prepared, and a splice placed from the playhead
+ * known before would land in audio already heard: a cut with no crossfade.
  * Then it rewinds to as near the playhead as the output allows (the request
  * is part of the mix's checkpoints, so the rewind keeps it) and builds the
  * room there, so the
@@ -123,7 +128,11 @@ export interface MixStage {
   setSpace(space: SoundscapeSpaceSettings): void;
   /** A room has been asked for and not built yet. */
   readonly roomPending: boolean;
-  /** Build the pending room and crossfade it in from here on: the expensive part of a change. */
+  /** The pending room is transformed already (or none is pending), so buildRoom is cheap. */
+  readonly roomPrepared: boolean;
+  /** Transform the pending room without installing it: the expensive part of a change. */
+  prepareRoom(): void;
+  /** Install the pending room and crossfade it in from here on (preparing it first if needed). */
   buildRoom(): void;
   /** One RENDER_CHUNK_FRAMES block of generator output into `out` (overwritten). */
   process(direct: [Float32Array, Float32Array], send: [Float32Array, Float32Array], out: [Float32Array, Float32Array]): void;
@@ -263,6 +272,8 @@ export class RenderAhead {
   private playedFrame = 0;
   private configured = false;
   private scheduled = false;
+  /** A room was just prepared; nothing more until the output reports its playhead (doRoomWork). */
+  private awaitingPlayhead = false;
   private fade: { from: number; frames: number } | null = null;
   /** The voice the settings in force are rendered by: a `configure` goes to it. */
   private voice: VoiceSource;
@@ -370,6 +381,16 @@ export class RenderAhead {
 
   /** Build what is pending, then splice it in: the current voice's new room, or a transition's voice. */
   private doRoomWork(): void {
+    // The expensive half first, on its own: while it runs the output plays
+    // on, so the playhead this renderer knows goes stale. Splicing on it
+    // would land the splice in audio already heard, a cut with no crossfade.
+    // So the install waits for the output to report where it is again.
+    const mix = (this.pendingBlend?.voice ?? this.voice).voice.mix;
+    if (!mix.roomPrepared) {
+      mix.prepareRoom();
+      this.awaitingPlayhead = true;
+      return;
+    }
     const blend = this.pendingBlend;
     this.pendingBlend = null;
     if (blend) {
@@ -385,6 +406,7 @@ export class RenderAhead {
   /** The output has played up to `frame`. */
   played(frame: number): void {
     this.playedFrame = Math.max(this.playedFrame, frame);
+    this.awaitingPlayhead = false;
     const reachable = this.spliceFrame();
     // A blend no rewind can reach back into any more is its new voice alone.
     while (this.source instanceof BlendSource && this.source.done(reachable)) this.source = this.source.to;
@@ -398,7 +420,7 @@ export class RenderAhead {
   }
 
   private pump(): void {
-    if (this.scheduled || !this.configured) return;
+    if (this.scheduled || this.awaitingPlayhead || !this.configured) return;
     if (this.queued >= this.leadFrames && !this.roomWork) return;
     this.scheduled = true;
     this.schedule(() => {
