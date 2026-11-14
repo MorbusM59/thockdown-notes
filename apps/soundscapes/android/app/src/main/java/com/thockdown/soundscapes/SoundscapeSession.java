@@ -93,6 +93,11 @@ final class SoundscapeSession {
             this.currentId = currentId;
             this.scheduleEnabled = scheduleEnabled;
         }
+
+        boolean sameAs(State other) {
+            return regular == other.regular && source == other.source
+                && java.util.Objects.equals(currentId, other.currentId) && scheduleEnabled == other.scheduleEnabled;
+        }
     }
 
     static final class Entry {
@@ -385,11 +390,18 @@ final class SoundscapeSession {
         // The run regular mode began in may have been moved, cut short or
         // turned off with the schedule: it now ends with the run under way,
         // if there is one, and with none otherwise.
+        State before = state();
         if (regularRunStop != null) regularRunStop = runStopNow();
         settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
-        // Reported even when the page changed the schedule: what is heard,
-        // and from which source, is the session's to work out.
-        report();
+        // Reported even when the page changed the schedule, since what is
+        // heard, and from which source, is the session's to work out -- but
+        // only when that changed. The page sends the schedule on every edit
+        // of a soundscape, and a report of a state the page already caused
+        // lands in the middle of its own requests: the session paused for a
+        // silent soundscape reported PAUSED after the page had asked to play
+        // again, and the page took that as the listener pausing, so a channel
+        // turned on after a reset stayed silent until the next edit.
+        if (!state().sameAs(before)) report();
     }
 
     /**
