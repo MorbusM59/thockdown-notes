@@ -17,7 +17,7 @@ import { readNowPlaying } from '../sound/nowPlaying'
 import { SoundstageOptions } from './SoundstageOptions'
 import type { EqPoint } from '../shared/musicEqCurve'
 import { EqCurveEditor } from './EqCurveEditor'
-import { type ActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from '../shared/soundstages'
+import { type SoundstagePreferences } from '../shared/soundstages'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
@@ -546,10 +546,7 @@ export interface SidebarOptionsPanelProps {
   musicEqCurve: EqPoint[]
   setMusicEqCurve: (value: EqPoint[]) => void
   soundstagePreferences: SoundstagePreferences
-  setSoundstagePreferences: (update: (previous: SoundstagePreferences) => SoundstagePreferences) => void
-  activeSoundstage: ActiveSoundstage
-  applySoundstage: (settings: SoundstageSettings) => void
-  selectFactorySoundstage: (id: FactorySoundstageId) => void
+  changeSoundstages: (next: SoundstagePreferences) => void
   allowRemoteImages: boolean
   onAllowRemoteImagesChange: (value: boolean) => void
   features: FeatureToggles
@@ -795,10 +792,7 @@ export function SidebarOptionsPanel({
   musicEqCurve,
   setMusicEqCurve,
   soundstagePreferences,
-  setSoundstagePreferences,
-  activeSoundstage,
-  applySoundstage,
-  selectFactorySoundstage,
+  changeSoundstages,
   allowRemoteImages,
   onAllowRemoteImagesChange,
   features,
@@ -2277,10 +2271,7 @@ export function SidebarOptionsPanel({
         <div className="utility-setting-slider-stack" aria-label="Soundstages">
           <SoundstageOptions
             preferences={soundstagePreferences}
-            setPreferences={setSoundstagePreferences}
-            active={activeSoundstage}
-            apply={applySoundstage}
-            selectFactory={selectFactorySoundstage}
+            onChange={changeSoundstages}
           />
         </div>
       </OptionsFixedSection>

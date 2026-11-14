@@ -85,7 +85,7 @@ export function SoundscapeDock({ preferences, onChange }: SoundscapeHostProps) {
   return (
     <div className="options-curve-rows options-dock-rows">
       <DockEntryRow
-        className="soundscape-dock-row"
+        className="preset-dock-row"
         name={preset.name}
         takenNames={soundscapePresets(preferences).filter((other) => other.id !== preset.id).map((other) => other.name)}
         onRename={(name) => onChange(renameSoundscape(preferences, preset.id, name))}

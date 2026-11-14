@@ -39,7 +39,8 @@ import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { openMusicLibrary } from '../sidebar/musicLibraryView'
 import { pressMusicSet } from '../sound/setPress'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
-import { CUSTOM_SOUNDSTAGE_ICON, FACTORY_SOUNDSTAGES } from '../shared/soundstages'
+import { CUSTOM_SOUNDSTAGE_ICON } from '../shared/soundstages'
+import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import { beginBackgroundWork } from '../shared/backgroundWork'
 
@@ -1323,7 +1324,7 @@ export const AudioControls = memo(function AudioControls({
         {/* Bottom row — music sets, or the sound options in their place */}
         {isSoundOptionsOpen ? (
           <>
-            {FACTORY_SOUNDSTAGES.map((stage) => (
+            {soundstage.factory.map((stage) => (
               <button
                 key={stage.id}
                 type="button"
@@ -1333,7 +1334,7 @@ export const AudioControls = memo(function AudioControls({
                 aria-pressed={soundstage.solid === stage.id}
                 onClick={() => soundstage.select(stage.id)}
               >
-                <span className={stage.icon} aria-hidden="true" />
+                <PresetMark preset={stage} lettersClassName="audio-playlist-custom-label" />
               </button>
             ))}
             <button

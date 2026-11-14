@@ -999,7 +999,7 @@ ${shortcutTable()}
 - **Going back** — a scrub that runs backward past the start of a song steps back through the last hundred songs played.
 - **Media keys and the system player** — your keyboard's media keys and your system's media controls drive this player and show the current song; next and previous work as right-clicking fast-forward and rewind does.
 - **Mini mode** — the expand button on the player's right leaves mini mode and maximizes the window (its arrows point that way). Your previous window size isn't lost: un-maximizing returns to it.
-- **Soundstages** — the headphones button swaps the row of five music sets and the Soundscapes switch for the six soundstages (the factory soundstages from the settings panel's Soundstages → Presets, and your own unsaved or saved one last), and swaps back. Click one to play the music through it.
+- **Soundstages** — the headphones button swaps the row of five music sets and the Soundscapes switch for the six soundstages (the five factory soundstages, then the last of your own you chose), and swaps back. Click one to play the music through it.
 - Scroll over the headphones button to adjust sound: plain scroll for volume, \`Shift\` for reverb, \`Ctrl\` for room size. Right-click it to mute or unmute; turning the volume up by scrolling also unmutes.
 - **Resuming across restarts** — if music was playing when the app was last closed, it resumes on launch (same song and position), fading in over 10 seconds from silence and full reverb up to your usual volume/reverb settings.
 `,

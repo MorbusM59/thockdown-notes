@@ -1,37 +1,37 @@
 import { describe, expect, it } from 'vitest'
 
+import { createPreset, deletePreset, editActivePreset, selectPreset } from '@thockdown/interaction/presetList'
 import {
+  activeSoundstage,
   DEFAULT_SOUNDSTAGE_PREFERENCES,
   FACTORY_SOUNDSTAGES,
-  isUnsavedShown,
-  matchingSoundstage,
   sanitizeSoundstagePreferences,
+  SOUNDSTAGE_KIND,
   steppedFactorySoundstage,
-  unsavedAfterEdit,
+  withActiveSoundstage,
 } from './soundstages'
 
 const someCustom = { eq: [{ hz: 20, db: 1, handle: 0 }, { hz: 440, db: -3, handle: 0.5 }, { hz: 20000, db: 0, handle: 0 }], width: 1.03, reverb: 0.3, size: 0.5, room: 0.6 }
 
 describe('soundstages', () => {
-  it('derives the active stage from the live settings: factory, then saved, then unsaved', () => {
-    for (const stage of FACTORY_SOUNDSTAGES) {
-      expect(matchingSoundstage({ ...stage.settings }, DEFAULT_SOUNDSTAGE_PREFERENCES)).toEqual({ kind: 'factory', id: stage.id })
-    }
-    const preferences = { ...DEFAULT_SOUNDSTAGE_PREFERENCES, saved: [{ id: 'a', settings: someCustom }] }
-    expect(matchingSoundstage({ ...someCustom, room: 0.6 + 1e-9 }, preferences)).toEqual({ kind: 'saved', id: 'a' })
-    expect(matchingSoundstage({ ...someCustom, room: 0.61 }, preferences)).toEqual({ kind: 'unsaved' })
+  it('starts on Neutral, as shipped', () => {
+    expect(activeSoundstage(DEFAULT_SOUNDSTAGE_PREFERENCES).id).toBe('neutral')
   })
 
-  it('keeps an edit as the unsaved stage, shown only while it equals no other stage', () => {
-    const changed = unsavedAfterEdit(someCustom, DEFAULT_SOUNDSTAGE_PREFERENCES)
-    expect(changed.unsaved).toEqual(someCustom)
-    expect(isUnsavedShown(changed)).toBe(true)
-    expect(unsavedAfterEdit({ ...someCustom }, changed)).toBe(changed)
-    // Editing onto a factory stage: that stage is the edit, and no plus.
-    const back = unsavedAfterEdit(FACTORY_SOUNDSTAGES[3].settings, changed)
-    expect(isUnsavedShown(back)).toBe(false)
-    // Saving it: equal to the saved stage, so no plus.
-    expect(isUnsavedShown({ ...changed, saved: [{ id: 'a', settings: someCustom }] })).toBe(false)
+  it('writes an edit into the active stage and follows the active stage with factory and lastCustom', () => {
+    const wide = withActiveSoundstage(DEFAULT_SOUNDSTAGE_PREFERENCES, selectPreset(SOUNDSTAGE_KIND, DEFAULT_SOUNDSTAGE_PREFERENCES, 'wide'))
+    expect(wide.factory).toBe('wide')
+    const edited = { ...wide, ...editActivePreset(SOUNDSTAGE_KIND, wide, someCustom) }
+    expect(activeSoundstage(edited).settings).toEqual(someCustom)
+    expect(edited.factoryEdits.map((stage) => stage.id)).toEqual(['wide'])
+    const created = createPreset(SOUNDSTAGE_KIND, edited, 'mine')!
+    const mine = withActiveSoundstage(edited, created)
+    expect(mine.lastCustom).toBe('mine')
+    expect(mine.factory).toBe('wide')
+    expect(activeSoundstage(mine).name).toBe('Soundstage A')
+    const deleted = withActiveSoundstage(mine, deletePreset(SOUNDSTAGE_KIND, mine, 'mine'))
+    expect(deleted.lastCustom).toBeNull()
+    expect(deleted.activeId).toBe(FACTORY_SOUNDSTAGES[FACTORY_SOUNDSTAGES.length - 1].id)
   })
 
   it('steps the factory stages in the solids\' order and stops at the ends', () => {
@@ -43,14 +43,21 @@ describe('soundstages', () => {
   it('sanitizes a stored record into range, dropping what is unusable', () => {
     const out = sanitizeSoundstagePreferences({
       factory: 'nope',
-      unsaved: { eq: 'old', width: 'x', room: -1 },
-      saved: [{ id: 'a', settings: someCustom }, { id: 'a', settings: someCustom }, { settings: someCustom }, null],
+      activeId: 'gone',
+      lastCustom: 'gone',
+      factoryEdits: [{ id: 'wide', settings: { eq: 'old', width: 'x', room: -1 } }, { id: 'nope', settings: someCustom }],
+      custom: [{ id: 'a', settings: someCustom }, { id: 'a', settings: someCustom }, { settings: someCustom }, null],
     })
     expect(out.factory).toBe('neutral')
-    expect(out.unsaved.eq).toEqual([{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }])
-    expect(out.unsaved.width).toBe(1)
-    expect(out.unsaved.room).toBe(0)
-    expect(out.saved.map((stage) => stage.id)).toEqual(['a'])
+    expect(out.activeId).toBe('neutral')
+    expect(out.lastCustom).toBeNull()
+    expect(out.factoryEdits).toHaveLength(1)
+    expect(out.factoryEdits[0].name).toBe('Wide')
+    expect(out.factoryEdits[0].settings.eq).toEqual([{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }])
+    expect(out.factoryEdits[0].settings.width).toBe(1)
+    expect(out.factoryEdits[0].settings.room).toBe(0)
+    expect(out.custom.map((stage) => stage.id)).toEqual(['a'])
+    expect(out.custom[0].name).toBe('Soundstage A')
     expect(sanitizeSoundstagePreferences(undefined)).toEqual(DEFAULT_SOUNDSTAGE_PREFERENCES)
   })
 })

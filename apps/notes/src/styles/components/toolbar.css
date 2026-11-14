@@ -624,9 +624,9 @@
 }
 
 
-/* The Soundscapes view's dock (sidebar/SoundscapesView.tsx): mark, name,
+/* A preset dock (soundscapes, soundstages, layouts): mark, name,
    reset, and trash or restore. */
-.soundscape-dock-row {
+.preset-dock-row {
   grid-template-columns: var(--entry-height) 1fr var(--entry-height) var(--entry-height);
   column-gap: var(--spacing-small);
 }

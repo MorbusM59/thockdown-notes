@@ -12,7 +12,7 @@ import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '@thockdown/soundscape/soundscape'
 import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES } from '../src/shared/keystrokeSounds'
-import { DEFAULT_SOUNDSTAGE_PREFERENCES } from '../src/shared/soundstages'
+import { DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE } from '../src/shared/soundstages'
 import { DEFAULT_FLASH_SHAPE_PREFERENCES, DEFAULT_FLASHING_SETTINGS } from '../src/shared/flashing'
 
 // Regression coverage for the exact bug class this file is prone to:
@@ -466,7 +466,7 @@ describe('StateService app-state field round-trip', () => {
         musicReverbFoliage: 0.4,
         musicStereoWidth: 1.3,
         musicEqCurve: [{ hz: 20, db: 1, handle: 0 }, { hz: 300, db: -2, handle: 0.5 }, { hz: 20000, db: 0, handle: 0.2 }],
-        musicSoundstages: { factory: 'wide', unsaved: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 }, saved: [{ id: 's1', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
+        musicSoundstages: { activeId: 's1', factory: 'wide', lastCustom: 's1', factoryEdits: [{ id: 'wide', name: 'Wider', icon: 'fa-wind', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 } }], custom: [{ id: 's1', name: 'Mine', icon: null, settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
         musicMuted: true,
         musicReverbBypassed: true,
         musicSoundOptionsOpen: true,
@@ -486,8 +486,10 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicStereoWidth).toBe(1.3)
     expect(loaded.menu?.musicEqCurve).toEqual([{ hz: 20, db: 1, handle: 0 }, { hz: 300, db: -2, handle: 0.5 }, { hz: 20000, db: 0, handle: 0.2 }])
     expect(loaded.menu?.musicSoundstages?.factory).toBe('wide')
-    expect(loaded.menu?.musicSoundstages?.unsaved.room).toBe(0.3)
-    expect(loaded.menu?.musicSoundstages?.saved[0]?.settings.room).toBe(0.7)
+    expect(loaded.menu?.musicSoundstages?.activeId).toBe('s1')
+    expect(loaded.menu?.musicSoundstages?.lastCustom).toBe('s1')
+    expect(loaded.menu?.musicSoundstages?.factoryEdits[0]?.name).toBe('Wider')
+    expect(loaded.menu?.musicSoundstages?.custom[0]?.settings.room).toBe(0.7)
   })
 
   it('persists active ids for user-created music sets', async () => {
@@ -538,7 +540,9 @@ describe('StateService app-state field round-trip', () => {
         musicSoundstages: {
           ...DEFAULT_SOUNDSTAGE_PREFERENCES,
           factory: 'wide',
-          saved: [{ id: 'my-stage', settings: DEFAULT_SOUNDSTAGE_PREFERENCES.unsaved }],
+          activeId: 'wide',
+          factoryEdits: [{ id: 'wide', name: 'Wider', icon: null, settings: NEUTRAL_SOUNDSTAGE }],
+          custom: [{ id: 'my-stage', name: 'Mine', icon: null, settings: NEUTRAL_SOUNDSTAGE }],
         },
         soundscapes: {
           ...DEFAULT_SOUNDSCAPE_PREFERENCES,
@@ -570,7 +574,9 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.soundscapes?.enabled).toBe(false)
     expect(loaded.menu?.soundscapes?.customPresets.map((preset) => preset.id)).toEqual(['my-soundscape'])
     expect(loaded.menu?.musicSoundstages?.factory).toBe('neutral')
-    expect(loaded.menu?.musicSoundstages?.saved.map((stage) => stage.id)).toEqual(['my-stage'])
+    expect(loaded.menu?.musicSoundstages?.custom.map((stage) => stage.id)).toEqual(['my-stage'])
+    expect(loaded.menu?.musicSoundstages?.activeId).toBe('neutral')
+    expect(loaded.menu?.musicSoundstages?.factoryEdits).toEqual([])
     expect(loaded.menu?.keystrokeSoundPresets?.saved.map((preset) => preset.id)).toEqual(['my-keystrokes'])
     expect(loaded.menu?.flashing).toEqual(DEFAULT_FLASHING_SETTINGS)
     expect(loaded.menu?.flashingPresets?.saved.map((preset) => preset.id)).toEqual(['my-flash'])

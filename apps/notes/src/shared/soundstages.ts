@@ -1,27 +1,30 @@
 import { FLAT_EQ_CURVE, sameEqCurve, sanitizeEqCurve, type EqPoint } from './musicEqCurve'
+import {
+  activePreset,
+  emptyPresetList,
+  isFactoryPreset,
+  sanitizePresetList,
+  type Preset,
+  type PresetKind,
+  type PresetList,
+} from '@thockdown/interaction/presetList'
 
 /**
- * SOUNDSTAGES: named sets of the music's sound (everything in Options > Music
- * but the volume, which is global). Pure, and shared with the main process's
- * state sanitizer.
+ * SOUNDSTAGES: named sets of the music's sound (everything in Options >
+ * Soundstages but the volume, which is global). Pure, and shared with the
+ * main process's state sanitizer.
  *
- * They work the way layouts and soundscapes do (one flat Presets list):
- * - five FACTORY stages, one per Platonic solid in the visualizer's cutout
- *   (tetrahedron, cube, octahedron, dodecahedron, icosahedron), stepped
- *   through by pressing the solid;
- * - SAVED stages: copies of the live settings kept under a number;
- * - the UNSAVED stage: the reader's last edit of the live settings
- *   (`unsavedAfterEdit`), shown as the plus after the saved stages exactly
- *   while it equals no other stage (`isUnsavedShown`), so trying another
- *   stage and coming back restores it exactly. A hold on the plus saves it.
- *   The visualizer's solid and the music bar call anything that is not a
- *   factory stage "custom", and their custom button plays this stage.
+ * A PRESET LIST (`@thockdown/interaction/presetList`): five FACTORY stages,
+ * one per Platonic solid in the visualizer's cutout (tetrahedron, cube,
+ * octahedron, dodecahedron, icosahedron), stepped through by pressing the
+ * solid, then the reader's own. One is always ACTIVE and the live settings
+ * are its settings: an edit is written into it (a factory stage keeps its
+ * edits until restored), and a new stage is a copy of the active one.
  *
- * Which stage is ACTIVE is never stored: it is derived from the live
- * settings (`matchingSoundstage`), so it cannot disagree with what is heard.
- * The one thing stored about the selection is the last factory stage, which
- * is the solid shown while a custom stage plays and the place the solid's
- * steps count from.
+ * The visualizer's solid and the music bar call any stage of the reader's
+ * own "custom"; their custom button plays the last one chosen
+ * (`lastCustom`). The solid shown for it is the stella octangula, and its
+ * steps back count from the last factory stage chosen (`factory`).
  */
 
 /** `stereoWidth.ts`'s range, restated here because the main process cannot import the audio package's Web Audio module. */
@@ -59,51 +62,62 @@ export const FACTORY_SOUNDSTAGE_IDS = ['muted', 'neutral', 'wide', 'amped', 'tho
 export type FactorySoundstageId = (typeof FACTORY_SOUNDSTAGE_IDS)[number]
 export const DEFAULT_FACTORY_SOUNDSTAGE: FactorySoundstageId = 'neutral'
 
-/** The music bar's button for the unsaved stage (anything that is not a factory stage). */
+/** The music bar's button for the custom stage (the last of the reader's own chosen). */
 export const CUSTOM_SOUNDSTAGE_ICON = 'fa-solid fa-marker'
 
-export interface FactorySoundstage {
-  id: FactorySoundstageId
-  name: string
-  /** Font Awesome class of its button in Options > Music. */
-  icon: string
-  settings: Readonly<SoundstageSettings>
-}
+export type FactorySoundstage = Preset<SoundstageSettings> & { id: FactorySoundstageId }
 
-/** In the solids' order: index 0 is the tetrahedron, 4 the icosahedron. */
+/** In the solids' order: index 0 is the tetrahedron, 4 the icosahedron. Icons without their style class. */
 export const FACTORY_SOUNDSTAGES: readonly FactorySoundstage[] = [
-  { id: 'muted', name: 'Muted', icon: 'fa-solid fa-cube', settings: { eq: [{ hz: 20, db: 5, handle: 2 }, { hz: 71, db: 8, handle: 2 }, { hz: 905, db: -6, handle: 2 }, { hz: 20000, db: -7, handle: 0 }], width: 1, reverb: 1, size: 0.3, room: 0.8 } },
-  { id: 'neutral', name: 'Neutral', icon: 'fa-solid fa-box-open', settings: NEUTRAL_SOUNDSTAGE },
-  { id: 'wide', name: 'Wide', icon: 'fa-solid fa-wifi', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 167, db: -3, handle: 1 }, { hz: 5000, db: 3, handle: 2 }, { hz: 20000, db: 1, handle: 2 }], width: 1.5, reverb: 0.1, size: 1, room: 0 } },
-  { id: 'amped', name: 'Amped', icon: 'fa-solid fa-plug', settings: { eq: [{ hz: 20, db: 1.5, handle: 0 }, { hz: 60, db: 4, handle: 1.6 }, { hz: 700, db: -4, handle: 1 }, { hz: 5120, db: 3, handle: 1 }, { hz: 20000, db: 1.5, handle: 2 }], width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
-  { id: 'thocky', name: 'Thocky', icon: 'fa-solid fa-burst', settings: { eq: [{ hz: 20, db: 7, handle: 2 }, { hz: 63, db: 10, handle: 1.7 }, { hz: 320, db: -6, handle: 1.35 }, { hz: 5120, db: 4, handle: 1 }, { hz: 20000, db: 1, handle: 0 }], width: 1.4, reverb: 0.15, size: 0.3, room: 0.4 } },
+  { id: 'muted', name: 'Muted', icon: 'fa-cube', settings: { eq: [{ hz: 20, db: 5, handle: 2 }, { hz: 71, db: 8, handle: 2 }, { hz: 905, db: -6, handle: 2 }, { hz: 20000, db: -7, handle: 0 }], width: 1, reverb: 1, size: 0.3, room: 0.8 } },
+  { id: 'neutral', name: 'Neutral', icon: 'fa-box-open', settings: NEUTRAL_SOUNDSTAGE },
+  { id: 'wide', name: 'Wide', icon: 'fa-wifi', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 167, db: -3, handle: 1 }, { hz: 5000, db: 3, handle: 2 }, { hz: 20000, db: 1, handle: 2 }], width: 1.5, reverb: 0.1, size: 1, room: 0 } },
+  { id: 'amped', name: 'Amped', icon: 'fa-plug', settings: { eq: [{ hz: 20, db: 1.5, handle: 0 }, { hz: 60, db: 4, handle: 1.6 }, { hz: 700, db: -4, handle: 1 }, { hz: 5120, db: 3, handle: 1 }, { hz: 20000, db: 1.5, handle: 2 }], width: 1.2, reverb: 0.1, size: 0.8, room: 0.2 } },
+  { id: 'thocky', name: 'Thocky', icon: 'fa-burst', settings: { eq: [{ hz: 20, db: 7, handle: 2 }, { hz: 63, db: 10, handle: 1.7 }, { hz: 320, db: -6, handle: 1.35 }, { hz: 5120, db: 4, handle: 1 }, { hz: 20000, db: 1, handle: 0 }], width: 1.4, reverb: 0.15, size: 0.3, room: 0.4 } },
 ]
 
-export function factorySoundstage(id: FactorySoundstageId): FactorySoundstage {
-  return FACTORY_SOUNDSTAGES.find((stage) => stage.id === id) ?? FACTORY_SOUNDSTAGES[1]
+export function cloneSoundstage(settings: SoundstageSettings): SoundstageSettings {
+  return { ...settings, eq: settings.eq.map((point) => ({ ...point })) }
 }
 
-export interface SavedSoundstage {
-  id: string
-  settings: SoundstageSettings
+export const SOUNDSTAGE_KIND: PresetKind<SoundstageSettings> = {
+  factory: FACTORY_SOUNDSTAGES,
+  defaultId: DEFAULT_FACTORY_SOUNDSTAGE,
+  noun: 'Soundstage',
+  maxCustom: 100,
+  clone: cloneSoundstage,
+  sanitizeSettings: (value) => sanitizeSettings(value, NEUTRAL_SOUNDSTAGE),
 }
 
-/** Not a design limit, only a bound on a list nobody should reach. */
-export const MAX_SAVED_SOUNDSTAGES = 100
+export function isFactorySoundstageId(id: string): id is FactorySoundstageId {
+  return isFactoryPreset(SOUNDSTAGE_KIND, id)
+}
 
 /** What is persisted (`musicSoundstages`); the live settings themselves are persisted as the music's own fields. */
-export interface SoundstagePreferences {
-  /** The last factory stage chosen: the solid shown, and where its steps count from. */
+export interface SoundstagePreferences extends PresetList<SoundstageSettings> {
+  /** The last factory stage chosen: where the solid's steps back from custom go. */
   factory: FactorySoundstageId
-  /** The unsaved stage: the live settings as the reader last edited them. */
-  unsaved: SoundstageSettings
-  saved: SavedSoundstage[]
+  /** The last of the reader's own stages chosen: what the custom button plays. */
+  lastCustom: string | null
 }
 
 export const DEFAULT_SOUNDSTAGE_PREFERENCES: SoundstagePreferences = {
+  ...emptyPresetList(SOUNDSTAGE_KIND),
   factory: DEFAULT_FACTORY_SOUNDSTAGE,
-  unsaved: { ...NEUTRAL_SOUNDSTAGE },
-  saved: [],
+  lastCustom: null,
+}
+
+export function activeSoundstage(preferences: SoundstagePreferences): Preset<SoundstageSettings> {
+  return activePreset(SOUNDSTAGE_KIND, preferences)
+}
+
+/** The preferences with `activeId` changed, `factory` and `lastCustom` following it. */
+export function withActiveSoundstage(preferences: SoundstagePreferences, list: PresetList<SoundstageSettings>): SoundstagePreferences {
+  const next = { ...preferences, ...list }
+  if (isFactorySoundstageId(next.activeId)) next.factory = next.activeId
+  else next.lastCustom = next.activeId
+  if (next.lastCustom !== null && !next.custom.some((stage) => stage.id === next.lastCustom)) next.lastCustom = null
+  return next
 }
 
 /**
@@ -113,38 +127,6 @@ export const DEFAULT_SOUNDSTAGE_PREFERENCES: SoundstagePreferences = {
  */
 export function sameSoundstage(a: SoundstageSettings, b: SoundstageSettings): boolean {
   return sameEqCurve(a.eq, b.eq) && SOUNDSTAGE_KEYS.every((key) => Math.abs(a[key] - b[key]) < 0.0005)
-}
-
-/** What the live settings are: a factory stage, else a saved one, else the unsaved stage. */
-export type ActiveSoundstage =
-  | { kind: 'factory'; id: FactorySoundstageId }
-  | { kind: 'saved'; id: string }
-  | { kind: 'unsaved' }
-
-export function matchingSoundstage(live: SoundstageSettings, preferences: SoundstagePreferences): ActiveSoundstage {
-  const factory = FACTORY_SOUNDSTAGES.find((stage) => sameSoundstage(stage.settings, live))
-  if (factory) return { kind: 'factory', id: factory.id }
-  const saved = preferences.saved.find((stage) => sameSoundstage(stage.settings, live))
-  if (saved) return { kind: 'saved', id: saved.id }
-  return { kind: 'unsaved' }
-}
-
-/** Whether the unsaved stage differs from every factory and saved stage: its plus is shown. */
-export function isUnsavedShown(preferences: SoundstagePreferences): boolean {
-  return matchingSoundstage(preferences.unsaved, preferences).kind === 'unsaved'
-}
-
-/**
- * The preferences after the reader EDITED the live settings: the edit is the
- * unsaved stage, also when it lands on another stage (which then reads as
- * active, and the plus goes). Selecting a stage is not an edit and leaves the
- * unsaved stage alone; telling the two apart is the caller's (App.tsx).
- * Returns the same object when nothing changes, so a caller can skip a state
- * update.
- */
-export function unsavedAfterEdit(live: SoundstageSettings, preferences: SoundstagePreferences): SoundstagePreferences {
-  if (sameSoundstage(preferences.unsaved, live)) return preferences
-  return { ...preferences, unsaved: { ...live, eq: live.eq.map((point) => ({ ...point })) } }
 }
 
 /** The factory stage `direction` places from the last one chosen, stopping at either end. */
@@ -165,17 +147,8 @@ function sanitizeSettings(value: unknown, fallback: SoundstageSettings): Soundst
 
 export function sanitizeSoundstagePreferences(value: unknown): SoundstagePreferences {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const factory = (FACTORY_SOUNDSTAGE_IDS as readonly unknown[]).includes(input.factory)
-    ? input.factory as FactorySoundstageId
-    : DEFAULT_FACTORY_SOUNDSTAGE
-  const saved: SavedSoundstage[] = []
-  if (Array.isArray(input.saved)) {
-    for (const entry of input.saved) {
-      if (saved.length >= MAX_SAVED_SOUNDSTAGES) break
-      const record = (entry && typeof entry === 'object' ? entry : null) as Record<string, unknown> | null
-      if (!record || typeof record.id !== 'string' || record.id === '' || saved.some((stage) => stage.id === record.id)) continue
-      saved.push({ id: record.id, settings: sanitizeSettings(record.settings, NEUTRAL_SOUNDSTAGE) })
-    }
-  }
-  return { factory, unsaved: sanitizeSettings(input.unsaved, NEUTRAL_SOUNDSTAGE), saved }
+  const list = sanitizePresetList(SOUNDSTAGE_KIND, input)
+  const factory = isFactorySoundstageId(String(input.factory)) ? input.factory as FactorySoundstageId : DEFAULT_FACTORY_SOUNDSTAGE
+  const lastCustom = typeof input.lastCustom === 'string' && list.custom.some((stage) => stage.id === input.lastCustom) ? input.lastCustom : null
+  return withActiveSoundstage({ ...list, factory, lastCustom }, list)
 }

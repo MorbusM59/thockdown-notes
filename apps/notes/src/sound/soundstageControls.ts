@@ -5,16 +5,18 @@
  * the factory stages and how to play one directly (the music bar's stage
  * row, `AudioControls.tsx`), so neither needs props for them.
  */
-import type { FactorySoundstageId } from '../shared/soundstages'
+import { FACTORY_SOUNDSTAGES, type FactorySoundstage, type FactorySoundstageId } from '../shared/soundstages'
 
 export type SoundstageControls = {
   solid: FactorySoundstageId | 'custom'
+  /** The factory stages as the reader left them (names and icons edited). */
+  factory: readonly FactorySoundstage[]
   step: (direction: 1 | -1) => void
   /** Play a factory stage, or the custom stage. */
   select: (stage: FactorySoundstageId | 'custom') => void
 }
 
-let controls: SoundstageControls = { solid: 'neutral', step: () => {}, select: () => {} }
+let controls: SoundstageControls = { solid: 'neutral', factory: FACTORY_SOUNDSTAGES, step: () => {}, select: () => {} }
 const listeners = new Set<() => void>()
 
 export function publishSoundstageControls(next: SoundstageControls): void {

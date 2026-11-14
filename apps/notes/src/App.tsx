@@ -26,7 +26,8 @@ import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
 import { DEFAULT_KEYSTROKE_SOUND, DEFAULT_KEYSTROKE_SOUND_PREFERENCES, KEYSTROKE_CHANNEL_IDS, cloneKeystrokeSound, matchingKeystrokeSound, sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings, unsavedKeystrokeSoundAfterEdit, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
-import { DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, factorySoundstage, matchingSoundstage, sameSoundstage, unsavedAfterEdit, sanitizeSoundstagePreferences, steppedFactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, FACTORY_SOUNDSTAGES, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { createPreset, editActivePreset, newPresetId, selectPreset } from '@thockdown/interaction/presetList'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
@@ -53,6 +54,7 @@ import {
 } from './shared/sidebarSections'
 import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
 import { SoundscapeDock, SoundscapeIconPicker, SoundscapesView } from './sidebar/SoundscapesView'
+import { SoundstageDock, SoundstageIconPicker } from './sidebar/SoundstageOptions'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   DEFAULT_GLAZE_SETTINGS,
@@ -6262,30 +6264,21 @@ ${markdownHtml}
     size: musicReverbRoom,
     room: musicReverbFoliage,
   }), [musicEqCurve, musicStereoWidth, musicReverbAmount, musicReverbRoom, musicReverbFoliage])
-  // An EDIT of the live settings is the unsaved stage; SELECTING a stage is
-  // not an edit and leaves it alone. A selection is told apart by what it
-  // set out to play (`soundstageSelectionRef`, written by applySoundstage):
-  // its settings arrive over several state updates, none of them an edit,
-  // until the live settings equal it. The first run after the app state is
-  // restored is the restore, not an edit.
+  // The live settings ARE the active stage's settings: an EDIT of them is
+  // written into the active stage (`editActivePreset`). SELECTING a stage is
+  // not an edit: its settings arrive over several state updates, none of
+  // them an edit, until the live settings equal it, and it is told apart by
+  // what it set out to play (`soundstageSelectionRef`, written by
+  // applySoundstage). The first run after the app state is restored is the
+  // restore: the active stage is the truth, so live settings that disagree
+  // with it are set to it.
   const liveSoundstageRef = useRef(liveSoundstage)
   liveSoundstageRef.current = liveSoundstage
+  const soundstagePreferencesRef = useRef(soundstagePreferences)
+  soundstagePreferencesRef.current = soundstagePreferences
   const soundstageSelectionRef = useRef<SoundstageSettings | null>(null)
   const soundstageRestoredRef = useRef(false)
-  useEffect(() => {
-    if (!persistenceReady) return
-    if (!soundstageRestoredRef.current) {
-      soundstageRestoredRef.current = true
-      return
-    }
-    const selection = soundstageSelectionRef.current
-    if (selection) {
-      if (sameSoundstage(selection, liveSoundstage)) soundstageSelectionRef.current = null
-      return
-    }
-    setSoundstagePreferences((previous) => unsavedAfterEdit(liveSoundstage, previous))
-  }, [liveSoundstage, persistenceReady])
-  /** Play a stage: every setting at once. Reverb and size go through the music bar's own rule (a bypassed reverb turns back on). */
+  /** Play a stage's settings, all at once. Reverb and size go through the music bar's own rule (a bypassed reverb turns back on). */
   const applySoundstage = useCallback((settings: SoundstageSettings) => {
     soundstageSelectionRef.current = sameSoundstage(settings, liveSoundstageRef.current) ? null : settings
     setMusicEqCurve(settings.eq.map((point) => ({ ...point })))
@@ -6294,10 +6287,51 @@ ${markdownHtml}
     readNowPlaying().setLevel('reverb', settings.reverb)
     readNowPlaying().setLevel('room', settings.size)
   }, [])
-  const selectFactorySoundstage = useCallback((id: FactorySoundstageId) => {
-    setSoundstagePreferences((previous) => (previous.factory === id ? previous : { ...previous, factory: id }))
-    applySoundstage(factorySoundstage(id).settings)
+  useEffect(() => {
+    if (!persistenceReady) return
+    if (!soundstageRestoredRef.current) {
+      soundstageRestoredRef.current = true
+      const restored = activeSoundstage(soundstagePreferencesRef.current).settings
+      if (!sameSoundstage(restored, liveSoundstage)) applySoundstage(restored)
+      return
+    }
+    const selection = soundstageSelectionRef.current
+    if (selection) {
+      if (sameSoundstage(selection, liveSoundstage)) soundstageSelectionRef.current = null
+      return
+    }
+    setSoundstagePreferences((previous) => (
+      sameSoundstage(activeSoundstage(previous).settings, liveSoundstage)
+        ? previous
+        : { ...previous, ...editActivePreset(SOUNDSTAGE_KIND, previous, liveSoundstage) }
+    ))
+  }, [liveSoundstage, persistenceReady, applySoundstage])
+  /**
+   * Every change to the soundstage list goes through here: the list changes,
+   * and when the active stage or its settings changed, they are played.
+   */
+  const changeSoundstages = useCallback((next: SoundstagePreferences) => {
+    const following = withActiveSoundstage(next, next)
+    soundstagePreferencesRef.current = following
+    setSoundstagePreferences(following)
+    const settings = activeSoundstage(following).settings
+    if (!sameSoundstage(settings, liveSoundstageRef.current)) applySoundstage(settings)
   }, [applySoundstage])
+  const selectSoundstage = useCallback((id: string) => {
+    const previous = soundstagePreferencesRef.current
+    changeSoundstages({ ...previous, ...selectPreset(SOUNDSTAGE_KIND, previous, id) })
+  }, [changeSoundstages])
+  /** The custom stage: the last of the reader's own chosen, else their first, else a new copy of the one playing. */
+  const selectCustomSoundstage = useCallback(() => {
+    const previous = soundstagePreferencesRef.current
+    const id = previous.lastCustom ?? previous.custom[0]?.id
+    if (id) {
+      selectSoundstage(id)
+      return
+    }
+    const created = createPreset(SOUNDSTAGE_KIND, previous, newPresetId('stage'))
+    if (created) changeSoundstages({ ...previous, ...created })
+  }, [changeSoundstages, selectSoundstage])
   // Keystroke sounds: an EDIT (a slider or a sound set in Options) is the
   // unsaved preset; SELECTING a preset only sets the live settings. Both are
   // synchronous, so unlike the soundstage no selection has to be told apart
@@ -6316,32 +6350,38 @@ ${markdownHtml}
     setKeystrokeSound(next)
   }, [])
   const activeKeystrokeSound = useMemo(() => matchingKeystrokeSound(keystrokeSound, keystrokeSoundPreferences), [keystrokeSound, keystrokeSoundPreferences])
-  const activeSoundstage = useMemo(() => matchingSoundstage(liveSoundstage, soundstagePreferences), [liveSoundstage, soundstagePreferences])
-  // The visualizer's solid: the factory stage playing, or the custom shape for
-  // anything else; pressing it steps from the last factory stage chosen.
-  const visualizerSolid = activeSoundstage.kind === 'factory' ? activeSoundstage.id : 'custom'
+  // The visualizer's solid: the factory stage active, or the custom shape for
+  // a stage of the reader's own; pressing it steps through the factory stages.
+  const activeSoundstageId = soundstagePreferences.activeId
+  const soundstageFactoryEdits = soundstagePreferences.factoryEdits
+  const soundstageFactory = useMemo(
+    () => FACTORY_SOUNDSTAGES.map((stage) => (soundstageFactoryEdits.find((edit) => edit.id === stage.id) as FactorySoundstage | undefined) ?? stage),
+    [soundstageFactoryEdits],
+  )
+  const visualizerSolid: FactorySoundstageId | 'custom' = isFactorySoundstageId(activeSoundstageId) ? activeSoundstageId : 'custom'
   useEffect(() => {
     publishSoundstageControls({
       solid: visualizerSolid,
-      // Custom (the unsaved stage) sits after the last factory stage: forward
-      // from it goes to custom, and back from custom returns to the last factory stage.
+      factory: soundstageFactory,
+      // Custom sits after the last factory stage: forward from it goes to
+      // custom, and back from custom returns to the last factory stage.
       step: (direction) => {
         if (visualizerSolid === 'custom') {
-          if (direction === -1) selectFactorySoundstage(soundstagePreferences.factory)
+          if (direction === -1) selectSoundstage(soundstagePreferencesRef.current.factory)
           return
         }
         if (direction === 1 && visualizerSolid === FACTORY_SOUNDSTAGE_IDS[FACTORY_SOUNDSTAGE_IDS.length - 1]) {
-          applySoundstage(soundstagePreferences.unsaved)
+          selectCustomSoundstage()
           return
         }
-        selectFactorySoundstage(steppedFactorySoundstage(visualizerSolid, direction))
+        selectSoundstage(steppedFactorySoundstage(visualizerSolid, direction))
       },
       select: (stage) => {
-        if (stage === 'custom') applySoundstage(soundstagePreferences.unsaved)
-        else selectFactorySoundstage(stage)
+        if (stage === 'custom') selectCustomSoundstage()
+        else selectSoundstage(stage)
       },
     })
-  }, [visualizerSolid, soundstagePreferences.factory, soundstagePreferences.unsaved, selectFactorySoundstage, applySoundstage])
+  }, [visualizerSolid, soundstageFactory, selectSoundstage, selectCustomSoundstage])
 
 
   const handleExportPdf = useCallback(async (scope: ExportScope) => {
@@ -6477,7 +6517,6 @@ ${markdownHtml}
   }, [isSearchQueryCaseSensitive, readNoteContent, searchQuery, sortedNotes])
 
   const isFindMode = sidebarMode === 'find'
-  const isOptionsSearchMode = sidebarMode === 'options'
   const isSongsSearchMode = sidebarMode === 'songs'
   // While an entry's icon is being picked (sidebar/iconPicker/iconPick.ts),
   // its view's filter field filters the icons, with a query of the picker's
@@ -6486,6 +6525,7 @@ ${markdownHtml}
   const iconPick = useSyncExternalStore(subscribeIconPick, readIconPick)
   const iconPickView = iconPick === null ? null : ICON_PICK_VIEW[iconPick.target.kind]
   const isIconPickMode = iconPickView !== null && iconPickView === sidebarMode
+  const isOptionsSearchMode = sidebarMode === 'options' && !isIconPickMode
   const iconPickQuery = isIconPickMode && iconPick ? iconPick.query : ''
   // A pick belongs to its entry's view: leaving the view by any route ends
   // the pick, so an open pick always means the picker is on screen (Escape
@@ -8171,7 +8211,7 @@ ${markdownHtml}
                       Aa
                     </button>
                   </div>
-                ) : (isOptionsSearchMode || isSongsSearchMode || isSoundscapesSearchMode) ? (
+                ) : (isOptionsSearchMode || isIconPickMode || isSongsSearchMode || isSoundscapesSearchMode) ? (
                   // The options search and the song filter are never case
                   // sensitive, so the toggle's place goes to clearing the
                   // term: back to the whole panel without reaching for the
@@ -8426,6 +8466,8 @@ ${markdownHtml}
                       isIconPickMode
                         ? <SoundscapeIconPicker preferences={soundscapePreferences} onChange={setSoundscapePreferences} query={iconPickQuery} />
                         : <SoundscapesView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
+                    ) : sidebarMode === 'options' && isIconPickMode ? (
+                      <SoundstageIconPicker preferences={soundstagePreferences} onChange={changeSoundstages} query={iconPickQuery} />
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
@@ -8552,10 +8594,7 @@ ${markdownHtml}
                         musicEqCurve={musicEqCurve}
                         setMusicEqCurve={setMusicEqCurve}
                         soundstagePreferences={soundstagePreferences}
-                        setSoundstagePreferences={setSoundstagePreferences}
-                        activeSoundstage={activeSoundstage}
-                        applySoundstage={applySoundstage}
-                        selectFactorySoundstage={selectFactorySoundstage}
+                        changeSoundstages={changeSoundstages}
                         allowRemoteImages={allowRemoteImages}
                         onAllowRemoteImagesChange={handleAllowRemoteImagesChange}
                         features={features}
@@ -8673,6 +8712,12 @@ ${markdownHtml}
                     // picker docks but straight on the sidebar, with no box.
                     <div className="sidebar-plain-dock">
                       <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && optionsSection === 'music' ? (
+                    // The playing soundstage's row, docked as the soundscapes' is.
+                    <div className="sidebar-plain-dock">
+                      <SoundstageDock preferences={soundstagePreferences} onChange={changeSoundstages} />
                     </div>
                   ) : null}
                   {sidebarMode === 'soundscapes' ? (

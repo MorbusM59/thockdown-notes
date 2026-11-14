@@ -559,3 +559,20 @@ and the old folder is gone). Then the module, its test and the call go, and
 **Noticed.** Written with the move itself, as the one piece of it that is
 transitional by design.
 
+
+## The soundscapes' own copy of the preset-list rule
+
+**What.** `packages/soundscape/soundscape.ts` carries its own `editSoundscape`,
+`renameSoundscape`, `setSoundscapeIcon`, `createSoundscape`,
+`deleteSoundscape`, `restoreFactorySoundscape` and `factoryEdits`: the rule
+`packages/interaction/presetList.ts` now states generically for soundstages
+(and, next, layouts). Two copies of one rule is how one of them drifts.
+
+**To remove.** Soundscape preferences become a `PresetList` plus their
+soundscape-only fields (enabled, preset order), the functions above become
+calls into `presetList.ts`, and the soundscape's export/import and the
+Android build are checked against the change (the Android app shares the
+module). Only `presetOrder` (drag reordering) has no counterpart in
+`presetList.ts` yet.
+
+**Noticed.** While porting the soundscape dock to Soundstages (2026-11-14).

@@ -53,7 +53,7 @@ export function resetMenuWithPreservedPresets(
     },
     musicSoundstages: {
       ...defaultSoundstagePreferences,
-      saved: currentSoundstagePreferences.saved,
+      custom: currentSoundstagePreferences.custom,
     },
     soundscapes: {
       ...defaultSoundscapePreferences,
