@@ -637,17 +637,6 @@
   transform: translateY(var(--selector-rows-shift, 0px));
 }
 
-/* A selector cell being dragged to a new place (sidebar/useSelectorReorder.ts):
-   the one picked up is dimmed, the one it would land on is framed. */
-.selector-rows [data-drag-state='source'] {
-  opacity: 0.25;
-  filter: var(--filter-alert);
-}
-
-.selector-rows [data-drag-state='target'] {
-  filter: var(--filter-alert);
-}
-
 /* The Music Library's set selector: the set this view shows and edits is
    drawn with a dashed border; pressed in (.is-active) means in the pool. */
 .options-loadout-btn.is-edited {

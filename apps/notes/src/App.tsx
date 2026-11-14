@@ -328,7 +328,7 @@ import { areStringArraysEqual } from './shared/stringArrays'
 import { buildTagHierarchy, type TagPrimaryGroup } from './shared/tagHierarchy'
 import { importDroppedImageFiles, registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
 import type { ImageLibraryView } from './imageLibrary/imageLibraryViews'
-import { armPointerDrag } from './shared/pointerDrag'
+import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 import { clamp } from '@thockdown/interaction/clamp'
 import { stableStringify } from './shared/stableStringify'
 

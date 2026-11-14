@@ -650,14 +650,14 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   }, [])
 
   /** Arm a touch long press: `action` runs if the finger is still down after `ms`. */
-  const startTouchHold = (pointerId: number, ms: number, action: () => void) => {
+  const startTouchHold = (pointerId: number, ms: number, action: () => void, options?: { isDragPickup?: boolean }) => {
     swallowClickRef.current = false
     touchHoldRef.current?.cancel()
     const cancel = armHold(() => {
       touchHoldRef.current = null
       swallowClickRef.current = true
       action()
-    }, ms)
+    }, ms, options)
     touchHoldRef.current = { pointerId, cancel }
   }
 
@@ -814,7 +814,11 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                 onPointerDown={(event) => {
                   reorder?.onPointerDown(event)
                   if (event.pointerType === 'touch') {
-                    if (onPickPreset) startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => onPickPreset(preset.id))
+                    // The same still hold also picks the soundscape up for a
+                    // drag where the host reorders (pointerDrag.ts), so it
+                    // does not claim the press: travelling on from it drags,
+                    // and the host puts the soundscape down as the drag starts.
+                    if (onPickPreset) startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => onPickPreset(preset.id), { isDragPickup: presetReorder !== undefined })
                     return
                   }
                   if (event.button !== 2) return

@@ -22,7 +22,7 @@ const HELP: Record<string, string[]> = {
     'What you hear: When the schedule is on, a run fades in at its start, fades out at its end, and blends into the next soundscape on the hour, each over a minute. If you are playing or have paused a soundscape yourself, that comes first: the schedule waits until you stop it. Anything you play or pause while a scheduled run is under way still ends with that run.',
   ],
   Presets: [
-    'Soundscapes: Tap one to play it. Hold one to pick it up for the schedule.',
+    'Soundscapes: Tap one to play it. Hold one to pick it up for the schedule. Hold one and then slide your finger to move it to a new place.',
     'Plus button: Makes a new soundscape of your own, a copy of the one playing. Changes you make go straight into the soundscape that plays, factory ones included.',
     'The row below: It always shows the soundscape that plays. Tap its icon to choose another icon, or hold it to go back to the original one. Hold the name to rename it.',
     'Reset button: Turns every channel off and puts the environment back to normal, for building a soundscape from scratch.',

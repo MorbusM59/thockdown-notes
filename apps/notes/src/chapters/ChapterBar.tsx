@@ -7,7 +7,7 @@ import { resolveIdentityLabel } from '../shared/tabLabels'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import type { ChapterPillSplitArm } from './useChapterPillActions'
 import { usePillStripScroll } from '../shared/usePillStripScroll'
-import { armPointerDrag } from '../shared/pointerDrag'
+import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 
 export interface ChapterBarProps {
   parentNoteId: string

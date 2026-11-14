@@ -18,6 +18,7 @@ import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
+  moveSoundscapePreset,
   setSoundscapeIcon,
   soundscapePresets,
   type SoundscapePreferences,
@@ -62,6 +63,7 @@ import { PageScrollbar } from './PageScrollbar'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
+import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
 installSoundscapeFiles()
 
@@ -111,6 +113,14 @@ export function MobileSoundscapeApp() {
   // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
   const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
   const pageScrollerRef = useRef<HTMLDivElement | null>(null)
+  // Dragging a soundscape to reorder it, as on the desktop: a finger held
+  // still picks it up (for the schedule, too), and travelling on drags it,
+  // putting the schedule's pick down.
+  const presetReorder = useSelectorReorder(
+    'soundscape',
+    (dragged, target) => setPreferences((current) => moveSoundscapePreset(current, dragged, target)),
+    { picture: 'copy', onStart: () => setPickedPresetId(null) },
+  )
   // The ICON PICKER for the soundscape that plays, opened from the dock's
   // mark as on the desktop: while it is open it stands in for the presets
   // grid, with its own filter field above it, and the dock stays below to
@@ -462,6 +472,7 @@ export function MobileSoundscapeApp() {
                   onChange={handleChange}
                   pickedPresetId={pickedPresetId}
                   onPickPreset={setPickedPresetId}
+                  presetReorder={presetReorder}
                   help={help}
                   framePresets={(grid) => (iconQuery === null ? grid : (<>
                     <div className="options-curve-rows options-dock-rows">

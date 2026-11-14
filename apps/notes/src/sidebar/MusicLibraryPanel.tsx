@@ -12,7 +12,7 @@ import { MusicSetRow, SetMark } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { closeIconPick } from './iconPicker/iconPick'
-import { useSelectorReorder } from './useSelectorReorder'
+import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
 /** A song's length without leading zeros: 3:21, or 1:02:05 past an hour. */

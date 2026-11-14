@@ -4,7 +4,7 @@ import { CategoryTree, type CategoryTreeFolds } from '../components/CategoryTree
 import { HoverActions, type HoverAction } from '../components/HoverActions'
 import { IMAGE_DRAG_MIME_TYPE, IMAGE_DRAG_TRASHED_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
-import { armPointerDrag } from '../shared/pointerDrag'
+import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 import { localImageSrc } from '../shared/localImages'
 import { isRemoteImageSrc, useRemoteImagesAllowed } from '../shared/remoteImages'
 import { buildTagHierarchy } from '../shared/tagHierarchy'

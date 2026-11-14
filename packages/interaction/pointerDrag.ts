@@ -59,9 +59,9 @@
 // starts and are untouched: they remain the browser's own drag events.
 
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { armHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from '@thockdown/interaction/holdTiming'
-import { holdTouchPanning } from '@thockdown/interaction/touchInput'
-import { beginCursorHold, endCursorHold } from '@thockdown/interaction/cursorHoldFeedback'
+import { armHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from './holdTiming'
+import { holdTouchPanning } from './touchInput'
+import { beginCursorHold, endCursorHold } from './cursorHoldFeedback'
 
 /**
  * How far a press must travel, in screen pixels, before it is a drag rather

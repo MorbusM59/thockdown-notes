@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react'
-import { armPointerDrag } from '../shared/pointerDrag'
+import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 import { normalizeTagName } from '../shared/tags'
 import { renameImage, setImageTags, useLibraryImage } from './imageLibraryStore'
 

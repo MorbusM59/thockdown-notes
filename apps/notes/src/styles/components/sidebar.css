@@ -547,7 +547,7 @@
   padding: 0;
   /* A row is pressed and dragged, never selected: dragging over its
    * title/date text must not start a text selection (see
-   * shared/pointerDrag.ts) -- the same reason .tag-pill sets this. */
+   * packages/interaction/pointerDrag.ts) -- the same reason .tag-pill sets this. */
   user-select: none;
 }
 

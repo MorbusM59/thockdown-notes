@@ -6,7 +6,7 @@ import { resolveIdentityLabel } from '../shared/tabLabels'
 import { buildNextAutoAssignedId, isAutoAssignedId } from '../shared/assignedIds'
 import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import type { UseSectionTabsResult } from './useSectionTabs'
-import { armPointerDrag } from '../shared/pointerDrag'
+import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 
 export interface TagBarProps {
   tabs: UseSectionTabsResult

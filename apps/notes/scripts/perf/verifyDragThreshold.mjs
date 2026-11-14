@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Live-browser gate for the press-or-drag decision (src/shared/pointerDrag.ts).
+// Live-browser gate for the press-or-drag decision (packages/interaction/pointerDrag.ts).
 //
 // The property: a press whose pointer travels LESS than DRAG_THRESHOLD_PX is
 // a click, however it wobbled, and one that travels at least that far is a

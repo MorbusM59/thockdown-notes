@@ -23,7 +23,7 @@ import { isTableCellDragStart, resolveTableCellDrop, resolveTableSelectionStep }
 import { imageMarkdown, isImageFile } from '../shared/images';
 import { droppedLibraryImage } from '../imageLibrary/imageLibraryStore';
 import { malformedImageTitlesOnLine, resolveImageSelectionStep } from '../editor/MarkdownImageTransforms';
-import { hasTravelledDragThreshold } from '../shared/pointerDrag';
+import { hasTravelledDragThreshold } from '@thockdown/interaction/pointerDrag';
 import { createRowWheel } from '../scroll/rowWheel';
 import { appendWheelTrace, isWheelTraceOn } from '../scroll/wheelTrace';
 import { getWheelSpinEffectiveThresholdMs } from '../scroll/wheelSpin';

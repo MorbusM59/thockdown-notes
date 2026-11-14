@@ -1062,3 +1062,14 @@
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
+
+/* A selector cell being dragged to a new place (useSelectorReorder.ts):
+   the one picked up is dimmed, the one it would land on is framed. */
+[data-drag-state='source'] {
+  opacity: 0.25;
+  filter: var(--filter-alert);
+}
+
+[data-drag-state='target'] {
+  filter: var(--filter-alert);
+}

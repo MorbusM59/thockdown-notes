@@ -36,7 +36,7 @@ const TEXT_ENTRY_SELECTOR = 'input, textarea, select, [contenteditable=""], [con
 /**
  * Read-only text: native press behaviour (the selection drag), no typing.
  * A drag SOURCE is not here: an in-app drag is started by
- * `shared/pointerDrag.ts` from pointer events, which need nothing from the
+ * `pointerDrag.ts` from pointer events, which need nothing from the
  * press default, so a dragged row or pill keeps the keyboard where it was
  * like every other control.
  */

@@ -4,7 +4,7 @@ import {
   WINDOW_RESTORE_DRAG_THRESHOLD_PX,
   WINDOW_TITLEBAR_SELECTOR,
 } from '../shared/windowDrag'
-import { hasTravelledDragThreshold } from '../shared/pointerDrag'
+import { hasTravelledDragThreshold } from '@thockdown/interaction/pointerDrag'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 
 /**

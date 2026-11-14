@@ -7,7 +7,7 @@ import { InlinePillOrInput } from '../shared/InlinePillOrInput'
 import { TEMP_TAB_PIN_HOLD_MS, type UseSectionTabsResult } from './useSectionTabs'
 import type { EscapeMenuModeChrome } from '../escapeMenu/escapeMenuContract'
 import { EscapeMenuReadouts } from '../escapeMenu/EscapeMenuStatus'
-import { armPointerDrag } from '../shared/pointerDrag'
+import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 
 export interface SectionTabBarProps {
   tabs: UseSectionTabsResult

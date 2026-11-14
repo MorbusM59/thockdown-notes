@@ -11,7 +11,7 @@
 
 // How far the primary button has to move before a press on draggable chrome
 // (the toolbar background) is a window move rather than a click is the app's
-// one drag distance, `DRAG_THRESHOLD_PX` in shared/pointerDrag.ts -- moving
+// one drag distance, `DRAG_THRESHOLD_PX` in packages/interaction/pointerDrag.ts -- moving
 // the window and dragging a tab are the same gesture to the hand.
 
 // How far the cursor has to move (in screen px) after a mousedown on a

@@ -9,7 +9,7 @@ import {
   type SoundscapePreferences,
 } from '@thockdown/soundscape/soundscape'
 import { SelectorRows } from './SelectorRows'
-import { useSelectorReorder } from './useSelectorReorder'
+import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
 

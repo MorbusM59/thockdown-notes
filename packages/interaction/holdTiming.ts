@@ -24,7 +24,7 @@
 // not a hold, so a hold whose pointer leaves a small grace radius around
 // where it landed is abandoned on the spot (`armHold` watches the pointer
 // itself), and leaving that same radius is what starts a drag
-// (`apps/notes/src/shared/pointerDrag.ts`). One radius for both, so there is
+// (`pointerDrag.ts`). One radius for both, so there is
 // no distance at which a press is neither, or both.
 
 import { beginCursorHold, endCursorHold } from './cursorHoldFeedback'
