@@ -84,7 +84,12 @@ describe('soundscape renderer bundle', () => {
     const played = 3 * SAMPLE_RATE;
     renderer.soundscapeStep(played, 64);
     renderer.soundscapeConfigure(configure(SOUNDSCAPE_FACTORY_PRESETS[3].settings));
-    const [first] = JSON.parse(renderer.soundscapeStep(played, 1)) as Array<{ s: number; d: string }>;
+    // A new room is prepared in one step and installed in the next, from the playhead that step reports.
+    let first: { s: number; d: string } | undefined;
+    for (let step = 0; step < 4 && first === undefined; step += 1) {
+      [first] = JSON.parse(renderer.soundscapeStep(played, 1)) as Array<{ s: number; d: string }>;
+    }
+    if (first === undefined) throw new Error('no chunk rendered after the change');
     // The first point of the splice grid past the margin.
     expect(first.s).toBe(Math.ceil((played + Math.round(MARGIN_SEC * SAMPLE_RATE)) / SPLICE_GRID_FRAMES) * SPLICE_GRID_FRAMES);
     const samples = decode(first.d);

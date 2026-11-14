@@ -47,6 +47,9 @@ interface Spectrum {
   im: Float32Array;
 }
 
+/** A response transformed for this convolver (prepareImpulse), ready to install. */
+export type PreparedImpulse = Filter;
+
 interface Filter {
   head: Spectrum[];
   tail: Spectrum[];
@@ -164,11 +167,8 @@ export class PartitionedConvolver {
    * Use `impulse` from the next block on, crossfading from the previous
    * response over `crossfadeFrames` (ignored for the first response).
    */
-  setImpulse(impulse: Float32Array, crossfadeFrames: number): void {
-    if (impulse.length > this.maxImpulseFrames) {
-      throw new Error(`Impulse of ${impulse.length} frames exceeds the ${this.maxImpulseFrames} this convolver was sized for`);
-    }
-    const filter = this.buildFilter(impulse);
+  setImpulse(impulse: Float32Array | PreparedImpulse, crossfadeFrames: number): void {
+    const filter = impulse instanceof Float32Array ? this.prepareImpulse(impulse) : impulse;
     // Its tail output for the window under way, so it joins mid-window.
     const active = { filter, tailOut: this.windowsComplete > 0 ? this.computeTail(filter) : new Float64Array(TAIL_BLOCK) };
     if (this.current && crossfadeFrames > 0) {
@@ -177,6 +177,18 @@ export class PartitionedConvolver {
       // from the one fully heard before it.
     }
     this.current = active;
+  }
+
+  /**
+   * Transform `impulse` into this convolver's partitions: the expensive part
+   * of setImpulse, and independent of the audio so far, so it can be done
+   * ahead of the moment the response is installed.
+   */
+  prepareImpulse(impulse: Float32Array): PreparedImpulse {
+    if (impulse.length > this.maxImpulseFrames) {
+      throw new Error(`Impulse of ${impulse.length} frames exceeds the ${this.maxImpulseFrames} this convolver was sized for`);
+    }
+    return this.buildFilter(impulse);
   }
 
   /** Convolve one BLOCK of input into `output` (overwritten). */

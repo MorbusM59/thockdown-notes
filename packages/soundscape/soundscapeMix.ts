@@ -18,7 +18,7 @@ import type { SoundscapeSpaceSettings } from './soundscape';
 import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from '@thockdown/audio/brilliance';
 import { buildRoomImpulseResponse, roomKey, roomPreDelaySec, ROOM_CROSSFADE_SEC, ROOM_MAX_LENGTH_SEC } from '@thockdown/audio/room';
 import { DynamicsCompressor, type CompressorSettings, type CompressorSnapshot } from './dynamicsCompressor';
-import { BLOCK, PartitionedConvolver, type ConvolverSnapshot } from './partitionedConvolver';
+import { BLOCK, PartitionedConvolver, type ConvolverSnapshot, type PreparedImpulse } from './partitionedConvolver';
 import type { StereoBiquadSnapshot } from '@thockdown/audio/brilliance';
 
 /** The block the mix processes: the convolver's. */
@@ -93,6 +93,11 @@ export class SoundscapeMix {
   /** The room built and heard; null before the first. */
   private spaceKey: string | null = null;
   private pendingRoom: SoundscapeSpaceSettings | null = null;
+  /**
+   * The pending room transformed ahead (prepareRoom), by its key. Not part of
+   * a snapshot: it depends on nothing but the space, so a rewind keeps it.
+   */
+  private prepared: { key: string; responses: [PreparedImpulse, PreparedImpulse] } | null = null;
   private returnGain = 0;
   private returnTarget = 0;
   /** NaN until the first space, which is then taken at once rather than glided to from nothing. */
@@ -173,14 +178,29 @@ export class SoundscapeMix {
     return this.pendingRoom !== null;
   }
 
-  /** Build the pending room and crossfade it in over ROOM_CROSSFADE_SEC (at once, for the first). */
-  buildRoom(): void {
+  /** The pending room is transformed already, so buildRoom is cheap (or no room is pending). */
+  get roomPrepared(): boolean {
+    return this.pendingRoom === null || this.prepared?.key === roomKey(this.pendingRoom);
+  }
+
+  /** Build and transform the pending room's response without installing it: the expensive part of buildRoom. */
+  prepareRoom(): void {
     const space = this.pendingRoom;
-    if (space === null) return;
+    if (space === null || this.roomPrepared) return;
+    const [left, right] = buildRoomImpulseResponse(space, this.sampleRate);
+    this.prepared = { key: roomKey(space), responses: [this.convolvers[0].prepareImpulse(left), this.convolvers[1].prepareImpulse(right)] };
+  }
+
+  /** Install the pending room and crossfade it in over ROOM_CROSSFADE_SEC (at once, for the first). */
+  buildRoom(): void {
+    this.prepareRoom();
+    const space = this.pendingRoom;
+    if (space === null || this.prepared === null) return;
     this.pendingRoom = null;
     const first = this.spaceKey === null;
     this.spaceKey = roomKey(space);
-    const [left, right] = buildRoomImpulseResponse(space, this.sampleRate);
+    const [left, right] = this.prepared.responses;
+    this.prepared = null;
     const fade = first ? 0 : Math.round(ROOM_CROSSFADE_SEC * this.sampleRate);
     this.convolvers[0].setImpulse(left, fade);
     this.convolvers[1].setImpulse(right, fade);
