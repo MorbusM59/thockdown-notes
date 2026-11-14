@@ -307,7 +307,7 @@ const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: stri
   { key: 'cute', label: 'Sour Gummy', family: "'Sour Gummy', 'Quicksand', 'Segoe UI', sans-serif" },
   { key: 'boogaloo', label: 'Boogaloo', family: "'Boogaloo', 'Comic Sans MS', 'Chalkboard SE', cursive" },
   { key: 'print', label: 'Big Shoulders', family: "'Big Shoulders', 'Times New Roman', Georgia, serif" },
-  { key: 'calibrilight', label: 'Calibri Light (Carlito)', family: "'Carlito', 'Calibri Light', 'Segoe UI', sans-serif" },
+  { key: 'calibrilight', label: 'Carlito', family: "'Carlito', 'Calibri Light', 'Segoe UI', sans-serif" },
   { key: 'opensans', label: 'Open Sans', family: "'Open Sans', 'Segoe UI', sans-serif" },
   { key: 'notoserif', label: 'Noto Serif', family: "'Noto Serif', Georgia, serif" },
   { key: 'neuton', label: 'Neuton', family: "'Neuton', Georgia, serif" },

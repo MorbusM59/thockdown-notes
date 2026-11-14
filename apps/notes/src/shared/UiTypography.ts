@@ -17,12 +17,11 @@ export type UiFontKey =
   | 'boogaloo'
   | 'sourgummy';
 
-export const DEFAULT_UI_FONT_KEY: UiFontKey = 'system';
+export const DEFAULT_UI_FONT_KEY: UiFontKey = 'geo';
 
-// The picker grid (Options > UI Font) renders exactly these 12 -- 'system'
-// (the default, matching the app's current look) is deliberately not a
-// clickable tile, so a fresh install shows no tile highlighted rather than
-// forcing a visible font change before the user has opted into one. IBM
+// The picker grid (Options > UI Font) renders exactly these 12. Geo is the
+// default. 'system' is not a tile: it remains only so a save that chose it
+// before Geo became the default still resolves to a font. IBM
 // Plex Sans is the one general-purpose workhorse; everything after it
 // leans into personality. Most reuse font files already bundled for the
 // editor/render pickers (EditorTypography.ts/SidebarOptionsPanel.tsx's
