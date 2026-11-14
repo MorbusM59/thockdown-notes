@@ -846,3 +846,10 @@
   text-align:  center;
   outline:     none;
 }
+
+/* A field's action button (FieldActionButton) with the field empty: nothing
+   to submit or clear, so the field's icon (magnifying glass, funnel) shows
+   dimmed, focused or not. Disabled is that state exactly. */
+.field-action-button:disabled {
+  opacity: 0.45;
+}

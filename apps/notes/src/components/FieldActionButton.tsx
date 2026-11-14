@@ -11,7 +11,8 @@
  *   leaves the keyboard where it is (`onClear`) -- clearing an applied
  *   filter is not a request to type a new one.
  * With the field empty there is nothing to submit or clear, focused or not,
- * so it shows the field's icon and is disabled.
+ * so it shows the field's icon, disabled and dimmed (`.field-action-button`
+ * in toolbar.css, the one rule for every field).
  *
  * A press must not move the keyboard (focusOwnership.ts suppresses a press's
  * focus at the window), and the mousedown default is cancelled here as well,
@@ -42,7 +43,7 @@ export function FieldActionButton({
   return (
     <button
       type="button"
-      className={className}
+      className={`field-action-button ${className}`}
       data-tooltip={label}
       aria-label={label}
       disabled={!hasValue}
