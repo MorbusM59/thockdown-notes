@@ -8087,10 +8087,6 @@ ${markdownHtml}
               className="notes-sidebar"
               style={isImmersiveMode ? { gridArea: 'sidebar', width: sidebarWidthPx } : { gridArea: 'sidebar' }}
               {...(isImmersiveMode ? ({ inert: '' } as object) : {})}
-              // An image shown from the sidebar is a glance: any click back
-              // in the sidebar gives the slot its note again. The click still
-              // reaches its target.
-              onClickCapture={shownImageId ? () => getActiveSection()?.exitSlotOverlay?.() : undefined}
             >
               <div className="search-box" aria-label="Search panel">
                 <div className={`search-input-shell${isReplaceMode ? ' search-replace-row' : ''}`}>
