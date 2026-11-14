@@ -35,7 +35,7 @@ import {
 } from '@thockdown/interaction/NonQuantizedSmoothScroll';
 import { createPageKeys, type PageKeys } from '../scroll/pageKeys';
 import { quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../scroll/QuantizedSmoothScroll';
-import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry';
+import { cancelSmoothScroll, isSmoothScrollActive, onSmoothScrollArrival } from '@thockdown/interaction/smoothScrollRegistry';
 import { beginScrollTrackHold } from '../scroll/scrollTrackHold';
 import { countWrappedLines, resolveThumbLineRatio } from '../scroll/scrollThumbMetrics';
 import { resolveCagedScrollTarget } from '../editor/CageMath';
@@ -5563,18 +5563,7 @@ export function CM6Editor({
         onStep: syncCustomScrollbar,
       });
       if (timing) rubberBand.start(timing, startThumbTopPx, clampedTop);
-      if (aimedAtEnd) {
-        const waitForArrival = () => {
-          const el = viewRef.current?.scrollDOM;
-          if (!el) return;
-          if (isSmoothScrollActive(el)) {
-            requestAnimationFrame(waitForArrival);
-            return;
-          }
-          landOnDocumentEnd();
-        };
-        requestAnimationFrame(waitForArrival);
-      }
+      if (aimedAtEnd) onSmoothScrollArrival(scrollDOM, landOnDocumentEnd);
     };
 
     trackHoldCancelRef.current?.();

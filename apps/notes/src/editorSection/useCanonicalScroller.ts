@@ -12,7 +12,7 @@ import { createContinuousWheel, type ContinuousWheel } from '../scroll/continuou
 import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
 import { scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
 import { createPageKeys, type PageKeys } from '../scroll/pageKeys'
-import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
+import { cancelSmoothScroll, isSmoothScrollActive, onSmoothScrollArrival } from '@thockdown/interaction/smoothScrollRegistry'
 import { clamp } from '@thockdown/interaction/clamp'
 
 
@@ -642,18 +642,6 @@ export function useCanonicalScroller({
       }
       requestAnimationFrame(step)
     }
-    const landOnDocumentEndAfterJourney = () => {
-      const waitForArrival = () => {
-        const el = scrollerRef.current
-        if (!el) return
-        if (isSmoothScrollActive(el)) {
-          requestAnimationFrame(waitForArrival)
-          return
-        }
-        landOnDocumentEnd()
-      }
-      requestAnimationFrame(waitForArrival)
-    }
 
     // A journey already in flight. A second click cannot become a second
     // journey: the thumb is stretched across the first one, so the new one
@@ -684,7 +672,7 @@ export function useCanonicalScroller({
         const startThumbTopPx = thumbTopRef.current
         const timing = position.travelToRatio(ratio)
         if (timing) rubberBand.start(timing, startThumbTopPx, clampedTop)
-        if (aimedAtEnd) landOnDocumentEndAfterJourney()
+        if (aimedAtEnd) onSmoothScrollArrival(element, landOnDocumentEnd)
         return
       }
 

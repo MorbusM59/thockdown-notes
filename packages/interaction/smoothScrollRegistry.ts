@@ -25,6 +25,12 @@ export interface SmoothScrollAnimation {
 
 const activeAnimations = new WeakMap<HTMLElement, SmoothScrollAnimation>();
 
+/**
+ * Callbacks waiting for the travel in flight on a scroller to ARRIVE. Kept
+ * apart from the animation record, which its engine rewrites every frame.
+ */
+const arrivalWaiters = new WeakMap<HTMLElement, Array<() => void>>();
+
 /** The animation in flight on `scroller`, if any, from either engine. */
 export function activeSmoothScroll(scroller: HTMLElement): SmoothScrollAnimation | undefined {
   return activeAnimations.get(scroller);
@@ -35,9 +41,16 @@ export function registerSmoothScroll(scroller: HTMLElement, animation: SmoothScr
   activeAnimations.set(scroller, animation);
 }
 
-/** Forgets an animation that finished on its own; its owner has already cleaned up. */
+/**
+ * Forgets an animation that finished on its own; its owner has already cleaned
+ * up. This is the one place a travel ARRIVES, so it runs the arrival waiters.
+ */
 export function unregisterSmoothScroll(scroller: HTMLElement): void {
   activeAnimations.delete(scroller);
+  const waiters = arrivalWaiters.get(scroller);
+  if (!waiters) return;
+  arrivalWaiters.delete(scroller);
+  for (const waiter of waiters) waiter();
 }
 
 /** Stops whatever travel is moving `scroller`, whichever engine started it. */
@@ -48,6 +61,27 @@ export function cancelSmoothScroll(scroller: HTMLElement): void {
   current.onCancel?.();
   current.releaseScrollBehavior();
   activeAnimations.delete(scroller);
+  // A cancelled travel did not arrive: whatever stopped it (the reader's own
+  // input, an instant landing, a journey to somewhere else) has superseded
+  // anything that was waiting for its destination.
+  arrivalWaiters.delete(scroller);
+}
+
+/**
+ * Runs `onArrive` once the travel now in flight on `scroller` lands on its
+ * target, or at once when nothing is travelling (an instant landing, a no-op,
+ * reduced motion). It is dropped, never run, when the travel is cancelled.
+ * Both engines register their first frame synchronously when a travel starts,
+ * so asking straight after starting one waits for that travel.
+ */
+export function onSmoothScrollArrival(scroller: HTMLElement, onArrive: () => void): void {
+  if (!activeAnimations.has(scroller)) {
+    onArrive();
+    return;
+  }
+  const waiters = arrivalWaiters.get(scroller);
+  if (waiters) waiters.push(onArrive);
+  else arrivalWaiters.set(scroller, [onArrive]);
 }
 
 /**
