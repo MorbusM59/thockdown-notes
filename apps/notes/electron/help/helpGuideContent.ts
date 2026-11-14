@@ -407,13 +407,13 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Search](#search)
 
 > **Where?**
-> The search field at the top of the sidebar, in the Notes view. (In the Find view the same field searches inside the open note instead, in the Music Library it filters the songs, and in the options it filters the settings down to the ones that mention your term; its X clears it.)
+> The search field at the top of the sidebar, in the Notes view. (In the Find view the same field searches inside the open note instead, in the Music Library it filters the songs, and in the options it filters the settings down to the ones that mention your term.) The button at the field's end is its Enter while you type, and clears the field once you have left it.
 
 *Filters your notes by title, content, filename, or tag as you type.*
 
 - Plain text matches a note's title, filename, content, and tags.
 - Prefixing the query with \`#\` searches tags only — \`#project\` matches any note tagged \`project\`, or with \`project\` anywhere in a tag name.
-- The \`Aa\` button toggles case-sensitive matching.
+- **Match case**, docked below the list, toggles case-sensitive matching.
 `,
   `## Split View & Tabs
 
@@ -650,10 +650,11 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Finds and optionally replaces text within the single open note.*
 
-- \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode.
+- \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode, or the dock's **Replace...** below the list.
+- \`Enter\` in the find field (or, in replace mode, the replace field) marks the first match.
 - \`Tab\` moves between the find and replace fields.
-- \`Ctrl+Enter\` replaces every match at once, and so does a right-click on the sidebar's Find icon.
-- The \`Aa\` toggle means "case-sensitive" in plain find mode; in replace mode it's repurposed as "keep case," searching case-insensitively but re-casing each replacement to match what it's replacing.
+- \`Ctrl+Enter\` replaces every match at once, as do the dock's **Replace all** and a right-click on the sidebar's Find icon; **Replace** replaces the marked match, or marks the next one.
+- The dock's **Match case** means "case-sensitive" in plain find mode; in replace mode it reads **Keep case**, searching case-insensitively but re-casing each replacement to match what it's replacing.
 - What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,

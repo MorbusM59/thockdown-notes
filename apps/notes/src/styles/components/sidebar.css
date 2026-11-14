@@ -212,11 +212,11 @@
 .search-box .search-input-field:focus    { border-color: var(--color-border-light-30); }
 .search-box .search-input-field:disabled { opacity: 0.75;}
 
-.search-box .search-input-field.has-case-toggle {
+.search-box .search-input-field.has-field-action {
   padding-right: calc(var(--btn-square-regular-size) + var(--spacing-regular) * 2);
 }
 
-.search-input-case-toggle {
+.search-input-action {
   position: absolute;
   margin: var(--spacing-regular);
   top:      0;

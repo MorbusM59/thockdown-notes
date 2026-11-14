@@ -700,6 +700,11 @@
   column-gap: var(--spacing-small);
 }
 
+/* A lone text button in a dock row takes the whole row. */
+.options-music-set-list-dock-row > .text-button.is-wide {
+  grid-column: 1 / -1;
+}
+
 /* An icon in a micro cell leaves the cell's frame visible around it, as the
    colour picker's channel letters do; a set's initials are two glyphs. */
 .options-curve-cell > .fa-solid {

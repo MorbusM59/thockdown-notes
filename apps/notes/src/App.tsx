@@ -179,6 +179,7 @@ import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
 import { TextButton } from './components/TextButton'
+import { FieldActionButton } from './components/FieldActionButton'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -6457,6 +6458,49 @@ ${markdownHtml}
   }, [sidebarMode, iconPickView])
   const isSoundscapesSearchMode = sidebarMode === 'soundscapes'
   const isReplaceMode = isFindMode && Boolean(activeSectionSnapshot?.isDocumentReplaceMode)
+  // The note lists' content search: every sidebar view whose field is not a
+  // find, an options/soundscape search, a song filter or an icon filter.
+  const isNoteSearchMode = !isFindMode && !isOptionsSearchMode && !isIconPickMode && !isSongsSearchMode && !isSoundscapesSearchMode
+
+  // Which of the search bar's two fields holds the keyboard: their action
+  // buttons (FieldActionButton) are an Enter while it does and a clear while
+  // it does not.
+  const sidebarSearchValue = isFindMode ? (activeSectionSnapshot?.documentFindQuery ?? '') : isIconPickMode ? iconPickQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery
+  const [focusedSidebarField, setFocusedSidebarField] = useState<'search' | 'replace' | null>(null)
+
+  /**
+   * SUBMITTING a search-bar field, by the Enter key or by its action button:
+   * the one definition, so the two cannot differ. Enter in the field the
+   * panel is waiting on -- the find field in Find, the replace field in Find
+   * & Replace -- marks the first hit, which is a card press on hit 1 and goes
+   * the same way in both views. The field is then left NOW, in either view:
+   * scheduling the editor's focus alone left the keyboard in the field
+   * whenever that schedule declined (the reader view, a slot with no note).
+   * Blurred, the focus reconciler hands the keyboard to the active slot's
+   * surface; the editor's own schedule still follows for the edit view.
+   */
+  const submitSidebarField = useCallback((field: 'search' | 'replace') => {
+    const section = getActiveSection()
+    const input = field === 'replace' ? documentReplaceInputRef.current : sidebarSearchInputRef.current
+    const firstHit = (field === 'search' && isFindMode && !isReplaceMode) || (field === 'replace' && isReplaceMode)
+      ? section?.documentFindHits[0]
+      : undefined
+    if (firstHit) section?.handleJumpToDocumentFindHit(firstHit)
+    if (input && document.activeElement === input) input.blur()
+    section?.scheduleFocusEditorInEditMode()
+  }, [getActiveSection, isFindMode, isReplaceMode])
+
+  /** CLEARING a search-bar field from its action button: the keyboard stays where it is. */
+  const clearSidebarField = useCallback((field: 'search' | 'replace') => {
+    const section = getActiveSection()
+    if (field === 'replace') section?.setDocumentReplaceQuery('')
+    else if (isFindMode) section?.setDocumentFindQuery('')
+    else if (isIconPickMode) setIconPickQuery('')
+    else if (isOptionsSearchMode) setOptionsSearchQuery('')
+    else if (isSongsSearchMode) setSongsSearchQuery('')
+    else if (isSoundscapesSearchMode) setSoundscapesSearchQuery('')
+    else setSearchQuery('')
+  }, [getActiveSection, isFindMode, isIconPickMode, isOptionsSearchMode, isSongsSearchMode, isSoundscapesSearchMode])
 
   // Ctrl+F / Ctrl+H ask for the find panel's keyboard before the panel they
   // asked for is necessarily on screen: the replace row appears only once the
@@ -7291,19 +7335,12 @@ ${markdownHtml}
         event.preventDefault()
         event.stopImmediatePropagation()
         if (event.key === 'Escape') escapeConsumedByFieldRef.current = true
-        // Enter in the field the panel is waiting on -- the find field in
-        // Find, the replace field in Find & Replace -- marks the first hit,
-        // which is a card press on hit 1 and goes the same way in both views.
-        const firstHit = event.key === 'Enter'
-          && ((isSearchField && isFindMode && !isReplaceMode) || (isReplaceField && isReplaceMode))
-          ? activeSection?.documentFindHits[0]
-          : undefined
-        if (firstHit) activeSection?.handleJumpToDocumentFindHit(firstHit)
-        // Leave the field NOW, in either view: scheduling the editor's focus
-        // alone left the keyboard in the field whenever that schedule
-        // declined (the reader view, a slot with no note). Blurred, the focus
-        // reconciler hands the keyboard to the active slot's surface, whatever
-        // that is; the editor's own schedule still follows for the edit view.
+        if (event.key === 'Enter' && (isSearchField || isReplaceField)) {
+          submitSidebarField(isReplaceField ? 'replace' : 'search')
+          return
+        }
+        // Leave the field NOW (see submitSidebarField for why the editor's
+        // scheduled focus alone is not enough).
         if (document.activeElement === target) target?.blur()
         activeSection?.scheduleFocusEditorInEditMode()
         return
@@ -7620,6 +7657,7 @@ ${markdownHtml}
     isFindMode,
     isImmersiveMode,
     isReplaceMode,
+    submitSidebarField,
     takePendingFindFocus,
     isSidebarShown,
     isVisualizerMode,
@@ -8045,66 +8083,54 @@ ${markdownHtml}
             >
               <div className="search-box" aria-label="Search panel">
                 <div className={`search-input-shell${isReplaceMode ? ' search-replace-row' : ''}`}>
-                {isReplaceMode ? (
-                  <div className="search-input-shell search-replace-find-shell">
-                    <input
-                      className="search-input-field"
-                      ref={sidebarSearchInputRef}
-                      type="text"
-                      spellCheck={false}
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      placeholder="Find..."
-                      value={activeSection?.documentFindQuery ?? ''}
-                      onChange={(event) => getActiveSection()?.setDocumentFindQuery(event.target.value)}
-                      onBlur={() => {
-                        window.setTimeout(() => {
-                          if (!isTextEntryElement(document.activeElement)) {
-                            getActiveSection()?.scheduleFocusEditorInEditMode()
-                          }
-                        }, 0)
-                      }}
-                    />
-                  </div>
-                ) : (
-                <input
-                  className="search-input-field has-case-toggle"
-                  ref={sidebarSearchInputRef}
-                  type="text"
-                  spellCheck={false}
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  placeholder={isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isIconPickMode ? 'Filter icons...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : isSoundscapesSearchMode ? 'Search soundscape options...' : 'Search for content or #tag...'}
-                  value={isFindMode ? (activeSection?.documentFindQuery ?? '') : isIconPickMode ? iconPickQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery}
-                  onChange={(event) => {
-                    const value = event.target.value
-                    if (isFindMode) {
-                      getActiveSection()?.setDocumentFindQuery(value)
-                    } else if (isIconPickMode) {
-                      setIconPickQuery(value)
-                    } else if (isOptionsSearchMode) {
-                      setOptionsSearchQuery(value)
-                    } else if (isSongsSearchMode) {
-                      setSongsSearchQuery(value)
-                    } else if (isSoundscapesSearchMode) {
-                      setSoundscapesSearchQuery(value)
-                    } else {
-                      setSearchQuery(value)
-                    }
-                  }}
-                  onBlur={() => {
-                    window.setTimeout(() => {
-                      if (!isTextEntryElement(document.activeElement)) {
-                        getActiveSection()?.scheduleFocusEditorInEditMode()
+                <div className={isReplaceMode ? 'search-input-shell search-replace-find-shell' : 'search-input-shell'}>
+                  <input
+                    className="search-input-field has-field-action"
+                    ref={sidebarSearchInputRef}
+                    type="text"
+                    spellCheck={false}
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    placeholder={isReplaceMode ? 'Find...' : isFindMode ? 'Find in current note...' : isOptionsSearchMode ? 'Search options...' : isIconPickMode ? 'Filter icons...' : isSongsSearchMode ? 'Filter songs, $artist, §album or #title...' : isSoundscapesSearchMode ? 'Search soundscape options...' : 'Search for content or #tag...'}
+                    value={sidebarSearchValue}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      if (isFindMode) {
+                        getActiveSection()?.setDocumentFindQuery(value)
+                      } else if (isIconPickMode) {
+                        setIconPickQuery(value)
+                      } else if (isOptionsSearchMode) {
+                        setOptionsSearchQuery(value)
+                      } else if (isSongsSearchMode) {
+                        setSongsSearchQuery(value)
+                      } else if (isSoundscapesSearchMode) {
+                        setSoundscapesSearchQuery(value)
+                      } else {
+                        setSearchQuery(value)
                       }
-                    }, 0)
-                  }}
-                />
-                )}
+                    }}
+                    onFocus={() => setFocusedSidebarField('search')}
+                    onBlur={() => {
+                      setFocusedSidebarField(null)
+                      window.setTimeout(() => {
+                        if (!isTextEntryElement(document.activeElement)) {
+                          getActiveSection()?.scheduleFocusEditorInEditMode()
+                        }
+                      }, 0)
+                    }}
+                  />
+                  <FieldActionButton
+                    className="btn-icon search-input-action"
+                    isFieldFocused={focusedSidebarField === 'search'}
+                    hasValue={sidebarSearchValue !== ''}
+                    onSubmit={() => submitSidebarField('search')}
+                    onClear={() => clearSidebarField('search')}
+                  />
+                </div>
                 {isReplaceMode ? (
                   <div className="search-input-shell search-replace-replace-shell">
                     <input
-                      className="search-input-field has-case-toggle"
+                      className="search-input-field has-field-action"
                       ref={documentReplaceInputRef}
                       type="text"
                       spellCheck={false}
@@ -8113,7 +8139,9 @@ ${markdownHtml}
                       placeholder="Replace..."
                       value={activeSection?.documentReplaceQuery ?? ''}
                       onChange={(event) => getActiveSection()?.setDocumentReplaceQuery(event.target.value)}
+                      onFocus={() => setFocusedSidebarField('replace')}
                       onBlur={() => {
+                        setFocusedSidebarField(null)
                         window.setTimeout(() => {
                           if (!isTextEntryElement(document.activeElement)) {
                             getActiveSection()?.scheduleFocusEditorInEditMode()
@@ -8121,54 +8149,15 @@ ${markdownHtml}
                         }, 0)
                       }}
                     />
-                    <button
-                      type="button"
-                      className={`btn-icon search-input-case-toggle${activeSection?.isDocumentFindCaseSensitive ? ' is-active' : ''}`}
-                      aria-pressed={activeSection?.isDocumentFindCaseSensitive}
-                      data-tooltip="Keep case"
-                      /* mouse-default: focus semantics, read by focusOwnership on mousedown */
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
-                    >
-                      Aa
-                    </button>
+                    <FieldActionButton
+                      className="btn-icon search-input-action"
+                      isFieldFocused={focusedSidebarField === 'replace'}
+                      hasValue={(activeSection?.documentReplaceQuery ?? '') !== ''}
+                      onSubmit={() => submitSidebarField('replace')}
+                      onClear={() => clearSidebarField('replace')}
+                    />
                   </div>
-                ) : (isOptionsSearchMode || isIconPickMode || isSongsSearchMode || isSoundscapesSearchMode) ? (
-                  // The options search and the song filter are never case
-                  // sensitive, so the toggle's place goes to clearing the
-                  // term: back to the whole panel without reaching for the
-                  // keyboard.
-                  <button
-                    type="button"
-                    className="btn-icon search-input-case-toggle"
-                    data-tooltip="Clear search"
-                    aria-label="Clear search"
-                    disabled={(isIconPickMode ? iconPickQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : optionsSearchQuery) === ''}
-                    /* mouse-default: focus semantics, read by focusOwnership on mousedown */
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => (isIconPickMode ? setIconPickQuery('') : isSongsSearchMode ? setSongsSearchQuery('') : isSoundscapesSearchMode ? setSoundscapesSearchQuery('') : setOptionsSearchQuery(''))}
-                  >
-                    <span className="fa-solid fa-xmark" aria-hidden="true" />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={`btn-icon search-input-case-toggle${(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive) ? ' is-active' : ''}`}
-                    aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
-                    data-tooltip="Match letter case"
-                    /* mouse-default: focus semantics, read by focusOwnership on mousedown */
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => {
-                      if (isFindMode) {
-                        getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)
-                      } else {
-                        setIsSearchQueryCaseSensitive((previous) => !previous)
-                      }
-                    }}
-                  >
-                    Aa
-                  </button>
-                )}
+                ) : null}
                 </div>
               </div>
 
@@ -8661,30 +8650,61 @@ ${markdownHtml}
                       <SoundscapeDock preferences={soundscapePreferences} onChange={setSoundscapePreferences} />
                     </div>
                   ) : null}
-                  {isReplaceMode ? (
-                    // Find & Replace's two actions, docked in the Music
-                    // Library's box and row.
+                  {isFindMode || isNoteSearchMode ? (
+                    // The search's options, docked below the list in the
+                    // Music Library dock's box and rows: what used to sit in
+                    // the field (letter case), the way into Find & Replace,
+                    // and -- in Find & Replace -- its two actions.
                     <div className="sidebar-color-picker-dock">
                       <div className="sidebar-content-texture" />
                       <div className="sidebar-color-picker-dock-content">
-                        <section className="options-section sidebar-options-section" aria-label="Replace controls">
+                        <section className="options-section sidebar-options-section" aria-label="Search options">
                           <div className="sidebar-options-accordion is-headerless">
                             <div className="sidebar-options-accordion-body">
                               <div className="options-curve-rows options-music-set-list-dock">
                                 <div className="options-curve-row options-music-set-list-dock-row">
+                                  {isFindMode ? (
+                                    <TextButton
+                                      aria-pressed={isReplaceMode}
+                                      isActive={isReplaceMode}
+                                      data-tooltip={isReplaceMode ? 'Back to find only' : 'Find and replace'}
+                                      onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
+                                    >
+                                      Replace...
+                                    </TextButton>
+                                  ) : null}
                                   <TextButton
-                                    data-tooltip="Replace the marked occurrence"
-                                    onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
+                                    className={isFindMode ? undefined : 'is-wide'}
+                                    aria-pressed={isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive}
+                                    isActive={Boolean(isFindMode ? activeSection?.isDocumentFindCaseSensitive : isSearchQueryCaseSensitive)}
+                                    data-tooltip={isReplaceMode ? 'Re-case each replacement to match what it replaces' : 'Match letter case'}
+                                    onClick={() => {
+                                      if (isFindMode) {
+                                        getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)
+                                      } else {
+                                        setIsSearchQueryCaseSensitive((previous) => !previous)
+                                      }
+                                    }}
                                   >
-                                    Replace
-                                  </TextButton>
-                                  <TextButton
-                                    data-tooltip="Replace every occurrence"
-                                    onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
-                                  >
-                                    Replace all
+                                    {isReplaceMode ? 'Keep case' : 'Match case'}
                                   </TextButton>
                                 </div>
+                                {isReplaceMode ? (
+                                  <div className="options-curve-row options-music-set-list-dock-row">
+                                    <TextButton
+                                      data-tooltip="Replace the marked occurrence"
+                                      onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
+                                    >
+                                      Replace
+                                    </TextButton>
+                                    <TextButton
+                                      data-tooltip="Replace every occurrence"
+                                      onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
+                                    >
+                                      Replace all
+                                    </TextButton>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           </div>

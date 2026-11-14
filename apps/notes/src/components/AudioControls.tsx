@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { FieldActionButton } from './FieldActionButton'
 import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
 import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
@@ -1179,27 +1180,49 @@ export const AudioControls = memo(function AudioControls({
  */
 function MusicBarFilter() {
   const filter = useSyncExternalStore(subscribePoolFilterDraft, readShownPoolFilter)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [isFocused, setIsFocused] = useState(false)
   return (
-    <input
-      className="audio-filter-field"
-      type="text"
-      value={filter.query}
-      aria-label="Filter songs"
-      spellCheck={false}
-      autoComplete="off"
-      autoFocus
-      onChange={(event) => setPoolFilterDraft({ query: event.currentTarget.value })}
-      onBlur={commitPoolFilterDraft}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === 'Tab') {
-          event.preventDefault()
-          event.currentTarget.blur()
-        } else if (event.key === 'Escape') {
-          event.preventDefault()
+    <>
+      <input
+        ref={inputRef}
+        className="audio-filter-field"
+        type="text"
+        value={filter.query}
+        aria-label="Filter songs"
+        spellCheck={false}
+        autoComplete="off"
+        autoFocus
+        onChange={(event) => setPoolFilterDraft({ query: event.currentTarget.value })}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => {
+          setIsFocused(false)
+          commitPoolFilterDraft()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === 'Tab') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          } else if (event.key === 'Escape') {
+            event.preventDefault()
+            setPoolFilterDraft(EMPTY_POOL_FILTER)
+            event.currentTarget.blur()
+          }
+        }}
+      />
+      {/* The row's sixth column: the field's Enter while it is being typed
+          in, and clearing the applied filter (committed at once, the field
+          left alone) while it is not. */}
+      <FieldActionButton
+        className="audio-ctrl-btn"
+        isFieldFocused={isFocused}
+        hasValue={filter.query !== ''}
+        onSubmit={() => inputRef.current?.blur()}
+        onClear={() => {
           setPoolFilterDraft(EMPTY_POOL_FILTER)
-          event.currentTarget.blur()
-        }
-      }}
-    />
+          commitPoolFilterDraft()
+        }}
+      />
+    </>
   )
 }

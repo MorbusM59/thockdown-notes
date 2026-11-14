@@ -87,9 +87,10 @@
   min-width:   0;
 }
 
-/* The pool filter: the whole second row, a button's height. */
+/* The pool filter: the second row but its last column, which holds the field's
+   action button (FieldActionButton); a button's height. */
 .audio-filter-field {
-  grid-column:   1 / -1;
+  grid-column:   1 / -2;
   min-width:     0;
   height:        var(--audio-btn-size);
   padding:       0 var(--spacing-regular);
