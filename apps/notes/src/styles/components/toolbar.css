@@ -793,9 +793,10 @@
 }
 
 /* THE PAGER (components/Pager.tsx): arrows and a readout in one box, the
-   parts at least --spacing-regular apart and sharing the rest evenly. */
+   outer arrows at its ends (a --spacing-regular in) and the parts spread
+   evenly over the width between. */
 .pager {
-  justify-content: space-evenly;
+  justify-content: space-between;
   gap:             var(--spacing-regular);
   padding:         0 var(--spacing-regular);
   min-width:       0;

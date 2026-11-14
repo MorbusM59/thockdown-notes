@@ -8340,7 +8340,7 @@ ${markdownHtml}
                         })}
                         {activeSection?.isDocumentFindTruncated && effectiveFindPage === findTotalPages ? (
                           <div className="notes-empty-state">
-                            {`Only the first ${MAX_FIND_HITS.toLocaleString()} matches are listed.`}
+                            {`Only the first ${MAX_FIND_HITS} matches are listed.`}
                           </div>
                         ) : null}
                         {(activeSection?.documentFindHits.length ?? 0) === 0 ? (

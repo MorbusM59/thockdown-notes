@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 
+/** The largest number the readout writes out; anything larger reads "many". */
+export const PAGER_MAX_FIGURE = 9999
+
 /**
  * One axis a pager moves along: the hits of a search, or the pages of a list.
  * Positions are 0-based here and shown 1-based.
@@ -9,7 +12,7 @@ export interface PagerAxis {
   /** Where on the axis we are, or null when nowhere (no hit marked yet). */
   current: number | null
   total: number
-  /** The total is a lower bound: more exist than are counted ("10,000+"). */
+  /** More exist than are counted: the total reads "many". */
   isTotalOpen?: boolean
   /** Go to a position, already clamped to the axis. */
   onGo: (position: number) => void
@@ -29,11 +32,11 @@ export interface PagerAxis {
  * each arrow only where its axis is given. A press steps; holding the press
  * goes to the first or last item, the same hold every other press-and-hold
  * here uses (`armHold`). The readout shows `n | N` for one axis and
- * `n[p] | N[P]` for both, and a right-click turns it into a field: the
+ * `n [p] | N [P]` for both, and a right-click turns it into a field: the
  * number typed is a hit when hits are shown, else a page.
  *
- * It fills the width it is given: the parts keep at least
- * `--spacing-regular` between them and share whatever is left evenly, so it
+ * It fills the width it is given: the page arrows sit at its two ends, a
+ * `--spacing-regular` in, and the parts between share the rest evenly, so it
  * can be a whole dock row or a slim part of one.
  */
 export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: PagerAxis; className?: string }) {
@@ -48,10 +51,13 @@ export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: Pa
   }, [draft === null])
 
   const entryAxis = hits ?? pages
-  const show = (axis: PagerAxis) => (axis.current === null ? '-' : (axis.current + 1).toLocaleString())
-  const showTotal = (axis: PagerAxis) => `${axis.total.toLocaleString()}${axis.isTotalOpen ? '+' : ''}`
+  // Plain figures, no thousands separator; past four digits a number reads
+  // "many", which keeps the readout one width however large the list.
+  const figure = (value: number) => (value > PAGER_MAX_FIGURE ? 'many' : String(value))
+  const show = (axis: PagerAxis) => (axis.current === null ? '-' : figure(axis.current + 1))
+  const showTotal = (axis: PagerAxis) => (axis.isTotalOpen ? 'many' : figure(axis.total))
   const readout = hits && pages
-    ? `${show(hits)}[${show(pages)}] | ${showTotal(hits)}[${showTotal(pages)}]`
+    ? `${show(hits)} [${show(pages)}] | ${showTotal(hits)} [${showTotal(pages)}]`
     : entryAxis
       ? `${show(entryAxis)} | ${showTotal(entryAxis)}`
       : ''
