@@ -939,7 +939,7 @@
   font-size:      calc(9px * var(--ui-font-scale));
   font-weight:    600;
   line-height:    1;
-  color:          var(--color-text-80);
+  color:          var(--canonical-handle-border);
   white-space:    nowrap;
   pointer-events: none;
   font-variant-numeric: tabular-nums;
