@@ -11,9 +11,9 @@ import { choose, enterEntryScreen, type DirectorDeps } from '../src/adventure/co
 import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '@thockdown/soundscape/soundscape'
-import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES } from '../src/shared/keystrokeSounds'
+import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES, FACTORY_KEYSTROKE_SOUNDS } from '../src/shared/keystrokeSounds'
 import { DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE } from '../src/shared/soundstages'
-import { DEFAULT_FLASH_SHAPE_PREFERENCES, DEFAULT_FLASHING_SETTINGS } from '../src/shared/flashing'
+import { DEFAULT_FLASH_SHAPE_PREFERENCES, FACTORY_FLASH_SHAPES, FLASH_MATCHING_DEFAULT } from '../src/shared/flashing'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and
@@ -375,16 +375,22 @@ describe('StateService app-state field round-trip', () => {
     expect((await new StateService(dataRoot).loadAppState()).menu?.features).toEqual(features)
   })
 
-  it('persists the live keystroke sounds and their presets across a save -> fresh-instance load', async () => {
+  it('persists the keystroke sound presets and the flashing presets across a save -> fresh-instance load', async () => {
     const base = { sidebarMode: 'date' as const, selectedMonths: [], selectedYears: [], searchQuery: '' }
     const channel = (on: boolean, volume: number, jitter: number, pitch = 0) => ({ on, volume, jitter, pitch })
     const channels = { pops: channel(false, 0.5, 0), pins: channel(true, 0.4, 0.1), creamy: channel(false, 0.5, 0), forge: channel(true, 0.8, 0.02, -35), bass: channel(true, 0.3, 0.05), treble: channel(false, 0.2, 0) }
     const keystrokeSound = { channels, volume: 0.7, variance: 0.1, pitch: -20, reverb: 0.3, room: 0.6, spatial: 40 }
-    const keystrokeSoundPresets = { unsaved: keystrokeSound, saved: [{ id: 'k1', settings: { ...keystrokeSound, channels: { ...channels, pops: channel(true, 0.9, 0.3) } } }] }
-    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, keystrokeSound, keystrokeSoundPresets } })
+    const keystrokeSoundPresets = {
+      activeId: 'k1',
+      custom: [{ id: 'k1', name: 'Mine', icon: 'fa-keyboard', settings: keystrokeSound }],
+      factoryEdits: [{ id: FACTORY_KEYSTROKE_SOUNDS[2].id, name: 'Renamed', icon: null, settings: { ...keystrokeSound, channels: { ...channels, pops: channel(true, 0.9, 0.3) } } }],
+    }
+    const flashingPresets = { activeId: 'blink', custom: [], factoryEdits: [{ ...FACTORY_FLASH_SHAPES[5], settings: { ...FACTORY_FLASH_SHAPES[5].settings, cycleMs: 2500 } }] }
+    await new StateService(dataRoot).saveAppState({ selectedNoteId: null, menu: { ...base, keystrokeSoundPresets, flashingPresets, flashMatching: 5 } })
     const menu = (await new StateService(dataRoot).loadAppState()).menu
-    expect(menu?.keystrokeSound).toEqual(keystrokeSound)
     expect(menu?.keystrokeSoundPresets).toEqual(keystrokeSoundPresets)
+    expect(menu?.flashingPresets).toEqual(flashingPresets)
+    expect(menu?.flashMatching).toBe(5)
   })
 
   it('persists the options panel\'s selected section, and reads anything else as General', async () => {
@@ -535,7 +541,8 @@ describe('StateService app-state field round-trip', () => {
         renderScrollTotalTimeSec: 3,
         keystrokeSoundPresets: {
           ...DEFAULT_KEYSTROKE_SOUND_PREFERENCES,
-          saved: [{ id: 'my-keystrokes', settings: DEFAULT_KEYSTROKE_SOUND_PREFERENCES.unsaved }],
+          activeId: 'my-keystrokes',
+          custom: [{ id: 'my-keystrokes', name: 'Mine', icon: null, settings: FACTORY_KEYSTROKE_SOUNDS[0].settings }],
         },
         musicSoundstages: {
           ...DEFAULT_SOUNDSTAGE_PREFERENCES,
@@ -549,10 +556,10 @@ describe('StateService app-state field round-trip', () => {
           enabled: true,
           customPresets: [savedSoundscape],
         },
-        flashing: { ...DEFAULT_FLASHING_SETTINGS, cycleMs: 2500 },
+        flashMatching: 0,
         flashingPresets: {
           ...DEFAULT_FLASH_SHAPE_PREFERENCES,
-          saved: [{ id: 'my-flash', shape: DEFAULT_FLASH_SHAPE_PREFERENCES.unsaved }],
+          custom: [{ id: 'my-flash', name: 'Mine', icon: null, settings: FACTORY_FLASH_SHAPES[0].settings }],
         },
       },
     })
@@ -577,9 +584,10 @@ describe('StateService app-state field round-trip', () => {
     expect(loaded.menu?.musicSoundstages?.custom.map((stage) => stage.id)).toEqual(['my-stage'])
     expect(loaded.menu?.musicSoundstages?.activeId).toBe('neutral')
     expect(loaded.menu?.musicSoundstages?.factoryEdits).toEqual([])
-    expect(loaded.menu?.keystrokeSoundPresets?.saved.map((preset) => preset.id)).toEqual(['my-keystrokes'])
-    expect(loaded.menu?.flashing).toEqual(DEFAULT_FLASHING_SETTINGS)
-    expect(loaded.menu?.flashingPresets?.saved.map((preset) => preset.id)).toEqual(['my-flash'])
+    expect(loaded.menu?.keystrokeSoundPresets?.custom.map((preset) => preset.id)).toEqual(['my-keystrokes'])
+    expect(loaded.menu?.keystrokeSoundPresets?.activeId).toBe(DEFAULT_KEYSTROKE_SOUND_PREFERENCES.activeId)
+    expect(loaded.menu?.flashMatching).toBe(FLASH_MATCHING_DEFAULT)
+    expect(loaded.menu?.flashingPresets?.custom.map((preset) => preset.id)).toEqual(['my-flash'])
   })
 
   it('clearAppState preserves saved presets from the live menu snapshot', async () => {

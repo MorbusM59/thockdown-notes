@@ -159,16 +159,26 @@ export function AccordionGroup({ children, filter = '' }: { children: ReactNode,
  * lists remember theirs across restarts -- and a press only ASKS, through
  * `onRequestOpenChange(open, exclusive)`, `exclusive` being the left press's
  * "and close the others". The fold then animates to whatever `open` becomes.
+ * A controlled fold inside an AccordionGroup takes part in it like any
+ * other: its own left press closes its siblings, and a sibling's (or the
+ * group's search) closing or opening it is passed on to the owner as a
+ * request, so the owner's state is never left saying open over a fold the
+ * group closed.
  */
 interface FoldControl {
   open?: boolean
   onRequestOpenChange?: (open: boolean, exclusive: boolean) => void
+  /**
+   * A right press does what a left press does (opens this fold and closes
+   * its siblings), for a section whose folds must never be open together.
+   */
+  exclusive?: boolean
   /** Uncontrolled only: open on mount. */
   defaultOpen?: boolean
   onOpenChange?: (open: boolean) => void
 }
 
-function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = false, onOpenChange }: FoldControl, lazy = false) {
+function useFold({ open: controlledOpen, onRequestOpenChange, exclusive = false, defaultOpen = false, onOpenChange }: FoldControl, lazy = false) {
   const id = useId()
   const group = useContext(AccordionGroupContext)
   const isControlled = controlledOpen !== undefined
@@ -271,11 +281,17 @@ function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = fals
   // Register with the group once; the handle reads the latest open/close.
   const openCloseRef = useRef({ open, close })
   openCloseRef.current = { open, close }
+  // What the group asks of this fold: done at once when the fold keeps its
+  // own state, asked of the owner when it does not.
+  const groupRequestRef = useRef({ open, close })
+  groupRequestRef.current = isControlled
+    ? { open: () => { if (!controlledOpen) onRequestOpenChange?.(true, false) }, close: () => { if (controlledOpen) onRequestOpenChange?.(false, false) } }
+    : { open, close }
   useLayoutEffect(() => {
     if (!group || !sectionRef.current || !summaryRef.current || !contentRef.current) return
     group.register(id, {
-      open: () => openCloseRef.current.open(),
-      close: () => openCloseRef.current.close(),
+      open: () => groupRequestRef.current.open(),
+      close: () => groupRequestRef.current.close(),
       section: sectionRef.current,
       heading: summaryRef.current,
       body: contentRef.current,
@@ -307,6 +323,7 @@ function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = fals
   const handleClick = useCallback((e: MouseEvent<HTMLElement>) => {
     e.preventDefault()
     if (isControlled) {
+      if (!settlesOpen) group?.closeOthers(id)
       onRequestOpenChange?.(!settlesOpen, !settlesOpen)
       return
     }
@@ -319,6 +336,10 @@ function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = fals
   }, [isControlled, onRequestOpenChange, settlesOpen, isOpen, close, open, group, id])
 
   const handleContextMenu = useCallback((e: MouseEvent<HTMLElement>) => {
+    if (exclusive) {
+      handleClick(e)
+      return
+    }
     e.preventDefault()
     if (isControlled) {
       onRequestOpenChange?.(!settlesOpen, false)
@@ -326,7 +347,7 @@ function useFold({ open: controlledOpen, onRequestOpenChange, defaultOpen = fals
     }
     if (isOpen) close()
     else open()
-  }, [isControlled, onRequestOpenChange, settlesOpen, isOpen, close, open])
+  }, [exclusive, handleClick, isControlled, onRequestOpenChange, settlesOpen, isOpen, close, open])
 
   return { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu }
 }

@@ -1,7 +1,7 @@
 import type { PlaylistSlot } from '../../shared/audioPlayer'
 
 /**
- * The ICON PICKER: while it is open for an entry (a music set, a soundscape, a soundstage, a layout),
+ * The ICON PICKER: while it is open for an entry (a music set, a soundscape, a soundstage, a keystroke sound, a flashing preset, a layout),
  * the entry's sidebar view shows every solid icon in place of its list, the
  * dock below stays to name the entry, and the sidebar's filter field filters
  * the icons. A module store, because what opens it (the entry's mark in its
@@ -16,6 +16,8 @@ export type IconPickTarget =
   | { kind: 'musicSet'; slot: PlaylistSlot }
   | { kind: 'soundscape'; id: string }
   | { kind: 'soundstage'; id: string }
+  | { kind: 'keystrokeSound'; id: string }
+  | { kind: 'flashing'; id: string }
   | { kind: 'layout'; id: number }
 
 export interface IconPick {
@@ -24,7 +26,7 @@ export interface IconPick {
 }
 
 /** The sidebar view an entry of each kind lives in. */
-export const ICON_PICK_VIEW = { musicSet: 'songs', soundscape: 'soundscapes', soundstage: 'options', layout: 'options' } as const satisfies Record<IconPickTarget['kind'], string>
+export const ICON_PICK_VIEW = { musicSet: 'songs', soundscape: 'soundscapes', soundstage: 'options', keystrokeSound: 'options', flashing: 'options', layout: 'options' } as const satisfies Record<IconPickTarget['kind'], string>
 
 export function sameIconPickTarget(a: IconPickTarget, b: IconPickTarget): boolean {
   if (a.kind === 'musicSet' || b.kind === 'musicSet') return a.kind === 'musicSet' && b.kind === 'musicSet' && a.slot === b.slot

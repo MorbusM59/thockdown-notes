@@ -25,9 +25,9 @@ import {
 import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
-import { DEFAULT_KEYSTROKE_SOUND, DEFAULT_KEYSTROKE_SOUND_PREFERENCES, KEYSTROKE_CHANNEL_IDS, cloneKeystrokeSound, matchingKeystrokeSound, sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings, unsavedKeystrokeSoundAfterEdit, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
-import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, FACTORY_SOUNDSTAGE_IDS, FACTORY_SOUNDSTAGES, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
-import { createPreset, editActivePreset, newPresetId, selectPreset } from '@thockdown/interaction/presetList'
+import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES, KEYSTROKE_CHANNEL_IDS, KEYSTROKE_SOUND_KIND, NEUTRAL_KEYSTROKE_SOUND, sanitizeKeystrokeSoundPreferences, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
+import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE, FACTORY_SOUNDSTAGE_IDS, FACTORY_SOUNDSTAGES, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { activePreset, createPreset, editActivePreset, newPresetId, selectPreset, type PresetList } from '@thockdown/interaction/presetList'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
@@ -54,7 +54,7 @@ import {
 } from './shared/sidebarSections'
 import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
 import { SoundscapeDock, SoundscapeIconPicker, SoundscapesView } from './sidebar/SoundscapesView'
-import { SoundstageDock, SoundstageIconPicker } from './sidebar/SoundstageOptions'
+import { PresetDock, PresetIconPicker } from './sidebar/PresetListControls'
 import { LayoutDock, LayoutIconPicker } from './sidebar/LayoutDock'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -137,15 +137,14 @@ import {
   CARET_HALO_BLUR_MIN_PX, CARET_HALO_BLUR_MAX_PX,
 } from '@thockdown/look/caretSettings'
 import {
-  DEFAULT_FLASHING_SETTINGS,
   DEFAULT_FLASH_SHAPE_PREFERENCES,
   FLASH_MATCHINGS,
-  cloneFlashShape,
+  FLASH_MATCHING_DEFAULT,
+  FLASH_SHAPE_KIND,
+  NEUTRAL_FLASH_SHAPE,
   flashLevels,
-  matchingFlashShape,
+  sanitizeFlashMatching,
   sanitizeFlashShapePreferences,
-  sanitizeFlashingSettings,
-  unsavedFlashShapeAfterEdit,
   type FlashShape,
   type FlashShapePreferences,
   type FlashingSettings,
@@ -172,7 +171,7 @@ import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedRead
 import { useBeatFeedback } from './beat/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
-import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId } from './shared/optionsSections'
+import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId, type PresetSubsectionId } from './shared/optionsSections'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
 import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from './sidebar/MusicLibraryPanel'
@@ -1318,6 +1317,10 @@ function App() {
   const [songsSearchQuery, setSongsSearchQuery] = useState('')
   const [soundscapesSearchQuery, setSoundscapesSearchQuery] = useState('')
   const [optionsSection, setOptionsSection] = useState<OptionsSectionId>(DEFAULT_OPTIONS_SECTION)
+  // Which preset subsection of Options is unfolded, if any: its dock shows
+  // while it is. Kept here rather than in the fold, so the subsection is
+  // still open when the panel comes back from the icon picker.
+  const [openPresetSubsection, setOpenPresetSubsection] = useState<PresetSubsectionId | null>(null)
   const [musicSetListGrouping, setMusicSetListGrouping] = useState<MusicSetListGrouping>(DEFAULT_MUSIC_SET_LIST_GROUPING)
   const musicLibrarySlot = useSyncExternalStore(subscribeMusicLibrarySlot, readMusicLibrarySlot)
   // Whether the options panel's Colors section is open, which docks its colour picker below the sidebar.
@@ -1354,29 +1357,17 @@ function App() {
   const [beatSettings, setBeatSettings] = useState<BeatSettings>(DEFAULT_BEAT_SETTINGS)
   // Global, not the layout's: how flashing elements (the caret's blink) flash,
   // and the presets of its shape (shared/flashing.ts). Options > Advanced >
-  // Animations > Flashing.
-  const [flashing, setFlashing] = useState<FlashingSettings>(DEFAULT_FLASHING_SETTINGS)
+  // Flashing.
+  const [flashMatching, setFlashMatching] = useState(FLASH_MATCHING_DEFAULT)
   const [flashShapePreferences, setFlashShapePreferences] = useState<FlashShapePreferences>(DEFAULT_FLASH_SHAPE_PREFERENCES)
-  const flashingRef = useRef(flashing)
-  flashingRef.current = flashing
-  // An EDIT of the shape (the curve or the cycle) becomes the unsaved preset; a selection does not.
+  // The live shape IS the active preset's; an edit is written into it.
+  const flashing = useMemo<FlashingSettings>(
+    () => ({ ...activePreset(FLASH_SHAPE_KIND, flashShapePreferences).settings, matching: flashMatching }),
+    [flashShapePreferences, flashMatching],
+  )
   const editFlashShape = useCallback((patch: Partial<FlashShape>) => {
-    const next = { ...flashingRef.current, ...patch }
-    flashingRef.current = next
-    setFlashing(next)
-    setFlashShapePreferences((previous) => unsavedFlashShapeAfterEdit(next, previous))
+    setFlashShapePreferences((previous) => editActivePreset(FLASH_SHAPE_KIND, previous, { ...activePreset(FLASH_SHAPE_KIND, previous).settings, ...patch }))
   }, [])
-  const applyFlashShape = useCallback((shape: FlashShape) => {
-    const next = { ...flashingRef.current, ...cloneFlashShape(shape) }
-    flashingRef.current = next
-    setFlashing(next)
-  }, [])
-  const setFlashMatching = useCallback((matching: number) => {
-    const next = { ...flashingRef.current, matching }
-    flashingRef.current = next
-    setFlashing(next)
-  }, [])
-  const activeFlashShape = useMemo(() => matchingFlashShape(flashing, flashShapePreferences), [flashing, flashShapePreferences])
   // One cycle sampled once per change of the curve: the free cycle's keyframes and the matched clock both read it.
   const flashCycleLevels = useMemo(() => flashLevels(flashing.curve), [flashing.curve])
   const flashCyclesPerBeat = FLASH_MATCHINGS[flashing.matching].cyclesPerBeat
@@ -2132,9 +2123,10 @@ function App() {
   const [filterContrast, setFilterContrast] = useState(1)
   const [filterSaturate, setFilterSaturate] = useState(1)
   const [filterColorize, setFilterColorize] = useState(0)
-  // Keystroke sounds: app-wide, with presets of their own (shared/keystrokeSounds.ts).
-  const [keystrokeSound, setKeystrokeSound] = useState<KeystrokeSoundSettings>(() => cloneKeystrokeSound(DEFAULT_KEYSTROKE_SOUND))
+  // Keystroke sounds: app-wide, a preset list of their own (shared/keystrokeSounds.ts);
+  // the live settings ARE the active preset's.
   const [keystrokeSoundPreferences, setKeystrokeSoundPreferences] = useState<KeystrokeSoundPreferences>(DEFAULT_KEYSTROKE_SOUND_PREFERENCES)
+  const keystrokeSound = useMemo(() => activePreset(KEYSTROKE_SOUND_KIND, keystrokeSoundPreferences).settings, [keystrokeSoundPreferences])
   useBeatFeedback(features.visualizer, beatSettings, visualizer, visualizerColors, flashClock, isVisualizerMode, uiMode)
   // The setting lives in a module store (the preview's img component and the
   // export read it there); App subscribes so the persisted snapshot follows it.
@@ -3126,7 +3118,6 @@ function App() {
       filterContrast,
       filterSaturate,
       filterColorize,
-      keystrokeSound,
       keystrokeSoundPresets: keystrokeSoundPreferences,
       musicVolume,
       musicReverbAmount,
@@ -3199,7 +3190,7 @@ function App() {
       spellCheckDictionaries,
       typingTrail: typingTrailSettings,
       beat: beatSettings,
-      flashing,
+      flashMatching,
       flashingPresets: flashShapePreferences,
       speedReading: speedReadingSettings,
       chapterBarMode: chapterBarModeRef.current,
@@ -3237,7 +3228,7 @@ function App() {
     spellCheckDictionaries,
     typingTrailSettings,
     beatSettings,
-    flashing,
+    flashMatching,
     flashShapePreferences,
     speedReadingSettings,
     allowRemoteImages,
@@ -3265,7 +3256,6 @@ function App() {
     wheelSpinCutoffMs,
     wheelStepRows,
     wheelStepLines,
-    keystrokeSound,
     keystrokeSoundPreferences,
     textureEnabled,
     glazeSettings,
@@ -5073,7 +5063,6 @@ ${markdownHtml}
             setFilterContrast(appState.menu.filterContrast ?? 1)
             setFilterSaturate(appState.menu.filterSaturate ?? 0.5)
             setFilterColorize(appState.menu.filterColorize ?? 0)
-            setKeystrokeSound(sanitizeKeystrokeSoundSettings(appState.menu.keystrokeSound))
             setKeystrokeSoundPreferences(sanitizeKeystrokeSoundPreferences(appState.menu.keystrokeSoundPresets))
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
@@ -5162,7 +5151,7 @@ ${markdownHtml}
             setTypingTrailSettings(sanitizeTypingTrailSettings(appState.menu.typingTrail))
             setSpeedReadingSettings(sanitizeSpeedReadingSettings(appState.menu.speedReading))
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
-            setFlashing(sanitizeFlashingSettings(appState.menu.flashing))
+            setFlashMatching(sanitizeFlashMatching(appState.menu.flashMatching))
             setFlashShapePreferences(sanitizeFlashShapePreferences(appState.menu.flashingPresets))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
@@ -6261,6 +6250,9 @@ ${markdownHtml}
     const settings = activeSoundstage(following).settings
     if (!sameSoundstage(settings, liveSoundstageRef.current)) applySoundstage(settings)
   }, [applySoundstage])
+  const changeSoundstageList = useCallback((list: PresetList<SoundstageSettings>) => {
+    changeSoundstages({ ...soundstagePreferencesRef.current, ...list })
+  }, [changeSoundstages])
   const selectSoundstage = useCallback((id: string) => {
     const previous = soundstagePreferencesRef.current
     changeSoundstages({ ...previous, ...selectPreset(SOUNDSTAGE_KIND, previous, id) })
@@ -6276,24 +6268,11 @@ ${markdownHtml}
     const created = createPreset(SOUNDSTAGE_KIND, previous, newPresetId('stage'))
     if (created) changeSoundstages({ ...previous, ...created })
   }, [changeSoundstages, selectSoundstage])
-  // Keystroke sounds: an EDIT (a slider or a sound set in Options) is the
-  // unsaved preset; SELECTING a preset only sets the live settings. Both are
-  // synchronous, so unlike the soundstage no selection has to be told apart
-  // after the fact.
-  const keystrokeSoundRef = useRef(keystrokeSound)
-  keystrokeSoundRef.current = keystrokeSound
+  // Keystroke sounds: an edit (a slider or a channel in Options) is written
+  // into the active preset, whose settings are the live ones.
   const editKeystrokeSound = useCallback((patch: Partial<KeystrokeSoundSettings>) => {
-    const next = { ...keystrokeSoundRef.current, ...patch }
-    keystrokeSoundRef.current = next
-    setKeystrokeSound(next)
-    setKeystrokeSoundPreferences((previous) => unsavedKeystrokeSoundAfterEdit(next, previous))
+    setKeystrokeSoundPreferences((previous) => editActivePreset(KEYSTROKE_SOUND_KIND, previous, { ...activePreset(KEYSTROKE_SOUND_KIND, previous).settings, ...patch }))
   }, [])
-  const applyKeystrokeSound = useCallback((settings: KeystrokeSoundSettings) => {
-    const next = cloneKeystrokeSound(settings)
-    keystrokeSoundRef.current = next
-    setKeystrokeSound(next)
-  }, [])
-  const activeKeystrokeSound = useMemo(() => matchingKeystrokeSound(keystrokeSound, keystrokeSoundPreferences), [keystrokeSound, keystrokeSoundPreferences])
   // The visualizer's solid: the factory stage active, or the custom shape for
   // a stage of the reader's own; pressing it steps through the factory stages.
   const activeSoundstageId = soundstagePreferences.activeId
@@ -8413,7 +8392,11 @@ ${markdownHtml}
                     ) : sidebarMode === 'options' && isIconPickMode ? (
                       iconPick?.target.kind === 'layout'
                         ? <LayoutIconPicker entries={layoutEntriesForCurrentMode} change={changeLoadouts} query={iconPickQuery} />
-                        : <SoundstageIconPicker preferences={soundstagePreferences} onChange={changeSoundstages} query={iconPickQuery} />
+                        : iconPick?.target.kind === 'keystrokeSound'
+                          ? <PresetIconPicker kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" query={iconPickQuery} />
+                          : iconPick?.target.kind === 'flashing'
+                            ? <PresetIconPicker kind={FLASH_SHAPE_KIND} list={flashShapePreferences} onChange={setFlashShapePreferences} pickKind="flashing" query={iconPickQuery} />
+                            : <PresetIconPicker kind={SOUNDSTAGE_KIND} list={soundstagePreferences} onChange={changeSoundstageList} pickKind="soundstage" query={iconPickQuery} />
                     ) : sidebarMode === 'options' ? (
                       <SidebarOptionsPanel
                         searchQuery={optionsSearchQuery}
@@ -8519,9 +8502,9 @@ ${markdownHtml}
                         keystrokeSound={keystrokeSound}
                         setKeystrokeSound={editKeystrokeSound}
                         keystrokeSoundPreferences={keystrokeSoundPreferences}
-                        setKeystrokeSoundPreferences={setKeystrokeSoundPreferences}
-                        activeKeystrokeSound={activeKeystrokeSound}
-                        applyKeystrokeSound={applyKeystrokeSound}
+                        onKeystrokeSoundPreferencesChange={setKeystrokeSoundPreferences}
+                        openPresetSubsection={openPresetSubsection}
+                        onOpenPresetSubsectionChange={setOpenPresetSubsection}
                         soundscapePreferences={soundscapePreferences}
                         onSoundscapePreferencesChange={setSoundscapePreferences}
                         musicReverbFoliage={musicReverbFoliage}
@@ -8621,11 +8604,9 @@ ${markdownHtml}
                         caretHaloColor={caretHaloColor}
                         flashing={flashing}
                         editFlashShape={editFlashShape}
-                        applyFlashShape={applyFlashShape}
                         setFlashMatching={setFlashMatching}
                         flashShapePreferences={flashShapePreferences}
-                        setFlashShapePreferences={setFlashShapePreferences}
-                        activeFlashShape={activeFlashShape}
+                        onFlashShapePreferencesChange={setFlashShapePreferences}
                       />
                     ) : (
                       <div
@@ -8660,10 +8641,20 @@ ${markdownHtml}
                       <LayoutDock entries={layoutEntriesForCurrentMode} change={changeLoadouts} onReset={() => void resetActiveLoadout()} />
                     </div>
                   ) : null}
-                  {sidebarMode === 'options' && optionsSection === 'music' ? (
-                    // The playing soundstage's row, docked as the soundscapes' is.
+                  {sidebarMode === 'options' && optionsSection === 'music' && openPresetSubsection === 'soundstages' ? (
+                    // The playing soundstage's row, docked as the soundscapes' is, while its subsection is open.
                     <div className="sidebar-plain-dock">
-                      <SoundstageDock preferences={soundstagePreferences} onChange={changeSoundstages} />
+                      <PresetDock kind={SOUNDSTAGE_KIND} list={soundstagePreferences} onChange={changeSoundstageList} pickKind="soundstage" resetTo={NEUTRAL_SOUNDSTAGE} resetTooltip="the EQ flat, the room and width at their defaults" />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && optionsSection === 'music' && openPresetSubsection === 'keystrokeSounds' ? (
+                    <div className="sidebar-plain-dock">
+                      <PresetDock kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" resetTo={NEUTRAL_KEYSTROKE_SOUND} resetTooltip="every channel off, the mix neutral" />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && optionsSection === 'advanced' && openPresetSubsection === 'flashing' ? (
+                    <div className="sidebar-plain-dock">
+                      <PresetDock kind={FLASH_SHAPE_KIND} list={flashShapePreferences} onChange={setFlashShapePreferences} pickKind="flashing" resetTo={NEUTRAL_FLASH_SHAPE} resetTooltip="steady, not flashing" />
                     </div>
                   ) : null}
                   {sidebarMode === 'soundscapes' ? (

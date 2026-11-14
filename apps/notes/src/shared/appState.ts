@@ -1,4 +1,4 @@
-import type { KeystrokeSoundPreferences, KeystrokeSoundSettings } from './keystrokeSounds';
+import type { KeystrokeSoundPreferences } from './keystrokeSounds';
 import type { OptionsSectionId } from './optionsSections';
 import type { MusicSetListGrouping } from './musicSetList';
 import type { SidebarSections } from './sidebarSections';
@@ -11,7 +11,7 @@ import type { VisualizerFont } from './visualizerFont';
 import type { VisualizerSettings } from '@thockdown/look/visualizer';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
-import type { FlashingSettings, FlashShapePreferences } from './flashing';
+import type { FlashShapePreferences } from './flashing';
 import type { InvokeChannels } from './ipcContract';
 import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
@@ -197,9 +197,7 @@ export interface PersistedMenuState {
   sidebarShowsImages?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;
-  /** The live keystroke sound settings (shared/keystrokeSounds.ts). */
-  keystrokeSound?: KeystrokeSoundSettings;
-  /** Saved keystroke sound presets and the unsaved one. */
+  /** The keystroke sound presets (shared/keystrokeSounds.ts); the live settings are the active one's. */
   keystrokeSoundPresets?: KeystrokeSoundPreferences;
   /**
    * Music LEVELS, always 0–1 and always the value the user set — never zeroed
@@ -250,9 +248,9 @@ export interface PersistedMenuState {
   speedReading?: SpeedReadingSettings;
   /** The visualizer's per-device delay (Options > Visualizer; on/off is `features.visualizer`); see sound/musicBeat.ts. */
   beat?: BeatSettings;
-  /** How flashing elements flash (Options > Advanced > Animations > Flashing): global, the caret's blink being the one reader today. */
-  flashing?: FlashingSettings;
-  /** The flashing shapes' presets (shared/flashing.ts). */
+  /** How flashing follows the music (Options > Advanced > Flashing), an index into FLASH_MATCHINGS: global, the caret's blink being the one reader today. */
+  flashMatching?: number;
+  /** The flashing shapes' presets (shared/flashing.ts); the live shape is the active one's. */
   flashingPresets?: FlashShapePreferences;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   chapterBarMode?: 'tags' | 'tabs';

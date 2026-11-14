@@ -11,12 +11,13 @@ import {
   flashLevels,
   flashPhaseAt,
   sanitizeFlashShapePreferences,
-  sanitizeFlashingSettings,
+  sanitizeFlashMatching,
+  sanitizeFlashShape,
 } from './flashing'
 
 describe('the flashing curve', () => {
   it('wraps: every factory curve meets itself at the seam in value and in slope', () => {
-    for (const { shape } of FACTORY_FLASH_SHAPES) {
+    for (const { settings: shape } of FACTORY_FLASH_SHAPES) {
       const curve = shape.curve
       const last = curve.length - 2
       const [start, out] = curveSegment(FLASH_PLANE, curve, 0)
@@ -37,7 +38,7 @@ describe('the flashing curve', () => {
   })
 
   it('stays inside 0..1 everywhere, every factory curve', () => {
-    for (const { shape } of FACTORY_FLASH_SHAPES) {
+    for (const { settings: shape } of FACTORY_FLASH_SHAPES) {
       for (let k = 0; k <= 480; k += 1) {
         const y = curveYAt(FLASH_PLANE, shape.curve, k / 480)
         expect(y).toBeGreaterThanOrEqual(0)
@@ -54,8 +55,8 @@ describe('the flashing curve', () => {
   })
 
   it('keeps every factory preset as it is through the sanitizer', () => {
-    for (const { shape } of FACTORY_FLASH_SHAPES) {
-      expect(sanitizeFlashingSettings({ ...shape, matching: 0 })).toEqual({ ...shape, matching: 0 })
+    for (const { settings: shape } of FACTORY_FLASH_SHAPES) {
+      expect(sanitizeFlashShape(shape)).toEqual(shape)
     }
   })
 })
@@ -79,14 +80,15 @@ describe('matching the beat', () => {
 
 describe('sanitizing', () => {
   it('reads anything that is not an object as the defaults', () => {
-    expect(sanitizeFlashingSettings(undefined)).toEqual(DEFAULT_FLASHING_SETTINGS)
-    expect(sanitizeFlashShapePreferences(null).saved).toEqual([])
+    expect(sanitizeFlashShape(undefined)).toEqual({ curve: DEFAULT_FLASHING_SETTINGS.curve, cycleMs: DEFAULT_FLASHING_SETTINGS.cycleMs })
+    expect(sanitizeFlashMatching(undefined)).toBe(DEFAULT_FLASHING_SETTINGS.matching)
+    expect(sanitizeFlashShapePreferences(null).custom).toEqual([])
   })
 
   it('clamps the cycle and the matching, and closes a seam left open', () => {
-    const out = sanitizeFlashingSettings({ cycleMs: 1, matching: 99, curve: [{ x: 0, y: 0.2, handle: 1 }, { x: 0.5, y: 3, handle: 9 }, { x: 1, y: 0.9, handle: 0 }] })
+    const out = sanitizeFlashShape({ cycleMs: 1, curve: [{ x: 0, y: 0.2, handle: 1 }, { x: 0.5, y: 3, handle: 9 }, { x: 1, y: 0.9, handle: 0 }] })
     expect(out.cycleMs).toBe(100)
-    expect(out.matching).toBe(FLASH_MATCHINGS.length - 1)
+    expect(sanitizeFlashMatching(99)).toBe(FLASH_MATCHINGS.length - 1)
     expect(out.curve).toEqual([{ x: 0, y: 0.2, handle: 1 }, { x: 0.5, y: 1, handle: 2 }, { x: 1, y: 0.2, handle: 1 }])
   })
 })

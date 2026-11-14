@@ -15,14 +15,14 @@ import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetter
 import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
-import { sanitizeKeystrokeSoundPreferences, sanitizeKeystrokeSoundSettings } from '../src/shared/keystrokeSounds';
+import { sanitizeKeystrokeSoundPreferences } from '../src/shared/keystrokeSounds';
 import { resetMenuWithPreservedPresets } from '../src/shared/appStateReset';
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
-import { DEFAULT_FLASHING_SETTINGS, sanitizeFlashShapePreferences, sanitizeFlashingSettings } from '../src/shared/flashing';
+import { FLASH_MATCHING_DEFAULT, sanitizeFlashMatching, sanitizeFlashShapePreferences } from '../src/shared/flashing';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
@@ -82,7 +82,7 @@ const DEFAULT_APP_STATE: AppState = {
     features: DEFAULT_FEATURE_TOGGLES,
     typingTrail: DEFAULT_TYPING_TRAIL_SETTINGS,
     beat: DEFAULT_BEAT_SETTINGS,
-    flashing: DEFAULT_FLASHING_SETTINGS,
+    flashMatching: FLASH_MATCHING_DEFAULT,
   },
 };
 
@@ -578,7 +578,6 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     // Strictly true: anything else, absence included, keeps the app local.
     allowRemoteImages: input?.allowRemoteImages === true,
     sidebarShowsImages: input?.sidebarShowsImages === true,
-    keystrokeSound: input?.keystrokeSound === undefined ? undefined : sanitizeKeystrokeSoundSettings(input.keystrokeSound),
     keystrokeSoundPresets: input?.keystrokeSoundPresets === undefined ? undefined : sanitizeKeystrokeSoundPreferences(input.keystrokeSoundPresets),
     musicVolume: sanitizeOptionalNumber(input?.musicVolume),
     musicReverbAmount: sanitizeOptionalNumber(input?.musicReverbAmount),
@@ -613,7 +612,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     visualizer: input?.visualizer === undefined ? undefined : sanitizeVisualizer(input.visualizer),
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
-    flashing: sanitizeFlashingSettings(input?.flashing),
+    flashMatching: sanitizeFlashMatching(input?.flashMatching),
     flashingPresets: sanitizeFlashShapePreferences(input?.flashingPresets),
     chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,

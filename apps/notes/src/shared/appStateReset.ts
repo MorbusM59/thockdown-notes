@@ -44,12 +44,12 @@ export function resetMenuWithPreservedPresets(
   )
   const currentFlashingPreferences = sanitizeFlashShapePreferences(current?.flashingPresets)
 
-  // Saved presets are user-created libraries; live and unsaved settings return to factory values.
+  // The reader's own presets are kept; the active entry and every edit of a factory preset return to as shipped.
   return {
     ...defaultMenu,
     keystrokeSoundPresets: {
       ...defaultKeystrokePreferences,
-      saved: currentKeystrokePreferences.saved,
+      custom: currentKeystrokePreferences.custom,
     },
     musicSoundstages: {
       ...defaultSoundstagePreferences,
@@ -61,7 +61,7 @@ export function resetMenuWithPreservedPresets(
     },
     flashingPresets: {
       ...defaultFlashingPreferences,
-      saved: currentFlashingPreferences.saved,
+      custom: currentFlashingPreferences.custom,
     },
   }
 }

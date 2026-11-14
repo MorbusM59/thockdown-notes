@@ -795,7 +795,7 @@ ${shortcutTable()}
 - **There is nothing to save**: anything you change is kept in the layout you are using, built-in ones included. The plus makes a new layout of your own, a copy of the one in use.
 - The row at the bottom of the sidebar is the layout in use, and works as the Soundscapes one does: click its icon to pick another, right-click its name to rename it, click the turning arrow to reset it to the neutral layout, and hold the last button to trash one of your own or restore a built-in one as shipped.
 - Hold right-click on one of your own layouts to export it.
-- Soundstages work the same way.
+- Soundstages (Settings panel → Sound → Soundstages), keystroke sounds and flashing work the same way; their row shows while their subsection is open.
 
 ### [Quick Access](#quick-access)
 
@@ -859,7 +859,7 @@ ${shortcutTable()}
 ### [Animations](#animations)
 
 > **Where?**
-> Settings panel → Advanced → Animations.
+> Settings panel → Advanced → Movement and Flashing.
 
 *How things move and how things flash. For what the wheel itself does, see [Scrolling]($#scrolling).*
 
@@ -871,7 +871,7 @@ ${shortcutTable()}
 
 **Flashing** sets how anything that flashes does it; today that is the caret's blink.
 
-- **Presets** at the top work like [layout presets]($#presets), without export. They hold the curve and the cycle; **Steady** does not flash at all.
+- **Presets** at the top work like [layout presets]($#presets), without export. They hold the curve and the cycle, not the matching; **Steady** does not flash at all.
 - The **curve** is the caret's opacity over one cycle,: click to add a point, drag it, right-drag up or down to round it (a handle of 0 makes a sharp corner, for a hard blink), right-click to remove it. The graph is a bar of twelve, dashed on the beats. The end runs on into the start, so the first and last points move together.
 - **Cycle** (100–5000ms) is how long one cycle takes.
 - **Matching** makes the cycle follow the music's beat instead, while Grid Beat is on, music plays and a beat is found; otherwise the cycle above runs. It reads in bar notation: **4/4** is one cycle a beat, **1/4** one a bar. The thirds run across the bar line on purpose.
@@ -930,11 +930,11 @@ ${shortcutTable()}
 ### [Keystroke Sounds](#keystroke-sounds)
 
 > **Where?**
-> Settings panel → Glitz → Keystroke Sounds.
+> Settings panel → Sound → Keystroke Sounds.
 
 *Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
 
-- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (one per factory layout, then your saved ones) work like [layout presets]($#presets), without export.
+- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (one per factory layout, then your own) work like [layout presets]($#presets), without export.
 - A keystroke is made of **channels**, layered: four click sets (Pops, Pins, Creamy, Forge) plus Bass and Treble. They work like soundscape channels: click one to show its **volume** , **jitter** (how far each press is pitched up or down at random) and **pitch**, hold it to turn it on, hold right-click to turn it off, and scroll over it to change its volume.
 - **Mix** acts on all channels together: volume, pitch, **variance** (how far each key is pitched apart from the others; a key always keeps its own sound), reverb and room.
 - **Spatial** slider adds stereo panning, centered (off) by default. Left of center pans by keyboard key position (left-hand keys sound from the left, right-hand keys from the right, non-character keys like arrows/Tab/Backspace stay centered); right of center pans by where the caret sits on the current line (line start sounds left, the far edge before an automatic wrap sounds right). The two modes don't blend — the slider picks one or the other by which side of center it's on, with distance from center setting how strong the effect is.

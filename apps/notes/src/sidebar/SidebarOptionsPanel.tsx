@@ -1,4 +1,4 @@
-import type { Dispatch, MouseEvent, MutableRefObject, PointerEvent, SetStateAction } from 'react'
+import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BUNDLED_DICTIONARIES, type SpellCheckDictionary } from '../shared/spellCheck'
@@ -8,16 +8,15 @@ import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { FontControls, FontSection } from './FontSection'
 import { OptionsSectionBar } from './OptionsSectionBar'
-import type { OptionsSectionId } from '../shared/optionsSections'
+import type { OptionsSectionId, PresetSubsectionId } from '../shared/optionsSections'
 import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
 import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
 import { readNowPlaying } from '../sound/nowPlaying'
-import { SoundstageOptions } from './SoundstageOptions'
 import type { EqPoint } from '../shared/musicEqCurve'
 import { EqCurveEditor } from './EqCurveEditor'
-import { type SoundstagePreferences } from '../shared/soundstages'
+import { SOUNDSTAGE_KIND, type SoundstagePreferences } from '../shared/soundstages'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
@@ -111,8 +110,9 @@ import {
   CARET_HALO_BLUR_STEP_PX,
   CARET_HALO_BLUR_DEFAULT_PX,
 } from '@thockdown/look/caretSettings'
-import type { ActiveFlashShape, FlashShape, FlashShapePreferences, FlashingSettings } from '../shared/flashing'
+import { FLASH_SHAPE_KIND, type FlashShape, type FlashShapePreferences, type FlashingSettings } from '../shared/flashing'
 import { FlashingOptions } from './FlashingOptions'
+import { PresetGrid } from './PresetListControls'
 import {
   type TextureSurfaceKey,
   type TextureMaterialsBySurface,
@@ -221,9 +221,8 @@ import {
   type GlazeSettings,
 } from '@thockdown/look/glaze'
 import { idKind, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
-import { KEYSTROKE_SOUND_RANGES, type ActiveKeystrokeSound, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
+import { KEYSTROKE_SOUND_KIND, KEYSTROKE_SOUND_RANGES, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
-import { KeystrokeSoundOptions } from './KeystrokeSoundOptions'
 import { useOutputDevice } from '../sound/outputDevice'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
@@ -520,13 +519,14 @@ export interface SidebarOptionsPanelProps {
   renderScrollSkew: number
   setRenderScrollSkew: (value: number) => void
 
-  /** The live keystroke sound settings; setting one is an edit (it becomes the unsaved preset). */
+  /** The live keystroke sound settings (the active preset's); setting one is an edit written into it. */
   keystrokeSound: KeystrokeSoundSettings
   setKeystrokeSound: (patch: Partial<KeystrokeSoundSettings>) => void
   keystrokeSoundPreferences: KeystrokeSoundPreferences
-  setKeystrokeSoundPreferences: (update: (previous: KeystrokeSoundPreferences) => KeystrokeSoundPreferences) => void
-  activeKeystrokeSound: ActiveKeystrokeSound
-  applyKeystrokeSound: (settings: KeystrokeSoundSettings) => void
+  onKeystrokeSoundPreferencesChange: (preferences: KeystrokeSoundPreferences) => void
+  /** Which preset subsection is unfolded (its dock shows below the panel); App keeps it. */
+  openPresetSubsection: PresetSubsectionId | null
+  onOpenPresetSubsectionChange: (open: PresetSubsectionId | null) => void
   soundscapePreferences: SoundscapePreferences
   onSoundscapePreferencesChange: (preferences: SoundscapePreferences) => void
   musicReverbFoliage: number
@@ -647,11 +647,9 @@ export interface SidebarOptionsPanelProps {
   caretHaloColor: string
   flashing: FlashingSettings
   editFlashShape: (patch: Partial<FlashShape>) => void
-  applyFlashShape: (shape: FlashShape) => void
   setFlashMatching: (matching: number) => void
   flashShapePreferences: FlashShapePreferences
-  setFlashShapePreferences: Dispatch<SetStateAction<FlashShapePreferences>>
-  activeFlashShape: ActiveFlashShape
+  onFlashShapePreferencesChange: (preferences: FlashShapePreferences) => void
   wheelSpinThresholdMs: number
   setWheelSpinThresholdMs: (value: number) => void
   wheelSpinDampenDivisor: number
@@ -764,9 +762,9 @@ export function SidebarOptionsPanel({
   keystrokeSound,
   setKeystrokeSound,
   keystrokeSoundPreferences,
-  setKeystrokeSoundPreferences,
-  activeKeystrokeSound,
-  applyKeystrokeSound,
+  onKeystrokeSoundPreferencesChange,
+  openPresetSubsection,
+  onOpenPresetSubsectionChange,
   soundscapePreferences,
   onSoundscapePreferencesChange,
   musicReverbFoliage,
@@ -866,11 +864,9 @@ export function SidebarOptionsPanel({
   caretHaloColor,
   flashing,
   editFlashShape,
-  applyFlashShape,
   setFlashMatching,
   flashShapePreferences,
-  setFlashShapePreferences,
-  activeFlashShape,
+  onFlashShapePreferencesChange,
   wheelSpinThresholdMs,
   setWheelSpinThresholdMs,
   wheelSpinDampenDivisor,
@@ -2231,33 +2227,32 @@ export function SidebarOptionsPanel({
       </>) : null}
 
       {showsSection('music') ? (<>
-      {/* The music's sound: app-wide like the rest of the music's settings,
-          not the layout's. Presets (the soundstages) first, then what a
-          soundstage is made of: the EQ, and the room. */}
-      <OptionsFixedSection className="sidebar-options-section-music-presets" heading="Presets" iconClass="fa-star" hiddenWhileSearching={isSearching}>
+      {/* Sound: the music's and the keystrokes', app-wide and never the
+          layout's. Each subsection is a preset list whose dock shows while it
+          is open, so only one may be open at a time (a right press does what
+          a left press does). */}
+      <AccordionSection
+        className="sidebar-options-section-music-presets"
+        ariaLabel="Soundstages"
+        heading="Soundstages"
+        iconClass="fa-star"
+        exclusive
+        open={openPresetSubsection === 'soundstages'}
+        onRequestOpenChange={(open) => onOpenPresetSubsectionChange(open ? 'soundstages' : null)}
+      >
         <div className="utility-setting-slider-stack" aria-label="Soundstages">
-          <SoundstageOptions
-            preferences={soundstagePreferences}
-            onChange={changeSoundstages}
+          <PresetGrid
+            kind={SOUNDSTAGE_KIND}
+            list={soundstagePreferences}
+            onChange={(list) => changeSoundstages({ ...soundstagePreferences, ...list })}
+            idPrefix="stage"
+            label="Soundstages"
+            plural="a soundstage"
           />
         </div>
-      </OptionsFixedSection>
-
-      <AccordionSection
-        className="sidebar-options-section-music-eq"
-        ariaLabel="Equalization"
-        heading="Equalization"
-        iconClass="fa-wave-square"
-      >
+        <OptionsSubsectionLabel>Equalization</OptionsSubsectionLabel>
         <EqCurveEditor curve={musicEqCurve} onChange={setMusicEqCurve} />
-      </AccordionSection>
-
-      <AccordionSection
-        className="sidebar-options-section-music-room"
-        ariaLabel="Room Parameters"
-        heading="Room Parameters"
-        iconClass="fa-door-open"
-      >
+        <OptionsSubsectionLabel>Room Parameters</OptionsSubsectionLabel>
         <div className="utility-setting-slider-stack" aria-label="Music room parameters">
           <OptionsSliderRows rows={[2, 2]}>
             <CompactScrollbarSlider
@@ -2308,21 +2303,23 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
-      </>) : null}
-
-      {showsSection('glitz') ? (<>
       <AccordionSection
         className="sidebar-options-section-audio"
         ariaLabel="Keystroke Sounds"
         heading="Keystroke Sounds"
         iconClass="fa-keyboard"
+        exclusive
+        open={openPresetSubsection === 'keystrokeSounds'}
+        onRequestOpenChange={(open) => onOpenPresetSubsectionChange(open ? 'keystrokeSounds' : null)}
       >
         <div className="utility-setting-slider-stack" aria-label="Keystroke sound controls">
-          <KeystrokeSoundOptions
-            preferences={keystrokeSoundPreferences}
-            setPreferences={setKeystrokeSoundPreferences}
-            active={activeKeystrokeSound}
-            apply={applyKeystrokeSound}
+          <PresetGrid
+            kind={KEYSTROKE_SOUND_KIND}
+            list={keystrokeSoundPreferences}
+            onChange={onKeystrokeSoundPreferencesChange}
+            idPrefix="keys"
+            label="Keystroke sounds"
+            plural="a keystroke sound"
           />
           <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>
           <KeystrokeChannelOptions settings={keystrokeSound} onChange={(channels) => setKeystrokeSound({ channels })} />
@@ -2400,6 +2397,9 @@ export function SidebarOptionsPanel({
         </div>
       </AccordionSection>
 
+      </>) : null}
+
+      {showsSection('glitz') ? (<>
       <AccordionSection
         className="sidebar-options-section-typing-trail"
         ariaLabel="Typing Trail"
@@ -2922,11 +2922,10 @@ export function SidebarOptionsPanel({
       {showsSection('advanced') ? (<>
       <AccordionSection
         className="sidebar-options-section-animations"
-        ariaLabel="Animations"
-        heading="Animations"
+        ariaLabel="Movement"
+        heading="Movement"
         iconClass="fa-spinner"
       >
-        <OptionsSubsectionLabel>Movement</OptionsSubsectionLabel>
         <div className="utility-setting-slider-stack" aria-label="Scroll curve settings">
           <OptionsSliderRows>
             <CompactScrollbarSlider
@@ -2979,18 +2978,32 @@ export function SidebarOptionsPanel({
           </OptionsSliderRows>
         </div>
 
-        {/* Flashing: global, the same for every layout (shared/flashing.ts).
-            The caret's blink is the only reader today; a new flashing
-            element reads these rather than growing its own. */}
-        <OptionsSubsectionLabel>Flashing</OptionsSubsectionLabel>
+      </AccordionSection>
+
+      {/* Flashing: global, the same for every layout (shared/flashing.ts).
+          The caret's blink is the only reader today; a new flashing element
+          reads these rather than growing its own. A preset list, so its dock
+          shows while it is open. */}
+      <AccordionSection
+        className="sidebar-options-section-flashing"
+        ariaLabel="Flashing"
+        heading="Flashing"
+        iconClass="fa-lightbulb"
+        open={openPresetSubsection === 'flashing'}
+        onRequestOpenChange={(open) => onOpenPresetSubsectionChange(open ? 'flashing' : null)}
+      >
+        <PresetGrid
+          kind={FLASH_SHAPE_KIND}
+          list={flashShapePreferences}
+          onChange={onFlashShapePreferencesChange}
+          idPrefix="flash"
+          label="Flashing presets"
+          plural="a flashing preset"
+        />
         <FlashingOptions
           flashing={flashing}
           editShape={editFlashShape}
-          applyShape={applyFlashShape}
           setMatching={setFlashMatching}
-          preferences={flashShapePreferences}
-          setPreferences={setFlashShapePreferences}
-          active={activeFlashShape}
           beatAvailable={features.visualizer}
         />
       </AccordionSection>

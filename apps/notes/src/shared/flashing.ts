@@ -1,3 +1,5 @@
+import { emptyPresetList, sanitizePresetList, type Preset, type PresetKind, type PresetList } from '@thockdown/interaction/presetList'
+
 import { flatCurve, sameCurve, sampleCurve, sanitizeCurve, type CurvePlane, type CurvePoint, type DrawnCurve } from './drawnCurve'
 
 /**
@@ -22,11 +24,11 @@ import { flatCurve, sameCurve, sampleCurve, sanitizeCurve, type CurvePlane, type
  * beat is found (Grid Beat on, music playing) and falls back to `cycleMs`
  * whenever there is none.
  *
- * PRESETS work as every preset list in the app does (`keystrokeSounds.ts`):
- * FACTORY presets, SAVED ones, and the UNSAVED preset (the reader's last edit)
- * shown as the plus exactly while it equals no other. A preset is a SHAPE, the
- * curve and the cycle; the matching is a property of how the reader likes the
- * music answered and stays as it is when a preset is chosen.
+ * The shapes are a PRESET LIST (`packages/interaction/presetList.ts`): one is
+ * always active, the live shape IS its shape, and an edit is written into it.
+ * A preset is a SHAPE, the curve and the cycle; the matching is a property of
+ * how the reader likes the music answered, kept on its own (`flashMatching`)
+ * and left as it is when a preset is chosen.
  */
 
 /** One cycle's plane: x the share of the cycle, y the opacity. */
@@ -93,31 +95,24 @@ export interface FlashingSettings extends FlashShape {
 
 const point = (x48: number, y: number, handle = 1): CurvePoint => ({ x: x48 / 48, y, handle })
 
-export interface FactoryFlashShape {
-  id: string
-  name: string
-  icon: string
-  shape: Readonly<FlashShape>
-}
-
 /**
  * The blink shapes the caret had before the curve, drawn as curves on the
  * editor's grid: each stop a point where the old eased segments turned
  * (level handles at a peak or a dip, which is what the old easing did there),
  * and Steady, the caret that does not flash at all.
  */
-export const FACTORY_FLASH_SHAPES: readonly FactoryFlashShape[] = [
-  { id: 'heartbeat', name: 'Heartbeat', icon: 'fa-solid fa-heart-pulse', shape: { cycleMs: 1200, curve: [point(0, 0.6), point(5, 0.1), point(31, 0.9), point(41, 0.3), point(48, 0.6)] } },
-  { id: 'bigBeat', name: 'Big beat', icon: 'fa-solid fa-heart', shape: { cycleMs: 1200, curve: [point(0, 0.1), point(31, 0.9), point(48, 0.1)] } },
-  { id: 'fadeMid', name: 'Fade, peak in the middle', icon: 'fa-solid fa-caret-up', shape: { cycleMs: 1200, curve: [point(0, 0), point(24, 1), point(48, 0)] } },
-  { id: 'fadeEarly', name: 'Fade, peak early', icon: 'fa-solid fa-caret-right', shape: { cycleMs: 1200, curve: [point(0, 0), point(7, 1), point(48, 0)] } },
-  { id: 'fadeLate', name: 'Fade, peak late', icon: 'fa-solid fa-caret-left', shape: { cycleMs: 1200, curve: [point(0, 0), point(41, 1), point(48, 0)] } },
-  { id: 'blink', name: 'Blink', icon: 'fa-solid fa-square', shape: { cycleMs: 1200, curve: [point(0, 1, 0), point(23, 1, 0), point(24, 0, 0), point(47, 0, 0), point(48, 1, 0)] } },
-  { id: 'steady', name: 'Steady', icon: 'fa-solid fa-minus', shape: { cycleMs: 1200, curve: flatCurve(FLASH_PLANE, 1) } },
+export const FACTORY_FLASH_SHAPES: readonly Preset<FlashShape>[] = [
+  { id: 'heartbeat', name: 'Heartbeat', icon: 'fa-heart-pulse', settings: { cycleMs: 1200, curve: [point(0, 0.6), point(5, 0.1), point(31, 0.9), point(41, 0.3), point(48, 0.6)] } },
+  { id: 'bigBeat', name: 'Big beat', icon: 'fa-heart', settings: { cycleMs: 1200, curve: [point(0, 0.1), point(31, 0.9), point(48, 0.1)] } },
+  { id: 'fadeMid', name: 'Fade, peak in the middle', icon: 'fa-caret-up', settings: { cycleMs: 1200, curve: [point(0, 0), point(24, 1), point(48, 0)] } },
+  { id: 'fadeEarly', name: 'Fade, peak early', icon: 'fa-caret-right', settings: { cycleMs: 1200, curve: [point(0, 0), point(7, 1), point(48, 0)] } },
+  { id: 'fadeLate', name: 'Fade, peak late', icon: 'fa-caret-left', settings: { cycleMs: 1200, curve: [point(0, 0), point(41, 1), point(48, 0)] } },
+  { id: 'blink', name: 'Blink', icon: 'fa-square', settings: { cycleMs: 1200, curve: [point(0, 1, 0), point(23, 1, 0), point(24, 0, 0), point(47, 0, 0), point(48, 1, 0)] } },
+  { id: 'steady', name: 'Steady', icon: 'fa-minus', settings: { cycleMs: 1200, curve: flatCurve(FLASH_PLANE, 1) } },
 ]
 
 export const DEFAULT_FLASHING_SETTINGS: FlashingSettings = {
-  ...cloneFlashShape(FACTORY_FLASH_SHAPES[0].shape),
+  ...cloneFlashShape(FACTORY_FLASH_SHAPES[0].settings),
   matching: FLASH_MATCHING_DEFAULT,
 }
 
@@ -154,7 +149,7 @@ const integer = (value: unknown, min: number, max: number, fallback: number) => 
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback
 )
 
-function sanitizeFlashShape(value: unknown, fallback: Readonly<FlashShape>): FlashShape {
+export function sanitizeFlashShape(value: unknown, fallback: Readonly<FlashShape> = DEFAULT_FLASHING_SETTINGS): FlashShape {
   const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
   return {
     curve: sanitizeCurve(FLASH_PLANE, input.curve, fallback.curve),
@@ -162,65 +157,30 @@ function sanitizeFlashShape(value: unknown, fallback: Readonly<FlashShape>): Fla
   }
 }
 
-export function sanitizeFlashingSettings(value: unknown): FlashingSettings {
-  const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  return {
-    ...sanitizeFlashShape(input, DEFAULT_FLASHING_SETTINGS),
-    matching: integer(input.matching, 0, FLASH_MATCHINGS.length - 1, DEFAULT_FLASHING_SETTINGS.matching),
-  }
+/** The matching, persisted on its own as the menu's `flashMatching`. */
+export function sanitizeFlashMatching(value: unknown): number {
+  return integer(value, 0, FLASH_MATCHINGS.length - 1, FLASH_MATCHING_DEFAULT)
 }
 
 // ── Presets ─────────────────────────────────────────────────────────────────
 
-export interface SavedFlashShape {
-  id: string
-  shape: FlashShape
-}
+/** What the dock's reset writes into the active preset: Steady, the flash that does not flash. */
+export const NEUTRAL_FLASH_SHAPE: Readonly<FlashShape> = FACTORY_FLASH_SHAPES.find((preset) => preset.id === 'steady')!.settings
 
-/** Not a design limit, only a bound on a list nobody should reach. */
-export const MAX_SAVED_FLASH_SHAPES = 100
+export const FLASH_SHAPE_KIND: PresetKind<FlashShape> = {
+  factory: FACTORY_FLASH_SHAPES,
+  defaultId: FACTORY_FLASH_SHAPES[0].id,
+  noun: 'Flashing',
+  maxCustom: 100,
+  clone: cloneFlashShape,
+  sanitizeSettings: (value) => sanitizeFlashShape(value),
+}
 
 /** What is persisted (`flashingPresets`). */
-export interface FlashShapePreferences {
-  unsaved: FlashShape
-  saved: SavedFlashShape[]
-}
+export type FlashShapePreferences = PresetList<FlashShape>
 
-export const DEFAULT_FLASH_SHAPE_PREFERENCES: FlashShapePreferences = { unsaved: cloneFlashShape(DEFAULT_FLASHING_SETTINGS), saved: [] }
-
-export type ActiveFlashShape =
-  | { kind: 'factory'; id: string }
-  | { kind: 'saved'; id: string }
-  | { kind: 'unsaved' }
-
-export function matchingFlashShape(live: Readonly<FlashShape>, preferences: FlashShapePreferences): ActiveFlashShape {
-  const factory = FACTORY_FLASH_SHAPES.find((entry) => sameFlashShape(entry.shape, live))
-  if (factory) return { kind: 'factory', id: factory.id }
-  const saved = preferences.saved.find((entry) => sameFlashShape(entry.shape, live))
-  if (saved) return { kind: 'saved', id: saved.id }
-  return { kind: 'unsaved' }
-}
-
-export function isUnsavedFlashShapeShown(preferences: FlashShapePreferences): boolean {
-  return matchingFlashShape(preferences.unsaved, preferences).kind === 'unsaved'
-}
-
-/** After an EDIT of the live shape (never a selection), the edit is the unsaved preset. Same object when nothing changes. */
-export function unsavedFlashShapeAfterEdit(live: Readonly<FlashShape>, preferences: FlashShapePreferences): FlashShapePreferences {
-  if (sameFlashShape(preferences.unsaved, live)) return preferences
-  return { ...preferences, unsaved: cloneFlashShape(live) }
-}
+export const DEFAULT_FLASH_SHAPE_PREFERENCES: FlashShapePreferences = emptyPresetList(FLASH_SHAPE_KIND)
 
 export function sanitizeFlashShapePreferences(value: unknown): FlashShapePreferences {
-  const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const saved: SavedFlashShape[] = []
-  if (Array.isArray(input.saved)) {
-    for (const entry of input.saved) {
-      if (saved.length >= MAX_SAVED_FLASH_SHAPES) break
-      const record = (entry && typeof entry === 'object' ? entry : null) as Record<string, unknown> | null
-      if (!record || typeof record.id !== 'string' || record.id === '' || saved.some((item) => item.id === record.id)) continue
-      saved.push({ id: record.id, shape: sanitizeFlashShape(record.shape, DEFAULT_FLASHING_SETTINGS) })
-    }
-  }
-  return { unsaved: sanitizeFlashShape(input.unsaved, DEFAULT_FLASHING_SETTINGS), saved }
+  return sanitizePresetList(FLASH_SHAPE_KIND, value)
 }

@@ -1,3 +1,4 @@
+import { emptyPresetList, sanitizePresetList, type Preset, type PresetKind, type PresetList } from '@thockdown/interaction/presetList'
 import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET_THEMES } from '@thockdown/look/presets'
 
 /**
@@ -5,14 +6,12 @@ import { DARK_PRESET_ICONS, DARK_PRESET_THEMES, LIGHT_PRESET_ICONS, LIGHT_PRESET
  * Keystroke Sounds). Pure, and shared with the main process's state
  * sanitizer. App-wide, never part of a layout.
  *
- * They work the way soundstages do (one flat Presets list, see
- * `soundstages.ts`): ten FACTORY presets, one per factory layout and named
+ * They are a PRESET LIST (`packages/interaction/presetList.ts`), as
+ * soundstages are: ten FACTORY presets, one per factory layout and named
  * after it (the sounds those layouts carried while sounds were part of a
- * layout); SAVED presets, copies of the live settings kept under a number;
- * and the UNSAVED preset, the reader's last edit, shown as the plus exactly
- * while it equals no other preset. Which preset is active is never stored:
- * it is derived from the live settings (`matchingKeystrokeSound`). The live
- * settings themselves are persisted as the menu's `keystrokeSound`.
+ * layout), then the reader's own. One is always active and the live
+ * settings ARE its settings: an edit is written into it. Persisted as the
+ * menu's `keystrokeSoundPresets`.
  */
 
 /**
@@ -90,13 +89,6 @@ const preset = (channels: ChannelOverrides, globals: Partial<Omit<KeystrokeSound
   channels: Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, { ...DEFAULT_KEYSTROKE_CHANNEL, ...(channels[id] ? { on: true, ...channels[id] } : {}) }])) as Record<KeystrokeChannelId, KeystrokeChannelSettings>,
 })
 
-export interface FactoryKeystrokeSound {
-  id: string
-  name: string
-  icon: string
-  settings: Readonly<KeystrokeSoundSettings>
-}
-
 /**
  * In the factory layouts' order, light then dark, under their names and
  * icons: the sounds those layouts carried while sounds were part of a layout,
@@ -116,9 +108,9 @@ const FACTORY_SETTINGS: readonly KeystrokeSoundSettings[] = [
   preset({ pins: { volume: 0.52 }, bass: { volume: 0.17 }, treble: { volume: 0.29 } }, { reverb: 0.13 }),
 ]
 const FACTORY_NAMES = [...LIGHT_PRESET_THEMES, ...DARK_PRESET_THEMES].map((name) => name.replace(/ \(Default\)$/, ''))
-const FACTORY_ICONS = [...LIGHT_PRESET_ICONS, ...DARK_PRESET_ICONS]
+const FACTORY_ICONS = [...LIGHT_PRESET_ICONS, ...DARK_PRESET_ICONS].map((icon) => icon.replace(/^fa-solid /, ''))
 
-export const FACTORY_KEYSTROKE_SOUNDS: readonly FactoryKeystrokeSound[] = FACTORY_SETTINGS.map((settings, index) => ({
+export const FACTORY_KEYSTROKE_SOUNDS: readonly Preset<KeystrokeSoundSettings>[] = FACTORY_SETTINGS.map((settings, index) => ({
   id: FACTORY_NAMES[index].toLowerCase(),
   name: FACTORY_NAMES[index],
   icon: FACTORY_ICONS[index],
@@ -128,55 +120,11 @@ export const FACTORY_KEYSTROKE_SOUNDS: readonly FactoryKeystrokeSound[] = FACTOR
 /** A fresh install sounds like the default light layout did. */
 export const DEFAULT_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = FACTORY_SETTINGS[0]
 
+/** What the dock's reset writes into the active preset: every channel off, the mix neutral. */
+export const NEUTRAL_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = preset({})
+
 export function cloneKeystrokeSound(settings: KeystrokeSoundSettings): KeystrokeSoundSettings {
   return { ...settings, channels: Object.fromEntries(KEYSTROKE_CHANNEL_IDS.map((id) => [id, { ...settings.channels[id] }])) as Record<KeystrokeChannelId, KeystrokeChannelSettings> }
-}
-
-export interface SavedKeystrokeSound {
-  id: string
-  settings: KeystrokeSoundSettings
-}
-
-/** Not a design limit, only a bound on a list nobody should reach. */
-export const MAX_SAVED_KEYSTROKE_SOUNDS = 100
-
-/** What is persisted (`keystrokeSoundPresets`). */
-export interface KeystrokeSoundPreferences {
-  unsaved: KeystrokeSoundSettings
-  saved: SavedKeystrokeSound[]
-}
-
-export const DEFAULT_KEYSTROKE_SOUND_PREFERENCES: KeystrokeSoundPreferences = { unsaved: cloneKeystrokeSound(DEFAULT_KEYSTROKE_SOUND), saved: [] }
-
-const close = (x: number, y: number) => Math.abs(x - y) < 0.0005
-
-/** Equal to a thousandth: the sliders step by hundredths at the finest. */
-export function sameKeystrokeSound(a: KeystrokeSoundSettings, b: KeystrokeSoundSettings): boolean {
-  return KEYSTROKE_GLOBAL_KEYS.every((key) => close(a[key], b[key]))
-    && KEYSTROKE_CHANNEL_IDS.every((id) => a.channels[id].on === b.channels[id].on && KEYSTROKE_CHANNEL_NUMBER_KEYS.every((key) => close(a.channels[id][key], b.channels[id][key])))
-}
-
-export type ActiveKeystrokeSound =
-  | { kind: 'factory'; id: string }
-  | { kind: 'saved'; id: string }
-  | { kind: 'unsaved' }
-
-export function matchingKeystrokeSound(live: KeystrokeSoundSettings, preferences: KeystrokeSoundPreferences): ActiveKeystrokeSound {
-  const factory = FACTORY_KEYSTROKE_SOUNDS.find((entry) => sameKeystrokeSound(entry.settings, live))
-  if (factory) return { kind: 'factory', id: factory.id }
-  const saved = preferences.saved.find((entry) => sameKeystrokeSound(entry.settings, live))
-  if (saved) return { kind: 'saved', id: saved.id }
-  return { kind: 'unsaved' }
-}
-
-export function isUnsavedKeystrokeSoundShown(preferences: KeystrokeSoundPreferences): boolean {
-  return matchingKeystrokeSound(preferences.unsaved, preferences).kind === 'unsaved'
-}
-
-/** After an EDIT of the live settings (never a selection), the edit is the unsaved preset. Same object when nothing changes. */
-export function unsavedKeystrokeSoundAfterEdit(live: KeystrokeSoundSettings, preferences: KeystrokeSoundPreferences): KeystrokeSoundPreferences {
-  if (sameKeystrokeSound(preferences.unsaved, live)) return preferences
-  return { ...preferences, unsaved: cloneKeystrokeSound(live) }
 }
 
 const clampTo = (raw: unknown, [low, high]: readonly [number, number], fallback: number) => (typeof raw === 'number' && Number.isFinite(raw) ? Math.max(low, Math.min(high, raw)) : fallback)
@@ -194,16 +142,27 @@ export function sanitizeKeystrokeSoundSettings(value: unknown, fallback: Keystro
   return out
 }
 
+export const KEYSTROKE_SOUND_KIND: PresetKind<KeystrokeSoundSettings> = {
+  factory: FACTORY_KEYSTROKE_SOUNDS,
+  defaultId: FACTORY_KEYSTROKE_SOUNDS[0].id,
+  noun: 'Keystroke Sound',
+  maxCustom: 100,
+  clone: cloneKeystrokeSound,
+  sanitizeSettings: (value) => sanitizeKeystrokeSoundSettings(value),
+}
+
+export type KeystrokeSoundPreferences = PresetList<KeystrokeSoundSettings>
+
+export const DEFAULT_KEYSTROKE_SOUND_PREFERENCES: KeystrokeSoundPreferences = emptyPresetList(KEYSTROKE_SOUND_KIND)
+
+const close = (x: number, y: number) => Math.abs(x - y) < 0.0005
+
+/** Equal to a thousandth: the sliders step by hundredths at the finest. */
+export function sameKeystrokeSound(a: KeystrokeSoundSettings, b: KeystrokeSoundSettings): boolean {
+  return KEYSTROKE_GLOBAL_KEYS.every((key) => close(a[key], b[key]))
+    && KEYSTROKE_CHANNEL_IDS.every((id) => a.channels[id].on === b.channels[id].on && KEYSTROKE_CHANNEL_NUMBER_KEYS.every((key) => close(a.channels[id][key], b.channels[id][key])))
+}
+
 export function sanitizeKeystrokeSoundPreferences(value: unknown): KeystrokeSoundPreferences {
-  const input = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
-  const saved: SavedKeystrokeSound[] = []
-  if (Array.isArray(input.saved)) {
-    for (const entry of input.saved) {
-      if (saved.length >= MAX_SAVED_KEYSTROKE_SOUNDS) break
-      const record = (entry && typeof entry === 'object' ? entry : null) as Record<string, unknown> | null
-      if (!record || typeof record.id !== 'string' || record.id === '' || saved.some((item) => item.id === record.id)) continue
-      saved.push({ id: record.id, settings: sanitizeKeystrokeSoundSettings(record.settings) })
-    }
-  }
-  return { unsaved: sanitizeKeystrokeSoundSettings(input.unsaved), saved }
+  return sanitizePresetList(KEYSTROKE_SOUND_KIND, value)
 }
