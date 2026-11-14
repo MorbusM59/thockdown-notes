@@ -91,6 +91,8 @@ export interface UseDocumentFindNavigationResult {
    * on a list that can run to thousands of cards.
    */
   visibleDocumentFindHitRange: { from: number; to: number } | null
+  /** The marked hit's position in the hit list, or null when none is marked. */
+  markedFindHitPosition: number | null
   handleJumpToDocumentFindHit: (hit: DocumentFindHit) => void
   replaceDocumentFindHit: (hit: DocumentFindHit) => void
   replaceAllDocumentFindHits: () => void
@@ -562,9 +564,34 @@ export function useDocumentFindNavigation({
   // hit in its pane and never in the editor's selection, so this is what its
   // Replace button replaces.
   const markedHitRef = useRef<DocumentFindHit | null>(null)
+  // Bumped whenever a hit is marked, so the position below is re-derived.
+  const [markedHitVersion, setMarkedHitVersion] = useState(0)
+
+  /**
+   * Where the marked hit stands in the hit list, or null when no listed hit
+   * is marked. Derived from the marked hit's OFFSET against the current list
+   * rather than stored, so a list rebuilt by an edit (a replace, typing in
+   * the note) still answers for the hit at that offset, and a marked hit
+   * that is no longer a match answers null.
+   */
+  const markedFindHitPosition = useMemo(() => {
+    const marked = markedHitRef.current
+    if (!marked || documentFindHits.length === 0) return null
+    let low = 0
+    let high = documentFindHits.length
+    while (low < high) {
+      const middle = (low + high) >>> 1
+      if (documentFindHits[middle].index < marked.index) low = middle + 1
+      else high = middle
+    }
+    return documentFindHits[low]?.index === marked.index ? low : null
+    // markedHitVersion stands for markedHitRef, which a memo cannot watch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentFindHits, markedHitVersion])
 
   const handleJumpToDocumentFindHit = useCallback((hit: DocumentFindHit) => {
     markedHitRef.current = hit
+    setMarkedHitVersion((version) => version + 1)
     if (isPreviewMode) {
       // A hit the reader can already see is not a journey. Travelling to it
       // would move the page under the very words they are reading to put them
@@ -746,6 +773,7 @@ export function useDocumentFindNavigation({
 
   return {
     visibleDocumentFindHitRange,
+    markedFindHitPosition,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,

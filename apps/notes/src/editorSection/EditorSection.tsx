@@ -1626,6 +1626,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
 
   const {
     visibleDocumentFindHitRange,
+    markedFindHitPosition,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,
@@ -1929,6 +1930,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     isDocumentFindTruncated,
     isDocumentFindSearching,
     visibleDocumentFindHitRange,
+    markedFindHitPosition,
     handleJumpToDocumentFindHit,
     replaceDocumentFindHit,
     replaceAllDocumentFindHits,

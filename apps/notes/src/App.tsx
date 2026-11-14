@@ -6707,10 +6707,11 @@ ${markdownHtml}
   const isSidebarPanelMode = sidebarMode === 'options' || sidebarMode === 'songs' || sidebarMode === 'soundscapes'
   // Whether the two pages controls are needed at all: only the Date, Trash
   // and External sections of the Notes view are paged.
-  // The page holding a hit the dock just marked, so the list follows it.
-  const showFindHitPage = useCallback((position: number | null | undefined) => {
-    if (position !== null && position !== undefined) setFindPage(Math.floor(position / FIND_HITS_PER_PAGE) + 1)
-  }, [])
+  // The list turns to the page of the marked hit, however it was marked.
+  const markedFindHitPosition = isFindMode ? (activeSectionSnapshot?.markedFindHitPosition ?? null) : null
+  useEffect(() => {
+    if (markedFindHitPosition !== null) setFindPage(Math.floor(markedFindHitPosition / FIND_HITS_PER_PAGE) + 1)
+  }, [markedFindHitPosition])
   // A new search starts on its first page.
   const findPageResetKey = `${activeSectionId}|${activeSectionSnapshot?.documentFindQuery ?? ''}|${activeSectionSnapshot?.isDocumentFindCaseSensitive}|${activeSectionSnapshot?.isDocumentFindWholeWord}|${activeSectionSnapshot?.isDocumentReplaceMode}`
   useEffect(() => {
@@ -8712,7 +8713,7 @@ ${markdownHtml}
                                 className="options-curve-cell options-curve-button options-dock-entry-icon"
                                 aria-label="Replace"
                                 data-tooltip="Replace the marked occurrence"
-                                onClick={() => showFindHitPage(getActiveSection()?.replaceSelectedDocumentFindHit())}
+                                onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
                               >
                                 <span className="fa-solid fa-arrow-turn-down find-dock-replace-icon" aria-hidden="true" />
                               </button>
@@ -8752,16 +8753,20 @@ ${markdownHtml}
                             className="options-curve-cell options-curve-button options-dock-entry-icon"
                             aria-label="Previous occurrence"
                             data-tooltip="Previous occurrence"
-                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(-1))}
+                            onClick={() => getActiveSection()?.stepDocumentFindHit(-1)}
                           >
                             <span className="fa-solid fa-caret-left" aria-hidden="true" />
                           </button>
+                          {/* Which hit is marked, of how many: a readout, not a control. */}
+                          <span className="options-curve-cell options-curve-display find-dock-count" aria-live="polite">
+                            {`${markedFindHitPosition === null ? '-' : (markedFindHitPosition + 1).toLocaleString()} of ${findHitCount.toLocaleString()}${activeSection?.isDocumentFindTruncated ? '+' : ''}`}
+                          </span>
                           <button
                             type="button"
                             className="options-curve-cell options-curve-button options-dock-entry-icon"
                             aria-label="Next occurrence"
                             data-tooltip="Next occurrence"
-                            onClick={() => showFindHitPage(getActiveSection()?.stepDocumentFindHit(1))}
+                            onClick={() => getActiveSection()?.stepDocumentFindHit(1)}
                           >
                             <span className="fa-solid fa-caret-right" aria-hidden="true" />
                           </button>

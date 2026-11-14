@@ -765,14 +765,21 @@
   }
 
 /* The Find dock (App.tsx): one row of square chips, previous and next
-   sharing what the row leaves. In replace mode two more chips join and the
+   sharing what the row and the hit count between them leave. In replace mode two more chips join and the
    two arrows narrow by their width. */
 .options-curve-row.find-dock-row {
-  grid-template-columns: repeat(3, var(--entry-height)) 1fr 1fr;
+  grid-template-columns: repeat(3, var(--entry-height)) 1fr auto 1fr;
 }
 
 .options-curve-row.find-dock-row.is-replace-mode {
-  grid-template-columns: repeat(5, var(--entry-height)) 1fr 1fr;
+  grid-template-columns: repeat(5, var(--entry-height)) 1fr auto 1fr;
+}
+
+/* The hit count between the arrows: as wide as its figures. */
+.find-dock-count {
+  padding:              0 var(--spacing-small);
+  white-space:          nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Turned a quarter counter-clockwise, then mirrored top to bottom (the
