@@ -30,10 +30,10 @@ export interface PagerAxis {
  * In order: page back, previous hit, the readout, next hit, page forward --
  * each arrow only where its axis is given. A press steps; holding the press
  * goes to the first or last item, the same hold every other press-and-hold
- * here uses (`armHold`). With hits, the readout between the arrows shows
- * `n | N` and a right-click turns it into a field for a match number. The
- * page is not written in the pager: a paged list shows it on the thumb of
- * its scrollbar (CanonicalScrollRail's `thumbLabel`).
+ * here uses (`armHold`). The readout between the arrows shows `n | N` of
+ * the hits when there are hits, else of the pages, and a right-click turns
+ * it into a field for that number. Hits and pages together show the page on
+ * the list's scrollbar thumb instead (CanonicalScrollRail's `thumbLabel`).
  *
  * It fills the width it is given: the page arrows sit at its two ends, a
  * `--spacing-regular` in, and the parts between share the rest evenly, so it
@@ -50,14 +50,14 @@ export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: Pa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft === null])
 
-  // The page is not written here: a paged list shows it on its scrollbar's
-  // thumb. The readout is the hits', and only typed into when there are hits.
-  const entryAxis = hits
+  // With hits the readout is theirs and the page shows on the list's
+  // scrollbar thumb instead; a pager over pages alone shows the page here.
+  const entryAxis = hits ?? pages
   // Plain figures, no thousands separator; past two digits a number reads
   // "...", which keeps the readout one width however large the list.
   const show = (axis: PagerAxis) => (axis.current === null ? '-' : pagerFigure(axis.current + 1))
   const showTotal = (axis: PagerAxis) => (axis.isTotalOpen ? '...' : pagerFigure(axis.total))
-  const readout = !hits ? null : hits.total === 0 ? 'no results' : `${show(hits)} | ${showTotal(hits)}`
+  const readout = !entryAxis ? null : hits && hits.total === 0 ? 'no results' : `${show(entryAxis)} | ${showTotal(entryAxis)}`
 
   const commit = () => {
     if (draft === null || !entryAxis) return
@@ -75,7 +75,7 @@ export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: Pa
       {readout === null ? null : draft === null ? (
         <span
           className="pager-readout"
-          data-tooltip="Right-click to go to a match"
+          data-tooltip={hits ? 'Right-click to go to a match' : 'Right-click to go to a page'}
           data-secondary-press="action"
           onContextMenu={(event) => {
             event.preventDefault()
@@ -91,7 +91,7 @@ export function Pager({ hits, pages, className }: { hits?: PagerAxis; pages?: Pa
           type="text"
           inputMode="numeric"
           spellCheck={false}
-          aria-label="Go to match"
+          aria-label={hits ? 'Go to match' : 'Go to page'}
           value={draft}
           onChange={(event) => setDraft(event.target.value.replace(/[^0-9]/g, ''))}
           onKeyDown={(event) => {

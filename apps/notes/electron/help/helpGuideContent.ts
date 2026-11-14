@@ -403,7 +403,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Steps through a long, flat list of notes a page at a time.*
 
 - The arrows turn the page; holding one goes to the first or last page.
-- The page you're on shows on the scrollbar's thumb.
+- Right-click the page number to type a page and jump to it.
 
 ### [Search](#search)
 

@@ -6727,11 +6727,9 @@ ${markdownHtml}
   const findTotalPages = Math.max(1, Math.ceil(findHitCount / FIND_HITS_PER_PAGE))
   const effectiveFindPage = Math.min(Math.max(1, findPage), findTotalPages)
   const showPagination = !isImageLibraryShown && isPagedNoteSection(sidebarMode) && totalPages > 1
-  // The page a paged list is on, written on its scrollbar's thumb (the pager
-  // beside it has arrows and no page number).
-  const sidebarThumbPage = isFindMode
-    ? (findTotalPages > 1 ? effectiveFindPage : null)
-    : showPagination ? effectiveCurrentPage : null
+  // The page the find list is on, written on its scrollbar's thumb: its
+  // pager's readout is the hits'. (The notes list's pager shows its page.)
+  const sidebarThumbPage = isFindMode && findTotalPages > 1 ? effectiveFindPage : null
   const isMusicLibraryDocked = sidebarMode === 'songs'
   const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
 

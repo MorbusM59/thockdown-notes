@@ -453,6 +453,7 @@
 .sidebar-pagination {
   --entry-height: var(--canonical-scroll-thickness);
   display:        flex;
+  flex:           0 0 auto;
   height:         var(--entry-height);
   padding:        0 0 0 var(--spacing-large);
 }
