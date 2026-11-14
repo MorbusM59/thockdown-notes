@@ -234,13 +234,13 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - Line numbers count actual Markdown source lines, not wrapped visual rows: a long wrapped line gets one number, shown beside its first row, with the rest of its rows left blank.
 - Click a line's box in the flag column to mark it for review (\`?\`); click again to escalate it to a warning (\`!\`); click again to go back to \`?\`. Either state tints the whole line (all of its wrapped rows) in the review or warning color. Right-click the box to clear the flag entirely — the only way to remove one.
 - Flags are saved permanently per note (or chapter) regardless of whether the gutter is currently shown — toggling the gutter off only hides them, it never deletes them.
-- Review and warning colors (plus the gutter's own background) are customizable from Settings alongside the other box colors.
+- Review and warning colors (plus the gutter's own background) are customizable in Options alongside the other box colors.
 - When a flagged line sits above or below what's currently visible, the flag column's topmost or bottommost box swaps to an up or down arrow — click it (or press Ctrl+Up/Ctrl+Down) to smooth-scroll to and center that flagged line. If the box showing the arrow is itself already flagged, clicking centers that line instead of jumping past it.
 
 ### [Spell Check](#spell-check)
 
 > **Where?**
-> Settings panel → [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}); dictionaries under Tools → Spell Checking.
+> Options → [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}); dictionaries under Tools → Spell Checking.
 
 *Outlines misspelled words, using dictionaries that ship with the app, so it works offline and the same on every computer.*
 
@@ -255,7 +255,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Typing Trail](#typing-trail)
 
 > **Where?**
-> Switched on in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}), tuned in Settings panel → Glitz → Typing Trail.
+> Switched on in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}), tuned in Options → Glitz → Typing Trail.
 
 *A faint trail along the line you are typing in, so your eye always finds it.*
 
@@ -266,12 +266,12 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Visualizer](#visualizer)
 
 > **Where?**
-> Settings panel → Advanced → Beat Detection, Glitz → Grid Beat and Glitz → Visualizer.
+> Options → Advanced → Beat Detection, Glitz → Grid Beat and Glitz → Visualizer.
 
 *The caret, the active editor's edge and its pane follow the music you are playing.*
 
 - Its switch in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}) turns it on for every layout, and the per-device **delay adjustment** moves it later if it runs ahead of what you hear, as wireless headphones often make it. The adjustment is remembered for each output device.
-- Its settings are the same for every layout. Its colours belong to the layout: Settings panel → Layouts → Colors → Visualizer.
+- Its settings are the same for every layout. Its colours belong to the layout: Options → Layouts → Colors → Visualizer.
 - Caret, edge and pane are separate blocks. The edge is a soft inner shadow along the editor's border. **Grid Beat** sets the edge, the **editor pane** (drawn over the box grid in the editor) and the **reader pane** (an even wash of its colour over the whole editor in the reader); the full-screen scene has its own edge and pane under **Visualizer**, with separate pane settings for light and dark mode. The caret follows the music through its flashing: see **Matching** in [Animations]($#animations).
 - What the music is listened for is set once, under **Beat detection**, in three groups: **Thump** (the low end jumping: a kick, a bass stab), **Pierce** (a sharp sound cutting through: a snare, a clap) and **Tick** (the busy top: hats, shakers). One sound can be a little of two (a snare with some punch is a pierce with a slight thump). Each has a **contrast**: how strong a hit must be against the others around it before it responds, so raising it keeps only the strongest, and only what is mostly that group. Each block then has three sliders for how much the thump, the pierce and the tick drive it; they add up, capped at full. Then its **effect**: right of centre a hit adds the block, left of centre it is inverted, resting at full strength while music plays with a hit taking it away, and the centre turns it off; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
 - In the visualizer scene (F5), the last row of the top strip fills with chromatic semitone boxes, lit in the accent colour. Their brightness follows the estimated strength of each note, and multiple notes can light together. The estimate uses each note's fundamental and partials together, so energy explained by one note's overtones is not automatically shown as extra notes. This is a visual estimate rather than a transcription; closely related notes and unusual instrument timbres can still be ambiguous. A3 sits in the middle (in the right-center box when the row has an even number of boxes). After enough tonal material, the row estimates and holds the track's tuning; until then it uses A=440. To avoid brief broadband hits flashing many boxes, already-lit keys carry through a thump or pierce, and a new key revealed by one is admitted only when its decoded-track energy remains in the short look-ahead. Changes follow the audio, without waiting for a beat-grid boundary.
@@ -282,7 +282,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Speed Reading](#speed-reading)
 
 > **Where?**
-> \`F9\`, the book button beside a slot's view button, or the \`Esc\` menu. Settings panel → Tools → Speed Reading.
+> \`F9\`, the book button beside a slot's view button, or the \`Esc\` menu. Options → Tools → Speed Reading.
 
 *Reads a note to you at a pace you set, from where you are.*
 
@@ -386,14 +386,14 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *What the sidebar shows, switched with one click.*
 
-- **Notes**, **Images** and the **Music Library** are the first three icons. Notes and Images each have four sections, picked in the row of icons at the top of their list; each view comes back on the section you left it on. Images is covered in [Images](${guideLink('TOOLBAR-FORMATTING', 'images')}); the Music Library lists the songs of a music set, one set per icon at its top (drag an icon to reorder the sets), and the search field filters them. Drop files or folders from your file manager anywhere on it to add their songs to the set shown, on a set's icon to add them to that set, or between the icons or on the plus to make a new set of them.
+- The icons are **Notes**, **Images**, **Songs** (the Music Library), **Soundscapes**, **Find** and **Options**. Notes and Images each have four sections, picked in the row of icons at the top of their list; each view comes back on the section you left it on. Images is covered in [Images](${guideLink('TOOLBAR-FORMATTING', 'images')}); the Music Library lists the songs of a music set, one set per icon at its top (drag an icon to reorder the sets), and the search field filters them. Drop files or folders from your file manager anywhere on it to add their songs to the set shown, on a set's icon to add them to that set, or between the icons or on the plus to make a new set of them.
 - The Notes sections:
 - **Date** — a flat, chronological list ordered by last-updated time, fifty notes to a page.
 - **Category** — notes grouped by primary tag, then by secondary tag, folded like the options' sections: a click opens a group and folds the others beside it, a right-click opens or folds just that one.
 - **Archive** — the same tree layout as Category, restricted to archived notes.
 - **Trash** — a flat list of notes marked for deletion, awaiting purge or restore, paged like Date.
 - **Find** — find (and replace) inside the note you have open, see [Find and Replace](${guideLink('FIND-REPLACE', 'find-and-replace')}).
-- The last icon, the cogwheel, opens Settings — see [Settings Panel](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
+- The last icon, the cogwheel, opens Options — see [Options](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
 
 ### [Pagination](#pagination)
 
@@ -651,7 +651,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 
 *Finds and optionally replaces text within the single open note.*
 
-- \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode, or the wide button in the dock below the list.
+- \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode, as does the mode toggle in the dock below the list.
 - Every search marks its first match as soon as it finds one; \`Enter\` in the find field (or, in replace mode, the replace field) takes you there.
 - \`Tab\` moves between the find and replace fields.
 - \`Ctrl+Enter\` replaces every match at once, as do the dock's replace-all button and a right-click on the sidebar's Find icon; its replace button replaces the marked match, or marks the next one.
@@ -700,7 +700,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Import](#import)
 
 > **Where?**
-> Settings → Advanced → Data → the import icon.
+> Options → Advanced → Data → the import icon.
 
 *Brings Markdown files from anywhere on your computer into Thockdown as regular notes.*
 
@@ -710,7 +710,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Back Up All Notes](#back-up-all-notes)
 
 > **Where?**
-> Settings → Advanced → Data → the database icon.
+> Options → Advanced → Data → the database icon.
 
 *Saves a copy of the database, which holds every note, its chapters, tags and history, and shows it in your file explorer.*
 
@@ -768,9 +768,9 @@ ${shortcutTable()}
 - **How small the window goes** is worked out from what actually has to fit rather than being a fixed number: across, the sidebar, the toolbar's formatting buttons at three groups of three per row, and this bar; down, enough of the Date view to show four note cards. Both scale with the spacing setting, so a roomier spacing raises the floor and a tighter one lowers it. Hiding the sidebar drops the width floor by the sidebar's own width, and each extra split-view slot raises it once the slots need more room than the chrome does.
 - **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
 `,
-  `## Appearance & Settings
+  `## Appearance & Options
 
-### [Settings Panel](#settings-panel)
+### [Options](#settings-panel)
 
 > **Where?**
 > The cogwheel, the last of the sidebar's view icons.
@@ -784,7 +784,7 @@ ${shortcutTable()}
 ### [Editor Font](#editor-font)
 
 > **Where?**
-> Settings panel → General, below Feature Toggles, followed by Reader Font.
+> Options → General, below Feature Toggles, followed by Reader Font.
 
 *Font family, size, spacing, and padding: Editor Font for editor (font family, size, glyph padding, line height), Reader Font for the reader (font family, size, letter spacing, line height).*
 
@@ -793,19 +793,19 @@ ${shortcutTable()}
 ### [Presets](#presets)
 
 > **Where?**
-> Settings panel → Layouts → Presets.
+> Options → Layouts → Presets.
 
 *The built-in light and dark presets, then your own layouts, in one list.*
 
 - **There is nothing to save**: anything you change is kept in the layout you are using, built-in ones included. The plus makes a new layout of your own, a copy of the one in use.
 - The row at the bottom of the sidebar is the layout in use, and works as the Soundscapes one does: click its icon to pick another, right-click its name to rename it, click the turning arrow to reset it to the neutral layout, and hold the last button to trash one of your own or restore a built-in one as shipped.
 - Hold right-click on one of your own layouts to export it.
-- Soundstages (Settings panel → Sound → Soundstages), keystroke sounds and flashing work the same way; their row shows while their subsection is open.
+- Soundstages (Options → Sound → Soundstages), keystroke sounds and flashing work the same way; their row shows while their subsection is open.
 
 ### [Feature Toggles](#feature-toggles)
 
 > **Where?**
-> Settings panel → General → Feature Toggles.
+> Options → General → Feature Toggles.
 
 *Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), [Grid Beat](${guideLink('NOTES-EDITING', 'visualizer')}) and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}).*
 
@@ -815,7 +815,7 @@ ${shortcutTable()}
 ### [Colors](#colors-and-textures)
 
 > **Where?**
-> Settings panel → Layouts → Colors.
+> Options → Layouts → Colors.
 
 *One staged colour, shown at the top of every section that has colours.*
 
@@ -828,14 +828,14 @@ ${shortcutTable()}
 ### [Borders](#borders-and-spacing)
 
 > **Where?**
-> Settings panel → Layouts → Borders.
+> Options → Layouts → Borders.
 
 *Fine control over border widths, corner radii, and layout spacing throughout the UI.*
 
 ### [UI Font](#ui-font)
 
 > **Where?**
-> Settings panel → General → UI Font.
+> Options → General → UI Font.
 
 *Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the note fonts under [Editor Font]($#editor-font).*
 
@@ -845,7 +845,7 @@ ${shortcutTable()}
 ### [Glaze](#glaze)
 
 > **Where?**
-> Settings panel → Layouts → Glaze.
+> Options → Layouts → Glaze.
 
 *A decorative multi-layer light overlay on top of the UI — purely cosmetic.*
 
@@ -855,7 +855,7 @@ ${shortcutTable()}
 ### [Filters](#filters)
 
 > **Where?**
-> Settings panel → Layouts → Filters.
+> Options → Layouts → Filters.
 
 *Global CSS filters applied over the whole app.*
 
@@ -864,7 +864,7 @@ ${shortcutTable()}
 ### [Animations](#animations)
 
 > **Where?**
-> Settings panel → Advanced → Movement and Flashing.
+> Options → Advanced → Movement and Flashing.
 
 *How things move and how things flash. For what the wheel itself does, see [Scrolling]($#scrolling).*
 
@@ -881,10 +881,10 @@ ${shortcutTable()}
 - **Cycle** (100–5000ms) is how long one cycle takes.
 - **Matching** makes the cycle follow the music's beat instead, while Grid Beat is on, music plays and a beat is found; otherwise the cycle above runs. It reads in bar notation: **4/4** is one cycle a beat, **1/4** one a bar. The thirds run across the bar line on purpose.
 
-### [Speed Reading Settings](#speed-reading-settings)
+### [Speed Reading](#speed-reading-settings)
 
 > **Where?**
-> Settings panel → Tools → Speed Reading.
+> Options → Tools → Speed Reading.
 
 *The pace of [Speed Reading]($#speed-reading) and how it eases.*
 
@@ -895,7 +895,7 @@ ${shortcutTable()}
 ### [Scrolling](#scrolling)
 
 > **Where?**
-> Settings panel → Advanced → Scrolling.
+> Options → Advanced → Scrolling.
 
 *What your own hand does to the page: how far one turn of the wheel goes, and whether a spin of it keeps going after you let go.*
 
@@ -910,7 +910,7 @@ ${shortcutTable()}
 ### [Cursor](#mouse-options)
 
 > **Where?**
-> Settings panel → Layouts → Cursor.
+> Options → Layouts → Cursor.
 
 *An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Feature Toggles]($#quick-access); while it is on, the native cursor is hidden everywhere in the app, not just the editor.*
 
@@ -922,7 +922,7 @@ ${shortcutTable()}
 ### [Caret](#caret)
 
 > **Where?**
-> Settings panel → Layouts → Caret.
+> Options → Layouts → Caret.
 
 *Shape and glow of the block caret in the editor. Its fill, outline and halo colors live with the rest of your theming in [Colors and Textures]($#colors-and-textures), and its blink in [Animations]($#animations).*
 
@@ -935,11 +935,11 @@ ${shortcutTable()}
 ### [Keystroke Sounds](#keystroke-sounds)
 
 > **Where?**
-> Settings panel → Sound → Keystroke Sounds.
+> Options → Sound → Keystroke Sounds.
 
 *Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
 
-- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (six built-in ones, Off first, then your own) work like [layout presets]($#presets), without export.
+- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (five built-in ones, Vanilla to Needles, then your own; switch keystroke sounds off in Feature Toggles) work like [layout presets]($#presets), without export.
 - A keystroke is made of **channels**, layered: four click sets (Pops, Pins, Creamy, Forge) plus Bass and Treble. They work like soundscape channels: click one to show its **volume** , **jitter** (how far each press is pitched up or down at random) and **pitch**, hold it to turn it on, hold right-click to turn it off, and scroll over it to change its volume.
 - **Mix** acts on all channels together: volume, pitch, **variance** (how far each key is pitched apart from the others; a key always keeps its own sound), reverb and room.
 - **Spatial** slider adds stereo panning, centered (off) by default. Left of center pans by keyboard key position (left-hand keys sound from the left, right-hand keys from the right, non-character keys like arrows/Tab/Backspace stay centered); right of center pans by where the caret sits on the current line (line start sounds left, the far edge before an automatic wrap sounds right). The two modes don't blend — the slider picks one or the other by which side of center it's on, with distance from center setting how strong the effect is.
@@ -968,7 +968,7 @@ ${shortcutTable()}
 ### [Data](#data-synchronization-settings)
 
 > **Where?**
-> Settings panel → Advanced → Data.
+> Options → Advanced → Data.
 
 *Note import and backup, and exporting or importing your whole appearance setup.*
 
@@ -979,7 +979,7 @@ ${shortcutTable()}
 ### [Debugging](#debugging)
 
 > **Where?**
-> Settings panel → Advanced → Debugging.
+> Options → Advanced → Debugging.
 
 *Tools for diagnosing problems, not intended for everyday use.*
 
