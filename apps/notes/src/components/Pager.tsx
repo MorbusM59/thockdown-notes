@@ -141,7 +141,7 @@ function PagerArrow({ axis, direction, kind }: { axis: PagerAxis; direction: 1 |
   return (
     <button
       type="button"
-      className={`pager-arrow${atEnd ? ' is-at-end' : ''}`}
+      className={`pager-arrow bare-icon${atEnd ? ' is-at-end' : ''}`}
       aria-label={label}
       data-tooltip={label}
       onPointerDown={(event) => {

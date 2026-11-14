@@ -96,6 +96,22 @@ button[data-pressed],
   box-shadow:   var(--box-shadow-inverted-harsh-active);
 }
 
+/* A BARE ICON: an interaction icon inside another element, with no button
+   look of its own (a row's archive, trash and close icons, the pager's
+   arrows). A press shrinks it by a tenth instead of drawing a pressed
+   button, which it never looked like. */
+.bare-icon,
+button.bare-icon[data-hovered],
+button.bare-icon[data-pressed] {
+  background:   transparent;
+  border-color: transparent;
+  box-shadow:   none;
+}
+
+.bare-icon[data-pressed] {
+  transform: scale(0.9);
+}
+
 button.is-active,
 .ui-btn.is-active,
 .btn-icon.is-active {

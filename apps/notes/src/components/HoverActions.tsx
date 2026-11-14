@@ -30,7 +30,7 @@ export function HoldIcon({ action, className = '' }: { action: HoverAction; clas
   useEffect(() => () => cancelRef.current?.(), [])
   return (
     <span
-      className={`hold-icon fa-solid ${action.icon}${className ? ` ${className}` : ''}`}
+      className={`hold-icon bare-icon fa-solid ${action.icon}${className ? ` ${className}` : ''}`}
       role="button"
       aria-label={action.label}
       data-tooltip={`Hold to ${action.label.charAt(0).toLowerCase()}${action.label.slice(1)}`}
