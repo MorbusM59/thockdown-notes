@@ -794,8 +794,11 @@
 
 /* THE PAGER (components/Pager.tsx): arrows and a readout in one box, the
    outer arrows at its ends (a --spacing-regular in) and the parts spread
-   evenly over the width between. */
-.pager {
+   evenly over the width between. Laid out as a flex row of its own: the
+   display cell it borrows its look from is a block. */
+.options-curve-cell.pager {
+  display:         flex;
+  align-items:     center;
   justify-content: space-between;
   gap:             var(--spacing-regular);
   padding:         0 var(--spacing-regular);
