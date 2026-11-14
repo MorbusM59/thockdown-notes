@@ -4,8 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
-import { DatabaseService, normalizeUiLayoutLoadout } from './databaseService'
-import { stableStringify } from '@thockdown/soundscape/presetFile'
+import { DatabaseService } from './databaseService'
 import { DEFAULT_EDITOR_SECTION_ID } from '../src/shared/sections'
 import { DARK_FACTORY_PRESETS, LIGHT_FACTORY_PRESETS } from '@thockdown/look/presets'
 
@@ -316,21 +315,5 @@ describe('DatabaseService editor slots', () => {
     // Restoring brings a factory layout back as shipped.
     db.restoreFactoryUiLoadout(1)
     expect(entry(1)).toMatchObject({ payload: LIGHT_FACTORY_PRESETS[0], edited: false, name: 'Light', icon: 'fa-sun' })
-  })
-
-  it('retires the old unsaved-changes row, keeping its look as a layout of the reader\'s own when it was in use', async () => {
-    const look = { ...LIGHT_FACTORY_PRESETS[0], borderRadiusRegularPx: 17 }
-    const normalized = normalizeUiLayoutLoadout(look)!
-    db.close()
-    const rawDb = new BetterSqlite3(path.join(dataRoot, 'thockdown-notes.db'))
-    rawDb.prepare('UPDATE ui_loadout_entries SET isActive = 0 WHERE id > 0').run()
-    rawDb.prepare('INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt) VALUES (7, 1, ?, ?, 0)')
-      .run(stableStringify(normalized), JSON.stringify(normalized))
-    rawDb.close()
-    db = new DatabaseService(dataRoot)
-    await db.initialize()
-    const entries = db.listUiLoadouts().entries
-    expect(entries.some((row) => row.id === 7)).toBe(false)
-    expect(entries.find((row) => row.id > 0 && row.isActive)).toMatchObject({ id: 8, name: 'Layout A', payload: normalized })
   })
 })

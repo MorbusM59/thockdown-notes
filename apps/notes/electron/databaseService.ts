@@ -3058,43 +3058,6 @@ export class DatabaseService {
 
     upsert();
     this.retireDefaultCustomRows();
-    this.retirePendingRows();
-  }
-
-  /**
-   * Rows +/-7 held the unsaved changes, which the preset list no longer has.
-   * A database that still has them loses them here: an active one whose look
-   * equals another row of its mode activates that row, and one that equals
-   * none becomes a layout of the reader's own, so the screen does not change.
-   */
-  private retirePendingRows(): void {
-    const db = this.requireDb();
-    const retired = db.prepare(`SELECT id, isActive, signature, payloadJson FROM ui_loadout_entries WHERE ABS(id) = ?`)
-      .all(LOADOUT_RETIRED_PENDING_ID_ABS) as Array<{ id: number; isActive: number; signature: string; payloadJson: string }>;
-    if (retired.length === 0) return;
-    const tx = db.transaction(() => {
-      for (const row of retired) {
-        db.prepare(`DELETE FROM ui_loadout_entries WHERE id = ?`).run(row.id);
-        if (row.isActive !== 1) continue;
-        const sign = row.id > 0 ? 1 : -1;
-        const match = db.prepare(`SELECT id FROM ui_loadout_entries WHERE signature = ? AND id * ? > 0 ORDER BY ABS(id) LIMIT 1`)
-          .get(row.signature, sign) as { id: number } | undefined;
-        if (match) {
-          db.prepare(`UPDATE ui_loadout_entries SET isActive = 1 WHERE id = ?`).run(match.id);
-          continue;
-        }
-        const id = this.nextCustomLoadoutId(sign);
-        if (id === null) {
-          db.prepare(`UPDATE ui_loadout_entries SET isActive = 1 WHERE id = ?`).run(sign);
-          continue;
-        }
-        db.prepare(`
-          INSERT INTO ui_loadout_entries (id, isActive, signature, payloadJson, updatedAt, name)
-          VALUES (?, 1, ?, ?, ?, ?)
-        `).run(id, row.signature, row.payloadJson, Date.now(), this.defaultLoadoutName(sign));
-      }
-    });
-    tx();
   }
 
   /** The first free custom id of a mode, or null when the list is full. */

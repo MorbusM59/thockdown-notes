@@ -127,8 +127,7 @@ export type UiLayoutLoadout = {
 //   abs(id) 1-5   -> factory presets, rewritten from presets.ts every launch
 //                    unless the reader edited them (`edited`)
 //   abs(id) 6, 7  -> unused (were the old Custom button's default layout and
-//                    the unsaved changes; a database that still has them
-//                    loses them on its next launch)
+//                    the unsaved changes)
 //   abs(id) >= 8  -> the reader's own layouts, numbered contiguously
 //
 // Each mode is a PRESET LIST (@thockdown/interaction/presetList.ts, the rule
