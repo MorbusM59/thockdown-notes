@@ -3,6 +3,17 @@ import { getPreviewVisibleTextProjection, mapVisibleRangeToSourceRange } from '.
 
 const DEFAULT_SNIPPET_RADIUS = 50;
 
+/**
+ * The most hits a search lists. A query that matches everywhere (a space, a
+ * single letter, in a novel) would otherwise build hundreds of thousands of
+ * hits, each with a snippet -- in the edit view on the main thread, in the
+ * reader in the worker and then again in the copy handed back -- which no
+ * reader can use and which made the app stall. The hit builders stop one
+ * past it, so `hits.length > MAX_FIND_HITS` says there were more. Replace all
+ * is not a list and is not bounded by it (it scans on its own).
+ */
+export const MAX_FIND_HITS = 10_000;
+
 type BuildSnippetResult = {
   snippetBefore: string;
   snippetMatch: string;
@@ -178,6 +189,7 @@ export function buildDocumentFindHits(
   query: string,
   matching: FindMatching,
   snippetRadius = DEFAULT_SNIPPET_RADIUS,
+  limit = MAX_FIND_HITS + 1,
 ): DocumentFindHit[] {
   // Check the (short) query before touching `text` -- this recomputes on
   // every keystroke via useDocumentFind's useMemo regardless of whether the
@@ -198,7 +210,7 @@ export function buildDocumentFindHits(
   const hits: DocumentFindHit[] = [];
   let searchStart = 0;
 
-  for (;;) {
+  while (hits.length < limit) {
     const foundIndex = scanner.next(normalizedText, haystack, searchStart);
     if (foundIndex < 0) {
       break;
@@ -232,6 +244,7 @@ export function buildPreviewVisibleDocumentFindHits(
   query: string,
   matching: FindMatching,
   snippetRadius = DEFAULT_SNIPPET_RADIUS,
+  limit = MAX_FIND_HITS + 1,
 ): DocumentFindHit[] {
   // Same query-first ordering as buildDocumentFindHits, and for a stronger
   // reason here: with no query there is nothing to search, and the
@@ -251,7 +264,7 @@ export function buildPreviewVisibleDocumentFindHits(
   const hits: DocumentFindHit[] = [];
   let searchStart = 0;
 
-  for (;;) {
+  while (hits.length < limit) {
     const foundIndex = scanner.next(visibleText, haystack, searchStart);
     if (foundIndex < 0) {
       break;

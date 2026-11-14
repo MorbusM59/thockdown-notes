@@ -3,6 +3,7 @@ import {
   applyPreserveCase,
   buildDocumentFindHits,
   buildPreviewVisibleDocumentFindHits,
+  MAX_FIND_HITS,
   resolveDocumentFindDirective,
 } from './FindReplaceEngine';
 
@@ -36,6 +37,16 @@ describe('buildDocumentFindHits', () => {
   it('finds runs of spaces with a whitespace-only query', () => {
     const hits = buildDocumentFindHits('a  b   c', '  ', { caseSensitive: false, wholeWord: false });
     expect(hits.map((hit) => hit.index)).toEqual([1, 4]);
+  });
+});
+
+describe('the hit bound', () => {
+  it('stops one past MAX_FIND_HITS in both views, so more matches than the list holds can be told apart', () => {
+    const text = 'a '.repeat(MAX_FIND_HITS + 50);
+    const matching = { caseSensitive: false, wholeWord: false };
+    expect(buildDocumentFindHits(text, 'a', matching)).toHaveLength(MAX_FIND_HITS + 1);
+    expect(buildPreviewVisibleDocumentFindHits(text, 'a', matching)).toHaveLength(MAX_FIND_HITS + 1);
+    expect(buildDocumentFindHits('a '.repeat(5), 'a', matching)).toHaveLength(5);
   });
 });
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { DocumentFindDirective, DocumentFindHit, FindMatching } from '../editor/FindReplaceEngine'
 import {
+  MAX_FIND_HITS,
   resolveDocumentFindDirective,
   buildDocumentFindHits,
 } from '../editor/FindReplaceEngine'
@@ -93,6 +94,8 @@ export interface UseDocumentFindResult {
   preserveCase: boolean
   documentFindDirective: DocumentFindDirective
   documentFindHits: DocumentFindHit[]
+  /** More matches exist than the list holds (MAX_FIND_HITS); the list shows the first of them. */
+  isDocumentFindTruncated: boolean
   /**
    * A render-view search is running on the worker and this list is not the
    * answer yet.
@@ -266,13 +269,20 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     && documentFindDirective.findText !== ''
     && !previewAnswerIsCurrent
 
-  const documentFindHits = !isFindActive
+  const builtHits = !isFindActive
     ? NO_HITS
     : !isPreviewMode
       ? editModeHits
       : previewAnswerIsCurrent
         ? previewAnswer.hits
         : NO_HITS
+  // The builders stop one past MAX_FIND_HITS, which is how a search with more
+  // matches than the list holds is told apart from one with exactly that many.
+  const isDocumentFindTruncated = builtHits.length > MAX_FIND_HITS
+  const documentFindHits = useMemo(
+    () => (builtHits.length > MAX_FIND_HITS ? builtHits.slice(0, MAX_FIND_HITS) : builtHits),
+    [builtHits],
+  )
 
   return {
     documentFindQuery,
@@ -289,6 +299,7 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     preserveCase,
     documentFindDirective,
     documentFindHits,
+    isDocumentFindTruncated,
     isDocumentFindSearching: isPreviewMode && isSearchingPreview,
   }
 }

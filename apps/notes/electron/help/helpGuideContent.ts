@@ -657,7 +657,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - The dock's **Aa** means "case-sensitive" in plain find mode; in replace mode it means *keep case*, searching case-insensitively but re-casing each replacement to match what it's replacing.
 - Its whole-word toggle finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
 - Its two arrows step through the matches, wrapping at either end.
-- Past 100 matches the list is shown a page at a time; the arrows turn the page as they go.
+- Past 100 matches the list is shown a page at a time; the arrows turn the page as they go. At most the first 10,000 matches are listed; replacing all still replaces every one.
 - What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
 - For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
 `,

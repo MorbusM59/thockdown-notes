@@ -1496,6 +1496,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     preserveCase,
     documentFindDirective,
     documentFindHits,
+    isDocumentFindTruncated,
     isDocumentFindSearching,
   } = useDocumentFind({
     sectionId,
@@ -1925,6 +1926,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     preserveCase,
     documentFindDirective,
     documentFindHits,
+    isDocumentFindTruncated,
     isDocumentFindSearching,
     visibleDocumentFindHitRange,
     handleJumpToDocumentFindHit,

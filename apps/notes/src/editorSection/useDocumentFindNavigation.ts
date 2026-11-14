@@ -4,7 +4,6 @@ import type { EditorAdapter } from '../editor/EditorContract'
 import { normalizeInternalText } from '../editor/TextPolicy'
 import {
   resolveDocumentFindDirective,
-  buildDocumentFindHits,
   applyPreserveCase,
   createFindScanner,
   isWholeWordMatch,
@@ -652,27 +651,33 @@ export function useDocumentFindNavigation({
       return
     }
 
-    const hits = buildDocumentFindHits(sourceText, directive.findText, findMatching)
-    if (hits.length === 0) {
+    // Every match, not the listed ones: the hit list stops at MAX_FIND_HITS,
+    // and a replace-all that stopped with it would leave the rest. Scanned
+    // here without building hits, since no snippet is needed.
+    const scanner = createFindScanner(directive.findText, findMatching)
+    const folded = scanner.fold(sourceText)
+    let foundIndex = scanner.next(sourceText, folded, 0)
+    if (foundIndex < 0) {
       return
     }
 
-    let cursor = 0
-    let nextText = ''
+    const firstHitStart = foundIndex
     let firstReplacementLength = directive.replaceText.length
-    hits.forEach((hit, hitIndex) => {
-      nextText += sourceText.slice(cursor, hit.index)
-      const matchedText = sourceText.slice(hit.index, hit.index + hit.matchLength)
+    const parts: string[] = []
+    let cursor = 0
+    while (foundIndex >= 0) {
+      parts.push(sourceText.slice(cursor, foundIndex))
+      const matchedText = sourceText.slice(foundIndex, foundIndex + scanner.length)
       const replacementText = preserveCase ? applyPreserveCase(matchedText, directive.replaceText) : directive.replaceText
-      if (hitIndex === 0) {
+      if (foundIndex === firstHitStart) {
         firstReplacementLength = replacementText.length
       }
-      nextText += replacementText
-      cursor = hit.index + hit.matchLength
-    })
-    nextText += sourceText.slice(cursor)
-
-    const firstHitStart = hits[0]?.index ?? 0
+      parts.push(replacementText)
+      cursor = foundIndex + scanner.length
+      foundIndex = scanner.next(sourceText, folded, cursor)
+    }
+    parts.push(sourceText.slice(cursor))
+    const nextText = parts.join('')
     const firstHitEnd = firstHitStart + firstReplacementLength
     applyProgrammaticEditorText(nextText, firstHitStart, firstHitEnd)
   }, [applyProgrammaticEditorText, documentFindQuery, documentReplaceQuery, findMatching, isDocumentReplaceMode, preserveCase, readEditorText])

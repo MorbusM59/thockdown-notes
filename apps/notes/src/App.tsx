@@ -179,6 +179,7 @@ import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
 import { FieldActionButton } from './components/FieldActionButton'
+import { MAX_FIND_HITS } from './editor/FindReplaceEngine'
 import { DEFAULT_VISUALIZER, defaultVisualizerColors, sanitizeVisualizerColors, type VisualizerColors, type VisualizerSettings } from '@thockdown/look/visualizer'
 import { EditorSection } from './editorSection/EditorSection'
 import type { EscapeMenuContribution } from './escapeMenu/escapeMenuContract'
@@ -8381,6 +8382,11 @@ ${markdownHtml}
                           </button>
                           )
                         })}
+                        {activeSection?.isDocumentFindTruncated && effectiveFindPage === findTotalPages ? (
+                          <div className="notes-empty-state">
+                            {`Only the first ${MAX_FIND_HITS.toLocaleString()} matches are listed.`}
+                          </div>
+                        ) : null}
                         {(activeSection?.documentFindHits.length ?? 0) === 0 ? (
                           <div className="notes-empty-state">
                             {/* Three states, not two. A render-view search
