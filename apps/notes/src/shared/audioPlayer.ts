@@ -308,6 +308,16 @@ export function songListTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath
 }
 
 /** The visualizer's song search, shared by the song list and the next pick. */
+/**
+ * What the music bar's second row shows: the two volume sliders, or in
+ * their place the soundstages or the pool filter (`AudioControls.tsx`).
+ */
+export type MusicBarRow = 'levels' | 'soundstages' | 'filter';
+
+export function sanitizeMusicBarRow(input: unknown): MusicBarRow | undefined {
+  return input === 'levels' || input === 'soundstages' || input === 'filter' ? input : undefined;
+}
+
 export type MusicPoolFilter = { query: string };
 
 export const EMPTY_POOL_FILTER: MusicPoolFilter = { query: '' };

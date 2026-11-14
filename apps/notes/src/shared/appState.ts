@@ -4,7 +4,7 @@ import type { MusicSetListGrouping } from './musicSetList';
 import type { SidebarSections } from './sidebarSections';
 import type { EqPoint } from './musicEqCurve';
 import type { SoundstagePreferences } from './soundstages';
-import type { MusicPoolFilter } from './audioPlayer';
+import type { MusicBarRow, MusicPoolFilter } from './audioPlayer';
 import type { FeatureToggles } from './features';
 import type { TypingTrailSettings } from './typingTrailSettings';
 import type { VisualizerFont } from './visualizerFont';
@@ -217,8 +217,8 @@ export interface PersistedMenuState {
   musicMuted?: boolean;
   /** Reverb bypassed; both the reverb and the room button reflect this one flag. */
   musicReverbBypassed?: boolean;
-  /** Bottom row of the player showing sound options instead of the music sets. */
-  musicSoundOptionsOpen?: boolean;
+  /** What the music bar's second row shows (`audioPlayer.ts`'s `MusicBarRow`). */
+  musicBarRow?: MusicBarRow;
   musicActiveSlots?: number[];
   /** The pool's search (`audioPlayer.ts`'s `MusicPoolFilter`), set in the visualizer. */
   musicPoolFilter?: MusicPoolFilter;

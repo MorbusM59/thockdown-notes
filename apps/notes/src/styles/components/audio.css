@@ -6,8 +6,9 @@
   --audio-control-gap: var(--spacing-small);
   /* Two rows of buttons stacked inside one large-square button box -- this is
      both their height and, since every regular control is square, their width.
-     The play/stop button spans two columns and so widens proportionally
-     (2 * size + the gap it swallows) rather than being sized separately.
+     The Music and Soundscape buttons span two columns and so widen
+     proportionally (2 * size + the gap they swallow) rather than being sized
+     separately.
      The shared token (tokens.css) is the same measurement the markdown
      toolbar's compact layout uses. */
   --audio-btn-size: var(--btn-square-half-size);
@@ -49,7 +50,6 @@
   transition:         background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.audio-playlist-btn,
 .audio-sound-btn {
   font-size:          10px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
@@ -70,28 +70,51 @@
   color:        var(--color-text-base);
 }
 
-.audio-ctrl-btn.is-primed {
-  filter: var(--filter-alert);
+
+
+/* Music and Soundscape: two columns each. */
+.audio-wide-btn {
+  grid-column: span 2;
+  font-size:   12px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 
-.audio-ctrl-btn.is-empty {
-  opacity: 0.45;
+/* The second row's two volume sliders, three columns each, centred on the
+   row's height. */
+.audio-slider-cell {
+  grid-column: span 3;
+  display:     flex;
+  align-items: center;
+  min-width:   0;
 }
 
-/* Play button takes up 2 columns and shows a song label text. */
-.audio-play-btn {
-  justify-content: center;
-  min-width: 0;
-  font-size: 12px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
-}
-
-.audio-song-label {
-  font-size:     calc(9px * var(--ui-font-scale));
-  white-space:   nowrap;
-  overflow:      hidden;
-  text-overflow: ellipsis;
+/* The pool filter: the whole second row, a button's height. */
+.audio-filter-field {
+  grid-column:   1 / -1;
   min-width:     0;
-  flex:          1;
-  text-align:    left;
-  opacity:       0.75;
+  height:        var(--audio-btn-size);
+  padding:       0 var(--spacing-regular);
+  border:        var(--backdrop-surface-border);
+  border-radius: var(--border-radius-small);
+  background:    var(--backdrop-surface-background);
+  box-shadow:    var(--backdrop-surface-shadow);
+  color:         var(--color-text-base);
+  font-size:     calc(10px * var(--ui-font-scale));
+  outline:       none;
+}
+
+.audio-filter-field:focus {
+  border-color: var(--color-border-light-30);
+}
+
+/* The slider as tall as the buttons, so the row keeps their height, and its
+   label free of the end padding and spacing a sidebar slider gives it, a
+   point smaller: the cell is three buttons wide and the label must fit. */
+.audio-slider-cell .utility-setting-scrollbar-shell {
+  --canonical-scroll-thickness: var(--audio-btn-size);
+}
+
+.audio-slider-cell .utility-setting-scrollbar-track-label {
+  padding:        0;
+  letter-spacing: 0;
+  font-size:      calc(9px * var(--ui-font-scale));
 }

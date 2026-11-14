@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { MouseEvent } from 'react'
-import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
-import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText, musicSetMarkOf } from '../shared/audioPlayer'
+import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
+import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -12,10 +11,8 @@ import {
 } from '../shared/audioPlayer'
 import { adjacentSongInPool } from '../shared/musicPool'
 import { activeSoundscape, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
-import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import {
   fromDisplayLevel,
-  nudgeLevel,
   SOUND_LEVEL_MAX_DISPLAY,
   toDisplayLevel,
 } from '@thockdown/soundscape/musicSoundOptions'
@@ -29,31 +26,28 @@ import {
   useHoldToAdjust,
   type HoldToAdjustKeyboardController,
 } from '../shared/useHoldToAdjust'
-import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
 import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
-import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
-import { openMusicLibrary } from '../sidebar/musicLibraryView'
-import { pressMusicSet } from '../sound/setPress'
+import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
-import { CUSTOM_SOUNDSTAGE_ICON } from '../shared/soundstages'
+import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, subscribePoolFilterDraft } from '../visualizer/poolFilterDraft'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import { beginBackgroundWork } from '../shared/backgroundWork'
 
-// Purging a song from the library and clearing a music set are both
-// "I know this is not undoable" -- the app's COMMIT threshold
-// (`shared/holdTiming.ts`), which also announces the completion in the
-// cursor. Was 700ms of its own.
-const HOLD_THRESHOLD_MS = HOLD_COMMIT_MS
 const VISUALIZER_DOUBLE_PRESS_MS = 300
 const SEEK_HOLD_DELAY_MS = 200
 const SEEK_INTERVAL_MS = 100
 const SEEK_HOLD_STEP = 0.05
 const SEEK_CLICK_STEP = 0.2
+/** How far the Music button's right click skips ahead. */
+const MUSIC_SKIP_SEC = 4 * 60
+/** Less than this left in the song, and the right click plays the next one. */
+const MUSIC_SKIP_TO_NEXT_SEC = 6 * 60
 
 type SeekDirection = 1 | -1
 
@@ -117,12 +111,9 @@ export interface AudioControlsProps {
    */
   soundscapePreferences: SoundscapePreferences
   onSoundscapePreferencesChange: (preferences: SoundscapePreferences) => void
-  /**
-   * Whether the bottom row is showing the sound options instead of the
-   * music sets. Owned by the parent so it survives a restart.
-   */
-  isSoundOptionsOpen: boolean
-  onSoundOptionsOpenChange: (value: boolean) => void
+  /** What the second row shows. Owned by the parent so it survives a restart. */
+  barRow: MusicBarRow
+  onBarRowChange: (row: MusicBarRow) => void
   /** DB id of the song that was last active in the previous session, if any. */
   initialSongId?: number | null
   /** Playback position (seconds) to resume the initial song at. */
@@ -159,8 +150,8 @@ export const AudioControls = memo(function AudioControls({
   onPoolFilterChange,
   soundscapePreferences,
   onSoundscapePreferencesChange,
-  isSoundOptionsOpen,
-  onSoundOptionsOpenChange,
+  barRow,
+  onBarRowChange,
   initialSongId,
   initialPositionSec,
   initialWasPlaying,
@@ -173,28 +164,14 @@ export const AudioControls = memo(function AudioControls({
   const activeSlotsRef = useRef(activeSlots)
   activeSlotsRef.current = activeSlots
   const selectionVersionRef = useRef(0)
-  // Slot button that is currently "primed" for clearing (held right-click)
-  /** The set whose list the current right press opened by being held; its release's contextmenu is ignored. */
-  const heldSlotRef = useRef<PlaylistSlot | null>(null)
   // Position to seek to once the restored song's first playback begins.
   const pendingSeekSecRef = useRef<number | null>(null)
 
-  const holdTimerRef = useRef<(() => void) | null>(null)
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seekIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isSeekScrubbing = useRef(false)
   const lastVisualizerSeekPressRef = useRef<{ direction: SeekDirection; atMs: number } | null>(null)
   const visualizerKeysDownRef = useRef(new Set<string>())
-  /**
-   * Set by the release that ends a scrub, to swallow the click the browser
-   * dispatches right after it: pointerup has already cleared
-   * `isSeekScrubbing` by then, so without this every left-button scrub ended
-   * with an extra 20% press on top. The click follows its pointerup within
-   * the same task, so the mark is dropped at the end of that task -- a
-   * release off the button produces no click, and must not leave the next
-   * genuine one swallowed.
-   */
-  const swallowScrubClickRef = useRef(false)
   const activeRef = useRef(activeSlots)
   activeRef.current = activeSlots
   // THE POOL is the activated sets: what the player and the Music Library
@@ -470,75 +447,11 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [isPlaying, currentSong, advanceToNextSong, purgeMissingSong])
 
-  // ---------------------------------------------------------------- favorability button
-
-  // The button is a toggle. Pressing it on an already-favourited song takes the
-  // replay marker back off, which is a priority change only -- favorability
-  // stays where it is, so toggling off does not walk back the earlier presses
-  // that raised it.
-  const handleFavoriteLeft = useCallback(async () => {
-    if (!currentSong) return
-    const api = window.thockdownAudioPlayer
-    const updated = currentSong.priority === 0
-      ? await api?.unfavoriteSong(currentSong.id)
-      : await api?.favoriteSong(currentSong.id)
-    if (updated) setCurrentSong(updated)
-  }, [currentSong])
-
-  const handleSkipRight = useCallback(async (event: MouseEvent) => {
-    event.preventDefault()
-    if (!currentSong) return
-    await window.thockdownAudioPlayer?.skipSong(currentSong.id)
-    if (currentSong.id != null) {
-      await window.thockdownAudioPlayer?.afterPlay(currentSong.id)
-    }
-    await musicPlayerService.fadeOut()
-    await advanceToNextSong()
-  }, [currentSong, advanceToNextSong])
-
-  const handleFavoriteContextMenu = useCallback((event: MouseEvent) => {
-    event.preventDefault()
-    // Right-click = skip; check for held right-click is handled by pointer events below.
-    void handleSkipRight(event)
-  }, [handleSkipRight])
-
-  // Held right-click on the favorability button = purge song.
-  const favHoldTimerRef = useRef<(() => void) | null>(null)
-  const favPrimedRef = useRef(false)
-
-  const handleFavPointerDown = useCallback((event: React.PointerEvent) => {
-    if (event.button !== 2) return
-    event.preventDefault()
-    favPrimedRef.current = false
-    favHoldTimerRef.current = armHold(() => {
-      favPrimedRef.current = true
-    }, HOLD_THRESHOLD_MS)
-  }, [])
-
-  const handleFavPointerUp = useCallback(async (event: React.PointerEvent) => {
-    if (event.button !== 2) return
-    if (favHoldTimerRef.current) {
-      favHoldTimerRef.current()
-      favHoldTimerRef.current = null
-    }
-    if (favPrimedRef.current && currentSong) {
-      favPrimedRef.current = false
-      musicPlayerService.stop()
-      setIsPlaying(false)
-      await purgeMissingSong(currentSong.id)
-      setCurrentSong(null)
-      // Pick the next song.
-      await advanceToNextSong()
-    }
-    // Normal right-click handled by contextmenu event.
-  }, [currentSong, advanceToNextSong, purgeMissingSong])
-
-  // ---------------------------------------------------------------- seek buttons
-  // Two direction-fixed buttons, rewind and forward, each owning its own way
-  // through the music on every gesture:
-  //   left-click        seek 20% of the track that way
-  //   right-click       change song that way (see jumpSong)
-  //   hold either       scrub 5% per 100 ms after a 200 ms delay
+  // ---------------------------------------------------------------- seeking
+  // The visualizer's arrow keys (below) seek and scrub:
+  //   press             seek 20% of the track that way
+  //   double press      change song that way (see jumpSong)
+  //   hold              scrub 5% per 100 ms after a 200 ms delay
   // A scrub that runs off either end of the track carries the overshoot into
   // the neighbouring song rather than stalling against the file boundary, so a
   // held rewind walks backwards through the tally continuously.
@@ -678,33 +591,7 @@ export const AudioControls = memo(function AudioControls({
     isSeekScrubbing.current = false
   }, [])
 
-  const handleSeekPointerDown = useCallback((event: React.PointerEvent, direction: SeekDirection) => {
-    if (event.button !== 0 && event.button !== 2) return
-    event.preventDefault()
-    startSeekHold(direction)
-  }, [startSeekHold])
 
-  /**
-   * The right-click action fires from pointer-up rather than from the
-   * contextmenu event, because contextmenu fires on press on some platforms
-   * and on release on others -- and on the press-firing ones it would jump to
-   * another song the instant a hold-to-scrub gesture began, before the scrub
-   * had a chance to mark itself. Waiting for the release means the same code
-   * decides between "this was a click" and "this was a hold" everywhere.
-   */
-  const handleSeekPointerUp = useCallback((event: React.PointerEvent, direction: SeekDirection) => {
-    if (event.button !== 0 && event.button !== 2) return
-    const wasScrubbing = isSeekScrubbing.current
-    stopSeekScrub()
-    if (wasScrubbing) {
-      if (event.button === 0) {
-        swallowScrubClickRef.current = true
-        window.setTimeout(() => { swallowScrubClickRef.current = false }, 0)
-      }
-      return
-    }
-    if (event.button === 2) void jumpSong(direction)
-  }, [stopSeekScrub, jumpSong])
 
   /**
    * A 20% press. Unlike the scrub above this never carries a leftover into the
@@ -713,12 +600,6 @@ export const AudioControls = memo(function AudioControls({
    * named. See that function for why the two gestures differ.
    */
   const handleSeekActivate = useCallback(async (direction: SeekDirection) => {
-    // A hold that already scrubbed swallows the click that ends it, so a
-    // release after scrubbing does not tack an extra 20% on top.
-    if (swallowScrubClickRef.current) {
-      swallowScrubClickRef.current = false
-      return
-    }
     if (isSeekScrubbing.current || isCrossingSongRef.current) return
 
     const outcome = resolveSeekPress(
@@ -753,10 +634,6 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [advanceToNextSong, playPreviousSong])
 
-  const handleSeekContextMenu = useCallback((event: React.MouseEvent) => {
-    // Suppress the native menu only; the action itself runs on pointer-up.
-    event.preventDefault()
-  }, [])
 
   // ---------------------------------------------------------------- playlist buttons
 
@@ -805,44 +682,9 @@ export const AudioControls = memo(function AudioControls({
     return true
   }, [])
 
-  /**
-   * A left press on a set button (sound/setPress.ts): a click toggles the set
-   * in the pool, a hold plays it alone. An empty set has nothing to play, so
-   * either asks for files first and joins the pool once it has some.
-   */
-  const handleSlotLeftPress = useCallback((event: React.PointerEvent, slot: PlaylistSlot) => {
-    const choose = async (selection: SetSelection) => {
-      if ((counts[slot] ?? 0) === 0) {
-        const selectionVersion = selectionVersionRef.current
-        if (await addToMusicSet(slot, 'files') && selectionVersion === selectionVersionRef.current) {
-          await selectSlot(slot, selection === 'solo' ? 'solo' : 'add')
-        }
-        return
-      }
-      await selectSlot(slot, selection)
-    }
-    pressMusicSet(event.nativeEvent, { toggle: () => { void choose('toggle') }, solo: () => { void choose('solo') } })
-  }, [counts, addToMusicSet, selectSlot])
 
 
-  const handleSlotRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
-    event.preventDefault()
-    // The release of a hold that opened the set list is not a right-click.
-    if (heldSlotRef.current === slot) return
-    await addToMusicSet(slot, 'files')
-  }, [addToMusicSet])
 
-  const handleSlotPointerDown = useCallback((event: React.PointerEvent, slot: PlaylistSlot) => {
-    if (event.button !== 2) return
-    event.preventDefault()
-    heldSlotRef.current = null
-    // A held right press opens the set's songs in the sidebar (the Music Library).
-    holdTimerRef.current = armHold(() => {
-      holdTimerRef.current = null
-      heldSlotRef.current = slot
-      openMusicLibrary(slot)
-    }, HOLD_THRESHOLD_MS)
-  }, [])
 
   /**
    * Take a set out of the activated sets (deactivated, purged or deleted) and
@@ -875,29 +717,8 @@ export const AudioControls = memo(function AudioControls({
     await leaveSet(slot)
   }, [leaveSet])
 
-  const cancelSlotHold = useCallback(() => {
-    if (holdTimerRef.current) {
-      holdTimerRef.current()
-      holdTimerRef.current = null
-    }
-  }, [])
 
-  const handleSlotShiftRightClick = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
-    if (!event.shiftKey) return
-    event.preventDefault()
-    const selectionVersion = selectionVersionRef.current
-    const added = await addToMusicSet(slot, 'folder')
-    if (added && selectionVersion === selectionVersionRef.current) await selectSlot(slot, 'add')
-  }, [addToMusicSet, selectSlot])
 
-  // Combine shift+right-click vs plain right-click on slot buttons.
-  const handleSlotContextMenu = useCallback(async (event: MouseEvent, slot: PlaylistSlot) => {
-    if (event.shiftKey) {
-      await handleSlotShiftRightClick(event, slot)
-    } else {
-      await handleSlotRightClick(event, slot)
-    }
-  }, [handleSlotShiftRightClick, handleSlotRightClick])
 
   const createMusicSet = useCallback(async (): Promise<PlaylistSlot | null> => {
     const audioPlayer = window.thockdownAudioPlayer
@@ -1015,7 +836,6 @@ export const AudioControls = memo(function AudioControls({
     filterRef.current = filter
     onPoolFilterChange(filter)
   }, [onPoolFilterChange])
-  const isPoolFiltered = !samePoolFilter(poolFilter, EMPTY_POOL_FILTER)
   const publishedPool = useMemo(() => ({ slots: poolSlots, active: activeSlots, counts, filter: poolFilter }), [poolSlots, activeSlots, counts, poolFilter])
   const publishedLevels = useMemo(() => ({ volume, reverb: reverbAmount, room: reverbRoom }), [volume, reverbAmount, reverbRoom])
   const publishedSetLevel = useCallback((level: keyof SoundLevels, fraction: number) => { mediaActionsRef.current.setLevel(level, fraction) }, [])
@@ -1073,65 +893,52 @@ export const AudioControls = memo(function AudioControls({
     ? `${currentSong.favorability} | ${songTitleText(currentSong)} (${songArtistText(currentSong)})`
     : 'No song'
 
-  // ---------------------------------------------------------------- sound options
-  // The headphones button swaps the bottom row's five music sets for the
-  // six soundstages (the five factory stages and the custom one, played
-  // through the published soundstage controls). It is a swap, not an overlay:
-  // the row keeps its geometry, so nothing under the cursor moves and the
-  // grid stays 2x6 in both states.
-  //
-  // Adjusting a level while its toggle is off turns the toggle back on. A
-  // number that changes while nothing can be heard is a dead control.
+  // ---------------------------------------------------------------- music button
+  // A right click skips ahead MUSIC_SKIP_SEC, or plays the next song once less
+  // than MUSIC_SKIP_TO_NEXT_SEC is left (a skip would land in the last two
+  // minutes); a right HOLD plays the next song wherever the playhead is. The
+  // click is taken on the release, so the one press decides between the two.
+  const musicRightHoldRef = useRef<{ cancel: () => void; fired: boolean } | null>(null)
+  const skipAhead = useCallback(async () => {
+    if (isCrossingSongRef.current || !currentSongRef.current) return
+    const left = musicPlayerService.currentDurationSec - musicPlayerService.currentTime
+    if (left < MUSIC_SKIP_TO_NEXT_SEC) await jumpSong(1)
+    else await musicPlayerService.seekWithFade(musicPlayerService.currentTime + MUSIC_SKIP_SEC)
+  }, [jumpSong])
+  const handleMusicPointerDown = useCallback((event: React.PointerEvent) => {
+    if (event.button !== 2) return
+    event.preventDefault()
+    musicRightHoldRef.current?.cancel()
+    const hold = { fired: false, cancel: () => {} }
+    hold.cancel = armHold(() => {
+      hold.fired = true
+      void jumpSong(1)
+    }, HOLD_CONFIRM_MS)
+    musicRightHoldRef.current = hold
+  }, [jumpSong])
+  const handleMusicPointerUp = useCallback((event: React.PointerEvent) => {
+    if (event.button !== 2) return
+    const hold = musicRightHoldRef.current
+    musicRightHoldRef.current = null
+    if (!hold) return
+    hold.cancel()
+    if (!hold.fired) void skipAhead()
+  }, [skipAhead])
+  const cancelMusicHold = useCallback(() => {
+    musicRightHoldRef.current?.cancel()
+    musicRightHoldRef.current = null
+  }, [])
 
-  // Wheel and hold share the "adjusting turns it back on" rule, so they share
-  // the intent that expresses it rather than each remembering to do it.
+  // Adjusting the volume while muted unmutes: a level that changes while
+  // nothing can be heard is a dead control.
   const unmuteForAdjust = useCallback(() => {
     if (isMuted) onMutedChange(false)
   }, [isMuted, onMutedChange])
 
-  const unbypassForAdjust = useCallback(() => {
-    if (isReverbBypassed) onReverbBypassedChange(false)
-  }, [isReverbBypassed, onReverbBypassedChange])
-
-  // One wheel step per level, shared by the level's own readout and the
-  // headphones button, so both obey the same "adjusting turns it back on" rule.
-  const nudgeVolume = useCallback((deltaY: number, coarse: boolean) => {
+  const handleMusicSlider = useCallback((display: number) => {
     unmuteForAdjust()
-    onVolumeChange(nudgeLevel(volume, deltaY, coarse))
-  }, [volume, unmuteForAdjust, onVolumeChange])
-
-  const nudgeReverb = useCallback((deltaY: number, coarse: boolean) => {
-    unbypassForAdjust()
-    onReverbAmountChange(nudgeLevel(reverbAmount, deltaY, coarse))
-  }, [reverbAmount, unbypassForAdjust, onReverbAmountChange])
-
-  const nudgeRoom = useCallback((deltaY: number, coarse: boolean) => {
-    unbypassForAdjust()
-    onReverbRoomChange(nudgeLevel(reverbRoom, deltaY, coarse))
-  }, [reverbRoom, unbypassForAdjust, onReverbRoomChange])
-
-  // The headphones button adjusts sound from the wheel whichever row is
-  // showing: plain scroll for volume, Shift for reverb, Ctrl for room. The
-  // modifiers pick the level here, so there is no coarse step. Native and non-passive so the page cannot scroll
-  // under it, and so Ctrl+wheel cannot zoom the page instead.
-  const soundOptionsButtonRef = useRef<HTMLButtonElement | null>(null)
-  const handleSoundOptionsWheel = useCallback((event: WheelEvent) => {
-    event.preventDefault()
-    if (event.shiftKey) nudgeReverb(event.deltaY, false)
-    else if (event.ctrlKey || event.metaKey) nudgeRoom(event.deltaY, false)
-    else nudgeVolume(event.deltaY, false)
-  }, [nudgeVolume, nudgeReverb, nudgeRoom])
-  useNonPassiveWheel(soundOptionsButtonRef, handleSoundOptionsWheel)
-
-  // The tooltip states the wheel mapping above with the live levels, so the
-  // button teaches its own gesture. A muted/bypassed level still shows its
-  // number (what adjusting would resume from) marked as off.
-  const soundOptionsTooltip = [
-    `[Scroll] Volume: ${toDisplayLevel(volume)}${isMuted ? ' (muted)' : ''}`,
-    `[Shift] Reverb: ${toDisplayLevel(reverbAmount)}${isReverbBypassed ? ' (off)' : ''}`,
-    `[Ctrl] Room: ${toDisplayLevel(reverbRoom)}${isReverbBypassed ? ' (off)' : ''}`,
-    isMuted ? '[Right-click] Unmute' : '[Right-click] Mute',
-  ].join('\n')
+    onVolumeChange(fromDisplayLevel(display))
+  }, [unmuteForAdjust, onVolumeChange])
 
   // The hold gesture speaks in printed 0-99 levels; the graph wants fractions.
   const handleVolumeLevel = useCallback((display: number) => {
@@ -1222,172 +1029,128 @@ export const AudioControls = memo(function AudioControls({
     }
   }, [isVisualizerMode, handlePlayToggle, startSeekHold, stopSeekScrub, jumpSong, handleSeekActivate])
 
-  const soundstage = useSyncExternalStore(subscribeSoundstageControls, readSoundstageControls)
-
   // ---------------------------------------------------------------- render
+  // Two rows of six. The top row is fixed: Music (two columns), Soundstages,
+  // Filters, Soundscape (two columns). The second row shows the two volume
+  // sliders, or in their place the stages or the pool filter: the two toggles
+  // both claim it, so pressing one replaces the other, and pressing the one
+  // that is showing gives the row back to the sliders.
+
+  const soundstage = useSyncExternalStore(subscribeSoundstageControls, readSoundstageControls)
+  const toggleRow = (row: MusicBarRow) => onBarRowChange(barRow === row ? 'levels' : row)
+  const soundscape = activeSoundscape(soundscapePreferences)
+  const nextSoundscape = nextSoundscapePreset(soundscapePreferences)
+  const filterQuery = poolFilter.query.trim()
 
   return (
     <div className="audio-controls" aria-label="Audio player controls">
-      {/* Top row — playback controls */}
       <div
         className="audio-micro-grid"
         style={{ '--audio-grid-columns': AUDIO_GRID_COLUMNS } as React.CSSProperties}
       >
-        {/* Play / pause — spans 2 columns */}
         <button
           type="button"
-          className={`audio-ctrl-btn audio-play-btn${isPlaying ? ' is-active' : ''}`}
-          data-tooltip={songLabel}
+          className={`audio-ctrl-btn audio-wide-btn${isPlaying ? ' is-active' : ''}`}
+          data-tooltip={`${songLabel}\n[Right] Skip ${MUSIC_SKIP_SEC / 60} minutes, or the next song near the end\n[Hold right] Next song`}
           aria-label={isPlaying ? 'Pause music' : 'Play music'}
           aria-pressed={isPlaying}
           onClick={() => { void handlePlayToggle() }}
-          style={{ gridColumn: 'span 2' }}
+          data-secondary-press="action"
+          onContextMenu={(event) => event.preventDefault()}
+          onPointerDown={handleMusicPointerDown}
+          onPointerUp={handleMusicPointerUp}
+          onPointerCancel={cancelMusicHold}
+          onMouseLeave={cancelMusicHold}
         >
-          <span
-            className={`fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'}`}
-            aria-hidden="true"
-          />
+          <span className="fa-solid fa-music" aria-hidden="true" />
         </button>
 
-        {/* Rewind — mirror of the forward button, always backwards */}
         <button
           type="button"
-          className="audio-ctrl-btn"
-          data-tooltip="Left-click: rewind 20%. Right-click: previous song. Hold: scrub back, crossing into the previous song."
-          aria-label="Rewind or previous song"
-          onClick={() => { void handleSeekActivate(-1) }}
-          data-secondary-press="action"
-          onContextMenu={handleSeekContextMenu}
-          onPointerDown={(e) => handleSeekPointerDown(e, -1)}
-          onPointerUp={(e) => handleSeekPointerUp(e, -1)}
-          onPointerLeave={stopSeekScrub}
-        >
-          <span className="fa-solid fa-backward" aria-hidden="true" />
-        </button>
-
-        {/* Favorability / skip button. While a pool filter is in force (set in
-            the visualizer), its left press clears the filter instead, and the
-            button shows that state: a magnifying glass, pressed. */}
-        <button
-          type="button"
-          className={`audio-ctrl-btn${isPoolFiltered || currentSong?.priority === 0 ? ' is-active' : ''}`}
-          data-tooltip={isPoolFiltered
-            ? 'Songs are filtered. Left-click: clear the filter. Right-click: skip. Hold right-click: purge.'
-            : currentSong?.priority === 0
-              ? 'Left-click: clear the replay marker. Right-click: skip. Hold right-click: purge.'
-              : 'Left-click: favourite (replay next). Right-click: skip. Hold right-click: purge.'}
-          aria-label={isPoolFiltered ? 'Clear song filter, or skip current song' : 'Favourite or skip current song'}
-          aria-pressed={isPoolFiltered || currentSong?.priority === 0}
-          onClick={() => { if (isPoolFiltered) setPoolFilter(EMPTY_POOL_FILTER); else void handleFavoriteLeft() }}
-          data-secondary-press="action"
-          onContextMenu={handleFavoriteContextMenu}
-          onPointerDown={handleFavPointerDown}
-          onPointerUp={(e) => { void handleFavPointerUp(e) }}
-        >
-          <span className={`fa-solid ${isPoolFiltered ? 'fa-magnifying-glass' : 'fa-heart'}`} aria-hidden="true" />
-        </button>
-
-        {/* Fast forward */}
-        <button
-          type="button"
-          className="audio-ctrl-btn"
-          data-tooltip="Left-click: forward 20%. Right-click: next song. Hold: scrub forward, crossing into the next song."
-          aria-label="Fast forward or next song"
-          onClick={() => { void handleSeekActivate(1) }}
-          data-secondary-press="action"
-          onContextMenu={handleSeekContextMenu}
-          onPointerDown={(e) => handleSeekPointerDown(e, 1)}
-          onPointerUp={(e) => handleSeekPointerUp(e, 1)}
-          onPointerLeave={stopSeekScrub}
-        >
-          <span className="fa-solid fa-forward" aria-hidden="true" />
-        </button>
-
-        {/* Soundstage toggle: swaps the bottom row between sets and soundstages */}
-        <button
-          ref={soundOptionsButtonRef}
-          type="button"
-          className={`audio-ctrl-btn${isSoundOptionsOpen ? ' is-active' : ''}`}
-          data-tooltip={soundOptionsTooltip}
-          aria-label={isSoundOptionsOpen ? 'Show playlists' : 'Show soundstages'}
-          aria-pressed={isSoundOptionsOpen}
-          onClick={() => onSoundOptionsOpenChange(!isSoundOptionsOpen)}
-          data-secondary-press="action"
-          onContextMenu={(event) => {
-            event.preventDefault()
-            onMutedChange(!isMuted)
-          }}
+          className={`audio-ctrl-btn${barRow === 'soundstages' ? ' is-active' : ''}`}
+          data-tooltip="Soundstages"
+          aria-label="Soundstages"
+          aria-pressed={barRow === 'soundstages'}
+          onClick={() => toggleRow('soundstages')}
         >
           <span className="fa-solid fa-headphones" aria-hidden="true" />
         </button>
 
-        {/* Bottom row — music sets, or the sound options in their place */}
-        {isSoundOptionsOpen ? (
-          <>
-            {soundstage.factory.map((stage) => (
+        <button
+          type="button"
+          className={`audio-ctrl-btn${barRow === 'filter' ? ' is-active' : ''}`}
+          data-tooltip={filterQuery ? `Filter: ${filterQuery}` : 'Filter'}
+          aria-label="Filter songs"
+          aria-pressed={barRow === 'filter'}
+          onClick={() => toggleRow('filter')}
+        >
+          <span className="fa-solid fa-filter" aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          className={`audio-ctrl-btn audio-wide-btn${soundscapePreferences.enabled ? ' is-active' : ''}`}
+          data-tooltip={`Soundscape: ${soundscape.name}\n[Right] ${nextSoundscape.name}`}
+          aria-label={soundscapePreferences.enabled ? 'Stop the soundscape' : 'Play the soundscape'}
+          aria-pressed={soundscapePreferences.enabled}
+          onClick={() => onSoundscapePreferencesChange({ ...soundscapePreferences, enabled: !soundscapePreferences.enabled })}
+          data-secondary-press="action"
+          onContextMenu={(event) => {
+            event.preventDefault()
+            onSoundscapePreferencesChange(applySoundscapePreset(soundscapePreferences, nextSoundscape))
+          }}
+        >
+          <span className="fa-solid fa-podcast" aria-hidden="true" />
+        </button>
+
+        {barRow === 'soundstages' ? (
+          Array.from({ length: AUDIO_GRID_COLUMNS }, (_, index) => {
+            const stage = soundstage.presets[index]
+            if (!stage) return <span key={`empty-${index}`} aria-hidden="true" />
+            const isActive = soundstage.activeId === stage.id
+            return (
               <button
                 key={stage.id}
                 type="button"
-                className={`audio-ctrl-btn audio-sound-btn${soundstage.solid === stage.id ? ' is-active' : ''}`}
+                className={`audio-ctrl-btn audio-sound-btn${isActive ? ' is-active' : ''}`}
                 data-tooltip={stage.name}
                 aria-label={`${stage.name} soundstage`}
-                aria-pressed={soundstage.solid === stage.id}
+                aria-pressed={isActive}
                 onClick={() => soundstage.select(stage.id)}
               >
                 <PresetMark preset={stage} lettersClassName="audio-playlist-custom-label" />
               </button>
-            ))}
-            <button
-              type="button"
-              className={`audio-ctrl-btn audio-sound-btn${soundstage.solid === 'custom' ? ' is-active' : ''}`}
-              data-tooltip="Custom"
-              aria-label="Custom soundstage"
-              aria-pressed={soundstage.solid === 'custom'}
-              onClick={() => soundstage.select('custom')}
-            >
-              <span className={CUSTOM_SOUNDSTAGE_ICON} aria-hidden="true" />
-            </button>
-          </>
+            )
+          })
+        ) : barRow === 'filter' ? (
+          <MusicBarFilter />
         ) : (
           <>
-          {musicSets.slice(0, MUSIC_SET_QUICK_ACCESS_COUNT).map((set) => {
-            const slot = set.slot
-            const count = counts[slot] ?? 0
-            const isEmpty = count === 0
-            const isActive = activeSlots.includes(slot)
-            const mark = musicSetMarkOf(set)
-            return (
-              <button
-                key={slot}
-                type="button"
-                className={`audio-ctrl-btn audio-playlist-btn${isActive ? ' is-active' : ''}${isEmpty ? ' is-empty' : ''}`}
-                data-tooltip={
-                  isEmpty
-                    ? `${set.name}: empty — click to add files`
-                    : `${set.name}: ${count} song${count !== 1 ? 's' : ''}${isActive ? ' (active)' : ''}`
-                }
-                aria-label={set.name}
-                aria-pressed={isActive}
-                data-secondary-press="action"
-                onContextMenu={(e) => { void handleSlotContextMenu(e, slot) }}
-                onPointerDown={(e) => {
-                  handleSlotLeftPress(e, slot)
-                  handleSlotPointerDown(e, slot)
-                }}
-                onPointerUp={cancelSlotHold}
-                onPointerCancel={cancelSlotHold}
-                onMouseLeave={cancelSlotHold}
-              >
-                {'iconClass' in mark
-                  ? <span className={mark.iconClass} aria-hidden="true" />
-                  : <span className="audio-playlist-custom-label" aria-hidden="true">{mark.letters}</span>}
-              </button>
-            )
-          })}
-          <SoundscapesButton
-            preferences={soundscapePreferences}
-            onChange={onSoundscapePreferencesChange}
-          />
+            <div className="audio-slider-cell">
+              <CompactScrollbarSlider
+                id="music-bar-music-volume"
+                value={toDisplayLevel(volume)}
+                min={0}
+                max={SOUND_LEVEL_MAX_DISPLAY}
+                step={1}
+                trackLabel="Music"
+                ariaLabel="Music volume"
+                dimmed={isMuted}
+                onCommit={handleMusicSlider}
+              />
+            </div>
+            <div className="audio-slider-cell">
+              <CompactScrollbarSlider
+                id="music-bar-ambient-volume"
+                value={toDisplayLevel(soundscapePreferences.masterVolume)}
+                min={0}
+                max={SOUND_LEVEL_MAX_DISPLAY}
+                step={1}
+                trackLabel="Ambient"
+                ariaLabel="Soundscape volume"
+                onCommit={(display) => onSoundscapePreferencesChange({ ...soundscapePreferences, masterVolume: fromDisplayLevel(display) })}
+              />
+            </div>
           </>
         )}
       </div>
@@ -1396,66 +1159,35 @@ export const AudioControls = memo(function AudioControls({
 })
 
 /**
- * The Soundscapes switch at the end of the playlist row, which is also the
- * Soundscapes master volume: a click turns soundscapes on or off, a wheel over
- * it nudges the level exactly like a music level readout (Shift: by 10), and
- * a right-click steps to the next soundscape -- every factory one, then the
- * user's own (nextSoundscapePreset) -- turning soundscapes on. Wheeling turns soundscapes on if it was off -- the same "adjusting
- * turns it back on" rule the music volume follows with mute.
- *
- * Its own component because it owns the ref its
- * native wheel listener is bound to. The playlist row unmounts while the
- * sound options are showing, and a listener bound from the parent would not
- * be re-bound to the new button when the row comes back.
- *
- * Its face is the soundscape a click would play -- the current settings, on or
- * off: a factory soundscape's icon, a custom one's number (as its button in the
- * options panel shows it), and the cloud-bolt when the settings match no saved
- * soundscape and so have no face of their own.
+ * The pool filter in the music bar's second row: the same filter as the
+ * visualizer's field (`visualizer/poolFilterDraft.ts`), followed as typed by
+ * anything showing the shown filter and handed to playback when the field
+ * is left. Enter or Tab leaves it; Escape empties it first. It takes the
+ * keyboard when it appears, because showing it is asking to type.
  */
-function SoundscapesButton({
-  preferences,
-  onChange,
-}: {
-  preferences: SoundscapePreferences
-  onChange: (preferences: SoundscapePreferences) => void
-}) {
-  const ref = useRef<HTMLButtonElement | null>(null)
-  const handleWheel = useCallback((event: WheelEvent) => {
-    event.preventDefault()
-    if (event.deltaY === 0) return
-    onChange({
-      ...preferences,
-      enabled: true,
-      masterVolume: nudgeLevel(preferences.masterVolume, event.deltaY, event.shiftKey),
-    })
-  }, [preferences, onChange])
-  useNonPassiveWheel(ref, handleWheel)
-
-  const level = toDisplayLevel(preferences.masterVolume)
-  const next = nextSoundscapePreset(preferences)
-  const current = activeSoundscape(preferences)
-  const tooltip = [
-    `Soundscape: ${preferences.enabled ? current.name : 'OFF'}`,
-    `[Scroll] Volume: ${level}`,
-    `[Right] ${next.name}`,
-  ].join('\n')
+function MusicBarFilter() {
+  const filter = useSyncExternalStore(subscribePoolFilterDraft, readShownPoolFilter)
   return (
-    <button
-      ref={ref}
-      type="button"
-      className={`audio-ctrl-btn audio-soundscapes-btn${preferences.enabled ? ' is-active' : ''}`}
-      data-tooltip={tooltip}
-      data-secondary-press="action"
-      onContextMenu={(event) => {
-        event.preventDefault()
-        onChange(applySoundscapePreset(preferences, next))
+    <input
+      className="audio-filter-field"
+      type="text"
+      value={filter.query}
+      aria-label="Filter songs"
+      spellCheck={false}
+      autoComplete="off"
+      autoFocus
+      onChange={(event) => setPoolFilterDraft({ query: event.currentTarget.value })}
+      onBlur={commitPoolFilterDraft}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === 'Tab') {
+          event.preventDefault()
+          event.currentTarget.blur()
+        } else if (event.key === 'Escape') {
+          event.preventDefault()
+          setPoolFilterDraft(EMPTY_POOL_FILTER)
+          event.currentTarget.blur()
+        }
       }}
-      aria-label={preferences.enabled ? 'Turn soundscapes off' : 'Turn soundscapes on'}
-      aria-pressed={preferences.enabled}
-      onClick={() => onChange({ ...preferences, enabled: !preferences.enabled })}
-    >
-      <SoundscapeMark preset={current} lettersClassName="audio-playlist-custom-label" />
-    </button>
+    />
   )
 }

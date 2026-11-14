@@ -475,7 +475,7 @@ describe('StateService app-state field round-trip', () => {
         musicSoundstages: { activeId: 's1', factory: 'wide', lastCustom: 's1', factoryEdits: [{ id: 'wide', name: 'Wider', icon: 'fa-wind', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 } }], custom: [{ id: 's1', name: 'Mine', icon: null, settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
         musicMuted: true,
         musicReverbBypassed: true,
-        musicSoundOptionsOpen: true,
+        musicBarRow: 'filter',
       },
     })
 
@@ -483,7 +483,7 @@ describe('StateService app-state field round-trip', () => {
     const loaded = await reader.loadAppState()
     expect(loaded.menu?.musicMuted).toBe(true)
     expect(loaded.menu?.musicReverbBypassed).toBe(true)
-    expect(loaded.menu?.musicSoundOptionsOpen).toBe(true)
+    expect(loaded.menu?.musicBarRow).toBe('filter')
     // The levels are retained, not destroyed, by the flags being on.
     expect(loaded.menu?.musicVolume).toBe(0.42)
     expect(loaded.menu?.musicReverbAmount).toBe(0.6)

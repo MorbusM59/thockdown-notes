@@ -19,6 +19,7 @@ import {
   FACTORY_MUSIC_SETS,
   MUSIC_SET_QUICK_ACCESS_COUNT,
   sanitizePoolFilter,
+  type MusicBarRow,
   type MusicPoolFilter,
   type MusicSet,
 } from './shared/audioPlayer'
@@ -26,8 +27,8 @@ import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
 import { readPoolFilterFields } from './visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
 import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES, KEYSTROKE_CHANNEL_IDS, KEYSTROKE_SOUND_KIND, NEUTRAL_KEYSTROKE_SOUND, sanitizeKeystrokeSoundPreferences, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
-import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE, FACTORY_SOUNDSTAGE_IDS, FACTORY_SOUNDSTAGES, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
-import { activePreset, createPreset, editActivePreset, newPresetId, selectPreset, type PresetList } from '@thockdown/interaction/presetList'
+import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE, FACTORY_SOUNDSTAGE_IDS, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { activePreset, createPreset, editActivePreset, newPresetId, presetsOf, selectPreset, type PresetList } from '@thockdown/interaction/presetList'
 import { publishSoundstageControls } from './sound/soundstageControls'
 import { readNowPlaying } from './sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
@@ -2146,7 +2147,7 @@ function App() {
   // remembered copy -- see PersistedMenuState's note on why.
   const [musicMuted, setMusicMuted] = useState(false)
   const [musicReverbBypassed, setMusicReverbBypassed] = useState(false)
-  const [musicSoundOptionsOpen, setMusicSoundOptionsOpen] = useState(false)
+  const [musicBarRow, setMusicBarRow] = useState<MusicBarRow>('levels')
   // The soundscape engine follows this state and nothing else: every change --
   // a control, the player's switch, a restore from disk -- reaches it through
   // this one effect, so there is no path that updates the sound without the
@@ -3126,7 +3127,7 @@ function App() {
       musicStereoWidth,
       musicMuted,
       musicReverbBypassed,
-      musicSoundOptionsOpen,
+      musicBarRow,
       soundscapes: soundscapePreferences,
       musicActiveSlots,
       musicPoolFilter,
@@ -3267,7 +3268,7 @@ function App() {
     musicStereoWidth,
     musicMuted,
     musicReverbBypassed,
-    musicSoundOptionsOpen,
+    musicBarRow,
     soundscapePreferences,
     musicActiveSlots,
     musicPoolFilter,
@@ -5073,7 +5074,7 @@ ${markdownHtml}
             setMusicStereoWidth(sanitizeStereoWidth(appState.menu.musicStereoWidth))
             setMusicMuted(appState.menu.musicMuted ?? false)
             setMusicReverbBypassed(appState.menu.musicReverbBypassed ?? false)
-            setMusicSoundOptionsOpen(appState.menu.musicSoundOptionsOpen ?? false)
+            setMusicBarRow(appState.menu.musicBarRow ?? 'levels')
             // Restored from the previous session: it rises from silence, as the music does.
             soundscapeEngine.fadeInNextStart(RESTORE_FADE_IN_SEC)
             setSoundscapePreferences(sanitizeSoundscapePreferences(appState.menu.soundscapes))
@@ -6277,15 +6278,17 @@ ${markdownHtml}
   // a stage of the reader's own; pressing it steps through the factory stages.
   const activeSoundstageId = soundstagePreferences.activeId
   const soundstageFactoryEdits = soundstagePreferences.factoryEdits
-  const soundstageFactory = useMemo(
-    () => FACTORY_SOUNDSTAGES.map((stage) => (soundstageFactoryEdits.find((edit) => edit.id === stage.id) as FactorySoundstage | undefined) ?? stage),
-    [soundstageFactoryEdits],
+  const soundstageCustom = soundstagePreferences.custom
+  const soundstagePresets = useMemo(
+    () => presetsOf(SOUNDSTAGE_KIND, { custom: soundstageCustom, factoryEdits: soundstageFactoryEdits }),
+    [soundstageCustom, soundstageFactoryEdits],
   )
   const visualizerSolid: FactorySoundstageId | 'custom' = isFactorySoundstageId(activeSoundstageId) ? activeSoundstageId : 'custom'
   useEffect(() => {
     publishSoundstageControls({
       solid: visualizerSolid,
-      factory: soundstageFactory,
+      presets: soundstagePresets,
+      activeId: activeSoundstageId,
       // Custom sits after the last factory stage: forward from it goes to
       // custom, and back from custom returns to the last factory stage.
       step: (direction) => {
@@ -6299,12 +6302,9 @@ ${markdownHtml}
         }
         selectSoundstage(steppedFactorySoundstage(visualizerSolid, direction))
       },
-      select: (stage) => {
-        if (stage === 'custom') selectCustomSoundstage()
-        else selectSoundstage(stage)
-      },
+      select: selectSoundstage,
     })
-  }, [visualizerSolid, soundstageFactory, selectSoundstage, selectCustomSoundstage])
+  }, [visualizerSolid, soundstagePresets, activeSoundstageId, selectSoundstage, selectCustomSoundstage])
 
 
   const handleExportPdf = useCallback(async (scope: ExportScope) => {
@@ -8885,8 +8885,8 @@ ${markdownHtml}
                 initialWasPlaying={musicRestoreWasPlaying}
                 playbackStateRef={musicPlaybackRef}
                 onPlaybackStateChange={queueActiveAppStateSave}
-                isSoundOptionsOpen={musicSoundOptionsOpen}
-                onSoundOptionsOpenChange={setMusicSoundOptionsOpen}
+                barRow={musicBarRow}
+                onBarRowChange={setMusicBarRow}
               />
 
               <div className="window-controls window-controls-right" aria-label="Window controls right">

@@ -12,7 +12,7 @@ import type {
 } from '../src/shared/appState';
 import { sanitizeGameSave } from '../src/adventure/save';
 import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
-import { isPlaylistSlot, sanitizePoolFilter } from '../src/shared/audioPlayer';
+import { isPlaylistSlot, sanitizeMusicBarRow, sanitizePoolFilter } from '../src/shared/audioPlayer';
 import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
 import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
 import { sanitizeKeystrokeSoundPreferences } from '../src/shared/keystrokeSounds';
@@ -586,7 +586,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     musicStereoWidth: sanitizeOptionalNumber(input?.musicStereoWidth),
     musicMuted: sanitizeOptionalBoolean(input?.musicMuted),
     musicReverbBypassed: sanitizeOptionalBoolean(input?.musicReverbBypassed),
-    musicSoundOptionsOpen: sanitizeOptionalBoolean(input?.musicSoundOptionsOpen),
+    musicBarRow: sanitizeMusicBarRow(input?.musicBarRow),
     musicActiveSlots: sanitizeMusicActiveSlots(input?.musicActiveSlots),
     musicPoolFilter: input?.musicPoolFilter === undefined ? undefined : sanitizePoolFilter(input.musicPoolFilter),
     musicSoundstages: input?.musicSoundstages === undefined ? undefined : sanitizeSoundstagePreferences(input.musicSoundstages),
