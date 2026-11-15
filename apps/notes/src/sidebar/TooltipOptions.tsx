@@ -1,3 +1,4 @@
+import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { encodeTooltip, type TooltipElement, type TooltipFixed } from '@thockdown/interaction/tooltipContent'
@@ -50,6 +51,7 @@ export function TooltipOptions({ settings, onChange }: { settings: TooltipSettin
           />
         </OptionsSliderRows>
       </div>
+      <OptionsSubsectionLabel>Component Toggle</OptionsSubsectionLabel>
       <div className="options-loadout-grid" role="group" aria-label="Tooltip elements">
         {ELEMENTS.map(({ key, icon, fixed }) => (
           <button
