@@ -6,6 +6,31 @@ workflow (.github/workflows/release-android.yml) refuses to build a version
 that has no entry here, and tags the commit it built as
 `soundscapes-v<version>`.
 
+## 1.1.0
+
+The schedule is now a list of rows: each plays a soundscape from a start time
+to a stop time on the days you pick, a stop before the start running into the
+next day. The top row wins where rows overlap. Rows fade in at their start and
+are silent at their stop, the fade a tenth of the row's length, at most five
+minutes. Earlier schedules are not carried over.
+
+A timer limits how long a soundscape you start plays, from 1 minute to 24
+hours or continuous. The time left shows under the soundscape's name, and
+playback fades out at the end; a schedule row due then crossfades in.
+
+Playing a soundscape yourself overrides the schedule until you stop it (hold
+play) or the timer ends; a pause keeps your choice.
+
+The playing soundscape has a row of its own under the presets: change its
+icon, rename it, reset it, delete your own or restore a factory one. Every
+change is saved to the playing soundscape, factory ones included. Hold and
+drag a soundscape to reorder it or to drop it onto a schedule row.
+
+Swiping anywhere scrolls the page; controls that drag need a short hold first.
+
+Sound: rooms, foliage and brilliance are shared with the desktop app, and the
+soundscapes are louder.
+
 ## 1.0.3
 
 Android Auto: the soundscapes appear in the car as a list to play from, and
