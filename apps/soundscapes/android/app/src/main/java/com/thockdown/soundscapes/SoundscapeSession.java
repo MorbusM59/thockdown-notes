@@ -36,9 +36,9 @@ import org.json.JSONObject;
  * - stop (the app's long press on its power button, the notification's
  *   close control, closing the app) makes it STOPPED, handing back to the
  *   schedule;
- * - a scheduled run's START ends a PAUSED regular mode -- a forgotten pause
- *   must not silence tomorrow's run -- but never a PLAYING one: while
- *   regular mode plays, the schedule is suspended;
+ * - while regular mode plays or is paused, the schedule is suspended; a
+ *   pause left for PAUSE_STOP_MS becomes a STOP, so a forgotten pause
+ *   cannot keep the schedule silent;
  * - THE TIMER (timer.ts): with a duration set, regular mode plays that long
  *   from when a soundscape was started or switched to, the countdown held
  *   while paused, and then STOPS, handing back to the schedule. It is silent
@@ -143,6 +143,8 @@ final class SoundscapeSession {
     private static final double HANDOVER_FADE_SEC = 10;
     /** A fade back from an ending that was interrupted. */
     private static final double RESTORE_FADE_SEC = 0.5;
+    /** How long a pause holds before it becomes a stop, handing back to the schedule. */
+    private static final long PAUSE_STOP_MS = 30L * 60 * 1000;
     private static final String LIBRARY_PREFERENCES = "soundscape-library";
     private static final String LIBRARY_KEY = "library";
     private static SoundscapeSession instance;
@@ -200,6 +202,8 @@ final class SoundscapeSession {
     private NextConfigure nextConfigure = NextConfigure.AS_SENT;
     /** The end of a fade-out that ends the session, while one is under way. */
     private Runnable pendingEnd = null;
+    /** The stop a pause becomes after PAUSE_STOP_MS, while paused. */
+    private Runnable pauseStop = null;
     private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
 
     private SoundscapeSession(Context context) {
@@ -457,12 +461,10 @@ final class SoundscapeSession {
 
     /**
      * The schedule's alarm: its events have begun, the latest taking
-     * `fadeSec`. A run STARTING ends a pause, which would otherwise silence
-     * it; regular mode PLAYING suspends the schedule, which then changes
-     * nothing.
+     * `fadeSec`. Regular mode, playing or paused, suspends the schedule,
+     * which then changes nothing.
      */
-    synchronized void applyScheduleEvents(boolean runStarted, double fadeSec) {
-        if (runStarted && regular == Regular.PAUSED) setRegular(Regular.STOPPED);
+    synchronized void applyScheduleEvents(double fadeSec) {
         settle(fadeSec, fadeSec);
         report();
     }
@@ -667,6 +669,22 @@ final class SoundscapeSession {
 
     /** Move regular mode; stopping it ends the countdown. */
     private void setRegular(Regular next) {
+        if (pauseStop != null) {
+            main.removeCallbacks(pauseStop);
+            pauseStop = null;
+        }
+        if (next == Regular.PAUSED) {
+            pauseStop = () -> {
+                synchronized (SoundscapeSession.this) {
+                    pauseStop = null;
+                    if (regular != Regular.PAUSED) return;
+                    setRegular(Regular.STOPPED);
+                    settle(HANDOVER_FADE_SEC, SWITCH_FADE_SEC);
+                    report();
+                }
+            };
+            main.postDelayed(pauseStop, PAUSE_STOP_MS);
+        }
         if (next == Regular.STOPPED) {
             clearCountdownCallbacks();
             timerLeftMs = -1;

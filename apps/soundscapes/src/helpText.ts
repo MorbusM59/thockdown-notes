@@ -6,7 +6,9 @@
  */
 const HELP: Record<string, string[]> = {
   Master: [
-    'Play button: Tap to play or pause the selected soundscape. Hold to stop; a scheduled soundscape due now then takes over. The icon shows playing, paused or stopped.',
+    'Playback modes: Soundscapes play in one of two modes, manual or scheduled.',
+    'Manual: Starts when you select a soundscape or tap the play button, and overrides the schedule while in effect. Tapping the play button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same, and so does a pause after 30 minutes. The icon shows playing, paused or stopped.',
+    'Scheduled: Active whenever manual playback is stopped. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag soundscape icons to change the order.',
     'Clock button: Turns the schedule on or off. A dashed frame means a scheduled soundscape is playing.',
     'Files button: Tap to load soundscapes from a file. Hold to save your own soundscapes to a file.',
     'Record button: Tap to save the playing soundscape as an audio file. Hold and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
@@ -14,18 +16,17 @@ const HELP: Record<string, string[]> = {
     'Volume: Sets the volume of the app.',
   ],
   Schedule: [
-    'Rows: Each row plays a soundscape from its start time to its stop time on its active days. A stop time earlier than the start time ends on the next day. Equal start and stop times play for 24 hours. Where rows overlap, the higher row plays.',
+    'Rows: Each row plays a soundscape from its start time to its stop time on its active days. A stop time earlier than the start time ends on the next day. Equal start and stop times play for 24 hours.',
     'Plus button: Tap to add a row for the playing soundscape. Drag a soundscape from Presets onto it to add a row for that soundscape.',
     'Soundscape button: Tap to turn the row on or off. Hold and drag it onto another row to move the row there. Drag a soundscape from Presets onto it to change what the row plays.',
     'Times: Tap an hour or minute to advance it one step. Hold and drag up or down to change it faster.',
     'Days: Tap a day to turn it on or off. The calendar button sets all days for the moment: tap for every day, hold for none, tap again to return to your days. Changing a day meanwhile keeps the days as shown.',
     'Bin: Hold to delete the row.',
     'Fades: A row fades in at its start time and is silent at its stop time. Each fade lasts a tenth of the length of the row, at most five minutes.',
-    'Your own playback: While you play a soundscape, the schedule pauses. It resumes when you stop playback or your timer ends.',
   ],
   Timer: [
     'Timer buttons: Tap a length to limit playback to it. Tap the active length again to turn the timer off; playback is then continuous, shown by the active infinity button. Hold a length and drag up or down to change it, from 1 minute to 24 hours.',
-    'Countdown: The timer restarts whenever you start or switch a soundscape and holds while paused. Playback fades out to silence at the end, over a tenth of the length, at most five minutes, then stops.',
+    'Countdown: The timer restarts whenever you start or switch a soundscape and holds while paused. Playback fades out at the end, over a tenth of the length, at most five minutes, then stops; a schedule row due then crossfades in instead.',
     'Time left: Shown in brackets under the name of the playing soundscape, for a timer or a schedule row.',
   ],
   Presets: [
