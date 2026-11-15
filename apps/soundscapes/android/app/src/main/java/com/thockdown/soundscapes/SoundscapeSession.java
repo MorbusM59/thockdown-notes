@@ -42,7 +42,9 @@ import org.json.JSONObject;
  * - THE TIMER (timer.ts): with a duration set, regular mode plays that long
  *   from when a soundscape was started or switched to, the countdown held
  *   while paused, and then STOPS, handing back to the schedule. It is silent
- *   at its end, having faded out over the fade it was handed.
+ *   at its end, having faded out over the fade it was handed -- or, when a
+ *   scheduled run will be playing then, crossfaded into it over that fade,
+ *   so the run is at full strength exactly at the timer's end.
  * The schedule's changes fade by the same rule: each event carries its fade
  * (schedule.ts), a stop or a switch fading out the entry that ends so it is
  * silent at its end time (the alarm comes that much early), a start fading
@@ -161,6 +163,12 @@ final class SoundscapeSession {
     private Runnable timerEnd = null;
     /** Whether the countdown's fade-out has begun on the output, to be undone if the countdown is. */
     private boolean timerFading = false;
+    /**
+     * The scheduled soundscape the countdown is crossfading into, or null:
+     * a run in effect when the timer ends is faded in over the timer's fade,
+     * finishing at its end, rather than after it from silence.
+     */
+    private Entry timerHandover = null;
     /**
      * The schedule's current run's soundscape, or null: outside a run, or the
      * schedule off. READ FROM THE STORED SCHEDULE by settle(), never carried
@@ -429,8 +437,12 @@ final class SoundscapeSession {
     /** The schedule changed (turned on or off, or its entries edited), or the device rebooted: apply its state at this moment. */
     synchronized void applyScheduleState() {
         State before = state();
-        SoundscapeSchedule.Event current = SoundscapeSchedule.load(context).current();
-        double fade = current != null ? Math.max(current.fadeSec, SWITCH_FADE_SEC) : SWITCH_FADE_SEC;
+        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
+        SoundscapeSchedule.Event current = schedule.current();
+        // Turned on in a run: it fades in over its fade. Turned off: what it
+        // played goes like a stop, which the listener asked for.
+        double fade = !schedule.enabled ? HANDOVER_FADE_SEC
+            : current != null ? Math.max(current.fadeSec, SWITCH_FADE_SEC) : SWITCH_FADE_SEC;
         settle(fade, fade);
         // Reported even when the page changed the schedule, since what is
         // heard, and from which source, is the session's to work out -- but
@@ -491,7 +503,12 @@ final class SoundscapeSession {
             synchronized (SoundscapeSession.this) {
                 timerFade = null;
                 long left = timerDeadline - android.os.SystemClock.elapsedRealtime();
-                if (output != null && left > 0) {
+                if (output == null || renderer == null || left <= 0) return;
+                Entry next = SoundscapeSchedule.load(context).playingAt(System.currentTimeMillis() + left);
+                if (next != null) {
+                    renderer.transition(next.configuration, left / 1000.0);
+                    timerHandover = next;
+                } else {
                     output.setFade(0f, left / 1000.0);
                     timerFading = true;
                 }
@@ -530,15 +547,39 @@ final class SoundscapeSession {
             timerFading = false;
             if (output != null) output.setFade(1f, RESTORE_FADE_SEC);
         }
+        if (timerHandover != null) {
+            timerHandover = null;
+            // The crossfade into the schedule is turned back to what plays.
+            Entry own = find(regularId);
+            if (renderer != null && own != null) renderer.transition(own.configuration, SWITCH_FADE_SEC);
+        }
         if (timerFade != null) main.removeCallbacks(timerFade);
         if (timerEnd != null) main.removeCallbacks(timerEnd);
         timerFade = null;
         timerEnd = null;
     }
 
-    /** The timer ran out, silent by now: regular mode stops and the schedule takes over, fading in from silence. */
+    /**
+     * The timer ran out: regular mode stops. If a scheduled run was due it
+     * has already been crossfaded in and carries on; otherwise the output
+     * is silent by now and the session ends, or a run that began since
+     * fades in from silence.
+     */
     private void timerExpired() {
         if (regular != Regular.PLAYING) return;
+        Entry handedTo = timerHandover;
+        timerHandover = null;
+        if (handedTo != null) {
+            // Already crossfaded into the run: it simply goes on, unless the
+            // schedule has changed under the crossfade.
+            setRegular(Regular.STOPPED);
+            scheduled = scheduledNow(SoundscapeSchedule.load(context));
+            if (scheduled == null || !scheduled.id.equals(handedTo.id)) settle(SWITCH_FADE_SEC, SWITCH_FADE_SEC);
+            else output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+            refreshService();
+            report();
+            return;
+        }
         if (output != null) output.setPaused(true);
         setRegular(Regular.STOPPED);
         SoundscapeSchedule.Event current = SoundscapeSchedule.load(context).current();
