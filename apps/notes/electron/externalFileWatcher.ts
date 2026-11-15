@@ -1,5 +1,5 @@
 // verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
-import { watch, type FSWatcher } from 'node:fs';
+import { statSync, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -19,7 +19,22 @@ import path from 'node:path';
  * reconciliation work it would otherwise repeat; reconciling is idempotent
  * and reaches a fixed point from any read, so a report that still lands
  * mid-write is followed by another that sees the finished file.
+ *
+ * An event is a hint, not a fact: macOS's FSEvents delivers changes made
+ * shortly BEFORE a watch began (the write that created or last saved the
+ * file is replayed to the new watch), and any platform may report a touch
+ * that changed nothing. So a note is reported only when its file's signature
+ * (inode, size, modification time, or its absence) differs from the one seen
+ * when the watch began or at the last report.
  */
+function signatureOf(filePath: string): string {
+  try {
+    const stats = statSync(filePath, { bigint: true });
+    return `${stats.ino}:${stats.size}:${stats.mtimeNs}`;
+  } catch {
+    return 'missing';
+  }
+}
 /**
  * A file name as the directory's watch matches it. Windows and macOS file
  * systems ignore case by default, so a note's stored path may spell the name
@@ -33,6 +48,8 @@ export class ExternalFileWatcher {
   private readonly watchers = new Map<string, { directory: string; watcher: FSWatcher; names: Map<string, Set<string>> }>();
   private readonly pathByNote = new Map<string, string>();
   private readonly pending = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Each watched note's file signature as last seen (see `signatureOf`). */
+  private readonly seen = new Map<string, string>();
 
   constructor(
     private readonly onChanged: (noteId: string) => void,
@@ -83,6 +100,7 @@ export class ExternalFileWatcher {
     notes.add(noteId);
     entry.names.set(name, notes);
     this.pathByNote.set(noteId, filePath);
+    this.seen.set(noteId, signatureOf(filePath));
   }
 
   private forgetDirectory(directory: string): void {
@@ -103,6 +121,7 @@ export class ExternalFileWatcher {
     const filePath = this.pathByNote.get(noteId);
     if (filePath === undefined) return;
     this.pathByNote.delete(noteId);
+    this.seen.delete(noteId);
     const timer = this.pending.get(noteId);
     if (timer !== undefined) clearTimeout(timer);
     this.pending.delete(noteId);
@@ -129,6 +148,11 @@ export class ExternalFileWatcher {
         if (previous !== undefined) clearTimeout(previous);
         this.pending.set(noteId, setTimeout(() => {
           this.pending.delete(noteId);
+          const filePath = this.pathByNote.get(noteId);
+          if (filePath === undefined) return;
+          const signature = signatureOf(filePath);
+          if (signature === this.seen.get(noteId)) return;
+          this.seen.set(noteId, signature);
           this.onChanged(noteId);
         }, this.settleMs));
       }
