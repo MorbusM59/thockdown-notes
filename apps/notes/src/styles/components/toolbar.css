@@ -220,11 +220,6 @@
   padding: 0;
   border-radius: var(--border-radius-small);
   font-size: 13px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
-  /* Narrower than base.css's `transition: all` on purpose: every one of this
-     button's geometry properties differs between the two layouts, and `all`
-     animated the switch between them over 200ms instead of just happening.
-     Hover feedback still transitions. */
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 /* Glyph size matches the tab/chapter bars' icon buttons

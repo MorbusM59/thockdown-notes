@@ -421,10 +421,6 @@
   line-height: 1.2;
   font-style: italic;
   font-weight: 100;
-  /* Only the hover look eases. The base button rule's `transition: all` would
-     also ease `filter` below, and a filter list interpolated from none passes
-     through washed-out frames on every card entering or leaving the view. */
-  transition-property: background-color, border-color;
 }
 /* A hit the reader can already see in the pane. Marked on the card rather
    than only in the text so the list reads as a map of the document: these
