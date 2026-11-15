@@ -107,11 +107,12 @@ body {
 }
 
 /* The play and stop marks: labels, not buttons. */
+/* The play and stop chips label their row: drawn as chips, pressed by nothing. */
 .mobile-schedule-label {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.6;
+  pointer-events: none;
 }
 
 .mobile-schedule-row.is-off > :not(.mobile-schedule-soundscape) {
@@ -158,14 +159,11 @@ body {
 }
 
 /* The icon picker's filter: the whole width, half a row high. */
+/* The look is the shared field's (.options-curve-field); only the size is its own. */
 .mobile-icon-filter {
-  box-sizing: border-box;
+  display: block;
   width: 100%;
   height: calc(var(--entry-height) / 2);
   padding: 0 var(--spacing-small);
-  font: inherit;
-  color: inherit;
-  background: var(--backdrop-surface-background, transparent);
-  border: var(--backdrop-surface-border);
-  border-radius: var(--border-radius-regular);
+  text-align: left;
 }

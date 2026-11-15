@@ -461,7 +461,7 @@ export function MobileSoundscapeApp() {
                   help={help}
                   framePresets={(grid) => (iconQuery === null ? grid : (<>
                     <input
-                      className="mobile-icon-filter"
+                      className="options-curve-cell options-curve-field mobile-icon-filter"
                       aria-label="Filter the icons"
                       placeholder="Filter icons..."
                       value={iconQuery}

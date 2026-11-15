@@ -191,7 +191,7 @@ export function ScheduleRows({ schedule, presets, currentPresetId, onChange }: S
         >
           {preset ? <SoundscapeMark preset={preset} /> : null}
         </button>
-        <span className="mobile-schedule-chip mobile-schedule-label is-start" aria-hidden="true"><span className="fa-solid fa-play" /></span>
+        <button type="button" tabIndex={-1} className="btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-label is-start" aria-hidden="true"><span className="fa-solid fa-play" /></button>
         {time('start', 'hour')}
         {time('start', 'minute')}
         <HoldChip
@@ -202,7 +202,7 @@ export function ScheduleRows({ schedule, presets, currentPresetId, onChange }: S
           held={() => update(entry.id, (current) => calendarPress(current, true))}
         />
         {[0, 1, 2, 3].map(day)}
-        <span className="mobile-schedule-chip mobile-schedule-label is-stop" aria-hidden="true"><span className="fa-solid fa-stop" /></span>
+        <button type="button" tabIndex={-1} className="btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-label is-stop" aria-hidden="true"><span className="fa-solid fa-stop" /></button>
         {time('stop', 'hour')}
         {time('stop', 'minute')}
         {[4, 5, 6].map(day)}
