@@ -6,3 +6,6 @@
 # Release-note drafts: `npm run release` writes one here, and what stays in the
 # repository is its entry in CHANGELOG.md.
 /release-notes/
+
+# Release screenshots (`npm run screenshots`); they go on the GitHub release.
+/release-screenshots/
