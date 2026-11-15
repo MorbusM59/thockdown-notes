@@ -26,7 +26,6 @@ export function ImageSlotView({ imageId, onScroller }: { imageId: string; onScro
       ) : loaded ? (
         <div className="image-slot-view-missing">{imageId} is no longer stored.</div>
       ) : null}
-      {image?.trashedAt ? <div className="image-slot-view-badge">In the trash</div> : null}
     </div>
   )
 }

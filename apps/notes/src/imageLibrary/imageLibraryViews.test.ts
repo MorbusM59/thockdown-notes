@@ -5,7 +5,7 @@ import { BEFORE_FIRST_SECTION, groupCardsBySection, imagesInView, imageUseCards 
 
 const image = (id: string, extra: Partial<StoredImageSummary> = {}): StoredImageSummary => ({
   id, src: '', width: 1, height: 1, mime: 'image/png', byteLength: 1, origin: null,
-  createdAt: '2026-10-11T00:00:00Z', tags: [], useCount: 1, trashedAt: null, ...extra,
+  createdAt: '2026-10-11T00:00:00Z', tags: [], useCount: 1, ...extra,
 })
 const use = (id: string, alt: string, section: string | null, subsection: string | null, from: number): NoteImageUse => ({ id, src: id, alt, from, to: from + 1, title: null, section, subsection })
 
@@ -13,7 +13,7 @@ describe('image library views', () => {
   const all = [
     image('&1', { tags: ['cats'], origin: '/pics/tom.png' }),
     image('&2', { useCount: 0, tags: ['cats', 'dogs'] }),
-    image('&3', { trashedAt: '2026-10-11T01:00:00Z' }),
+    image('&3', { tags: ['deleted'] }),
     image('&LOGO'),
   ]
   it('archives every image outside the trash', () => {

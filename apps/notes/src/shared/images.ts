@@ -99,8 +99,11 @@ export interface StoredImageSummary {
   tags: string[]
   /** How many notes' current text uses it, by its name or one it used to have. */
   useCount: number
-  /** ISO time it was put in the trash; null when it is not there. */
-  trashedAt: string | null
+}
+
+/** In the trash: it carries the protected 'deleted' tag, as a note in the trash does (isDeletedNote). */
+export function isImageTrashed(image: { tags: readonly string[] }): boolean {
+  return image.tags.includes('deleted')
 }
 
 export interface ImagesApi {

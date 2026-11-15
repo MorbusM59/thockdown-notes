@@ -3,7 +3,7 @@ import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from 'react'
 import { CategoryTree, type CategoryTreeFolds } from '../components/CategoryTree'
 import { HoverActions, type HoverAction } from '../components/HoverActions'
-import { IMAGE_DRAG_MIME_TYPE, IMAGE_DRAG_TRASHED_MIME_TYPE, type NoteImageUse, type StoredImageSummary } from '../shared/images'
+import { IMAGE_DRAG_MIME_TYPE, IMAGE_DRAG_TRASHED_MIME_TYPE, isImageTrashed, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { cssInset, parseImageTitle, type ImageInset } from '../shared/imageLayout'
 import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 import { localImageSrc } from '../shared/localImages'
@@ -151,7 +151,7 @@ function dragImage(image: StoredImageSummary) {
     'data-drag-picture': 'cursor',
     onDragStart: (event: DragEvent) => {
       event.dataTransfer.setData(IMAGE_DRAG_MIME_TYPE, image.id)
-      if (image.trashedAt) event.dataTransfer.setData(IMAGE_DRAG_TRASHED_MIME_TYPE, '')
+      if (isImageTrashed(image)) event.dataTransfer.setData(IMAGE_DRAG_TRASHED_MIME_TYPE, '')
       event.dataTransfer.effectAllowed = 'copy'
     },
   }

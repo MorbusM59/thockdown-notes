@@ -123,6 +123,12 @@ const IMAGE_USE_COUNT = `
   WHERE image_refs.imageId = images.id
      OR image_refs.imageId IN (SELECT oldId FROM image_aliases WHERE image_aliases.imageId = images.id)
 `;
+// An image is in the trash when it carries the protected 'deleted' tag: the
+// same rule as a note (getTrashNoteIds), so the trash is one tag everywhere.
+const IMAGE_TRASHED = `
+  EXISTS (SELECT 1 FROM image_tags JOIN tags ON tags.id = image_tags.tagId
+          WHERE image_tags.imageId = images.id AND tags.name = 'deleted')
+`;
 const NOTES_FOLDER_RETIRED_KEY = 'notesFolderRetiredAt';
 const BACKUPS_DIR_NAME = 'backups';
 const LAUNCH_BACKUP_COUNT = 3;
@@ -4119,7 +4125,8 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_image_refs_image ON image_refs(imageId);
 
       -- An image's own tags, the library's categories (the same tags table
-      -- notes use, so one name is one tag). Archive is NOT a tag here: an
+      -- notes use, so one name is one tag). The trash IS a tag, the
+      -- protected 'deleted', as for a note. Archive is NOT a tag here: an
       -- image no note uses is archived, derived from image_refs.
       CREATE TABLE IF NOT EXISTS image_tags (
         imageId  TEXT    NOT NULL REFERENCES images(id) ON DELETE CASCADE,
@@ -4136,11 +4143,8 @@ export class DatabaseService {
         imageId TEXT NOT NULL REFERENCES images(id) ON DELETE CASCADE
       );
 
-      -- Images the reader put in the trash. Only emptying it removes them.
-      CREATE TABLE IF NOT EXISTS image_trash (
-        imageId   TEXT PRIMARY KEY REFERENCES images(id) ON DELETE CASCADE,
-        trashedAt TEXT NOT NULL
-      );
+      -- The trash used to be a table of its own; it is the 'deleted' tag now.
+      DROP TABLE IF EXISTS image_trash;
     `);
 
 
@@ -4574,9 +4578,8 @@ export class DatabaseService {
   resolveImages(ids: string[]): Record<string, { hash: string; width: number; height: number; origin: string | null; trashed: number } | null> {
     const lookup = this.requireDb().prepare(`
       SELECT images.blobHash AS hash, image_blobs.width AS width, image_blobs.height AS height, images.origin AS origin,
-             (image_trash.imageId IS NOT NULL) AS trashed
-      FROM images JOIN image_blobs ON image_blobs.hash = images.blobHash
-      LEFT JOIN image_trash ON image_trash.imageId = images.id WHERE images.id = ?
+             (${IMAGE_TRASHED}) AS trashed
+      FROM images JOIN image_blobs ON image_blobs.hash = images.blobHash WHERE images.id = ?
     `);
     const alias = this.requireDb().prepare('SELECT imageId FROM image_aliases WHERE oldId = ?');
     const resolved: Record<string, { hash: string; width: number; height: number; origin: string | null; trashed: number } | null> = {};
@@ -4600,11 +4603,9 @@ export class DatabaseService {
     const rows = db.prepare(`
       SELECT images.id AS id, images.blobHash AS hash, image_blobs.width AS width, image_blobs.height AS height,
              image_blobs.mime AS mime, image_blobs.byteLength AS byteLength, images.origin AS origin,
-             images.createdAt AS createdAt, image_trash.trashedAt AS trashedAt,
-             (${IMAGE_USE_COUNT}) AS useCount
+             images.createdAt AS createdAt, (${IMAGE_USE_COUNT}) AS useCount
       FROM images
       JOIN image_blobs ON image_blobs.hash = images.blobHash
-      LEFT JOIN image_trash ON image_trash.imageId = images.id
       ORDER BY images.createdAt DESC, images.id ASC
     `).all() as Array<Omit<StoredImageSummary, 'src' | 'tags'> & { hash: string }>;
     const tags = new Map<string, string[]>();
@@ -4629,13 +4630,21 @@ export class DatabaseService {
     `).all(imageId) as Array<{ name: string }>).map((row) => row.name);
   }
 
-  /** Replaces an image's tags; answers the tags kept (normalized, de-duplicated, never the protected ones). */
+  /**
+   * Replaces an image's regular tags; answers its tags afterwards (normalized,
+   * de-duplicated). The protected ones are not the tag bar's to give or take:
+   * those it already carries ('deleted', the trash) are kept, in front, and
+   * any passed in are ignored -- only setImageTrashed moves an image in or out.
+   */
   setImageTags(id: string, rawTags: string[]): string[] {
     const imageId = normalizeImageId(id);
     const db = this.requireDb();
     if (!imageId || !db.prepare('SELECT 1 FROM images WHERE id = ?').get(imageId)) return [];
-    // Archive and trash are states an image is in, not names it carries.
-    const tags = uniqueNormalizedTags(rawTags).filter((tag) => !PROTECTED_TAGS.includes(tag as typeof PROTECTED_TAGS[number]));
+    const isProtected = (tag: string) => PROTECTED_TAGS.includes(tag as typeof PROTECTED_TAGS[number]);
+    const tags = [
+      ...this.imageTagNames(imageId).filter(isProtected),
+      ...uniqueNormalizedTags(rawTags).filter((tag) => !isProtected(tag)),
+    ];
     const findTag = db.prepare('SELECT id FROM tags WHERE name = ?');
     const insertTag = db.prepare('INSERT INTO tags (name) VALUES (?)');
     db.transaction(() => {
@@ -4653,11 +4662,20 @@ export class DatabaseService {
     const imageId = normalizeImageId(id);
     if (!imageId) return;
     const db = this.requireDb();
-    if (trashed) {
-      db.prepare('INSERT OR IGNORE INTO image_trash (imageId, trashedAt) SELECT id, ? FROM images WHERE id = ?').run(new Date().toISOString(), imageId);
-    } else {
-      db.prepare('DELETE FROM image_trash WHERE imageId = ?').run(imageId);
-    }
+    db.transaction(() => {
+      if (!db.prepare('SELECT 1 FROM images WHERE id = ?').get(imageId)) return;
+      const tagId = (db.prepare("SELECT id FROM tags WHERE name = 'deleted'").get() as { id: number } | undefined)?.id
+        ?? Number(db.prepare("INSERT INTO tags (name) VALUES ('deleted')").run().lastInsertRowid);
+      if (trashed) {
+        // In front of the image's own tags, where a note's protected tag sits.
+        db.prepare(`
+          INSERT OR IGNORE INTO image_tags (imageId, tagId, position)
+          VALUES (?, ?, (SELECT COALESCE(MIN(position), 0) - 1 FROM image_tags WHERE imageId = ?))
+        `).run(imageId, tagId, imageId);
+      } else {
+        db.prepare('DELETE FROM image_tags WHERE imageId = ? AND tagId = ?').run(imageId, tagId);
+      }
+    })();
   }
 
   /** Removes a trashed image no note uses for good; its bytes go too when no other name uses them. */
@@ -4666,7 +4684,7 @@ export class DatabaseService {
     if (!imageId) return false;
     const db = this.requireDb();
     return db.transaction(() => {
-      if (!db.prepare('SELECT 1 FROM image_trash WHERE imageId = ?').get(imageId)) return false;
+      if (!db.prepare(`SELECT 1 FROM images WHERE id = ? AND ${IMAGE_TRASHED}`).get(imageId)) return false;
       // A note still uses it: deleting it would break that note, so it waits
       // until the reader has taken it out of them.
       if ((db.prepare(`SELECT (${IMAGE_USE_COUNT}) AS uses FROM images WHERE id = ?`).get(imageId) as { uses: number }).uses > 0) return false;
@@ -4699,7 +4717,6 @@ export class DatabaseService {
       db.pragma('defer_foreign_keys = ON');
       db.prepare('UPDATE images SET id = ? WHERE id = ?').run(to, from);
       db.prepare('UPDATE image_tags SET imageId = ? WHERE imageId = ?').run(to, from);
-      db.prepare('UPDATE image_trash SET imageId = ? WHERE imageId = ?').run(to, from);
       db.prepare('UPDATE image_aliases SET imageId = ? WHERE imageId = ?').run(to, from);
       db.prepare('DELETE FROM image_aliases WHERE oldId = ?').run(to);
       db.prepare('INSERT OR REPLACE INTO image_aliases (oldId, imageId) VALUES (?, ?)').run(from, to);

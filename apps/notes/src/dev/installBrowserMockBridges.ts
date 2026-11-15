@@ -1,4 +1,4 @@
-import { buildNextAutoImageId, normalizeImageId, MAX_STORED_IMAGE_BYTES, type ImagesApi, type ResolvedImage } from '../shared/images'
+import { buildNextAutoImageId, isImageTrashed, normalizeImageId, MAX_STORED_IMAGE_BYTES, type ImagesApi, type ResolvedImage } from '../shared/images'
 import type { AppState, AppStateApi, WindowState } from '../shared/appState'
 import type { UiLayoutLoadout, UiLoadoutApi, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
@@ -2149,7 +2149,7 @@ function buildSectionsBridge(storeRef: { current: BrowserMockStore }): EditorSec
 // the size cap nor the format check is the real one (electron/imageSniff.ts).
 function buildImagesBridge(): ImagesApi {
   const images = new Map<string, ResolvedImage>()
-  const meta = new Map<string, { tags: string[]; trashedAt: string | null; createdAt: string; byteLength: number }>()
+  const meta = new Map<string, { tags: string[]; createdAt: string; byteLength: number }>()
   return {
     importImage: async ({ bytes }) => {
       if (bytes.byteLength > MAX_STORED_IMAGE_BYTES) return { ok: false, reason: 'too-large' }
@@ -2160,7 +2160,7 @@ function buildImagesBridge(): ImagesApi {
       bitmap.close()
       const id = buildNextAutoImageId(images.keys())
       images.set(id, { src: URL.createObjectURL(blob), width, height, origin: null, trashed: false })
-      meta.set(id, { tags: [], trashedAt: null, createdAt: new Date().toISOString(), byteLength: bytes.byteLength })
+      meta.set(id, { tags: [], createdAt: new Date().toISOString(), byteLength: bytes.byteLength })
       return { ok: true, id }
     },
     // useCount is always 0 here: the mock keeps no reference index.
@@ -2168,12 +2168,13 @@ function buildImagesBridge(): ImagesApi {
     setImageTags: async (id, tags) => {
       const entry = meta.get(id)
       if (!entry) return []
-      entry.tags = [...new Set(tags.map((tag) => tag.trim().toLowerCase().replace(/\s+/g, '-')).filter(Boolean))]
+      const regular = [...new Set(tags.map((tag) => tag.trim().toLowerCase().replace(/\s+/g, '-')).filter((tag) => tag && tag !== 'deleted'))]
+      entry.tags = [...(isImageTrashed(entry) ? ['deleted'] : []), ...regular]
       return entry.tags
     },
     setImageTrashed: async (id, trashed) => {
       const entry = meta.get(id)
-      if (entry) entry.trashedAt = trashed ? new Date().toISOString() : null
+      if (entry) entry.tags = [...(trashed ? ['deleted'] : []), ...entry.tags.filter((tag) => tag !== 'deleted')]
     },
     // The mock keeps no note index, so a rename reaches only open notes.
     renameImage: async ({ id, newId }) => {
@@ -2190,14 +2191,14 @@ function buildImagesBridge(): ImagesApi {
       return { ok: true, id: to, rewrittenNoteIds: [] }
     },
     purgeImage: async (id) => {
-      if (!meta.get(id)?.trashedAt) return false
+      if (!isImageTrashed(meta.get(id) ?? { tags: [] })) return false
       meta.delete(id)
       images.delete(id)
       return true
     },
     resolveImages: async (ids) => Object.fromEntries(ids.map((id) => {
       const image = images.get(id)
-      return [id, image ? { ...image, trashed: Boolean(meta.get(id)?.trashedAt) } : null]
+      return [id, image ? { ...image, trashed: isImageTrashed(meta.get(id) ?? { tags: [] }) } : null]
     })),
     // The mock has no main process to download through.
     storeImageSources: async (requests) => Object.fromEntries(requests.map(({ source }) => [source, { ok: false, reason: 'unsupported' }])),

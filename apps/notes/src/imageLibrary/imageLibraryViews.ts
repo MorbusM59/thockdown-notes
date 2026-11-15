@@ -1,4 +1,4 @@
-import type { NoteImageUse, StoredImageSummary } from '../shared/images'
+import { isImageTrashed, type NoteImageUse, type StoredImageSummary } from '../shared/images'
 import { matchesNoteSearchQuery } from '../shared/noteSearch'
 import { GENERAL_SECONDARY_NAME, type TagPrimaryGroup } from '../shared/tagHierarchy'
 
@@ -33,9 +33,8 @@ export function matchesImageSearch(image: StoredImageSummary, query: string, alt
 }
 
 export function imagesInView(images: readonly StoredImageSummary[], view: 'archive' | 'trash', query: string): StoredImageSummary[] {
-  const shown = images.filter((image) => (image.trashedAt !== null) === (view === 'trash') && matchesImageSearch(image, query))
-  if (view === 'trash') return shown.sort((a, b) => (b.trashedAt ?? '').localeCompare(a.trashedAt ?? ''))
-  return shown
+  // Newest first in both, the order the library lists them in.
+  return images.filter((image) => isImageTrashed(image) === (view === 'trash') && matchesImageSearch(image, query))
 }
 
 /**

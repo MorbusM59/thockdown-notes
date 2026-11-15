@@ -1369,12 +1369,6 @@ button.escape-menu-chrome-gauge[data-pressed] .escape-menu-chrome-gauge-fill {
   color: var(--color-text-60, inherit);
 }
 
-.image-slot-view-badge {
-  position: absolute;
-  top: var(--spacing-regular, 12px);
-  right: var(--spacing-regular, 12px);
-}
-
 /* Speed reading's edit-view row (speedReading/SpeedReadingEditOverlay.tsx).
    While the overlay is in the editor layer, everything else the layer draws
    is faded out -- the note's text, the caret, the zones, the flow trail --
