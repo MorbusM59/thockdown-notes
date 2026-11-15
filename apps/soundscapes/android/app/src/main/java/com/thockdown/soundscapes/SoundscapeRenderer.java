@@ -53,6 +53,8 @@ final class SoundscapeRenderer {
     private boolean woken = false;
     /** The configuration in force; only the renderer's thread reads or writes it. */
     private String applied = null;
+    /** The length a pending change carries to mean a restart rather than a configure or a transition. */
+    private static final double RESTART = -1;
 
     SoundscapeRenderer(Context context, SoundscapeAudioOutput output, Listener listener) {
         this.context = context.getApplicationContext();
@@ -71,6 +73,12 @@ final class SoundscapeRenderer {
     /** Change to `configurationJson` by a crossfade of `seconds` from what plays (RenderAhead's transition). */
     void transition(String configurationJson, double seconds) {
         pending.add(new Object[] { configurationJson, seconds });
+        wake();
+    }
+
+    /** Start `configurationJson` afresh, nothing of what played before carried over (RenderAhead's restart). */
+    void restart(String configurationJson) {
+        pending.add(new Object[] { configurationJson, RESTART });
         wake();
     }
 
@@ -109,11 +117,14 @@ final class SoundscapeRenderer {
                 while ((change = pending.poll()) != null) {
                     String configuration = (String) change[0];
                     double seconds = (Double) change[1];
-                    if (configuration.equals(applied)) continue;
+                    // A restart is applied even when the settings are the same: what changes is where they start from.
+                    if (seconds != RESTART && configuration.equals(applied)) continue;
                     applied = configuration;
                     // The playhead first, so a splice is measured from now.
                     isolate.evaluateJavaScriptAsync("soundscapeStep(" + output.playheadFrame() + ", 0)").get();
-                    isolate.evaluateJavaScriptAsync(seconds > 0
+                    isolate.evaluateJavaScriptAsync(seconds == RESTART
+                        ? "soundscapeRestart(" + JSONObject.quote(configuration) + ")"
+                        : seconds > 0
                         ? "soundscapeTransition(" + JSONObject.quote(configuration) + ", " + seconds + ")"
                         : "soundscapeConfigure(" + JSONObject.quote(configuration) + ")").get();
                 }

@@ -361,6 +361,34 @@ export class RenderAhead {
     this.pump();
   }
 
+  /**
+   * Start `message` afresh, from silence: a new voice, with nothing of what
+   * was rendered before carried over, heard from as near the playhead as the
+   * output allows. For playing again after a pause, where the output holds
+   * the soundscape from before the pause and the listener has heard silence
+   * since: a `configure` would carry the old channels on and fade them out,
+   * and a `transition` would crossfade from them, so the old soundscape
+   * would be heard first. What the output still holds before the splice is
+   * the output's to drop (it fades in from silence after a pause anyway).
+   */
+  restart(message: ConfigureMessage): void {
+    if (!this.createVoice || !this.configured) {
+      this.configure(message);
+      return;
+    }
+    const voice = new VoiceSource(this.createVoice());
+    voice.voice.generator.configure(message.generator);
+    voice.voice.mix.setSpace(message.space);
+    // Built at once, as a first room is: nothing is being heard to cover for.
+    voice.voice.mix.buildRoom();
+    this.voice = voice;
+    this.source = voice;
+    this.pendingBlend = null;
+    this.fade = null;
+    this.writeFrame = Math.min(this.writeFrame, this.spliceFrame());
+    this.pump();
+  }
+
   /** Blend into the pending transition's voice from as near the playhead as the output allows. */
   private startBlend(voice: VoiceSource, frames: number): void {
     const spliceAt = this.spliceFrame();

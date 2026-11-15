@@ -74,6 +74,11 @@ scope.soundscapeTransition = (json: string, seconds: number): string => {
   return 'ok';
 };
 
+scope.soundscapeRestart = (json: string): string => {
+  renderer?.restart(JSON.parse(json) as ConfigureMessage);
+  return 'ok';
+};
+
 scope.soundscapeStep = (playedFrame: number, maxChunks: number): string => {
   if (!renderer) return '[]';
   renderer.played(playedFrame);
