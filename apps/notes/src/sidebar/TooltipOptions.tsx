@@ -1,6 +1,6 @@
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
-import type { TooltipElement } from '@thockdown/interaction/tooltipContent'
+import { encodeTooltip, type TooltipElement, type TooltipFixed } from '@thockdown/interaction/tooltipContent'
 import {
   DEFAULT_TOOLTIP_SETTINGS,
   TOOLTIP_DELAY_MAX_SEC,
@@ -9,15 +9,17 @@ import {
   type TooltipSettings,
 } from '../shared/tooltipSettings'
 
-// Options > Advanced > Tooltips: the delay, then one toggle per tooltip
-// element. Each toggle says what its element is and shows an example of it,
-// because the element is the thing being chosen and an icon could not show it.
+// Options > Advanced > Tooltips: the delay, then one icon toggle per tooltip
+// element. Each explains its element in a fixed tooltip after a fixed 300ms,
+// whatever the setting: they are what sets it.
 
-const ELEMENTS: readonly { key: TooltipElement; name: string; meaning: string; example: string }[] = [
-  { key: 'intention', name: 'Intention', meaning: 'What a click does.', example: 'Next track' },
-  { key: 'shortcut', name: 'Shortcut', meaning: 'The key that does it.', example: '[F9]' },
-  { key: 'gestures', name: 'Gestures', meaning: 'What other presses do.', example: '[Right] Reset' },
-  { key: 'value', name: 'Value', meaning: 'The current setting.', example: '0.6' },
+const EXPLANATION_DELAY_MS = 300
+
+const ELEMENTS: readonly { key: TooltipElement; icon: string; fixed: TooltipFixed }[] = [
+  { key: 'intention', icon: 'fa-person-walking-arrow-right', fixed: { title: 'Intention', detail: '(what a click does or opens)', example: 'Insert image / Soundscapes', delayMs: EXPLANATION_DELAY_MS } },
+  { key: 'shortcut', icon: 'fa-keyboard', fixed: { title: 'Shortcut', detail: '(which key does the same)', example: '[F5] / [Ctrl + L]', delayMs: EXPLANATION_DELAY_MS } },
+  { key: 'gestures', icon: 'fa-hands', fixed: { title: 'Gesture', detail: '(alternative input)', example: '[Drag] Reorder / [Hold right] Delete', delayMs: EXPLANATION_DELAY_MS } },
+  { key: 'value', icon: 'fa-ruler-horizontal', fixed: { title: 'Value', detail: '(current setting)', example: 'Filter: dnb / Volume: 0.15', delayMs: EXPLANATION_DELAY_MS } },
 ]
 
 const toSlider = (delaySec: TooltipSettings['delaySec']) => (delaySec === 'never' ? TOOLTIP_DELAY_NEVER_SLIDER : delaySec)
@@ -48,18 +50,18 @@ export function TooltipOptions({ settings, onChange }: { settings: TooltipSettin
           />
         </OptionsSliderRows>
       </div>
-      <div className="options-loadout-grid tooltip-element-grid" role="group" aria-label="Tooltip elements">
-        {ELEMENTS.map(({ key, name, meaning, example }) => (
+      <div className="options-loadout-grid" role="group" aria-label="Tooltip elements">
+        {ELEMENTS.map(({ key, icon, fixed }) => (
           <button
             key={key}
             type="button"
-            className={`btn-icon options-color-swatch options-loadout-btn tooltip-element-toggle${settings.show[key] ? ' is-active' : ''}`}
+            className={`btn-icon options-color-swatch options-loadout-btn${settings.show[key] ? ' is-active' : ''}`}
             aria-pressed={settings.show[key]}
-            aria-label={`Show ${name.toLowerCase()} in tooltips`}
+            aria-label={`Show ${fixed.title.toLowerCase()} in tooltips`}
+            data-tooltip={encodeTooltip({ fixed })}
             onClick={() => onChange({ ...settings, show: { ...settings.show, [key]: !settings.show[key] } })}
           >
-            <span className="tooltip-element-line"><strong>{name}:</strong> {meaning}</span>
-            <span className="tooltip-element-line"><em>Example: {example}</em></span>
+            <span className={`fa-solid ${icon}`} aria-hidden="true" />
           </button>
         ))}
       </div>

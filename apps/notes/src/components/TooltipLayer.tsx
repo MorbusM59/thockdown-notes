@@ -106,13 +106,15 @@ export function TooltipLayer({ settings }: { settings: TooltipSettings }) {
       observer.disconnect()
       targetRef.current = next
       setTip(null)
+      // A fixed explanation keeps its own delay and ignores the setting.
+      const fixed = decodeTooltip(readTooltipText(next)).fixed
       const delaySec = delayRef.current
-      if (delaySec === 'never') return
+      if (!fixed && delaySec === 'never') return
       const warm = performance.now() - lastShownAtRef.current < WARM_HANDOFF_MS
       showTimerRef.current = window.setTimeout(() => {
         showTimerRef.current = null
         if (targetRef.current === next) showFor(next)
-      }, warm ? 0 : delaySec * 1000)
+      }, fixed ? fixed.delayMs : warm ? 0 : (delaySec as number) * 1000)
     }
 
     const handleMouseOut = (event: MouseEvent) => {
@@ -166,8 +168,19 @@ export function TooltipLayer({ settings }: { settings: TooltipSettings }) {
   }, [tip])
 
   if (!tip) return null
+  const content = decodeTooltip(tip.text)
+  if (content.fixed) {
+    const { title, detail, example } = content.fixed
+    return (
+      <div className="app-tooltip-layer" aria-hidden="true">
+        <div ref={bubbleRef} className="app-tooltip-bubble">
+          <strong>{title}</strong> {detail}{'\n'}Example: {example}
+        </div>
+      </div>
+    )
+  }
   // A tooltip with nothing left to say under the reader's choice is not shown.
-  const lines = tooltipLines(decodeTooltip(tip.text), settings.show, shortcutText)
+  const lines = tooltipLines(content, settings.show, shortcutText)
   if (lines.length === 0) return null
 
   return (

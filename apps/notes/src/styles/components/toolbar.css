@@ -728,37 +728,3 @@
 .field-action-button:disabled {
   opacity: 0.45;
 }
-
-/* Options > Advanced > Tooltips (sidebar/TooltipOptions.tsx): one toggle per
-   tooltip element, three cells wide so two fill a row, each naming its
-   element and showing an example. A row is one cell tall and grows only when
-   the UI font is too large for its two lines. Three classes so the button's
-   square sizing elsewhere cannot win. */
-.options-loadout-grid.tooltip-element-grid {
-  grid-auto-rows: minmax(var(--loadout-cell-size, 32px), auto);
-}
-
-.options-loadout-grid > .options-loadout-btn.tooltip-element-toggle {
-  grid-column: span 3;
-  aspect-ratio: auto;
-  width: auto;
-  height: auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  padding: var(--spacing-small) var(--spacing-large);
-  text-align: left;
-  font-weight: normal;
-  font-size: calc(11px * var(--ui-font-scale));
-  line-height: 1.25;
-}
-
-.tooltip-element-line {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-
-.tooltip-element-line strong {
-  font-weight: 600;
-}

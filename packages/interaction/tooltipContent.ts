@@ -46,6 +46,20 @@ export interface TooltipContent {
   shortcut?: string
   gestures?: readonly TooltipGestureLine[]
   value?: string
+  /**
+   * A fixed explanation, shown whatever the reader's element choice and
+   * delay, after its own `delayMs`: for the controls that MAKE that choice,
+   * which would otherwise explain themselves only under the setting they set.
+   */
+  fixed?: TooltipFixed
+}
+
+export interface TooltipFixed {
+  /** Shown bold, followed by `detail`. */
+  title: string
+  detail: string
+  example: string
+  delayMs: number
 }
 
 /** Which elements the reader wants shown. */
@@ -63,7 +77,7 @@ const STRUCTURED_MARK = '\u0002'
 /** The attribute value for a tooltip; intention-only content stays a plain string. */
 export function encodeTooltip(content: TooltipContent): string {
   const { intention, shortcut, gestures, value } = content
-  if (!shortcut && !(gestures && gestures.length > 0) && value === undefined) return intention ?? ''
+  if (!content.fixed && !shortcut && !(gestures && gestures.length > 0) && value === undefined) return intention ?? ''
   return STRUCTURED_MARK + JSON.stringify(content)
 }
 

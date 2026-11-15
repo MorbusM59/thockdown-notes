@@ -2955,45 +2955,6 @@ export function SidebarOptionsPanel({
 
       </AccordionSection>
 
-      {/* Flashing: global, the same for every layout (shared/flashing.ts).
-          The caret's blink is the only reader today; a new flashing element
-          reads these rather than growing its own. A preset list, so its dock
-          shows while it is open. */}
-      <AccordionSection
-        className="sidebar-options-section-flashing"
-        ariaLabel="Flashing"
-        heading="Flashing"
-        iconClass="fa-lightbulb"
-        open={openPresetSubsection === 'flashing'}
-        onRequestOpenChange={(open) => onOpenPresetSubsectionChange(open ? 'flashing' : null)}
-      >
-        <PresetGrid
-          kind={FLASH_SHAPE_KIND}
-          list={flashShapePreferences}
-          onChange={onFlashShapePreferencesChange}
-          idPrefix="flash"
-          label="Flashing presets"
-          plural="a flashing preset"
-        />
-        <FlashingOptions
-          flashing={flashing}
-          editShape={editFlashShape}
-          setMatching={setFlashMatching}
-          beatAvailable={features.visualizer}
-        />
-      </AccordionSection>
-
-      {/* Tooltips: global. How long a hover waits, and which elements of a
-          tooltip are shown (shared/tooltipSettings.ts). */}
-      <AccordionSection
-        className="sidebar-options-section-tooltips"
-        ariaLabel="Tooltips"
-        heading="Tooltips"
-        iconClass="fa-comment-dots"
-      >
-        <TooltipOptions settings={tooltipSettings} onChange={onTooltipSettingsChange} />
-      </AccordionSection>
-
       {/* Scrolling is its own section because it answers a different
           question from Animations. Those four sliders shape a journey the
           APP decides to make -- a search jump, a page key, a chapter change.
@@ -3092,6 +3053,45 @@ export function SidebarOptionsPanel({
             />
           </OptionsSliderRows>
         </div>
+      </AccordionSection>
+
+      {/* Tooltips: global. How long a hover waits, and which elements of a
+          tooltip are shown (shared/tooltipSettings.ts). */}
+      <AccordionSection
+        className="sidebar-options-section-tooltips"
+        ariaLabel="Tooltips"
+        heading="Tooltips"
+        iconClass="fa-comment-dots"
+      >
+        <TooltipOptions settings={tooltipSettings} onChange={onTooltipSettingsChange} />
+      </AccordionSection>
+
+      {/* Flashing: global, the same for every layout (shared/flashing.ts).
+          The caret's blink is the only reader today; a new flashing element
+          reads these rather than growing its own. A preset list, so its dock
+          shows while it is open. */}
+      <AccordionSection
+        className="sidebar-options-section-flashing"
+        ariaLabel="Flashing"
+        heading="Flashing"
+        iconClass="fa-lightbulb"
+        open={openPresetSubsection === 'flashing'}
+        onRequestOpenChange={(open) => onOpenPresetSubsectionChange(open ? 'flashing' : null)}
+      >
+        <PresetGrid
+          kind={FLASH_SHAPE_KIND}
+          list={flashShapePreferences}
+          onChange={onFlashShapePreferencesChange}
+          idPrefix="flash"
+          label="Flashing presets"
+          plural="a flashing preset"
+        />
+        <FlashingOptions
+          flashing={flashing}
+          editShape={editFlashShape}
+          setMatching={setFlashMatching}
+          beatAvailable={features.visualizer}
+        />
       </AccordionSection>
 
       <AccordionSection
