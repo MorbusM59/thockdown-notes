@@ -1,15 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { placeTooltip, type AnchorRect } from './tooltipPlacement'
 
 const TOOLTIP_SELECTOR = '[data-tooltip], [data-live-tooltip]'
 const SHOW_DELAY_MS = 600
-const GAP_PX = 6
-
-interface AnchorRect {
-  left: number
-  top: number
-  right: number
-  bottom: number
-}
 
 interface TooltipState {
   text: string
@@ -29,32 +22,6 @@ function anchorOf(el: Element): AnchorRect {
 function windowMarginPx(): number {
   const value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--spacing-regular'))
   return Number.isFinite(value) ? value : 0
-}
-
-/**
- * Where a bubble of the MEASURED size goes: centred on the anchor, above it if
- * it fits there and below otherwise, then clamped so the whole box keeps
- * `margin` to every window edge. The bubble's CSS max-width already leaves
- * room for both side margins, so the clamp can always be satisfied
- * horizontally; vertically it can only fail for a tooltip taller than the
- * window, which is then pinned to the top margin.
- */
-export function placeTooltip(
-  anchor: AnchorRect,
-  width: number,
-  height: number,
-  viewportWidth: number,
-  viewportHeight: number,
-  margin: number,
-): { left: number; top: number } {
-  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
-  const centreX = (anchor.left + anchor.right) / 2
-  const left = clamp(centreX - width / 2, margin, viewportWidth - margin - width)
-  const above = anchor.top - GAP_PX - height
-  const below = anchor.bottom + GAP_PX
-  const preferred = above >= margin ? above : below
-  const top = Math.max(margin, Math.min(viewportHeight - margin - height, preferred))
-  return { left, top }
 }
 
 /**

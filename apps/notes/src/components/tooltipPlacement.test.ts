@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeTooltip } from './TooltipLayer'
+import { placeTooltip } from './tooltipPlacement'
 
 const W = 800
 const H = 600
