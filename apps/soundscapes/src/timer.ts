@@ -3,8 +3,8 @@
  * plays) runs before it stops, and the one rule every end in the app fades
  * by.
  *
- * - Five DURATIONS the listener sets (5 seconds to 24 hours, on a grid that
- *   coarsens as they grow: `stepDuration`), and at most one of them ACTIVE;
+ * - Five DURATIONS the listener sets (each one of DURATIONS_SEC, 1 minute to 24 hours,
+ *   stepped through by `stepDuration`), and at most one of them ACTIVE;
  *   none active is the infinity button, playing until stopped.
  * - The countdown runs in the native session (SoundscapeSession.java), which
  *   is handed the active duration and its fade: it starts when a soundscape
@@ -16,8 +16,9 @@
  *   only; the schedule's events and the timer both carry the number they
  *   came to, so the native side does not restate it.
  */
-export const MIN_DURATION_SEC = 5
-export const MAX_DURATION_SEC = 24 * 60 * 60
+/** The durations a timer may be, in seconds: a drag steps through them. */
+export const DURATIONS_SEC: readonly number[] = [1, 2, 5, 10, 15, 30, 60, 90].map((minutes) => minutes * 60)
+  .concat([2, 4, 6, 8, 10, 12, 16, 24].map((hours) => hours * 3600))
 const MAX_FADE_SEC = 5 * 60
 const FADE_SHARE = 0.1
 
@@ -38,42 +39,16 @@ export function fadeSecFor(playSec: number): number {
   return Math.min(playSec * FADE_SHARE, MAX_FADE_SEC)
 }
 
-/** Below each bound, the step a duration moves by; past the last, an hour. */
-const GRID: ReadonlyArray<readonly [below: number, step: number]> = [
-  [60, 5],
-  [5 * 60, 30],
-  [15 * 60, 60],
-  [60 * 60, 5 * 60],
-  [2 * 60 * 60, 15 * 60],
-  [8 * 60 * 60, 30 * 60],
-]
-const LAST_STEP = 60 * 60
-
-/** The step up from `sec`: the grid of the range `sec` lies in. */
-function stepUp(sec: number): number {
-  return GRID.find(([below]) => sec < below)?.[1] ?? LAST_STEP
-}
-
-/** The step down from `sec`: the grid of the range just below it, so a step down undoes a step up. */
-function stepDown(sec: number): number {
-  return stepUp(sec - 1)
-}
-
-/** `sec` moved `steps` steps on the grid (up positive), held within 5 seconds and 24 hours. */
+/** `sec` moved `steps` places along DURATIONS_SEC (up positive), stopping at either end. */
 export function stepDuration(sec: number, steps: number): number {
-  let value = sec
-  for (let count = 0; count < Math.abs(steps); count += 1) {
-    value = steps > 0 ? Math.min(MAX_DURATION_SEC, value + stepUp(value)) : Math.max(MIN_DURATION_SEC, value - stepDown(value))
-  }
-  return value
+  const index = DURATIONS_SEC.indexOf(snapDuration(sec, DURATIONS_SEC[0]))
+  return DURATIONS_SEC[Math.max(0, Math.min(DURATIONS_SEC.length - 1, index + steps))]
 }
 
-/** A stored duration made safe: a whole number of seconds, in range, on the grid. */
+/** A stored duration made safe: the nearest of DURATIONS_SEC. */
 function snapDuration(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
-  let snapped = MIN_DURATION_SEC
-  while (snapped < value && snapped < MAX_DURATION_SEC) snapped = stepDuration(snapped, 1)
-  return snapped
+  return DURATIONS_SEC.reduce((best, candidate) => (Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best))
 }
 
 export function sanitizeTimer(input: unknown): TimerSettings {
@@ -86,16 +61,9 @@ export function sanitizeTimer(input: unknown): TimerSettings {
   return { durations, active }
 }
 
-/**
- * A duration as its button shows it: the longer unit over the shorter, a
- * unit with nothing in it left out. Below an hour minutes and seconds,
- * from an hour hours and minutes.
- */
-export function durationLines(sec: number): string[] {
-  const [big, small, bigUnit, smallUnit] = sec < 60 * 60
-    ? [Math.floor(sec / 60), sec % 60, 'm', 's']
-    : [Math.floor(sec / 3600), Math.floor((sec % 3600) / 60), 'h', 'm']
-  return [big > 0 ? `${big} ${bigUnit}` : null, small > 0 ? `${small} ${smallUnit}` : null].filter((line): line is string => line !== null)
+/** A duration as its button shows it: the number over its unit, minutes up to 90, hours from 2. */
+export function durationLines(sec: number): [string, string] {
+  return sec < 2 * 3600 ? [String(Math.round(sec / 60)), 'm'] : [String(Math.round(sec / 3600)), 'h']
 }
 
 /** Time left as h:mm:ss with no leading zeros: 1:05:09, 5:09, 0:09. */

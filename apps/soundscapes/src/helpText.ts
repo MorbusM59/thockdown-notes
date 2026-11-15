@@ -24,7 +24,7 @@ const HELP: Record<string, string[]> = {
   ],
   Timer: [
     'How long a soundscape you play runs: tap one of the five lengths to set it, and tap it again to play without end, like the infinity button. It counts from when you start or switch to a soundscape, stops counting while paused, and fades the soundscape out so it is silent at the end, over a tenth of the length, at most five minutes. Then the schedule takes over again.',
-    'Lengths: Hold one and then drag up or down to change it, from 5 seconds to 24 hours.',
+    'Lengths: Hold one and then drag up or down to change it, from 1 minute to 24 hours.',
     'Time left: Shown under the name of the soundscape that plays, for the timer or a scheduled row.',
   ],
   Presets: [

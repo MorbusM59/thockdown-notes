@@ -3,7 +3,7 @@
  * infinity, exactly one of them active.
  *
  * - A DURATION: a tap makes it the timer, or, when it already is, hands
- *   over to infinity; hold, then drag up or down, to change it on its grid
+ *   over to infinity; hold, then drag up or down, to step it through the durations
  *   (useStepDrag), which also restarts the countdown when it is the active one.
  * - INFINITY: a tap plays until stopped.
  */
