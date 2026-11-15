@@ -1042,6 +1042,26 @@
   text-overflow: ellipsis;
 }
 
+/* A name with a line under it (the phone's time left): the two stacked,
+   the line lighter, smaller and not bold. */
+.options-dock-entry-name.has-detail {
+  flex-direction: column;
+  gap:            2px;
+}
+
+.options-dock-entry-title,
+.options-dock-entry-detail {
+  max-width:     100%;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+.options-dock-entry-detail {
+  font-size:   calc(1em - 2px);
+  font-weight: 400;
+  opacity:     0.75;
+}
+
 /* A label on the thumb (CanonicalScrollRail's thumbLabel): centred both ways,
    in the pager readout's font and size, free to overhang a narrow thumb. */
 .thockdown-scroll-thumb {

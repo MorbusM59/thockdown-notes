@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { SoundscapeMark } from './SoundscapeOptions'
@@ -21,6 +21,8 @@ export interface SoundscapeDockProps {
   /** Whether the host's icon picker is open for the soundscape that plays. */
   picking: boolean
   onTogglePicker: () => void
+  /** A line under the name (the phone's time left), or nothing. */
+  detail?: ReactNode
 }
 
 /**
@@ -36,7 +38,7 @@ export interface SoundscapeDockProps {
  * of its own: `armHold` abandons a hold that leaves the grace radius, and a
  * pan the browser takes cancels the pointer.
  */
-export function SoundscapeDock({ preferences, onChange, picking, onTogglePicker }: SoundscapeDockProps) {
+export function SoundscapeDock({ preferences, onChange, picking, onTogglePicker, detail }: SoundscapeDockProps) {
   const preset = activeSoundscape(preferences)
   const factory = isFactorySoundscape(preset.id)
   // A factory soundscape as shipped has nothing to restore.
@@ -58,6 +60,7 @@ export function SoundscapeDock({ preferences, onChange, picking, onTogglePicker 
         picking={picking}
         onTogglePicker={onTogglePicker}
         onResetMark={() => onChange(setSoundscapeIcon(preferences, preset.id, null))}
+        detail={detail}
       >
         <button
           type="button"

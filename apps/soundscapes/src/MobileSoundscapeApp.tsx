@@ -45,15 +45,19 @@ import {
   loadLook,
   loadPreferences,
   loadSchedule,
+  loadTimer,
   saveClipMinutes,
   saveLook,
   saveSchedule,
+  saveTimer,
   savePreferences,
   type MobileLook,
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 import { sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleRows } from './ScheduleRows'
+import { fadeSecFor, remainingText, type TimerSettings } from './timer'
+import { TimerRow } from './TimerRow'
 import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
@@ -177,6 +181,27 @@ export function MobileSoundscapeApp() {
     })
   }, [native, schedule.enabled, events, presets, preferences.masterVolume])
 
+  // The timer (timer.ts): its active duration and fade go to the session,
+  // which counts down; what it reports back is shown under the dock's name.
+  const [timer, setTimer] = useState<TimerSettings>(loadTimer)
+  useEffect(() => saveTimer(timer), [timer])
+  const timerSeconds = timer.active === null ? 0 : timer.durations[timer.active]
+  useEffect(() => {
+    if (!native) return
+    void nativeSoundscape!.setTimer({ seconds: timerSeconds, fadeSec: fadeSecFor(timerSeconds) })
+  }, [native, timerSeconds])
+  const [countdown, setCountdown] = useState<{ endsAtMs: number; remainingMs: number }>({ endsAtMs: -1, remainingMs: -1 })
+  const [clock, setClock] = useState(() => Date.now())
+  useEffect(() => {
+    if (countdown.endsAtMs < 0) return undefined
+    const tick = window.setInterval(() => setClock(Date.now()), 1000)
+    setClock(Date.now())
+    return () => window.clearInterval(tick)
+  }, [countdown.endsAtMs])
+  const timeLeft = countdown.endsAtMs >= 0 ? remainingText(countdown.endsAtMs - clock)
+    : countdown.remainingMs >= 0 ? remainingText(countdown.remainingMs)
+    : null
+
   const activeId = activeSoundscape(preferences).id
   useEffect(() => setIconQuery(null), [activeId])
 
@@ -199,6 +224,7 @@ export function MobileSoundscapeApp() {
     const follow = (state: SessionState) => {
       setRegular(state.regular)
       setSource(state.source)
+      setCountdown({ endsAtMs: state.endsAtMs, remainingMs: state.remainingMs })
       setPreferences((current) => followSession(current, state))
       setSchedule((current) => (current.enabled === state.scheduleEnabled ? current : { ...current, enabled: state.scheduleEnabled }))
     }
@@ -206,6 +232,7 @@ export function MobileSoundscapeApp() {
     void nativeSoundscape!.getState().then(follow).finally(() => setHydrated(true))
     const handles = [
       nativeSoundscape!.addListener('sessionChanged', follow),
+      nativeSoundscape!.addListener('countdown', setCountdown),
       nativeSoundscape!.addListener('clipProgress', ({ fraction }) => setClipProgress(fraction)),
       nativeSoundscape!.addListener('clipFinished', () => setClipProgress(null)),
     ]
@@ -454,6 +481,10 @@ export function MobileSoundscapeApp() {
                     onChange={setSchedule}
                   />}
                 </div>
+                <div className="utility-setting-slider-stack" aria-label="Timer">
+                  <OptionsSubsectionLabel>Timer</OptionsSubsectionLabel>
+                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Timer')!} /> : <TimerRow timer={timer} onChange={setTimer} />}
+                </div>
                 <SoundscapeControls
                   preferences={preferences}
                   onChange={handleChange}
@@ -483,6 +514,7 @@ export function MobileSoundscapeApp() {
                       onChange={setPreferences}
                       picking={iconQuery !== null}
                       onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
+                      detail={timeLeft}
                     />
                   )}
                 />

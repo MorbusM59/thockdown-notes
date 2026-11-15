@@ -253,18 +253,12 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         return new Notification.Action.Builder(icon, title, intent).build();
     }
 
-    /** What the notification says is going on: playing, paused, or the schedule's run and when it ends. */
+    /** What the notification says is going on: playing, paused, or scheduled, and until when, if it ends. */
     private String statusText(boolean playing) {
-        if (soundscape.source() == SoundscapeSession.Source.SCHEDULE) {
-            Integer end = SoundscapeSchedule.load(this).nextStopMinute();
-            if (end == null) return "Scheduled";
-            java.util.Calendar at = java.util.Calendar.getInstance();
-            // A minute of the week: its time of day is what the listener reads.
-            at.set(java.util.Calendar.HOUR_OF_DAY, (end / 60) % 24);
-            at.set(java.util.Calendar.MINUTE, end % 60);
-            return "Scheduled until " + android.text.format.DateFormat.getTimeFormat(this).format(at.getTime());
-        }
-        return playing ? "Playing" : "Paused";
+        String status = soundscape.source() == SoundscapeSession.Source.SCHEDULE ? "Scheduled" : playing ? "Playing" : "Paused";
+        long endsAt = soundscape.state().endsAtMs;
+        if (endsAt < 0) return status;
+        return status + " until " + android.text.format.DateFormat.getTimeFormat(this).format(new java.util.Date(endsAt));
     }
 
     @Override

@@ -20,10 +20,15 @@ const HELP: Record<string, string[]> = {
     'Times: Tap an hour or a minute to move it on by one step. Hold it and then drag up or down to move it further.',
     'Days: Tap a day to switch it on or off. Tap the calendar to play every day, hold it to play no day, and tap it again to go back to your days.',
     'Bin: Hold it to delete the row.',
-    'What you hear: When the schedule is on, a run fades in at its start, fades out at its end, and blends into the next soundscape where one row gives way to another, each over a minute. If you are playing or have paused a soundscape yourself, that comes first: the schedule waits until you stop it. Anything you play or pause while a scheduled run is under way still ends with that run.',
+    'What you hear: When the schedule is on, a run fades in at its start and has faded out by its end, and one row blends into the next where it gives way. Each fade takes a tenth of the play time of the row, at most five minutes. While you play a soundscape yourself, the schedule waits; it takes over again once you stop, or once your timer runs out.',
+  ],
+  Timer: [
+    'How long a soundscape you play runs: tap one of the five lengths to set it, and tap it again to play without end, like the infinity button. It counts from when you start or switch to a soundscape, stops counting while paused, and fades the soundscape out so it is silent at the end, over a tenth of the length, at most five minutes. Then the schedule takes over again.',
+    'Lengths: Hold one and then drag up or down to change it, from 5 seconds to 24 hours.',
+    'Time left: Shown under the name of the soundscape that plays, for the timer or a scheduled row.',
   ],
   Presets: [
-    'Soundscapes: Tap one to play it. Hold one and then slide your finger to move it to a new place, or onto the schedule.',
+    'Soundscapes: Tap one to play it. Hold one and then slide your finger to move it to a new place, or onto a schedule row or its plus.',
     'Plus button: Makes a new soundscape of your own, a copy of the one playing. Changes you make go straight into the soundscape that plays, factory ones included.',
     'The row above: It always shows the soundscape that plays. Tap its icon to choose another icon, or hold it to go back to the original one. Hold the name to rename it.',
     'Reset button: Turns every channel off and puts the environment back to normal, for building a soundscape from scratch.',

@@ -31,16 +31,13 @@ public class ScheduleReceiver extends BroadcastReceiver {
         if (SoundscapeSchedule.ACTION_ALARM.equals(action)) {
             SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
             if (schedule.enabled) {
-                int minute = intent.getIntExtra(SoundscapeSchedule.EXTRA_MINUTE, -1);
-                if (minute >= 0) {
-                    List<SoundscapeSchedule.Event> due = schedule.dueSince(minute);
-                    java.util.Set<Integer> stopMinutes = new java.util.HashSet<>();
+                int at = intent.getIntExtra(SoundscapeSchedule.EXTRA_AT, -1);
+                if (at >= 0) {
+                    List<SoundscapeSchedule.Event> due = schedule.dueSince(at);
                     boolean runStarted = false;
-                    for (SoundscapeSchedule.Event event : due) {
-                        if ("stop".equals(event.kind)) stopMinutes.add(event.minute);
-                        runStarted |= "start".equals(event.kind);
-                    }
-                    if (!due.isEmpty()) session.applyScheduleEvents(stopMinutes, runStarted);
+                    for (SoundscapeSchedule.Event event : due) runStarted |= "start".equals(event.kind);
+                    // The latest change decides how long it takes.
+                    if (!due.isEmpty()) session.applyScheduleEvents(runStarted, due.get(due.size() - 1).fadeSec);
                 }
             }
         } else if (SoundscapeSchedule.ACTION_APPLY_STATE.equals(action)) {

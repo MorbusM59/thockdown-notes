@@ -25,14 +25,16 @@ export interface DockEntryRowProps {
   onTogglePicker: () => void
   /** A held click on the mark: back to the entry's default mark. */
   onResetMark: () => void
+  /** A line under the name, in the name's field (the phone's time left). */
+  detail?: ReactNode
   children?: ReactNode
 }
 
-export function DockEntryRow({ className, name, takenNames, onRename, mark, picking, onTogglePicker, onResetMark, children }: DockEntryRowProps) {
+export function DockEntryRow({ className, name, takenNames, onRename, mark, picking, onTogglePicker, onResetMark, detail, children }: DockEntryRowProps) {
   return (
     <div className={`options-curve-row ${className}`}>
       <MarkButton name={name} mark={mark} picking={picking} onToggle={onTogglePicker} onReset={onResetMark} />
-      <EntryName name={name} takenNames={takenNames} onRename={onRename} />
+      <EntryName name={name} takenNames={takenNames} onRename={onRename} detail={detail} />
       {children}
     </div>
   )
@@ -87,7 +89,7 @@ function MarkButton({ name, mark, picking, onToggle, onReset }: { name: string; 
   )
 }
 
-function EntryName({ name, takenNames, onRename }: { name: string; takenNames: readonly string[]; onRename: (name: string) => Promise<void> | void }) {
+function EntryName({ name, takenNames, onRename, detail }: { name: string; takenNames: readonly string[]; onRename: (name: string) => Promise<void> | void; detail?: ReactNode }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name)
   const [error, setError] = useState<string | null>(null)
@@ -167,7 +169,7 @@ function EntryName({ name, takenNames, onRename }: { name: string; takenNames: r
   return (
     <button
       type="button"
-      className="options-curve-cell options-curve-display options-dock-entry-name"
+      className={`options-curve-cell options-curve-display options-dock-entry-name${detail ? ' has-detail' : ''}`}
       data-tooltip="Rename"
       aria-label={`${name}; right-click to rename`}
       data-secondary-press="action"
@@ -190,7 +192,10 @@ function EntryName({ name, takenNames, onRename }: { name: string; takenNames: r
         startEditing()
       }}
     >
-      {name}
+      {detail ? (<>
+        <span className="options-dock-entry-title">{name}</span>
+        <span className="options-dock-entry-detail">{detail}</span>
+      </>) : name}
     </button>
   )
 }
