@@ -160,7 +160,9 @@ schedule, closing the app) are reported (`sessionChanged`), and the page asks
 for the state at startup and on returning to the foreground; a stop's
 outcome is returned to the call. The session reads the schedule's current run from the stored
 schedule whenever it settles, never from a value carried between alarms,
-so a restarted process or slots edited under a run are followed. The
+so a restarted process or entries edited under a run are followed. The
+schedule's events are at minutes of the WEEK from Monday 00:00, worked out
+in `schedule.ts` from its entries, so the native side restates no rule. The
 renderer skips a configuration identical to the one in force, so the page following the session changes
 nothing audible.
 

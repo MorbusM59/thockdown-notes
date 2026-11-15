@@ -53,7 +53,7 @@ import {
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 import { sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
-import { ScheduleGrid } from './ScheduleGrid'
+import { ScheduleRows } from './ScheduleRows'
 import { LookButton } from './LookButton'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
@@ -111,18 +111,16 @@ export function MobileSoundscapeApp() {
   const [hydrated, setHydrated] = useState(false)
   const [clipProgress, setClipProgress] = useState<number | null>(null)
   const [clipMinutes, setClipMinutes] = useState(loadClipMinutes)
-  // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
-  const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
   const pageScrollerRef = useRef<HTMLDivElement | null>(null)
   // A finger scrolls the page wherever it is not given to a control (touchScroll.ts).
   useEffect(() => (pageScrollerRef.current ? installTouchScroll(pageScrollerRef.current) : undefined), [])
   // Dragging a soundscape to reorder it, as on the desktop: a finger held
-  // still picks it up (for the schedule, too), and travelling on drags it,
-  // putting the schedule's pick down.
+  // still picks it up, and travelling on drags it -- onto another soundscape
+  // to move it there, or onto the schedule's rows (ScheduleRows.tsx).
   const presetReorder = useSelectorReorder(
     'soundscape',
     (dragged, target) => setPreferences((current) => moveSoundscapePreset(current, dragged, target)),
-    { picture: 'copy', onStart: () => setPickedPresetId(null) },
+    { picture: 'copy' },
   )
   // The ICON PICKER for the soundscape that plays, opened from the dock's
   // mark as on the desktop: while it is open it stands in for the presets
@@ -146,19 +144,6 @@ export function MobileSoundscapeApp() {
     }
   }, [native, helpMode])
   const help = helpMode ? helpFor : undefined
-  // Pressing anything that does not act on the picked-up soundscape puts it
-  // down, and the press then does what it always does. Decided on the press
-  // (capture phase, before any control's own handler), so the control sees
-  // the state the reader now expects.
-  useEffect(() => {
-    if (pickedPresetId === null) return undefined
-    const putDown = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest('[data-pick-target]')) return
-      setPickedPresetId(null)
-    }
-    window.addEventListener('pointerdown', putDown, { capture: true })
-    return () => window.removeEventListener('pointerdown', putDown, { capture: true })
-  }, [pickedPresetId])
 
   useEffect(() => {
     void nativePlayback.then((supported) => {
@@ -176,7 +161,7 @@ export function MobileSoundscapeApp() {
   // handed to the native session, which runs them with or without this page.
   const [schedule, setSchedule] = useState<Schedule>(() => loadSchedule(soundscapePresets(preferences)))
   useEffect(() => saveSchedule(schedule), [schedule])
-  // A deleted soundscape empties the slots that held it.
+  // A deleted soundscape leaves the schedule rows that held it empty.
   useEffect(() => setSchedule((current) => sanitizeSchedule(current, presets)), [presets])
   const events = useMemo(() => scheduleEvents(schedule), [schedule])
   useEffect(() => {
@@ -462,18 +447,16 @@ export function MobileSoundscapeApp() {
                 </div>
                 <div className="utility-setting-slider-stack" aria-label="Schedule">
                   <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
-                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleGrid
+                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleRows
                     schedule={schedule}
                     presets={presets}
-                    pickedPresetId={pickedPresetId}
+                    currentPresetId={preferences.activePresetId}
                     onChange={setSchedule}
                   />}
                 </div>
                 <SoundscapeControls
                   preferences={preferences}
                   onChange={handleChange}
-                  pickedPresetId={pickedPresetId}
-                  onPickPreset={setPickedPresetId}
                   presetReorder={presetReorder}
                   help={help}
                   framePresets={(grid) => (iconQuery === null ? grid : (<>

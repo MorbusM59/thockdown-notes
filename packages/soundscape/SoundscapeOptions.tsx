@@ -391,18 +391,7 @@ interface SoundscapeOptionsProps {
   onChange: (preferences: SoundscapePreferences) => void
 }
 
-/**
- * PICKING UP a soundscape, which a host may offer (the mobile app does, for
- * its schedule): on touch, a long press on a soundscape picks it up without
- * playing it, and a tap on the picked-up one puts it down. Deleting is the
- * dock's (SoundscapeDock), on every platform. What a picked-up soundscape is
- * FOR is the host's business, and so is putting it down when the reader
- * presses something else; the control that acts ON it (the picked-up button
- * itself) carries `data-pick-target` so the host can tell it apart.
- */
 interface SoundscapeControlsProps extends SoundscapeOptionsProps {
-  pickedPresetId?: string | null
-  onPickPreset?: (presetId: string | null) => void
   /**
    * HELP, which a host may offer (the mobile app does): the explanation for
    * a subsection by its heading ("Presets", "Channels", "Environment",
@@ -601,7 +590,7 @@ interface SoundscapePartsProps extends SoundscapeControlsProps {
 }
 
 /** The soundscape's controls and their state, laid out by the host (`arrange`). */
-function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickPreset, help, framePresets = (grid) => grid, presetReorder, arrangement, arrange }: SoundscapePartsProps) {
+function SoundscapeParts({ preferences, onChange, help, framePresets = (grid) => grid, presetReorder, arrangement, arrange }: SoundscapePartsProps) {
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   // A right press on a channel, until its release decides what it was: a
@@ -623,9 +612,10 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   // - a channel: a long press turns it on or off (either way, where a mouse
   //   holds the left button to turn on and the right to turn off), a double
   //   tap solos it (a right-click);
-  // - a soundscape: a long press picks it up, where the host offers that
-  //   (onPickPreset); exporting one alone has no touch gesture: the mobile
-  //   app exports them all from its own controls;
+  // - a soundscape: a long press picks it up for a drag where the host
+  //   reorders (presetReorder), and does nothing else; exporting one alone
+  //   has no touch gesture: the mobile app exports them all from its own
+  //   controls;
   // A long press is followed by a click when the finger lifts, which must
   // not also act (it would select or create), so a completed touch
   // hold swallows the next click. Every touch press clears that first, so a
@@ -778,10 +768,6 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   }
 
   const activatePreset = (preset: SoundscapePreset) => {
-    if (onPickPreset && pickedPresetId === preset.id) {
-      onPickPreset(null)
-      return
-    }
     onChange(applySoundscapePreset(preferences, preset))
   }
 
@@ -801,14 +787,12 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
         {framePresets(<div className="options-loadout-grid soundscape-preset-grid" role="group" aria-label="Soundscapes">
           {orderedSoundscapePresets(preferences).map((preset) => {
             const reorder = presetReorder?.(preset.id)
-            const isPicked = pickedPresetId === preset.id
             return (
               <button
                 key={preset.id}
                 type="button"
-                className={`btn-icon options-color-swatch options-loadout-btn soundscape-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}${isPicked ? ' is-picked' : ''}`}
-                aria-label={isPicked ? `${preset.name}, picked up` : preset.name}
-                data-pick-target={isPicked ? '' : undefined}
+                className={`btn-icon options-color-swatch options-loadout-btn soundscape-preset-btn${selectedPresetId === preset.id ? ' is-active' : ''}`}
+                aria-label={preset.name}
                 aria-pressed={selectedPresetId === preset.id}
                 data-tooltip={preset.name}
                 data-secondary-press="action"
@@ -817,11 +801,10 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                 onPointerDown={(event) => {
                   reorder?.onPointerDown(event)
                   if (event.pointerType === 'touch') {
-                    // The same still hold also picks the soundscape up for a
-                    // drag where the host reorders (pointerDrag.ts), so it
-                    // does not claim the press: travelling on from it drags,
-                    // and the host puts the soundscape down as the drag starts.
-                    if (onPickPreset) startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => onPickPreset(preset.id), { isDragPickup: presetReorder !== undefined })
+                    // A still hold is a drag's pick-up (pointerDrag.ts) and
+                    // nothing more: it only swallows the click its release
+                    // brings, so a hold let go in place plays nothing.
+                    startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => {}, { isDragPickup: true })
                     return
                   }
                   if (event.button !== 2) return

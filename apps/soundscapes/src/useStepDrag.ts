@@ -1,15 +1,15 @@
 /**
  * A button that is tapped, or dragged up and down through a list of values
- * (LookButton.tsx's looks, the clip button's lengths).
+ * (LookButton.tsx's looks, the clip button's lengths, the schedule's times).
  *
  * On touch, a drag needs a HOLD first (HOLD_CONFIRM_MS): a finger that moves
  * on without one is a swipe of the page (touchScroll.ts).
  *
- * The drag goes by the schedule slot's minute-drag rules (ScheduleGrid.tsx),
- * so every such control feels alike: a press becomes a drag only once the
+ * Every such control feels alike: a press becomes a drag only once the
  * finger LEAVES THE BUTTON, a step is the button's own height measured from
  * where the press began (leaving is the first step, up is +1), and moving
- * back undoes steps. A release that never left the button is a tap.
+ * back undoes steps. A release that never left the button is a tap, unless
+ * the hold before a drag had completed.
  *
  * `adjusting` is true while a drag is under way and for SHOW_AFTER_DRAG_MS
  * after it, which is how long the button shows the value it was dragged to
@@ -27,6 +27,8 @@ interface StepPress<T> {
   base: T
   stepPx: number
   dragging: boolean
+  /** The hold before a drag completed (touch). */
+  held: boolean
 }
 
 export function useStepDrag<T>(options: {
@@ -54,7 +56,10 @@ export function useStepDrag<T>(options: {
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
       event.currentTarget.setPointerCapture(event.pointerId)
       dragHoldRef.current?.()
-      dragHoldRef.current = event.pointerType === 'touch' ? armTouchDragHold() : null
+      const pointerId = event.pointerId
+      dragHoldRef.current = event.pointerType === 'touch'
+        ? armTouchDragHold(() => { if (pressRef.current?.pointerId === pointerId) pressRef.current.held = true })
+        : null
       pressRef.current = {
         pointerId: event.pointerId,
         y: event.clientY,
@@ -62,6 +67,7 @@ export function useStepDrag<T>(options: {
         base: optionsRef.current.begin(),
         stepPx: Math.max(1, event.currentTarget.offsetHeight),
         dragging: false,
+        held: false,
       }
     },
     onPointerMove: (event: PointerEvent<HTMLElement>) => {
@@ -83,7 +89,8 @@ export function useStepDrag<T>(options: {
       pressRef.current = null
       dragHoldRef.current?.()
       if (!press.dragging) {
-        optionsRef.current.tap()
+        // A release after a hold was the start of a drag that did not happen: no step.
+        if (!press.held) optionsRef.current.tap()
         return
       }
       setDragging(false)

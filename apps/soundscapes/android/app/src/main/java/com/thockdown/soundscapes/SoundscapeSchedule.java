@@ -15,8 +15,8 @@ import org.json.JSONObject;
 
 /**
  * The daily schedule as the native side keeps it: the EVENTS the web page
- * worked out from its slots (mobile/src/schedule.ts, the only place the
- * rules about slots are written), the soundscapes those events name, and
+ * worked out from its entries (apps/soundscapes/src/schedule.ts, the only place the
+ * schedule's rules are written), at minutes of the week, the soundscapes those events name, and
  * whether the schedule is on. Kept in SharedPreferences, because it has to
  * act with the app closed and after a restart or a reboot, when no web page
  * exists to ask.
@@ -50,6 +50,8 @@ final class SoundscapeSchedule {
     private static final String PREFERENCES = "soundscape-schedule";
     private static final String KEY = "schedule";
     private static final int MINUTES_PER_DAY = 24 * 60;
+    /** Event minutes are minutes of the WEEK, from Monday 00:00 (schedule.ts). */
+    static final int MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY;
 
     final boolean enabled;
     final float masterVolume;
@@ -99,14 +101,14 @@ final class SoundscapeSchedule {
         preferences(context).edit().putString(KEY, json.toString()).apply();
     }
 
-    /** The minute of the day the run under way stops at: the next stop event from now, round the clock; null for none. */
+    /** The minute of the week the run under way stops at: the next stop event from now, round the week; null for none. */
     Integer nextStopMinute() {
-        int now = minuteOfDay(Calendar.getInstance());
+        int now = minuteOfWeek(Calendar.getInstance());
         Integer best = null;
         int bestDistance = Integer.MAX_VALUE;
         for (Event event : events) {
             if (!"stop".equals(event.kind)) continue;
-            int distance = Math.floorMod(event.minute - now, MINUTES_PER_DAY);
+            int distance = Math.floorMod(event.minute - now, MINUTES_PER_WEEK);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = event.minute;
@@ -128,17 +130,17 @@ final class SoundscapeSchedule {
 
     /**
      * The events from `fromMinute` up to and including this minute, in order,
-     * round midnight if need be. An alarm armed for `fromMinute` may arrive
+     * round the week's end if need be. An alarm armed for `fromMinute` may arrive
      * late (Android defers exact alarms in deep sleep, by minutes when two
      * fall close together), and an event between the two would otherwise be
      * skipped, since the next alarm is armed for after now.
      */
     List<Event> dueSince(int fromMinute) {
-        int now = minuteOfDay(Calendar.getInstance());
-        int span = Math.floorMod(now - fromMinute, MINUTES_PER_DAY);
+        int now = minuteOfWeek(Calendar.getInstance());
+        int span = Math.floorMod(now - fromMinute, MINUTES_PER_WEEK);
         List<Event> due = new ArrayList<>();
         for (int offset = 0; offset <= span; offset += 1) {
-            int minute = (fromMinute + offset) % MINUTES_PER_DAY;
+            int minute = (fromMinute + offset) % MINUTES_PER_WEEK;
             for (Event event : events) {
                 if (event.minute == minute) due.add(event);
             }
@@ -146,10 +148,10 @@ final class SoundscapeSchedule {
         return due;
     }
 
-    /** The event whose state holds now: the latest at or before this minute, round the clock; null if there are none. */
+    /** The event whose state holds now: the latest at or before this minute, round the week; null if there are none. */
     Event current() {
         if (events.isEmpty()) return null;
-        int now = minuteOfDay(Calendar.getInstance());
+        int now = minuteOfWeek(Calendar.getInstance());
         Event latest = events.get(events.size() - 1);
         for (Event event : events) {
             if (event.minute <= now) latest = event;
@@ -157,8 +159,10 @@ final class SoundscapeSchedule {
         return latest;
     }
 
-    static int minuteOfDay(Calendar calendar) {
-        return (calendar.get(Calendar.HOUR_OF_DAY) * 60) + calendar.get(Calendar.MINUTE);
+    /** Minutes since Monday 00:00 of this week. */
+    static int minuteOfWeek(Calendar calendar) {
+        int day = Math.floorMod(calendar.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY, 7);
+        return (day * MINUTES_PER_DAY) + (calendar.get(Calendar.HOUR_OF_DAY) * 60) + calendar.get(Calendar.MINUTE);
     }
 
     /** Whether alarms can be exact here: granted by the listener on Android 12 and later. */
@@ -195,24 +199,22 @@ final class SoundscapeSchedule {
             return;
         }
         Calendar now = Calendar.getInstance();
-        int nowMinute = minuteOfDay(now);
-        // The first event after this minute, or tomorrow's first.
+        int nowMinute = minuteOfWeek(now);
+        // The first event after this minute, or next week's first.
         Event next = schedule.events.get(0);
-        int daysAhead = 1;
         for (Event event : schedule.events) {
             if (event.minute > nowMinute) {
                 next = event;
-                daysAhead = 0;
                 break;
             }
         }
+        int ahead = Math.floorMod(next.minute - nowMinute, MINUTES_PER_WEEK);
+        if (ahead == 0) ahead = MINUTES_PER_WEEK;
         Calendar at = (Calendar) now.clone();
-        at.add(Calendar.DAY_OF_YEAR, daysAhead);
-        at.set(Calendar.HOUR_OF_DAY, next.minute / 60);
-        at.set(Calendar.MINUTE, next.minute % 60);
         at.set(Calendar.SECOND, 0);
         at.set(Calendar.MILLISECOND, 0);
-        intent.putExtra(EXTRA_MINUTE, next.minute % MINUTES_PER_DAY);
+        at.add(Calendar.MINUTE, ahead);
+        intent.putExtra(EXTRA_MINUTE, next.minute);
         alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at.getTimeInMillis(),
             PendingIntent.getBroadcast(app, 0, intent, flags));
     }

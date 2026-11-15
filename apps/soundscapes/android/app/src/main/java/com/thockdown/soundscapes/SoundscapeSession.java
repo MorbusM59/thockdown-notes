@@ -151,7 +151,7 @@ final class SoundscapeSession {
      * The schedule's current run's soundscape, or null: outside a run, or the
      * schedule off. READ FROM THE STORED SCHEDULE by settle(), never carried
      * from event to event: the process may have been restarted since the run
-     * began, and the slots may have been changed under it.
+     * began, and the entries may have been changed under it.
      */
     private Entry scheduled = null;
     private List<Entry> entries = Collections.emptyList();
@@ -395,7 +395,7 @@ final class SoundscapeSession {
 
     // --- From the schedule ---
 
-    /** The schedule changed (turned on or off, or its slots edited), or the device rebooted: apply its state at this moment. */
+    /** The schedule changed (turned on or off, or its entries edited), or the device rebooted: apply its state at this moment. */
     synchronized void applyScheduleState() {
         // The run regular mode began in may have been moved, cut short or
         // turned off with the schedule: it now ends with the run under way,

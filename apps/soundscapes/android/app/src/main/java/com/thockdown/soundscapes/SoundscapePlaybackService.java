@@ -259,7 +259,8 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             Integer end = SoundscapeSchedule.load(this).nextStopMinute();
             if (end == null) return "Scheduled";
             java.util.Calendar at = java.util.Calendar.getInstance();
-            at.set(java.util.Calendar.HOUR_OF_DAY, end / 60);
+            // A minute of the week: its time of day is what the listener reads.
+            at.set(java.util.Calendar.HOUR_OF_DAY, (end / 60) % 24);
             at.set(java.util.Calendar.MINUTE, end % 60);
             return "Scheduled until " + android.text.format.DateFormat.getTimeFormat(this).format(at.getTime());
         }
