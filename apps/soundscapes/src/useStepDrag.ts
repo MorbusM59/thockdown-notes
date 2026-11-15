@@ -2,6 +2,9 @@
  * A button that is tapped, or dragged up and down through a list of values
  * (LookButton.tsx's looks, the clip button's lengths).
  *
+ * On touch, a drag needs a HOLD first (HOLD_CONFIRM_MS): a finger that moves
+ * on without one is a swipe of the page (touchScroll.ts).
+ *
  * The drag goes by the schedule slot's minute-drag rules (ScheduleGrid.tsx),
  * so every such control feels alike: a press becomes a drag only once the
  * finger LEAVES THE BUTTON, a step is the button's own height measured from
@@ -13,6 +16,7 @@
  * before going back to its usual face.
  */
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
+import { armTouchDragHold } from '@thockdown/interaction/holdTiming'
 
 const SHOW_AFTER_DRAG_MS = 2000
 
@@ -33,6 +37,8 @@ export function useStepDrag<T>(options: {
   tap: () => void
 }) {
   const pressRef = useRef<StepPress<T> | null>(null)
+  /** A finger's hold before a drag (armTouchDragHold); a swipe without it scrolls the page. */
+  const dragHoldRef = useRef<(() => void) | null>(null)
   const optionsRef = useRef(options)
   optionsRef.current = options
   const [dragging, setDragging] = useState(false)
@@ -47,6 +53,8 @@ export function useStepDrag<T>(options: {
   const handlers = {
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
       event.currentTarget.setPointerCapture(event.pointerId)
+      dragHoldRef.current?.()
+      dragHoldRef.current = event.pointerType === 'touch' ? armTouchDragHold() : null
       pressRef.current = {
         pointerId: event.pointerId,
         y: event.clientY,
@@ -73,6 +81,7 @@ export function useStepDrag<T>(options: {
       const press = pressRef.current
       if (!press || press.pointerId !== event.pointerId) return
       pressRef.current = null
+      dragHoldRef.current?.()
       if (!press.dragging) {
         optionsRef.current.tap()
         return
@@ -81,6 +90,7 @@ export function useStepDrag<T>(options: {
       setLingering(true)
     },
     onPointerCancel: () => {
+      dragHoldRef.current?.()
       if (pressRef.current?.dragging) {
         setDragging(false)
         setLingering(true)

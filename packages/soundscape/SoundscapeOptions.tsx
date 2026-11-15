@@ -632,6 +632,8 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
   // tap.
   const touchHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   const swallowClickRef = useRef(false)
+  /** The channel a touch hold completed on, still down: its release toggles it, unless it became a volume drag. */
+  const heldChannelRef = useRef<string | null>(null)
   const lastChannelTapRef = useRef<{ channelId: string; at: number } | null>(null)
   // A touch press on an ENABLED channel that may become a volume drag -- the
   // touch counterpart of the desktop's wheel over a channel, in the same 5%
@@ -910,11 +912,13 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                     startChannelHold(channel, event.button, event.pointerId)
                     return
                   }
+                  // A hold takes the press (a finger that moves on without one
+                  // scrolls the page, touchScroll.ts): released in place it
+                  // turns the channel on or off, dragged out of the button it
+                  // sets the volume instead.
                   startTouchHold(event.pointerId, HOLD_CONFIRM_MS, () => {
-                    // The long press won: this press is not a volume drag.
-                    channelDragRef.current = null
+                    heldChannelRef.current = channel.id
                     setSelectedId(channel.id)
-                    updateChannel(channel.id, { enabled: !channel.enabled })
                   })
                   channelDragRef.current = channel.enabled
                     ? {
@@ -937,6 +941,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                     endTouchHold(event.pointerId)
                     swallowClickRef.current = true
                     lastChannelTapRef.current = null
+                    heldChannelRef.current = null
                     setVolumeDragChannelId(press.channelId)
                   }
                   // Up is louder: screen y grows downwards.
@@ -951,6 +956,11 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                   }
                   channelDragRef.current = null
                   setVolumeDragChannelId(null)
+                  if (heldChannelRef.current === channel.id) {
+                    heldChannelRef.current = null
+                    updateChannel(channel.id, { enabled: !channel.enabled })
+                    return
+                  }
                   if (!endTouchHold(event.pointerId)) return
                   const last = lastChannelTapRef.current
                   if (last && last.channelId === channel.id && event.timeStamp - last.at < DOUBLE_TAP_MS) {
@@ -963,6 +973,7 @@ function SoundscapeParts({ preferences, onChange, pickedPresetId = null, onPickP
                 onPointerCancel={(event) => {
                   endChannelHold(event.pointerId, false)
                   endTouchHold(event.pointerId)
+                  heldChannelRef.current = null
                   channelDragRef.current = null
                   setVolumeDragChannelId(null)
                 }}

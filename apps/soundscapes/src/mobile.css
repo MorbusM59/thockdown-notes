@@ -94,16 +94,11 @@ body {
 }
 
 /* The element that scrolls is the panel's own options content (a scroller
-   in the desktop's styles). No scrolling under a finger: the scrollbar
-   scrolls the page (PageScrollbar.tsx), so every other drag belongs to the
-   control it starts on. */
+   in the desktop's styles). A finger scrolls it, but by the app's rule
+   rather than the browser's (touchScroll.ts): the browser would claim every
+   first movement, before a control could say the press was its own. */
 .mobile-page-scroller {
   touch-action: none;
-}
-
-/* In help mode nothing on the page is a control, so a finger scrolls it. */
-.mobile-page-scroller.is-help {
-  touch-action: pan-y;
 }
 
 /* The page's scrollbar, at the right edge where the system's would be: a

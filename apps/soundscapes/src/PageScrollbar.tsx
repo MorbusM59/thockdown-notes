@@ -1,14 +1,8 @@
 /**
- * The page's scrollbar: the ONLY way the page scrolls on touch.
- *
- * Nearly everything on the page is a control, many of them dragged (the
- * sliders) or held (channels, soundscapes, slots, the power button), and a
- * finger cannot say whether it means the control or the page. So the page
- * does not scroll under a finger at all (touch-action: none on the
- * scroller, mobile.css) and this bar does the scrolling: drag the thumb, or
- * tap the track to travel there. Every other drag is then the control's
- * alone. A mouse wheel still scrolls, as a wheel cannot be mistaken for a
- * control.
+ * The page's scrollbar. A finger also scrolls the page anywhere it is not
+ * given to a control (touchScroll.ts); this bar is the way to travel far:
+ * drag the thumb, or tap the track to travel there. A mouse wheel still
+ * scrolls.
  *
  * It is the desktop's scrollbar -- its track and thumb (the thumb padded
  * inside the track) and the shared thumb arithmetic in scrollTrackGeometry.ts

@@ -39,10 +39,11 @@
  *   from where the press began, so leaving the slot is the first step, each
  *   slot's worth of travel after it is another, and moving back undoes
  *   them. Up or down on the inside of a run does nothing.
- * The page does not scroll under a finger (PageScrollbar.tsx), so a drag
- * here is always the slot's.
+ * On touch, a drag needs a HOLD first (HOLD_CONFIRM_MS): a finger that moves
+ * on without one is a swipe of the page (touchScroll.ts).
  */
 import { useEffect, useRef, useState } from 'react'
+import { armTouchDragHold } from '@thockdown/interaction/holdTiming'
 import { type SoundscapePreset } from '@thockdown/soundscape/soundscape'
 import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import {
@@ -110,6 +111,8 @@ function useCurrentHour(): number {
 export function ScheduleGrid({ schedule, presets, pickedPresetId, onChange }: ScheduleGridProps) {
   const currentHour = useCurrentHour()
   const pressRef = useRef<SlotPress | null>(null)
+  /** A finger's hold before a drag (armTouchDragHold); a swipe without it scrolls the page. */
+  const dragHoldRef = useRef<(() => void) | null>(null)
 
   const withSlot = (hour: number, change: Partial<ScheduleSlot>): Schedule => ({
     ...schedule,
@@ -221,6 +224,8 @@ export function ScheduleGrid({ schedule, presets, pickedPresetId, onChange }: Sc
         data-schedule-hour={hour}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture(event.pointerId)
+          dragHoldRef.current?.()
+          dragHoldRef.current = event.pointerType === 'touch' ? armTouchDragHold() : null
           pressRef.current = {
             pointerId: event.pointerId,
             hour,
@@ -247,9 +252,10 @@ export function ScheduleGrid({ schedule, presets, pickedPresetId, onChange }: Sc
           const press = pressRef.current
           if (!press || press.pointerId !== event.pointerId) return
           pressRef.current = null
+          dragHoldRef.current?.()
           if (!press.dragging) tap(press.hour)
         }}
-        onPointerCancel={() => { pressRef.current = null }}
+        onPointerCancel={() => { pressRef.current = null; dragHoldRef.current?.() }}
         onContextMenu={(event) => event.preventDefault()}
       >
         {label(slot, hour)}

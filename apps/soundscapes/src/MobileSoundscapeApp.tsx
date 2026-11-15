@@ -60,6 +60,7 @@ import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/Sounds
 import { SoundscapeDock } from '@thockdown/soundscape/SoundscapeDock'
 import { IconPickerGrid } from '@thockdown/interaction/iconPicker/IconPicker'
 import { PageScrollbar } from './PageScrollbar'
+import { installTouchScroll } from '@thockdown/interaction/touchScroll'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
@@ -113,6 +114,8 @@ export function MobileSoundscapeApp() {
   // The soundscape picked up for filling schedule slots (ScheduleGrid); not persisted.
   const [pickedPresetId, setPickedPresetId] = useState<string | null>(null)
   const pageScrollerRef = useRef<HTMLDivElement | null>(null)
+  // A finger scrolls the page wherever it is not given to a control (touchScroll.ts).
+  useEffect(() => (pageScrollerRef.current ? installTouchScroll(pageScrollerRef.current) : undefined), [])
   // Dragging a soundscape to reorder it, as on the desktop: a finger held
   // still picks it up (for the schedule, too), and travelling on drags it,
   // putting the schedule's pick down.
@@ -128,9 +131,8 @@ export function MobileSoundscapeApp() {
   // soundscape coming to play closes it.
   const [iconQuery, setIconQuery] = useState<string | null>(null)
   // HELP MODE: every subsection shows an explanation in place of its
-  // controls (helpText.ts). Nothing on the page acts while it is up, so the
-  // page scrolls under a finger like any page (`is-help`), and the system's
-  // back gesture ends it (takeBack, below).
+  // controls (helpText.ts). The system's back gesture ends it (takeBack,
+  // below).
   const [helpMode, setHelpMode] = useState(false)
   // While help is up, the system's back gesture closes it rather than
   // leaving the app.
@@ -342,7 +344,7 @@ export function MobileSoundscapeApp() {
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
-              <div ref={pageScrollerRef} className={`options-content sidebar-options-content thockdown-custom-scrollbar mobile-page-scroller${helpMode ? ' is-help' : ''}`}>
+              <div ref={pageScrollerRef} className={`options-content sidebar-options-content thockdown-custom-scrollbar mobile-page-scroller`}>
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Master')!} /> : (<>

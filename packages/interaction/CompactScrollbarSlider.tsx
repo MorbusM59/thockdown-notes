@@ -152,6 +152,9 @@ export function CompactScrollbarSlider({
     if (Number.isFinite(parsed)) onCommit(snapValue(parsed))
   }
 
+  /** A finger is down and has not yet left the tap radius (see onPointerDown). */
+  const touchPendingRef = useRef(false)
+
   useGracedWheel(shellRef, handleWheel)
 
   return (
@@ -207,19 +210,38 @@ export function CompactScrollbarSlider({
         if (event.button !== 0) return
         event.preventDefault()
         event.currentTarget.setPointerCapture(event.pointerId)
+        // A finger may be starting a swipe of the page (touchScroll.ts),
+        // decided once it leaves the tap radius: until then the value is
+        // left alone, and a release inside the radius is a tap.
+        if (event.pointerType === 'touch') {
+          touchPendingRef.current = true
+          return
+        }
         setIsDragging(true)
         applyPointerValue(event.clientX)
       }}
       onPointerMove={(event) => {
-        if (!isDragging) return
+        if (touchPendingRef.current) {
+          // Still here once the finger left the radius: the move was not a swipe.
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+          touchPendingRef.current = false
+          setIsDragging(true)
+        } else if (!isDragging) return
         applyPointerValue(event.clientX)
       }}
       onPointerUp={(event) => {
-        if (!isDragging) return
+        if (touchPendingRef.current) {
+          touchPendingRef.current = false
+          applyPointerValue(event.clientX)
+        } else if (!isDragging) return
         event.currentTarget.releasePointerCapture(event.pointerId)
         setIsDragging(false)
       }}
-      onPointerCancel={() => setIsDragging(false)}
+      onPointerCancel={() => {
+        touchPendingRef.current = false
+        setIsDragging(false)
+      }}
+      data-touch-slider=""
       data-secondary-press="action"
       onContextMenu={(event) => {
         event.preventDefault()

@@ -66,6 +66,8 @@ interface Press extends PressOrigin {
   readonly pointerId: number
   /** A hold completed during this press: it was held in place, not dragged. */
   holdCompleted: boolean
+  /** Any hold completed during this press, a drag's pick-up included: the press has been taken by its control. */
+  taken: boolean
 }
 
 /**
@@ -85,6 +87,7 @@ if (typeof window !== 'undefined') {
       clientX: event.clientX,
       clientY: event.clientY,
       holdCompleted: false,
+      taken: false,
     }
     presses.set(event.pointerId, press)
     latestPress = press
@@ -100,6 +103,15 @@ if (typeof window !== 'undefined') {
 /** Did a hold complete during the press of `pointerId`, still down? */
 export function holdCompletedDuringPress(pointerId: number): boolean {
   return presses.get(pointerId)?.holdCompleted === true
+}
+
+/**
+ * Did any hold complete during the press of `pointerId`, a drag's pick-up
+ * included? Then the press belongs to the control it was held on, and a
+ * finger moving on is that control's drag (touchScroll.ts), not a swipe.
+ */
+export function pressTakenByHold(pointerId: number): boolean {
+  return presses.get(pointerId)?.taken === true
 }
 
 /**
@@ -145,6 +157,7 @@ export function armHold(onComplete: () => void, holdMs: number = HOLD_CONFIRM_MS
     // Picking a drag up is not a hold that claims the press: it is the drag's
     // own way of starting on a touch screen, and must not stop itself.
     if (press && !options.isDragPickup) press.holdCompleted = true
+    if (press) press.taken = true
     endCursorHold(true)
     onComplete()
   }, holdMs)
@@ -157,4 +170,13 @@ export function armHold(onComplete: () => void, holdMs: number = HOLD_CONFIRM_MS
     endCursorHold(false)
   }
   return abandon
+}
+
+/**
+ * The hold a finger needs before it may drag a control that otherwise takes
+ * a tap (touchScroll.ts: without it, moving on is a swipe of the page). It
+ * does nothing itself but take the press; returns the function abandoning it.
+ */
+export function armTouchDragHold(): () => void {
+  return armHold(() => {}, HOLD_CONFIRM_MS, { isDragPickup: true })
 }
