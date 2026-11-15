@@ -127,8 +127,15 @@ body {
   font-size: 15px;
 }
 
-/* The icon picker's filter: a magnifier, then the field. */
-.mobile-icon-filter-row {
-  grid-template-columns: var(--entry-height) 1fr;
-  column-gap: var(--spacing-small);
+/* The icon picker's filter: the whole width, half a row high. */
+.mobile-icon-filter {
+  box-sizing: border-box;
+  width: 100%;
+  height: calc(var(--entry-height) / 2);
+  padding: 0 var(--spacing-small);
+  font: inherit;
+  color: inherit;
+  background: var(--backdrop-surface-background, transparent);
+  border: var(--backdrop-surface-border);
+  border-radius: var(--border-radius-regular);
 }

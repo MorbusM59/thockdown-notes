@@ -81,7 +81,8 @@ function MarkButton({ name, mark, picking, onToggle, onReset }: { name: string; 
         event.stopPropagation()
       }}
     >
-      {mark}
+      {/* Blank while the picker is open: the icon is being chosen. */}
+      {picking ? null : mark}
     </button>
   )
 }

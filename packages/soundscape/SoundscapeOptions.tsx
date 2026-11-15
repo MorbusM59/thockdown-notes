@@ -571,10 +571,11 @@ export function SoundscapeControls({ presetsDock, ...props }: SoundscapeControls
       arrange={({ presets, environment, channels, presetsLabel, channelsLabel }) => (
         <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
           {presetsLabel}
-          {presets}
-          {/* The dock for the soundscape that plays (SoundscapeDock), which
-              the desktop keeps below its view instead. Help covers it. */}
+          {/* The dock for the soundscape that plays (SoundscapeDock), above
+              the soundscapes it is one of; the desktop keeps it below its
+              view instead. Help covers it. */}
           {props.help?.('Presets') ? null : presetsDock}
+          {presets}
           {environment}
           {channelsLabel}
           {channels}

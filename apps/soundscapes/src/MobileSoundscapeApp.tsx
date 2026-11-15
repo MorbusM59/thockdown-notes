@@ -477,19 +477,13 @@ export function MobileSoundscapeApp() {
                   presetReorder={presetReorder}
                   help={help}
                   framePresets={(grid) => (iconQuery === null ? grid : (<>
-                    <div className="options-curve-rows options-dock-rows">
-                      <div className="options-curve-row mobile-icon-filter-row">
-                        <span className="options-curve-cell options-curve-display" aria-hidden="true">
-                          <span className="fa-solid fa-magnifying-glass" />
-                        </span>
-                        <input
-                          className="options-curve-cell options-curve-field"
-                          aria-label="Filter the icons"
-                          value={iconQuery}
-                          onChange={(event) => setIconQuery(event.target.value)}
-                        />
-                      </div>
-                    </div>
+                    <input
+                      className="mobile-icon-filter"
+                      aria-label="Filter the icons"
+                      placeholder="Filter icons..."
+                      value={iconQuery}
+                      onChange={(event) => setIconQuery(event.target.value)}
+                    />
                     <IconPickerGrid
                       label={activeSoundscape(preferences).name}
                       current={activeSoundscape(preferences).icon}
