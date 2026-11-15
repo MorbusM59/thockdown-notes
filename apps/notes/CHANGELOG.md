@@ -6,6 +6,38 @@ were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
 
+## 0.9.0 (2026-11-15)
+
+Alpha Release #24. The sidebar is rebuilt around six views, every preset list works the same way, images get a home of their own, and Find & Replace is rebuilt.
+
+#### New features
+
+- **Sidebar views.** Notes, Images, Songs, Soundscapes, Find and Options each have their own view. Notes gains an **External** section for files opened from disk, and every section reopens where you left it.
+- **Presets work one way everywhere.** Layouts, soundstages, soundscapes, keystroke sounds and flashing: your changes go straight into the preset in use, a built-in preset keeps your changes until you restore it, and "+" makes a copy. A dock row lets you change a preset's icon, rename it, reset it, and trash or restore it.
+- **Images.** Drop image files and folders on the Images view to store them, tagged by their folders. A click shows an image whole in the slot, and you place an image in a note by dragging it.
+- **Music.** Click a set to add it to what plays or take it out; hold it to play that set alone. Drop files and folders on the Songs view to add them, group songs by folder or artist, and see each song's length. The music bar now holds Music, Filter, Soundstages and Soundscape above the volume sliders.
+- **Keystroke sounds.** Five built-in presets, from Vanilla to Needles.
+- **Find & Replace.** One find dock with whole-word, match-case and keep-case toggles, previous and next, and an "n of N" count. Long hit lists are paged, the reader highlights every match, Ctrl+H opens replace and Ctrl+Enter replaces all.
+- **List actions.** Every row (notes, images, songs) shows its action icons on hover; each acts on a short hold.
+- **Tooltips.** Each tooltip names what a control is for. In Options > Advanced > Tooltips you choose how long they wait to appear (or never) and whether they also show shortcuts, mouse gestures and values.
+- **Look.** Panels are one textured surface. The default fonts are Nova Mono for the editor and Geo for the interface, and the Gold, Bubblegum, Light, Sand and Paper presets are refreshed.
+
+#### Under the hood
+
+- Notes, images and the sidebar now scroll through one shared scroller, so they all move the same way.
+- Song tags are read in the background at start-up, and a music folder's songs are built only when you first unfold it.
+- The User Guide is updated for the new views and presets.
+
+#### Bug fixes
+
+- A long scrollbar jump stays smooth in the reader, the sidebar and the song list, and a jump to the end lands exactly on the last line.
+- A deleted note can no longer reappear from an older list.
+- Escape in a text field no longer also switches modes.
+- After a right-hold on the scrollbar in a large, partly loaded note, the thumb no longer jumps.
+- The scrollbar thumb hides when there is nothing to scroll.
+- Switching between find and find & replace keeps the marked match and the page, and the reader's hit list no longer empties while it updates.
+- Tooltips always stay inside the window.
+
 ## 0.8.1 (2026-11-09)
 
 A patch for the 0.8.0 prerelease. Pressing Enter at the start of a list item now opens a blank line above it, selecting a factory preset no longer leaves the layout looking modified, and the Visualizer's beat detection is independent of Grid Beat (the beat delay now starts at 0). The Quick Access switches now only disable, and the render view's restore landing no longer disturbs scrolling.
