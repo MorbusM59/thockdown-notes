@@ -169,8 +169,21 @@ final class SoundscapeSchedule {
 
     /** The event whose state holds now: the latest to have begun, round the week; null if there are none. */
     Event current() {
+        return holdingAt(secondOfWeek(Calendar.getInstance()));
+    }
+
+    /** The soundscape the schedule plays at wall-clock time `millis` (its run's entry), or null: off, or no run then. */
+    SoundscapeSession.Entry playingAt(long millis) {
+        if (!enabled) return null;
+        Calendar at = Calendar.getInstance();
+        at.setTimeInMillis(millis);
+        Event event = holdingAt(secondOfWeek(at));
+        return event == null || "stop".equals(event.kind) ? null : entry(event.presetId);
+    }
+
+    /** The event whose state holds at second `now` of the week. */
+    private Event holdingAt(int now) {
         if (events.isEmpty()) return null;
-        int now = secondOfWeek(Calendar.getInstance());
         Event latest = events.get(events.size() - 1);
         for (Event event : events) {
             if (event.at <= now) latest = event;
