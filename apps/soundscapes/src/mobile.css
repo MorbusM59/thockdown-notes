@@ -43,9 +43,14 @@ body {
   grid-auto-rows: auto;
 }
 
+.mobile-app-shell {
+  /* The icon size of the phone's regular buttons, which a 2x2 schedule button shares. */
+  --mobile-button-icon-size: 24px;
+}
+
 .mobile-app-shell .options-loadout-grid > * {
   aspect-ratio: 1;
-  font-size: 24px;
+  font-size: var(--mobile-button-icon-size);
 }
 
 /* A long press is a gesture here (SoundscapeControls' touch path), so it
@@ -101,6 +106,11 @@ body {
 .mobile-schedule-soundscape {
   grid-column: span 2;
   grid-row: span 2;
+}
+
+/* Its mark (and the "+") at a regular button's icon size, not the row's chip text size. */
+.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape {
+  font-size: var(--mobile-button-icon-size);
 }
 
 .mobile-app-shell .mobile-schedule-time {
