@@ -6,6 +6,18 @@ were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
 
+## 0.9.2 (2026-11-15)
+
+Alpha Release #26. Images in the trash work like notes in the trash.
+
+#### Changes
+
+- **Image trash.** An image in the trash now carries the protected "deleted" tag, just like a note. The "In the trash" label on an image opened in a slot is gone, since the tag already shows it.
+
+#### Upgrade note
+
+- Images that were in the trash before this update come back out of it. Trash them again if you still want them gone.
+
 ## 0.9.1 (2026-11-15)
 
 Alpha Release #25. Tooltip settings are tidier, and the macOS build is back.
