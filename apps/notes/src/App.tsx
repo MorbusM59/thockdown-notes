@@ -6744,8 +6744,10 @@ ${markdownHtml}
   useEffect(() => {
     if (markedFindHitPosition !== null) setFindPage(Math.floor(markedFindHitPosition / FIND_HITS_PER_PAGE) + 1)
   }, [markedFindHitPosition])
-  // A new search starts on its first page.
-  const findPageResetKey = `${activeSectionId}|${activeSectionSnapshot?.documentFindQuery ?? ''}|${activeSectionSnapshot?.isDocumentFindCaseSensitive}|${activeSectionSnapshot?.isDocumentFindWholeWord}|${activeSectionSnapshot?.isDocumentReplaceMode}`
+  // A new search term starts on its first page. A change of matching alone
+  // (case, whole word, find vs. replace) keeps the mark where it was, and the
+  // page follows the mark above.
+  const findPageResetKey = `${activeSectionId}|${activeSectionSnapshot?.documentFindQuery ?? ''}`
   useEffect(() => {
     setFindPage(1)
   }, [findPageResetKey])

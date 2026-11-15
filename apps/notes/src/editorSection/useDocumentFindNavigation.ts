@@ -780,15 +780,30 @@ export function useDocumentFindNavigation({
   // the matching, the slot's mode -- so an edit that rebuilds the hit list
   // under the same search does not move the mark, and a search with no hits
   // marks one when a later hit list has some.
+  //
+  // Except when only the MATCHING changed under the same term (switching
+  // between find and find & replace flips the case rule): that is the same
+  // search seen differently, so the mark stays where it was -- on the same
+  // hit if it is still one, else on the next hit after it -- rather than
+  // sending the reader back to the top of the note.
   const searchKey = `${documentFindDirective.findText}|${findMatching.caseSensitive}|${findMatching.wholeWord}|${isPreviewMode}`
-  const unmarkedSearchKeyRef = useRef<string | null>(null)
+  const termKey = `${documentFindDirective.findText}|${isPreviewMode}`
+  const unmarkedSearchRef = useRef<{ searchKey: string; keepFrom: number | null } | null>(null)
+  const lastTermKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    unmarkedSearchKeyRef.current = documentFindDirective.findText ? searchKey : null
-  }, [searchKey, documentFindDirective.findText])
+    const sameTerm = lastTermKeyRef.current === termKey
+    lastTermKeyRef.current = termKey
+    const marked = markedHitRef.current
+    unmarkedSearchRef.current = documentFindDirective.findText
+      ? { searchKey, keepFrom: sameTerm && marked ? marked.index : null }
+      : null
+  }, [searchKey, termKey, documentFindDirective.findText])
   useEffect(() => {
-    if (unmarkedSearchKeyRef.current !== searchKey || documentFindHits.length === 0) return
-    unmarkedSearchKeyRef.current = null
-    handleJumpToDocumentFindHit(documentFindHits[0], { takeKeyboard: false })
+    const pending = unmarkedSearchRef.current
+    if (pending?.searchKey !== searchKey || documentFindHits.length === 0) return
+    unmarkedSearchRef.current = null
+    const kept = pending.keepFrom === null ? undefined : documentFindHits.find((hit) => hit.index >= pending.keepFrom!)
+    handleJumpToDocumentFindHit(kept ?? documentFindHits[0], { takeKeyboard: false })
   }, [searchKey, documentFindHits, handleJumpToDocumentFindHit])
 
   /** Marks the hit at a position in the list (the pager's typed number, its holds). */
