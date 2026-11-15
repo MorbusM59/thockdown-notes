@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 
@@ -256,7 +257,14 @@ export function CurveEditor(props: CurveEditorProps) {
           tabIndex={0}
           role="group"
           aria-label={ariaLabel}
-          data-tooltip={`${tooltip}\nClick to add a point, drag to move it, right-drag up or down to round it, right-click to remove it.\nArrows move the selected point, Delete removes it.`}
+          data-tooltip={encodeTooltip({
+            intention: `${tooltip}\nAdd a point`,
+            gestures: [
+              { press: 'drag', intention: 'Move a point' },
+              { press: 'rightDrag', intention: 'Round it' },
+              { press: 'right', intention: 'Remove it' },
+            ],
+          })}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}

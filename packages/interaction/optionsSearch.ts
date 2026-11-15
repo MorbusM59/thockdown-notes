@@ -1,3 +1,4 @@
+import { tooltipSearchText } from './tooltipContent'
 // OPTIONS SEARCH -- which sections and sub-sections of an accordion group a
 // search term leaves standing.
 //
@@ -41,9 +42,9 @@ export interface OptionsSearchSection {
 function searchableTextOf(element: Element): string {
   let text = element.textContent ?? ''
   const tooltip = element.getAttribute('data-tooltip')
-  if (tooltip) text += `\n${tooltip}`
+  if (tooltip) text += `\n${tooltipSearchText(tooltip)}`
   element.querySelectorAll('[data-tooltip]').forEach((node) => {
-    text += `\n${node.getAttribute('data-tooltip')}`
+    text += `\n${tooltipSearchText(node.getAttribute('data-tooltip') ?? '')}`
   })
   return text.toLowerCase()
 }

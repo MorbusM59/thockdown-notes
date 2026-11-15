@@ -37,7 +37,7 @@ export function FeatureToggleBar({
             key={id}
             type="button"
             className={`btn-icon options-color-swatch options-loadout-btn${on ? ' is-active' : ''}`}
-            data-tooltip={tooltip}
+            data-tooltip={label}
             aria-label={tooltip}
             aria-pressed={on}
             onClick={() => setFeatures((previous) => ({ ...previous, [id]: !previous[id] }))}

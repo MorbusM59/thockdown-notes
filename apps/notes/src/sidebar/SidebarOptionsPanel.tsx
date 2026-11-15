@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -112,6 +113,8 @@ import {
 } from '@thockdown/look/caretSettings'
 import { FLASH_SHAPE_KIND, type FlashShape, type FlashShapePreferences, type FlashingSettings } from '../shared/flashing'
 import { FlashingOptions } from './FlashingOptions'
+import { TooltipOptions } from './TooltipOptions'
+import type { TooltipSettings } from '../shared/tooltipSettings'
 import { PresetGrid } from './PresetListControls'
 import {
   type TextureSurfaceKey,
@@ -649,6 +652,8 @@ export interface SidebarOptionsPanelProps {
   setFlashMatching: (matching: number) => void
   flashShapePreferences: FlashShapePreferences
   onFlashShapePreferencesChange: (preferences: FlashShapePreferences) => void
+  tooltipSettings: TooltipSettings
+  onTooltipSettingsChange: (settings: TooltipSettings) => void
   wheelSpinThresholdMs: number
   setWheelSpinThresholdMs: (value: number) => void
   wheelSpinDampenDivisor: number
@@ -865,6 +870,8 @@ export function SidebarOptionsPanel({
   setFlashMatching,
   flashShapePreferences,
   onFlashShapePreferencesChange,
+  tooltipSettings,
+  onTooltipSettingsChange,
   wheelSpinThresholdMs,
   setWheelSpinThresholdMs,
   wheelSpinDampenDivisor,
@@ -2976,6 +2983,17 @@ export function SidebarOptionsPanel({
         />
       </AccordionSection>
 
+      {/* Tooltips: global. How long a hover waits, and which elements of a
+          tooltip are shown (shared/tooltipSettings.ts). */}
+      <AccordionSection
+        className="sidebar-options-section-tooltips"
+        ariaLabel="Tooltips"
+        heading="Tooltips"
+        iconClass="fa-comment-dots"
+      >
+        <TooltipOptions settings={tooltipSettings} onChange={onTooltipSettingsChange} />
+      </AccordionSection>
+
       {/* Scrolling is its own section because it answers a different
           question from Animations. Those four sliders shape a journey the
           APP decides to make -- a search jump, a page key, a chapter change.
@@ -3233,8 +3251,8 @@ export function SidebarOptionsPanel({
             data-secondary-press="none"
             data-tooltip={
               allowRemoteImages
-                ? 'Remote images: on. The app is no longer local only: image servers see each note you open. Click to turn off'
-                : 'Hold to load remote images. This makes the app non-local: image servers see each note you open'
+                ? 'Stop loading remote images'
+                : encodeTooltip({ intention: 'Load remote images: image servers see each note you open', gestures: [{ press: 'hold', intention: 'Turn on' }] })
             }
             aria-label="Load remote images"
             aria-pressed={allowRemoteImages}

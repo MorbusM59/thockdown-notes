@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { useCallback, useEffect, useRef, type MouseEvent, type PointerEvent } from 'react'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import type { ImageStorageButton } from './useImageStorageButton'
@@ -27,9 +28,15 @@ export function ImageStorageToggle({ button }: { button: ImageStorageButton }) {
 
   const isStored = button.state === 'stored'
   const failureLine = button.failures.length > 0 ? `\nNot stored: ${button.failures.join('; ')}` : ''
-  const tooltip = isStored
-    ? 'All images are stored in the app.\nHold right-click: point them back to where they came from.'
-    : `Some images are loaded from the web or a file.\nHold left-click: download and store them in the app (works even with remote images off).\nHold right-click: point stored images back to where they came from.${failureLine}`
+  const tooltip = encodeTooltip(isStored
+    ? { intention: 'All images are stored in the app', gestures: [{ press: 'holdRight', intention: 'Point them back to where they came from' }] }
+    : {
+        intention: `Some images are loaded from the web or a file${failureLine}`,
+        gestures: [
+          { press: 'hold', intention: 'Store them in the app' },
+          { press: 'holdRight', intention: 'Point stored images back to where they came from' },
+        ],
+      })
 
   return (
     <button

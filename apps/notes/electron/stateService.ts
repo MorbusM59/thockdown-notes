@@ -22,6 +22,7 @@ import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
+import { DEFAULT_TOOLTIP_SETTINGS, sanitizeTooltipSettings } from '../src/shared/tooltipSettings';
 import { FLASH_MATCHING_DEFAULT, sanitizeFlashMatching, sanitizeFlashShapePreferences } from '../src/shared/flashing';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
@@ -82,6 +83,7 @@ const DEFAULT_APP_STATE: AppState = {
     typingTrail: DEFAULT_TYPING_TRAIL_SETTINGS,
     beat: DEFAULT_BEAT_SETTINGS,
     flashMatching: FLASH_MATCHING_DEFAULT,
+    tooltips: DEFAULT_TOOLTIP_SETTINGS,
   },
 };
 
@@ -612,6 +614,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
     flashMatching: sanitizeFlashMatching(input?.flashMatching),
+    tooltips: sanitizeTooltipSettings(input?.tooltips),
     flashingPresets: sanitizeFlashShapePreferences(input?.flashingPresets),
     chapterBarMode: sanitizeChapterBarMode(input?.chapterBarMode),
     isSidebarVisible: typeof input?.isSidebarVisible === 'boolean' ? input.isSidebarVisible : true,

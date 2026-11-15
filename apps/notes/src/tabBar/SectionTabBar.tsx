@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { ImageOriginPill } from '../imageLibrary/ImageOriginPill'
 import type { CSSProperties, MouseEvent, RefObject } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -193,7 +194,7 @@ export function SectionTabBar({
         <button
           type="button"
           className={`btn-icon sidebar-toggle${isSidebarVisible ? ' is-active' : ''}`}
-          data-tooltip={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+          data-tooltip={encodeTooltip({ intention: isSidebarVisible ? 'Hide sidebar' : 'Show sidebar', shortcut: 'toggleSidebar' })}
           aria-label={isSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           onClick={toggleSidebarVisible}
         >
@@ -204,7 +205,7 @@ export function SectionTabBar({
           type="button"
           className="btn-icon section-close-toggle"
           data-tooltip={onCloseSlotLeft
-            ? 'Left-click: Close this slot.\nRight-click: Close the slot to its left.'
+            ? encodeTooltip({ intention: 'Close this slot', gestures: [{ press: 'right', intention: 'Close the slot to its left' }] })
             : 'Close this slot'}
           aria-label="Close this slot"
           data-secondary-press={onCloseSlotLeft ? 'action' : 'none'}
@@ -251,8 +252,8 @@ export function SectionTabBar({
                 modeStatus || isShowingGuide || shownImageId
                   ? undefined
                   : isShowingUndockedNote
-                  ? `Left click: Pick a collection for this note.\nRight click: Return to ${sectionName ?? '···'}.`
-                  : 'Left click: Pick a collection for this slot.\nRight click: Rename this collection.'
+                  ? encodeTooltip({ intention: 'Pick a collection for this note', gestures: [{ press: 'right', intention: `Return to ${sectionName ?? '···'}` }] })
+                  : encodeTooltip({ intention: 'Pick a collection for this slot', gestures: [{ press: 'right', intention: 'Rename this collection' }] })
               }
             >
               <span className="tag-pill-label">{modeStatus ? modeStatus.title : isShowingGuide ? 'User Guide' : shownImageId ? 'Image' : (isShowingUndockedNote ? '' : (sectionName ?? '···'))}</span>
@@ -383,7 +384,7 @@ export function SectionTabBar({
                           data-tooltip={
                             isPrimed
                               ? 'Click again to close, or move cursor away to cancel'
-                              : `${note?.title ?? 'Open note'} — hold left to pin, right-click to rename`
+                              : encodeTooltip({ intention: note?.title ?? 'Open note', gestures: [{ press: 'hold', intention: 'Pin' }, { press: 'right', intention: 'Rename' }] })
                           }
                         >
                           <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
@@ -428,7 +429,7 @@ export function SectionTabBar({
                           data-tooltip={
                             isPrimed
                               ? 'Click again to unpin, or move cursor away to cancel'
-                              : `${note?.title ?? 'Open note'} — hold right to unpin, quick right-click to rename`
+                              : encodeTooltip({ intention: note?.title ?? 'Open note', gestures: [{ press: 'right', intention: 'Rename' }, { press: 'holdRight', intention: 'Unpin' }] })
                           }
                         >
                           <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{label}</span>
@@ -464,7 +465,7 @@ export function SectionTabBar({
         <button
           type="button"
           className={`btn-icon section-render-mode-toggle${isSpeedReading ? ' is-active' : ''}`}
-          data-tooltip={isSpeedReading ? 'Stop speed reading' : 'Speed reading'}
+          data-tooltip={encodeTooltip({ intention: isSpeedReading ? 'Stop speed reading' : 'Speed reading', shortcut: 'speedReading' })}
           aria-label={isSpeedReading ? 'Stop speed reading' : 'Speed reading'}
           aria-pressed={isSpeedReading}
           onClick={onToggleSpeedReading}

@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
@@ -81,9 +82,9 @@ export function KeystrokeChannelOptions({ settings, onChange }: KeystrokeChannel
             className={`btn-icon options-color-swatch options-loadout-btn soundscape-channel-selector-btn${id === selectedId ? ' is-active' : ''}${channel.on ? ' is-enabled' : ' is-disabled'}`}
             aria-label={`${look.name}, ${channel.on ? 'on' : 'off'}`}
             aria-pressed={id === selectedId}
-            data-tooltip={channel.on
-              ? `${look.name}: ${Math.round(channel.volume * 100)}\nScroll to change its volume. Hold right-click to turn it off.`
-              : `${look.name}: off\nHold to turn it on.`}
+            data-tooltip={encodeTooltip(channel.on
+              ? { intention: look.name, value: String(Math.round(channel.volume * 100)), gestures: [{ press: 'wheel', intention: 'Volume' }, { press: 'holdRight', intention: 'Turn off' }] }
+              : { intention: look.name, value: 'off', gestures: [{ press: 'hold', intention: 'Turn on' }] })}
             data-keystroke-channel-id={id}
             data-secondary-press="action"
             onClick={() => {

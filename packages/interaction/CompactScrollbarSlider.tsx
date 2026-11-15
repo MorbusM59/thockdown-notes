@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { useGracedWheel } from './useGracedWheel'
 import { clamp } from './clamp'
+import { encodeTooltip } from './tooltipContent'
 
 
 function formatCompactSettingNumber(value: number, step: number): string {
@@ -170,7 +171,15 @@ export function CompactScrollbarSlider({
       aria-valuetext={formatValue ? formatValue(value) : undefined}
       aria-disabled={disabled || undefined}
       className={`utility-setting-scrollbar-shell${isDragging ? ' is-dragging' : ''}${disabled ? ' is-disabled' : ''}${dimmed ? ' is-dimmed' : ''}`}
-      data-live-tooltip={`${tooltipLabel ?? trackLabel}: ${formatValue ? formatValue(value) : formatCompactSettingNumber(value, step)}`}
+      data-live-tooltip={encodeTooltip({
+        intention: tooltipLabel ?? trackLabel,
+        value: formatValue ? formatValue(value) : formatCompactSettingNumber(value, step),
+        gestures: disabled
+          ? undefined
+          : secondaryPress === 'type'
+            ? [{ press: 'right', intention: 'Type a value' }]
+            : defaultValue !== undefined ? [{ press: 'right', intention: 'Reset' }] : undefined,
+      })}
       ref={shellRef}
       onKeyDown={(event) => {
         if (disabled) return

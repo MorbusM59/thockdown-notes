@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { FieldActionButton } from './FieldActionButton'
 import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
@@ -1060,7 +1061,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn audio-wide-btn${isPlaying ? ' is-active' : ''}`}
-          data-tooltip={songLabel}
+          data-tooltip={encodeTooltip({ intention: 'Music', value: songLabel, gestures: [{ press: 'right', intention: 'Skip forward' }, { press: 'holdRight', intention: 'Next song' }] })}
           aria-label={isPlaying ? 'Pause music' : 'Play music'}
           aria-pressed={isPlaying}
           onClick={() => {
@@ -1081,7 +1082,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn${barRow === 'filter' ? ' is-active' : ''}`}
-          data-tooltip={filterQuery ? `Filter: ${filterQuery}` : 'Filter'}
+          data-tooltip={encodeTooltip({ intention: 'Filter', value: filterQuery || undefined })}
           aria-label="Filter songs"
           aria-pressed={barRow === 'filter'}
           onClick={() => toggleRow('filter')}
@@ -1103,7 +1104,7 @@ export const AudioControls = memo(function AudioControls({
         <button
           type="button"
           className={`audio-ctrl-btn audio-wide-btn${soundscapePreferences.enabled ? ' is-active' : ''}`}
-          data-tooltip={`Soundscape: ${soundscape.name}`}
+          data-tooltip={encodeTooltip({ intention: 'Soundscape', value: soundscape.name, gestures: [{ press: 'right', intention: 'Next soundscape' }] })}
           aria-label={soundscapePreferences.enabled ? 'Stop the soundscape' : 'Play the soundscape'}
           aria-pressed={soundscapePreferences.enabled}
           onClick={() => onSoundscapePreferencesChange({ ...soundscapePreferences, enabled: !soundscapePreferences.enabled })}

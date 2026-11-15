@@ -12,6 +12,7 @@ import type { VisualizerSettings } from '@thockdown/look/visualizer';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
 import type { FlashShapePreferences } from './flashing';
+import type { TooltipSettings } from './tooltipSettings';
 import type { InvokeChannels } from './ipcContract';
 import type { GameSave } from '../adventure/model/gameState';
 import type { SlotOverlay } from './slotOverlay';
@@ -252,6 +253,8 @@ export interface PersistedMenuState {
   flashMatching?: number;
   /** The flashing shapes' presets (shared/flashing.ts); the live shape is the active one's. */
   flashingPresets?: FlashShapePreferences;
+  /** Tooltip delay and which elements show (Options > Advanced > Tooltips); see shared/tooltipSettings.ts. */
+  tooltips?: TooltipSettings;
   /** Whether the tab bar shows tag management or pinned quick-access note tabs. */
   chapterBarMode?: 'tags' | 'tabs';
   /** Whether the sidebar is visible (not part of layout widths). */

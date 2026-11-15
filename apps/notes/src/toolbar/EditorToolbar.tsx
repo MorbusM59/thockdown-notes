@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import type { UseMarkdownFormattingToolbarResult } from '../editorSection/useMarkdownFormattingToolbar'
@@ -168,7 +169,7 @@ export function EditorToolbar({
           <button
             type="button"
             className={`btn-icon display-modes-split-btn dark-mode${uiMode === 'dark' ? ' is-active' : ''}`}
-            data-tooltip="Dark mode"
+            data-tooltip={encodeTooltip({ intention: 'Dark mode', shortcut: 'lightDark' })}
             aria-label="Dark mode"
             aria-pressed={uiMode === 'dark'}
             onClick={toggleUiMode}
@@ -178,7 +179,7 @@ export function EditorToolbar({
           <button
             type="button"
             className={`btn-icon display-modes-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}`}
-            data-tooltip={isDoubleSizeMode ? 'Exit double size' : 'Double size'}
+            data-tooltip={encodeTooltip({ intention: isDoubleSizeMode ? 'Exit double size' : 'Double size', shortcut: 'doubleSize' })}
             aria-label={isDoubleSizeMode ? 'Exit double size mode' : 'Enable double size mode'}
             aria-pressed={isDoubleSizeMode}
             onClick={handleToggleDoubleSizeMode}
@@ -201,7 +202,7 @@ export function EditorToolbar({
               type="button"
               className={`btn-icon ${activeDecorationFormats.has('bold') ? 'is-active' : ''}`}
               onClick={inEditMode(() => applyTextDecoration('bold'))}
-              data-tooltip="Bold"
+              data-tooltip={encodeTooltip({ intention: 'Bold', shortcut: 'bold' })}
               aria-label="Bold"
               disabled={formattingDisabled}
             >
@@ -211,7 +212,7 @@ export function EditorToolbar({
               type="button"
               className={`btn-icon ${activeDecorationFormats.has('italic') ? 'is-active' : ''}`}
               onClick={inEditMode(() => applyTextDecoration('italic'))}
-              data-tooltip="Italic"
+              data-tooltip={encodeTooltip({ intention: 'Italic', shortcut: 'italic' })}
               aria-label="Italic"
               disabled={formattingDisabled}
             >
@@ -221,7 +222,7 @@ export function EditorToolbar({
               type="button"
               className={`btn-icon ${activeDecorationFormats.has('strikethrough') ? 'is-active' : ''}`}
               onClick={inEditMode(() => applyTextDecoration('strikethrough'))}
-              data-tooltip="Strikethrough"
+              data-tooltip={encodeTooltip({ intention: 'Strikethrough', shortcut: 'strikethrough' })}
               aria-label="Strikethrough"
               disabled={formattingDisabled}
             >
@@ -242,10 +243,10 @@ export function EditorToolbar({
           </div>
 
           <div className="toolbar-group">
-            <button type="button" className={`btn-icon ${isBulletedListActive ? 'is-active' : ''}`} data-tooltip="Bulleted list" aria-label="Bulleted list" onClick={inEditMode(toggleBulletedList)} disabled={formattingDisabled}>
+            <button type="button" className={`btn-icon ${isBulletedListActive ? 'is-active' : ''}`} data-tooltip={encodeTooltip({ intention: 'Bulleted list', shortcut: 'bulletedList' })} aria-label="Bulleted list" onClick={inEditMode(toggleBulletedList)} disabled={formattingDisabled}>
               <span className="fa-solid fa-list" aria-hidden="true" />
             </button>
-            <button type="button" className={`btn-icon ${isNumberedListActive ? 'is-active' : ''}`} data-tooltip="Numbered list" aria-label="Numbered list" onClick={inEditMode(toggleNumberedList)} disabled={formattingDisabled}>
+            <button type="button" className={`btn-icon ${isNumberedListActive ? 'is-active' : ''}`} data-tooltip={encodeTooltip({ intention: 'Numbered list', shortcut: 'numberedList' })} aria-label="Numbered list" onClick={inEditMode(toggleNumberedList)} disabled={formattingDisabled}>
               <span className="fa-solid fa-list-ol" aria-hidden="true" />
             </button>
             <button type="button" className={`btn-icon ${isChecklistActive ? 'is-active' : ''}`} data-tooltip="Checklist" aria-label="Checklist" onClick={inEditMode(toggleChecklistList)} disabled={formattingDisabled}>
@@ -289,8 +290,8 @@ export function EditorToolbar({
             >
               <span className="fa-solid fa-image" aria-hidden="true" />
             </button>
-            <button type="button" className="btn-icon" data-tooltip="Link" onClick={inEditMode(applyLink)} disabled={formattingDisabled}><span className="fa-solid fa-link" aria-hidden="true" /></button>
-            <button type="button" className="btn-icon" data-tooltip="Anchor" onClick={inEditMode(applyAnchor)} disabled={formattingDisabled}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
+            <button type="button" className="btn-icon" data-tooltip={encodeTooltip({ intention: 'Link', shortcut: 'link' })} onClick={inEditMode(applyLink)} disabled={formattingDisabled}><span className="fa-solid fa-link" aria-hidden="true" /></button>
+            <button type="button" className="btn-icon" data-tooltip={encodeTooltip({ intention: 'Anchor', shortcut: 'anchor' })} onClick={inEditMode(applyAnchor)} disabled={formattingDisabled}><span className="fa-solid fa-anchor" aria-hidden="true" /></button>
           </div>
           <div className="toolbar-group chapter-group">
             <button

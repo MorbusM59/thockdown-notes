@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { memo, useCallback, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from 'react'
 import { CategoryTree, type CategoryTreeFolds } from '../components/CategoryTree'
@@ -171,6 +172,19 @@ function actionsForUse(card: ImageUseCard, onOpen: (id: string) => void, onRemov
 }
 
 /** A card with the image behind its text: Images in Order and the trash. */
+/** A card's tooltip: a click shows the image, the other presses as gestures. `label` (a use's alt text) leads when given. */
+function imageCardTooltip(image: StoredImageSummary | null, use: NoteImageUse | null, label?: string): string {
+  const lead = [label, use && !image ? use.src : undefined].filter(Boolean).join('. ')
+  const intention = lead ? `${lead}\nSee the image` : 'See the image'
+  if (!use) return encodeTooltip({ intention, gestures: [{ press: 'drag', intention: 'Put it into a note' }, { press: 'holdRight', intention: 'Show it' }] })
+  return encodeTooltip({
+    intention,
+    gestures: image
+      ? [{ press: 'right', intention: 'Go to it' }, { press: 'holdRight', intention: 'Show it' }]
+      : [{ press: 'right', intention: 'Go to it' }, { press: 'hold', intention: 'Store it in the app' }],
+  })
+}
+
 const ImageCard = memo(function ImageCard({ image, use, isActive, expanded, press, actions, nameFirst = false }: {
   image: StoredImageSummary | null
   /** The image's place in the note; null in the trash. */
@@ -188,9 +202,7 @@ const ImageCard = memo(function ImageCard({ image, use, isActive, expanded, pres
   const src = image ? image.src : use ? externalCardSrc(use.src, remoteAllowed) : null
   const part = shownPart(image, use)
   const style = part.width > 0 ? { '--image-ratio': part.height / part.width } as CSSProperties : undefined
-  const tooltip = !use ? `Click to see it, drag it into a note to put it there. Hold right-click to show it`
-    : !image ? `${use.src}. Click to see it, right-click to go to it, hold to store it in the app`
-    : `Click to see it, right-click to go to it. Hold right-click to show it`
+  const tooltip = imageCardTooltip(image, use)
   const title = nameFirst && image ? <span data-tooltip={image.origin ?? 'Pasted from the clipboard'}>{originLabel(image)}</span> : <CardTitle image={image} />
   const metaLeft = nameFirst && image ? <span className="note-list-meta-left">{image.id}</span>
     : use ? <span className="note-list-meta-left">{use.alt}</span>
@@ -242,9 +254,7 @@ const ImageTreeCard = memo(function ImageTreeCard({ image, use, isActive, expand
   const src = image ? image.src : use ? externalCardSrc(use.src, remoteAllowed) : null
   const part = shownPart(image, use)
   const previewing = expanded && src !== null
-  const tooltip = use
-    ? `${use.alt ? `${use.alt}. ` : ''}${image ? 'Click to see it, right-click to go to it, hold right-click to show it' : `${use.src}. Click to see it, right-click to go to it, hold to store it in the app`}`
-    : 'Click to see it, drag it into a note to put it there. Hold right-click to show it'
+  const tooltip = imageCardTooltip(image, use, use?.alt)
   return (
     <div
       className={`note-list-item is-tree-card image-list-item${isActive ? ' is-active' : ''}${previewing ? ' is-previewing' : ''}`}

@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -175,9 +176,11 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
               setIsEditingNoteId(true)
             }}
             data-tooltip={identityNoteId
-              ? (isProvisionalId
-                  ? `${identityLabel} — right-click to give this note an id of its own, click for suggested tags`
-                  : `Note: ${identityLabel} — click for suggested tags, right-click to rename`)
+              ? encodeTooltip({
+                  intention: 'Suggested tags',
+                  value: identityLabel,
+                  gestures: [{ press: 'right', intention: isProvisionalId ? 'Give this note an id of its own' : 'Rename' }],
+                })
               : 'No note open'}
           >
             <span className={`tag-pill-label${isAssigned ? '' : ' tag-pill-label-derived'}`}>{identityLabel}</span>

@@ -864,7 +864,7 @@ ${shortcutTable()}
 ### [Animations](#animations)
 
 > **Where?**
-> Options → Advanced → Movement and Flashing.
+> Options → Advanced → Movement, Flashing and Tooltips.
 
 *How things move and how things flash. For what the wheel itself does, see [Scrolling]($#scrolling).*
 
@@ -880,6 +880,8 @@ ${shortcutTable()}
 - The **curve** is the caret's opacity over one cycle,: click to add a point, drag it, right-drag up or down to round it (a handle of 0 makes a sharp corner, for a hard blink), right-click to remove it. The graph is a bar of twelve, dashed on the beats. The end runs on into the start, so the first and last points move together.
 - **Cycle** (100–5000ms) is how long one cycle takes.
 - **Matching** makes the cycle follow the music's beat instead, while Grid Beat is on, music plays and a beat is found; otherwise the cycle above runs. It reads in bar notation: **4/4** is one cycle a beat, **1/4** one a bar. The thirds run across the bar line on purpose.
+
+**Tooltips** sets how long a tooltip waits before it shows (0–5 seconds, or **never**), and which of its parts you see: the **intention** (what a click does), the **shortcut** key, the **gestures** (what a right press or a hold does, as **[Right]** or **[Hold right]**) and the current **value**. A tooltip with none of your chosen parts does not show at all. Once one tooltip has shown, the next shows at once while you move from control to control.
 
 ### [Speed Reading](#speed-reading-settings)
 

@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { useEffect, useRef, useState } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { pagerFigure } from '../shared/pagerFigure'
@@ -143,7 +144,7 @@ function PagerArrow({ axis, direction, kind }: { axis: PagerAxis; direction: 1 |
       type="button"
       className={`pager-arrow bare-icon${atEnd ? ' is-at-end' : ''}`}
       aria-label={label}
-      data-tooltip={label}
+      data-tooltip={encodeTooltip({ intention: `${direction === -1 ? 'Previous' : 'Next'} ${noun}`, gestures: [{ press: 'hold', intention: direction === -1 ? 'The first' : 'The last' }] })}
       onPointerDown={(event) => {
         if (event.button !== 0 || axis.total === 0) return
         holdClaimedRef.current = false

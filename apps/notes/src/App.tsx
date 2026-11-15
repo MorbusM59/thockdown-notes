@@ -1,3 +1,4 @@
+import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
 import { CanonicalScrollRail } from './components/CanonicalScrollRail'
 import { scrollerIdentity } from './shared/scrollerIdentity'
@@ -41,6 +42,7 @@ import {
 import MouseCursorOverlay from './components/MouseCursorOverlay'
 import { installFocusDiagnostics } from './dev/focusDiagnostics'
 import { TooltipLayer } from './components/TooltipLayer'
+import { DEFAULT_TOOLTIP_SETTINGS, sanitizeTooltipSettings, type TooltipSettings } from './shared/tooltipSettings'
 import { useWindowDragRegion } from './window/useWindowDragRegion'
 import './App.css'
 import { buildExportCss, type ExportViewStyle } from './exportStyles'
@@ -1383,6 +1385,8 @@ function App() {
   // and the presets of its shape (shared/flashing.ts). Options > Advanced >
   // Flashing.
   const [flashMatching, setFlashMatching] = useState(FLASH_MATCHING_DEFAULT)
+  // Global: Options > Advanced > Tooltips (shared/tooltipSettings.ts).
+  const [tooltipSettings, setTooltipSettings] = useState<TooltipSettings>(DEFAULT_TOOLTIP_SETTINGS)
   const [flashShapePreferences, setFlashShapePreferences] = useState<FlashShapePreferences>(DEFAULT_FLASH_SHAPE_PREFERENCES)
   // The live shape IS the active preset's; an edit is written into it.
   const flashing = useMemo<FlashingSettings>(
@@ -3212,6 +3216,7 @@ function App() {
       beat: beatSettings,
       flashMatching,
       flashingPresets: flashShapePreferences,
+      tooltips: tooltipSettings,
       speedReading: speedReadingSettings,
       chapterBarMode: chapterBarModeRef.current,
       isSidebarVisible: overrides?.isSidebarVisible ?? isSidebarVisible,
@@ -3251,6 +3256,7 @@ function App() {
     beatSettings,
     flashMatching,
     flashShapePreferences,
+    tooltipSettings,
     speedReadingSettings,
     allowRemoteImages,
     sidebarShowsImages,
@@ -5178,6 +5184,7 @@ ${markdownHtml}
             setBeatSettings(sanitizeBeatSettings(appState.menu.beat))
             setFlashMatching(sanitizeFlashMatching(appState.menu.flashMatching))
             setFlashShapePreferences(sanitizeFlashShapePreferences(appState.menu.flashingPresets))
+            setTooltipSettings(sanitizeTooltipSettings(appState.menu.tooltips))
             setRestoredTabBarMode(appState.menu.chapterBarMode ?? 'tabs')
 
             // Restore persisted sidebar visibility
@@ -8068,7 +8075,7 @@ ${markdownHtml}
             overlay, tooltips should still pick up this wrapper's own
             filter/glaze/colorize layers, same as the rest of the app's UI.
             See the component's own doc comment. */}
-        <TooltipLayer />
+        <TooltipLayer settings={tooltipSettings} />
         {windowModeTransitionOverlayNonce > 0 ? (
           <div key={windowModeTransitionOverlayNonce} className="window-mode-transition-overlay" aria-hidden="true" />
         ) : null}
@@ -8211,7 +8218,7 @@ ${markdownHtml}
                   type="button"
                   role="tab"
                   aria-selected={isFindMode}
-                  data-tooltip="Find"
+                  data-tooltip={encodeTooltip({ intention: 'Find', shortcut: 'find' })}
                   aria-label="Find"
                   onClick={() => handleViewModeButtonClick('find')}
                   data-secondary-press="action"
@@ -8617,6 +8624,8 @@ ${markdownHtml}
                         setFlashMatching={setFlashMatching}
                         flashShapePreferences={flashShapePreferences}
                         onFlashShapePreferencesChange={setFlashShapePreferences}
+                        tooltipSettings={tooltipSettings}
+                        onTooltipSettingsChange={setTooltipSettings}
                       />
                     ) : (
                       <div
@@ -8697,7 +8706,7 @@ ${markdownHtml}
                             className={`options-curve-cell options-curve-button options-dock-entry-icon${isReplaceMode ? ' is-active' : ''}`}
                             aria-pressed={isReplaceMode}
                             aria-label="Find and replace"
-                            data-tooltip={isReplaceMode ? 'Back to find only' : 'Find and replace'}
+                            data-tooltip={isReplaceMode ? 'Back to find only' : encodeTooltip({ intention: 'Find and replace', shortcut: 'findReplace' })}
                             onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
                           >
                             <span className="fa-solid fa-arrow-down-up-across-line find-dock-mode-icon" aria-hidden="true" />
@@ -8717,7 +8726,7 @@ ${markdownHtml}
                                 type="button"
                                 className="options-curve-cell options-curve-button options-dock-entry-icon"
                                 aria-label="Replace all"
-                                data-tooltip="Replace every occurrence"
+                                data-tooltip={encodeTooltip({ intention: 'Replace every occurrence', shortcut: 'replaceAll' })}
                                 onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
                               >
                                 <span className="fa-solid fa-arrows-turn-right" aria-hidden="true" />
@@ -8936,8 +8945,8 @@ ${markdownHtml}
                       adventureSectionId
                         ? 'Leave the adventure'
                         : guideSectionId
-                        ? 'Close the User Guide\nRight click: an adventure'
-                        : 'User Guide\nRight click: an adventure'
+                        ? encodeTooltip({ intention: 'Close the User Guide', shortcut: 'userGuide', gestures: [{ press: 'right', intention: 'An adventure' }] })
+                        : encodeTooltip({ intention: 'User Guide', shortcut: 'userGuide', gestures: [{ press: 'right', intention: 'An adventure' }] })
                     }
                     aria-label={
                       adventureSectionId

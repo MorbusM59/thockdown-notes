@@ -1,8 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { decodeTooltip, tooltipLines } from '@thockdown/interaction/tooltipContent'
 import { placeTooltip, type AnchorRect } from './tooltipPlacement'
+import { SHORTCUTS, formatShortcut, type ShortcutId } from '../shared/keyboardShortcuts'
+import type { TooltipSettings } from '../shared/tooltipSettings'
 
 const TOOLTIP_SELECTOR = '[data-tooltip], [data-live-tooltip]'
-const SHOW_DELAY_MS = 600
+/**
+ * Once a tooltip has shown, moving straight on to another control shows its
+ * tooltip at once, as long as the pointer arrives within this long of the
+ * last one hiding: the reader is already reading tooltips, and making them
+ * wait the whole delay again per control is what makes browsing a toolbar slow.
+ */
+const WARM_HANDOFF_MS = 400
+
+function shortcutText(id: string): string | null {
+  const declaration = (SHORTCUTS as Record<string, (typeof SHORTCUTS)[ShortcutId] | undefined>)[id]
+  return declaration ? formatShortcut(declaration) : null
+}
 
 interface TooltipState {
   text: string
@@ -45,10 +59,15 @@ function windowMarginPx(): number {
  * MutationObserver on the currently-hovered element rather than requiring
  * every call site to notify this layer -- it just watches the attribute.
  */
-export function TooltipLayer() {
+export function TooltipLayer({ settings }: { settings: TooltipSettings }) {
   const [tip, setTip] = useState<TooltipState | null>(null)
   const targetRef = useRef<Element | null>(null)
   const showTimerRef = useRef<number | null>(null)
+  // Read by the listeners through a ref, so a settings change does not
+  // re-install them.
+  const delayRef = useRef(settings.delaySec)
+  delayRef.current = settings.delaySec
+  const lastShownAtRef = useRef(-Infinity)
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -65,6 +84,7 @@ export function TooltipLayer() {
 
     const hide = () => {
       clearShowTimer()
+      if (targetRef.current && showTimerRef.current === null) lastShownAtRef.current = performance.now()
       observer.disconnect()
       targetRef.current = null
       setTip(null)
@@ -81,14 +101,18 @@ export function TooltipLayer() {
       if (!(target instanceof Element)) return
       const next = target.closest(TOOLTIP_SELECTOR)
       if (!next || next === targetRef.current) return
+      if (targetRef.current && showTimerRef.current === null) lastShownAtRef.current = performance.now()
       clearShowTimer()
       observer.disconnect()
       targetRef.current = next
       setTip(null)
+      const delaySec = delayRef.current
+      if (delaySec === 'never') return
+      const warm = performance.now() - lastShownAtRef.current < WARM_HANDOFF_MS
       showTimerRef.current = window.setTimeout(() => {
         showTimerRef.current = null
         if (targetRef.current === next) showFor(next)
-      }, SHOW_DELAY_MS)
+      }, warm ? 0 : delaySec * 1000)
     }
 
     const handleMouseOut = (event: MouseEvent) => {
@@ -142,11 +166,14 @@ export function TooltipLayer() {
   }, [tip])
 
   if (!tip) return null
+  // A tooltip with nothing left to say under the reader's choice is not shown.
+  const lines = tooltipLines(decodeTooltip(tip.text), settings.show, shortcutText)
+  if (lines.length === 0) return null
 
   return (
     <div className="app-tooltip-layer" aria-hidden="true">
       <div ref={bubbleRef} className="app-tooltip-bubble">
-        {tip.text}
+        {lines.join('\n')}
       </div>
     </div>
   )
