@@ -78,7 +78,11 @@
 
 .app-tooltip-bubble {
   position:       absolute;
-  max-width:      260px;
+  left:           0;
+  top:            0;
+  /* Never wider than the window less --spacing-regular on each side, so
+     TooltipLayer's placeTooltip can always keep both side margins. */
+  max-width:      min(260px, calc(100vw - 2 * var(--spacing-regular)));
   white-space:    pre-line;
   text-align:     center;
   padding:        var(--ui-text-padding) calc(var(--ui-text-padding) * 2);

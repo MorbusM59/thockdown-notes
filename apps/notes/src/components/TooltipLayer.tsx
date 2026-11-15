@@ -1,43 +1,60 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 const TOOLTIP_SELECTOR = '[data-tooltip], [data-live-tooltip]'
 const SHOW_DELAY_MS = 600
 const GAP_PX = 6
-const VIEWPORT_MARGIN_PX = 8
-// Matches app-tooltip-bubble's own CSS max-width -- used only to keep a
-// centered tooltip's assumed worst-case box inside the viewport without
-// having to measure the actual rendered bubble (which would need a second
-// render pass). A short/narrow tooltip just ends up with a little extra
-// clamped-in margin near an edge instead of sitting dead-center; harmless.
-const ASSUMED_MAX_WIDTH_PX = 260
-const ASSUMED_BUBBLE_HEIGHT_PX = 26
+
+interface AnchorRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
 
 interface TooltipState {
   text: string
-  left: number
-  top: number
-  placement: 'above' | 'below'
+  anchor: AnchorRect
 }
 
 function readTooltipText(el: Element): string {
   return el.getAttribute('data-live-tooltip') ?? el.getAttribute('data-tooltip') ?? ''
 }
 
-function clampCenterX(centerX: number): number {
-  const halfWidth = ASSUMED_MAX_WIDTH_PX / 2
-  const min = VIEWPORT_MARGIN_PX + halfWidth
-  const max = window.innerWidth - VIEWPORT_MARGIN_PX - halfWidth
-  if (max < min) return window.innerWidth / 2
-  return Math.min(max, Math.max(min, centerX))
+function anchorOf(el: Element): AnchorRect {
+  const { left, top, right, bottom } = el.getBoundingClientRect()
+  return { left, top, right, bottom }
 }
 
-function positionFor(el: Element): { left: number; top: number; placement: 'above' | 'below' } {
-  const rect = el.getBoundingClientRect()
-  const left = clampCenterX(rect.left + rect.width / 2)
-  const fitsAbove = rect.top - GAP_PX - ASSUMED_BUBBLE_HEIGHT_PX >= VIEWPORT_MARGIN_PX
-  return fitsAbove
-    ? { left, top: rect.top - GAP_PX, placement: 'above' }
-    : { left, top: rect.bottom + GAP_PX, placement: 'below' }
+/** The gap every tooltip keeps to each window edge: the theme's --spacing-regular, read when placing. */
+function windowMarginPx(): number {
+  const value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--spacing-regular'))
+  return Number.isFinite(value) ? value : 0
+}
+
+/**
+ * Where a bubble of the MEASURED size goes: centred on the anchor, above it if
+ * it fits there and below otherwise, then clamped so the whole box keeps
+ * `margin` to every window edge. The bubble's CSS max-width already leaves
+ * room for both side margins, so the clamp can always be satisfied
+ * horizontally; vertically it can only fail for a tooltip taller than the
+ * window, which is then pinned to the top margin.
+ */
+export function placeTooltip(
+  anchor: AnchorRect,
+  width: number,
+  height: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  margin: number,
+): { left: number; top: number } {
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+  const centreX = (anchor.left + anchor.right) / 2
+  const left = clamp(centreX - width / 2, margin, viewportWidth - margin - width)
+  const above = anchor.top - GAP_PX - height
+  const below = anchor.bottom + GAP_PX
+  const preferred = above >= margin ? above : below
+  const top = Math.max(margin, Math.min(viewportHeight - margin - height, preferred))
+  return { left, top }
 }
 
 /**
@@ -52,8 +69,8 @@ function positionFor(el: Element): { left: number; top: number; placement: 'abov
  * ancestor kept needing (options panel swatches, the sidebar's custom
  * scrollbar, the toolbar's container-query overflow, the search box's case
  * toggle, top-row chrome clipped against the window edge, ...). Screen-space
- * clamping (never rendering off the left/right edge, flipping below when
- * there's no room above) is real arithmetic here instead of CSS overrides
+ * placement (`placeTooltip`: the measured bubble kept --spacing-regular from
+ * every window edge, flipping below when there's no room above) is real arithmetic here instead of CSS overrides
  * bolted on per container as each clipping case turned up.
  *
  * `data-live-tooltip` content that changes while still hovering (dragging an
@@ -89,7 +106,7 @@ export function TooltipLayer() {
     const showFor = (el: Element) => {
       observer.disconnect()
       observer.observe(el, { attributes: true, attributeFilter: ['data-tooltip', 'data-live-tooltip'] })
-      setTip({ text: readTooltipText(el), ...positionFor(el) })
+      setTip({ text: readTooltipText(el), anchor: anchorOf(el) })
     }
 
     const handleMouseOver = (event: MouseEvent) => {
@@ -124,7 +141,7 @@ export function TooltipLayer() {
         hide()
         return
       }
-      setTip((previous) => (previous ? { ...previous, ...positionFor(el) } : previous))
+      setTip((previous) => (previous ? { ...previous, anchor: anchorOf(el) } : previous))
     }
 
     window.addEventListener('mouseover', handleMouseOver, { capture: true })
@@ -143,18 +160,25 @@ export function TooltipLayer() {
     }
   }, [])
 
+  // Placed after layout, before paint: the bubble is measured as rendered
+  // (text, font scale, max-width all included) and positioned by writing its
+  // style directly, so a show costs one measurement and no second render.
+  // Runs only when a tooltip appears, its text changes, or its anchor moves.
+  const bubbleRef = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    const bubble = bubbleRef.current
+    if (!tip || !bubble) return
+    const { width, height } = bubble.getBoundingClientRect()
+    const { left, top } = placeTooltip(tip.anchor, width, height, window.innerWidth, window.innerHeight, windowMarginPx())
+    bubble.style.left = `${left}px`
+    bubble.style.top = `${top}px`
+  }, [tip])
+
   if (!tip) return null
 
   return (
     <div className="app-tooltip-layer" aria-hidden="true">
-      <div
-        className="app-tooltip-bubble"
-        style={{
-          left: tip.left,
-          top: tip.top,
-          transform: `translate(-50%, ${tip.placement === 'above' ? '-100%' : '0'})`,
-        }}
-      >
+      <div ref={bubbleRef} className="app-tooltip-bubble">
         {tip.text}
       </div>
     </div>
