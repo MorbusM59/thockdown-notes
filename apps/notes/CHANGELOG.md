@@ -6,6 +6,18 @@ were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
 
+## 0.9.1 (2026-11-15)
+
+Alpha Release #25. Tooltip settings are tidier, and the macOS build is back.
+
+#### New features
+
+- **Tooltip settings.** Options > Advanced > Tooltips chooses what a tooltip shows with four icon toggles: intention, shortcut, gesture and value. Each toggle's own tooltip says what that part means and gives an example. The Advanced subsections now run Movement, Scrolling, Tooltips, Flashing.
+
+#### Bug fixes
+
+- On macOS, opening a file from disk no longer reports a change to it that never happened. This also restores the macOS download, which 0.8.1 and 0.9.0 lacked.
+
 ## 0.9.0 (2026-11-15)
 
 Alpha Release #24. The sidebar is rebuilt around six views, every preset list works the same way, images get a home of their own, and Find & Replace is rebuilt.
