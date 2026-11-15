@@ -84,8 +84,7 @@ function StoredPreviewImage({ id, alt, title, sourceLine }: PreviewImageProps & 
 
 function FramedImage({ src, alt, title, width, height, sourceLine }: { src: string; alt?: string; title?: string; width: number; height: number; sourceLine?: string }) {
   // The title carries the image's size and alignment (shared/imageLayout.ts);
-  // a title that is not layout is shown the way any renderer shows it, as
-  // the image's tooltip.
+  // a title that is not layout is the image's tooltip, drawn by TooltipLayer.
   const parsed = parseImageTitle(title)
   const layout = parsed.kind === 'layout' ? parsed.layout : EMPTY_IMAGE_LAYOUT
   const styles = imageLayoutStyles(layout)
@@ -105,7 +104,7 @@ function FramedImage({ src, alt, title, width, height, sourceLine }: { src: stri
       <img
         src={src}
         alt={alt ?? ''}
-        title={parsed.kind === 'layout' ? undefined : parsed.text}
+        data-tooltip={parsed.kind === 'layout' ? undefined : parsed.text}
         // The intrinsic size, when known, gives the image its aspect ratio
         // before it loads (CSS keeps it no wider than its frame); a crop's
         // size is the part of it that is kept.
