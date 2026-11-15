@@ -18,6 +18,7 @@
     "adventure:sim": "npm run adventure:sim -w thockdown-notes --",
     "adventure:balance": "npm run adventure:balance -w thockdown-notes --",
     "adventure:play": "npm run adventure:play -w thockdown-notes --",
+    "screenshots": "npm run screenshots -w thockdown-notes --",
     "perf:input-lag": "npm run perf:input-lag -w thockdown-notes --",
     "perf:input-lag:electron": "npm run perf:input-lag:electron -w thockdown-notes --",
     "perf:input-lag:electron:packaged": "npm run perf:input-lag:electron:packaged -w thockdown-notes --",
