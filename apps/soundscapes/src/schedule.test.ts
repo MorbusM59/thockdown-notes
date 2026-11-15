@@ -1,100 +1,101 @@
 import { describe, expect, it } from 'vitest'
 import {
-  HOURS,
-  emptySchedule,
+  calendarPress,
+  effectiveDays,
+  MINUTES_PER_DAY,
+  MINUTES_PER_WEEK,
+  moveEntry,
+  newEntry,
   scheduleEvents,
-  slotRole,
+  stepTime,
+  toggleDay,
+  weekTimeline,
   type Schedule,
-  type ScheduleEvent,
+  type ScheduleEntry,
 } from './schedule'
 
-/** `spec` maps an hour to [presetId, minute]. */
-function scheduleOf(spec: Record<number, [string, number?]>): Schedule {
-  const schedule = emptySchedule()
-  for (const [hour, [presetId, minute]] of Object.entries(spec)) {
-    schedule.slots[Number(hour)] = { presetId, on: true, minute: minute ?? 0 }
-  }
-  return schedule
-}
-
-/** What plays at `minute` by the events: the latest at or before it, round the clock -- as the native side reads them (SoundscapeSchedule.current). */
-function scheduledPresetAt(events: readonly ScheduleEvent[], minute: number): string | null {
-  const due = events.filter((event) => event.minute <= minute)
-  const last = due.length > 0 ? due[due.length - 1] : events[events.length - 1]
-  return last && last.kind !== 'stop' ? last.presetId : null
-}
-
-/** What plays at `minute`, read straight off the slots: the oracle the events must agree with. */
-function playingBySlots(schedule: Schedule, minute: number): string | null {
-  const hour = Math.floor(minute / 60)
-  const role = slotRole(schedule, hour)
-  const slot = schedule.slots[hour]
-  const into = minute % 60
-  if (role === 'inactive') return null
-  if (role === 'start' && into < slot.minute) return null
-  if (role === 'end' && into >= slot.minute) return null
-  return slot.presetId
-}
-
-function expectAgreement(schedule: Schedule) {
-  const events = scheduleEvents(schedule)
-  for (let minute = 0; minute < HOURS * 60; minute += 1) {
-    expect(scheduledPresetAt(events, minute), `at ${Math.floor(minute / 60)}:${minute % 60}`).toBe(playingBySlots(schedule, minute))
-  }
-}
+const entry = (presetId: string, start: number, stop: number, days: number[], extra: Partial<ScheduleEntry> = {}): ScheduleEntry => ({
+  ...newEntry(presetId),
+  id: `${presetId}-${start}-${stop}`,
+  start,
+  stop,
+  days: Array.from({ length: 7 }, (_, day) => days.includes(day)),
+  ...extra,
+})
+const at = (day: number, hour: number, minute = 0) => (day * MINUTES_PER_DAY) + (hour * 60) + minute
+const schedule = (...entries: ScheduleEntry[]): Schedule => ({ enabled: true, entries })
 
 describe('schedule', () => {
-  it('a single slot is its whole hour, whatever minute it holds', () => {
-    const schedule = scheduleOf({ 4: ['rain', 25] })
-    expect(slotRole(schedule, 4)).toBe('whole')
-    expect(scheduleEvents(schedule)).toEqual([
-      { minute: 240, kind: 'start', presetId: 'rain' },
-      { minute: 300, kind: 'stop', presetId: null },
+  it('plays from start to stop on its days', () => {
+    expect(scheduleEvents(schedule(entry('a', 8 * 60, 9 * 60 + 30, [0, 2])))).toEqual([
+      { minute: at(0, 8), kind: 'start', presetId: 'a' },
+      { minute: at(0, 9, 30), kind: 'stop', presetId: null },
+      { minute: at(2, 8), kind: 'start', presetId: 'a' },
+      { minute: at(2, 9, 30), kind: 'stop', presetId: null },
     ])
-    expectAgreement(schedule)
   })
 
-  it('a run starts at its start slot\'s minute and stops at its end slot\'s, switching on the hour', () => {
-    const schedule = scheduleOf({ 22: ['rain', 30], 23: ['rain'], 0: ['wind'], 1: ['wind', 15] })
-    expect([22, 23, 0, 1].map((hour) => slotRole(schedule, hour))).toEqual(['start', 'interior', 'interior', 'end'])
-    expect(scheduleEvents(schedule)).toEqual([
-      { minute: 0, kind: 'switch', presetId: 'wind' },
-      { minute: 75, kind: 'stop', presetId: null },
-      { minute: 22 * 60 + 30, kind: 'start', presetId: 'rain' },
+  it('a stop before the start runs into the next day, the day being the start day (Sunday into Monday)', () => {
+    expect(scheduleEvents(schedule(entry('a', 22 * 60, 6 * 60, [6])))).toEqual([
+      { minute: at(0, 6), kind: 'stop', presetId: null },
+      { minute: at(6, 22), kind: 'start', presetId: 'a' },
     ])
-    expectAgreement(schedule)
   })
 
-  it('an end slot at :00 stops on the hour and never plays its own soundscape', () => {
-    const schedule = scheduleOf({ 5: ['rain', 0], 6: ['wind', 0] })
-    expect(scheduleEvents(schedule)).toEqual([
-      { minute: 300, kind: 'start', presetId: 'rain' },
-      { minute: 360, kind: 'stop', presetId: null },
+  it('a stop equal to the start is the whole day', () => {
+    const owner = weekTimeline(schedule(entry('a', 0, 0, [3])))
+    expect(owner.filter((id) => id === 'a')).toHaveLength(MINUTES_PER_DAY)
+    expect(owner[at(3, 0)]).toBe('a')
+    expect(owner[at(3, 23, 59)]).toBe('a')
+    expect(owner[at(4, 0)]).toBeNull()
+  })
+
+  it('the higher entry wins where two overlap, and the lower one carries on around it', () => {
+    expect(scheduleEvents(schedule(entry('top', 10 * 60, 11 * 60, [0]), entry('low', 9 * 60, 12 * 60, [0])))).toEqual([
+      { minute: at(0, 9), kind: 'start', presetId: 'low' },
+      { minute: at(0, 10), kind: 'switch', presetId: 'top' },
+      { minute: at(0, 11), kind: 'switch', presetId: 'low' },
+      { minute: at(0, 12), kind: 'stop', presetId: null },
     ])
-    expectAgreement(schedule)
   })
 
-  it('round the clock there is no start or stop', () => {
-    const all: Record<number, [string]> = {}
-    for (let hour = 0; hour < HOURS; hour += 1) all[hour] = [hour < 8 ? 'rain' : 'wind']
-    const schedule = scheduleOf(all)
-    expect(scheduleEvents(schedule).map((event) => event.kind)).toEqual(['switch', 'switch'])
-    expectAgreement(schedule)
+  it('inactive entries and entries with no soundscape play nothing; all week through is one switch', () => {
+    expect(scheduleEvents(schedule(entry('a', 0, 0, [0, 1, 2, 3, 4, 5, 6], { active: false })))).toEqual([])
+    expect(scheduleEvents(schedule({ ...entry('a', 0, 0, [0]), presetId: null }))).toEqual([])
+    expect(scheduleEvents(schedule(entry('a', 0, 0, [0, 1, 2, 3, 4, 5, 6])))).toEqual([{ minute: 0, kind: 'switch', presetId: 'a' }])
   })
 
-  it('agrees with the slots at every minute for many schedules', () => {
-    let seed = 7
-    const random = () => {
-      seed = (seed * 1103515245 + 12345) % 2147483648
-      return seed / 2147483648
-    }
-    for (let trial = 0; trial < 60; trial += 1) {
-      const schedule = emptySchedule()
-      for (let hour = 0; hour < HOURS; hour += 1) {
-        if (random() < 0.5) schedule.slots[hour] = { presetId: random() < 0.5 ? 'a' : 'b', on: random() < 0.85, minute: Math.floor(random() * 12) * 5 }
-      }
-      expectAgreement(schedule)
+  it('events agree with the timeline at every minute', () => {
+    const s = schedule(entry('a', 23 * 60, 1 * 60, [1, 4, 6]), entry('b', 0, 12 * 60, [0, 2]), entry('c', 5 * 60, 5 * 60, [5]))
+    const owner = weekTimeline(s)
+    const events = scheduleEvents(s)
+    let playing: string | null = owner[MINUTES_PER_WEEK - 1]
+    for (let minute = 0; minute < MINUTES_PER_WEEK; minute += 1) {
+      for (const event of events) if (event.minute === minute) playing = event.kind === 'stop' ? null : event.presetId
+      expect(playing).toBe(owner[minute])
     }
   })
 
+  it('the calendar override: all, back, none, back; a day changed under it saves its days with that change', () => {
+    const weekend = entry('a', 0, 0, [5, 6])
+    const all = calendarPress(weekend, false)
+    expect(effectiveDays(all).every(Boolean)).toBe(true)
+    expect(effectiveDays(calendarPress(all, false))).toEqual(weekend.days)
+    const none = calendarPress(weekend, true)
+    expect(effectiveDays(none).some(Boolean)).toBe(false)
+    expect(effectiveDays(calendarPress(none, false))).toEqual(weekend.days)
+    const allButFriday = toggleDay(all, 4)
+    expect(allButFriday.override).toBeNull()
+    expect(allButFriday.days).toEqual([true, true, true, true, false, true, true])
+  })
+
+  it('times step and cycle; entries reorder by the universal rule', () => {
+    expect(stepTime(23 * 60 + 5, 'hour', 1)).toBe(5)
+    expect(stepTime(55, 'minute', 1)).toBe(0)
+    expect(stepTime(0, 'minute', -1)).toBe(55)
+    const s = schedule(entry('a', 0, 0, []), entry('b', 0, 0, []), entry('c', 0, 0, []))
+    const ids = (next: Schedule) => next.entries.map((e) => e.presetId)
+    expect(ids(moveEntry(s, s.entries[0].id, s.entries[2].id))).toEqual(['b', 'c', 'a'])
+    expect(ids(moveEntry(s, s.entries[2].id, s.entries[0].id))).toEqual(['c', 'a', 'b'])
+  })
 })

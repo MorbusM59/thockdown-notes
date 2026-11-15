@@ -175,8 +175,9 @@ export function armHold(onComplete: () => void, holdMs: number = HOLD_CONFIRM_MS
 /**
  * The hold a finger needs before it may drag a control that otherwise takes
  * a tap (touchScroll.ts: without it, moving on is a swipe of the page). It
- * does nothing itself but take the press; returns the function abandoning it.
+ * does nothing itself but take the press (and call `onTaken`); returns the
+ * function abandoning it.
  */
-export function armTouchDragHold(): () => void {
-  return armHold(() => {}, HOLD_CONFIRM_MS, { isDragPickup: true })
+export function armTouchDragHold(onTaken: () => void = () => {}): () => void {
+  return armHold(onTaken, HOLD_CONFIRM_MS, { isDragPickup: true })
 }

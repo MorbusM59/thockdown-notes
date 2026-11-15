@@ -61,36 +61,66 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The schedule: each of the row's six cells holds four half-size slots. */
-.mobile-schedule-cell {
+/* The schedule (ScheduleRows.tsx): a row is twelve chip columns by two chip
+   rows, six buttons wide; placement is the grid's own, row by row, so only
+   the spans are written. */
+.mobile-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-schedule-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 3px;
 }
 
-.mobile-app-shell .mobile-schedule-slot {
+.mobile-app-shell .mobile-schedule-row > * {
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
   padding: 0;
-  font-size: 13px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
-.mobile-schedule-slot.is-off {
+.mobile-schedule-chip {
+  aspect-ratio: 1;
+}
+
+.mobile-schedule-soundscape {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.mobile-app-shell .mobile-schedule-time {
+  grid-column: span 2;
+  aspect-ratio: auto;
+  font-size: 14px;
+}
+
+.mobile-schedule-calendar {
+  grid-row: span 2;
+  aspect-ratio: auto;
+}
+
+/* The play and stop marks: labels, not buttons. */
+.mobile-schedule-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+}
+
+.mobile-schedule-row.is-off > :not(.mobile-schedule-soundscape) {
   opacity: 0.4;
 }
 
-/* The slot of the current hour. */
-.mobile-schedule-slot.is-now {
-  outline: 1px solid var(--color-text-60);
+.mobile-schedule-soundscape.is-drop-target {
+  outline: 2px solid var(--color-text-60);
   outline-offset: 1px;
-}
-
-.mobile-schedule-minute {
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
 
 /* The element that scrolls is the panel's own options content (a scroller

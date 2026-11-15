@@ -22,6 +22,11 @@ export interface SelectorReorderCell {
   }
 }
 
+/** The DataTransfer type a selector's drag carries its cell's id under: another surface may accept it as a drop (the phone's schedule takes a soundscape this way). */
+export function selectorDragType(scope: string): string {
+  return `application/x-thockdown-selector-${scope}`
+}
+
 /**
  * DRAG TO REORDER a selector's cells, by id. A drop on a cell calls
  * `onMove(dragged, target)`, which moves the dragged entry to the target's
@@ -39,7 +44,7 @@ export function useSelectorReorder(
   onMove: (draggedId: string, targetId: string) => void,
   { picture = 'cursor', onStart }: { picture?: 'cursor' | 'copy'; onStart?: () => void } = {},
 ): (id: string) => SelectorReorderCell {
-  const type = `application/x-thockdown-selector-${scope}`
+  const type = selectorDragType(scope)
   const [drag, setDrag] = useState<{ source: string; target: string | null } | null>(null)
 
   const end = useCallback(() => setDrag(null), [])
