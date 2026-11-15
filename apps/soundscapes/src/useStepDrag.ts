@@ -6,9 +6,8 @@
  * on without one is a swipe of the page (touchScroll.ts).
  *
  * Every such control feels alike: a press becomes a drag only once the
- * finger LEAVES THE BUTTON, a step is the button's own height measured from
- * where the press began (leaving is the first step, up is +1), and moving
- * back undoes steps. A release that never left the button is a tap, unless
+ * finger LEAVES THE BUTTON, leaving is the first step (up is +1) and every
+ * STEP_PX on from there another, and moving back undoes steps. A release that never left the button is a tap, unless
  * the hold before a drag had completed.
  *
  * `adjusting` is true while a drag is under way and for SHOW_AFTER_DRAG_MS
@@ -19,13 +18,17 @@ import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 
 import { armTouchDragHold } from '@thockdown/interaction/holdTiming'
 
 const SHOW_AFTER_DRAG_MS = 2000
+/** How far a drag travels per step, past the first (leaving the button). */
+const STEP_PX = 15
 
 interface StepPress<T> {
   pointerId: number
   y: number
   box: DOMRect
   base: T
-  stepPx: number
+  /** Where the press left the button, and which way (up +1): the first step, counted from there. */
+  leftY: number
+  leftStep: number
   dragging: boolean
   /** The hold before a drag completed (touch). */
   held: boolean
@@ -65,7 +68,8 @@ export function useStepDrag<T>(options: {
         y: event.clientY,
         box: event.currentTarget.getBoundingClientRect(),
         base: optionsRef.current.begin(),
-        stepPx: Math.max(1, event.currentTarget.offsetHeight),
+        leftY: 0,
+        leftStep: 0,
         dragging: false,
         held: false,
       }
@@ -77,11 +81,13 @@ export function useStepDrag<T>(options: {
         const { box } = press
         if (event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom) return
         press.dragging = true
+        press.leftY = event.clientY
+        press.leftStep = event.clientY < press.y ? 1 : -1
         setDragging(true)
         setLingering(false)
       }
       // Up is +1: screen y grows downwards.
-      optionsRef.current.step(press.base, Math.round((press.y - event.clientY) / press.stepPx))
+      optionsRef.current.step(press.base, press.leftStep + Math.trunc((press.leftY - event.clientY) / STEP_PX))
     },
     onPointerUp: (event: PointerEvent<HTMLElement>) => {
       const press = pressRef.current

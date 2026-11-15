@@ -22,9 +22,9 @@ describe('timer', () => {
 
   it('labels the longer unit over the shorter, leaving out an empty one', () => {
     expect(durationLines(8 * 3600)).toEqual(['8 h'])
-    expect(durationLines(80 * 60)).toEqual(['1 h', '20 min'])
-    expect(durationLines(210)).toEqual(['3 min', '30 sec'])
-    expect(durationLines(45)).toEqual(['45 sec'])
+    expect(durationLines(80 * 60)).toEqual(['1 h', '20 m'])
+    expect(durationLines(210)).toEqual(['3 m', '30 s'])
+    expect(durationLines(45)).toEqual(['45 s'])
   })
 
   it('fades over a tenth of the play time, at most five minutes', () => {

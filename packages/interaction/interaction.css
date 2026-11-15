@@ -1044,9 +1044,13 @@
 
 /* A name with a line under it (the phone's time left): the two stacked,
    the line lighter, smaller and not bold. */
-.options-dock-entry-name.has-detail {
-  flex-direction: column;
-  gap:            2px;
+.options-curve-display.options-dock-entry-name.has-detail {
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  justify-content: center;
+  gap:             var(--spacing-regular);
+  line-height:     1;
 }
 
 .options-dock-entry-title,

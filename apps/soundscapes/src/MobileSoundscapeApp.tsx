@@ -198,9 +198,8 @@ export function MobileSoundscapeApp() {
     setClock(Date.now())
     return () => window.clearInterval(tick)
   }, [countdown.endsAtMs])
-  const timeLeft = countdown.endsAtMs >= 0 ? remainingText(countdown.endsAtMs - clock)
-    : countdown.remainingMs >= 0 ? remainingText(countdown.remainingMs)
-    : null
+  const timeLeftMs = countdown.endsAtMs >= 0 ? countdown.endsAtMs - clock : countdown.remainingMs
+  const timeLeft = timeLeftMs >= 0 ? `(${remainingText(timeLeftMs)})` : null
 
   const activeId = activeSoundscape(preferences).id
   useEffect(() => setIconQuery(null), [activeId])

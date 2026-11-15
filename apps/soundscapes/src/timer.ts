@@ -93,8 +93,8 @@ export function sanitizeTimer(input: unknown): TimerSettings {
  */
 export function durationLines(sec: number): string[] {
   const [big, small, bigUnit, smallUnit] = sec < 60 * 60
-    ? [Math.floor(sec / 60), sec % 60, 'min', 'sec']
-    : [Math.floor(sec / 3600), Math.floor((sec % 3600) / 60), 'h', 'min']
+    ? [Math.floor(sec / 60), sec % 60, 'm', 's']
+    : [Math.floor(sec / 3600), Math.floor((sec % 3600) / 60), 'h', 'm']
   return [big > 0 ? `${big} ${bigUnit}` : null, small > 0 ? `${small} ${smallUnit}` : null].filter((line): line is string => line !== null)
 }
 

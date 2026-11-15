@@ -62,11 +62,13 @@ body {
 }
 
 /* The timer (TimerRow.tsx): a duration in two centred lines, longer unit on top. */
-.mobile-timer-btn {
+/* At the size of the soundscape's name in the dock, never wrapped. */
+.mobile-app-shell .mobile-timer-btn {
   flex-direction: column;
-  gap: 1px;
-  font-size: 12px;
+  gap: 2px;
+  font-size: 15px;
   line-height: 1;
+  white-space: nowrap;
 }
 
 /* The schedule (ScheduleRows.tsx): a row is twelve chip columns by two chip
