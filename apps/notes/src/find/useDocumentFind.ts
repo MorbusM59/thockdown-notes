@@ -261,6 +261,16 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     && previewAnswer.query === documentFindDirective.findText
     && previewAnswer.matching === findMatching
 
+  // While the worker answers a new question about the SAME text (a changed
+  // query, or the case rule flipping with find/replace), the last answer
+  // stays listed: its positions still point into this text, so every card
+  // still jumps where it says, and emptying the list for one round trip made
+  // the sidebar flash on every toggle. Only a changed text, or an empty
+  // query, has nothing to stand in.
+  const previewAnswerIsStandIn = previewAnswer !== null
+    && previewAnswer.sourceTextVersion === sourceTextVersion
+    && documentFindDirective.findText !== ''
+
   // Not searching while on ice, however stale the last answer is: saying
   // "Searching this note..." about a search that is not running would be the
   // same lie the flag version told for one frame, just held indefinitely.
@@ -273,8 +283,8 @@ export function useDocumentFind(options: UseDocumentFindOptions): UseDocumentFin
     ? NO_HITS
     : !isPreviewMode
       ? editModeHits
-      : previewAnswerIsCurrent
-        ? previewAnswer.hits
+      : previewAnswerIsCurrent || previewAnswerIsStandIn
+        ? previewAnswer!.hits
         : NO_HITS
   // The builders stop one past MAX_FIND_HITS, which is how a search with more
   // matches than the list holds is told apart from one with exactly that many.
