@@ -7,7 +7,7 @@
  *   (useStepDrag), which also restarts the countdown when it is the active one.
  * - INFINITY: a tap plays until stopped.
  */
-import { durationLines, stepDuration, type TimerSettings } from './timer'
+import { durationLabel, stepDuration, type TimerSettings } from './timer'
 import { useStepDrag } from './useStepDrag'
 
 interface TimerRowProps {
@@ -21,17 +21,17 @@ function DurationButton({ seconds, active, onTap, onStep }: { seconds: number; a
     step: (base, steps) => onStep(stepDuration(base, steps)),
     tap: onTap,
   })
-  const lines = durationLines(seconds)
+  const label = durationLabel(seconds)
   return (
     <button
       type="button"
       className={`btn-icon options-color-swatch options-loadout-btn mobile-timer-btn${active ? ' is-active' : ''}`}
       aria-pressed={active}
-      aria-label={`Timer ${lines.join(' ')}`}
+      aria-label={`Timer ${label}`}
       data-secondary-press="none"
       {...handlers}
     >
-      {lines.map((line) => <span key={line}>{line}</span>)}
+      {label}
     </button>
   )
 }

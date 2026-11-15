@@ -61,11 +61,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The timer (TimerRow.tsx): a duration in two centred lines, longer unit on top. */
+/* The timer (TimerRow.tsx): a duration in one line. */
 /* At the size of the soundscape's name in the dock, never wrapped. */
 .mobile-app-shell .mobile-timer-btn {
-  flex-direction: column;
-  gap: 2px;
   font-size: 15px;
   line-height: 1;
   white-space: nowrap;

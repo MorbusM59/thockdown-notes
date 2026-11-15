@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { durationLines, fadeSecFor, remainingText, sanitizeTimer, stepDuration } from './timer'
+import { durationLabel, fadeSecFor, remainingText, sanitizeTimer, stepDuration } from './timer'
 
 describe('timer', () => {
   it('steps through the durations, stopping at either end', () => {
@@ -8,9 +8,9 @@ describe('timer', () => {
     expect(stepDuration(16 * 3600, 3)).toBe(24 * 3600)
   })
 
-  it('shows the number over its unit, minutes up to 90, hours from 2', () => {
-    expect(durationLines(90 * 60)).toEqual(['90', 'm'])
-    expect(durationLines(8 * 3600)).toEqual(['8', 'h'])
+  it('labels minutes up to 90, hours from 2', () => {
+    expect(durationLabel(90 * 60)).toBe('90 m')
+    expect(durationLabel(8 * 3600)).toBe('8 h')
   })
 
   it('fades over a tenth of the play time, at most five minutes', () => {

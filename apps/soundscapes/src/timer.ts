@@ -61,9 +61,9 @@ export function sanitizeTimer(input: unknown): TimerSettings {
   return { durations, active }
 }
 
-/** A duration as its button shows it: the number over its unit, minutes up to 90, hours from 2. */
-export function durationLines(sec: number): [string, string] {
-  return sec < 2 * 3600 ? [String(Math.round(sec / 60)), 'm'] : [String(Math.round(sec / 3600)), 'h']
+/** A duration as its button shows it: minutes up to 90, hours from 2. */
+export function durationLabel(sec: number): string {
+  return sec < 2 * 3600 ? `${Math.round(sec / 60)} m` : `${Math.round(sec / 3600)} h`
 }
 
 /** Time left as h:mm:ss with no leading zeros: 1:05:09, 5:09, 0:09. */
