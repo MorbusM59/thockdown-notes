@@ -159,12 +159,12 @@ body {
 }
 
 /* The icon picker's filter: the whole width, half a row high. */
-/* The look is the shared field's (.options-curve-field); only the size is its own: the text's height plus a small spacing above and below. */
+/* The look is the shared field's (.options-curve-field); only the size is its own: the text's height plus a regular spacing above and below and a large one at the sides. */
 .mobile-icon-filter {
   display: block;
   width: 100%;
   height: auto;
-  padding: var(--spacing-small);
+  padding: var(--spacing-regular) var(--spacing-large);
   line-height: 1;
   text-align: left;
 }
