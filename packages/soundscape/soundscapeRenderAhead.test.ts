@@ -295,6 +295,36 @@ describe('render ahead', () => {
     expect(Array.from(out.subarray(from + fadeFrames)).every((value) => value === -1)).toBe(true);
   });
 
+  it('a restart plays the new voice alone from the splice, with nothing of the old one faded under it', () => {
+    const constant = (value: number): HostedGenerator => ({
+      processor: null,
+      exports: undefined,
+      configure: () => {},
+      renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },
+      frame: 0,
+      snapshot: () => ({ frame: 0, state: {} }),
+      restore: () => {},
+    });
+    const sent: RenderedChunk[] = [];
+    const tasks: Array<() => void> = [];
+    const renderer = new RenderAhead(
+      constant(1), identityMix, SAMPLE_RATE, MARGIN_SEC, (chunk) => sent.push(chunk), (work) => tasks.push(work),
+      () => ({ generator: constant(-1), mix: identityMix }),
+    );
+    const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
+    renderer.configure(CONFIGURE);
+    drain();
+    renderer.restart(CONFIGURE);
+    for (let played = 0; played <= LEAD_FRAMES; played += RENDER_CHUNK_FRAMES) {
+      renderer.played(played);
+      drain();
+    }
+    const out = heard(sent);
+    const from = spliceAt(0);
+    expect(Array.from(out.subarray(0, from)).every((value) => value === 1)).toBe(true);
+    expect(Array.from(out.subarray(from)).every((value) => value === -1)).toBe(true);
+  });
+
   it('a transition during a transition fades from the blend being heard, without a jump, wherever the output is', () => {
     const constant = (value: number): HostedGenerator => ({
       processor: null,

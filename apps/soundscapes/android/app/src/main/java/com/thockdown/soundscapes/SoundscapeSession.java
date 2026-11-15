@@ -293,7 +293,16 @@ final class SoundscapeSession {
     synchronized void configure(String configuration, double transitionSec) {
         if (renderer == null || regular != Regular.PLAYING) return;
         if (nextConfigure == NextConfigure.CROSSFADE) transitionSec = Math.max(transitionSec, SWITCH_FADE_SEC);
-        if (nextConfigure == NextConfigure.REPLACE) transitionSec = 0;
+        if (nextConfigure == NextConfigure.REPLACE) {
+            // Playing again after silence: start from silence, not from the
+            // soundscape the output held when it paused (heard fading out
+            // under the new one otherwise).
+            nextConfigure = NextConfigure.AS_SENT;
+            output.discardQueued();
+            output.fadeFrom(0f, 1f, SWITCH_FADE_SEC);
+            renderer.restart(configuration);
+            return;
+        }
         nextConfigure = NextConfigure.AS_SENT;
         if (transitionSec > 0) renderer.transition(configuration, transitionSec);
         else renderer.configure(configuration);
@@ -365,7 +374,8 @@ final class SoundscapeSession {
         } else if (output.isPaused()) {
             // From a pause nothing is heard to crossfade from: the new
             // soundscape replaces what was queued and fades in alone.
-            renderer.configure(entry.configuration);
+            output.discardQueued();
+            renderer.restart(entry.configuration);
             fadeIn(SWITCH_FADE_SEC);
         } else {
             renderer.transition(entry.configuration, SWITCH_FADE_SEC);

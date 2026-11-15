@@ -152,6 +152,11 @@ final class SoundscapeAudioOutput {
         end = startFrame + frames;
     }
 
+    /** Drop everything queued past the playhead: it plays as silence until new audio is written. */
+    synchronized void discardQueued() {
+        if (started) end = Math.min(end, playhead);
+    }
+
     /** The listener's volume: glide to `target` with time constant `timeConstantSec` (once resumed, if paused). */
     synchronized void setVolume(float target, double timeConstantSec) {
         listenerVolume = target;
