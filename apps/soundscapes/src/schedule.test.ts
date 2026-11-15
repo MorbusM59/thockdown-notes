@@ -23,11 +23,12 @@ const entry = (presetId: string, start: number, stop: number, days: number[], ex
   ...extra,
 })
 const at = (day: number, hour: number, minute = 0) => (day * MINUTES_PER_DAY) + (hour * 60) + minute
+const strip = (events: ReturnType<typeof scheduleEvents>) => events.map(({ fadeSec: _fade, ...event }) => event)
 const schedule = (...entries: ScheduleEntry[]): Schedule => ({ enabled: true, entries })
 
 describe('schedule', () => {
   it('plays from start to stop on its days', () => {
-    expect(scheduleEvents(schedule(entry('a', 8 * 60, 9 * 60 + 30, [0, 2])))).toEqual([
+    expect(strip(scheduleEvents(schedule(entry('a', 8 * 60, 9 * 60 + 30, [0, 2]))))).toEqual([
       { minute: at(0, 8), kind: 'start', presetId: 'a' },
       { minute: at(0, 9, 30), kind: 'stop', presetId: null },
       { minute: at(2, 8), kind: 'start', presetId: 'a' },
@@ -36,7 +37,7 @@ describe('schedule', () => {
   })
 
   it('a stop before the start runs into the next day, the day being the start day (Sunday into Monday)', () => {
-    expect(scheduleEvents(schedule(entry('a', 22 * 60, 6 * 60, [6])))).toEqual([
+    expect(strip(scheduleEvents(schedule(entry('a', 22 * 60, 6 * 60, [6]))))).toEqual([
       { minute: at(0, 6), kind: 'stop', presetId: null },
       { minute: at(6, 22), kind: 'start', presetId: 'a' },
     ])
@@ -51,7 +52,7 @@ describe('schedule', () => {
   })
 
   it('the higher entry wins where two overlap, and the lower one carries on around it', () => {
-    expect(scheduleEvents(schedule(entry('top', 10 * 60, 11 * 60, [0]), entry('low', 9 * 60, 12 * 60, [0])))).toEqual([
+    expect(strip(scheduleEvents(schedule(entry('top', 10 * 60, 11 * 60, [0]), entry('low', 9 * 60, 12 * 60, [0]))))).toEqual([
       { minute: at(0, 9), kind: 'start', presetId: 'low' },
       { minute: at(0, 10), kind: 'switch', presetId: 'top' },
       { minute: at(0, 11), kind: 'switch', presetId: 'low' },
@@ -60,9 +61,16 @@ describe('schedule', () => {
   })
 
   it('inactive entries and entries with no soundscape play nothing; all week through is one switch', () => {
-    expect(scheduleEvents(schedule(entry('a', 0, 0, [0, 1, 2, 3, 4, 5, 6], { active: false })))).toEqual([])
-    expect(scheduleEvents(schedule({ ...entry('a', 0, 0, [0]), presetId: null }))).toEqual([])
-    expect(scheduleEvents(schedule(entry('a', 0, 0, [0, 1, 2, 3, 4, 5, 6])))).toEqual([{ minute: 0, kind: 'switch', presetId: 'a' }])
+    expect(strip(scheduleEvents(schedule(entry('a', 0, 0, [0, 1, 2, 3, 4, 5, 6], { active: false }))))).toEqual([])
+    expect(strip(scheduleEvents(schedule({ ...entry('a', 0, 0, [0]), presetId: null })))).toEqual([])
+    expect(strip(scheduleEvents(schedule(entry('a', 0, 0, [0, 1, 2, 3, 4, 5, 6]))))).toEqual([{ minute: 0, kind: 'switch', presetId: 'a' }])
+  })
+
+  it('a start fades its entry in; a stop or a switch fades out the entry ending, by its play time', () => {
+    const fades = scheduleEvents(schedule(entry('top', 10 * 60, 11 * 60, [0]), entry('low', 9 * 60, 12 * 60, [0]))).map((event) => event.fadeSec)
+    // low plays 3 h (fade capped at 5 min), top 1 h (6 min, capped at 5): all capped here.
+    expect(fades).toEqual([300, 300, 300, 300])
+    expect(scheduleEvents(schedule(entry('a', 8 * 60, 8 * 60 + 20, [0]))).map((event) => event.fadeSec)).toEqual([120, 120])
   })
 
   it('events agree with the timeline at every minute', () => {

@@ -60,6 +60,14 @@ public class BackgroundAudioPlugin extends Plugin {
         }
 
         @Override
+        public void onCountdown(long endsAtMs, long remainingMs) {
+            JSObject data = new JSObject();
+            data.put("endsAtMs", endsAtMs);
+            data.put("remainingMs", remainingMs);
+            notifyListeners("countdown", data);
+        }
+
+        @Override
         public void onFailure(String message) {
             JSObject data = new JSObject();
             data.put("message", message);
@@ -94,6 +102,8 @@ public class BackgroundAudioPlugin extends Plugin {
         data.put("source", state.source.name().toLowerCase(java.util.Locale.ROOT));
         data.put("currentId", state.currentId);
         data.put("scheduleEnabled", state.scheduleEnabled);
+        data.put("endsAtMs", state.endsAtMs);
+        data.put("remainingMs", state.remainingMs);
         return data;
     }
 
@@ -153,6 +163,13 @@ public class BackgroundAudioPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("granted", granted);
         call.resolve(result);
+    }
+
+    /** The timer (timer.ts): `{ seconds, fadeSec }`, seconds 0 for none. */
+    @PluginMethod
+    public void setTimer(PluginCall call) {
+        session.setTimer(call.getDouble("seconds", 0.0), call.getDouble("fadeSec", 0.0));
+        call.resolve();
     }
 
     /** `entries`: `[{ id, name, configuration }]`; `currentId`; `currentName`; `masterVolume`. */

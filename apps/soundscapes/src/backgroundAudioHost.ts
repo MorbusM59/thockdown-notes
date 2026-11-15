@@ -37,6 +37,10 @@ export interface SessionState {
   /** The soundscape heard or paused on (an entry's id), or null. */
   currentId: string | null
   scheduleEnabled: boolean
+  /** When what is heard ends (wall clock, ms): the timer's end, or the scheduled run's next change; -1 for none. */
+  endsAtMs: number
+  /** The timer's time left while paused (ms); -1 for none. */
+  remainingMs: number
 }
 
 /** The schedule as the native side runs it (schedule.ts works it out). */
@@ -58,6 +62,8 @@ export interface NativeSoundscapePlugin {
    */
   publish(options: { entries: SessionEntry[]; currentId: string | null; currentName: string | null; masterVolume: number }): Promise<void>
   getState(): Promise<SessionState>
+  /** The timer (timer.ts): how long a soundscape the listener plays runs, `seconds` 0 for no end, and the fade it ends over. */
+  setTimer(options: { seconds: number; fadeSec: number }): Promise<void>
   /** Store and arm the schedule; turning it on applies its state at this moment. */
   setSchedule(schedule: NativeSchedule): Promise<void>
   /** Whether exact alarms are allowed; if not, opens the system page that grants them. */
@@ -80,6 +86,8 @@ export interface NativeSoundscapePlugin {
   takeBack(options: { taken: boolean }): Promise<void>
   /** A media control or the schedule changed what plays. */
   addListener(event: 'sessionChanged', listener: (state: SessionState) => void): Promise<PluginListenerHandle>
+  /** The timer's countdown started, held or ended, for any reason (the page's own changes included). */
+  addListener(event: 'countdown', listener: (data: { endsAtMs: number; remainingMs: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'back', listener: () => void): Promise<PluginListenerHandle>
   addListener(event: 'rendererFailure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'clipProgress', listener: (data: { fraction: number }) => void): Promise<PluginListenerHandle>

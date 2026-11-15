@@ -19,6 +19,7 @@
  * 00:00, and plays those, so the rules are not restated on the native side.
  */
 import { type SoundscapePreset } from '@thockdown/soundscape/soundscape'
+import { fadeSecFor } from './timer'
 
 export const MINUTES_PER_DAY = 24 * 60
 export const DAYS = 7
@@ -58,6 +59,12 @@ export interface ScheduleEvent {
   minute: number
   kind: 'start' | 'switch' | 'stop'
   presetId: string | null
+  /**
+   * How long the change takes (timer.ts's fade rule). A stop or a switch
+   * fades out the entry that ENDS, finishing at `minute`, so it begins this
+   * long before; a start fades the entry it starts in from `minute`.
+   */
+  fadeSec: number
 }
 
 export function emptySchedule(): Schedule {
@@ -142,35 +149,53 @@ export function sanitizeSchedule(input: unknown, presets: readonly SoundscapePre
   }
 }
 
-/** What plays at each minute of the week, by the rules above. */
-export function weekTimeline(schedule: Schedule): Array<string | null> {
-  const owner: Array<string | null> = Array.from({ length: MINUTES_PER_WEEK }, () => null)
+/** How long `entry` plays each time: start to stop, round midnight, the whole day when they are equal. */
+function entryMinutes(entry: ScheduleEntry): number {
+  return entry.stop > entry.start ? entry.stop - entry.start
+    : entry.stop < entry.start ? entry.stop + MINUTES_PER_DAY - entry.start
+    : MINUTES_PER_DAY
+}
+
+/** The entry that plays at each minute of the week, by the rules above. */
+function weekOwners(schedule: Schedule): Array<ScheduleEntry | null> {
+  const owner: Array<ScheduleEntry | null> = Array.from({ length: MINUTES_PER_WEEK }, () => null)
   // Lowest priority first, so a higher entry paints over it.
   for (const entry of [...schedule.entries].reverse()) {
     if (!entry.active || entry.presetId === null) continue
-    const length = entry.stop > entry.start ? entry.stop - entry.start
-      : entry.stop < entry.start ? entry.stop + MINUTES_PER_DAY - entry.start
-      : MINUTES_PER_DAY
+    const length = entryMinutes(entry)
     effectiveDays(entry).forEach((on, day) => {
       if (!on) return
       const from = (day * MINUTES_PER_DAY) + entry.start
-      for (let offset = 0; offset < length; offset += 1) owner[(from + offset) % MINUTES_PER_WEEK] = entry.presetId
+      for (let offset = 0; offset < length; offset += 1) owner[(from + offset) % MINUTES_PER_WEEK] = entry
     })
   }
   return owner
 }
 
+/** What plays at each minute of the week, by the rules above. */
+export function weekTimeline(schedule: Schedule): Array<string | null> {
+  return weekOwners(schedule).map((entry) => entry?.presetId ?? null)
+}
+
 /** The events the schedule comes to, in order of their minute of the week. */
 export function scheduleEvents(schedule: Schedule): ScheduleEvent[] {
-  const owner = weekTimeline(schedule)
+  const owner = weekOwners(schedule)
   const events: ScheduleEvent[] = []
   for (let minute = 0; minute < MINUTES_PER_WEEK; minute += 1) {
-    const now = owner[minute]
-    const before = owner[(minute + MINUTES_PER_WEEK - 1) % MINUTES_PER_WEEK]
+    const now = owner[minute]?.presetId ?? null
+    const beforeEntry = owner[(minute + MINUTES_PER_WEEK - 1) % MINUTES_PER_WEEK]
+    const before = beforeEntry?.presetId ?? null
     if (now === before) continue
-    events.push({ minute, kind: before === null ? 'start' : now === null ? 'stop' : 'switch', presetId: now })
+    // A start fades the entry in; a stop or a switch fades out the one ending.
+    const fading = before === null ? owner[minute]! : beforeEntry!
+    events.push({
+      minute,
+      kind: before === null ? 'start' : now === null ? 'stop' : 'switch',
+      presetId: now,
+      fadeSec: fadeSecFor(entryMinutes(fading) * 60),
+    })
   }
   // Playing all week through one soundscape: one switch says what plays.
-  if (events.length === 0 && owner[0] !== null) events.push({ minute: 0, kind: 'switch', presetId: owner[0] })
+  if (events.length === 0 && owner[0] !== null) events.push({ minute: 0, kind: 'switch', presetId: owner[0].presetId, fadeSec: 0 })
   return events
 }

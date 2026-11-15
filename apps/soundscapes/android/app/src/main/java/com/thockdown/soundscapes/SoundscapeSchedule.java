@@ -22,7 +22,7 @@ import org.json.JSONObject;
  * exists to ask.
  *
  * It ARMS one exact alarm at a time, for the next event, which
- * ScheduleReceiver hands to the session (SoundscapeSession.applyScheduleEvent)
+ * ScheduleReceiver hands to the session (SoundscapeSession.applyScheduleEvents)
  * before arming the one after. An exact alarm is also what allows the
  * session's foreground service to be started from the background; the
  * listener grants it once (SCHEDULE_EXACT_ALARM), asked when they turn the
@@ -34,11 +34,22 @@ final class SoundscapeSchedule {
         /** "start", "switch" or "stop": see ScheduleEvent in schedule.ts. */
         final String kind;
         final String presetId;
+        /** How long the change takes (timer.ts's fade rule, worked out by schedule.ts). */
+        final double fadeSec;
+        /**
+         * The second of the week the change BEGINS: a stop or a switch fades
+         * out the entry ending so it is silent at `minute`, so it begins
+         * `fadeSec` before; a start begins at `minute` and fades in.
+         */
+        final int at;
 
-        Event(int minute, String kind, String presetId) {
+        Event(int minute, String kind, String presetId, double fadeSec) {
             this.minute = minute;
             this.kind = kind;
             this.presetId = presetId;
+            this.fadeSec = fadeSec;
+            int lead = "start".equals(kind) ? 0 : (int) Math.round(fadeSec);
+            this.at = Math.floorMod(minute * 60 - lead, SECONDS_PER_WEEK);
         }
     }
 
@@ -46,12 +57,14 @@ final class SoundscapeSchedule {
     /** Apply the schedule's state now (after a reboot), from an alarm, which may start the service where the boot broadcast may not. */
     static final String ACTION_APPLY_STATE = "com.thockdown.soundscapes.SCHEDULE_APPLY_STATE";
     private static final long APPLY_STATE_DELAY_MS = 5000;
-    static final String EXTRA_MINUTE = "minute";
+    /** The second of the week the alarm was armed for (Event.at). */
+    static final String EXTRA_AT = "at";
     private static final String PREFERENCES = "soundscape-schedule";
     private static final String KEY = "schedule";
     private static final int MINUTES_PER_DAY = 24 * 60;
     /** Event minutes are minutes of the WEEK, from Monday 00:00 (schedule.ts). */
     static final int MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY;
+    static final int SECONDS_PER_WEEK = MINUTES_PER_WEEK * 60;
 
     final boolean enabled;
     final float masterVolume;
@@ -61,7 +74,10 @@ final class SoundscapeSchedule {
     private SoundscapeSchedule(boolean enabled, float masterVolume, List<Event> events, List<SoundscapeSession.Entry> entries) {
         this.enabled = enabled;
         this.masterVolume = masterVolume;
-        this.events = events;
+        // In the order they BEGIN: a fade's lead can put a change before the one listed ahead of it.
+        List<Event> ordered = new ArrayList<>(events);
+        ordered.sort((a, b) -> Integer.compare(a.at, b.at));
+        this.events = Collections.unmodifiableList(ordered);
         this.entries = entries;
     }
 
@@ -72,7 +88,7 @@ final class SoundscapeSchedule {
         for (int index = 0; index < eventArray.length(); index += 1) {
             JSONObject event = eventArray.getJSONObject(index);
             events.add(new Event(event.getInt("minute"), event.getString("kind"),
-                event.isNull("presetId") ? null : event.getString("presetId")));
+                event.isNull("presetId") ? null : event.getString("presetId"), event.optDouble("fadeSec", 0)));
         }
         List<SoundscapeSession.Entry> entries = new ArrayList<>();
         JSONArray entryArray = json.getJSONArray("entries");
@@ -81,7 +97,7 @@ final class SoundscapeSchedule {
             entries.add(new SoundscapeSession.Entry(entry.getString("id"), entry.getString("name"), entry.getString("configuration")));
         }
         return new SoundscapeSchedule(json.getBoolean("enabled"), (float) json.getDouble("masterVolume"),
-            Collections.unmodifiableList(events), Collections.unmodifiableList(entries));
+            events, Collections.unmodifiableList(entries));
     }
 
     static SoundscapeSchedule load(Context context) {
@@ -101,20 +117,25 @@ final class SoundscapeSchedule {
         preferences(context).edit().putString(KEY, json.toString()).apply();
     }
 
-    /** The minute of the week the run under way stops at: the next stop event from now, round the week; null for none. */
-    Integer nextStopMinute() {
-        int now = minuteOfWeek(Calendar.getInstance());
-        Integer best = null;
-        int bestDistance = Integer.MAX_VALUE;
+    /**
+     * The wall-clock time the run under way next changes (its stop, or a
+     * switch to another entry), at the event's own minute rather than where
+     * its fade begins; -1 outside a run or with no events.
+     */
+    long nextChangeMillis() {
+        if (events.isEmpty()) return -1;
+        Calendar now = Calendar.getInstance();
+        int nowSec = secondOfWeek(now);
+        Event current = current();
+        if (current == null || "stop".equals(current.kind)) return -1;
+        int best = Integer.MAX_VALUE;
         for (Event event : events) {
-            if (!"stop".equals(event.kind)) continue;
-            int distance = Math.floorMod(event.minute - now, MINUTES_PER_WEEK);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = event.minute;
-            }
+            if (event == current) continue;
+            int distance = Math.floorMod(event.minute * 60 - nowSec, SECONDS_PER_WEEK);
+            if (distance > 0 && distance < best) best = distance;
         }
-        return best;
+        if (best == Integer.MAX_VALUE) return -1;
+        return now.getTimeInMillis() - (now.getTimeInMillis() % 1000) + best * 1000L;
     }
 
     private static SharedPreferences preferences(Context context) {
@@ -129,34 +150,37 @@ final class SoundscapeSchedule {
     }
 
     /**
-     * The events from `fromMinute` up to and including this minute, in order,
-     * round the week's end if need be. An alarm armed for `fromMinute` may arrive
-     * late (Android defers exact alarms in deep sleep, by minutes when two
-     * fall close together), and an event between the two would otherwise be
-     * skipped, since the next alarm is armed for after now.
+     * The events that have begun from `fromAt` (a second of the week) up to
+     * now, in order, round the week's end if need be. An alarm armed for
+     * `fromAt` may arrive late (Android defers exact alarms in deep sleep,
+     * by minutes when two fall close together), and an event between the
+     * two would otherwise be skipped, since the next alarm is armed for
+     * after now.
      */
-    List<Event> dueSince(int fromMinute) {
-        int now = minuteOfWeek(Calendar.getInstance());
-        int span = Math.floorMod(now - fromMinute, MINUTES_PER_WEEK);
+    List<Event> dueSince(int fromAt) {
+        int span = Math.floorMod(secondOfWeek(Calendar.getInstance()) - fromAt, SECONDS_PER_WEEK);
         List<Event> due = new ArrayList<>();
-        for (int offset = 0; offset <= span; offset += 1) {
-            int minute = (fromMinute + offset) % MINUTES_PER_WEEK;
-            for (Event event : events) {
-                if (event.minute == minute) due.add(event);
-            }
+        for (Event event : events) {
+            if (Math.floorMod(event.at - fromAt, SECONDS_PER_WEEK) <= span) due.add(event);
         }
+        due.sort((a, b) -> Integer.compare(Math.floorMod(a.at - fromAt, SECONDS_PER_WEEK), Math.floorMod(b.at - fromAt, SECONDS_PER_WEEK)));
         return due;
     }
 
-    /** The event whose state holds now: the latest at or before this minute, round the week; null if there are none. */
+    /** The event whose state holds now: the latest to have begun, round the week; null if there are none. */
     Event current() {
         if (events.isEmpty()) return null;
-        int now = minuteOfWeek(Calendar.getInstance());
+        int now = secondOfWeek(Calendar.getInstance());
         Event latest = events.get(events.size() - 1);
         for (Event event : events) {
-            if (event.minute <= now) latest = event;
+            if (event.at <= now) latest = event;
         }
         return latest;
+    }
+
+    /** Seconds since Monday 00:00 of this week. */
+    static int secondOfWeek(Calendar calendar) {
+        return minuteOfWeek(calendar) * 60 + calendar.get(Calendar.SECOND);
     }
 
     /** Minutes since Monday 00:00 of this week. */
@@ -199,22 +223,21 @@ final class SoundscapeSchedule {
             return;
         }
         Calendar now = Calendar.getInstance();
-        int nowMinute = minuteOfWeek(now);
-        // The first event after this minute, or next week's first.
+        int nowSec = secondOfWeek(now);
+        // The first event to begin after this second, or next week's first.
         Event next = schedule.events.get(0);
         for (Event event : schedule.events) {
-            if (event.minute > nowMinute) {
+            if (event.at > nowSec) {
                 next = event;
                 break;
             }
         }
-        int ahead = Math.floorMod(next.minute - nowMinute, MINUTES_PER_WEEK);
-        if (ahead == 0) ahead = MINUTES_PER_WEEK;
+        int ahead = Math.floorMod(next.at - nowSec, SECONDS_PER_WEEK);
+        if (ahead == 0) ahead = SECONDS_PER_WEEK;
         Calendar at = (Calendar) now.clone();
-        at.set(Calendar.SECOND, 0);
         at.set(Calendar.MILLISECOND, 0);
-        at.add(Calendar.MINUTE, ahead);
-        intent.putExtra(EXTRA_MINUTE, next.minute);
+        at.add(Calendar.SECOND, ahead);
+        intent.putExtra(EXTRA_AT, next.at);
         alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at.getTimeInMillis(),
             PendingIntent.getBroadcast(app, 0, intent, flags));
     }

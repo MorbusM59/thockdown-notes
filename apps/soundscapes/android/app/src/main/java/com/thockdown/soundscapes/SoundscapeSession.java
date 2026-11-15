@@ -37,17 +37,17 @@ import org.json.JSONObject;
  *   close control, closing the app) makes it STOPPED, handing back to the
  *   schedule;
  * - a scheduled run's START ends a PAUSED regular mode -- a forgotten pause
- *   must not silence tomorrow's run -- but never a PLAYING one;
- * - a scheduled run's END stops regular mode if regular mode began DURING
- *   that run (`regularRunStop`): pausing and resuming the schedule's
- *   soundscape, skipping, or choosing another while a run plays all stay
- *   inside the run's window, so the run still ends in silence. Regular mode
- *   that was already under way when the run started is the listener's own
- *   and carries on past it.
- * The schedule's changes fade: a run starts by fading in and ends by fading
- * out over SCHEDULE_FADE_SEC, and a change of soundscape within a run is a
- * transition of that length. A STOP hands over faster, over
- * HANDOVER_FADE_SEC: the listener asked for it.
+ *   must not silence tomorrow's run -- but never a PLAYING one: while
+ *   regular mode plays, the schedule is suspended;
+ * - THE TIMER (timer.ts): with a duration set, regular mode plays that long
+ *   from when a soundscape was started or switched to, the countdown held
+ *   while paused, and then STOPS, handing back to the schedule. It is silent
+ *   at its end, having faded out over the fade it was handed.
+ * The schedule's changes fade by the same rule: each event carries its fade
+ * (schedule.ts), a stop or a switch fading out the entry that ends so it is
+ * silent at its end time (the alarm comes that much early), a start fading
+ * its entry in. A STOP hands over faster, over HANDOVER_FADE_SEC: the
+ * listener asked for it.
  *
  * CLIENTS. The web page (BackgroundAudioPlugin) plays, pauses, stops,
  * configures and sets the volume, and publishes the soundscapes next and
@@ -77,6 +77,13 @@ final class SoundscapeSession {
     interface Listener {
         /** A media control, the schedule or the system changed what is heard. */
         void onChanged(State state);
+        /**
+         * The timer's countdown started, held, or ended (`endsAtMs`,
+         * `remainingMs` as in State). Sent for the page's own changes too:
+         * it carries only the countdown, which the page cannot know, never
+         * what is heard, so it cannot race the page's next request.
+         */
+        void onCountdown(long endsAtMs, long remainingMs);
         void onFailure(String message);
     }
 
@@ -86,14 +93,21 @@ final class SoundscapeSession {
         /** The soundscape heard or paused on: an entry's id, or null. */
         final String currentId;
         final boolean scheduleEnabled;
+        /** When what is heard ends (wall clock, ms): the timer's end, or the scheduled run's next change; -1 for none. */
+        final long endsAtMs;
+        /** The timer's time left while paused (ms); -1 for none. */
+        final long remainingMs;
 
-        State(Regular regular, Source source, String currentId, boolean scheduleEnabled) {
+        State(Regular regular, Source source, String currentId, boolean scheduleEnabled, long endsAtMs, long remainingMs) {
             this.regular = regular;
             this.source = source;
             this.currentId = currentId;
             this.scheduleEnabled = scheduleEnabled;
+            this.endsAtMs = endsAtMs;
+            this.remainingMs = remainingMs;
         }
 
+        /** The same in what it says is heard; when it ends follows from that and is not compared. */
         boolean sameAs(State other) {
             return regular == other.regular && source == other.source
                 && java.util.Objects.equals(currentId, other.currentId) && scheduleEnabled == other.scheduleEnabled;
@@ -114,8 +128,6 @@ final class SoundscapeSession {
     }
 
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.08;
-    /** How long the schedule's fades and transitions take. */
-    private static final double SCHEDULE_FADE_SEC = 60;
     /**
      * The shortest a change of what is heard may take: a change of
      * soundscape is crossfaded, a start from silence (opening, resuming
@@ -139,14 +151,16 @@ final class SoundscapeSession {
     /** Volatile: the output's writer thread reads it without the session's lock, which close() holds while joining that thread. */
     private volatile SoundscapeRenderer renderer;
     private Regular regular = Regular.STOPPED;
-    /**
-     * The minute of the day the scheduled run regular mode began in stops
-     * at, or null: regular mode began outside a run (or is STOPPED). That
-     * run's stop event, and no other run's, stops regular mode. Read from the
-     * STORED schedule when regular mode begins (an alarm may be late), and
-     * reconciled whenever the schedule is changed (applyScheduleState).
-     */
-    private Integer regularRunStop = null;
+    /** The timer (timer.ts): how long regular mode plays, in seconds, 0 for no end, and the fade it ends over. */
+    private double timerSec = 0;
+    private double timerFadeSec = 0;
+    /** The countdown: the time left (ms), -1 for none; while PLAYING, measured to `timerDeadline` (elapsedRealtime). */
+    private long timerLeftMs = -1;
+    private long timerDeadline = 0;
+    private Runnable timerFade = null;
+    private Runnable timerEnd = null;
+    /** Whether the countdown's fade-out has begun on the output, to be undone if the countdown is. */
+    private boolean timerFading = false;
     /**
      * The schedule's current run's soundscape, or null: outside a run, or the
      * schedule off. READ FROM THE STORED SCHEDULE by settle(), never carried
@@ -206,7 +220,15 @@ final class SoundscapeSession {
     // --- State, read by the service and the plugin ---
 
     synchronized State state() {
-        return new State(regular, source(), currentId(), SoundscapeSchedule.load(context).enabled);
+        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
+        long endsAt = -1;
+        if (regular == Regular.PLAYING && timerLeftMs >= 0) {
+            endsAt = System.currentTimeMillis() + (timerDeadline - android.os.SystemClock.elapsedRealtime());
+        } else if (source() == Source.SCHEDULE) {
+            endsAt = schedule.nextChangeMillis();
+        }
+        long remaining = regular == Regular.PAUSED ? timerLeftMs : -1;
+        return new State(regular, source(), currentId(), schedule.enabled, endsAt, remaining);
     }
 
     synchronized Source source() {
@@ -261,10 +283,13 @@ final class SoundscapeSession {
     /** Regular mode PLAYING (the engine opened its playback): open, resume, or take over from the schedule. */
     synchronized void play() {
         cancelPendingEnd();
+        Regular before = regular;
         if (regular != Regular.PLAYING) {
             nextConfigure = output != null && !output.isPaused() ? NextConfigure.CROSSFADE : NextConfigure.REPLACE;
         }
         setRegular(Regular.PLAYING);
+        if (before == Regular.STOPPED) startCountdown();
+        else if (before == Regular.PAUSED) runCountdown();
         if (output == null) {
             open(find(regularId));
             output.fadeFrom(0f, 1f, SWITCH_FADE_SEC);
@@ -278,6 +303,7 @@ final class SoundscapeSession {
     synchronized void pause() {
         if (regular != Regular.PLAYING || output == null) return;
         setRegular(Regular.PAUSED);
+        holdCountdown();
         output.setPaused(true);
         refreshService();
     }
@@ -292,6 +318,8 @@ final class SoundscapeSession {
     /** From the page's engine: `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */
     synchronized void configure(String configuration, double transitionSec) {
         if (renderer == null || regular != Regular.PLAYING) return;
+        // A change of soundscape is a new play: the timer counts from it.
+        if (transitionSec > 0) startCountdown();
         if (nextConfigure == NextConfigure.CROSSFADE) transitionSec = Math.max(transitionSec, SWITCH_FADE_SEC);
         if (nextConfigure == NextConfigure.REPLACE) {
             // Playing again after silence: start from silence, not from the
@@ -326,6 +354,7 @@ final class SoundscapeSession {
         if (regular != Regular.PAUSED) return;
         setRegular(Regular.PLAYING);
         fadeIn(SWITCH_FADE_SEC);
+        runCountdown();
         // The page may have faded the output to silence before it paused it.
         output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
         refreshService();
@@ -341,6 +370,7 @@ final class SoundscapeSession {
         }
         cancelPendingEnd();
         setRegular(Regular.PAUSED);
+        holdCountdown();
         output.setPaused(true);
         refreshService();
         report();
@@ -368,6 +398,7 @@ final class SoundscapeSession {
         regularId = entry.id;
         regularName = entry.name;
         setRegular(Regular.PLAYING);
+        startCountdown();
         if (output == null) {
             open(entry);
             output.fadeFrom(0f, 1f, SWITCH_FADE_SEC);
@@ -397,12 +428,10 @@ final class SoundscapeSession {
 
     /** The schedule changed (turned on or off, or its entries edited), or the device rebooted: apply its state at this moment. */
     synchronized void applyScheduleState() {
-        // The run regular mode began in may have been moved, cut short or
-        // turned off with the schedule: it now ends with the run under way,
-        // if there is one, and with none otherwise.
         State before = state();
-        if (regularRunStop != null) regularRunStop = runStopNow();
-        settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
+        SoundscapeSchedule.Event current = SoundscapeSchedule.load(context).current();
+        double fade = current != null ? Math.max(current.fadeSec, SWITCH_FADE_SEC) : SWITCH_FADE_SEC;
+        settle(fade, fade);
         // Reported even when the page changed the schedule, since what is
         // heard, and from which source, is the session's to work out -- but
         // only when that changed. The page sends the schedule on every edit
@@ -415,16 +444,106 @@ final class SoundscapeSession {
     }
 
     /**
-     * The schedule's alarm: its events are due. A run STARTING ends a pause,
-     * which would otherwise silence it; the END of the run regular mode began
-     * in (`stopMinutes`, the due stop events) ends regular mode. Checked
-     * before the start, so a run ending as the next one starts (in one late
-     * alarm) is ended first.
+     * The schedule's alarm: its events have begun, the latest taking
+     * `fadeSec`. A run STARTING ends a pause, which would otherwise silence
+     * it; regular mode PLAYING suspends the schedule, which then changes
+     * nothing.
      */
-    synchronized void applyScheduleEvents(java.util.Set<Integer> stopMinutes, boolean runStarted) {
-        if (regularRunStop != null && stopMinutes.contains(regularRunStop)) setRegular(Regular.STOPPED);
+    synchronized void applyScheduleEvents(boolean runStarted, double fadeSec) {
         if (runStarted && regular == Regular.PAUSED) setRegular(Regular.STOPPED);
-        settle(SCHEDULE_FADE_SEC, SCHEDULE_FADE_SEC);
+        settle(fadeSec, fadeSec);
+        report();
+    }
+
+    // --- The timer ---
+
+    /** The timer, from the page: `seconds` 0 for none. Changed while playing, it counts again from now. */
+    synchronized void setTimer(double seconds, double fadeSec) {
+        timerSec = Math.max(0, seconds);
+        timerFadeSec = Math.max(0, fadeSec);
+        saveLibrary();
+        if (regular == Regular.PLAYING) {
+            startCountdown();
+        } else if (regular == Regular.PAUSED) {
+            timerLeftMs = timerSec > 0 ? Math.round(timerSec * 1000) : -1;
+            reportCountdown();
+        }
+    }
+
+    /** A play begins (a start, or a change of soundscape): the whole duration again, or none. */
+    private void startCountdown() {
+        clearCountdownCallbacks();
+        timerLeftMs = timerSec > 0 ? Math.round(timerSec * 1000) : -1;
+        runCountdown();
+    }
+
+    /** Count the time left down while PLAYING: fade out over the timer's fade (or what is left of it), then stop. */
+    private void runCountdown() {
+        clearCountdownCallbacks();
+        if (timerLeftMs < 0 || regular != Regular.PLAYING) {
+            reportCountdown();
+            return;
+        }
+        long now = android.os.SystemClock.elapsedRealtime();
+        timerDeadline = now + timerLeftMs;
+        long fadeMs = Math.round(timerFadeSec * 1000);
+        timerFade = () -> {
+            synchronized (SoundscapeSession.this) {
+                timerFade = null;
+                long left = timerDeadline - android.os.SystemClock.elapsedRealtime();
+                if (output != null && left > 0) {
+                    output.setFade(0f, left / 1000.0);
+                    timerFading = true;
+                }
+            }
+        };
+        timerEnd = () -> {
+            synchronized (SoundscapeSession.this) {
+                timerEnd = null;
+                timerExpired();
+            }
+        };
+        main.postDelayed(timerFade, Math.max(0, timerLeftMs - fadeMs));
+        main.postDelayed(timerEnd, timerLeftMs);
+        reportCountdown();
+    }
+
+    /** Paused: the countdown holds what is left. */
+    private void holdCountdown() {
+        if (timerLeftMs >= 0 && (timerFade != null || timerEnd != null)) {
+            timerLeftMs = Math.max(0, timerDeadline - android.os.SystemClock.elapsedRealtime());
+        }
+        clearCountdownCallbacks();
+        reportCountdown();
+    }
+
+    private void reportCountdown() {
+        if (listener == null) return;
+        State now = state();
+        listener.onCountdown(now.endsAtMs, now.remainingMs);
+    }
+
+    private void clearCountdownCallbacks() {
+        // A fade-out under way is undone: the play goes on after all (or
+        // is paused, and a resume fades in from silence regardless).
+        if (timerFading) {
+            timerFading = false;
+            if (output != null) output.setFade(1f, RESTORE_FADE_SEC);
+        }
+        if (timerFade != null) main.removeCallbacks(timerFade);
+        if (timerEnd != null) main.removeCallbacks(timerEnd);
+        timerFade = null;
+        timerEnd = null;
+    }
+
+    /** The timer ran out, silent by now: regular mode stops and the schedule takes over, fading in from silence. */
+    private void timerExpired() {
+        if (regular != Regular.PLAYING) return;
+        if (output != null) output.setPaused(true);
+        setRegular(Regular.STOPPED);
+        SoundscapeSchedule.Event current = SoundscapeSchedule.load(context).current();
+        double fade = current != null ? Math.max(current.fadeSec, SWITCH_FADE_SEC) : SWITCH_FADE_SEC;
+        settle(fade, 0);
         report();
     }
 
@@ -457,7 +576,9 @@ final class SoundscapeSession {
             open(scheduled);
             output.fadeFrom(0f, 1f, fadeSec);
         } else if (output.isPaused()) {
-            renderer.configure(scheduled.configuration);
+            // Nothing is heard to crossfade from: the run replaces what was queued.
+            output.discardQueued();
+            renderer.restart(scheduled.configuration);
             fadeIn(fadeSec);
         } else {
             renderer.transition(scheduled.configuration, fadeSec);
@@ -503,16 +624,12 @@ final class SoundscapeSession {
 
     // --- Internals ---
 
-    /** The minute the stored schedule's run under way stops at, or null outside a run. */
-    private Integer runStopNow() {
-        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
-        return scheduledNow(schedule) == null ? null : schedule.nextStopMinute();
-    }
-
-    /** Move regular mode, noting whether it began inside a scheduled run. */
+    /** Move regular mode; stopping it ends the countdown. */
     private void setRegular(Regular next) {
-        if (next == Regular.STOPPED) regularRunStop = null;
-        else if (regular == Regular.STOPPED) regularRunStop = runStopNow();
+        if (next == Regular.STOPPED) {
+            clearCountdownCallbacks();
+            timerLeftMs = -1;
+        }
         regular = next;
     }
 
@@ -563,6 +680,7 @@ final class SoundscapeSession {
             JSONObject json = new JSONObject().put("entries", array).put("masterVolume", (double) masterVolume);
             if (regularId != null) json.put("currentId", regularId);
             if (regularName != null) json.put("currentName", regularName);
+            json.put("timerSec", timerSec).put("timerFadeSec", timerFadeSec);
             preferences().edit().putString(LIBRARY_KEY, json.toString()).apply();
         } catch (Exception ignored) {
             // JSONObject.put throws only for a non-finite number, which a volume is not.
@@ -586,6 +704,8 @@ final class SoundscapeSession {
             regularId = json.optString("currentId", null);
             regularName = json.optString("currentName", null);
             masterVolume = (float) json.optDouble("masterVolume", masterVolume);
+            timerSec = json.optDouble("timerSec", 0);
+            timerFadeSec = json.optDouble("timerFadeSec", 0);
         } catch (Exception corrupt) {
             // Unreadable: as if never stored; the page's next publish replaces it.
         }

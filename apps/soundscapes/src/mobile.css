@@ -61,6 +61,14 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* The timer (TimerRow.tsx): a duration in two centred lines, longer unit on top. */
+.mobile-timer-btn {
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  line-height: 1;
+}
+
 /* The schedule (ScheduleRows.tsx): a row is twelve chip columns by two chip
    rows, six buttons wide; placement is the grid's own, row by row, so only
    the spans are written. */

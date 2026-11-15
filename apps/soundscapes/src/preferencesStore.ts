@@ -11,6 +11,7 @@ import {
   type SoundscapePreset,
 } from '@thockdown/soundscape/soundscape'
 import { sanitizeSchedule, type Schedule } from './schedule'
+import { DEFAULT_TIMER, sanitizeTimer, type TimerSettings } from './timer'
 
 const STORAGE_KEY = 'thockdown:soundscape-preferences'
 
@@ -94,6 +95,26 @@ export function saveLook(look: MobileLook): void {
     localStorage.setItem(LOOK_STORAGE_KEY, JSON.stringify(look))
   } catch (error) {
     console.error('Failed to save the look', error)
+  }
+}
+
+const TIMER_STORAGE_KEY = 'thockdown:soundscape-timer'
+
+/** The timer's durations and which is active (timer.ts). */
+export function loadTimer(): TimerSettings {
+  try {
+    const stored = localStorage.getItem(TIMER_STORAGE_KEY)
+    return stored ? sanitizeTimer(JSON.parse(stored)) : DEFAULT_TIMER
+  } catch {
+    return DEFAULT_TIMER
+  }
+}
+
+export function saveTimer(timer: TimerSettings): void {
+  try {
+    localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(timer))
+  } catch (error) {
+    console.error('Failed to save the timer', error)
   }
 }
 
