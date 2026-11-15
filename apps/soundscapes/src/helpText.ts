@@ -7,7 +7,7 @@
 const HELP: Record<string, string[]> = {
   Master: [
     'Playback modes: Soundscapes play in one of two modes, manual or scheduled.',
-    'Manual: Starts when you select a soundscape or tap the play button, and overrides the schedule while in effect. Tapping the play button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same, and so does a pause after 30 minutes. The icon shows playing, paused or stopped.',
+    'Manual: Starts when you select a soundscape or tap the play button, and overrides the schedule while in effect. Tapping the play button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same. The icon shows playing, paused or stopped.',
     'Scheduled: Active whenever manual playback is stopped. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag soundscape icons to change the order.',
     'Clock button: Turns the schedule on or off. A dashed frame means a scheduled soundscape is playing.',
     'Files button: Tap to load soundscapes from a file. Hold to save your own soundscapes to a file.',
