@@ -32,7 +32,7 @@ const HELP: Record<string, string[]> = {
   Presets: [
     'Soundscapes: Tap one to play it. Hold and drag it to move it, or onto a schedule row or the plus button of the schedule.',
     'Plus button: Adds a copy of the playing soundscape. All changes are saved to the playing soundscape, factory ones included.',
-    'Top row: Shows the playing soundscape. Tap its icon to choose another; hold it to restore the original. Hold the name to rename it.',
+    'Active Soundscape: Shows the playing soundscape. Tap its icon to choose another; hold it to restore the original. Hold the name to rename it.',
     'Reset button: Turns every channel off and resets the environment.',
     'Bin button: Hold to delete one of your own soundscapes. On a factory soundscape it is an undo arrow: hold it to restore the original.',
   ],

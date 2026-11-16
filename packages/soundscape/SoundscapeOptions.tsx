@@ -559,11 +559,16 @@ export function SoundscapeControls({ presetsDock, ...props }: SoundscapeControls
       arrangement="labelled"
       arrange={({ presets, environment, channels, presetsLabel, channelsLabel }) => (
         <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
-          {presetsLabel}
           {/* The dock for the soundscape that plays (SoundscapeDock), above
               the soundscapes it is one of; the desktop keeps it below its
               view instead. Help covers it. */}
-          {props.help?.('Presets') ? null : presetsDock}
+          {props.help?.('Presets') ? presetsLabel : (
+            <>
+              <OptionsSubsectionLabel>Active Soundscape</OptionsSubsectionLabel>
+              {presetsDock}
+              {presetsLabel}
+            </>
+          )}
           {presets}
           {environment}
           {channelsLabel}

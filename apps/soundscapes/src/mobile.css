@@ -53,6 +53,32 @@ body {
   font-size: var(--mobile-button-icon-size);
 }
 
+/* The active soundscape docks into the same six-cell grid as its presets:
+   one cell for the mark, three for the name and one for each action. */
+.mobile-app-shell .preset-dock-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  column-gap: var(--toolbar-options-gap);
+  height: auto;
+}
+
+.mobile-app-shell .preset-dock-row > * {
+  aspect-ratio: 1;
+  border-radius: var(--border-radius-regular);
+}
+
+.mobile-app-shell .preset-dock-row .options-dock-entry-icon {
+  font-size: var(--mobile-button-icon-size);
+}
+
+.mobile-app-shell .preset-dock-row .options-curve-cell > .fa-solid {
+  font-size: var(--mobile-button-icon-size);
+}
+
+.mobile-app-shell .preset-dock-row > .options-dock-entry-name {
+  grid-column: span 3;
+  aspect-ratio: auto;
+}
+
 /* A long press is a gesture here (SoundscapeControls' touch path), so it
    must not also select text or raise the system's callout. */
 .mobile-app-shell {
