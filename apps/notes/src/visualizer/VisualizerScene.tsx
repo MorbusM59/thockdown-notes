@@ -49,7 +49,7 @@ import { SongList } from './SongList'
 import { readPanelsShown, subscribePanelsShown } from './panelsShown'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { FACTORY_SOUNDSTAGE_IDS } from '../shared/soundstages'
-import { CUSTOM_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
+import { CUSTOM_SOLID_INDEX, RHOMBIC_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
 import { BarEndGlyphs, LevelBars } from './LevelBars'
@@ -495,7 +495,13 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
   // a Platonic solid per factory stage, the stella octangula for a custom one.
   // A left press steps to the next factory stage, a right press back.
   const soundstage = useSyncExternalStore(subscribeSoundstageControls, readSoundstageControls)
-  const solid = solidSeed(sceneSeed, soundstage.solid === 'custom' ? CUSTOM_SOLID_INDEX : FACTORY_SOUNDSTAGE_IDS.indexOf(soundstage.solid))
+  // Crisp is a rhombic dodecahedron, a custom stage the stella octangula; the other factory stages keep their Platonic solids in order.
+  const solidIndex = soundstage.solid === 'custom'
+    ? CUSTOM_SOLID_INDEX
+    : soundstage.solid === 'crisp'
+      ? RHOMBIC_SOLID_INDEX
+      : FACTORY_SOUNDSTAGE_IDS.filter((id) => id !== 'crisp').indexOf(soundstage.solid)
+  const solid = solidSeed(sceneSeed, solidIndex)
   return (
     <div ref={setScene} className={panelsShown ? 'visualizer-scene' : 'visualizer-scene is-panels-hidden'} tabIndex={-1} data-visualizer-scene="" style={style}>
       {width > 0 && (

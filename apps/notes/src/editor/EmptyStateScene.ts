@@ -298,11 +298,61 @@ function buildSolidScene(rand: () => number, forced: SolidDef | null): SolidScen
 
 const sceneCache = new Map<string, SolidScene>()
 
-/** The solids from fewest faces to most, as the visualizer steps through them (`solidSeed`). */
-const SOLIDS_BY_FACES: readonly SolidDef[] = [TETRAHEDRON, CUBE, OCTAHEDRON, SOLIDS[4], ICOSAHEDRON, STELLA_OCTANGULA]
+/**
+ * The rhombic dodecahedron: twelve rhombic faces, the cube's eight corners
+ * plus six points on the axes at twice that distance. A second twelve-faced
+ * solid beside the regular dodecahedron; it names the Crisp soundstage and is
+ * never drawn at random. Each face joins two axis points to the two cube
+ * corners that lie between them.
+ */
+function buildRhombicDodecahedron(): SolidDef {
+  const vertices: Vec3[] = []
+  const indexOf = new Map<string, number>()
+  const add = (v: Vec3): number => {
+    const key = v.join(',')
+    let index = indexOf.get(key)
+    if (index === undefined) {
+      index = vertices.length
+      vertices.push(v)
+      indexOf.set(key, index)
+    }
+    return index
+  }
+  const faces: number[][] = []
+  for (let a = 0; a < 3; a += 1) {
+    for (let b = a + 1; b < 3; b += 1) {
+      const c = 3 - a - b
+      for (const sa of [1, -1]) {
+        for (const sb of [1, -1]) {
+          const axisA: Vec3 = [0, 0, 0]
+          const axisB: Vec3 = [0, 0, 0]
+          axisA[a] = 2 * sa
+          axisB[b] = 2 * sb
+          const cornerOf = (sc: number): Vec3 => {
+            const corner: Vec3 = [0, 0, 0]
+            corner[a] = sa
+            corner[b] = sb
+            corner[c] = sc
+            return corner
+          }
+          faces.push([add(axisA), add(cornerOf(1)), add(axisB), add(cornerOf(-1))])
+        }
+      }
+    }
+  }
+  return { vertices, faces }
+}
+
+const RHOMBIC_DODECAHEDRON: SolidDef = buildRhombicDodecahedron()
+
+/** The solids from fewest faces to most, as the visualizer steps through them (`solidSeed`), then the two that are not Platonic. */
+const SOLIDS_BY_FACES: readonly SolidDef[] = [TETRAHEDRON, CUBE, OCTAHEDRON, SOLIDS[4], ICOSAHEDRON, STELLA_OCTANGULA, RHOMBIC_DODECAHEDRON]
 
 /** `solidSeed`'s index for the custom soundstage's stella octangula, after the five Platonic solids. */
 export const CUSTOM_SOLID_INDEX = 5
+
+/** `solidSeed`'s index for the Crisp soundstage's rhombic dodecahedron. */
+export const RHOMBIC_SOLID_INDEX = 6
 
 /**
  * A seed that shows the `index`-th solid by face count (0 the tetrahedron,
