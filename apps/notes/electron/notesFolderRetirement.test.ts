@@ -108,4 +108,109 @@ describe('the notes folder is retired', () => {
     handle.close()
     expect(row.content).toBe('# Backed up')
   })
+
+  it.each(['music', 'texture', 'both'] as const)('backs up and resets incompatible %s tables without touching notes or images', async (kind) => {
+    const note = await lifecycle.createNote({ initialText: '# Kept\n\n![image](&1)' })
+    const image = Uint8Array.from([...'GIF89a'].map((c) => c.charCodeAt(0)).concat([3, 0, 2, 0, 0, 0, 0]))
+    expect(db.importImage({ bytes: image, origin: null })).toEqual({ ok: true, id: '&1' })
+    if (kind === 'texture') {
+      db.addMusicSongs(3, [{ filePath: '/music/existing.mp3', title: '', artist: '', album: '', durationSec: 0 }])
+    }
+    db.close()
+    const raw = new Sqlite(path.join(dataRoot, 'thockdown-notes.db'))
+    if (kind !== 'texture') {
+      raw.exec(`
+        DROP TABLE music_set_songs;
+        DROP TABLE music_songs;
+        CREATE TABLE music_songs (
+          id INTEGER PRIMARY KEY, filePath TEXT NOT NULL UNIQUE,
+          playlistSlot INTEGER NOT NULL, priority INTEGER NOT NULL DEFAULT 1,
+          favorability INTEGER NOT NULL DEFAULT 1, title TEXT NOT NULL DEFAULT '',
+          artist TEXT NOT NULL DEFAULT '', durationSec REAL NOT NULL DEFAULT 0
+        );
+        INSERT INTO music_songs (id, filePath, playlistSlot) VALUES (19, '/music/old.mp3', 3);
+      `)
+    }
+    if (kind !== 'music') {
+      raw.exec(`
+        DROP TABLE texture_pattern_cache;
+        CREATE TABLE texture_pattern_cache (
+          surface TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
+          seed INTEGER NOT NULL, granularity REAL NOT NULL, vSteps INTEGER NOT NULL,
+          algorithmVersion INTEGER NOT NULL, data BLOB NOT NULL, mimeType TEXT NOT NULL,
+          createdAt INTEGER NOT NULL,
+          PRIMARY KEY (surface, width, height, seed, granularity, vSteps, algorithmVersion)
+        );
+      `)
+    }
+    raw.close()
+    await launch()
+
+    expect((await lifecycle.loadNote({ id: note.id })).text).toBe('# Kept\n\n![image](&1)')
+    expect(db.resolveImages(['&1'])['&1']).not.toBeNull()
+    expect(() => db.purgeTextureCache()).not.toThrow()
+    db.addMusicSongs(3, [{ filePath: '/music/new.mp3', title: '', artist: '', album: '', durationSec: 0 }])
+
+    const backups = readdirSync(path.join(dataRoot, 'backups')).filter((name) => name.startsWith('before-schema-reset-'))
+    expect(backups).toHaveLength(1)
+    const backup = new Sqlite(path.join(dataRoot, 'backups', backups[0]), { readonly: true })
+    expect((backup.prepare('SELECT content FROM note_content WHERE noteId = ?').get(note.id) as { content: string }).content)
+      .toBe('# Kept\n\n![image](&1)')
+    if (kind !== 'texture') {
+      expect(backup.prepare('SELECT filePath FROM music_songs WHERE id = 19').get()).toEqual({ filePath: '/music/old.mp3' })
+    }
+    backup.close()
+    await restart()
+    expect(db.getMusicPlaylist(3).map((song) => song.filePath)).toEqual(
+      kind === 'texture' ? ['/music/existing.mp3', '/music/new.mp3'] : ['/music/new.mp3'],
+    )
+    expect(readdirSync(path.join(dataRoot, 'backups')).filter((name) => name.startsWith('before-schema-reset-') && name.endsWith('.db'))).toHaveLength(1)
+  })
+
+  it('rolls back the reset if the current schema cannot be created', async () => {
+    db.close()
+    const raw = new Sqlite(path.join(dataRoot, 'thockdown-notes.db'))
+    raw.exec(`
+      DROP TABLE music_set_songs;
+      DROP TABLE music_songs;
+      CREATE TABLE music_songs (id INTEGER PRIMARY KEY, filePath TEXT NOT NULL, playlistSlot INTEGER NOT NULL);
+      INSERT INTO music_songs VALUES (19, '/music/old.mp3', 3);
+      DROP INDEX idx_chapters_parent_position;
+      ALTER TABLE chapters RENAME COLUMN position TO oldPosition;
+    `)
+    raw.close()
+    db = new DatabaseService(dataRoot)
+    await expect(db.initialize()).rejects.toThrow()
+    db.close()
+    const unchanged = new Sqlite(path.join(dataRoot, 'thockdown-notes.db'), { readonly: true })
+    expect(unchanged.prepare('SELECT filePath, playlistSlot FROM music_songs WHERE id = 19').get())
+      .toEqual({ filePath: '/music/old.mp3', playlistSlot: 3 })
+    unchanged.close()
+  })
+
+  it('resets duplicate old music set names without losing notes or images', async () => {
+    const note = await lifecycle.createNote({ initialText: '# Kept' })
+    const image = Uint8Array.from([...'GIF89a'].map((c) => c.charCodeAt(0)).concat([3, 0, 2, 0, 0, 0, 0]))
+    db.importImage({ bytes: image, origin: null })
+    db.addMusicSongs(3, [{ filePath: '/music/old.mp3', title: '', artist: '', album: '', durationSec: 0 }])
+    db.close()
+    const raw = new Sqlite(path.join(dataRoot, 'thockdown-notes.db'))
+    raw.exec(`
+      DROP INDEX idx_music_sets_name;
+      UPDATE music_sets SET name = (SELECT name FROM music_sets WHERE id = 2) WHERE id = 3;
+    `)
+    raw.close()
+    await launch()
+    expect((await lifecycle.loadNote({ id: note.id })).text).toBe('# Kept')
+    expect(db.resolveImages(['&1'])['&1']).not.toBeNull()
+    expect(db.getMusicPlaylist(3)).toEqual([])
+    expect(db.addMusicSongs(3, [{ filePath: '/music/new.mp3', title: '', artist: '', album: '', durationSec: 0 }])).toHaveLength(1)
+    const backupName = readdirSync(path.join(dataRoot, 'backups')).find((name) => name.startsWith('before-schema-reset-') && name.endsWith('.db'))
+    expect(backupName).toBeDefined()
+    const backup = new Sqlite(path.join(dataRoot, 'backups', backupName!), { readonly: true })
+    expect(backup.prepare('SELECT filePath FROM music_songs').all()).toEqual([{ filePath: '/music/old.mp3' }])
+    backup.close()
+    await restart()
+    expect(db.getMusicPlaylist(3)).toHaveLength(1)
+  })
 })

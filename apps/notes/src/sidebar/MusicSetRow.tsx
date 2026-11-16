@@ -102,7 +102,7 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
           event.stopPropagation()
         }}
       >
-        <span className="fa-solid fa-xmark" aria-hidden="true" />
+        <span className={`fa-solid ${factory ? 'fa-arrow-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
       </button>
     </DockEntryRow>
   )

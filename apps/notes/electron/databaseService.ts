@@ -701,13 +701,39 @@ export class DatabaseService {
     db.pragma('synchronous = FULL');
 
     this.db = db;
-    this.ensureSchema();
+    const reset = await this.resetIncompatibleTables();
+    if (!reset) this.ensureSchema();
     this.ensureImageReferenceIndex();
     this.ensureProtectedTags();
     await ensureHelpNote(this);
     // Before seeding, which rewrites every row through the normalizer and so drops it.
     this.legacyVisualizerByMode = this.readActiveLegacyVisualizers();
     this.ensureLoadoutsSeeded();
+  }
+
+  private async resetIncompatibleTables(): Promise<boolean> {
+    const db = this.requireDb();
+    const musicColumns = db.prepare('PRAGMA table_info(music_songs)').all() as Array<{ name: string }>;
+    const setColumns = db.prepare('PRAGMA table_info(music_sets)').all() as Array<{ name: string }>;
+    const textureColumns = db.prepare('PRAGMA table_info(texture_pattern_cache)').all() as Array<{ name: string; pk: number }>;
+    const duplicateSetNames = setColumns.some((column) => column.name === 'name')
+      && Boolean(db.prepare('SELECT 1 FROM music_sets GROUP BY name HAVING COUNT(*) > 1 LIMIT 1').get());
+    const music = musicColumns.some((column) => column.name === 'playlistSlot') || duplicateSetNames;
+    const texture = textureColumns.length > 0
+      && !textureColumns.some((column) => column.name === 'textureStrength' && column.pk > 0);
+    if (!music && !texture) return false;
+
+    const backupsDir = path.join(this.dataRoot, BACKUPS_DIR_NAME);
+    await fs.mkdir(backupsDir, { recursive: true });
+    const backupPath = path.join(backupsDir, `before-schema-reset-${randomUUID()}.db`);
+    await db.backup(backupPath);
+    db.transaction(() => {
+      if (music) db.exec('DROP TABLE IF EXISTS music_set_songs; DROP TABLE IF EXISTS music_songs; DROP TABLE IF EXISTS music_sets;');
+      if (texture) db.exec('DROP TABLE texture_pattern_cache;');
+      this.ensureSchema();
+    })();
+    console.info(`[db] reset incompatible ${[music && 'music library', texture && 'texture cache'].filter(Boolean).join(' and ')}; backup: ${backupPath}`);
+    return true;
   }
 
   /**

@@ -1076,7 +1076,7 @@ export const AudioControls = memo(function AudioControls({
           onPointerCancel={cancelMusicHold}
           onMouseLeave={cancelMusicHold}
         >
-          <span className="fa-solid fa-music" aria-hidden="true" />
+          <span className="fa-solid fa-compact-disc" aria-hidden="true" />
         </button>
 
         <button

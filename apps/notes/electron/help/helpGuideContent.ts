@@ -715,6 +715,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Saves a copy of the database, which holds every note, its chapters, tags and history, and shows it in your file explorer.*
 
 - A copy is also kept automatically each time the app starts, for the last three starts, in the same \`backups\` folder.
+- If an older version's music library is incompatible, the app backs up the database before resetting the library. Your music files are unchanged; add them again to the new library.
 - To get notes out as files other programs can read, use [Export to Markdown](#export-to-markdown).
 `,
   `## Export
@@ -1013,7 +1014,7 @@ ${shortcutTable()}
 
 *Everything Thockdown stores is local to your machine.*
 
-- Note content is written to Markdown files on disk; titles, tags, ordering, snapshots, and app preferences live in a local database alongside them.
+- Notes, stored images, tags, ordering and snapshots live in a local database. App preferences are kept separately.
 - Nothing leaves your machine unless you explicitly export, sync to, or import from another location yourself.
 `,
 ]

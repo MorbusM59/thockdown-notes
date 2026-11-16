@@ -3205,7 +3205,7 @@ export function SidebarOptionsPanel({
             data-tooltip="Import soundscapes from a .tds file"
             aria-label="Import soundscapes from a .tds file"
           >
-            <span className="fa-solid fa-music" aria-hidden="true" />
+            <span className="fa-solid fa-volume" aria-hidden="true" />
           </button>
         </div>
         <OptionsSubsectionLabel>Network</OptionsSubsectionLabel>
