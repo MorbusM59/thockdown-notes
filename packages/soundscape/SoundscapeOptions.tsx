@@ -407,6 +407,8 @@ interface SoundscapeControlsProps extends SoundscapeOptionsProps {
    * one, the grid grows with what it holds (the mobile app).
    */
   framePresets?: (grid: ReactNode) => ReactNode
+  /** Content owned by the active soundscape section, directly below its dock. */
+  activeSoundscapeContent?: ReactNode
   /**
    * Dragging a soundscape to reorder it, which a host may offer (the desktop's
    * Soundscapes view, through its selector's drag): per soundscape, the press
@@ -552,7 +554,7 @@ export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & Pi
  * controls as its whole interface, where a heading would have nothing to
  * collapse against.
  */
-export function SoundscapeControls({ presetsDock, ...props }: SoundscapeControlsProps & { presetsDock?: ReactNode }) {
+export function SoundscapeControls({ presetsDock, activeSoundscapeContent, ...props }: SoundscapeControlsProps & { presetsDock?: ReactNode }) {
   return (
     <SoundscapeParts
       {...props}
@@ -566,6 +568,7 @@ export function SoundscapeControls({ presetsDock, ...props }: SoundscapeControls
             <>
               <OptionsSubsectionLabel>Active Soundscape</OptionsSubsectionLabel>
               {presetsDock}
+              {activeSoundscapeContent}
               {presetsLabel}
             </>
           )}

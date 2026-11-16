@@ -127,10 +127,9 @@ export function MobileSoundscapeApp() {
     { picture: 'copy' },
   )
   // The ICON PICKER for the soundscape that plays, opened from the dock's
-  // mark as on the desktop: while it is open it stands in for the presets
-  // grid, with its own filter field above it, and the dock stays below to
-  // name the soundscape. Not persisted; a pick, the mark again, or another
-  // soundscape coming to play closes it.
+  // mark as on the desktop: while it is open it sits between the active
+  // soundscape dock and the presets section. Not persisted; a pick, the mark
+  // again, or another soundscape coming to play closes it.
   const [iconQuery, setIconQuery] = useState<string | null>(null)
   // HELP MODE: every subsection shows an explanation in place of its
   // controls (helpText.ts). The system's back gesture ends it (takeBack,
@@ -489,7 +488,7 @@ export function MobileSoundscapeApp() {
                   onChange={handleChange}
                   presetReorder={presetReorder}
                   help={help}
-                  framePresets={(grid) => (iconQuery === null ? grid : (<>
+                  activeSoundscapeContent={iconQuery === null ? null : (<>
                     <input
                       className="options-curve-cell options-curve-field mobile-icon-filter"
                       aria-label="Filter the icons"
@@ -506,7 +505,7 @@ export function MobileSoundscapeApp() {
                         setPreferences((current) => setSoundscapeIcon(current, activeSoundscape(current).id, icon))
                       }}
                     />
-                  </>))}
+                  </>)}
                   presetsDock={(
                     <SoundscapeDock
                       preferences={preferences}
