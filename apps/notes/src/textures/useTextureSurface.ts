@@ -155,9 +155,14 @@ export function useTextureSurface(params: {
       }
       jobRef.current?.retire();
       jobRef.current = null;
-      revokeUrl(currentUrlRef.current);
+      const previousUrl = currentUrlRef.current;
       currentUrlRef.current = null;
       setUrl(null);
+      if (previousUrl) {
+        window.requestAnimationFrame(() => {
+          revokeUrl(previousUrl);
+        });
+      }
       return;
     }
 

@@ -26,7 +26,13 @@ export function useTintedTexture(maskCss: string, tintCss: string): string {
   const key = `${maskUrl}|${tintCss}`;
 
   useEffect(() => {
-    if (!maskUrl) return;
+    if (!maskUrl) {
+      setComposed((previous) => {
+        if (previous) window.requestAnimationFrame(() => URL.revokeObjectURL(previous.url));
+        return null;
+      });
+      return;
+    }
     let cancelled = false;
     const run = async () => {
       const image = new Image();
@@ -82,5 +88,5 @@ export function useTintedTexture(maskCss: string, tintCss: string): string {
   if (!maskUrl) return `linear-gradient(${tintCss}, ${tintCss})`;
   // Until the new composition is ready the previous one stays on screen, as
   // the masked layer keeps its old mask until the new one has decoded.
-  return composed ? `url(${composed.url})` : `linear-gradient(transparent, transparent)`;
+  return composed?.key === key ? `url(${composed.url})` : `linear-gradient(transparent, transparent)`;
 }
