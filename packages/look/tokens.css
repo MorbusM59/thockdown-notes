@@ -529,7 +529,7 @@
   --------------------------------------------------------------------------- */
 
   --sidebar-view-padding-left: var(--spacing-regular);
-  --sidebar-padding-right:     var(--spacing-large);
+  --sidebar-padding-right:     var(--spacing-regular);
 
   /* The sidebar has to be wide enough for the options panel's
    * always-visible top section (font settings + preset buttons), which is

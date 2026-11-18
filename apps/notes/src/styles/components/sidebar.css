@@ -32,7 +32,7 @@
   min-height:     0;
   display:        flex;
   flex-direction: column;
-  gap:            var(--spacing-regular);
+  gap:            0;
 }
 
 .sidebar-content-column > .sidebar-wrapper {
@@ -84,7 +84,7 @@
    Library's controls, the find options and the colour picker. */
 .sidebar-plain-dock {
   flex:    0 0 auto;
-  padding: var(--spacing-small) var(--spacing-regular) 0 var(--spacing-regular);
+  padding: var(--spacing-regular) 0 0 var(--spacing-regular);
 }
 
 .sidebar-content {
@@ -337,7 +337,7 @@
   min-height:     0;
   overflow-y:     auto;
   /* Preserve card width while moving the left edge inward; bottom follows the window-edge gutter. */
-  padding:        var(--spacing-regular) calc(var(--spacing-large) + var(--spacing-regular)) var(--spacing-regular) var(--spacing-regular);
+  padding:        var(--spacing-large);
   display:        flex;
   flex-direction: column;
   gap:            var(--spacing-regular);

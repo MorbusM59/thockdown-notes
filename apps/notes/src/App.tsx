@@ -1528,12 +1528,12 @@ function App() {
   // settings + preset buttons, a 6-column grid of square buttons) plus a
   // spacing-large gutter on each side inside .sidebar-content, its own
   // border, the custom scrollbar slot beside it, and the sidebar's own
-  // right-hand padding (--sidebar-padding-right, i.e. spacing-large). Kept
+  // right-hand padding (--sidebar-padding-right, i.e. spacing-regular). Kept
   // in JS too because this value also drives the app-grid's inline
   // gridTemplateColumns below, which overrides the CSS column width.
   const sidebarWidthPx = useMemo(() => {
     const sidebarOptionsContentWidthPx = BTN_SQUARE_REGULAR_SIZE_PX * 6 + 7 * spacingRegularPx + 2
-    const sidebarPaddingRightPx = spacingRegularPx * 2 // mirrors --spacing-large
+    const sidebarPaddingRightPx = spacingRegularPx // mirrors --spacing-regular
     const sidebarScrollbarSlotWidthPx = spacingRegularPx + scrollTrackSizeFor(uiScale).thicknessPx // mirrors --sidebar-scrollbar-slot-width
     return Math.round(
       sidebarOptionsContentWidthPx
@@ -1602,7 +1602,7 @@ function App() {
     // .view-toggle's buttons are `flex: 1 1 0` with `aspect-ratio: 1 / 1`, so
     // their height is however wide a sixth of the row turns out to be.
     const viewToggleRowWidthPx = sidebarWidthPx
-      - largeGapPx /* --sidebar-padding-right */
+      - spacingRegularPx /* --sidebar-padding-right */
       - spacingRegularPx /* --sidebar-view-padding-left */
       - spacingRegularPx /* .view-toggle right padding */
     const modeButtonPx = (viewToggleRowWidthPx - 5 * smallGapPx) / 6
