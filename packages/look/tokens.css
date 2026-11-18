@@ -528,7 +528,7 @@
      1i. Sidebar Layout Tokens
   --------------------------------------------------------------------------- */
 
-  --sidebar-view-padding-left: var(--spacing-large);
+  --sidebar-view-padding-left: var(--spacing-regular);
   --sidebar-padding-right:     var(--spacing-large);
 
   /* The sidebar has to be wide enough for the options panel's
@@ -585,7 +585,7 @@
      (written by scrollTrackGeometry.ts's installScrollTrackTokens). Every element of the row takes this height; the icons inside
      the square buttons keep their own fixed glyph size. */
   --bottom-utility-bar-content-height: var(--canonical-scroll-thickness);
-  --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-regular) + var(--spacing-large));
+  --bottom-utility-bar-height: calc(var(--bottom-utility-bar-content-height) + var(--spacing-regular) * 2);
 
   /* Tab bar, tag bar, and chapter bar heights are no longer separate
    * constants that have to be hand-kept in sync with padding elsewhere --

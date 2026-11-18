@@ -1561,7 +1561,7 @@ function App() {
     const formattingWidthPx = 2 * spacingRegularPx + 3 * groupWidthPx + 2 * largeGapPx
     const toolbarContainerWidthPx = formattingWidthPx + TOOLBAR_CONTAINER_BORDER_PX + 2 * largeGapPx
     const displayModesWidthPx = 2 * spacingRegularPx + BTN_SQUARE_LARGE_SIZE_PX + DISPLAY_MODES_BORDER_PX
-    return Math.ceil(largeGapPx + displayModesWidthPx + toolbarContainerWidthPx)
+    return Math.ceil(spacingRegularPx + displayModesWidthPx + toolbarContainerWidthPx)
   }, [spacingRegularPx])
 
   const appShellMinWidthPx = useMemo(
@@ -1579,7 +1579,7 @@ function App() {
   // The shortest the window may get. The measurement above is the authority;
   // what follows is the stand-in until it arrives, mirroring sidebar.css top to
   // bottom -- the sidebar's own vertical padding and the gaps between its
-  // children, the search box (its padding-top plus the input's fixed height),
+  // children, the search box (the input's fixed height),
   // the view-toggle row (its padding plus the mode buttons, which are square
   // and so take their height from how wide six of them plus their gaps come out
   // in the sidebar's width), the two-line date-filter rail, the pagination bar,
@@ -1598,10 +1598,13 @@ function App() {
     const smallGapPx = spacingRegularPx / 2 // mirrors --spacing-small
     const largeGapPx = spacingRegularPx * 2 // mirrors --spacing-large
 
-    const searchBoxPx = spacingRegularPx + (BTN_SQUARE_REGULAR_SIZE_PX + 2 * spacingRegularPx)
+    const searchBoxPx = BTN_SQUARE_REGULAR_SIZE_PX + 2 * spacingRegularPx
     // .view-toggle's buttons are `flex: 1 1 0` with `aspect-ratio: 1 / 1`, so
     // their height is however wide a sixth of the row turns out to be.
-    const viewToggleRowWidthPx = sidebarWidthPx - largeGapPx /* --sidebar-padding-right */ - largeGapPx /* --sidebar-view-padding-left */
+    const viewToggleRowWidthPx = sidebarWidthPx
+      - largeGapPx /* --sidebar-padding-right */
+      - spacingRegularPx /* --sidebar-view-padding-left */
+      - spacingRegularPx /* .view-toggle right padding */
     const modeButtonPx = (viewToggleRowWidthPx - 5 * smallGapPx) / 6
     const viewTogglePx = 2 * spacingRegularPx + modeButtonPx
     // Two rows of chips (months, years), the first with a spacing-regular
@@ -1623,7 +1626,7 @@ function App() {
       + paginationPx
 
     const noteCardPx = noteListRowContentHeightPx(uiScale) + 2 * largeGapPx
-    const fourCardsPx = 2 * largeGapPx /* .notes-list padding */
+    const fourCardsPx = largeGapPx + spacingRegularPx /* .notes-list top/bottom padding */
       + SIDEBAR_MIN_VISIBLE_NOTE_CARDS * noteCardPx
       + (SIDEBAR_MIN_VISIBLE_NOTE_CARDS - 1) * largeGapPx
 
