@@ -140,7 +140,7 @@
 .toolbar-container {
   width: 100%;
   height: 100%;
-  margin: 0 var(--spacing-large);
+  margin: 0 var(--spacing-regular);
   border-radius:    0 0 var(--border-radius-regular) var(--border-radius-regular);
   border:      var(--backdrop-surface-border);
   border-top: none;

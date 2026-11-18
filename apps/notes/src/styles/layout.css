@@ -55,7 +55,7 @@
   border: 1px solid var(--color-border-light-30);
   border-radius: var(--border-radius-small);
   box-shadow: var(--box-shadow-inverted);
-  margin: var(--spacing-regular) 0 var(--spacing-large) 0;
+  margin: var(--spacing-regular) 0;
 }
 
 .editor-section-column:focus {
@@ -77,7 +77,7 @@
   width: 100%;
   min-width: 0;
   min-height: 0;
-  padding: var(--spacing-regular) var(--spacing-large) var(--spacing-regular) var(--spacing-regular);
+  padding: var(--spacing-regular);
   /* height/flex (sizes to its content) -- see pillbars.css */
 }
 

@@ -20,7 +20,7 @@
   display:        flex;
   align-items:    center;
   gap:            var(--spacing-regular);
-  padding:        var(--spacing-regular) var(--spacing-regular) var(--spacing-regular) var(--spacing-large);
+  padding:        var(--spacing-regular);
   font-size:      calc(9px * var(--ui-font-scale));
   letter-spacing: 0.02em;
   color:          var(--color-text-60);
@@ -56,7 +56,7 @@
 .chapter-bar-row {
   gap: var(--spacing-regular);
   width: 100%;
-  padding: 0 var(--spacing-regular);
+  padding: 0 var(--spacing-regular) 0 0;
 }
 
 /* The visible tab-strip container -- deliberately the same box treatment as

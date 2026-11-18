@@ -1559,7 +1559,7 @@ function App() {
     const compactButtonPx = (BTN_SQUARE_LARGE_SIZE_PX - smallGapPx) / 2 // mirrors --btn-square-half-size
     const groupWidthPx = 3 * compactButtonPx + 2 * smallGapPx
     const formattingWidthPx = 2 * spacingRegularPx + 3 * groupWidthPx + 2 * largeGapPx
-    const toolbarContainerWidthPx = formattingWidthPx + TOOLBAR_CONTAINER_BORDER_PX + 2 * largeGapPx
+    const toolbarContainerWidthPx = formattingWidthPx + TOOLBAR_CONTAINER_BORDER_PX + 2 * smallGapPx
     const displayModesWidthPx = 2 * spacingRegularPx + BTN_SQUARE_LARGE_SIZE_PX + DISPLAY_MODES_BORDER_PX
     return Math.ceil(spacingRegularPx + displayModesWidthPx + toolbarContainerWidthPx)
   }, [spacingRegularPx])
