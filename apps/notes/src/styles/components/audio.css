@@ -7,11 +7,9 @@
   /* Two rows of buttons stacked inside one large-square button box -- this is
      both their height and, since every regular control is square, their width.
      The grid is cut into HALF columns, (size - gap) / 2 wide, so that two of
-     them and the gap between are exactly one button: everything spans an even
-     number of them except Music and Soundscape, which span three, a button
-     and a half plus half a gap. Two of those with the three single buttons
-     and four gaps fill the same six buttons and five gaps as before, with
-     the Visualizer button in the exact centre.
+     them and the gap between are exactly one button; everything in the second
+     row spans an even number of them. The top row lays itself out
+     (.audio-top-row).
      The shared token (tokens.css) is the same measurement the markdown
      toolbar's compact layout uses. */
   --audio-btn-size: var(--btn-square-half-size);
@@ -76,14 +74,30 @@
 
 
 
+/* The top row: Music, Filter, Visualizer, Soundstages, Soundscape. The two
+   wide buttons are a button and a half plus half a gap, rounded DOWN to a
+   whole pixel so nothing to their right starts on a half pixel; the centre
+   button takes what the rounding left (1fr), so the row keeps its width and
+   the Visualizer button stays in the exact centre. */
+.audio-top-row {
+  --audio-wide-btn-size: round(down, calc(1.5 * var(--audio-btn-size) + var(--audio-control-gap) / 2), 1px);
+  grid-column:           1 / -1;
+  display:               grid;
+  grid-template-columns: var(--audio-wide-btn-size) var(--audio-btn-size) 1fr var(--audio-btn-size) var(--audio-wide-btn-size);
+  gap:                   var(--audio-control-gap);
+}
+
+.audio-top-row > .audio-ctrl-btn {
+  grid-column: auto;
+}
+
 /* An empty soundstage place: one button's width, like a button. */
 .audio-grid-cell {
   grid-column: span 2;
 }
 
-/* Music and Soundscape: a button and a half each (three half columns). */
+/* Music and Soundscape: a slightly larger glyph (width: .audio-top-row). */
 .audio-wide-btn {
-  grid-column: span 3;
   font-size:   12px; /* icon glyph, fixed box -- see --ui-font-scale's scope note in tokens.css */
 }
 

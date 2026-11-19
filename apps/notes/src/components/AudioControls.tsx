@@ -1062,75 +1062,77 @@ export const AudioControls = memo(function AudioControls({
         className="audio-micro-grid"
         style={{ '--audio-grid-columns': AUDIO_GRID_COLUMNS } as React.CSSProperties}
       >
-        <button
-          type="button"
-          className={`audio-ctrl-btn audio-wide-btn${isPlaying ? ' is-active' : ''}`}
-          data-tooltip={encodeTooltip({ intention: 'Music', value: songLabel, gestures: [{ press: 'right', intention: 'Skip forward' }, { press: 'holdRight', intention: 'Next song' }] })}
-          aria-label={isPlaying ? 'Pause music' : 'Play music'}
-          aria-pressed={isPlaying}
-          onClick={() => {
-            // Nothing to play from: show the Songs view, where sets are filled and chosen.
-            if (!isPlaying && activeSlots.length === 0) openMusicLibrary()
-            else void handlePlayToggle()
-          }}
-          data-secondary-press="action"
-          onContextMenu={(event) => event.preventDefault()}
-          onPointerDown={handleMusicPointerDown}
-          onPointerUp={handleMusicPointerUp}
-          onPointerCancel={cancelMusicHold}
-          onMouseLeave={cancelMusicHold}
-        >
-          <span className="fa-solid fa-compact-disc" aria-hidden="true" />
-        </button>
+        <div className="audio-top-row">
+          <button
+            type="button"
+            className={`audio-ctrl-btn audio-wide-btn${isPlaying ? ' is-active' : ''}`}
+            data-tooltip={encodeTooltip({ intention: 'Music', value: songLabel, gestures: [{ press: 'right', intention: 'Skip forward' }, { press: 'holdRight', intention: 'Next song' }] })}
+            aria-label={isPlaying ? 'Pause music' : 'Play music'}
+            aria-pressed={isPlaying}
+            onClick={() => {
+              // Nothing to play from: show the Songs view, where sets are filled and chosen.
+              if (!isPlaying && activeSlots.length === 0) openMusicLibrary()
+              else void handlePlayToggle()
+            }}
+            data-secondary-press="action"
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={handleMusicPointerDown}
+            onPointerUp={handleMusicPointerUp}
+            onPointerCancel={cancelMusicHold}
+            onMouseLeave={cancelMusicHold}
+          >
+            <span className="fa-solid fa-compact-disc" aria-hidden="true" />
+          </button>
 
-        <button
-          type="button"
-          className={`audio-ctrl-btn${barRow === 'filter' ? ' is-active' : ''}`}
-          data-tooltip={encodeTooltip({ intention: 'Filter', value: filterQuery || undefined })}
-          aria-label="Filter songs"
-          aria-pressed={barRow === 'filter'}
-          onClick={() => toggleRow('filter')}
-        >
-          <span className="fa-solid fa-filter" aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            className={`audio-ctrl-btn${barRow === 'filter' ? ' is-active' : ''}`}
+            data-tooltip={encodeTooltip({ intention: 'Filter', value: filterQuery || undefined })}
+            aria-label="Filter songs"
+            aria-pressed={barRow === 'filter'}
+            onClick={() => toggleRow('filter')}
+          >
+            <span className="fa-solid fa-filter" aria-hidden="true" />
+          </button>
 
-        <button
-          type="button"
-          className={`audio-ctrl-btn${isVisualizerMode ? ' is-active' : ''}`}
-          data-tooltip={encodeTooltip({ intention: 'Visualizer', shortcut: 'visualizer' })}
-          aria-label="Visualizer"
-          aria-pressed={isVisualizerMode}
-          onClick={onToggleVisualizer}
-        >
-          <span className="fa-solid fa-wave-square" aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            className={`audio-ctrl-btn${isVisualizerMode ? ' is-active' : ''}`}
+            data-tooltip={encodeTooltip({ intention: 'Visualizer', shortcut: 'visualizer' })}
+            aria-label="Visualizer"
+            aria-pressed={isVisualizerMode}
+            onClick={onToggleVisualizer}
+          >
+            <span className="fa-solid fa-wave-square" aria-hidden="true" />
+          </button>
 
-        <button
-          type="button"
-          className={`audio-ctrl-btn${barRow === 'soundstages' ? ' is-active' : ''}`}
-          data-tooltip="Soundstages"
-          aria-label="Soundstages"
-          aria-pressed={barRow === 'soundstages'}
-          onClick={() => toggleRow('soundstages')}
-        >
-          <span className="fa-solid fa-headphones" aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            className={`audio-ctrl-btn${barRow === 'soundstages' ? ' is-active' : ''}`}
+            data-tooltip="Soundstages"
+            aria-label="Soundstages"
+            aria-pressed={barRow === 'soundstages'}
+            onClick={() => toggleRow('soundstages')}
+          >
+            <span className="fa-solid fa-headphones" aria-hidden="true" />
+          </button>
 
-        <button
-          type="button"
-          className={`audio-ctrl-btn audio-wide-btn${soundscapePreferences.enabled ? ' is-active' : ''}`}
-          data-tooltip={encodeTooltip({ intention: 'Soundscape', value: soundscape.name, gestures: [{ press: 'right', intention: 'Next soundscape' }] })}
-          aria-label={soundscapePreferences.enabled ? 'Stop the soundscape' : 'Play the soundscape'}
-          aria-pressed={soundscapePreferences.enabled}
-          onClick={() => onSoundscapePreferencesChange({ ...soundscapePreferences, enabled: !soundscapePreferences.enabled })}
-          data-secondary-press="action"
-          onContextMenu={(event) => {
-            event.preventDefault()
-            onSoundscapePreferencesChange(applySoundscapePreset(soundscapePreferences, nextSoundscape))
-          }}
-        >
-          <span className="fa-solid fa-podcast" aria-hidden="true" />
-        </button>
+          <button
+            type="button"
+            className={`audio-ctrl-btn audio-wide-btn${soundscapePreferences.enabled ? ' is-active' : ''}`}
+            data-tooltip={encodeTooltip({ intention: 'Soundscape', value: soundscape.name, gestures: [{ press: 'right', intention: 'Next soundscape' }] })}
+            aria-label={soundscapePreferences.enabled ? 'Stop the soundscape' : 'Play the soundscape'}
+            aria-pressed={soundscapePreferences.enabled}
+            onClick={() => onSoundscapePreferencesChange({ ...soundscapePreferences, enabled: !soundscapePreferences.enabled })}
+            data-secondary-press="action"
+            onContextMenu={(event) => {
+              event.preventDefault()
+              onSoundscapePreferencesChange(applySoundscapePreset(soundscapePreferences, nextSoundscape))
+            }}
+          >
+            <span className="fa-solid fa-podcast" aria-hidden="true" />
+          </button>
+        </div>
 
         {barRow === 'soundstages' ? (
           Array.from({ length: AUDIO_GRID_COLUMNS }, (_, index) => {
