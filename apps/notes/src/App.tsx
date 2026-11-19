@@ -2829,12 +2829,17 @@ function App() {
    * the old textures, then each surface changing in its own frame, and the
    * backdrop panels empty for up to a second (textures/textureStore.ts).
    * `alongside` is any other state that must change in that same render (the
-   * light/dark mode). Only the latest switch is applied: a press that arrives
-   * while an earlier one is still preparing supersedes it.
+   * light/dark mode, the layout rows, whose active entry must not change
+   * before the live state does or the edit debounce writes the old look into
+   * it). Only the latest switch's look is applied: a press that arrives while
+   * an earlier one is still preparing supersedes it, and the earlier one's
+   * `alongside` runs with the later commit rather than being lost.
    */
   const lookSwitchTicketRef = useRef(0)
+  const lookSwitchAlongsideRef = useRef<Array<() => void>>([])
   const applyEntryToLiveState = useCallback((entry: UiLoadoutEntry, alongside?: () => void) => {
     const ticket = ++lookSwitchTicketRef.current
+    if (alongside) lookSwitchAlongsideRef.current.push(alongside)
     const materials = normalizeUiLoadoutForSignature(entry.payload).textureMaterials
     const tintOf = (material: TextureMaterialSettings) => rgbaToCssColor(hsvaToRgba(material.color))
     void prepareLookTextures([
@@ -2854,8 +2859,10 @@ function App() {
       // nothing, because nothing changes after that.
       const root = document.documentElement
       root.dataset.lookSwitch = ''
+      const pendingAlongside = lookSwitchAlongsideRef.current
+      lookSwitchAlongsideRef.current = []
       flushSync(() => {
-        alongside?.()
+        for (const run of pendingAlongside) run()
         applyUiLayoutLoadout(entry.payload)
       })
       void getComputedStyle(root).color
@@ -2867,10 +2874,10 @@ function App() {
     if (!window.thockdownLoadouts) return
     try {
       const result = await window.thockdownLoadouts.setActive(id)
-      setUiLoadoutEntries(result.entries)
       const sign = modeSign(idMode(id))
       const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
-      if (active) applyEntryToLiveState(active)
+      if (active) applyEntryToLiveState(active, () => setUiLoadoutEntries(result.entries))
+      else setUiLoadoutEntries(result.entries)
     } catch (error) {
       console.error('Failed to select UI loadout preset', error)
     }
@@ -2900,10 +2907,10 @@ function App() {
     try {
       await flushLayoutEdit()
       const result = await action(api)
-      setUiLoadoutEntries(result.entries)
       const sign = modeSign(uiMode)
       const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
-      if (active && active.signature !== currentUiLoadoutSignature) applyEntryToLiveState(active)
+      if (active && active.signature !== currentUiLoadoutSignature) applyEntryToLiveState(active, () => setUiLoadoutEntries(result.entries))
+      else setUiLoadoutEntries(result.entries)
     } catch (error) {
       console.error('Failed to change UI layouts', error)
     }
@@ -2965,12 +2972,21 @@ function App() {
 
   // The mode changes in the same render as the look it brings, once that
   // look's textures are ready (applyEntryToLiveState).
+  // A second press while the first is preparing toggles from where the first
+  // is heading, not from the mode still on screen.
+  const uiModeTargetRef = useRef<UiLoadoutMode | null>(null)
   const toggleUiMode = useCallback(() => {
-    const nextMode: UiLoadoutMode = uiMode === 'light' ? 'dark' : 'light'
+    const from = uiModeTargetRef.current ?? uiMode
+    const nextMode: UiLoadoutMode = from === 'light' ? 'dark' : 'light'
+    uiModeTargetRef.current = nextMode
     const sign = modeSign(nextMode)
     const active = uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
-    if (active) applyEntryToLiveState(active, () => setUiMode(nextMode))
-    else setUiMode(nextMode)
+    const commitMode = () => {
+      if (uiModeTargetRef.current === nextMode) uiModeTargetRef.current = null
+      setUiMode(nextMode)
+    }
+    if (active) applyEntryToLiveState(active, commitMode)
+    else commitMode()
   }, [uiMode, uiLoadoutEntries, applyEntryToLiveState])
 
   /**
@@ -3010,10 +3026,10 @@ function App() {
     void window.thockdownLoadouts.list()
       .then((result) => {
         if (cancelled) return
-        setUiLoadoutEntries(result.entries)
         const sign = modeSign(uiMode)
         const active = result.entries.find((entry) => entry.id * sign > 0 && entry.isActive)
-        if (active) applyEntryToLiveState(active)
+        if (active) applyEntryToLiveState(active, () => setUiLoadoutEntries(result.entries))
+        else setUiLoadoutEntries(result.entries)
       })
       .catch((error) => {
         console.error('Failed to load UI loadouts', error)
