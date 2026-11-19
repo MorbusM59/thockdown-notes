@@ -573,14 +573,16 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {layout.stripRows > 0 && layout.columns > 0 && (
             // The exit box: the top strip's first full box from the right, on
             // its empty first row, lit in the accent with the glyph in the
-            // accent inverted, like a bar's end box. A div, not a button:
+            // accent inverted, like a bar's end box. It is drawn above the grid
+            // lines, so it starts a pixel in (a box's first row and column are
+            // the line it shares with the box before), leaving them drawn. A div, not a button:
             // the app's button styles would round and tint it. One of the panels, so it
             // shows and hides with them.
             <div
               role="button"
               className="visualizer-exit"
               aria-label="Leave the visualizer"
-              style={{ left: originXPx + (columns - 1) * box, top: rowTop(0), width: box, height: box, fontSize: Math.round(box * 0.7) }}
+              style={{ left: originXPx + (columns - 1) * box + 1, top: rowTop(0) + 1, width: box - 1, height: box - 1, fontSize: Math.round(box * 0.7) }}
               onClick={onExit}
             >
               <i className="fa-solid fa-xmark" aria-hidden="true" />
