@@ -1625,7 +1625,7 @@ function App() {
       + paginationPx
 
     const noteCardPx = noteListRowContentHeightPx(uiScale) + 2 * largeGapPx
-    const fourCardsPx = largeGapPx + spacingRegularPx /* .notes-list top/bottom padding */
+    const fourCardsPx = 2 * largeGapPx /* .notes-list top/bottom padding */
       + SIDEBAR_MIN_VISIBLE_NOTE_CARDS * noteCardPx
       + (SIDEBAR_MIN_VISIBLE_NOTE_CARDS - 1) * largeGapPx
 
