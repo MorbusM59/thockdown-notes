@@ -202,6 +202,16 @@
   initial-value: 0;
 }
 
+/* A layout switch commits with every transition off (App.tsx's
+   applyEntryToLiveState): the controls' hover and press easing is for those
+   gestures, and a look changing all at once must not fade in control by
+   control behind the panels around it. */
+html[data-look-switch] *,
+html[data-look-switch] *::before,
+html[data-look-switch] *::after {
+  transition: none !important;
+}
+
 .thockdown-block-caret {
   opacity: calc(1 - var(--beat-caret, 0) * var(--beat-caret-hold) * (1 - var(--caret-typing-hold, 0)));
   transition: --beat-caret-hold var(--flash-cycle, 1200ms) ease-in-out;

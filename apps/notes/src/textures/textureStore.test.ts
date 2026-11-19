@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetBackgroundWorkForTests, subscribeToBackgroundWork, type BackgroundWorkState } from '../shared/backgroundWork';
-import { startTextureJob } from './useTextureSurface';
+import { startTextureJob } from './textureStore';
 
 // A terminated Worker fires neither `message` nor `error`, which is what
 // leaked a background-work entry per cancelled generation. The fake does the

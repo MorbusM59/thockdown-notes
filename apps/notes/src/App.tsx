@@ -320,7 +320,8 @@ import {
   TEXTURE_VSTEPS_MIN,
   TEXTURE_VSTEPS_MAX,
 } from '@thockdown/look/textureTypes'
-import { TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE, useTextureSurface } from './textures/useTextureSurface'
+import { useTextureSurface } from './textures/useTextureSurface'
+import { prepareLookTextures, TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE } from './textures/textureStore'
 import { useTintedTexture } from './textures/useTintedTexture'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { HoverActions, type HoverAction } from './components/HoverActions'
@@ -2289,7 +2290,12 @@ function App() {
   const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
   // The sidebar's material, composed into one image for every backdrop panel
   // that does not scroll (useTintedTexture.ts).
-  const backdropTextureCss = useTintedTexture(sidebarTextureCss, sidebarTextureTintCss)
+  const backdropTextureCss = useTintedTexture({
+    enabled: textureEnabled,
+    surface: 'sidebarContent',
+    material: textureMaterials.sidebarContent,
+    tintCss: sidebarTextureTintCss,
+  })
   const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
   const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
   // Everything the visual loadout decides about the look, in one place
@@ -2814,9 +2820,48 @@ function App() {
 
   // --- Loadout actions --------------------------------------------------
 
-  const applyEntryToLiveState = useCallback((entry: UiLoadoutEntry) => {
-    applyUiLayoutLoadout(entry.payload)
-  }, [applyUiLayoutLoadout])
+  /**
+   * A layout switch is ONE transaction: every texture image the new look
+   * needs is brought into the texture store, decoded, BEFORE any of its state
+   * changes, and then all of it is set in one batch, so its first render
+   * shows the new colours, geometry and textures together. Applying first
+   * and letting each texture follow on its own showed the new colours over
+   * the old textures, then each surface changing in its own frame, and the
+   * backdrop panels empty for up to a second (textures/textureStore.ts).
+   * `alongside` is any other state that must change in that same render (the
+   * light/dark mode). Only the latest switch is applied: a press that arrives
+   * while an earlier one is still preparing supersedes it.
+   */
+  const lookSwitchTicketRef = useRef(0)
+  const applyEntryToLiveState = useCallback((entry: UiLoadoutEntry, alongside?: () => void) => {
+    const ticket = ++lookSwitchTicketRef.current
+    const materials = normalizeUiLoadoutForSignature(entry.payload).textureMaterials
+    const tintOf = (material: TextureMaterialSettings) => rgbaToCssColor(hsvaToRgba(material.color))
+    void prepareLookTextures([
+      { surface: 'appGrid', material: materials.appGrid },
+      { surface: 'sidebarContent', material: materials.sidebarContent, tintCss: tintOf(materials.sidebarContent) },
+      { surface: 'editorEditText', material: materials.editorEditText },
+      { surface: 'editorRenderText', material: materials.editorRenderText },
+    ], textureEnabled).then(() => {
+      if (ticket !== lookSwitchTicketRef.current) return
+      // The controls ease their colours, borders and shadows for hover and
+      // press. A layout switch is not one of those: left on, ~80 controls
+      // faded from the old look over 150-200ms while the panels around them
+      // had already changed (measured: ~480 transitions started per switch),
+      // so the switch read as a slow smear rather than one change. So the
+      // look is committed synchronously with transitions off and its style
+      // resolved once while they are; turning them back on then starts
+      // nothing, because nothing changes after that.
+      const root = document.documentElement
+      root.dataset.lookSwitch = ''
+      flushSync(() => {
+        alongside?.()
+        applyUiLayoutLoadout(entry.payload)
+      })
+      void getComputedStyle(root).color
+      delete root.dataset.lookSwitch
+    })
+  }, [applyUiLayoutLoadout, textureEnabled])
 
   const selectLoadoutPreset = useCallback(async (id: number) => {
     if (!window.thockdownLoadouts) return
@@ -2918,15 +2963,15 @@ function App() {
   }, [])
 
 
+  // The mode changes in the same render as the look it brings, once that
+  // look's textures are ready (applyEntryToLiveState).
   const toggleUiMode = useCallback(() => {
-    setUiMode((previousMode) => {
-      const nextMode: UiLoadoutMode = previousMode === 'light' ? 'dark' : 'light'
-      const sign = modeSign(nextMode)
-      const active = uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
-      if (active) applyEntryToLiveState(active)
-      return nextMode
-    })
-  }, [uiLoadoutEntries, applyEntryToLiveState])
+    const nextMode: UiLoadoutMode = uiMode === 'light' ? 'dark' : 'light'
+    const sign = modeSign(nextMode)
+    const active = uiLoadoutEntries.find((entry) => entry.id * sign > 0 && entry.isActive)
+    if (active) applyEntryToLiveState(active, () => setUiMode(nextMode))
+    else setUiMode(nextMode)
+  }, [uiMode, uiLoadoutEntries, applyEntryToLiveState])
 
   /**
    * Steps the current mode's layout to the next (+1) or previous (-1) preset,
