@@ -6,6 +6,33 @@ were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
 
+## 0.9.3 (2026-11-19)
+
+Alpha Release #27. A Visualizer button in the music bar, a new soundstage, tidier edges, and smoother switching.
+
+#### New features
+
+- **Visualizer button.** The music bar has a Visualizer button (the eye) at its centre, which turns the Visualizer on and off like F5. The Double size button is now a magnifying glass with a plus.
+- **Crisp soundstage.** A new factory soundstage between Wide and Amped: wide, bright and tight in the low end.
+
+#### Changes
+
+- **Edge spacing.** Every border, including the end of the sidebar's scrollbar, now sits one regular spacing from the window's edge.
+- **Layout switching** happens in a single step, with no intermediate looks while textures and colours change.
+- **Double size switching** (F3) happens in a single step, slots included.
+- **Large notes open faster** in the Reader.
+
+#### Bug fixes
+
+- Textures no longer show blotches after a layout change.
+- The Reader's scrollbar thumb no longer jumps around while a large note is still loading.
+- A click far down the Reader's scrollbar track lands at the right spot, even while a large note is still loading.
+- Fixed database errors when upgrading from an older version.
+
+#### Upgrade note
+
+- If the music library from an older version is incompatible, the app backs up the database and resets the library. Your music files are unchanged; add them to the new library again.
+
 ## 0.9.2 (2026-11-15)
 
 Alpha Release #26. Images in the trash work like notes in the trash.
