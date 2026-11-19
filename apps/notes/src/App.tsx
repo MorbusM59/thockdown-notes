@@ -8940,6 +8940,7 @@ ${markdownHtml}
 
               <AudioControls
                 isVisualizerMode={isVisualizerMode}
+                onToggleVisualizer={toggleVisualizerMode}
                 volume={musicVolume}
                 onVolumeChange={setMusicVolume}
                 isMuted={musicMuted}

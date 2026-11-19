@@ -994,7 +994,7 @@ ${shortcutTable()}
 
 *A built-in music player with your own music sets and an independent soundscape switch.*
 
-- **Top row** — **Music** plays and pauses (with no set playing, it opens the Songs view instead); right-click it to skip four minutes ahead, or to the next song once less than six minutes are left, and hold right-click to play the next song wherever you are. **Filter** shows the song filter and **Headphones** the soundstages in the second row; the two take turns, and pressing the one showing brings the volume sliders back. **Soundscape** plays and stops the soundscape; right-click it for the next one.
+- **Top row** — **Music** plays and pauses (with no set playing, it opens the Songs view instead); right-click it to skip four minutes ahead, or to the next song once less than six minutes are left, and hold right-click to play the next song wherever you are. **Filter** shows the song filter and **Headphones** the soundstages in the second row; the two take turns, and pressing the one showing brings the volume sliders back. **Visualizer**, in the centre, opens and closes the visualizer, as **F5** does. **Soundscape** plays and stops the soundscape; right-click it for the next one.
 - **Second row** — the **Music** and **Ambient** volume sliders. Moving the music volume also unmutes.
 - **Soundstages** — your first six soundstages (the five factory ones, then your first own). Click one to play the music through it.
 - **Filter** — the same filter as the visualizer's: type to narrow what plays; it applies when you leave the field (Enter), and Escape empties it. It stays in force while the field is hidden.

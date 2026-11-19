@@ -75,6 +75,8 @@ export interface MusicPlaybackSnapshot {
 export interface AudioControlsProps {
   /** Whether fullscreen visualizer keyboard controls are active. */
   isVisualizerMode: boolean
+  /** Enters or leaves the visualizer, as F5 does. */
+  onToggleVisualizer: () => void
   /**
    * 0–1 volume for the music player. This is the LEVEL, not the audibility:
    * it keeps its value while muted (see `isMuted`) so unmuting restores it
@@ -134,6 +136,7 @@ export interface AudioControlsProps {
 
 export const AudioControls = memo(function AudioControls({
   isVisualizerMode,
+  onToggleVisualizer,
   volume,
   onVolumeChange,
   isMuted,
@@ -1040,8 +1043,9 @@ export const AudioControls = memo(function AudioControls({
   }, [isVisualizerMode, handlePlayToggle, startSeekHold, stopSeekScrub, jumpSong, handleSeekActivate])
 
   // ---------------------------------------------------------------- render
-  // Two rows of six. The top row is fixed: Music (two columns), Filter,
-  // Soundstages, Soundscape (two columns). The second row shows the two volume
+  // Two rows six buttons wide. The top row is fixed: Music (a button and a
+  // half), Filter, Visualizer (the centre), Soundstages, Soundscape (a button
+  // and a half). The second row shows the two volume
   // sliders, or in their place the stages or the pool filter: the two toggles
   // both claim it, so pressing one replaces the other, and pressing the one
   // that is showing gives the row back to the sliders.
@@ -1092,6 +1096,17 @@ export const AudioControls = memo(function AudioControls({
 
         <button
           type="button"
+          className={`audio-ctrl-btn${isVisualizerMode ? ' is-active' : ''}`}
+          data-tooltip={encodeTooltip({ intention: 'Visualizer', shortcut: 'visualizer' })}
+          aria-label="Visualizer"
+          aria-pressed={isVisualizerMode}
+          onClick={onToggleVisualizer}
+        >
+          <span className="fa-solid fa-wave-square" aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
           className={`audio-ctrl-btn${barRow === 'soundstages' ? ' is-active' : ''}`}
           data-tooltip="Soundstages"
           aria-label="Soundstages"
@@ -1120,7 +1135,7 @@ export const AudioControls = memo(function AudioControls({
         {barRow === 'soundstages' ? (
           Array.from({ length: AUDIO_GRID_COLUMNS }, (_, index) => {
             const stage = soundstage.presets[index]
-            if (!stage) return <span key={`empty-${index}`} aria-hidden="true" />
+            if (!stage) return <span key={`empty-${index}`} className="audio-grid-cell" aria-hidden="true" />
             const isActive = soundstage.activeId === stage.id
             return (
               <button
