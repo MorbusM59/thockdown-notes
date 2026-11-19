@@ -81,8 +81,8 @@ const OCTAHEDRON: SolidDef = {
  * Not a Platonic solid: Kepler's STELLA OCTANGULA, two tetrahedra pushed
  * through each other, their eight corners a cube's. It names the CUSTOM
  * soundstage in the visualizer (shared/soundstages.ts), the one stage that
- * is not a factory one, so it is the one shape that is not a Platonic solid
- * -- and built from the first of them. Never drawn at random.
+ * is not a factory one -- and built from the first of the Platonic solids.
+ * Never drawn at random.
  */
 const STELLA_OCTANGULA: SolidDef = {
   vertices: [

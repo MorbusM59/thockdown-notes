@@ -1559,7 +1559,7 @@ function App() {
     const compactButtonPx = (BTN_SQUARE_LARGE_SIZE_PX - smallGapPx) / 2 // mirrors --btn-square-half-size
     const groupWidthPx = 3 * compactButtonPx + 2 * smallGapPx
     const formattingWidthPx = 2 * spacingRegularPx + 3 * groupWidthPx + 2 * largeGapPx
-    const toolbarContainerWidthPx = formattingWidthPx + TOOLBAR_CONTAINER_BORDER_PX + 2 * smallGapPx
+    const toolbarContainerWidthPx = formattingWidthPx + TOOLBAR_CONTAINER_BORDER_PX + 2 * spacingRegularPx /* .toolbar-container's side margins */
     const displayModesWidthPx = 2 * spacingRegularPx + BTN_SQUARE_LARGE_SIZE_PX + DISPLAY_MODES_BORDER_PX
     return Math.ceil(spacingRegularPx + displayModesWidthPx + toolbarContainerWidthPx)
   }, [spacingRegularPx])
@@ -1604,7 +1604,6 @@ function App() {
     const viewToggleRowWidthPx = sidebarWidthPx
       - spacingRegularPx /* --sidebar-padding-right */
       - spacingRegularPx /* --sidebar-view-padding-left */
-      - spacingRegularPx /* .view-toggle right padding */
     const modeButtonPx = (viewToggleRowWidthPx - 5 * smallGapPx) / 6
     const viewTogglePx = 2 * spacingRegularPx + modeButtonPx
     // Two rows of chips (months, years), the first with a spacing-regular
