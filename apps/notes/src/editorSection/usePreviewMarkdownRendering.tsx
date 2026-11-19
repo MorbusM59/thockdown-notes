@@ -1784,6 +1784,44 @@ export function usePreviewMarkdownRendering({
   }, [previewScrollRef, readBlockMeasurements, isWindowed, previewWindow.api])
 
   /**
+   * A jump to a character the split has not delivered yet. The track speaks
+   * the whole document from the first frame, so a click low on it while a
+   * large note is still splitting names a place no block covers; landing on
+   * the last delivered block instead would be landing somewhere else. It is
+   * parked, like a source-line landing, and released by the instalment that
+   * covers it -- a wait on the blocks, not a retry. At most one: a newer jump
+   * replaces it, and the reader scrolling by wheel or key drops it, so a
+   * parked target never yanks a reader who has moved on.
+   */
+  const parkedCharRef = useRef<number | null>(null)
+  const isCharDelivered = useCallback((charOffset: number) => {
+    const offsets = blockCharOffsetsRef.current
+    return isSplitCompleteRef.current || (!!offsets && charOffset < offsets[offsets.length - 1])
+  }, [])
+  const parkCharUnlessDelivered = useCallback((charOffset: number): boolean => {
+    parkedCharRef.current = isCharDelivered(charOffset) ? null : charOffset
+    return parkedCharRef.current !== null
+  }, [isCharDelivered])
+  useEffect(() => {
+    const drop = () => { parkedCharRef.current = null }
+    window.addEventListener('wheel', drop, { capture: true, passive: true })
+    window.addEventListener('keydown', drop, { capture: true })
+    return () => {
+      window.removeEventListener('wheel', drop, { capture: true })
+      window.removeEventListener('keydown', drop, { capture: true })
+    }
+  }, [])
+  useLayoutEffect(() => {
+    const parked = parkedCharRef.current
+    if (parked === null || !isCharDelivered(parked)) return
+    parkedCharRef.current = null
+    // Through a microtask for the parked source-line landing's reason: the
+    // windowed landing commits synchronously, which React cannot do from
+    // inside its own commit.
+    queueMicrotask(() => scrollToChar(parked))
+  }, [previewBlocks, isCharDelivered, scrollToChar])
+
+  /**
    * The two answers to "where are we", behind one interface.
    *
    * Which one this document gets is decided by its length alone, and the
@@ -2082,7 +2120,7 @@ export function usePreviewMarkdownRendering({
           return
         }
         const charTarget = resolveChunkedTarget(ratio)
-        if (charTarget !== null) scrollToChar(charTarget)
+        if (charTarget !== null && !parkCharUnlessDelivered(charTarget)) scrollToChar(charTarget)
       },
 
       travelToRatio: (ratio) => {
@@ -2093,7 +2131,8 @@ export function usePreviewMarkdownRendering({
           return scrollToNonQuantizedSmooth(scroller, ratio * maxScrollTopPx)
         }
         const charTarget = resolveChunkedTarget(ratio)
-        return charTarget !== null ? smoothScrollToChar(charTarget) : null
+        if (charTarget === null || parkCharUnlessDelivered(charTarget)) return null
+        return smoothScrollToChar(charTarget)
       },
     }
   }, [
@@ -2105,6 +2144,7 @@ export function usePreviewMarkdownRendering({
     scrollPreviewTo,
     previewBlocksRef,
     isWindowed,
+    parkCharUnlessDelivered,
   ])
 
   useLayoutEffect(() => {
