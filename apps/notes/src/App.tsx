@@ -9220,6 +9220,7 @@ ${markdownHtml}
                   onEmptySceneStep={(delta) => handleEmptySceneStep(entry.id, delta)}
                   isImmersiveMode={isImmersiveMode}
                   isVisualizerMode={isVisualizerMode && entry.id === activeSectionId}
+                  onExitVisualizer={toggleVisualizerMode}
                   onToggleReviewGutter={() => handleToggleReviewGutter(entry.id)}
                   onToggleReviewFlags={() => handleToggleReviewFlags(entry.id)}
                 />

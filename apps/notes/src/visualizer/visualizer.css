@@ -391,3 +391,22 @@
 :root.is-cursor-idle .visualizer-scene * {
   cursor: none !important;
 }
+
+/* The exit box (VisualizerScene.tsx): lit in the accent, its xmark in the
+   accent inverted, as a bar's end glyph is. One of the panels. */
+.visualizer-scene > .visualizer-exit {
+  z-index: 8;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background-color: var(--visualizer-accent-color, var(--color-caret));
+  color: var(--visualizer-letterbox-color, var(--color-bg-regular));
+  cursor: pointer;
+  opacity: var(--visualizer-panels);
+}
+.visualizer-scene.is-panels-hidden > .visualizer-exit {
+  pointer-events: none;
+}

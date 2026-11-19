@@ -158,6 +158,8 @@ export interface SectionEditorAreaProps {
    * stays mounted underneath and is not drawn.
    */
   isVisualizerMode: boolean
+  /** Leaves the visualizer (the exit box in its scene). */
+  onExitVisualizer: () => void
   onToggleReviewGutter: () => void
   onToggleReviewFlags: () => void
   /** Whether the active note (or its whole chapter family) is frozen in time -- see databaseService.ts's freezeNoteFamily. Forces the editor read-only, hides the Time Machine timeline, and disables chapter/tag mutation affordances, same shape as isViewingAutoTocChapter/isViewingAutoOpenItemsChapter below. */
@@ -285,6 +287,7 @@ export function SectionEditorArea({
   onEmptySceneStep,
   isImmersiveMode,
   isVisualizerMode,
+  onExitVisualizer,
   onToggleReviewGutter,
   onToggleReviewFlags,
   isViewingTimelessNote,
@@ -582,6 +585,7 @@ export function SectionEditorArea({
                 fontSizePx={visualizerFont.sizePx}
                 sceneSeed={emptyStateSceneSeed}
                 gridOutlineRef={beatGridRef}
+                onExit={onExitVisualizer}
               />
             ) : null}
           </div>

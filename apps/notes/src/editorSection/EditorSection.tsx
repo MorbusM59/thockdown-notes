@@ -277,6 +277,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
   onEmptySceneStep,
   isImmersiveMode,
   isVisualizerMode,
+  onExitVisualizer,
   onToggleReviewGutter,
   onToggleReviewFlags,
   isEscapeHoldPanelOpen,
@@ -2309,6 +2310,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         onEmptySceneStep={onEmptySceneStep}
         isImmersiveMode={isImmersiveMode}
         isVisualizerMode={isVisualizerMode}
+        onExitVisualizer={onExitVisualizer}
         onToggleReviewGutter={onToggleReviewGutter}
         onToggleReviewFlags={onToggleReviewFlags}
         isViewingAutoTocChapter={isViewingAutoTocChapter}

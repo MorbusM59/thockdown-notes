@@ -94,6 +94,8 @@ export type VisualizerSceneProps = {
   sceneSeed: string
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
   gridOutlineRef: (element: HTMLDivElement | null) => void
+  /** Leaves the visualizer: the same toggle as F5 (App.tsx's `toggleVisualizerMode`), pressed on the exit box. */
+  onExit: () => void
 }
 
 /** The lit runs of the track: all of it, or the boxes before and after `gap`. */
@@ -172,7 +174,7 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
   })
 }
 
-export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef }: VisualizerSceneProps) {
+export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef, onExit }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
   const { boxPx, fontSizePx } = fitVisualizerBox(height, readerBoxPx, readerFontSizePx, EMPTY_SCENE_DIAMETER_PX)
@@ -568,6 +570,21 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
           {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
           {levelArea && <LevelBars layout={layout} area={levelArea} />}
+          {layout.stripRows > 0 && layout.columns > 0 && (
+            // The exit box: the top strip's first full box from the right, on
+            // its empty first row, lit in the accent with the glyph in the
+            // accent inverted, like a bar's end box. One of the panels, so it
+            // shows and hides with them.
+            <button
+              type="button"
+              className="visualizer-exit"
+              aria-label="Leave the visualizer"
+              style={{ left: originXPx + (columns - 1) * box, top: rowTop(0), width: box, height: box, fontSize: Math.round(box * 0.7) }}
+              onClick={onExit}
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          )}
           <CursorIdle />
 
           {progressArea && (
