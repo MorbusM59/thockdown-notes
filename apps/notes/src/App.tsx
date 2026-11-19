@@ -6495,10 +6495,19 @@ ${markdownHtml}
 
     setAppShellMeasuredWidthPx(Math.round(shellElement.clientWidth))
 
+    // Committed with flushSync: a ResizeObserver delivers after layout and
+    // BEFORE paint, but an ordinary update from it is rendered after that
+    // paint, so every slot was laid out from the old width for one frame. A
+    // page zoom change (double size) halves or doubles the width in CSS px
+    // at once, and that frame showed the slots at half the row or spilling
+    // past it. Committed here, the frame that has the new width paints the
+    // slots sized to it. Same-width notifications set an equal value and
+    // React bails out.
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (!entry) return
-      setAppShellMeasuredWidthPx(Math.round(entry.contentRect.width))
+      const width = Math.round(entry.contentRect.width)
+      flushSync(() => setAppShellMeasuredWidthPx(width))
     })
 
     observer.observe(shellElement)
