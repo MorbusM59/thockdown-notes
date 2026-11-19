@@ -383,17 +383,18 @@
    independently, so any combination of states draws crisply without one
    state's look being built out of another's:
 
-     1. outer border  -- the mark's own 1px border; always drawn
-     2. band          -- the space between the two borders (::before), filled
-     3. inner border  -- 1px, inside the band (::after's border)
-     4. inner fill    -- inside the inner border (::after's background)
+     1. inner border  -- 1px, inside the band (::after's border); ALWAYS
+                         drawn: the inner ring is the mark itself
+     2. inner fill    -- inside the inner border (::after's background)
+     3. outer border  -- the mark's own 1px border: an extra
+     4. band          -- the space between the two borders (::before), filled
 
    The geometry never changes with the state, only which layers are painted,
    so every mark has the same footprint and nothing shifts when a state flips.
    What each layer MEANS:
-     snapshot  automatic: outer border only (a single ring)
-               manual:    + inner border (a double ring)
-               from file: + inner border + band (a double ring, filled between)
+     snapshot  automatic: inner border only (a single ring)
+               manual:    + outer border (a double ring)
+               from file: + outer border + band (a double ring, filled between)
                viewed:    + inner fill
      present   both borders always; viewed: + inner fill; the present text is
                saved in some snapshot: + band
@@ -417,7 +418,7 @@
   box-sizing:     border-box;
   width:          var(--timeline-mark-size);
   height:         var(--timeline-mark-size);
-  border:         1px solid var(--timeline-mark-line);
+  border:         1px solid transparent;
   border-radius:  var(--border-radius-small);
   background:     transparent;
 }
@@ -441,16 +442,15 @@
 }
 
 /* 3 and 4. The inner border and the inner fill: one box inside the band. Its
-   border is transparent when off, so the fill's area is the same either
-   way. */
+   border is always drawn, so a fill always has an edge. */
 .timeline-mark::after {
   inset:          var(--timeline-mark-band);
-  border:         1px solid transparent;
+  border:         1px solid var(--timeline-mark-line);
   border-radius:  max(0px, calc(var(--border-radius-small) - 1px - var(--timeline-mark-band)));
 }
 
 .timeline-mark.has-band::before      { background: var(--timeline-mark-fill); }
-.timeline-mark.has-inner-ring::after { border-color: var(--timeline-mark-line); }
+.timeline-mark.has-outer-ring        { border-color: var(--timeline-mark-line); }
 .timeline-mark.has-inner-fill::after { background: var(--timeline-mark-fill); }
 
 /* A hold's progress, in the band's exact shape: --hold-progress (0..1) of

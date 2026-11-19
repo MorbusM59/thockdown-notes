@@ -351,7 +351,7 @@ function SnapshotMark({
         // A from-disk snapshot can be manual or automatic as well; what marks
         // it out is where its CONTENT came from, and it reads as the heaviest
         // of the three whichever it is.
-        placement.isManual || placement.isFromDisk ? 'has-inner-ring' : '',
+        placement.isManual || placement.isFromDisk ? 'has-outer-ring' : '',
         placement.isFromDisk ? 'has-band' : '',
         isActive ? 'has-inner-fill' : '',
       ].filter(Boolean).join(' ')}

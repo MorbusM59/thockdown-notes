@@ -95,7 +95,7 @@ export function PresentStateCircle({
           compacting hold's progress played in the band. */}
       <span
         className={[
-          'timeline-mark has-inner-ring',
+          'timeline-mark has-outer-ring',
           isPresent ? 'has-inner-fill' : '',
           isPresentSaved ? 'has-band' : '',
         ].filter(Boolean).join(' ')}
