@@ -4,6 +4,7 @@ import { IS_LINUX_DESKTOP } from '../shared/platform'
 import { useRef, useState, useSyncExternalStore } from 'react'
 import { createDictionary, readDictionaries, renameDictionary, subscribeDictionaries } from '../spellCheck/dictionaryStore'
 import { openDictionary } from './dictionaryView'
+import { DictionaryMark } from './DictionaryPanel'
 import { TextButton } from '../components/TextButton'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
@@ -2702,7 +2703,7 @@ export function SidebarOptionsPanel({
         heading="Spell Checking"
         iconClass="fa-spell-check"
       >
-        {/* The dictionaries, each one a toggle: a word is correct when any
+        {/* The dictionaries, each one a toggle, its mark pressed in while active: a word is correct when any
             active dictionary accepts it (spellCheck/spellCheckClient.ts). The
             user dictionary is always active and has no toggle. The edit
             button opens a dictionary's words in the sidebar
@@ -2729,7 +2730,7 @@ export function SidebarOptionsPanel({
                     ))
                   }}
                 >
-                  {isActive && <span className="fa-solid fa-check" aria-hidden="true" />}
+                  <DictionaryMark dictionary={dictionary} />
                 </button>
                 <DictionaryNameField label={dictionary.label} onRename={(label) => void renameDictionary(dictionary.id, label)} />
                 <button

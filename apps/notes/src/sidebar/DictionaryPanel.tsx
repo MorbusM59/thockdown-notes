@@ -4,7 +4,7 @@ import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { HoverActions } from '../components/HoverActions'
-import { DEFAULT_DICTIONARY_ICON, type SpellCheckDictionary } from '../shared/spellCheck'
+import { DEFAULT_DICTIONARY_ICON, USER_DICTIONARY_ICON, type SpellCheckDictionary } from '../shared/spellCheck'
 import { groupDictionaryWords } from '../shared/dictionaryWordList'
 import {
   addDictionaryText, installDictionaries, loadDictionaryWords, readDictionaries, removeDictionaryWords,
@@ -22,9 +22,10 @@ function useOpenDictionary(): { dictionary: SpellCheckDictionary | undefined; wo
   return { dictionary, words: dictionary ? words.get(dictionary.id) : undefined }
 }
 
-/** A dictionary's mark: its icon, or the default one. */
+/** A dictionary's mark: its icon, or the default one (the user dictionary's own). */
 export function DictionaryMark({ dictionary }: { dictionary: SpellCheckDictionary }) {
-  return <span className={`fa-solid ${dictionary.icon ?? DEFAULT_DICTIONARY_ICON}`} aria-hidden="true" />
+  const icon = dictionary.icon ?? (dictionary.kind === 'user' ? USER_DICTIONARY_ICON : DEFAULT_DICTIONARY_ICON)
+  return <span className={`fa-solid ${icon}`} aria-hidden="true" />
 }
 
 /**
@@ -67,11 +68,13 @@ export function DictionaryPanel({ filter }: { filter: string }) {
   return (
     <div className="options-content sidebar-options-content" aria-label={`Words in ${dictionary.label}`}>
       {/* Keyed on the dictionary and on whether a filter is typed, so a new
-          list starts folded and a filtered one starts with its dividers open. */}
+          list starts folded and a filtered one starts with its letters open.
+          Dividers stay folded: they exist only from 500 words listed. */}
       <AccordionGroup key={`${dictionary.id}:${filtering}`}>
         {groups.map((group) => (
           <AccordionSection
             lazy
+            defaultOpen={filtering}
             key={group.key}
             heading={<span className="options-music-song-heading">{group.label}</span>}
             ariaLabel={group.label}
@@ -81,7 +84,7 @@ export function DictionaryPanel({ filter }: { filter: string }) {
             {group.dividers ? (
               <AccordionGroup>
                 {group.dividers.map((divider) => (
-                  <AccordionDivider key={divider.key} label={divider.label} lazy defaultOpen={filtering}
+                  <AccordionDivider key={divider.key} label={divider.label} lazy
                     marker={<AccordionCount count={divider.words.length} />}
                   >
                     {rows(divider.words)}

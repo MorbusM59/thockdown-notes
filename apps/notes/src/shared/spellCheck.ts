@@ -47,7 +47,9 @@ export type SpellCheckDictionaryFiles = {
 
 export const USER_DICTIONARY_ID = 'user';
 export const USER_DICTIONARY_LABEL = 'User Dictionary';
-export const DEFAULT_DICTIONARY_ICON = 'fa-book';
+export const DEFAULT_DICTIONARY_ICON = 'fa-globe';
+/** The user dictionary's own default mark. */
+export const USER_DICTIONARY_ICON = 'fa-user';
 
 export const BUNDLED_DICTIONARIES: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'en', label: 'English (US)' },

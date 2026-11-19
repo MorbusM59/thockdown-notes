@@ -245,7 +245,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Outlines misspelled words, using dictionaries that ship with the app, so it works offline and the same on every computer.*
 
 - One switch for the whole app. It checks the editor of the slot you are typing in, never the reader.
-- English (US), Spanish, French and German come with the app; each is a row under Spell Checking, with a box to switch it on or off and a name you can type over. A word counts as correct when any active dictionary knows it, so a note can mix languages.
+- English (US), Spanish, French and German come with the app; each is a row under Spell Checking: press its icon to switch it on or off, and type over its name. A word counts as correct when any active dictionary knows it, so a note can mix languages.
 - The User Dictionary at the top holds your own words and is always active. Ctrl+D adds the outlined words in the selection to it, or, with nothing selected, the nearest unrecognized word before the caret in its paragraph.
 - The pen on a row opens that dictionary's words in the sidebar, where the search field filters them and holding a word's x removes it. Below the list, type words into the field to add them. Its dock imports Hunspell dictionaries (an .oxt from LibreOffice's extensions site, a Firefox .xpi, a .zip, or a .dic with its .aff) and resets the open one: a bundled dictionary goes back to how it shipped, one of your own is deleted, and the User Dictionary is emptied. New dictionary... below the rows creates an empty one.
 - Code, links, web addresses and #tags are not checked. The word you are still typing is not marked until you move on; a marked word stays marked until you change it.
