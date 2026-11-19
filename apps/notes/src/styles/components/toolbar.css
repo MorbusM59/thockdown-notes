@@ -80,6 +80,10 @@
   border-radius: var(--border-radius-small) var(--border-radius-small) var(--border-radius-regular) var(--border-radius-regular);
 }
 
+.double-size-glyph {
+  font-size: 17px;
+}
+
 .display-modes-split > .btn-icon.display-modes-split-btn.is-active {
   border-color: var(--btn-border-active);
   box-shadow: var(--box-shadow-inverted-harsh-active);

@@ -184,7 +184,7 @@ export function EditorToolbar({
             aria-pressed={isDoubleSizeMode}
             onClick={handleToggleDoubleSizeMode}
           >
-            <span className="double-size-glyph fa-solid fa-magnifying-glass-plus" aria-hidden="true" />
+            <span className="double-size-glyph fa-solid fa-voicemail fa-rotate-180" aria-hidden="true" />
           </button>
         </div>
       </div>
