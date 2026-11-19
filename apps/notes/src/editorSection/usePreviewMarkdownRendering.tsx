@@ -45,6 +45,7 @@ import { noteFrameCostScroll } from './previewFrameCostTrace'
 import { usePreviewWindow, type PreviewWindowApi } from './usePreviewWindow'
 import {
   buildBlockCharOffsets,
+  resolveDocumentChars,
   resolveVisibleBlockIndexRange,
   resolveLastScreenChars,
   resolvePreviewCharScrollOffset,
@@ -1411,6 +1412,12 @@ export function usePreviewMarkdownRendering({
     blockCharOffsetsSourceRef.current = previewBlocks
     blockCharOffsetsRef.current = buildBlockCharOffsets(previewBlocks)
   }
+  // The whole document's length in the same space, known from the source
+  // before the split has delivered anything below the top. Every ratio
+  // divides by this rather than by the last offset, which only reaches the
+  // document's end once the split is complete.
+  const documentCharsRef = useRef(0)
+  documentCharsRef.current = resolveDocumentChars(splitResult.text)
 
   // Which of the two strategies this document gets, decided by its length and
   // nothing else -- the same boundary editor/documentPosition.ts draws, and the
@@ -1506,6 +1513,8 @@ export function usePreviewMarkdownRendering({
     previewScrollRef,
     previewBlocks,
     blockCharOffsetsRef,
+    documentCharsRef,
+    isSplitComplete: splitState.isComplete,
     renderBlock: renderPreviewBlock,
     overlay: isWindowed ? typographyProbeElement : null,
     geometryProbeRef: charRulerRef,
@@ -1608,6 +1617,7 @@ export function usePreviewMarkdownRendering({
     if (!scroller) return null
     return resolvePreviewCharViewport({
       offsets: blockCharOffsetsRef.current,
+      totalChars: documentCharsRef.current,
       measurements: readBlockMeasurements(),
       scrollTop: scroller.scrollTop,
       clientHeight: scroller.clientHeight,
@@ -1867,8 +1877,7 @@ export function usePreviewMarkdownRendering({
     // thumb's POSITION is measured in, so size and position speak one unit.
     const readChunkedThumbRatio = () => {
       const charsPerScreen = readViewportCharCapacity()
-      const offsets = blockCharOffsetsRef.current
-      const totalChars = offsets && offsets.length > 1 ? offsets[offsets.length - 1] : 0
+      const totalChars = documentCharsRef.current
       if (charsPerScreen === null) return null
       return resolveChunkedThumbRatio({ charsPerScreen, totalChars })
     }
@@ -1984,6 +1993,7 @@ export function usePreviewMarkdownRendering({
       // instead of by two functions agreeing to stay in step.
       const at = resolvePreviewCharViewport({
         offsets: blockCharOffsetsRef.current,
+        totalChars: documentCharsRef.current,
         measurements: readBlockMeasurements(),
         scrollTop: offsetPx,
         clientHeight: scroller.clientHeight,
@@ -2042,18 +2052,18 @@ export function usePreviewMarkdownRendering({
 
       ratioForScrollOffsetPx,
 
-      // Final once the note's split is complete, and not before. Both
-      // strategies read the document through the blocks delivered so far: a
-      // chunked ratio divides the screen's character capacity by the blocks'
-      // total characters, a continuous one reads a scrollHeight made of the
-      // blocks mounted. The split arrives in instalments, top first, so an
-      // earlier answer is about part of the document -- and the scrollbar
+      // A CHUNKED ratio is final from its first answer: it divides the
+      // screen's character capacity (geometry) by the document's length,
+      // which is the source's and is known before the split has delivered a
+      // single block. A CONTINUOUS one reads a scrollHeight made of the blocks
+      // mounted, and the split arrives in instalments, top first -- so it is
+      // final once the split is complete and not before. The scrollbar
       // COMMITS the thumb's size on the first settled answer and holds it
-      // (scrollThumbMetrics.ts), keyed on the full text's length, which a
-      // later instalment does not change. Answering "yes, always" froze a
-      // large note's thumb at the size of its first instalment: twice the
-      // right height on a 400,000-character note.
-      isThumbRatioSettled: () => isSplitCompleteRef.current,
+      // (scrollThumbMetrics.ts). Settling the chunked ratio on completion as
+      // well left a large note drawing the provisional pixel ratio of its
+      // mounted window until then, which resized the thumb on every window
+      // move while the note loaded.
+      isThumbRatioSettled: () => !isContinuous() || isSplitCompleteRef.current,
 
       // Only a windowed pane has an end that is not the document's, and only a
       // windowed pane's scrollTop stops counting at a window boundary.
@@ -2111,9 +2121,7 @@ export function usePreviewMarkdownRendering({
       if (isPreviewSettleHolding?.()) return
       noteFrameCostScroll(() => ({
         blocks: previewBlocksRef.current.length,
-        // The cumulative block offsets already end at the document's own
-        // length, so this costs a read rather than a pass over the text.
-        chars: blockCharOffsetsRef.current?.at(-1) ?? 0,
+        chars: documentCharsRef.current,
       }))
     }
     scroller.addEventListener('scroll', onScroll, { passive: true })

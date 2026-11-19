@@ -10,12 +10,12 @@ import {
 describe('splitMarkdownIntoPreviewBlocks', () => {
   it('returns a single block spanning the whole text for empty input', () => {
     const blocks = splitMarkdownIntoPreviewBlocks('')
-    expect(blocks).toEqual([{ text: '', startLine: 0 }])
+    expect(blocks).toEqual([{ text: '', startLine: 0, sourceLength: 0 }])
   })
 
   it('returns a single block spanning the whole text for a single paragraph', () => {
     const blocks = splitMarkdownIntoPreviewBlocks('just one paragraph')
-    expect(blocks).toEqual([{ text: 'just one paragraph', startLine: 0 }])
+    expect(blocks).toEqual([{ text: 'just one paragraph', startLine: 0, sourceLength: 18 }])
   })
 
   it('splits multiple paragraphs at blank-line boundaries, each with the correct absolute start line', () => {

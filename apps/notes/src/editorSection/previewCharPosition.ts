@@ -44,23 +44,41 @@ export interface PreviewCharViewport {
 }
 
 /**
- * Prefix-sums the block list into character offsets.
+ * Prefix-sums the block list into character offsets: each block's position in
+ * the SOURCE text.
  *
- * Length is `blocks.length + 1`: the last entry is the document total, so
- * every block's span is `offsets[i + 1] - offsets[i]` with no special case at
- * the end. Each block also counts for one character more than its text, so a
- * genuinely empty block still occupies a position of its own rather than
- * sharing one with its neighbour (which would make the mapping non-monotone).
+ * Length is `blocks.length + 1`, so every block's span is
+ * `offsets[i + 1] - offsets[i]` with no special case at the end. A block
+ * counts its own source text plus the newline that separates it from the
+ * next, so the offsets are true source positions (the blocks tile the source's
+ * lines) and a genuinely empty block still occupies a position of its own.
+ *
+ * The last entry is where the DELIVERED blocks end, which is the document's
+ * end only once the split is complete. The split arrives top first, so the
+ * document's own length is not this number but `resolveDocumentChars` of the
+ * source -- and that, not the last offset, is what a ratio divides by. A
+ * denominator that grew with every instalment put the reader at a different
+ * place on the track each time one arrived, which is the warp a right-hold in
+ * a large, still-loading note showed.
  */
-export function buildBlockCharOffsets(blocks: readonly { text: string }[]): Float64Array {
+export function buildBlockCharOffsets(blocks: readonly { sourceLength: number }[]): Float64Array {
   const offsets = new Float64Array(blocks.length + 1)
   let total = 0
   for (let index = 0; index < blocks.length; index += 1) {
     offsets[index] = total
-    total += blocks[index].text.length + 1
+    total += blocks[index].sourceLength + 1
   }
   offsets[blocks.length] = total
   return offsets
+}
+
+/**
+ * The whole document's length in the character space above, known from the
+ * source before a single block has been split: once the split is complete it
+ * equals the last offset exactly.
+ */
+export function resolveDocumentChars(sourceText: string): number {
+  return sourceText.length + 1
 }
 
 /** Index of the block whose character span contains `charOffset`. */
@@ -168,14 +186,15 @@ function pixelToChar(
  */
 export function resolvePreviewCharViewport(options: {
   offsets: Float64Array | null
+  /** The whole document's length (`resolveDocumentChars`), not the delivered blocks'. */
+  totalChars: number
   measurements: readonly PreviewBlockMeasurement[]
   scrollTop: number
   clientHeight: number
 }): PreviewCharViewport | null {
-  const { offsets, measurements, scrollTop, clientHeight } = options
+  const { offsets, totalChars, measurements, scrollTop, clientHeight } = options
   if (!offsets || offsets.length < 2 || measurements.length === 0) return null
 
-  const totalChars = offsets[offsets.length - 1]
   if (!(totalChars > 0)) return null
 
   const startChar = pixelToChar(offsets, measurements, scrollTop)
@@ -246,6 +265,9 @@ export function resolvePreviewCharScrollOffset(options: {
  * Returns null when the measurements do not reach the document's last block,
  * which is the honest answer rather than a guess drawn from the wrong end of
  * the document. The caller stands in something approximate until they do.
+ *
+ * Only meaningful for a COMPLETE split: the last delivered block of a partial
+ * one is not the document's last block, and its screen is not the last screen.
  */
 export function resolveLastScreenChars(options: {
   offsets: Float64Array | null

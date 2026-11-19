@@ -184,6 +184,14 @@ export interface UsePreviewWindowOptions {
   previewScrollRef: MutableRefObject<HTMLDivElement | null>
   previewBlocks: readonly PreviewBlock[]
   blockCharOffsetsRef: MutableRefObject<Float64Array | null>
+  /** The whole document's length in that character space (previewCharPosition.ts's `resolveDocumentChars`). */
+  documentCharsRef: MutableRefObject<number>
+  /**
+   * Whether `previewBlocks` is the whole document or only its top so far. The
+   * tail probe measures the LAST blocks as the document's last screen, which
+   * only they are once the split is complete.
+   */
+  isSplitComplete: boolean
   /**
    * Renders one block. Supplied by the caller rather than built here so the
    * windowed path mounts the SAME memoized component the virtualized path
@@ -232,6 +240,8 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     previewScrollRef,
     previewBlocks,
     blockCharOffsetsRef,
+    documentCharsRef,
+    isSplitComplete,
     renderBlock,
     overlay,
     geometryProbeRef,
@@ -547,19 +557,28 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
 
   const readLastScreenChars = useCallback(() => lastScreenCharsRef.current, [])
 
+  // Written during render, like previewBlocksRef: a probe restarted in this
+  // commit must know whether the blocks it would measure end the document.
+  const isSplitCompleteRef = useRef(isSplitComplete)
+  isSplitCompleteRef.current = isSplitComplete
+
   const restartTailProbe = useCallback(() => {
     lastScreenCharsRef.current = null
-    setTailProbeBlocks(previewBlocksRef.current.length > 0
-      ? Math.min(PREVIEW_TAIL_PROBE_INITIAL_BLOCKS, previewBlocksRef.current.length)
-      : 0)
+    // Until the split is complete the last delivered blocks are the middle of
+    // the document, and their screen says nothing about its last one. No
+    // answer is the honest one: the caller stands in the grid capacity.
+    const blockCount = isSplitCompleteRef.current ? previewBlocksRef.current.length : 0
+    setTailProbeBlocks(blockCount > 0 ? Math.min(PREVIEW_TAIL_PROBE_INITIAL_BLOCKS, blockCount) : 0)
   }, [])
 
   // A new document is the obvious trigger, and it is immediate: nothing the
-  // probe learned about the previous document's tail is true of this one.
+  // probe learned about the previous document's tail is true of this one. The
+  // split completing is the same event arriving late -- the first moment the
+  // document's tail exists to be measured -- so it is immediate too.
   useEffect(() => {
     if (!enabled) return
     restartTailProbe()
-  }, [enabled, activeNoteId, restartTailProbe])
+  }, [enabled, activeNoteId, isSplitComplete, restartTailProbe])
 
   // An edit to the document already on screen is the other trigger, and it is
   // deliberately NOT immediate.
@@ -844,11 +863,12 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     if (!scroller) return null
     return resolvePreviewCharViewport({
       offsets: blockCharOffsetsRef.current,
+      totalChars: documentCharsRef.current,
       measurements: measurementsRef.current,
       scrollTop: scroller.scrollTop,
       clientHeight: scroller.clientHeight,
     })
-  }, [previewScrollRef, blockCharOffsetsRef])
+  }, [previewScrollRef, blockCharOffsetsRef, documentCharsRef])
 
   const resolveCharTarget = useCallback((charOffset: number): { blockIndex: number; fraction: number } | null => {
     const offsets = blockCharOffsetsRef.current

@@ -7,10 +7,12 @@ import {
   resolvePreviewCharScrollOffset,
   resolvePreviewCharViewport,
   resolveLastScreenChars,
+  resolveDocumentChars,
 } from './previewCharPosition'
+import { splitMarkdownIntoPreviewBlocks } from '../editor/PreviewBlockSplit'
 import type { PreviewBlockMeasurement } from './previewCharPosition'
 
-const blocks = (lengths: number[]) => lengths.map((length) => ({ text: 'x'.repeat(length) }))
+const blocks = (lengths: number[]) => lengths.map((length) => ({ sourceLength: length }))
 
 /** Blocks of `size` pixels each, laid out end to end from 0. */
 const evenMeasurements = (count: number, size: number): PreviewBlockMeasurement[] =>
@@ -31,6 +33,39 @@ describe('buildBlockCharOffsets', () => {
 
   it('handles an empty document', () => {
     expect([...buildBlockCharOffsets([])]).toEqual([0])
+  })
+})
+
+describe('the character space is the SOURCE text', () => {
+  // Footnote and link definitions are appended to every other block's text,
+  // so a block's text length is not its length in the source.
+  const source = [
+    '# Title',
+    '',
+    'A paragraph with a footnote[^1] and a [link][ref].',
+    '',
+    '- one',
+    '- two',
+    '',
+    '[^1]: The footnote.',
+    '[ref]: https://example.com',
+    '',
+    'Last paragraph.',
+  ].join('\n')
+
+  it('puts every block at its own position in the source and ends at the document length', () => {
+    const split = splitMarkdownIntoPreviewBlocks(source)
+    const offsets = buildBlockCharOffsets(split)
+    const lineStart = (line: number) => source.split('\n').slice(0, line).join('\n').length + (line > 0 ? 1 : 0)
+    split.forEach((block, index) => expect(offsets[index]).toBe(lineStart(block.startLine)))
+    expect(offsets[split.length]).toBe(resolveDocumentChars(source))
+  })
+
+  it('places a partial split at the top of the same space, so an instalment moves nothing already placed', () => {
+    const split = splitMarkdownIntoPreviewBlocks(source)
+    const whole = buildBlockCharOffsets(split)
+    const top = buildBlockCharOffsets(split.slice(0, 2))
+    expect([...top]).toEqual([...whole.slice(0, 3)])
   })
 })
 
@@ -71,11 +106,11 @@ describe('findBlockAtPixel', () => {
 
 describe('resolvePreviewCharViewport', () => {
   const lengths = [99, 99, 99, 99, 99]
-  const offsets = buildBlockCharOffsets(lengths.map((length) => ({ text: 'x'.repeat(length) })))
+  const offsets = buildBlockCharOffsets(lengths.map((length) => ({ sourceLength: length })))
   const measurements = evenMeasurements(5, 100)
 
   it('reads position at the top of the document as zero', () => {
-    const viewport = resolvePreviewCharViewport({ offsets, measurements, scrollTop: 0, clientHeight: 200 })!
+    const viewport = resolvePreviewCharViewport({ offsets, totalChars: 500, measurements, scrollTop: 0, clientHeight: 200 })!
     expect(viewport.startChar).toBe(0)
     expect(viewport.totalChars).toBe(500)
     expect(viewport.visibleChars).toBe(200)
@@ -85,26 +120,35 @@ describe('resolvePreviewCharViewport', () => {
     // Half way down block 2 (pixels 200..300) is half way through its
     // characters. Without interpolation this would report the same position
     // for every scroll offset inside the block.
-    const viewport = resolvePreviewCharViewport({ offsets, measurements, scrollTop: 250, clientHeight: 200 })!
+    const viewport = resolvePreviewCharViewport({ offsets, totalChars: 500, measurements, scrollTop: 250, clientHeight: 200 })!
     expect(viewport.startChar).toBe(250)
   })
 
   it('reports the end of the document at the end of the scroll range', () => {
-    const viewport = resolvePreviewCharViewport({ offsets, measurements, scrollTop: 300, clientHeight: 200 })!
+    const viewport = resolvePreviewCharViewport({ offsets, totalChars: 500, measurements, scrollTop: 300, clientHeight: 200 })!
     expect(viewport.startChar + viewport.visibleChars).toBe(500)
   })
 
   it('never reports a span outside the document', () => {
-    const viewport = resolvePreviewCharViewport({ offsets, measurements, scrollTop: 480, clientHeight: 400 })!
+    const viewport = resolvePreviewCharViewport({ offsets, totalChars: 500, measurements, scrollTop: 480, clientHeight: 400 })!
     expect(viewport.startChar).toBeLessThanOrEqual(viewport.totalChars)
     expect(viewport.startChar + viewport.visibleChars).toBeLessThanOrEqual(viewport.totalChars)
   })
 
+  it('reads position against the WHOLE document while only its top has been split', () => {
+    // The same five blocks are the top half of a 1000-character document:
+    // the reader at block 2 is a quarter of the way through, not half.
+    const viewport = resolvePreviewCharViewport({ offsets, totalChars: 1000, measurements, scrollTop: 250, clientHeight: 200 })!
+    expect(viewport.startChar).toBe(250)
+    expect(viewport.totalChars).toBe(1000)
+  })
+
   it('says nothing at all when there is nothing to say', () => {
-    expect(resolvePreviewCharViewport({ offsets: null, measurements, scrollTop: 0, clientHeight: 100 })).toBeNull()
-    expect(resolvePreviewCharViewport({ offsets, measurements: [], scrollTop: 0, clientHeight: 100 })).toBeNull()
+    expect(resolvePreviewCharViewport({ offsets: null, totalChars: 500, measurements, scrollTop: 0, clientHeight: 100 })).toBeNull()
+    expect(resolvePreviewCharViewport({ offsets, totalChars: 500, measurements: [], scrollTop: 0, clientHeight: 100 })).toBeNull()
     expect(resolvePreviewCharViewport({
       offsets: buildBlockCharOffsets([]),
+      totalChars: 0,
       measurements,
       scrollTop: 0,
       clientHeight: 100,
@@ -120,7 +164,7 @@ describe('resolvePreviewCharScrollOffset', () => {
     // A drag that reads position one way and writes it another drops the
     // thumb somewhere the reader did not put it.
     for (const scrollTop of [0, 37, 150, 250, 399]) {
-      const viewport = resolvePreviewCharViewport({ offsets, measurements, scrollTop, clientHeight: 200 })!
+      const viewport = resolvePreviewCharViewport({ offsets, totalChars: 500, measurements, scrollTop, clientHeight: 200 })!
       const back = resolvePreviewCharScrollOffset({ offsets, measurements, charOffset: viewport.startChar })!
       expect(Math.abs(back - scrollTop)).toBeLessThan(1)
     }

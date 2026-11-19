@@ -19,6 +19,14 @@ export interface PreviewMarkdownBlock {
   text: string
   /** 0-indexed absolute start line within the full document -- same convention createPreviewSourceAnchorRehypePlugin already uses (remark's 1-indexed line minus 1). */
   startLine: number
+  /**
+   * Length of the block's OWN source text, before any definition text is
+   * appended to `text` (see materializeBlocks). The blocks tile the source's
+   * lines, so these lengths, one newline apart, are the blocks' true positions
+   * in the source -- which is what the render view's character space
+   * (editorSection/previewCharPosition.ts) is built from.
+   */
+  sourceLength: number
 }
 
 /**
@@ -117,10 +125,10 @@ function materializeBlocks(ranges: PreviewBlockRange[], lines: string[]): Previe
   })
 
   if (definitionTextByIndex.size === 0) {
-    return ranges.map(({ rangeStartLine1, rangeEndLine1 }) => ({
-      text: lines.slice(rangeStartLine1 - 1, rangeEndLine1).join('\n'),
-      startLine: rangeStartLine1 - 1,
-    }))
+    return ranges.map(({ rangeStartLine1, rangeEndLine1 }) => {
+      const text = lines.slice(rangeStartLine1 - 1, rangeEndLine1).join('\n')
+      return { text, startLine: rangeStartLine1 - 1, sourceLength: text.length }
+    })
   }
 
   const allDefinitionsText = Array.from(definitionTextByIndex.values()).join('\n\n')
@@ -128,7 +136,7 @@ function materializeBlocks(ranges: PreviewBlockRange[], lines: string[]): Previe
   return ranges.map(({ rangeStartLine1, rangeEndLine1 }, index) => {
     const ownText = lines.slice(rangeStartLine1 - 1, rangeEndLine1).join('\n')
     const text = definitionTextByIndex.has(index) ? ownText : `${ownText}\n\n${allDefinitionsText}`
-    return { text, startLine: rangeStartLine1 - 1 }
+    return { text, startLine: rangeStartLine1 - 1, sourceLength: ownText.length }
   })
 }
 
