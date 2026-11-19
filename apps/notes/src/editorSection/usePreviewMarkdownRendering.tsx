@@ -1646,6 +1646,8 @@ export function usePreviewMarkdownRendering({
     const { prefix } = blockWordPrefixRef.current
     const endChar = viewport.startChar + viewport.visibleChars
     if (endChar >= viewport.totalChars) return 0
+    // Past the blocks split so far there is no word count to read yet.
+    if (endChar >= offsets[blocks.length]) return null
     const index = findBlockAtChar(offsets, endChar)
     const span = offsets[index + 1] - offsets[index]
     const passed = span > 0 ? Math.min(1, Math.max(0, (endChar - offsets[index]) / span)) : 1

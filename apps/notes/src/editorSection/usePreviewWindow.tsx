@@ -273,6 +273,10 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
 
   const previewBlocksRef = useRef(previewBlocks)
   previewBlocksRef.current = previewBlocks
+  // Written during render for the same reason: whether the last block here is
+  // the document's last, which the tail probe and the edge test both ask.
+  const isSplitCompleteRef = useRef(isSplitComplete)
+  isSplitCompleteRef.current = isSplitComplete
 
   // Rebuilt in a layout effect after every window change and on any resize of
   // the mounted content. Read on every scroll frame, so it must never force a
@@ -385,7 +389,7 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
     const blockCount = previewBlocksRef.current.length
     if (direction > 0) {
       const atWindowEnd = scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - 1
-      return atWindowEnd && rangeRef.current.endIndex >= blockCount - 1
+      return atWindowEnd && isSplitCompleteRef.current && rangeRef.current.endIndex >= blockCount - 1
     }
     return scroller.scrollTop <= 1 && rangeRef.current.startIndex <= 0
   }, [previewScrollRef])
@@ -556,11 +560,6 @@ export function usePreviewWindow(options: UsePreviewWindowOptions): {
   }, [enabled, range, containerEl, rebuildMeasurements, applyPendingScroll, previewScrollRef])
 
   const readLastScreenChars = useCallback(() => lastScreenCharsRef.current, [])
-
-  // Written during render, like previewBlocksRef: a probe restarted in this
-  // commit must know whether the blocks it would measure end the document.
-  const isSplitCompleteRef = useRef(isSplitComplete)
-  isSplitCompleteRef.current = isSplitComplete
 
   const restartTailProbe = useCallback(() => {
     lastScreenCharsRef.current = null
