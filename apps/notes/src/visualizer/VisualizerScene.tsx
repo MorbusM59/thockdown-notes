@@ -53,6 +53,7 @@ import { CUSTOM_SOLID_INDEX, RHOMBIC_SOLID_INDEX, solidSeed } from '../editor/Em
 import { BucketList } from './BucketList'
 import { PoolFilter } from './PoolFilter'
 import { BarEndGlyphs, LevelBars } from './LevelBars'
+import { CutoutGlyphBox } from './CutoutGlyphBox'
 import { CursorIdle } from './CursorIdle'
 import { dropWideGlyphs } from './cellGlyphs'
 import { pulseAmount, subscribePulseHits } from './pulseHits'
@@ -515,7 +516,6 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
 
           {progressArea && progressColumns >= 2 && (
             <>
-              <div className="visualizer-lit" style={{ left: progressLeftPx, top: rowTop(progressArea.row), width: box, height: box }} />
               {/* The track is drawn as the lit runs either side of the
                   playhead's box, so that box is truly missing: painting the
                   strip's colour over a lit track let the caret colour show
@@ -523,8 +523,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
               {trackRuns(track, gapColumn).map((run) => (
                 <div key={run.first} className="visualizer-lit" style={{ left: progressLeftPx + run.first * box, top: rowTop(progressArea.row), width: run.count * box, height: box }} />
               ))}
-              <div className="visualizer-lit" style={{ left: progressLeftPx + (progressColumns - 1) * box, top: rowTop(progressArea.row), width: box, height: box }} />
-              <BarEndGlyphs layout={layout} bar={progressArea} glyphs={['<', '>']} onPress={(end) => readNowPlaying().jumpSong(end === 0 ? -1 : 1)} />
+              <BarEndGlyphs layout={layout} bar={progressArea} glyphs={['<', '>']} font={glyphFont} onPress={(end) => readNowPlaying().jumpSong(end === 0 ? -1 : 1)} />
             </>
           )}
           {layout.titleRow !== null && <LetterBoxes runs={title} row={layout.titleRow} layout={layout} />}
@@ -569,24 +568,24 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {songArea && <SongList layout={layout} area={songArea} glyphFont={glyphFont} />}
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
           {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
-          {levelArea && <LevelBars layout={layout} area={levelArea} />}
+          {levelArea && <LevelBars layout={layout} area={levelArea} font={glyphFont} />}
           {layout.stripRows > 0 && layout.columns > 0 && (
             // The exit box: the top strip's first full box from the right, on
-            // its empty first row, lit in the accent with the glyph in the
-            // accent inverted, like a bar's end box. It is drawn above the grid
-            // lines, so it starts a pixel in (a box's first row and column are
-            // the line it shares with the box before), leaving them drawn. A div, not a button:
-            // the app's button styles would round and tint it. One of the panels, so it
-            // shows and hides with them.
-            <div
-              role="button"
-              className="visualizer-exit"
-              aria-label="Leave the visualizer"
-              style={{ left: originXPx + (columns - 1) * box + 1, top: rowTop(0) + 1, width: box - 1, height: box - 1, fontSize: Math.round(box * 0.7) }}
-              onClick={onExit}
-            >
-              <i className="fa-solid fa-xmark" aria-hidden="true" />
-            </div>
+            // its empty first row, an accent box laid over the middle section's
+            // colour (so it reads as a bar end's does, not tinted by the
+            // letterbox), with an xmark cut out of both. A pixel in, so the grid
+            // line on a box's first row and column stays drawn. One of the
+            // panels, so it shows and hides with them.
+              <CutoutGlyphBox
+                className="visualizer-exit"
+                label="Leave the visualizer"
+                left={originXPx + (columns - 1) * box + 1}
+                top={rowTop(0) + 1}
+                sizePx={box - 1}
+                text={'\uf00d'}
+                font={`900 ${Math.round(box * 0.7)}px "Font Awesome 7 Free"`}
+                onClick={onExit}
+              />
           )}
           <CursorIdle />
 

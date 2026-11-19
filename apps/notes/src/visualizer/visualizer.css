@@ -99,21 +99,24 @@
   white-space: pre;
 }
 
-/* The glyph on a bar's end box (the progress track's < and >, the volume
-   bar's - and +): the box is lit in the accent, so the glyph takes the strip's
-   own colour, the accent inverted. */
-.visualizer-letter.is-bar-end {
-  color: var(--visualizer-letterbox-color, var(--color-bg-regular));
-  /* Above both bars' hit layers (6 and 8), so the end box takes its press. */
+/* A button box (CutoutGlyphBox.tsx): the accent, masked by everything
+   EXCLUDING its glyph, so the glyph is a hole showing what lies beneath. A
+   press shrinks the glyph layer of the mask by a tenth and nothing else.
+   Above both bars' hit layers (6 and 8), so a bar end takes its own press. */
+.visualizer-scene > .visualizer-cutout-glyph {
   z-index: 9;
   pointer-events: auto;
   cursor: pointer;
-  transition: scale 80ms ease-out;
+  background-color: var(--visualizer-accent-color, var(--color-caret));
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: 100% 100%, var(--visualizer-glyph-press, 100%) var(--visualizer-glyph-press, 100%);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  transition: mask-size 80ms ease-out;
 }
-/* A press shrinks the glyph by a tenth and nothing else: the element is the
-   glyph alone, its lit box drawn underneath. */
-.visualizer-letter.is-bar-end[data-pressed] {
-  scale: 0.9;
+.visualizer-cutout-glyph[data-pressed] {
+  --visualizer-glyph-press: 90%;
 }
 
 .visualizer-scene > .visualizer-progress-hit {
@@ -403,28 +406,11 @@
 }
 
 /* The exit box (VisualizerScene.tsx): the accent laid over the middle
-   section's own colour, as the bars' end boxes are (not over the letterbox it
-   sits in), and its xmark in the accent inverted, as a bar end's glyph is. A
-   press shrinks the glyph by a tenth and nothing else. One of the panels. */
-.visualizer-scene > .visualizer-exit {
-  z-index: 8;
-  pointer-events: auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+   section's colour, both under the one mask, so the xmark punches through
+   both to the letterbox. One of the panels. */
+.visualizer-scene > .visualizer-cutout-glyph.visualizer-exit {
   background: linear-gradient(var(--visualizer-accent-color, var(--color-caret)), var(--visualizer-accent-color, var(--color-caret))), var(--color-bg-regular);
-  color: var(--visualizer-letterbox-color, var(--color-bg-regular));
-  cursor: pointer;
   opacity: var(--visualizer-panels);
-}
-/* Pressed is marked on the box itself (pressTracking.ts marks only what a
-   [data-pressed] rule names as its subject), and the glyph reads it. */
-.visualizer-exit[data-pressed] {
-  --visualizer-exit-press: 0.9;
-}
-.visualizer-exit > i {
-  scale: var(--visualizer-exit-press, 1);
-  transition: scale 80ms ease-out;
 }
 .visualizer-scene.is-panels-hidden > .visualizer-exit {
   pointer-events: none;
