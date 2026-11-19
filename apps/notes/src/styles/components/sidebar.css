@@ -336,7 +336,6 @@
   flex:           1 1 auto;
   min-height:     0;
   overflow-y:     auto;
-  /* Preserve card width while moving the left edge inward; bottom follows the window-edge gutter. */
   padding:        var(--spacing-large);
   display:        flex;
   flex-direction: column;

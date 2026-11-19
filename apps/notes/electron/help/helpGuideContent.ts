@@ -715,7 +715,6 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 *Saves a copy of the database, which holds every note, its chapters, tags and history, and shows it in your file explorer.*
 
 - A copy is also kept automatically each time the app starts, for the last three starts, in the same \`backups\` folder.
-- If an older version's music library is incompatible, the app backs up the database before resetting the library. Your music files are unchanged; add them again to the new library.
 - To get notes out as files other programs can read, use [Export to Markdown](#export-to-markdown).
 `,
   `## Export
