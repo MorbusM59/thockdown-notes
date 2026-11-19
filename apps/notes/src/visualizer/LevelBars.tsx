@@ -18,9 +18,10 @@ const BARS: ReadonlyArray<keyof SoundLevels & keyof LevelBarsArea> = ['volume']
  * What frames an edge-to-edge bar: the glyphs on its two end boxes, drawn
  * over its lit boxes in the inverted accent, and the screen's cut-off part
  * boxes beyond them (the grid's margin either side), lit in the accent so the
- * bar reaches the screen's edges.
+ * bar reaches the screen's edges. An end box takes its own press (`onPress`,
+ * what the bar's own hit layer does at that column) so it can look pressed.
  */
-export function BarEndGlyphs({ layout, bar, glyphs }: { layout: VisualizerLayout; bar: LevelBar; glyphs: readonly [string, string] }) {
+export function BarEndGlyphs({ layout, bar, glyphs, onPress }: { layout: VisualizerLayout; bar: LevelBar; glyphs: readonly [string, string]; onPress: (end: 0 | 1) => void }) {
   const { boxPx, originXPx, originYPx } = layout
   const top = originYPx + bar.row * boxPx
   return (
@@ -32,6 +33,11 @@ export function BarEndGlyphs({ layout, bar, glyphs }: { layout: VisualizerLayout
           key={column}
           className="visualizer-letter is-bar-end"
           style={{ left: originXPx + (bar.column + column) * boxPx, top: originYPx + bar.row * boxPx, width: boxPx, height: boxPx, lineHeight: `${boxPx}px` }}
+          // The end box takes its own press, above the bar's hit layer, so it
+          // can show the press (its glyph shrinks a tenth, visualizer.css).
+          onPointerDown={(event) => {
+            if (event.button === 0) onPress(index as 0 | 1)
+          }}
         >
           {glyphs[index]}
         </div>
@@ -51,7 +57,12 @@ export function LevelBars({ layout, area }: { layout: VisualizerLayout; area: Le
   })
   return (
     <>
-      <BarEndGlyphs layout={layout} bar={area.volume} glyphs={['\u2013', '+']} />
+      <BarEndGlyphs
+        layout={layout}
+        bar={area.volume}
+        glyphs={['\u2013', '+']}
+        onPress={(end) => readNowPlaying().setLevel('volume', levelAtColumn(area.volume.columns, end === 0 ? 0 : area.volume.columns - 1))}
+      />
       {BARS.map((key) => {
         const bar = area[key]
         const gap = levelGapColumn(bar.columns, levels[key])

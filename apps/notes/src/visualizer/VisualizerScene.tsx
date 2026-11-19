@@ -524,7 +524,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
                 <div key={run.first} className="visualizer-lit" style={{ left: progressLeftPx + run.first * box, top: rowTop(progressArea.row), width: run.count * box, height: box }} />
               ))}
               <div className="visualizer-lit" style={{ left: progressLeftPx + (progressColumns - 1) * box, top: rowTop(progressArea.row), width: box, height: box }} />
-              <BarEndGlyphs layout={layout} bar={progressArea} glyphs={['<', '>']} />
+              <BarEndGlyphs layout={layout} bar={progressArea} glyphs={['<', '>']} onPress={(end) => readNowPlaying().jumpSong(end === 0 ? -1 : 1)} />
             </>
           )}
           {layout.titleRow !== null && <LetterBoxes runs={title} row={layout.titleRow} layout={layout} />}
@@ -573,7 +573,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {layout.stripRows > 0 && layout.columns > 0 && (
             // The exit box: the top strip's first full box from the right, on
             // its empty first row, lit in the accent with the glyph in the
-            // accent inverted, both opaque so the glyph reads. A div, not a button:
+            // accent inverted, like a bar's end box. A div, not a button:
             // the app's button styles would round and tint it. One of the panels, so it
             // shows and hides with them.
             <div
