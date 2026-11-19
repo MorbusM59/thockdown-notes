@@ -35,7 +35,7 @@ export interface PreviewMarkdownBlock {
  * materialized block. The unit of incremental reuse in
  * splitMarkdownIntoPreviewBlocksIncremental below.
  */
-interface PreviewBlockRange {
+export interface PreviewBlockRange {
   type: string
   /** 1-indexed, inclusive. */
   rangeStartLine1: number
@@ -153,6 +153,16 @@ function fullSplit(text: string): PreviewBlockSplitCache {
 export const PROGRESSIVE_FIRST_CHUNK_LINES = 256
 
 /**
+ * The largest window parsed in one go (unless one construct spans more).
+ * remark's parse is SUPERLINEAR in its input: on a 2MB note of ordinary prose
+ * the doubling windows this replaced took 20s in all, the last window alone
+ * 11s, where windows held at 1024 lines take 4s -- the same lines, parsed in
+ * pieces no construct crosses. Measured flat from 256 to 2048 lines and twice
+ * as slow at 8192.
+ */
+export const PROGRESSIVE_MAX_CHUNK_LINES = 1024
+
+/**
  * The same split, delivered in order and in pieces, so a reader can start
  * reading the top of a large document while the rest of it is still being
  * parsed.
@@ -182,13 +192,16 @@ export const PROGRESSIVE_FIRST_CHUNK_LINES = 256
  * than one line and never crosses a top-level boundary -- and each chunk
  * begins at exactly such a boundary, inductively back to line 1.
  *
- * ## Why the windows double
+ * ## Why the windows grow, and then stop
  *
- * Re-materializing blocks costs O(document) each time the consumer receives
- * one, so a fixed chunk size would make the whole delivery O(n^2) in the
- * number of chunks. Doubling makes it O(log n) deliveries and O(n) total
- * work, while keeping the FIRST one small, which is the only one a reader is
- * waiting on.
+ * The first window is small because it is the one a reader is waiting on.
+ * They double from there, up to PROGRESSIVE_MAX_CHUNK_LINES and no further,
+ * because the parse is superlinear in a window's size (see that constant).
+ *
+ * How often the consumer is TOLD is a separate question: re-materializing
+ * blocks costs O(document) per delivery, so a delivery per window would be
+ * O(n^2). The worker therefore batches windows into deliveries that double
+ * (documentFacts.worker.ts) -- O(log n) deliveries over a linear parse.
  *
  * A window that produces nothing to keep is a single construct spanning all
  * of it; the window grows until the construct ends or the document does.
@@ -259,7 +272,7 @@ export function* splitPreviewBlockRangesProgressively(
       startLine0 += advanceLines
       break
     }
-    chunkLines *= 2
+    chunkLines = Math.min(chunkLines * 2, PROGRESSIVE_MAX_CHUNK_LINES)
   }
 }
 

@@ -18,7 +18,7 @@
 // construction and needs to be synchronous to keep a keystroke's result in
 // the same frame as the keystroke. Only whole-document work comes here.
 
-import { splitPreviewBlockRangesProgressively } from './PreviewBlockSplit'
+import { splitPreviewBlockRangesProgressively, type PreviewBlockRange } from './PreviewBlockSplit'
 import { buildPreviewVisibleDocumentFindHits, type FindMatching } from './FindReplaceEngine'
 import { collectDocumentImages, documentImagesIn, type DocumentImage } from './DocumentImages'
 import {
@@ -73,11 +73,23 @@ function handleSplit(id: number, text: string): void {
     : createPreviewVisibleTextAccumulator()
 
   const images: DocumentImage[] = []
+  // Windows are parsed at a bounded size, but each delivery costs the main
+  // thread a pass over the whole document, so they are delivered in batches
+  // that double: the first window at once, then whenever the undelivered
+  // lines reach the size of everything delivered so far.
+  let batch: PreviewBlockRange[] = []
+  let deliveredLines = 0
   for (const chunk of splitPreviewBlockRangesProgressively(text)) {
     if (projection) appendProjectionNodes(projection, chunk.nodes, chunk.sourceOffset)
     collectDocumentImages(chunk.nodes, chunk.sourceOffset, images)
-    const partial: DocumentFactsResponse = { kind: 'split', id, ranges: chunk.ranges, done: false }
-    workerScope.postMessage(partial)
+    batch = batch.length === 0 ? chunk.ranges : batch.concat(chunk.ranges)
+    const reached = batch[batch.length - 1].rangeEndLine1
+    if (deliveredLines === 0 || reached - deliveredLines >= deliveredLines) {
+      const partial: DocumentFactsResponse = { kind: 'split', id, ranges: batch, done: false }
+      workerScope.postMessage(partial)
+      deliveredLines = reached
+      batch = []
+    }
   }
 
   rememberedImages = { text, images }
@@ -87,8 +99,9 @@ function handleSplit(id: number, text: string): void {
   )
   // A separate terminal message rather than a flag on the last chunk: the
   // generator cannot know which chunk is last until it has tried to produce
-  // another, and an empty message costs nothing next to the parse.
-  const complete: DocumentFactsResponse = { kind: 'split', id, ranges: [], done: true }
+  // another. It carries whatever the last batch held, which no partial
+  // delivered.
+  const complete: DocumentFactsResponse = { kind: 'split', id, ranges: batch, done: true }
   workerScope.postMessage(complete)
 }
 
