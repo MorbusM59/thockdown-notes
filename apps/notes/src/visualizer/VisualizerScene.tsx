@@ -573,17 +573,18 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {layout.stripRows > 0 && layout.columns > 0 && (
             // The exit box: the top strip's first full box from the right, on
             // its empty first row, lit in the accent with the glyph in the
-            // accent inverted, like a bar's end box. One of the panels, so it
+            // accent inverted, both opaque so the glyph reads. A div, not a button:
+            // the app's button styles would round and tint it. One of the panels, so it
             // shows and hides with them.
-            <button
-              type="button"
+            <div
+              role="button"
               className="visualizer-exit"
               aria-label="Leave the visualizer"
               style={{ left: originXPx + (columns - 1) * box, top: rowTop(0), width: box, height: box, fontSize: Math.round(box * 0.7) }}
               onClick={onExit}
             >
               <i className="fa-solid fa-xmark" aria-hidden="true" />
-            </button>
+            </div>
           )}
           <CursorIdle />
 
