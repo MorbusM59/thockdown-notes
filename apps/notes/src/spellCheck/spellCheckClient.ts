@@ -19,7 +19,7 @@
  * Nothing is loaded until an editor first asks (`ensureStarted`): with spell
  * checking off, neither the worker nor any dictionary exists.
  */
-import type { SpellCheckApi } from '../shared/spellCheck';
+import { USER_DICTIONARY_ID, type SpellCheckApi, type SpellCheckDictionaryFiles } from '../shared/spellCheck';
 import { typoMarks, type MarkRange } from './typoMarks';
 
 type Listener = () => void;
@@ -90,23 +90,39 @@ function ensureWorker(): Worker {
  * does not hold yet. Serialized, so two quick toggles cannot interleave their
  * fetches and leave the worker configured for the first.
  */
-function configure(): void {
-  const ids = [...activeIds];
+/**
+ * The dictionaries the worker checks with: the active ones and the user
+ * dictionary, which is always active alongside them. With none active
+ * nothing is checked, so the user dictionary alone does not make every
+ * other word wrong.
+ */
+function checkedIds(): string[] {
+  return activeIds.length === 0 ? [] : [USER_DICTIONARY_ID, ...activeIds.filter((id) => id !== USER_DICTIONARY_ID)];
+}
+
+/** Forgets every answer: they were computed against dictionaries that have changed. */
+function forgetAnswers(): number {
   const myGeneration = ++generation;
   answers = new Map();
   marks = new Map();
   suggestionAnswers = new Map();
   pending.clear();
   queued = [];
+  return myGeneration;
+}
+
+function configure(): void {
+  const ids = checkedIds();
+  const myGeneration = forgetAnswers();
   configureChain = configureChain.then(async () => {
     const bridge = api();
     const target = ensureWorker();
-    const dictionaries: Array<{ id: string; aff?: Uint8Array; dic?: Uint8Array }> = [];
+    const dictionaries: Array<{ id: string; files?: SpellCheckDictionaryFiles }> = [];
     for (const id of ids) {
       if (sentToWorker.has(id)) { dictionaries.push({ id }); continue; }
       const files = bridge ? await bridge.readDictionary(id).catch(() => null) : null;
       if (!files) continue;
-      dictionaries.push({ id, aff: files.aff, dic: files.dic });
+      dictionaries.push({ id, files });
     }
     // The worker disposes whatever is not in this list.
     sentToWorker.clear();
@@ -184,6 +200,30 @@ export const spellCheckClient = {
     });
     suggestionAnswers.set(word, answer);
     return answer;
+  },
+
+  /**
+   * A dictionary's words changed on disk (`dictionaryStore.ts`): a loaded
+   * one is edited in place, and every answer is asked again, since any of
+   * them may now be different. `reload` drops the dictionary instead, for a
+   * change that is not a list of words (a reset), so it is read afresh.
+   */
+  dictionaryChanged(id: string, change: { add: readonly string[]; remove: readonly string[] } | 'reload'): void {
+    if (change === 'reload') {
+      if (!sentToWorker.has(id)) return;
+      sentToWorker.delete(id);
+      // Configuring without it disposes it; configuring again reads it anew.
+      const without = checkedIds().filter((other) => other !== id);
+      void configureChain.then(() => ensureWorker().postMessage({ type: 'configure', generation, dictionaries: without.filter((other) => sentToWorker.has(other)).map((other) => ({ id: other })) }));
+      if (started) configure();
+      return;
+    }
+    if (!sentToWorker.has(id)) return;
+    const myGeneration = forgetAnswers();
+    void configureChain.then(() => {
+      ensureWorker().postMessage({ type: 'edit', id, add: [...change.add], remove: [...change.remove] });
+      if (myGeneration === generation) notify();
+    });
   },
 
   /** Called whenever an answer could change what is drawn. Returns the unsubscribe. */

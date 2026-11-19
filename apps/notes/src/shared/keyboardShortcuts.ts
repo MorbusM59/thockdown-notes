@@ -225,6 +225,7 @@ export const SHORTCUTS = {
   },
   // Matched by the spell checker's own key handler (spellCheckExtension.ts).
   spellSuggest: { section: 'native', chords: [{ code: 'Space', shift: true }], label: 'Fix the last misspelled word, again for the next suggestion' },
+  spellAddToDictionary: { section: 'native', chords: [{ key: 'd', ctrl: true }], label: 'Add the misspelled words selected, or the last one, to the User Dictionary' },
 
   // One direction per declaration: a declaration's further chords are
   // ALTERNATIVES for the same action, and Shift+Tab is not another Tab.

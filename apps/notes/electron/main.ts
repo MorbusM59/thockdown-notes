@@ -1075,6 +1075,10 @@ function registerIpcHandlers() {
   registerInvokeHandlers<SpellCheckApi, IpcMainInvokeEvent>(SPELL_CHECK_CHANNELS, {
     listDictionaries: async () => spellCheckDictionaries.list(),
     readDictionary: async (_event, id) => spellCheckDictionaries.read(id),
+    listWords: async (_event, id) => spellCheckDictionaries.listWords(id),
+    addWords: async (_event, id, words) => spellCheckDictionaries.addWords(id, words),
+    removeWords: async (_event, id, words) => spellCheckDictionaries.removeWords(id, words),
+    createDictionary: async () => spellCheckDictionaries.create(),
     installDictionary: async (event) => {
       const owner = BrowserWindow.fromWebContents(event.sender) ?? win
       const options = {
@@ -1087,7 +1091,8 @@ function registerIpcHandlers() {
       return spellCheckDictionaries.install(filePaths)
     },
     renameDictionary: async (_event, id, label) => spellCheckDictionaries.rename(id, label),
-    removeDictionary: async (_event, id) => spellCheckDictionaries.remove(id),
+    setDictionaryIcon: async (_event, id, icon) => spellCheckDictionaries.setIcon(id, icon),
+    resetDictionary: async (_event, id) => spellCheckDictionaries.reset(id),
   }, handleTracked);
 
   registerInvokeHandlers<TextureCacheApi, IpcMainInvokeEvent>(TEXTURE_CHANNELS, {

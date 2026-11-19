@@ -177,6 +177,9 @@ import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId,
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
 import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
 import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from './sidebar/MusicLibraryPanel'
+import { DictionaryDock, DictionaryIconPicker, DictionaryPanel } from './sidebar/DictionaryPanel'
+import { closeDictionary, readOpenDictionary, registerDictionaryPresenter, subscribeOpenDictionary } from './sidebar/dictionaryView'
+import { readDictionaries, subscribeDictionaries } from './spellCheck/dictionaryStore'
 import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
@@ -1339,6 +1342,8 @@ function App() {
   // The options panel's own search term, kept apart from the note search so
   // that leaving the options for a note list (and coming back) costs neither.
   const [optionsSearchQuery, setOptionsSearchQuery] = useState('')
+  // The dictionary view's filter (sidebar/DictionaryPanel.tsx), kept apart from the options' own.
+  const [dictionarySearchQuery, setDictionarySearchQuery] = useState('')
   // The Music Library's song filter: what the search field holds while the
   // Songs view is up, separate from the note search's and not kept across a
   // restart.
@@ -1374,6 +1379,22 @@ function App() {
   useEffect(() => {
     spellCheckClient.setActiveDictionaries(spellCheckDictionaries)
   }, [spellCheckDictionaries])
+  // A dictionary created or installed is made to be used, so it starts out
+  // active; one deleted leaves the active list. Judged against the list as it
+  // was last seen, from the first listing the main process gave on.
+  const { dictionaries: spellCheckDictionaryList, listed: spellCheckDictionariesListed } = useSyncExternalStore(subscribeDictionaries, readDictionaries)
+  const seenDictionaryIdsRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    if (!spellCheckDictionariesListed) return
+    const ids = new Set(spellCheckDictionaryList.map((entry) => entry.id))
+    const seen = seenDictionaryIdsRef.current
+    seenDictionaryIdsRef.current = ids
+    if (seen === null) return
+    const added = [...ids].filter((id) => !seen.has(id))
+    const removed = [...seen].filter((id) => !ids.has(id))
+    if (added.length === 0 && removed.length === 0) return
+    setSpellCheckDictionaries((previous) => [...previous.filter((id) => !removed.includes(id)), ...added.filter((id) => !previous.includes(id))])
+  }, [spellCheckDictionaryList, spellCheckDictionariesListed])
   const [typingTrailSettings, setTypingTrailSettings] = useState<TypingTrailSettings>(DEFAULT_TYPING_TRAIL_SETTINGS)
   useEffect(() => {
     typingTrail.configure({ enabled: features.typingTrail, ...typingTrailSettings })
@@ -3646,6 +3667,7 @@ function App() {
   const showSidebarInModeRef = useRef(showSidebarInMode)
   showSidebarInModeRef.current = showSidebarInMode
   useEffect(() => registerMusicLibraryPresenter(() => showSidebarInModeRef.current('songs')), [])
+  useEffect(() => registerDictionaryPresenter(() => showSidebarInModeRef.current('options')), [])
 
   const handleWindowMinimize = useCallback(() => {
     window.windowControls?.minimize?.()
@@ -6550,7 +6572,17 @@ ${markdownHtml}
   const iconPick = useSyncExternalStore(subscribeIconPick, readIconPick)
   const iconPickView = iconPick === null ? null : ICON_PICK_VIEW[iconPick.target.kind]
   const isIconPickMode = iconPickView !== null && iconPickView === sidebarMode
-  const isOptionsSearchMode = sidebarMode === 'options' && !isIconPickMode
+  // A dictionary opened from Options > Spell Checking is shown in the
+  // Options view in place of the options (sidebar/dictionaryView.ts); leaving
+  // Options closes it.
+  const openDictionaryId = useSyncExternalStore(subscribeOpenDictionary, readOpenDictionary)
+  const isDictionaryShown = sidebarMode === 'options' && openDictionaryId !== null
+  useEffect(() => {
+    if (sidebarMode !== 'options' && openDictionaryId !== null) closeDictionary()
+  }, [sidebarMode, openDictionaryId])
+  useEffect(() => { if (openDictionaryId === null) setDictionarySearchQuery('') }, [openDictionaryId])
+  const isDictionarySearchMode = isDictionaryShown && !isIconPickMode
+  const isOptionsSearchMode = sidebarMode === 'options' && !isIconPickMode && !isDictionaryShown
   const iconPickQuery = isIconPickMode && iconPick ? iconPick.query : ''
   // A pick belongs to its entry's view: leaving the view by any route ends
   // the pick, so an open pick always means the picker is on screen (Escape
@@ -6568,7 +6600,7 @@ ${markdownHtml}
   // late; the two fields show their own drafts while typed in (useFieldDraft).
   const [findFieldValue, setFindFieldDraft] = useFieldDraft(activeSectionSnapshot?.documentFindQuery ?? '', isFindMode && focusedSidebarField === 'search')
   const [replaceFieldValue, setReplaceFieldDraft] = useFieldDraft(activeSectionSnapshot?.documentReplaceQuery ?? '', focusedSidebarField === 'replace')
-  const sidebarSearchValue = isFindMode ? findFieldValue : isIconPickMode ? iconPickQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery
+  const sidebarSearchValue = isFindMode ? findFieldValue : isIconPickMode ? iconPickQuery : isDictionarySearchMode ? dictionarySearchQuery : isOptionsSearchMode ? optionsSearchQuery : isSongsSearchMode ? songsSearchQuery : isSoundscapesSearchMode ? soundscapesSearchQuery : searchQuery
 
   /**
    * SUBMITTING a search-bar field, by the Enter key or by its action button:
@@ -6601,11 +6633,12 @@ ${markdownHtml}
     if (field === 'replace') section?.setDocumentReplaceQuery('')
     else if (isFindMode) section?.setDocumentFindQuery('')
     else if (isIconPickMode) setIconPickQuery('')
+    else if (isDictionarySearchMode) setDictionarySearchQuery('')
     else if (isOptionsSearchMode) setOptionsSearchQuery('')
     else if (isSongsSearchMode) setSongsSearchQuery('')
     else if (isSoundscapesSearchMode) setSoundscapesSearchQuery('')
     else setSearchQuery('')
-  }, [getActiveSection, isFindMode, isIconPickMode, isOptionsSearchMode, isSongsSearchMode, isSoundscapesSearchMode])
+  }, [getActiveSection, isDictionarySearchMode, isFindMode, isIconPickMode, isOptionsSearchMode, isSongsSearchMode, isSoundscapesSearchMode])
 
   // Ctrl+F / Ctrl+H ask for the find panel's keyboard before the panel they
   // asked for is necessarily on screen: the replace row appears only once the
@@ -6833,7 +6866,7 @@ ${markdownHtml}
   // pager's readout is the hits'. (The notes list's pager shows its page.)
   const sidebarThumbPage = isFindMode && findTotalPages > 1 ? effectiveFindPage : null
   const isMusicLibraryDocked = sidebarMode === 'songs'
-  const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen
+  const isColorPickerDocked = sidebarMode === 'options' && isColorsSectionOpen && openDictionaryId === null
 
   // The sidebar's scroll box: the list's own scroller in a list view, the
   // panel otherwise. Its rail is remounted when the box is replaced, because
@@ -7331,6 +7364,13 @@ ${markdownHtml}
         escapeConsumedByFieldRef.current = true
         event.preventDefault()
         if (!event.repeat) closeIconPick()
+        return
+      }
+      // Escape outside a field closes an open dictionary, back to the options, likewise.
+      if (event.key === 'Escape' && readOpenDictionary() !== null && !escapeConsumedByFieldRef.current) {
+        escapeConsumedByFieldRef.current = true
+        event.preventDefault()
+        if (!event.repeat) closeDictionary()
         return
       }
       if (event.defaultPrevented) return
@@ -8189,6 +8229,8 @@ ${markdownHtml}
                         getActiveSection()?.setDocumentFindQuery(value)
                       } else if (isIconPickMode) {
                         setIconPickQuery(value)
+                      } else if (isDictionarySearchMode) {
+                        setDictionarySearchQuery(value)
                       } else if (isOptionsSearchMode) {
                         setOptionsSearchQuery(value)
                       } else if (isSongsSearchMode) {
@@ -8264,7 +8306,7 @@ ${markdownHtml}
                   Library and Soundscapes the soundscape's presets and
                   controls. */}
               {/* A press on any view, the Songs view's own included, ends an icon pick. */}
-              <div className="view-toggle" role="tablist" aria-label="Sidebar views" onClickCapture={closeIconPick}>
+              <div className="view-toggle" role="tablist" aria-label="Sidebar views" onClickCapture={() => { closeIconPick(); closeDictionary() }}>
                 {([
                   { view: 'notes', label: 'Notes', icon: 'fa-solid fa-file-lines' },
                   { view: 'images', label: 'Images', icon: 'fa-solid fa-image' },
@@ -8481,6 +8523,10 @@ ${markdownHtml}
                       isIconPickMode
                         ? <SoundscapeIconPicker preferences={soundscapePreferences} onChange={setSoundscapePreferences} query={iconPickQuery} />
                         : <SoundscapesView preferences={soundscapePreferences} onChange={setSoundscapePreferences} filter={soundscapesSearchQuery} />
+                    ) : sidebarMode === 'options' && isIconPickMode && iconPick?.target.kind === 'dictionary' ? (
+                      <DictionaryIconPicker query={iconPickQuery} />
+                    ) : isDictionaryShown ? (
+                      <DictionaryPanel filter={dictionarySearchQuery} />
                     ) : sidebarMode === 'options' && isIconPickMode ? (
                       iconPick?.target.kind === 'layout'
                         ? <LayoutIconPicker entries={layoutEntriesForCurrentMode} change={changeLoadouts} query={iconPickQuery} />
@@ -8728,6 +8774,12 @@ ${markdownHtml}
                       <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
                     </div>
                   ) : null}
+                  {isDictionaryShown ? (
+                    // The open dictionary's row and its field for new words, docked as a music set's is.
+                    <div className="sidebar-plain-dock">
+                      <DictionaryDock />
+                    </div>
+                  ) : null}
                   {isColorPickerDocked ? (
                     // The Colors subsection's picker, docked directly above the
                     // layout's dock row so it stays in reach however far down
@@ -8736,24 +8788,24 @@ ${markdownHtml}
                       <ColorPickerRow />
                     </div>
                   ) : null}
-                  {sidebarMode === 'options' && optionsSection === 'layouts' ? (
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'layouts' ? (
                     // The layout in use, docked as the soundscapes' is.
                     <div className="sidebar-plain-dock">
                       <LayoutDock entries={layoutEntriesForCurrentMode} change={changeLoadouts} onReset={() => void resetActiveLoadout()} />
                     </div>
                   ) : null}
-                  {sidebarMode === 'options' && optionsSection === 'music' && openPresetSubsection === 'soundstages' ? (
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'music' && openPresetSubsection === 'soundstages' ? (
                     // The playing soundstage's row, docked as the soundscapes' is, while its subsection is open.
                     <div className="sidebar-plain-dock">
                       <PresetDock kind={SOUNDSTAGE_KIND} list={soundstagePreferences} onChange={changeSoundstageList} pickKind="soundstage" resetTo={NEUTRAL_SOUNDSTAGE} />
                     </div>
                   ) : null}
-                  {sidebarMode === 'options' && optionsSection === 'music' && openPresetSubsection === 'keystrokeSounds' ? (
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'music' && openPresetSubsection === 'keystrokeSounds' ? (
                     <div className="sidebar-plain-dock">
                       <PresetDock kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" resetTo={NEUTRAL_KEYSTROKE_SOUND} />
                     </div>
                   ) : null}
-                  {sidebarMode === 'options' && optionsSection === 'advanced' && openPresetSubsection === 'flashing' ? (
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'advanced' && openPresetSubsection === 'flashing' ? (
                     <div className="sidebar-plain-dock">
                       <PresetDock kind={FLASH_SHAPE_KIND} list={flashShapePreferences} onChange={setFlashShapePreferences} pickKind="flashing" resetTo={NEUTRAL_FLASH_SHAPE} />
                     </div>

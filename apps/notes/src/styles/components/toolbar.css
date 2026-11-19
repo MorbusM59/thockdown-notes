@@ -528,9 +528,25 @@
 }
 
 
-/* A dictionary row: the EQ point row's cells, as toggle, name, remove, install. */
+/* A dictionary row: the EQ point row's cells, as toggle, name, edit. */
 .options-dictionary-row {
-  grid-template-columns: var(--entry-height) 1fr var(--entry-height) var(--entry-height);
+  grid-template-columns: var(--entry-height) 1fr var(--entry-height);
+}
+
+/* The row under them: one text button creating a dictionary. */
+.options-dictionary-new-row {
+  grid-template-columns: 1fr;
+}
+
+/* The dictionary view's dock (sidebar/DictionaryPanel.tsx): mark, name, word
+   count (as wide as its figures), import, reset; then the field adding words. */
+.options-dictionary-dock-row {
+  grid-template-columns: var(--entry-height) 1fr auto var(--entry-height) var(--entry-height);
+  column-gap: var(--spacing-small);
+}
+
+.options-dictionary-add-row {
+  grid-template-columns: 1fr;
 }
 
 .options-music-set-row {

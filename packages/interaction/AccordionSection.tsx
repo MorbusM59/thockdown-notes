@@ -456,14 +456,17 @@ export function AccordionCount({ count }: { count: number }) {
   return <>({count})</>
 }
 
-export function AccordionDivider({ label, marker, children, ariaLabel, ...fold }: FoldControl & {
+export function AccordionDivider({ label, marker, children, ariaLabel, lazy = false, ...fold }: FoldControl & {
   label: ReactNode
   /** What the line's open end shows: how many entries it folds (`AccordionCount`), or a control acting on them all. */
   marker: ReactNode
   children: ReactNode
   ariaLabel?: string
+  /** As a section's `lazy`: the content is built when the divider first opens. */
+  lazy?: boolean
 }) {
-  const { sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold)
+  const { isOpen, sectionRef, detailsRef, summaryRef, contentRef, handleClick, handleContextMenu } = useFold(fold, lazy)
+  const mounted = useMountedWhileFolded(lazy, isOpen)
   return (
     <div ref={sectionRef as RefObject<HTMLDivElement>} className="options-divider" aria-label={ariaLabel}>
       <details ref={detailsRef} className="options-divider-fold">
@@ -478,7 +481,7 @@ export function AccordionDivider({ label, marker, children, ariaLabel, ...fold }
           <span className="options-divider-count">{marker}</span>
           {label}
         </summary>
-        <div ref={contentRef} className="options-divider-body">{children}</div>
+        <div ref={contentRef} className="options-divider-body">{mounted && children}</div>
       </details>
     </div>
   )

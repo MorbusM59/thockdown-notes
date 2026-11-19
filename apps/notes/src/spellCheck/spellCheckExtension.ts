@@ -41,12 +41,18 @@
  * to the note or the caret that is not a swap ends the mode, leaving the
  * word as it stands. A swap is its own undo step and is not typing, so it
  * neither exempts the word nor is exempted.
+ *
+ * ADDING TO THE USER DICTIONARY (Ctrl+D, `spellAddToDictionary`) takes every
+ * outlined word the selection touches, or with no selection the nearest
+ * unrecognised word before the caret in its paragraph, the word being typed
+ * included: that one is not outlined yet, and is the word most often meant.
  */
 import { Annotation, Prec, type Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { matchShortcut } from '../shared/keyboardShortcuts';
 import { isOffsetInFencedCodeBlock } from '../editor/MarkdownContext';
 import { spellCheckClient } from './spellCheckClient';
+import { addToUserDictionary } from './dictionaryStore';
 import { inFenceAfter, isFenceLine, wordsOnLine } from './spellCheckWords';
 
 export type SpellCheckGrid = { lineHeightPx: number; cellWidthPx: number };
@@ -214,6 +220,50 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
       }
     }
 
+    /** Ctrl+D: see the file's header. */
+    async addToDictionary() {
+      this.endSuggesting();
+      const { state } = this.view;
+      const selection = state.selection.main;
+      if (!selection.empty) {
+        const words = new Set<string>();
+        for (const range of state.selection.ranges) {
+          if (range.empty) continue;
+          const firstLine = state.doc.lineAt(range.from).number;
+          const lastLine = state.doc.lineAt(range.to).number;
+          for (let number = firstLine; number <= lastLine; number += 1) {
+            const line = state.doc.line(number);
+            for (const word of wordsOnLine(line.text)) {
+              const from = line.from + word.from;
+              if (from < range.to && line.from + word.to > range.from && spellCheckClient.lookup(word.word) === true) words.add(word.word);
+            }
+          }
+        }
+        await addToUserDictionary([...words]);
+        return;
+      }
+      const caret = selection.head;
+      const { doc } = state;
+      let paragraph = doc.lineAt(caret);
+      while (paragraph.number > 1 && doc.line(paragraph.number - 1).text.trim() !== '') paragraph = doc.line(paragraph.number - 1);
+      const words: VisibleWord[] = [];
+      for (let number = paragraph.number; number <= doc.lineAt(caret).number; number += 1) {
+        const line = doc.line(number);
+        for (const word of wordsOnLine(line.text)) {
+          if (line.from + word.from < caret) words.push({ word: word.word, from: line.from + word.from, to: line.from + word.to });
+        }
+      }
+      for (const candidate of words.reverse()) {
+        // Known when outlined; the word being typed is not looked up while
+        // it is typed, so it is asked for here.
+        const known = spellCheckClient.lookup(candidate.word);
+        const misspelled = known ?? (await spellCheckClient.suggestionsFor(candidate.word)).misspelled;
+        if (!misspelled) continue;
+        await addToUserDictionary([candidate.word]);
+        return;
+      }
+    }
+
     /** Puts suggestion `index` (-1: the original) in the word's place. */
     swapTo(index: number) {
       const mode = this.suggesting;
@@ -323,6 +373,11 @@ export function spellCheckExtension(options: SpellCheckExtensionOptions): Extens
     plugin,
     Prec.highest(EditorView.domEventHandlers({
       keydown(event, view) {
+        if (matchShortcut(event, 'spellAddToDictionary')) {
+          event.preventDefault();
+          void view.plugin(plugin)?.addToDictionary();
+          return true;
+        }
         if (!matchShortcut(event, 'spellSuggest')) return false;
         event.preventDefault();
         view.plugin(plugin)?.takeSuggestion();

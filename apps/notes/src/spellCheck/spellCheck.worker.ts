@@ -37,12 +37,18 @@
 import { loadModule } from 'hunspell-asm/dist/cjs/index.js';
 import type { Hunspell, HunspellFactory } from 'hunspell-asm';
 import { isNearMiss } from './typoMarks';
+import type { SpellCheckDictionaryFiles } from '../shared/spellCheck';
+
+const encoder = new TextEncoder();
+const BLANK_AFF = encoder.encode('SET UTF-8\n');
+const BLANK_DIC = encoder.encode('0\n');
 
 type ConfigureMessage = {
   type: 'configure';
   generation: number;
-  dictionaries: Array<{ id: string; aff?: Uint8Array; dic?: Uint8Array }>;
+  dictionaries: Array<{ id: string; files?: SpellCheckDictionaryFiles }>;
 };
+type EditMessage = { type: 'edit'; id: string; add: string[]; remove: string[] };
 type CheckMessage = { type: 'check'; generation: number; words: string[] };
 type SuggestMessage = { type: 'suggest'; generation: number; word: string };
 
@@ -50,6 +56,8 @@ type Loaded = { hunspell: Hunspell; affPath: string; dicPath: string };
 
 const factoryPromise: Promise<HunspellFactory> = loadModule();
 const loaded = new Map<string, Loaded>();
+/** Counts every mount, so a dictionary reloaded never reuses a path still mounted. */
+let mounts = 0;
 // Messages are handled strictly in order: a check must see the configuration
 // sent before it, and loading the factory is asynchronous.
 let queue: Promise<void> = Promise.resolve();
@@ -64,11 +72,16 @@ function configure(factory: HunspellFactory, message: ConfigureMessage): void {
     loaded.delete(id);
   }
   for (const entry of message.dictionaries) {
-    if (loaded.has(entry.id) || !entry.aff || !entry.dic) continue;
+    const { files } = entry;
+    if (loaded.has(entry.id) || !files) continue;
     try {
-      const affPath = factory.mountBuffer(entry.aff, `${loaded.size}-${entry.id}.aff`);
-      const dicPath = factory.mountBuffer(entry.dic, `${loaded.size}-${entry.id}.dic`);
-      loaded.set(entry.id, { hunspell: factory.create(affPath, dicPath), affPath, dicPath });
+      const affPath = factory.mountBuffer(files.aff ?? BLANK_AFF, `${mounts}-${entry.id}.aff`);
+      const dicPath = factory.mountBuffer(files.dic ?? BLANK_DIC, `${mounts}-${entry.id}.dic`);
+      mounts += 1;
+      const hunspell = factory.create(affPath, dicPath);
+      for (const word of files.added) hunspell.addWord(word);
+      for (const word of files.removed) hunspell.removeWord(word);
+      loaded.set(entry.id, { hunspell, affPath, dicPath });
     } catch (error) {
       console.warn(`Spell check: dictionary "${entry.id}" could not be loaded`, error);
     }
@@ -119,17 +132,25 @@ function check(message: CheckMessage): void {
   if (targets.length > 0) postMessage({ type: 'suggested', generation: message.generation, targets });
 }
 
+function edit(message: EditMessage): void {
+  const hunspell = loaded.get(message.id)?.hunspell;
+  if (!hunspell) return;
+  for (const word of message.add) hunspell.addWord(word);
+  for (const word of message.remove) hunspell.removeWord(word);
+}
+
 function suggest(message: SuggestMessage): void {
   const misspelled = loaded.size > 0 && !isKnown(message.word);
   const suggestions = misspelled ? suggestionsFor(message.word).ranked : [];
   postMessage({ type: 'suggestions', generation: message.generation, word: message.word, misspelled, suggestions });
 }
 
-self.onmessage = (event: MessageEvent<ConfigureMessage | CheckMessage | SuggestMessage>) => {
+self.onmessage = (event: MessageEvent<ConfigureMessage | EditMessage | CheckMessage | SuggestMessage>) => {
   const message = event.data;
   queue = queue.then(async () => {
     const factory = await factoryPromise;
     if (message.type === 'configure') configure(factory, message);
+    else if (message.type === 'edit') edit(message);
     else if (message.type === 'check') check(message);
     else suggest(message);
   }).catch((error) => console.warn('Spell check worker failed', error));

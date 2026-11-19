@@ -1,8 +1,10 @@
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { BUNDLED_DICTIONARIES, type SpellCheckDictionary } from '../shared/spellCheck'
+import { useRef, useState, useSyncExternalStore } from 'react'
+import { createDictionary, readDictionaries, renameDictionary, subscribeDictionaries } from '../spellCheck/dictionaryStore'
+import { openDictionary } from './dictionaryView'
+import { TextButton } from '../components/TextButton'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
@@ -883,33 +885,8 @@ export function SidebarOptionsPanel({
   wheelStepLines,
   setWheelStepLines,
 }: SidebarOptionsPanelProps) {
-  // Every dictionary the spell checker can use: the bundled four, then any
-  // the reader installed (shared/spellCheck.ts). Read when the panel opens and
-  // after an install or a removal; nothing else changes the list.
-  const [availableDictionaries, setAvailableDictionaries] = useState<SpellCheckDictionary[]>(() => [...BUNDLED_DICTIONARIES])
-  const refreshDictionaries = useCallback(async () => {
-    const listed = await window.thockdownSpellCheck?.listDictionaries().catch(() => null)
-    if (listed) setAvailableDictionaries(listed)
-  }, [])
-  useEffect(() => { void refreshDictionaries() }, [refreshDictionaries])
-  const installSpellCheckDictionary = useCallback(async () => {
-    const installed = await window.thockdownSpellCheck?.installDictionary().catch(() => null)
-    if (!installed || installed.length === 0) return
-    await refreshDictionaries()
-    // A dictionary is installed to be used, so it starts out checking.
-    setSpellCheckDictionaries((previous) => [...previous, ...installed.map((entry) => entry.id).filter((id) => !previous.includes(id))])
-  }, [refreshDictionaries, setSpellCheckDictionaries])
-  const renameSpellCheckDictionary = useCallback(async (id: string, label: string) => {
-    setAvailableDictionaries((previous) => previous.map((entry) => (entry.id === id ? { ...entry, label } : entry)))
-    await window.thockdownSpellCheck?.renameDictionary(id, label).catch(() => false)
-    await refreshDictionaries()
-  }, [refreshDictionaries])
-  const removeSpellCheckDictionary = useCallback(async (id: string) => {
-    const removed = await window.thockdownSpellCheck?.removeDictionary(id).catch(() => false)
-    if (!removed) return
-    setSpellCheckDictionaries((previous) => previous.filter((entry) => entry !== id))
-    await refreshDictionaries()
-  }, [refreshDictionaries, setSpellCheckDictionaries])
+  // Every dictionary the spell checker can use (spellCheck/dictionaryStore.ts).
+  const { dictionaries: availableDictionaries } = useSyncExternalStore(subscribeDictionaries, readDictionaries)
     // Visualizer settings are global across layouts; the full-screen pane has
     // separate light/dark tuning.
     const visualizerDefaults = DEFAULT_VISUALIZER
@@ -2727,48 +2704,54 @@ export function SidebarOptionsPanel({
       >
         {/* The dictionaries, each one a toggle: a word is correct when any
             active dictionary accepts it (spellCheck/spellCheckClient.ts). The
-            checker itself is switched in Feature Toggles. */}
+            user dictionary is always active and has no toggle. The edit
+            button opens a dictionary's words in the sidebar
+            (DictionaryPanel.tsx). The checker itself is switched in
+            Feature Toggles. */}
         <OptionsSubsectionLabel>Dictionaries</OptionsSubsectionLabel>
         <div className="options-curve-rows options-dictionary-rows" role="group" aria-label="Spell checking dictionaries">
           {availableDictionaries.map((dictionary) => {
-            const isActive = spellCheckDictionaries.includes(dictionary.id)
+            const isUser = dictionary.kind === 'user'
+            const isActive = isUser || spellCheckDictionaries.includes(dictionary.id)
             return (
               <div key={dictionary.id} className="options-curve-row options-dictionary-row">
                 <button
                   type="button"
                   className={`options-curve-cell options-curve-button options-dictionary-toggle${isActive ? ' is-active' : ''}`}
-                  data-tooltip={isActive ? 'Checking with this dictionary' : 'Not checking with this dictionary'}
+                  data-tooltip={isUser ? 'Always checking with your own words' : isActive ? 'Checking with this dictionary' : 'Not checking with this dictionary'}
                   aria-label={`Check with ${dictionary.label}`}
                   aria-pressed={isActive}
-                  onClick={() => setSpellCheckDictionaries((previous) => (
-                    previous.includes(dictionary.id) ? previous.filter((id) => id !== dictionary.id) : [...previous, dictionary.id]
-                  ))}
+                  aria-disabled={isUser}
+                  onClick={() => {
+                    if (isUser) return
+                    setSpellCheckDictionaries((previous) => (
+                      previous.includes(dictionary.id) ? previous.filter((id) => id !== dictionary.id) : [...previous, dictionary.id]
+                    ))
+                  }}
                 >
                   {isActive && <span className="fa-solid fa-check" aria-hidden="true" />}
                 </button>
-                <DictionaryNameField label={dictionary.label} onRename={(label) => void renameSpellCheckDictionary(dictionary.id, label)} />
-                <button
-                  type="button"
-                  className={`options-curve-cell options-curve-button${dictionary.bundled ? ' is-disabled' : ''}`}
-                  data-tooltip={dictionary.bundled ? 'Dictionaries that come with the app cannot be removed' : `Remove ${dictionary.label}`}
-                  aria-label={`Remove ${dictionary.label}`}
-                  aria-disabled={dictionary.bundled}
-                  onClick={() => { if (!dictionary.bundled) void removeSpellCheckDictionary(dictionary.id) }}
-                >
-                  <span className="fa-solid fa-xmark" aria-hidden="true" />
-                </button>
+                <DictionaryNameField label={dictionary.label} onRename={(label) => void renameDictionary(dictionary.id, label)} />
                 <button
                   type="button"
                   className="options-curve-cell options-curve-button"
-                  data-tooltip="Install dictionaries"
-                  aria-label="Install dictionaries"
-                  onClick={() => void installSpellCheckDictionary()}
+                  data-tooltip={`Edit ${dictionary.label}`}
+                  aria-label={`Edit ${dictionary.label}`}
+                  onClick={() => openDictionary(dictionary.id)}
                 >
-                  <span className="fa-solid fa-plus" aria-hidden="true" />
+                  <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
                 </button>
               </div>
             )
           })}
+          <div className="options-curve-row options-dictionary-new-row">
+            <TextButton
+              data-tooltip="Create an empty dictionary"
+              onClick={() => { void createDictionary().then((created) => { if (created) openDictionary(created.id) }) }}
+            >
+              New dictionary...
+            </TextButton>
+          </div>
         </div>
       </AccordionSection>
 
