@@ -1103,7 +1103,7 @@ export const AudioControls = memo(function AudioControls({
             aria-pressed={isVisualizerMode}
             onClick={onToggleVisualizer}
           >
-            <span className="fa-solid fa-wave-square" aria-hidden="true" />
+            <span className="fa-solid fa-eye" aria-hidden="true" />
           </button>
 
           <button
