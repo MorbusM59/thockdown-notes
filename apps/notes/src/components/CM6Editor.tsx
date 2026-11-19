@@ -2218,10 +2218,34 @@ export function CM6Editor({
     });
   }, []);
 
+  /**
+   * Keeps the scroll-following layer (the typing trail's marks and the spell
+   * check outlines, both placed in document coordinates) on the scroller's
+   * position. It is not part of the caret: it runs before every one of
+   * updateCaret's early returns, because a selection, an unfocused editor or
+   * an off-screen caret hide the CARET but must not freeze the marks, which
+   * otherwise stayed where they were on screen while the text scrolled.
+   */
+  const syncScrollFollowingLayer = useCallback((view: EditorView, layerEl: HTMLElement) => {
+    const trailClip = typingTrailClipRef.current;
+    const trailLayer = typingTrailLayerRef.current;
+    if (!trailClip || !trailLayer) return;
+    const scroller = view.scrollDOM;
+    if (!scrollerRectRef.current) scrollerRectRef.current = scroller.getBoundingClientRect();
+    if (!caretLayerRectRef.current) caretLayerRectRef.current = layerEl.getBoundingClientRect();
+    const scrollerRect = scrollerRectRef.current;
+    const caretLayerRect = caretLayerRectRef.current;
+    trailClip.style.transform = `translate(${scrollerRect.left - caretLayerRect.left}px, ${scrollerRect.top - caretLayerRect.top}px)`;
+    trailClip.style.width = `${scroller.clientWidth}px`;
+    trailClip.style.height = `${scroller.clientHeight}px`;
+    trailLayer.style.transform = `translate(${-scroller.scrollLeft}px, ${-scroller.scrollTop}px)`;
+  }, []);
+
   const updateCaret = useCallback(() => {
     const view = viewRef.current;
     const layerEl = layerRef.current;
     if (!view || !layerEl) return;
+    syncScrollFollowingLayer(view, layerEl);
 
     const selectionRange = view.state.selection.main;
     if (!selectionRange.empty) {
@@ -2255,16 +2279,6 @@ export function CM6Editor({
     }
     const scrollerRect = scrollerRectRef.current;
     const caretLayerRect = caretLayerRectRef.current;
-
-    // The trail follows the scroll even while the caret is off-screen.
-    const trailClip = typingTrailClipRef.current;
-    const trailLayer = typingTrailLayerRef.current;
-    if (trailClip && trailLayer) {
-      trailClip.style.transform = `translate(${scrollerRect.left - caretLayerRect.left}px, ${scrollerRect.top - caretLayerRect.top}px)`;
-      trailClip.style.width = `${scroller.clientWidth}px`;
-      trailClip.style.height = `${scroller.clientHeight}px`;
-      trailLayer.style.transform = `translate(${-scroller.scrollLeft}px, ${-scroller.scrollTop}px)`;
-    }
 
     const caretTopInScroll = resolveCM6CaretTopInScroll(
       caretRect,
@@ -2317,7 +2331,7 @@ export function CM6Editor({
       width: runtimeCellWidthPx + 1,
       height: lineHeightPxNow + 1,
     });
-  }, [applyCaretStyle]);
+  }, [applyCaretStyle, syncScrollFollowingLayer]);
 
   const scheduleCaretUpdate = useCallback(() => {
     if (caretAnimationFrameRef.current !== null) {
