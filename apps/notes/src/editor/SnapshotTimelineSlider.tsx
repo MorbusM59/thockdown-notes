@@ -1,4 +1,3 @@
-import { SCROLL_HANDLE_GAP_BASE_PX } from '@thockdown/interaction/scrollTrackGeometry'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PlacedSnapshot } from './SnapshotTimelineCurve'
 import { clusterPlacements } from './SnapshotTimelineCurve'
@@ -18,14 +17,14 @@ import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 // its center sit exactly on the boundary (which pushes half of it outside).
 // There's deliberately no separately-positioned "thumb" element: earlier
 // versions had one, positioned with a different formula than the marks, so
-// the two could only ever coincide by coincidence. The active mark's own
-// ring is the selection indicator now, so there's nothing to keep in sync.
+// the two could only ever coincide by coincidence. The viewed mark's own
+// inner fill is the selection indicator, so there's nothing to keep in sync.
+// What a mark's layers mean is written once, at .timeline-mark in editor.css.
 
 export type SnapshotTimelineSliderProps = {
   sourceNoteId: string
   placements: PlacedSnapshot[]
   snapshotsById: Map<number, NoteSnapshotRecord>
-  snapshotIdsMatchingPresent: Set<number>
   /** null = viewing the live present text. A snapshot id = previewing history (read-only). */
   activeSnapshotId: number | null
   onNavigate: (snapshotId: number | null) => void
@@ -36,9 +35,9 @@ export type SnapshotTimelineSliderProps = {
   onTrackLengthChange?: (trackLength: number) => void
 }
 
-// A mark is as large as a slider thumb (--canonical-scroll-handle-thickness:
-// the rail's thickness less the thumb's gap on each side), and both follow
-// the UI font scale. A mark's centre is pulled in from each rail end by half
+// A mark is the rail's thickness less 2px at each side (editor.css's
+// --timeline-mark-size, which this restates for the spacing arithmetic, from
+// the measured rail, so the two read the same number). A mark's centre is pulled in from each rail end by half
 // the rail's height plus 2px, which keeps the end marks clear of the ends.
 const MARK_INSET_CSS = 'calc(var(--canonical-scroll-thickness) / 2 + 2px)'
 
@@ -46,8 +45,13 @@ function markInsetPx(railHeightPx: number): number {
   return (railHeightPx / 2) + 2
 }
 
+function markSizePx(railHeightPx: number): number {
+  return railHeightPx - 4
+}
+
+/** Before the rail is measured: the same position, unrounded, for one frame. */
 function markLeftStyle(ratio: number): string {
-  return `calc(${MARK_INSET_CSS} + (${ratio} * (100% - 2 * ${MARK_INSET_CSS})))`
+  return `calc(${MARK_INSET_CSS} + (${ratio} * (100% - 2 * ${MARK_INSET_CSS})) - var(--timeline-mark-size) / 2)`
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -117,7 +121,6 @@ export function SnapshotTimelineSlider({
   sourceNoteId,
   placements,
   snapshotsById,
-  snapshotIdsMatchingPresent,
   activeSnapshotId,
   onNavigate,
   onBranchOpened,
@@ -184,13 +187,13 @@ export function SnapshotTimelineSlider({
 
     const MARK_INSET_PX = markInsetPx(railHeightPx)
     const usableWidth = Math.max(0, railWidthPx - MARK_INSET_PX * 2)
-    // Half a mark's width, plus the manual mark's heavier outline.
-    const markHalf = (railHeightPx / 2) - SCROLL_HANDLE_GAP_BASE_PX
-    const outerHalves = marks.map((mark) => (mark.isManual ? markHalf + 1 : markHalf))
-    const minGapBetween = (i: number) => outerHalves[i] + outerHalves[i + 1] + 2
+    // Every mark has the same footprint whatever its state, so neighbours
+    // are kept one mark plus 2px apart, centre to centre.
+    const markSize = markSizePx(railHeightPx)
+    const minGap = markSize + 2
     const renderedCenters = marks.map((mark) => MARK_INSET_PX + mark.ratio * usableWidth)
 
-    // Two passes keep every pair of neighbours at least minGapBetween apart.
+    // Two passes keep every pair of neighbours at least minGap apart.
     // Right to left: a mark crowded by its right neighbour yields leftwards,
     // and the last mark never passes the right edge. Left to right: marks
     // that the first pass pushed past the left edge -- typically several
@@ -201,14 +204,16 @@ export function SnapshotTimelineSlider({
     const last = marks.length - 1
     renderedCenters[last] = Math.min(renderedCenters[last], railWidthPx - MARK_INSET_PX)
     for (let i = last - 1; i >= 0; i -= 1) {
-      renderedCenters[i] = Math.min(renderedCenters[i], renderedCenters[i + 1] - minGapBetween(i))
+      renderedCenters[i] = Math.min(renderedCenters[i], renderedCenters[i + 1] - minGap)
     }
     renderedCenters[0] = Math.max(renderedCenters[0], MARK_INSET_PX)
     for (let i = 1; i <= last; i += 1) {
-      renderedCenters[i] = Math.max(renderedCenters[i], renderedCenters[i - 1] + minGapBetween(i - 1))
+      renderedCenters[i] = Math.max(renderedCenters[i], renderedCenters[i - 1] + minGap)
     }
 
-    return renderedCenters.map((center) => `${center}px`)
+    // The left EDGE is rounded, not the centre: a mark is a whole number of
+    // pixels wide, so a whole-pixel edge keeps every ring on the pixel grid.
+    return renderedCenters.map((center) => `${Math.round(center - markSize / 2)}px`)
   }, [historyMarksToRender, railWidthPx, railHeightPx])
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
@@ -277,7 +282,6 @@ export function SnapshotTimelineSlider({
             sourceNoteId={sourceNoteId}
             placement={mark}
             snapshotRecord={snapshotsById.get(mark.id)}
-            matchesPresent={snapshotIdsMatchingPresent.has(mark.id)}
             isActive={mark.id === activeSnapshotId}
             onNavigate={onNavigate}
             onBranchOpened={onBranchOpened}
@@ -294,7 +298,6 @@ type SnapshotMarkProps = {
   sourceNoteId: string
   placement: PlacedSnapshot
   snapshotRecord?: NoteSnapshotRecord
-  matchesPresent?: boolean
   isActive: boolean
   leftStyle?: string
   onNavigate: (snapshotId: number | null) => void
@@ -306,7 +309,6 @@ function SnapshotMark({
   sourceNoteId,
   placement,
   snapshotRecord,
-  matchesPresent = false,
   isActive,
   leftStyle,
   onNavigate,
@@ -345,15 +347,13 @@ function SnapshotMark({
   return (
     <div
       className={[
-        'snapshot-timeline-mark',
-        placement.isManual ? 'is-manual' : 'is-automatic',
-        // Its own class rather than a variant of the two above: a from-disk
-        // snapshot can be either manual or automatic, and what marks it out is
-        // where its CONTENT came from, not who asked for it.
-        placement.isFromDisk ? 'is-from-disk' : '',
-        matchesPresent ? 'matches-present' : '',
-        isActive ? 'is-active' : '',
-        isHolding ? 'is-holding' : '',
+        'timeline-mark snapshot-timeline-mark',
+        // A from-disk snapshot can be manual or automatic as well; what marks
+        // it out is where its CONTENT came from, and it reads as the heaviest
+        // of the three whichever it is.
+        placement.isManual || placement.isFromDisk ? 'has-inner-ring' : '',
+        placement.isFromDisk ? 'has-band' : '',
+        isActive ? 'has-inner-fill' : '',
       ].filter(Boolean).join(' ')}
       style={{ left: leftStyle ?? markLeftStyle(placement.ratio) }}
       onClick={(event: React.MouseEvent) => {
@@ -365,9 +365,11 @@ function SnapshotMark({
       {...handlers}
     >
       {isHolding && (
-        <svg viewBox="0 0 20 20" className="snapshot-timeline-hold-ring" aria-hidden="true">
-          <circle cx="10" cy="10" r="8" pathLength={1} fill="none" strokeWidth="2" strokeDasharray={`${progress} 1`} />
-        </svg>
+        <span
+          className="timeline-mark-hold"
+          style={{ '--hold-progress': progress, '--hold-arcs': 1 } as React.CSSProperties}
+          aria-hidden="true"
+        />
       )}
     </div>
   )

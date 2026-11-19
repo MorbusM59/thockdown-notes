@@ -750,7 +750,6 @@ export function SectionEditorArea({
             sourceNoteId={activeNoteId}
             placements={noteSnapshots.placements}
             snapshotsById={noteSnapshots.snapshotsById}
-            snapshotIdsMatchingPresent={noteSnapshots.snapshotIdsMatchingPresent}
             activeSnapshotId={previewedSnapshotId}
             onNavigate={handleNavigateSnapshot}
             onBranchOpened={handleBranchOpened}
@@ -767,6 +766,7 @@ export function SectionEditorArea({
         </div>
         <div className="manual-snapshot-panel">
           <PresentStateCircle
+            isPresentSaved={activeNoteId && !isViewingTimelessNote && !isViewingAutoTocChapter && !isViewingAutoOpenItemsChapter ? noteSnapshots.snapshotIdsMatchingPresent.size > 0 : false}
             hasPendingManualChanges={activeNoteId && !isViewingTimelessNote ? ((isViewingAutoTocChapter || isViewingAutoOpenItemsChapter) ? true : noteSnapshots.hasPendingManualChanges) : false}
             onCreateManualSnapshot={() => { void handleCreateManualSnapshot() }}
             onGoToPresent={activeNoteId ? handleReturnToPresent : undefined}

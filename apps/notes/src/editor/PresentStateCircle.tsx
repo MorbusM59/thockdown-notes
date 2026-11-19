@@ -10,6 +10,8 @@ import { useHoldToBranch } from './useHoldToBranch'
 
 export type PresentStateCircleProps = {
   hasPendingManualChanges: boolean
+  /** The present text equals some saved snapshot, of any kind: drawn as the mark's band. */
+  isPresentSaved: boolean
   onCreateManualSnapshot: () => void
   onGoToPresent?: () => void
   onMergeAdjacentSnapshots?: () => void
@@ -21,6 +23,7 @@ export type PresentStateCircleProps = {
 
 export function PresentStateCircle({
   hasPendingManualChanges,
+  isPresentSaved,
   onCreateManualSnapshot,
   onGoToPresent,
   onMergeAdjacentSnapshots,
@@ -59,9 +62,6 @@ export function PresentStateCircle({
       type="button"
       className={[
         'manual-snapshot-circle btn-icon',
-        hasPendingManualChanges ? 'is-hollow' : 'is-filled',
-        !isPresent ? 'not-present' : '',
-        isHolding ? 'is-holding' : '',
       ].filter(Boolean).join(' ')}
       disabled={disabled}
       aria-pressed={!hasPendingManualChanges}
@@ -89,32 +89,25 @@ export function PresentStateCircle({
       }}
       {...handlers}
     >
-      <span className="manual-snapshot-circle-dot" aria-hidden="true" />
-      {(isHolding || showComplete) && (() => {
-        // Three arcs, each growing clockwise over a third of the ring from
-        // 12, 4 and 8 o'clock. pathLength="1" makes every dash length a
-        // fraction of the circle, so the radius can change without touching
-        // this arithmetic; the CSS rotation puts the path's start at 12.
-        const arcLength = Math.max(0, Math.min(1, progress)) / 3
-        return (
-          <svg viewBox="0 0 20 20" className={`snapshot-merge-circle${isFading ? ' is-fading' : ''}`} aria-hidden="true">
-            {[0, 1, 2].map((i) => (
-              <circle
-                key={i}
-                cx="10"
-                cy="10"
-                r="5"
-                pathLength={1}
-                fill="none"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeDasharray={`${arcLength} ${1 - arcLength}`}
-                strokeDashoffset={-i / 3}
-              />
-            ))}
-          </svg>
-        )
-      })()}
+      {/* The same layer stack as a snapshot's mark (.timeline-mark in
+          editor.css): both borders always, the inner fill while the present
+          is what is shown, the band while the present is saved, and the
+          compacting hold's progress played in the band. */}
+      <span
+        className={[
+          'timeline-mark has-inner-ring',
+          isPresent ? 'has-inner-fill' : '',
+          isPresentSaved ? 'has-band' : '',
+        ].filter(Boolean).join(' ')}
+        aria-hidden="true"
+      >
+        {(isHolding || showComplete) && (
+          <span
+            className={`timeline-mark-hold${isFading ? ' is-fading' : ''}`}
+            style={{ '--hold-progress': showComplete ? 1 : Math.max(0, Math.min(1, progress)), '--hold-arcs': 3 } as React.CSSProperties}
+          />
+        )}
+      </span>
     </button>
   )
 }

@@ -378,79 +378,111 @@
   box-shadow:    var(--backdrop-surface-shadow);
 }
 
+/* TIMELINE MARKS -- every mark on the snapshot timeline, and the present-state
+   mark beside it, is ONE fixed stack of four layers, each switched on or off
+   independently, so any combination of states draws crisply without one
+   state's look being built out of another's:
+
+     1. outer border  -- the mark's own 1px border; always drawn
+     2. band          -- the space between the two borders (::before), filled
+     3. inner border  -- 1px, inside the band (::after's border)
+     4. inner fill    -- inside the inner border (::after's background)
+
+   The geometry never changes with the state, only which layers are painted,
+   so every mark has the same footprint and nothing shifts when a state flips.
+   What each layer MEANS:
+     snapshot  automatic: outer border only (a single ring)
+               manual:    + inner border (a double ring)
+               from file: + inner border + band (a double ring, filled between)
+               viewed:    + inner fill
+     present   both borders always; viewed: + inner fill; the present text is
+               saved in some snapshot: + band
+     a hold    (branching a snapshot, compacting from the present mark) plays
+               its progress IN THE BAND, .timeline-mark-hold below.
+   Lines are --color-text-60 and fills --color-text-30 throughout.
+
+   SIZE: as large as a slider's thumb, the track's thickness less 2px at each
+   side, so it follows the UI font scale in whole pixels and sits exactly 1px
+   inside the rail's border (thickness - 2 borders - size = 2, an even number,
+   so the vertical centring never lands on half a pixel; the horizontal
+   position is rounded in SnapshotTimelineSlider.tsx). The band is a sixth
+   of the mark in whole pixels, at least one, so a filled band stays legible
+   beside the rings at every scale without ever being a fraction of a pixel. */
+.timeline-mark {
+  --timeline-mark-size: calc(var(--canonical-scroll-thickness) - 4px);
+  --timeline-mark-band: max(1px, round(down, calc(var(--timeline-mark-size) / 6), 1px));
+  --timeline-mark-line: var(--color-text-60);
+  --timeline-mark-fill: var(--color-text-30);
+  position:       relative;
+  box-sizing:     border-box;
+  width:          var(--timeline-mark-size);
+  height:         var(--timeline-mark-size);
+  border:         1px solid var(--timeline-mark-line);
+  border-radius:  var(--border-radius-small);
+  background:     transparent;
+}
+
+.timeline-mark::before,
+.timeline-mark::after {
+  content:        '';
+  position:       absolute;
+  box-sizing:     border-box;
+  pointer-events: none;
+}
+
+/* 2. The band: the whole inside of the outer border, with the inner box cut
+   out of it by the mask, so a band fill can never paint under the inner
+   fill. */
+.timeline-mark::before {
+  inset:          0;
+  padding:        var(--timeline-mark-band);
+  border-radius:  calc(var(--border-radius-small) - 1px);
+  mask:           linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+/* 3 and 4. The inner border and the inner fill: one box inside the band. Its
+   border is transparent when off, so the fill's area is the same either
+   way. */
+.timeline-mark::after {
+  inset:          var(--timeline-mark-band);
+  border:         1px solid transparent;
+  border-radius:  max(0px, calc(var(--border-radius-small) - 1px - var(--timeline-mark-band)));
+}
+
+.timeline-mark.has-band::before      { background: var(--timeline-mark-fill); }
+.timeline-mark.has-inner-ring::after { border-color: var(--timeline-mark-line); }
+.timeline-mark.has-inner-fill::after { background: var(--timeline-mark-fill); }
+
+/* A hold's progress, in the band's exact shape: --hold-progress (0..1) of
+   each of --hold-arcs equal sectors, starting at 12 o'clock -- one sweep for
+   branching a snapshot, three for compacting. */
+.timeline-mark-hold {
+  position:       absolute;
+  inset:          0;
+  box-sizing:     border-box;
+  padding:        var(--timeline-mark-band);
+  border-radius:  calc(var(--border-radius-small) - 1px);
+  background:     repeating-conic-gradient(
+                    var(--color-compacting) 0 calc(var(--hold-progress, 0) * 360deg / var(--hold-arcs, 1)),
+                    transparent 0 calc(360deg / var(--hold-arcs, 1)));
+  mask:           linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+  opacity:        1;
+  transition:     opacity 500ms linear;
+}
+.timeline-mark-hold.is-fading {
+  opacity: 0;
+}
+
 .snapshot-timeline-mark {
   position:       absolute;
-  top:            50%;
-  /* As large as a slider's thumb, so the marks keep the thumb's gap to the
-     track's edges at every UI font scale. */
-  width:          var(--canonical-scroll-handle-thickness);
-  height:         var(--canonical-scroll-handle-thickness);
-  margin-left:    calc(var(--canonical-scroll-handle-thickness) / -2);
-  border-radius:  var(--border-radius-small);
-  transform:      translateY(-50%);
-  background:     transparent;
-  background-color: transparent;
+  top:            1px;
   pointer-events: auto;
   z-index:        2;
-  border: 1px solid var(--color-text-60);
-  outline: 1px none var(--color-text-60);
-  outline-offset: 1px;
-}
-
-.snapshot-timeline-mark.is-automatic {
-}
-
-.snapshot-timeline-mark.is-manual {
-  border-style: none;
-  outline-offset: -2px;
-  outline: 3px double var(--color-text-60);
-}
-
-.snapshot-timeline-mark.matches-present {
-}
-
-.snapshot-timeline-mark.is-active {
-}
-
-.snapshot-timeline-mark.is-from-disk {
-  border: 1px solid var(--color-text-40);
-  outline-offset: -2px;
-  outline: 3px double var(--color-text-60);
-}
-
-.snapshot-timeline-mark.is-holding {
-  background-color: var(--color-text-60);
 }
 
 .manual-snapshot-circle {
   position:        relative;
-}
-
-/* Both rings are centred on their host (a timeline mark, the present-state
-   button) by percentages, so they stay centred whatever size the host is,
-   and rotated so the circle's path starts at 12 o'clock -- the progress
-   arithmetic in the components assumes that start. */
-.snapshot-timeline-hold-ring, .snapshot-merge-circle {
-  position:       absolute;
-  left:           50%;
-  top:            50%;
-  width:          calc(var(--canonical-scroll-thickness) + 4px); /* 20px at scale 1 */
-  height:         calc(var(--canonical-scroll-thickness) + 4px);
-  translate:      -50% -50%;
-  rotate:         -90deg;
-  pointer-events: none;
-}
-
-.snapshot-timeline-hold-ring circle, .snapshot-merge-circle circle {
-  stroke: var(--color-compacting);
-}
-
-.snapshot-merge-circle {
-  opacity: 1;
-  transition: opacity 500ms linear;
-}
-.snapshot-merge-circle.is-fading {
-  opacity: 0;
 }
 
 /* Manual-snapshot circle */
@@ -459,19 +491,8 @@
   height: var(--bottom-utility-bar-content-height);
 }
 
-
-
-.manual-snapshot-circle:disabled .manual-snapshot-circle-dot,
-.manual-snapshot-circle.not-present .manual-snapshot-circle-dot {
+.manual-snapshot-circle:disabled .timeline-mark {
   display: none;
-}
-
-.manual-snapshot-circle-dot {
-  width:         var(--canonical-scroll-handle-thickness);
-  height:        var(--canonical-scroll-handle-thickness);
-  border-radius: var(--border-radius-small);
-  border: 1px solid var(--color-text-60);
-  background-color: var(--color-text-30);
 }
 
 .editor-shell {
