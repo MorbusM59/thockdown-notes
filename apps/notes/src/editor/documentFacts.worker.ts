@@ -64,7 +64,7 @@ function handleSplit(id: number, text: string): void {
   // Sent in order and in pieces, smallest first: a reader waiting on a 2MB
   // note should get the top of it in a few milliseconds rather than the
   // whole of it in seconds. See splitPreviewBlockRangesProgressively for why
-  // a chunk discards its own last range and why the windows double.
+  // a chunk discards its own last range and why the windows grow and then stop, and why deliveries are batched.
   // A document carrying reference definitions cannot be projected window by
   // window -- see projectionNeedsWholeDocumentParse. Decided BEFORE the loop
   // so such a document does not pay for a walk whose result is discarded.

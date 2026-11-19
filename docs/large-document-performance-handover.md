@@ -4152,8 +4152,11 @@ against a whole-document parse — long fences, UNCLOSED fences, HTML blocks,
 setext underlines, lists interrupting paragraphs, lazy blockquote
 continuation, document-wide definitions, and randomized mixed corpora.
 
-Windows double, so delivery is O(log n) instalments and O(n) total
-re-materialization while the first stays small. The client accumulates
+Windows double up to 1024 lines and stop there (remark's parse is
+superlinear: doubling to half the document took a 2MB note 20s, capped
+windows 4s), and the worker batches windows into deliveries that double, so
+delivery is still O(log n) instalments and O(n) total re-materialization
+while the first stays small. The client accumulates
 deltas rather than resending the running total, and fans instalments out to
 a **set** of listeners: the answer is shared by text while the wish to watch
 it arrive is per-caller. An incomplete split is never committed to the
