@@ -24,7 +24,7 @@ Alpha Release #27. A Visualizer button in the music bar, a new soundstage, tidie
 
 #### Bug fixes
 
-- Textures no longer show blotches after a layout change.
+- Fixed textures not rendering correctly in some layouts.
 - The Reader's scrollbar thumb no longer jumps around while a large note is still loading.
 - A click far down the Reader's scrollbar track lands at the right spot, even while a large note is still loading.
 - Fixed database errors when upgrading from an older version.
