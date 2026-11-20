@@ -415,6 +415,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
   // stable for PREVIEW_BLOCK_PREWARM_DEBOUNCE_MS.
   const previewBlockPrewarmTextRef = useRef<string | null>(null)
   const previewBlockPrewarmTimerRef = useRef<number | null>(null)
+  /** Withdraws the previous prewarm's request, so a superseded text is not parsed if it is still queued. */
+  const previewBlockPrewarmAbortRef = useRef<AbortController | null>(null)
   // Mirrors `notes` for onTextChange's external-note bookkeeping (inside the
   // `bindings` useMemo below), so a stale notes array can't be read between
   // memo recreations without forcing bindings -- and the editor's lifecycle
@@ -2472,6 +2474,8 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         return
       }
       previewBlockPrewarmTextRef.current = text
+      previewBlockPrewarmAbortRef.current?.abort()
+      previewBlockPrewarmAbortRef.current = null
       debugLogPreviewBlockCache('scheduling background prewarm', { textLength: text.length })
 
       if (previewBlockPrewarmTimerRef.current !== null) {
@@ -2490,7 +2494,10 @@ export function useEditorSectionMount(options: UseEditorSectionMountOptions): Us
         // the reader for it would be the least defensible freeze of all --
         // and the one the idle callback below only defers rather than avoids.
         const run = () => {
-          void requestFullBlockSplit(currentText)
+          if (previewBlockPrewarmTextRef.current !== currentText) return
+          const withdrawn = new AbortController()
+          previewBlockPrewarmAbortRef.current = withdrawn
+          void requestFullBlockSplit(currentText, undefined, withdrawn.signal)
             .then((splitCache) => {
               if (previewBlockPrewarmTextRef.current !== currentText) return
               previewBlockSplitCacheRef.current = splitCache

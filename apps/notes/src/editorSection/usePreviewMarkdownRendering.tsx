@@ -764,12 +764,18 @@ export function usePreviewMarkdownRendering({
   useEffect(() => {
     if (splitState.isComplete) return
     let cancelled = false
+    // Withdrawn on cleanup, so a text this pane has moved past is never
+    // parsed if it has not reached the worker yet.
+    const withdrawn = new AbortController()
     void requestFullBlockSplit(splitSourceRef.current?.text ?? '', (partial) => {
       if (!cancelled) setWorkerSplit({ cache: partial, isComplete: false })
-    }).then((cache) => {
+    }, withdrawn.signal).then((cache) => {
       if (!cancelled) setWorkerSplit({ cache, isComplete: true })
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      withdrawn.abort()
+    }
   }, [splitState.isComplete, splitSourceKey])
 
   // Committed in an effect, not during the useMemo above, so this cache
