@@ -7227,7 +7227,7 @@ ${markdownHtml}
       // placeholder outside the Date/Trash views this floor is measured for.
       const railEl = sidebarEl.querySelector('.date-filter-rail')
       if (!railEl || railEl.classList.contains('date-filter-rail-placeholder')) {
-        outsideContentPx += 2 * SIDEBAR_MINI_CONTROL_HEIGHT_PX + 2 * spacingRegularPx
+        outsideContentPx += 2 * SIDEBAR_MINI_CONTROL_HEIGHT_PX + spacingRegularPx * 1.5 // top gap + row gap (--spacing-small)
       }
 
       const requiredPx = outsideContentPx + minContentRectPx
@@ -8910,7 +8910,7 @@ ${markdownHtml}
                   {/* Paging and the date filter sit in the column beside the
                       scrollbar, as every dock does. */}
               {showPagination ? (
-                <div className="sidebar-pagination">
+                <div className="sidebar-plain-dock sidebar-pagination">
                   <Pager
                     pages={{
                       current: effectiveCurrentPage - 1,
@@ -8926,7 +8926,7 @@ ${markdownHtml}
               ) : null}
 
               {(isPagedNoteSection(sidebarMode) || isSidebarTreeMode) && !isImageLibraryShown ? (
-                <div className="date-filter-rail" aria-label="Date filters">
+                <div className="sidebar-plain-dock date-filter-rail" aria-label="Date filters">
                   <div
                     className="date-filter-line"
                     data-secondary-press="action"

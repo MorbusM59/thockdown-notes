@@ -450,13 +450,15 @@
 }
 
 /* The notes list's pager (components/Pager.tsx), a row in the docks'
-   metrics like the date filter below it. */
+   metrics like the date filter below it. Its spacing from the list is
+   .sidebar-plain-dock's, which it also carries, so it sits off the list's
+   edge exactly as every other dock does; it adds only its right inset. */
 .sidebar-pagination {
   --entry-height: var(--canonical-scroll-thickness);
   display:        flex;
-  flex:           0 0 auto;
+  box-sizing:     content-box;
   height:         var(--entry-height);
-  padding:        0 var(--spacing-regular) 0 var(--spacing-regular);
+  padding-right:  var(--spacing-regular);
 }
 
 .sidebar-pagination > .pager {
@@ -466,13 +468,14 @@
 /* Date filter */
 /* The date filter rail: two rows in the sidebar docks' own metrics (the
    Music Library's .options-curve-rows), so every dock below the list reads
-   as one family -- row height, row gap and cell gap alike. */
+   as one family in row height. Its spacing from
+   the list is .sidebar-plain-dock's, which it carries. */
 .date-filter-rail {
   --entry-height: var(--canonical-scroll-thickness);
-  padding:        0 0 0 var(--spacing-regular);
   display:        flex;
   flex-direction: column;
-  gap:            var(--toolbar-options-gap);
+  /* The row gap is the chips' own gap, so the grid's two gaps are equal. */
+  gap:            var(--spacing-small);
 }
 
 .date-filter-rail.date-filter-rail-placeholder {
