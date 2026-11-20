@@ -35,6 +35,17 @@
   // Presence of this file (checked via process.resourcesPath in electron/main.ts)
   // is how the app tells a portable build apart from an installed one at runtime.
   "extraResources": [
+    // The notices the bundled dependencies' licences require, written by
+    // the build (scripts/thirdPartyNotices.mjs), placed beside the app as a
+    // plain file a reader can open.
+    {
+      "from": "dist/THIRD_PARTY_NOTICES.txt",
+      "to": "THIRD_PARTY_NOTICES.txt"
+    },
+    {
+      "from": "dist-electron/THIRD_PARTY_NOTICES.txt",
+      "to": "THIRD_PARTY_NOTICES-main.txt"
+    },
     {
       "from": "assets/portable.flag",
       "to": "portable.flag"

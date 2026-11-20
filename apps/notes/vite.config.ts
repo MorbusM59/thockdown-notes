@@ -8,10 +8,14 @@ import path from 'node:path'
 import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
 import { CONTENT_SECURITY_POLICY } from './contentSecurityPolicy'
+import { createThirdPartyNotices, thirdPartyNotices } from '../../scripts/thirdPartyNotices.mjs'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const isBrowserOnlyDev = mode === 'browser'
+  // THIRD_PARTY_NOTICES.txt beside each build's output, the renderer's
+  // covering its workers too (scripts/thirdPartyNotices.mjs).
+  const rendererNotices = createThirdPartyNotices()
 
   return {
     // The app's own folder, whichever directory Vite or Vitest is run from.
@@ -44,6 +48,9 @@ export default defineConfig(({ mode }) => {
         ),
       },
     },
+    worker: {
+      plugins: () => [rendererNotices.collect],
+    },
     build: {
       // Lets the perf harness (scripts/perf/) resolve real function names
       // from a CDP JS-sampling profile of the production Electron build --
@@ -66,6 +73,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      rendererNotices.emit,
       {
         // EVERY CODE EDIT RELOADS THE PAGE; only a stylesheet is swapped in
         // place. React Fast Refresh keeps component state across an edit by
@@ -105,6 +113,7 @@ export default defineConfig(({ mode }) => {
                   musicIndexWorker: 'electron/musicIndexWorker.ts',
                 },
                 vite: {
+                  plugins: [thirdPartyNotices()],
                   build: {
                     rollupOptions: {
                       external: ['better-sqlite3'],

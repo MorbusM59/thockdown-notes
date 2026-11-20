@@ -6,10 +6,12 @@
  */
 import { defineConfig } from 'vite'
 import path from 'node:path'
+import { thirdPartyNotices } from '../../scripts/thirdPartyNotices.mjs'
 
 export default defineConfig({
   // Only the bundle: the app's public/ belongs to the web build.
   publicDir: false,
+  plugins: [thirdPartyNotices()],
   build: {
     outDir: path.resolve(__dirname, 'android/app/src/main/assets'),
     emptyOutDir: false,
