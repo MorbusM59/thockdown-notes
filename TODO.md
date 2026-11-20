@@ -46,3 +46,4 @@
 
 - [x] **Mobile schedule: assign by MARKING a soundscape.** Built as PICKING UP: a long press on a soundscape picks it up without playing it, and every slot tap fills a slot with it until a tap on it puts it down (`SoundscapeControls`' `onPickPreset`, `ScheduleGrid.tsx`).
 - [ ] **Visualizer glaze: radial sources shake on the kick (Joe, 2026-10-31, "could").** The linear stacks are endless and take drift and snare pushes; the radial sources deliberately stay in place and only sway softly. A small shake on the kick tracker's hits is the one response Joe floated for them.
+- [ ] **Before the public launch: ship every bundled dependency's licence notice.** MIT/BSD/ISC require the notice with every copy, and the minified bundle may not keep them. Generate a third-party notices file at build time and link it from Options > Advanced > About (`apps/notes/src/about/about.ts`). Touches packaging, so it goes through a PR.
