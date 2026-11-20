@@ -158,10 +158,23 @@ export class NoteLifecycleService {
   }
 
   private async readSummary(record: NoteRecord): Promise<NoteSummaryWithContent | null> {
+    // The database is the only store of a note's text (see
+    // DatabaseService.retireNotesFolder for where the files went).
+    let text: string;
     try {
-      // The database is the only store of a note's text (see
-      // DatabaseService.retireNotesFolder for where the files went).
-      const text = this.databaseService.readStoredNoteContent(record.id) ?? '';
+      text = this.databaseService.readStoredNoteContent(record.id) ?? '';
+    } catch {
+      return null;
+    }
+    return this.summaryFrom(text, record);
+  }
+
+  /**
+   * The summary of a note whose text is in hand. A save builds its summary
+   * from the text it has just written rather than reading it back.
+   */
+  private summaryFrom(text: string, record: NoteRecord): NoteSummaryWithContent | null {
+    try {
       const parsed = parseNoteMetadata(text, true);
 
       const tags = this.databaseService.getNoteTags(record.id);
@@ -958,7 +971,7 @@ export class NoteLifecycleService {
         previewBlockCache: input.previewBlockCache ? JSON.stringify(input.previewBlockCache) : null,
       });
       this.databaseService.updateTempNoteState(input.id, hasUnsavedChanges, syncMode);
-      const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
+      const summary = this.summaryFrom(text, this.databaseService.getNoteRecord(input.id) ?? {
         id: input.id,
         title: titleFromText(text),
         createdAtMs: record.createdAtMs,
@@ -1020,7 +1033,7 @@ export class NoteLifecycleService {
       cursorPos: input.cursorPos,
       previewBlockCache: input.previewBlockCache ? JSON.stringify(input.previewBlockCache) : null,
     });
-    const summary = await this.readSummary(this.databaseService.getNoteRecord(input.id) ?? {
+    const summary = this.summaryFrom(text, this.databaseService.getNoteRecord(input.id) ?? {
       id: input.id,
       title: titleFromText(text),
       createdAtMs: record.createdAtMs ?? nowMs,
