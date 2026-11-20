@@ -29,7 +29,7 @@ describe('estimateLag', () => {
 })
 
 describe('delayForLag', () => {
-  it('is what the audio path adds beyond the reported latency, without the visual offset', () => {
+  it('is what the audio path adds beyond the reported latency', () => {
     const latency = 0.21
     for (const setting of [0, 120, 333, 500]) {
       const lag = latency + setting / 1000
@@ -37,11 +37,11 @@ describe('delayForLag', () => {
     }
   })
 
-  it('reads a tap slightly ahead of the reported latency as 0, never as a beat later', () => {
+  it('reads a tap ahead of the reported latency as a negative setting, never as a beat later', () => {
     const latency = 0.2
     for (const early of [0.005, 0.014, 0.06, 0.15]) {
       const lag = latency - early
-      expect(delayForLag(((lag % P) + P) % P, latency)).toBe(0)
+      expect(delayForLag(((lag % P) + P) % P, latency)).toBe(-Math.round(early * 1000))
     }
   })
 

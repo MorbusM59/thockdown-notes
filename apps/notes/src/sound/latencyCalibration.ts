@@ -11,7 +11,7 @@
  * output buffer and the device add up to, and no relation between the audio
  * clock and the page's clock is assumed: the tap's time on the listener clock
  * minus the click's media time is the lag the SOUND has on this device; the
- * setting is solved from it (`delayForLag`), and `heardLagSec` adds the built-in visual offset on top.
+ * setting is solved from it (`delayForLag`).
  *
  * The reader's own anticipation (people tap a little ahead of a steady beat)
  * is measured with it, deliberately: what is wanted is the pulse landing
@@ -113,20 +113,16 @@ export function estimateLag(lags: readonly number[], period: number = CALIBRATIO
 
 /**
  * The setting for a device whose sound reaches the reader `lagSec` after the
- * graph handles it. The taps measure the AUDIO path only, and the setting is
- * what that path adds beyond the latency the audio stack reports. The
- * built-in offset (`BEAT_DELAY_OFFSET_MS`) is not part of it: it is the same
- * on every device, set by ear on a wired headset where the taps agree with
- * the reported latency to within a few milliseconds, so it corrects the
- * VISUAL side (how late a drawn hit is perceived) and stays on top of
- * whatever the taps find. A lag is only known modulo the beat, so it is
- * placed in the window around `LAG_WINDOW_CENTRE_MS`, then clamped to the
- * setting's range (a tap ahead of the reported latency is 0).
+ * graph handles it: what that path adds beyond the latency the audio stack
+ * reports, signed, since a device may report more than it has. A lag is
+ * only known modulo the beat, so it is placed in the window around
+ * `LAG_WINDOW_CENTRE_MS`, then clamped to the setting's range.
  */
 export function delayForLag(lagSec: number, outputLatency: number, period: number = CALIBRATION_PERIOD_SEC): number {
   const raw = (lagSec - outputLatency) * 1000
   const shifted = LAG_WINDOW_CENTRE_MS + wrapCentred(raw - LAG_WINDOW_CENTRE_MS, period * 1000)
-  return Math.round(Math.max(BEAT_DELAY_MIN_MS, Math.min(BEAT_DELAY_MAX_MS, shifted)))
+  // `+ 0` turns a rounded -0 into 0.
+  return Math.round(Math.max(BEAT_DELAY_MIN_MS, Math.min(BEAT_DELAY_MAX_MS, shifted))) + 0
 }
 
 export type CalibrationVerdict = 'continue' | 'done' | 'failed'

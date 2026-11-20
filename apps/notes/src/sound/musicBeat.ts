@@ -466,17 +466,25 @@ export function setBeatResponseHeadroomDb(db: number): void {
 }
 
 /**
- * Sets the visual timing offset added to the latency the audio stack reports:
- * the internal calibration plus the reader's per-device adjustment.
+ * Sets the reader's per-device delay, added to the latency the audio stack
+ * reports.
  */
 export function setBeatVisualDelaySec(sec: number): void {
   visualDelaySec = sec
 }
 
-/** How far behind the media time the listener hears it: the output context's processing and output latency. */
+/**
+ * How far behind the media time the listener hears it. Chromium's
+ * `outputLatency` is the whole way from the graph to the speaker, the output
+ * buffer `baseLatency` names included (measured on Windows: base 170 ms,
+ * output 202 ms at a 8192-frame buffer), so the two are not added: their sum
+ * counted the buffer twice and drew everything 170 ms late. The larger is
+ * taken so a platform that reports only the hardware's part still has the
+ * buffer as its floor.
+ */
 export function outputLatencySec(): number {
   const context = outputContext()
-  return (context.baseLatency || 0) + (context.outputLatency || 0)
+  return Math.max(context.baseLatency || 0, context.outputLatency || 0)
 }
 
 /**
