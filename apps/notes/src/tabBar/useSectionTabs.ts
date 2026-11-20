@@ -117,6 +117,13 @@ export interface UseSectionTabsResult {
   handleTabsContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   /** Removes a note's pinned tab in this section, without touching activation -- used when a foreign section claims it via drag-and-drop. */
   unpinNoteTab: (noteId: string) => Promise<void>
+  /**
+   * The slot's close button for a note: takes the shown note's tab out of the
+   * collection (or drops the unpinned temp tab), then shows the collection's
+   * right-most remaining tab in its place, or the empty scene when none is
+   * left. The note itself is untouched: closing is never deleting.
+   */
+  closeActiveTab: () => Promise<void>
   /** Pins `noteId` to this section (if not already pinned) and moves it to the rightmost position -- used by section-wide drop targets (cross-section tab moves, sidebar note drops). */
   pinNoteAsRightmostTab: (noteId: string) => Promise<void>
   /** Lets a caller outside this hook (EditorSection.tsx's activateNote, routed through a ref -- see its own doc comment) hand back a fresh tab list after its own out-of-band write (recording a tab's last-active chapter) so this section's locally cached pinnedTabs doesn't go stale until the next full remount. */
@@ -627,6 +634,30 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     }
   }, [tabIdentityNoteId, sectionId, clearActiveNote])
 
+  // Activates the next note directly rather than blanking first, so the slot
+  // goes from the closed note to its successor without an empty frame.
+  const closeActiveTab = useCallback(async () => {
+    const closingNoteId = tabIdentityNoteId
+    if (!closingNoteId) return
+    let remaining = pinnedTabs.filter((tab) => tab.noteId !== closingNoteId)
+    if (activeNoteIsPinned && window.thockdownTabs) {
+      const allUpdatedTabs = await window.thockdownTabs.removeTab(sectionId, closingNoteId).catch(() => null)
+      if (!allUpdatedTabs) return
+      remaining = allUpdatedTabs.filter((tab) => tab.sectionId === sectionId)
+      setPinnedTabs(remaining)
+    }
+    const next = remaining.at(-1)
+    if (!next) {
+      await clearActiveNote()
+      return
+    }
+    // The same resolution a tab click makes: resume the chapter it last showed.
+    const targetNoteId = next.lastActiveChapterNoteId && notes.some((note) => note.id === next.lastActiveChapterNoteId)
+      ? next.lastActiveChapterNoteId
+      : next.noteId
+    await activateNote(targetNoteId)
+  }, [tabIdentityNoteId, pinnedTabs, activeNoteIsPinned, sectionId, clearActiveNote, notes, activateNote])
+
   // Pins `noteId` to this section if it isn't already, then moves it to the
   // rightmost slot -- idempotent either way, so it's safe to call whether
   // the note is new to this section (a cross-section tab move, or a
@@ -971,6 +1002,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTabDrop,
     handleTabsContainerDrop,
     unpinNoteTab,
+    closeActiveTab,
     pinNoteAsRightmostTab,
     applyTabsUpdate,
   }

@@ -38,10 +38,12 @@ export interface SectionTabBarProps {
   /**
    * Non-null when this slot is showing something a view toggle makes no
    * sense for -- the User Guide, or a mode that has taken the slot over.
-   * The toggle becomes an EXIT then, in the same place, doing the same
-   * thing Escape does: in a note Escape switches view, here it leaves.
+   * The mode toggle is absent then and Escape closes it, as the close
+   * button does: in a note Escape switches modes, here it leaves.
    */
   exitSlotOverlay: (() => void) | null
+  /** Closes whatever this slot shows (EditorSection's closeSlotResource); null when it shows nothing. */
+  closeSlotResource: (() => void) | null
   /** Opens a new slot immediately to the right of this one. */
   onCreateSlot: () => void
   /** Closes this slot (only ever called for non-leftmost slots). */
@@ -130,6 +132,7 @@ export function SectionTabBar({
   isSpeedReading,
   onToggleSpeedReading,
   exitSlotOverlay,
+  closeSlotResource,
   onCreateSlot,
   onCloseSlot,
   onCloseSlotLeft,
@@ -439,21 +442,14 @@ export function SectionTabBar({
           </div>
         </div>
 
-      {/* Edit/render toggle, or EXIT when the slot is showing the guide or a
-          mode -- one control, because Escape activates this position and
-          Escape means the same thing in both cases: leave what this slot is
-          currently doing. In a note that is the other view; in the guide or
-          the game there is no other view, so it is the way out. It was a
-          dead disabled pen in the guide before, which said nothing.
-
-          A per-slot control, so it lives here at the
-          slot's own edge rather than in the chapter bar (which speaks for one
-          note's internals). Active means editor, so a note that can't leave
-          reader (auto-TOC, Open Items, timeless) reads as plain inactive
-          and takes no clicks, rather than showing a state the user can't act
-          on. Sitting immediately left of the add-slot "+" also lets the two
-          read together as slot-level actions: this is the writing window, and
-          that makes another one. */}
+      {/* The mode toggle, then the slot's CLOSE button. In the guide, an
+          image or a mode there is no other mode, so the toggle is absent and
+          Escape does what close does (exitSlotOverlay). In a note Escape
+          switches modes, so close is only the button: it takes the note out of
+          the collection and opens the right-most remaining tab. A note that
+          can't leave the reader (auto-TOC, Open Items, timeless) shows the
+          toggle inactive and disabled. Both sit left of the add-slot "+" so
+          they read together as slot-level actions. */}
       {/* Speed reading belongs to the slot like its view does, so it sits
           beside the view toggle; it has nothing to read in the guide's
           place-holders or a mode, where the exit stands alone. */}
@@ -469,17 +465,7 @@ export function SectionTabBar({
           <span className="fa-solid fa-book-open-reader" aria-hidden="true" />
         </button>
       ) : null}
-      {exitSlotOverlay ? (
-        <button
-          type="button"
-          className="btn-icon section-render-mode-toggle section-overlay-exit"
-          data-tooltip="Back"
-          aria-label="Close this and go back"
-          onClick={exitSlotOverlay}
-        >
-          <span className="fa-solid fa-arrow-right-from-bracket" aria-hidden="true" />
-        </button>
-      ) : (
+      {exitSlotOverlay ? null : (
         <button
           type="button"
           className={`btn-icon section-render-mode-toggle${!isForcedPreviewNote && !isPreviewMode ? ' is-active' : ''}`}
@@ -496,6 +482,17 @@ export function SectionTabBar({
           <span className="fa-solid fa-pen-to-square" aria-hidden="true" />
         </button>
       )}
+      {closeSlotResource ? (
+        <button
+          type="button"
+          className="btn-icon section-render-mode-toggle section-overlay-exit"
+          data-tooltip={encodeTooltip({ intention: 'Close' })}
+          aria-label="Close"
+          onClick={closeSlotResource}
+        >
+          <span className="fa-solid fa-xmark" aria-hidden="true" />
+        </button>
+      ) : null}
 
       {canCreateSlot ? (
         <button

@@ -92,7 +92,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Editor and Reader](#edit-and-preview-modes)
 - **Switch modes**: \`Esc\`, or the pen at the right end of the tab bar.
 - **Tick a checklist box**: click it in the Reader.
-- In a slot showing the User Guide, the same button and \`Esc\` close it.
+- In a slot showing the User Guide, \`Esc\` closes it.
 
 ### [Quick Actions Menu](#quick-actions-menu)
 - **Open**: hold \`Esc\`. **Close**: tap \`Esc\`.
@@ -210,7 +210,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Pinned and Temporary Tabs](#pinned-and-temporary-tabs)
 - **Open temporarily**: click a note in the sidebar. **Pin**: hold the click.
 - **New pinned note**: the \`+\` at the start of the tab strip.
-- **Set the note's id**: right-click a tab. **Close**: hold right-click, then click.
+- **Set the note's id**: right-click a tab. **Close**: hold right-click, then click, or the \`×\` at the right end of the tab bar, which closes whatever the slot shows and opens the right-most remaining tab. Closing never deletes a note.
 - **Reorder**: drag tabs; drag a note from the sidebar to open it there.
 - A tab returns to the chapter you left it on.
 
