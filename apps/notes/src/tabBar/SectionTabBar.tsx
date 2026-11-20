@@ -166,9 +166,7 @@ export function SectionTabBar({
     commitTabIdEdit,
     cancelTabIdEdit,
     unpinArmingTabNoteId,
-    tabsScrollerRef,
-    tabsCanScrollLeft,
-    tabsCanScrollRight,
+    tabsStrip,
     handleTabContextMenu,
     handleTabMouseLeave,
     handleTabClick,
@@ -176,8 +174,6 @@ export function SectionTabBar({
     handleTabPointerUp,
     handleTempTabPointerDown,
     clearTempTabHoldTimer,
-    updateTabsScrollEdges,
-    handleTabsWheel,
     handleTabDragStart,
     handleTabDragEnd,
     handleTabDrop,
@@ -262,13 +258,13 @@ export function SectionTabBar({
       </div>
 
       <div className="tab-mode-shell tabs-mode" role="group" aria-label="Note tabs">
-          <div className={`tabbar-tabs-scroll-shell${tabsCanScrollLeft ? ' fade-left' : ''}${tabsCanScrollRight ? ' fade-right' : ''}`}>
+          <div className={`tabbar-tabs-scroll-shell${tabsStrip.fadeClassName}`}>
             <div
               className="tabbar-tabs-display"
               aria-live="polite"
-              ref={tabsScrollerRef}
-              onScroll={updateTabsScrollEdges}
-              onWheel={handleTabsWheel}
+              ref={tabsStrip.ref}
+              onScroll={tabsStrip.onScroll}
+              onWheel={tabsStrip.onWheel}
               onDrop={handleTabsContainerDrop}
             >
               {/* An undocked note shows an empty strip: it is in no collection,
