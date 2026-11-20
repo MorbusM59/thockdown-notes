@@ -16,8 +16,8 @@ const COARSE_STEP_MS = 10
  */
 const HOLD_TRAVEL_SEC = (BEAT_DELAY_MAX_MS - BEAT_DELAY_MIN_MS) / 100
 
-/** Boxes to the strip's height: half a row, three whole rows and half a row. */
-const ROWS = 4
+/** Boxes to the strip's height: half a row, a whole row and half a row. */
+const ROWS = 2
 /** The delay's boxes, centred on the middle row: room for -200. */
 const VALUE_BOXES = 4
 
@@ -75,8 +75,8 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
     return () => observer.disconnect()
   }, [])
   const boxPx = Math.max(0, Math.round(size.height / ROWS))
-  // Grid lines through the strip's horizontal centre, and half a box above the middle row's
-  // top edge's row: the rows read half, whole, whole, whole, half, the middle row centred.
+  // Grid lines through the strip's horizontal centre, and the whole row centred
+  // vertically: the rows read half, whole, half.
   const centreX = Math.round(size.width / 2)
   const valueTop = Math.round((size.height - boxPx) / 2)
   const originX = boxPx > 0 ? centreX % boxPx : 0

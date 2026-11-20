@@ -798,11 +798,10 @@
   mask-position:       calc(var(--loop-grid-x) + 1px) calc(var(--loop-grid-y) + 1px);
 }
 
-/* The delay, a letter to a box as the visualizer writes its text: the box lit
-   in the accent (.visualizer-lit), the letter in the text colour. */
+/* The delay, a letter to a box as the visualizer writes its text, on the
+   ordinary boxes, in the text colour. */
 .beat-loop-calibration-letter {
   position:         absolute;
-  background-color: var(--visualizer-accent-color, var(--color-caret));
   color:            var(--color-text-base);
   text-align:       center;
   white-space:      pre;
