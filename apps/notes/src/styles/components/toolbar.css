@@ -760,39 +760,30 @@
   grid-template-columns: 1fr 1fr 1fr;
 }
 
-/* Options > Beat Detection's tap-along calibration (sidebar/BeatCalibration.tsx):
-   a two-by-two start/stop button and a four-by-two pad, large because the pad
-   is pressed in time and a small target costs aim. The pad fills from the
-   left as the taps it needs come in. */
-.beat-calibration > .beat-calibration-toggle {
-  grid-column: span 2;
-  grid-row:    span 2;
+/* Options > Beat Detection's delay calibration (sidebar/SwishCalibration.tsx):
+   one strip, six cells wide and one high, a canvas filling it, and the delay
+   at its right end while it runs. */
+.swish-calibration > .swish-calibration-strip {
+  position:    relative;
+  grid-column: span 6;
+  padding:     0;
+  overflow:    hidden;
 }
 
-.beat-calibration > .beat-calibration-pad {
-  position:     relative;
-  grid-column:  span 4;
-  grid-row:     span 2;
-  touch-action: none;
-}
-
-.beat-calibration-pad::before {
-  content:        '';
+.swish-calibration-canvas {
   position:       absolute;
   inset:          0;
-  border-radius:  inherit;
-  background:     var(--btn-border-default);
-  opacity:        0.35;
-  transform:      scaleX(var(--calibration-fill, 0));
-  transform-origin: left center;
+  width:          100%;
+  height:         100%;
   pointer-events: none;
 }
 
-.beat-calibration-value {
-  position:    relative;
-  display:     inline-flex;
-  align-items: center;
-  gap:         var(--spacing-small);
+.swish-calibration-value {
+  position:    absolute;
+  right:       var(--spacing-small);
+  top:         50%;
+  transform:   translateY(-50%);
   font-size:   calc(16px * var(--ui-font-scale));
   font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
