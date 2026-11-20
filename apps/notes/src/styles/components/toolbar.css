@@ -760,25 +760,38 @@
   grid-template-columns: 1fr 1fr 1fr;
 }
 
-/* Options > Beat Detection's delay calibration (sidebar/SwishCalibration.tsx):
-   one strip, six cells wide and one high, a canvas filling it, and the delay
-   at its right end while it runs. */
-.swish-calibration > .swish-calibration-strip {
+/* Options > Beat Detection's delay calibration (sidebar/BeatLoopCalibration.tsx):
+   one strip, six cells wide and one high, carrying the grid beat's two
+   effects in the layout's own beat colours (the edit view's .editor-beat-edge
+   and pane, at the strength the strip writes as --loop-edge / --loop-pane),
+   and the delay at its right end while it runs. */
+.beat-loop-calibration > .beat-loop-calibration-strip {
   position:    relative;
   grid-column: span 6;
-  padding:     0;
   overflow:    hidden;
 }
 
-.swish-calibration-canvas {
+.beat-loop-calibration-edge,
+.beat-loop-calibration-pane {
   position:       absolute;
   inset:          0;
-  width:          100%;
-  height:         100%;
+  border-radius:  inherit;
   pointer-events: none;
 }
 
-.swish-calibration-value {
+.beat-loop-calibration-edge {
+  box-shadow:
+    inset 0 0 4px 1px var(--beat-edge-color, var(--color-text-base)),
+    inset 0 0 14px 2px color-mix(in srgb, var(--beat-edge-color, var(--color-text-base)) 45%, transparent);
+  opacity:    var(--loop-edge, 0);
+}
+
+.beat-loop-calibration-pane {
+  background-color: var(--beat-pane-color, var(--color-text-base));
+  opacity:          calc(0.5 * var(--loop-pane, 0));
+}
+
+.beat-loop-calibration-value {
   position:    absolute;
   right:       var(--spacing-small);
   top:         50%;

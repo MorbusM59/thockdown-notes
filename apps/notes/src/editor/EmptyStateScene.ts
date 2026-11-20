@@ -218,11 +218,6 @@ function rotateAroundAxis(p: Vec3, axis: Vec3, angleRad: number): Vec3 {
   ]
 }
 
-/** Where `point` of `scene` (in its own coordinates) is at `timeSec` of its turn. */
-export function solidPointAt(scene: SolidScene, point: Vec3, timeSec: number): Vec3 {
-  return rotateAroundAxis(point, scene.axis, scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec)
-}
-
 /** Simple perspective divide -- points nearer the viewer (more negative z) project larger. */
 function project(p: Vec3, scale: number, focal: number, cx: number, cy: number): Vec2 {
   const [x, y, z] = p
@@ -272,26 +267,7 @@ export interface SolidScene {
   strokeWidth: number
   /** Each face's own alpha, 0.1 to 0.5. */
   faceAlphas: number[]
-  /**
-   * The frame the solid is drawn in, width over height: absent is square
-   * (the empty scene's solids). A wider frame is VIEWBOX high and
-   * `VIEWBOX * aspect` wide, fitted into the canvas as large as it goes and
-   * centred, so a solid authored for it fills a strip rather than a square.
-   */
-  aspect?: number
-  /**
-   * Where the camera is: this far in front of the solid's centre (towards
-   * -z), looking at +z. Absent, the camera is `focal` away and nothing comes
-   * near it (the empty scene's solids). Present, `focal` is only the lens
-   * (pixels at depth `focal` are `halfSize` viewbox units per unit), the
-   * camera may be INSIDE the solid, and whatever lies behind it is clipped
-   * away rather than projected through it.
-   */
-  eyeDistance?: number
 }
-
-/** The height of the frame a solid is authored in (`SolidScene.halfSize` and the projection are in its units). */
-export const SOLID_VIEWBOX = VIEWBOX
 
 /**
  * Picks one of the 5 Platonic solids and tumbles it around a fully random
@@ -477,75 +453,8 @@ export function drawSolidScene(
     context.fillStyle = stripes
     context.fillRect(0, 0, width, height)
   }
-  for (const placement of placements) {
-    const aspect = placement.scene.aspect ?? 1
-    cutOutSolid(context, scratch, placement, Math.min(width / aspect, height), dpr)
-  }
-}
-
-/** Fills each face (projected, as points) at its own alpha, then strokes the edges, into the cutout. */
-function drawFacesAndEdges(a: CanvasRenderingContext2D, scene: SolidScene, faces: Vec2[][], edges: Array<[Vec2, Vec2]>): void {
-  a.fillStyle = '#000'
-  faces.forEach((points, faceIndex) => {
-    if (points.length < 3) return
-    a.globalAlpha = scene.faceAlphas[faceIndex]
-    a.beginPath()
-    points.forEach(([x, y], i) => (i === 0 ? a.moveTo(x, y) : a.lineTo(x, y)))
-    a.closePath()
-    a.fill()
-  })
-  a.globalAlpha = 1
-  a.strokeStyle = '#000'
-  a.lineWidth = scene.strokeWidth
-  a.lineCap = 'round'
-  a.beginPath()
-  for (const [[x0, y0], [x1, y1]] of edges) {
-    a.moveTo(x0, y0)
-    a.lineTo(x1, y1)
-  }
-  a.stroke()
-}
-
-/** Depth (from the camera) below which a point is behind it, in the solid's units. */
-const NEAR_PLANE = 0.01
-
-/**
- * A solid seen from a camera `eye` in front of its centre (`SolidScene.eyeDistance`):
- * faces and edges clipped to what is in front of the camera (one plane,
- * Sutherland-Hodgman), then projected.
- */
-function drawClippedFromEye(a: CanvasRenderingContext2D, scene: SolidScene, eye: number, timeSec: number, cx: number, cy: number): void {
-  const view = scene.vertices.map((vertex): Vec3 => {
-    const [x, y, z] = solidPointAt(scene, vertex, timeSec)
-    return [x, y, z + eye]
-  })
-  const toScreen = ([x, y, z]: Vec3): Vec2 => [cx + (x * scene.halfSize * scene.focal) / z, cy + (y * scene.halfSize * scene.focal) / z]
-  const cut = (p: Vec3, q: Vec3): Vec3 => {
-    const t = (NEAR_PLANE - p[2]) / (q[2] - p[2])
-    return [p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1]), NEAR_PLANE]
-  }
-  const faces = scene.faces.map((face) => {
-    const out: Vec3[] = []
-    face.forEach((index, i) => {
-      const p = view[index]
-      const q = view[face[(i + 1) % face.length]]
-      const pIn = p[2] >= NEAR_PLANE
-      const qIn = q[2] >= NEAR_PLANE
-      if (pIn) out.push(p)
-      if (pIn !== qIn) out.push(cut(p, q))
-    })
-    return out.map(toScreen)
-  })
-  const edges: Array<[Vec2, Vec2]> = []
-  for (const [from, to] of scene.edges) {
-    let p = view[from]
-    let q = view[to]
-    if (p[2] < NEAR_PLANE && q[2] < NEAR_PLANE) continue
-    if (p[2] < NEAR_PLANE) p = cut(p, q)
-    else if (q[2] < NEAR_PLANE) q = cut(p, q)
-    edges.push([toScreen(p), toScreen(q)])
-  }
-  drawFacesAndEdges(a, scene, faces, edges)
+  const restSide = Math.min(width, height)
+  for (const placement of placements) cutOutSolid(context, scratch, placement, restSide, dpr)
 }
 
 function cutOutSolid(
@@ -557,7 +466,6 @@ function cutOutSolid(
 ): void {
   const width = context.canvas.width
   const height = context.canvas.height
-  const aspect = scene.aspect ?? 1
   const side = restSide * scale
   const top = (height - side) / 2 + offsetY * restSide
   // Wholly outside the canvas (a solid falling away or not yet arrived): nothing to cut.
@@ -568,29 +476,46 @@ function cutOutSolid(
   // by the quantize.
   const size = Math.ceil(side / Math.max(1, dpr))
   if (size <= 0) return
-  const sizeX = Math.ceil(size * aspect)
   const { alpha, alphaContext: a } = scratch
-  if (alpha.width !== sizeX || alpha.height !== size) {
-    alpha.width = sizeX
+  if (alpha.width !== size || alpha.height !== size) {
+    alpha.width = size
     alpha.height = size
   }
   a.setTransform(1, 0, 0, 1, 0, 0)
-  a.clearRect(0, 0, sizeX, size)
+  a.clearRect(0, 0, size, size)
   const unit = size / VIEWBOX
   a.setTransform(unit, 0, 0, unit, 0, 0)
+  const angle = scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec
   const centre = VIEWBOX / 2
-  if (scene.eyeDistance === undefined) {
-    const projected = scene.vertices.map((vertex) => project(solidPointAt(scene, vertex, timeSec), scene.halfSize, scene.focal, centre * aspect, centre))
-    drawFacesAndEdges(a, scene, scene.faces.map((face) => face.map((v) => projected[v])), scene.edges.map(([from, to]) => [projected[from], projected[to]]))
-  } else {
-    drawClippedFromEye(a, scene, scene.eyeDistance, timeSec, centre * aspect, centre)
+  const projected = scene.vertices.map((vertex) => project(rotateAroundAxis(vertex, scene.axis, angle), scene.halfSize, scene.focal, centre, centre))
+  a.fillStyle = '#000'
+  scene.faces.forEach((face, faceIndex) => {
+    a.globalAlpha = scene.faceAlphas[faceIndex]
+    a.beginPath()
+    face.forEach((vertexIndex, i) => {
+      const [x, y] = projected[vertexIndex]
+      if (i === 0) a.moveTo(x, y)
+      else a.lineTo(x, y)
+    })
+    a.closePath()
+    a.fill()
+  })
+  a.globalAlpha = 1
+  a.strokeStyle = '#000'
+  a.lineWidth = scene.strokeWidth
+  a.lineCap = 'round'
+  a.beginPath()
+  for (const [from, to] of scene.edges) {
+    a.moveTo(projected[from][0], projected[from][1])
+    a.lineTo(projected[to][0], projected[to][1])
   }
+  a.stroke()
 
   // Cut out through the quantize: the COMPOSITED alpha of the faces and
   // edges, stepped to QUANTIZE_STEPS values from 0 to 1.
   context.filter = quantizeFilter()
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(alpha, (width - side * aspect) / 2, top, side * aspect, side)
+  context.drawImage(alpha, (width - side) / 2, top, side, side)
   context.globalCompositeOperation = 'source-over'
   context.filter = 'none'
 }

@@ -231,7 +231,7 @@ import { idKind, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdow
 import { KEYSTROKE_SOUND_KIND, KEYSTROKE_SOUND_RANGES, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
 import { useOutputDevice } from '../sound/outputDevice'
-import { SwishCalibration } from './SwishCalibration'
+import { BeatLoopCalibration } from './BeatLoopCalibration'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
   DEFAULT_WHEEL_SPIN_THRESHOLD_MS,
@@ -3090,7 +3090,7 @@ export function SidebarOptionsPanel({
         heading="Beat Detection"
         iconClass="fa-drum"
       >
-          <SwishCalibration delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
+          <BeatLoopCalibration delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
           <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[2]}>
