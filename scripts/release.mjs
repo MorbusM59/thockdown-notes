@@ -385,15 +385,30 @@ const findWindowsArtifacts = () => {
     .map((f) => path.join(outDir, f))
 }
 
+// A build is reused only when it was made from the tagged commit. Reusing any
+// build that merely existed shipped v0.7.0 from a day-old local build of the
+// same version number: the checksums proved the upload matched the file, not
+// that the file matched the tag. The stamp is written after a build succeeds,
+// so a folder without one (or with another commit's) is never trusted.
+const builtFromPath = path.join(outDir, 'built-from.txt')
+const tagSha = DRY_RUN && !tagExists ? gateSha : git('rev-parse', `${tag}^{commit}`)
+const builtFrom = fs.existsSync(builtFromPath) ? fs.readFileSync(builtFromPath, 'utf8').trim() : null
+
 let windowsArtifacts = findWindowsArtifacts()
-if (windowsArtifacts.length >= 2) {
-  ok(`reusing the existing build in apps/notes/release/${version}`)
+if (windowsArtifacts.length >= 2 && builtFrom === tagSha) {
+  ok(`reusing the build of ${tagSha.slice(0, 7)} in apps/notes/release/${version}`)
 } else if (DRY_RUN) {
   info(dim('[dry-run] would run npm run build'))
 } else {
+  if (fs.existsSync(outDir)) {
+    const aside = `${outDir}.stale-${(builtFrom ?? 'unknown').slice(0, 7)}-${Date.now()}`
+    fs.renameSync(outDir, aside)
+    info(`moved a build not made from ${tagSha.slice(0, 7)} aside to ${path.relative(repoRoot, aside)}`)
+  }
   info('running npm run build (installer + portable) -- this takes a few minutes')
   run('npm', ['run', 'build'])
   windowsArtifacts = findWindowsArtifacts()
+  if (windowsArtifacts.length) fs.writeFileSync(builtFromPath, `${tagSha}\n`)
 }
 
 if (!DRY_RUN) {
