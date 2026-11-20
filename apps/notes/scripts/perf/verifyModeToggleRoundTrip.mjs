@@ -37,7 +37,7 @@
 //
 // Usage: node scripts/perf/verifyModeToggleRoundTrip.mjs
 import { chromium } from 'playwright'
-import { startDevServer, waitForAppReady, ensureEditMode, generateSyntheticDocument } from './perfHarness.mjs'
+import { reloadInMode, startDevServer, waitForAppReady, ensureEditMode, generateSyntheticDocument } from './perfHarness.mjs'
 
 const PORT = 5247
 // A block in this synthetic document is ~37 lines at 26px. Two of them is
@@ -76,14 +76,14 @@ const main = async () => {
       const note = await window.thockdownNotes.createNote({ initialText: text })
       await window.thockdownSections.setActiveNote('default', note.id)
     }, documentText)
-    await page.reload()
+    await reloadInMode(page, 'edit')
     await waitForAppReady(page)
     await ensureEditMode(page)
     await page.waitForTimeout(5000)
 
     const toggle = page.getByRole('button', { name: /Switch to/ })
 
-    const track = await page.locator('.thockdown-scroll-track').boundingBox()
+    const track = await page.locator('.editor-scrollbar-slot-inner .thockdown-scroll-track').boundingBox()
     await page.mouse.click(track.x + track.width / 2, track.y + track.height * 0.45, { delay: 0 })
     await page.waitForTimeout(4000)
 

@@ -264,6 +264,50 @@ export async function ensureEditMode(page, timeoutMs = MOUNT_TIMEOUT_MS) {
   return editable
 }
 
+/**
+ * Reloads the page with the persisted view mode set to `mode` ('edit' or
+ * 'preview'), so the slot comes back in that mode by construction.
+ *
+ * Why this exists: after a reload the slot mounts in edit view and only
+ * then is switched to the persisted mode, when App's state restore runs
+ * (`getActiveSection()?.setIsPreviewMode(appState.menu.isPreviewMode)`).
+ * ensureEditMode/ensurePreviewMode look once and press Escape if the pane is
+ * hidden, so a look taken before the restore saw edit view, pressed nothing,
+ * and then watched the restore hide the editor for good. The mode a run
+ * reloads into is whatever the previous run (or the welcome note's
+ * forced-render chapter) left persisted, which is why this failed only in
+ * some orders. Writing the mode before the reload makes both moments agree,
+ * so the ensure helpers never have to guess when the restore is done.
+ *
+ * The write cannot go through `thockdownState.saveAppState` before reloading:
+ * the page saves its own app state from `beforeunload` (a quit participant),
+ * which lands after it and puts the old mode back. So the mode is handed
+ * across the reload in sessionStorage and written into the browser mock's
+ * persisted store by an init script, which runs on the new document before
+ * any app code reads that store.
+ */
+const MOCK_STORAGE_KEY = 'thockdown-notes:browser-mock:v1'
+const MODE_HANDOFF_KEY = 'thockdown-harness:reload-preview-mode'
+const pagesWithModeHandoff = new WeakSet()
+
+export async function reloadInMode(page, mode) {
+  if (!pagesWithModeHandoff.has(page)) {
+    pagesWithModeHandoff.add(page)
+    await page.addInitScript(([storeKey, handoffKey]) => {
+      const handoff = window.sessionStorage.getItem(handoffKey)
+      if (handoff === null) return
+      window.sessionStorage.removeItem(handoffKey)
+      const raw = window.localStorage.getItem(storeKey)
+      if (!raw) return
+      const store = JSON.parse(raw)
+      store.appState = { ...store.appState, menu: { ...store.appState?.menu, isPreviewMode: handoff === 'preview' } }
+      window.localStorage.setItem(storeKey, JSON.stringify(store))
+    }, [MOCK_STORAGE_KEY, MODE_HANDOFF_KEY])
+  }
+  await page.evaluate(([key, value]) => window.sessionStorage.setItem(key, value), [MODE_HANDOFF_KEY, mode])
+  await page.reload()
+}
+
 /** The mirror of ensureEditMode, for scripts that want the render view. */
 export async function ensurePreviewMode(page, timeoutMs = MOUNT_TIMEOUT_MS) {
   await page.waitForSelector(PREVIEW_SELECTOR, { state: 'attached', timeout: timeoutMs })
@@ -288,7 +332,7 @@ export async function seedLargeNoteAndReload(page, text) {
     const note = await window.thockdownNotes.createNote({ initialText })
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
-  await page.reload()
+  await reloadInMode(page, 'edit')
   await ensureEditMode(page)
   // Let the initial mount/hydration settle (virtualizer measurement passes,
   // fixed-focus viewport boundary calculation) before any measurement starts.

@@ -125,11 +125,20 @@ async function main() {
     // Only a ResizeObserver on the row itself can notice this. Then wait
     // exactly two animation frames, which is where a ResizeObserver's
     // callback lands; a fix that were still a frame late would fail here.
-    const afterSqueeze = await page.evaluate(async () => {
+    //
+    // How far to narrow is DERIVED from the baseline, never a fixed width:
+    // the row's slack is its clearance beyond the gutter, so narrowing by
+    // that plus two pixels is the least squeeze the current survivors can no
+    // longer fit in. A fixed 420px used to be a squeeze, then the tag bar's
+    // layout changed and it took 12px off a row with 22px of slack -- every
+    // pill still fit, and the drop assertion failed with nothing wrong.
+    const slackPx = baseline.clearancePx - baseline.gutter
+    const afterSqueeze = await page.evaluate(async (squeezePx) => {
       // The tag WELL specifically -- the first .tab-mode-shell in the
       // document is the tab bar's, one row up.
       const row = document.querySelector('.tabbar-suggested-tags')
-      row.closest('.tab-mode-shell').style.maxWidth = '420px'
+      const shell = row.closest('.tab-mode-shell')
+      shell.style.maxWidth = `${shell.getBoundingClientRect().width - squeezePx}px`
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
       const rowBox = row.getBoundingClientRect()
       const shown = [...row.querySelectorAll('.tag-pill.suggested')].filter((p) => !p.classList.contains('is-out-of-bounds'))
@@ -139,7 +148,7 @@ async function main() {
         shown: shown.map((p) => p.textContent),
         clearancePx: shown.length === 0 ? Infinity : Math.min(...shown.map((p) => p.getBoundingClientRect().left - rowBox.left)),
       }
-    })
+    }, slackPx + 2)
     console.log('  after out-of-band squeeze:', JSON.stringify(afterSqueeze))
     assertTrue(afterSqueeze.rowWidth < baseline.rowWidth, 'the squeeze actually narrowed the suggested row')
     assertTrue(afterSqueeze.shown.length < baseline.shown.length, 'suggestions were dropped to fit the narrower row')

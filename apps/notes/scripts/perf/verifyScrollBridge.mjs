@@ -17,6 +17,7 @@
 
 import { chromium } from 'playwright'
 import {
+  reloadInMode,
   startDevServer, waitForAppReady, ensureEditMode, ensurePreviewMode, generateSyntheticDocument,
 } from './perfHarness.mjs'
 
@@ -38,6 +39,7 @@ const PANES = {
     host: '.render-container',
     // The render view's blocks are of every height; there is no grid to hold.
     rowGrid: false,
+    mode: 'preview',
     enter: ensurePreviewMode,
   },
   edit: {
@@ -49,6 +51,7 @@ const PANES = {
     host: '.cm6-editor-root',
     hostIsParent: true,
     rowGrid: true,
+    mode: 'edit',
     enter: ensureEditMode,
   },
 }
@@ -104,7 +107,7 @@ async function seed(page, pane, text) {
     const note = await window.thockdownNotes.createNote({ initialText })
     await window.thockdownSections.setActiveNote('default', note.id)
   }, text)
-  await page.reload()
+  await reloadInMode(page, pane.mode)
   await pane.enter(page)
   await page.waitForTimeout(6000)
 }
