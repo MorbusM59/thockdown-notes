@@ -3,7 +3,7 @@
 // note's own body, HELP_GUIDE_CHAPTERS is one chapter per topic (in display
 // order). Content only — seeding lives in helpGuideNote.ts; the ids these
 // pair with live in src/shared/helpGuide.ts (shared with the renderer,
-// which needs them without needing this ~800 lines of prose).
+// which needs them without needing this prose).
 //
 // Internal cross-references go through `guideLink` below, which addresses the
 // target chapter by its own permanent note id (`@noteId#anchor`, see
@@ -52,983 +52,413 @@ export interface HelpGuideChapterContent {
 
 export const HELP_GUIDE_INTRO_CONTENT = `# Thockdown User Guide
 
-
-Hey there! Love the learning mindset!
+Thockdown is a Markdown note app. Each **slot** shows a note in one of two modes: the **Editor**, where you write, and the **Reader**, where the note is shown formatted.
 
 ## The Basics
-Let's get you started: At its most basic, Thockdown is about
-- **writing notes** in the **[Markdown Editor](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})** and
-- **reading notes** in the **[Markdown Reader](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})**.
+- **New note**: \`Ctrl+N\`. See [Creating Notes](${guideLink('NOTES-EDITING', 'creating-notes')}).
+- **Switch modes**: \`Esc\`. See [Editor and Reader](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}).
+- **Quick Actions Menu**: hold \`Esc\`. See [Quick Actions Menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}).
+- **All shortcuts**: hold \`F1\`. Tap \`F1\` to open or close this guide. See [Keyboard Shortcuts](${guideLink('SHORTCUTS')}).
+- **Sidebar**: the menu button left of the toolbar. See [Sidebar Views](${guideLink('SIDEBAR-SEARCH', 'sidebar-views')}).
+- **Another slot**: the plus at the right of the tab bar. See [Opening a Slot](${guideLink('SPLIT-VIEW-TABS', 'opening-a-slot')}).
+- **Touch**: a second finger is the right button; a finger resting on the screen holds \`Ctrl\` for the next one (two hold \`Shift\`).
 
-You can 
-- hit **Ctrl+N** to create a [**new note**](${guideLink('NOTES-EDITING', 'creating-notes')}),
-- [**toggle**](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}) between the editor and the reader using the **Escape**-key,
-- **hold Escape** to bring up the [quick access note menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}),
-- **hold F1** to see every [keyboard shortcut](${guideLink('SHORTCUTS')}) at a glance for as long as you hold it, or tap **F1** to open and close this guide,
-- use the [**side bar**](${guideLink('SIDEBAR-SEARCH', 'sidebar-views')}) to find the notes you created again later and (**menu** button to the left of the bar above)
-- create additional editor [**slots**](${guideLink('SPLIT-VIEW-TABS', 'opening-a-slot')}) for side by side work (**plus** button to the right of the bar above).
-- on a **touch screen**, use your fingers as you would the mouse: a **second finger** tapping or holding alongside the first is the **right button**, and a finger **resting** on the glass holds **Ctrl** for another finger (two resting fingers hold **Shift**).
+## Core Concepts
+- **Collections** are sets of notes, shown as tabs in the **tab bar** above the editor. Click the collection's name to pick another, right-click it to rename. See [Naming and Swapping Collections](${guideLink('SPLIT-VIEW-TABS', 'naming-and-swapping-collections')}) and [Pinned and Temporary Tabs](${guideLink('SPLIT-VIEW-TABS', 'pinned-and-temporary-tabs')}).
+- **Chapters** are notes inside a note, shown in the **chapter bar** below the editor. The house is the parent note; the bookmark adds a chapter. See [Chapters](${guideLink('SPLIT-VIEW-TABS', 'chapters')}).
+- **Tags** sort notes into the sidebar's categories. The tag button at the left of the chapter bar switches it to the **tag bar**. See [Adding Tags](${guideLink('TAGS', 'adding-tags')}) and [Tabs and Tags Mode](${guideLink('SPLIT-VIEW-TABS', 'tabs-and-tags-mode')}).
+- **IDs** name a note so other notes can link to it. See [Assigning a Note Id](${guideLink('INTERNAL-LINKING', 'assigning-a-note-id')}).
 
-*If you want to, you can leave it at that and explore on your own. If you are a structural learner, however, it might be a good idea to spend a moment to familiarize yourself with a few core concepts.*
-
-## Core Concepts and Basic Editor Layout
-
-The **notes** you create can be...
-- kept together by pinning them to [**collections**](${guideLink('SPLIT-VIEW-TABS', 'naming-and-swapping-collections')}),
-- structured by splitting them into [**chapters**](${guideLink('SPLIT-VIEW-TABS', 'chapters')}),
-- categorized by using [**tags**](${guideLink('TAGS', 'adding-tags')}) and
-- referenced easily by assigning a unique [**ID**](${guideLink('INTERNAL-LINKING', 'assigning-a-note-id')}).
-
-These systems are literally **surrounding your editor** and figuratively (or, possibly, also *literally* if you happen to be working on a touch-capable device) right at your fingertips.
-
-### Collections
-***Collections work like browser tabs.***
-- You can find the **collection bar** right **above your editor**. ([Pinned and Temporary Tabs](${guideLink('SPLIT-VIEW-TABS', 'pinned-and-temporary-tabs')}))
-  - Each tab represents one note.
-  - The tabs show that note's ID.
-- Each collection has a name that is displayed to the left of the note tab bar.
-  - Left click that button to pick a different collection to show.
-  - Right click that button to rename the collection.
-
-### The Dual Tag and Chapter Bar
-- You can find the dual mode **chapter** and **tag** bar **below the editor**.
-- You can toggle between both modes using the **tag toggle button** on the very left. ([Tabs and Tags Mode](${guideLink('SPLIT-VIEW-TABS', 'tabs-and-tags-mode')}))
-  - New notes shows the **tag bar** by default until they have an ID.
-  - Notes with IDs show the **chapter bar** by default.
-
-### Tags
-***Tags determine how your notes are categorized in the [sidebar category view](${guideLink('SIDEBAR-SEARCH', 'sidebar-views')}).***
-- You can assign an ID to your note with the button to the left.
-- You can assign tags by interacting with the tag bar itself. ([Adding Tags](${guideLink('TAGS', 'adding-tags')}), [Managing Tags](${guideLink('TAGS', 'managing-tags')}))
-
-### Chapters
-***Chapters are nested notes within a note.***
-- When you create a chapter, think of the original note as the parent note that may contain a preface or introduction.
-- The parent note can be accessed via the house button.
-- You can create chapters by hitting the new chapter button that sits to its left.
-
-### Go Explore!
-
-Seriously. This app has plenty of tooltips. You don't have to learn every system right away. You can have a lot of fun and success with this app without going full power user. Have fun and enjoy the trip.
-
-But if you've committed to the guide this far, you deserve to be pointed towards the most satisfying discoveries waiting for you to be made:
-
-- The [**double size** and **dark modes**](${guideLink('TOOLBAR-FORMATTING', 'toolbar-overview')}).
-- The immserive low distraction [**music player**](${guideLink('MUSIC-PLAYER')}).
-- The endless [**customization options**](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}) in the sidebar options menu.
-- Particularly the [**layout presets**](${guideLink('APPEARANCE-SETTINGS', 'presets')}).
-- The app's namesake feature: [**Thocky typing sounds**](${guideLink('APPEARANCE-SETTINGS', 'keystroke-sounds')})!
+## Worth Discovering
+- [Dark mode and double size](${guideLink('TOOLBAR-FORMATTING', 'toolbar-overview')})
+- The [music player](${guideLink('MUSIC-PLAYER')}) and its visualizer
+- [Options](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}), especially [layout presets](${guideLink('APPEARANCE-SETTINGS', 'presets')})
+- [Keystroke sounds](${guideLink('APPEARANCE-SETTINGS', 'keystroke-sounds')})
 `
 
 const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
   `## Notes & Editing
 
 ### [Creating Notes](#creating-notes)
-
-> **Where?**
-> The leading \`+\` pill in a slot's tab bar, New Note in the [Quick Actions Menu]($#quick-actions-menu), or \`Ctrl+N\` / \`Ctrl+Shift+N\` from anywhere.
-
-*Starts a new note, either blank or pre-titled from your clipboard.*
-
-- \`Ctrl+N\` creates a blank note pre-filled with \`# \` on the title line.
-- \`Ctrl+Shift+N\` creates a note whose title is taken directly from your clipboard, with the cursor placed on line two so you can start writing immediately.
-
-### [Note Titles](#note-titles)
-
-> **Where?**
-> The first line of any note's text.
-
-*A note's title is just its first line — no separate title field.*
-
-- A line starting with \`# \` becomes the note's title everywhere in the app: sidebar, tabs, exports.
-- A note without a \`# \` first line falls back to showing its content as-is wherever a title would appear.
-
-### [Autosave](#autosave)
-
-> **Where?**
-> Runs automatically in the background — no control to find or toggle.
-
-*Your changes save themselves a short moment after you stop typing.*
-
-- Autosave briefly pauses while you're actively editing the title line, so a half-typed title is never saved as the note's name.
-- Switching into reader forces an immediate save first, so what you see is always current.
+- **Blank note**: \`Ctrl+N\`, the \`+\` at the start of the tab strip, or New Note in the Quick Actions Menu.
+- **Note titled from the clipboard**: \`Ctrl+Shift+N\`.
+- **Title**: the note's first line, written as \`# Title\`.
+- Notes save themselves as you type.
 
 ### [Characters the Editor Keeps](#characters-the-editor-keeps)
-
-> **Where?**
-> Everywhere text enters a note — typing, pasting, dropping, and opening a note or file.
-
-*Every character takes exactly one cell of the editor's grid; characters that would not are left out.*
-
-- Left out: emoji, Chinese, Japanese and Korean characters (they take two cells), and invisible characters such as zero-width spaces and joiners (they take none). They simply do not appear when you type or paste them.
-- Wider or narrower spaces become an ordinary space, and an accent typed as a separate mark is joined to its letter.
-- A note or file that already contains such characters has them removed when it opens.
-- Some fonts cannot draw every symbol (arrows, box drawing, Greek letters) at the width of one cell. In the editor such a character shows as an empty cell, so nothing after it shifts; it is still in the note, and reader, search and exports show it. Another editor font may draw it.
+- Every character takes one box of the editor's grid. Emoji, Chinese, Japanese and Korean characters and invisible characters are left out when typed, pasted or opened.
+- A symbol the editor font cannot draw shows as an empty box in the editor; the Reader, search and exports still show it.
 
 ### [Editor and Reader](#edit-and-preview-modes)
-
-> **Where?**
-> The pen icon at the right of the tab bar, next to the "+", or \`Esc\`.
-
-*Switches the slot between the editor, where you type the Markdown, and the reader, where it is shown formatted.*
-
-- The reader renders GitHub-Flavored Markdown: headings, bold/italic/strikethrough, lists (including task checklists with tick boxes), tables, blockquotes, syntax-highlighted code blocks, horizontal rules, images, and links.
-- A task checklist's box is clickable right there in the reader, same as [clicking its caret in the editor](${guideLink('TOOLBAR-FORMATTING', 'formatting-group')}) — it's the same checkbox either way, so the note's own text (and editor's view of it) updates immediately.
-- \`Esc\` also blurs a focused field (like search) before it starts toggling modes, so it's safe to hit repeatedly.
-- **In a slot that isn't showing a note** — the User Guide — there is no other mode to switch to, so the same button becomes an **exit** and closes what the slot is showing. \`Esc\` follows it, because \`Esc\` *is* that button: one key, one position, one meaning — leave whatever this slot is currently doing.
+- **Switch modes**: \`Esc\`, or the pen at the right end of the tab bar.
+- **Tick a checklist box**: click it in the Reader.
+- In a slot showing the User Guide, the same button and \`Esc\` close it.
 
 ### [Quick Actions Menu](#quick-actions-menu)
-
-> **Where?**
-> Hold \`Esc\` for about a quarter of a second, anywhere in the slot — works with a note open, an empty editor, or a read-only auto-generated one (Table of Contents, Open Items, the User Guide, ...).
-
-*A small ring of choices over the editor for the note actions you reach for most, without leaving the keyboard.*
-
-- Keeps showing while you hold \`Esc\`; tapping \`Esc\` once more dismisses it without doing anything. Clicking outside it does *not* — the menu is only ever dismissed deliberately, so a stray click can't end something you were in the middle of.
-- Navigate with the arrow keys, \`Tab\`/\`Shift+Tab\`, or by rolling the mouse wheel while the pointer is over the menu — one notch is one step, the same as one arrow press. The choices turn *under* the pointer, so you can leave the mouse where it is, wheel until the one you want is beneath it, and click: the whole menu is reachable without moving the mouse at all. Then \`Enter\`/\`Space\` or a click to run the highlighted action. Running an action closes the menu — unless it's something that carries on *inside* the menu, in which case the menu stays up and its cells change to whatever comes next.
-- Currently wired up: New Note, New Chapter, Export, Export All, User Guide (opens this page — see [The User Guide]($#the-user-guide)). New Note and User Guide always appear; New Chapter and Export only appear with a note open (New Chapter not for a note that can't take one, like one frozen in time), and Export All only for a note that has chapters — see [Export All]($#export-all).
+- **Open**: hold \`Esc\`. **Close**: tap \`Esc\`.
+- **Choose**: arrow keys, \`Tab\` or the mouse wheel, then \`Enter\`, \`Space\` or a click.
+- Offers New Note, New Chapter, Export, Export All and User Guide.
 
 ### [The User Guide](#the-user-guide)
-
-> **Where?**
-> The graduation-cap button in the window controls (top right, above Maximize), or the User Guide choice in the Quick Actions Menu above — both do the same thing.
-
-*This page, opened as an ordinary (timeless, read-only) note in whichever slot you triggered it from.*
-
-- Opens exactly like clicking any note in the sidebar does — as a temporary tab, replacing whatever that slot was showing. Leave it with the **exit button** where that slot's [editor/reader toggle](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')}) normally sits, or with \`Esc\`, which is the same button. Picking another note, a pinned tab, or anything from the sidebar also leaves it, the ordinary way.
-- Browsable with the same chapter bar every note with chapters uses — click a chapter pill to jump to it, or the bookmark icon for a full table of contents.
-- Always render-only: nothing here can be edited, renamed, tagged, archived, or deleted.
+- **Open**: the graduation cap in the window controls, \`F1\`, or User Guide in the Quick Actions Menu.
+- **Close**: \`Esc\`, or open any other note.
+- Read-only; browse it with its chapter bar.
 
 ### [Scrollbar Navigation](#scrollbar-navigation)
-
-> **Where?**
-> The scrollbar track alongside the editor, in both edit and reader.
-
-*Left-click jumps straight to a spot; right-click pages up or down, one screen at a time.*
-
-- Left-click anywhere on the track to travel to that position — a smooth ride, so you keep your bearings and see what you're passing.
-- **Hold** the left button on the track instead, for about a quarter of a second, and it snaps there instantly rather than travelling. The jump happens while the button is still down, so the gesture shows you what it does the first time you try it. Use it when you already know where you're going and the journey is just in the way.
-- Right-click above or below the thumb to page up/down once, the same as pressing \`Page Up\`/\`Page Down\`. Right-clicking on the thumb itself does nothing.
-- Hold the right click down to keep paging continuously, just like holding \`Page Up\`/\`Page Down\` on the keyboard. It stops when you release the button, or as soon as the thumb reaches your cursor.
-- **What the thumb measures depends on the size of the note.** On a smaller note it represents actual screen space, the way a scrollbar normally does, so you keep the familiar sense of orientation as you write. On a larger one — which in practice usually means an external file — it represents character count instead, to give you an exact idea of how much information is left in the document regardless of that note's internal geometry.
-- That second reading is why, on a large note in the reader, your position means the same thing whatever your font settings are: changing the font size or the pane width can re-flow every line without moving the thumb, and dragging it to the bottom of the track lands at the end of the note whether or not you've read your way down there before.
+- **Travel to a spot**: click the track.
+- **Jump there at once**: hold on the track.
+- **Page up or down**: right-click above or below the thumb; hold to keep paging.
 
 ### [Word and Character Count](#word-and-character-count)
-
-> **Where?**
-> Beneath the editor, next to the Time Machine slider.
-
-*A live word and character count for the note you're currently viewing.*
-
-- Updates as you type; shown only while a note is open.
+- Below the editor, beside the Time Machine.
 
 ### [Line Numbers and Review Flags](#line-numbers-and-review-flags)
-
-> **Where?**
-> The list-number icon next to the Word and Character Count panel.
-
-*A toggleable gutter: true (unwrapped) line numbers on the left, a review/warning flag column on the right, both fit into the editor's existing grid.*
-
-- Toggling is per open editor (split-view slot) — each slot remembers its own on/off state independently, and a freshly opened slot always starts with it off. It's not tied to which note or chapter happens to be showing in that slot.
-- Left-click toggles both columns together, based on whether line numbers are currently shown: off shows both, on hides both. Right-click toggles the review-flag column alone, leaving line numbers as they are.
-- Line numbers count actual Markdown source lines, not wrapped visual rows: a long wrapped line gets one number, shown beside its first row, with the rest of its rows left blank.
-- Click a line's box in the flag column to mark it for review (\`?\`); click again to escalate it to a warning (\`!\`); click again to go back to \`?\`. Either state tints the whole line (all of its wrapped rows) in the review or warning color. Right-click the box to clear the flag entirely — the only way to remove one.
-- Flags are saved permanently per note (or chapter) regardless of whether the gutter is currently shown — toggling the gutter off only hides them, it never deletes them.
-- Review and warning colors (plus the gutter's own background) are customizable in Options alongside the other box colors.
-- When a flagged line sits above or below what's currently visible, the flag column's topmost or bottommost box swaps to an up or down arrow — click it (or press Ctrl+Up/Ctrl+Down) to smooth-scroll to and center that flagged line. If the box showing the arrow is itself already flagged, clicking centers that line instead of jumping past it.
+- **Show or hide line numbers and flags**: the list button beside the word count. Right-click it for the flags alone.
+- **Flag a line for review**: click its box in the flag column (\`?\`); click again for a warning (\`!\`). Right-click to clear.
+- **Go to the next flagged line**: the arrow at either end of the flag column, or \`Ctrl+Up\`/\`Ctrl+Down\`.
+- Flags stay with the note when the column is hidden.
 
 ### [Spell Check](#spell-check)
-
-> **Where?**
-> Options → [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}); dictionaries under Tools → Spell Checking.
-
-*Outlines misspelled words, using dictionaries that ship with the app, so it works offline and the same on every computer.*
-
-- One switch for the whole app. It checks the editor of the slot you are typing in, never the reader.
-- English (US), Spanish, French and German come with the app; each is a row under Spell Checking: press its icon to switch it on or off, and type over its name. A word counts as correct when any active dictionary knows it, so a note can mix languages.
-- The User Dictionary at the top holds your own words and is always active. Ctrl+D adds the outlined words in the selection to it, or, with nothing selected, the nearest unrecognized word before the caret in its paragraph.
-- The pen on a row opens that dictionary's words in the sidebar, where the search field filters them and holding a word's x removes it. Below the list, type words into the field to add them. Its dock imports Hunspell dictionaries (an .oxt from LibreOffice's extensions site, a Firefox .xpi, a .zip, or a .dic with its .aff) and resets the open one: a bundled dictionary goes back to how it shipped, one of your own is deleted, and the User Dictionary is emptied. New dictionary... below the rows creates an empty one.
-- Code, links, web addresses and #tags are not checked. The word you are still typing is not marked until you move on; a marked word stays marked until you change it.
-- When the intended word is clear, only the letters in question are outlined (a missing letter outlines its two neighbours).
-- Shift+Space replaces the nearest outlined word before the caret in the same paragraph, even while you are typing the next one, with its best suggestion (with none before it, the word you are typing is completed) and tints the word in the warning flag colour. Press Shift+Space again for the next suggestion; after the last, your own spelling comes back. Any other key or click keeps the word as it is.
-- The outline color is Spell Checking Outline Color, among the editor box colors.
+- **On or off**: Options → [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}). It checks the slot you are typing in.
+- **Dictionaries**: Options → Tools → Spell Checking. Click a dictionary's icon to use it, type over its name to rename it, the pen to see and edit its words. The dock below imports Hunspell dictionaries and resets the open one.
+- **Add a word to your User Dictionary**: \`Ctrl+D\`.
+- **Correct a word**: \`Shift+Space\` replaces the nearest marked word before the caret; press again for the next suggestion.
 
 ### [Typing Trail](#typing-trail)
-
-> **Where?**
-> Switched on in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}), tuned in Options → Glitz → Typing Trail.
-
-*A faint trail along the line you are typing in, so your eye always finds it.*
-
-- Each letter you type lights the grid lines above and below it, and the trail fades behind you. It builds up gently over the first letters of each line rather than appearing at full strength.
-- **fade** and **shape** set how a mark fades out; **gain** is how much of its full colour each letter adds. The colour is under Colors, in Editor Boxes.
-- Each letter you type holds the caret steady, and it eases back into its blink as the trail fades.
+- A trail along the line you are typing in. **On or off**: [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}). **Tune**: Options → Glitz → Typing Trail. **Colour**: Colors → Editor Boxes.
 
 ### [Visualizer](#visualizer)
-
-> **Where?**
-> Options → Advanced → Beat Detection, Glitz → Grid Beat and Glitz → Visualizer.
-
-*The caret, the active editor's edge and its pane follow the music you are playing.*
-
-- Its switch in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}) turns it on for every layout, and the per-device **delay adjustment** moves it later if it runs ahead of what you hear, as wireless headphones often make it. The adjustment is remembered for each output device.
-- Its settings are the same for every layout. Its colours belong to the layout: Options → Layouts → Colors → Visualizer.
-- Caret, edge and pane are separate blocks. The edge is a soft inner shadow along the editor's border. **Grid Beat** sets the edge, the **editor pane** (drawn over the box grid in the editor) and the **reader pane** (an even wash of its colour over the whole editor in the reader); the full-screen scene has its own edge and pane under **Visualizer**, with separate pane settings for light and dark mode. The caret follows the music through its flashing: see **Matching** in [Animations]($#animations).
-- What the music is listened for is set once, under **Beat detection**, in three groups: **Thump** (the low end jumping: a kick, a bass stab), **Pierce** (a sharp sound cutting through: a snare, a clap) and **Tick** (the busy top: hats, shakers). One sound can be a little of two (a snare with some punch is a pierce with a slight thump). Each has a **contrast**: how strong a hit must be against the others around it before it responds, so raising it keeps only the strongest, and only what is mostly that group. Each block then has three sliders for how much the thump, the pierce and the tick drive it; they add up, capped at full. Then its **effect**: right of centre a hit adds the block, left of centre it is inverted, resting at full strength while music plays with a hit taking it away, and the centre turns it off; and how each hit falls away: its **shape**, from a heavy thump that holds its weight and then lets go (left) to a sharp ride-cymbal point with a long, low tail (right), and its **fall**, how long it takes to fade.
-- In the visualizer scene (F5), the last row of the top strip fills with chromatic semitone boxes, lit in the accent colour. Their brightness follows the estimated strength of each note, and multiple notes can light together. The estimate uses each note's fundamental and partials together, so energy explained by one note's overtones is not automatically shown as extra notes. This is a visual estimate rather than a transcription; closely related notes and unusual instrument timbres can still be ambiguous. A3 sits in the middle (in the right-center box when the row has an even number of boxes). After enough tonal material, the row estimates and holds the track's tuning; until then it uses A=440. To avoid brief broadband hits flashing many boxes, already-lit keys carry through a thump or pierce, and a new key revealed by one is admitted only when its decoded-track energy remains in the short look-ahead. Changes follow the audio, without waiting for a beat-grid boundary.
-- Left of the centre, the scene lists the songs of the active sets in the order they will play, the current one at the top. Scroll it with the wheel; it returns to the top shortly after the mouse leaves. Clicking a song plays it, and the songs after it follow in the same order. Right of the centre are the sets that hold songs, the active ones highlighted: click one to add it to what plays or take it out again, **hold** one to play from it alone. Below them, **Filter songs...** narrows the list to songs whose title, artist, album or file path contain every word you type (quote words to match them as a phrase; start with **$** for artists only, **§** for albums, **#** for titles). Once you leave the field (**Enter**, **Tab** or a click elsewhere) the first song left on the list plays. Just start typing to search. **Esc** empties the field; with no field in use it shows or hides the panels. **F5** leaves the visualizer. Under the centre, the long bar is the music's volume and the two above it its reverb (left) and room (right); clicking a box sets the level there.
-- In the scene, **F4** steps through layouts and **F3** switches light and dark, as everywhere; **Tab** and **Shift+Tab** focus the song filter while the panels are shown. **Space** plays or pauses music. **Left** and **Right** seek 20% through the current song, fading down over 300 ms and back up over 50 ms; press the same arrow again within 300 ms to play the previous or next song in the list, wrapping at either end, or hold it to scrub. **Up** raises volume and **Down** lowers it; hold either to sweep the level.
-- It switches itself off while nothing is playing.
+- **Grid Beat**: the caret, the edge and the pane of the active slot follow the music. On or off in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}); tuned in Options → Glitz → Grid Beat.
+- **Visualizer scene**: \`F5\` or the eye in the music player. Tuned in Options → Glitz → Visualizer; its colours are part of the layout.
+- **Beat detection**: Options → Advanced → Beat Detection. Every effect mixes three kinds of hits: **Thump** (kick, bass), **Pierce** (snare, clap) and **Tick** (hats, shakers). **Delay adjustment** fixes effects running ahead of what you hear.
+- In the scene:
+  - **Play a song**: click it in the song list on the left.
+  - **Add or remove a set**: click it in the list on the right; hold to play that set alone.
+  - **Filter songs**: just type. Start with **$** for artists, **§** for albums, **#** for titles. Leaving the field plays the first song that matches.
+  - **Volume**: click the bottom bar, or \`Up\`/\`Down\`.
+  - **Play or pause**: \`Space\`. **Skip within a song**: \`Left\`/\`Right\`; press twice for the previous or next song; hold to scrub.
+  - **Show or hide the panels**: \`Esc\`. **Leave**: \`F5\`.
 
 ### [Speed Reading](#speed-reading)
-
-> **Where?**
-> \`F9\`, the book button beside a slot's view button, or the \`Esc\` menu. Options → Tools → Speed Reading.
-
-*Reads a note to you at a pace you set, from where you are.*
-
-- **Reader** scrolls the page on its own from what is on screen, at your words per minute, measured from the text as it is laid out. Hold \`Space\` or \`↓\` to ease to a pause; let go to ease back up.
-- **Editor** greys out the grid and shows the note a few words at a time in one row, starting at the caret. \`Space\` or \`↓\` shows the next words; hold it to read on at your pace. \`↑\` goes back. When you stop, the caret is at the end of the last words shown.
-- \`←\` and \`→\` make it slower or faster in steps of 5; hold to sweep. The word count shows the pace while you read, and the time left in the note at that pace.
-- \`Esc\` switches modes and keeps reading. \`F9\` stops.
+- **Start or stop**: \`F9\`, the book beside the mode button, or the Quick Actions Menu. Settings: [Speed Reading](${guideLink('APPEARANCE-SETTINGS', 'speed-reading-settings')}).
+- **Reader**: the page scrolls at your pace. Hold \`Space\` or \`↓\` to pause.
+- **Editor**: the note shows a few words at a time from the caret. \`Space\` or \`↓\` for the next words (hold to read on), \`↑\` to go back.
+- **Slower or faster**: \`←\`/\`→\`. The word count shows the pace and the time left.
 `,
   `## Internal Linking
 
 ### [Defining an Anchor](#defining-an-anchor)
-
-> **Where?**
-> Typed directly into a note's text, anywhere, in either the editor or the reader — or select some text and hit the anchor button (right behind the link button) or \`Shift+Ctrl+L\`.
-
-*Turns a heading or phrase into a jump target with \`[Anchor Text](#anchor-id)\` — a real link whose destination is never clicked.*
-
-- The bracketed part is the label — shown exactly as written, formatting and all. The \`#anchor-id\` part is just an internal handle: short, no spaces, and separate from the label.
-- The anchor button/shortcut needs an actual selection (not just a caret) — it wraps whatever's selected as the label and derives the id from it automatically: lowercased, spaces become hyphens, anything else stripped. Selecting "Two Words" and hitting it gives \`[Two Words](#two-words)\`. It doesn't check whether that id collides with another anchor already in the note — same as typing one by hand, that's on you to keep unambiguous.
-- Anchor ids only need to be unique within the note they're defined in.
-- Anchors work in both the current note and any note you link to; a link naming an anchor that doesn't actually exist in the target note simply does nothing when clicked, rather than partially navigating.
-- The app remembers the note/chapter and id of whichever anchor you most recently set this way (button or shortcut, anywhere in the app) for the rest of the session — see the link button's own prefill below.
+- **Make an anchor**: select text and press the anchor button or \`Ctrl+Shift+L\`, or type \`[Label](#anchor-id)\`.
+- An anchor id needs to be unique only within its note.
 
 ### [Assigning a Note Id](#assigning-a-note-id)
-
-> **Where?**
-> A quick right-click on any note tab in the tab bar (tabs mode) — the active note's own tab, or any other pinned tab.
-
-*Gives a note a short, memorable id (shown as \`$id\`) so other notes can link straight to it.*
-
-- If you never set one, the app derives a default from the note's title the first time it's needed.
-- Ids are case-insensitive and spaces become hyphens — \`$meeting-2\` and \`$Meeting 2\` refer to the same note.
-- If the id you type is already taken by another note, a \`-2\`, \`-3\`, … suffix is appended automatically.
+- **Set**: right-click the note's tab.
+- Ids ignore case and turn spaces into hyphens.
 
 ### [Linking to Notes and Anchors](#linking-to-notes-and-anchors)
-
-> **Where?**
-> Typed directly into a note's text, using standard Markdown link syntax \`[text](destination)\` — or select some text and hit the link button or \`Ctrl+L\`.
-
-*One link syntax covers jumping within a note, to another note, or straight to a spot inside another note — the \`$\` always means "go somewhere," never "you are here."*
-
-- \`[text]($#anchor-id)\` — jump to the \`#anchor-id\` anchor in the current note.
-- \`[text]($NOTE-ID)\` — open another note by its assigned id.
-- \`[text]($NOTE-ID#anchor-id)\` — open another note and jump straight to one of its anchors.
-- A bare \`[text](#anchor-id)\` — no \`$\` — always means "define an anchor here," never a link; if you want to link, the \`$\` is required.
-- Opening a link to the note that's already active just scrolls to the anchor, without disrupting your place otherwise.
-- The link button/shortcut prefills the destination with the last anchor you set (button or shortcut, anywhere, this session) — \`$NOTE-ID§CHAPTER-ID#anchor-id\`, with each part left blank if that anchor wasn't set inside a chapter, or if nothing's been set yet this session. Wraps a selection as the link text the same way the other toolbar buttons do; with just a caret, it inserts \`[link](...)\` with "link" selected, ready to type over.
+- **Make a link**: select text and press the link button or \`Ctrl+L\`. It fills in the last anchor you made.
+- \`[text]($#anchor-id)\`: an anchor in this note.
+- \`[text]($NOTE-ID)\`: another note.
+- \`[text]($NOTE-ID#anchor-id)\` or \`[text]($NOTE-ID§CHAPTER-ID#anchor-id)\`: a place in another note or chapter.
+- Without the \`$\`, \`[text](#anchor-id)\` defines an anchor, not a link.
 `,
   `## Tags
 
 ### [Adding Tags](#adding-tags)
-
-> **Where?**
-> The tag input field in the chapter bar's tag view (toggle it with the tag icon at the bar's left edge).
-
-*Types and commits a tag onto the active note.*
-
-- Tag names are normalized automatically: lowercased, spaces become hyphens.
-- The first tag you add is the note's primary category; the second is its sub-category — this ordering drives the Category sidebar view.
+- **Add**: type into the tag bar's field, or click a suggested tag below it.
+- The first tag is the note's category, the second its sub-category in the sidebar.
 
 ### [Managing Tags](#managing-tags)
-
-> **Where?**
-> The tag chips shown in the tab bar's tag-mode view.
-
-*Removes or reorders the tags already on a note.*
-
-- Click a tag once to arm it for deletion (it highlights); click it again to delete, or move the pointer away to cancel.
-- Right-click a tag to rename it in place — the pill itself becomes an editable field, renaming the tag everywhere it's used (not just on this note). Enter or clicking away commits, Escape cancels. Protected tags can't be renamed this way.
-- Drag a tag left or right to reorder it relative to the others.
-- Too many tags to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab and chapter bars.
+- **Delete**: click a tag twice.
+- **Rename everywhere**: right-click a tag.
+- **Reorder**: drag a tag.
 
 ### [Suggested Tags](#suggested-tags)
-
-> **Where?**
-> Below the tag input field, in tag-mode.
-
-*A shortlist of your frequently-used tags, one click away from being added.*
-
-- Click a suggested tag to add it instantly to the current note.
-- Tags already on the note, and protected tags, are excluded from suggestions.
-- Suggestions only ever use space the note's own tags don't need: as the tag list grows, the least-used suggestions drop off one at a time — always whole, never half a pill — and once the note's own tags no longer all fit, no suggestion is shown at all.
-- Right-click the tag input field to expand the suggested list to fill the whole bar; right-click again (anywhere in the expanded view) to collapse it back.
+- Your most-used tags appear beside the field. Right-click the field to show all of them.
 
 ### [Protected Tags](#protected-tags)
-
-> **Where?**
-> Never typed directly — applied automatically by the corresponding action.
-
-*Three reserved tag names (\`archived\`, \`deleted\`, \`external\`) that track note state rather than your own organization.*
-
-- Set and cleared only through [Archiving and Trash](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')}), [Restoring from Archive or Trash](${guideLink('ARCHIVE-TRASH', 'restoring-from-archive-or-trash')}), and [Opening an External File](${guideLink('EXTERNAL-FILES', 'opening-an-external-file')}).
-- Can't be typed into the tag field directly, and are excluded from the suggested-tags list.
+- \`archived\`, \`deleted\` and \`external\` are set by [archiving](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')}), deleting and [opening a file](${guideLink('EXTERNAL-FILES', 'opening-an-external-file')}), never typed.
 `,
   `## Sidebar & Search
 
 ### [Sidebar Views](#sidebar-views)
-
-> **Where?**
-> The row of icons at the top of the sidebar, just below the search field.
-
-*What the sidebar shows, switched with one click.*
-
-- The icons are **Notes**, **Images**, **Songs** (the Music Library), **Soundscapes**, **Find** and **Options**. Notes and Images each have four sections, picked in the row of icons at the top of their list; each view comes back on the section you left it on. Images is covered in [Images](${guideLink('TOOLBAR-FORMATTING', 'images')}); the Music Library lists the songs of a music set, one set per icon at its top (drag an icon to reorder the sets), and the search field filters them. Drop files or folders from your file manager anywhere on it to add their songs to the set shown, on a set's icon to add them to that set, or between the icons or on the plus to make a new set of them.
-- The Notes sections:
-- **Date** — a flat, chronological list ordered by last-updated time, fifty notes to a page.
-- **Category** — notes grouped by primary tag, then by secondary tag, folded like the options' sections: a click opens a group and folds the others beside it, a right-click opens or folds just that one.
-- **Archive** — the same tree layout as Category, restricted to archived notes.
-- **Trash** — a flat list of notes marked for deletion, awaiting purge or restore, paged like Date.
-- **Find** — find (and replace) inside the note you have open, see [Find and Replace](${guideLink('FIND-REPLACE', 'find-and-replace')}).
-- The last icon, the cogwheel, opens Options — see [Options](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
+- The icons at the top switch between **Notes**, **Images**, **Songs**, **Soundscapes**, **Find** and **Options**.
+- **Notes** has four sections: **Date**, **Category** (by tag; right-click a group to open it without folding the others), **Archive** and **Trash**.
+- **Images**: see [Images](${guideLink('TOOLBAR-FORMATTING', 'images')}). **Find**: see [Find and Replace](${guideLink('FIND-REPLACE', 'find-and-replace')}). **Options**: see [Options](${guideLink('APPEARANCE-SETTINGS', 'settings-panel')}).
+- **Songs**: see [Music Player](${guideLink('MUSIC-PLAYER')}). Drop files or folders on a set's icon to add them to it, or between the icons to make a new set.
 
 ### [Pagination](#pagination)
-
-> **Where?**
-> Bottom of the sidebar, in the Date and Trash sections once they hold more than fifty notes.
-
-*Steps through a long, flat list of notes a page at a time.*
-
-- The arrows turn the page; holding one goes to the first or last page.
-- Right-click the page number to type a page and jump to it.
+- **Turn the page**: the arrows; hold for the first or last page. Right-click the page number to type one.
 
 ### [Search](#search)
-
-> **Where?**
-> The search field at the top of the sidebar, in the Notes view. (In the Find view the same field searches inside the open note instead, in the Music Library it filters the songs, and in the options it filters the settings down to the ones that mention your term.) The button at the field's end searches while you type, and clears the field once you have left it.
-
-*Filters your notes by title, content, filename, or tag as you type.*
-
-- Plain text matches a note's title, filename, content, and tags.
-- Prefixing the query with \`#\` searches tags only — \`#project\` matches any note tagged \`project\`, or with \`project\` anywhere in a tag name.
-- Letter case never matters.
+- The field at the top of the sidebar searches notes by title, text, file name and tag. Start with \`#\` for tags only.
+- In Find it searches the open note, in Songs it filters songs, in Options it filters settings.
 `,
   `## Split View & Tabs
 
 ### [Opening a Slot](#opening-a-slot)
-
-> **Where?**
-> The \`+\` button at the very right edge of any tab bar.
-
-*Splits the editor into an additional side-by-side slot.*
-
-- Hidden once there's no more room for another 300px-minimum-wide slot.
-- \`Alt+Left\` / \`Alt+Right\` step between slots directly — Alt rather than Ctrl so it never collides with the editor's own word-jump caret navigation.
-
-### [Naming and Swapping Collections](#naming-and-swapping-collections)
-
-> **Where?**
-> A collection's identity tab.
-
-*Gives a collection a name so you can swap it in and out of any slot instead of rebuilding it.*
-
-- Right-click the identity tab to name the current collection.
-- Left-click the identity tab to open a picker of your other named collections — click one to swap it into this slot.
-- Right-click a candidate in that picker to delete it permanently; the leading \`···\` pill clears the current slot back to empty (no note, no tabs, no name).
+- **Open**: the \`+\` at the right end of a tab bar.
+- **Move between slots**: \`Alt+Left\`/\`Alt+Right\`.
 
 ### [Closing a Slot](#closing-a-slot)
+- **Close**: the chevron at the left of the slot. Right-click it to close the slot to its left.
 
-> **Where?**
-> The chevron button on the left edge of any non-leftmost slot.
-
-*Closes a split-view slot entirely.*
-
-- The leftmost slot shows the sidebar toggle in this spot instead.
-- Right-click a chevron to close the slot to its LEFT instead, including the leftmost one.
-
-### [Tabs and Tags Mode](#tabs-and-tags-mode)
-
-> **Where?**
-> The tag icon at the left edge of the chapter bar.
-
-*Switches the chapter bar between a note's content structure (its chapters) and its metadata (its id and tags).*
-
-- Tags belong to a note, never to a collection or a chapter, which is why they live on this bar rather than the tab bar above it. The tag view also carries the note's own id button: right-click it to give the note an id of your own (see [Assigning a Note Id](${guideLink('INTERNAL-LINKING', 'assigning-a-note-id')})), or left-click it to fill the bar with suggested tags.
+### [Naming and Swapping Collections](#naming-and-swapping-collections)
+- **Name**: right-click the collection's name.
+- **Swap in another**: click the name and pick one. Right-click one in the list to delete it; \`···\` empties the slot.
 
 ### [Pinned and Temporary Tabs](#pinned-and-temporary-tabs)
+- **Open temporarily**: click a note in the sidebar. **Pin**: hold the click.
+- **New pinned note**: the \`+\` at the start of the tab strip.
+- **Set the note's id**: right-click a tab. **Close**: hold right-click, then click.
+- **Reorder**: drag tabs; drag a note from the sidebar to open it there.
+- A tab returns to the chapter you left it on.
 
-> **Where?**
-> A collection's tab bar.
-
-*Keeps one note open temporarily, or several open permanently, per collection.*
-
-- The leading \`+\` pill in the tab strip creates a brand-new note and pins it as this collection's own rightmost tab in one step — the quickest way to attach a fresh note to whichever collection you're looking at, active or not.
-- Clicking a note in the sidebar opens it as a single temporary tab (replacing any previous one). Its label is the note's own \`$id\` if you've assigned one (shown upright), or otherwise a short preview pulled live from the note's own first line (shown in italics, so the two never look alike) — never a placeholder minted on your behalf.
-- Holding the click past a short threshold pins it as a permanent tab instead, which stays open alongside others — pinning doesn't assign an id either, it's still whichever of the two labels above already applied.
-- A quick right-click on any tab (pinned or temporary) turns it into an editable field for that note's \`$id\` — same as [Assigning a Note Id](${guideLink('INTERNAL-LINKING', 'assigning-a-note-id')}). Holding the right-click past a short threshold arms it for unpin/close instead; release early and it's a rename, hold it and a follow-up left-click confirms the close (move the pointer away to cancel either way).
-- Drag tabs to reorder them; drag a note from the sidebar directly into a tab bar to open it there.
-- Each tab remembers which chapter of its note you last had open, per collection — switching away and clicking back returns you to that chapter, not always the parent's own base content. This is remembered per tab, not per note, so the same note pinned as a tab in two different collections can be resting on two different chapters at once.
+### [Tabs and Tags Mode](#tabs-and-tags-mode)
+- **Switch the chapter bar to tags and back**: the tag button at its left.
+- The tag bar also holds the note's id: right-click it to set the id, click it to show suggested tags.
 
 ### [Chapters](#chapters)
-
-> **Where?**
-> The bookmark pill at the start of the chapter bar's strip, below the editor — or New Chapter in the [Quick Actions Menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}) — both do the same thing.
-
-*Splits a note into sub-notes, browsable from a bar of their own.*
-
-- The chapter bar is always showing for whatever note is open, with or without chapters yet — there's no manual show/hide toggle. The bookmark pill at the start of its strip creates a new empty chapter at the end of the note and switches straight to it; New Chapter in the Quick Actions Menu does exactly the same thing.
-- The bar's leading icon buttons, before the chapter strip: the **tag toggle** (see [Tabs and Tags Mode]($#tabs-and-tags-mode)), then the auto-generated Open Items and Table of Contents chapters when they exist. The **editor/reader toggle** is not here — it belongs to the slot, so it sits at the right end of the slot's tab bar (see [Editor and Reader](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})).
-- The chapter strip's first tab after the bookmark pill is always the parent note itself (the house); every chapter follows in order. Click the parent tab or any chapter pill to switch between them — each keeps and saves its own text independently. Too many chapters to fit scrolls horizontally, fading at whichever edge has more off-screen, same as the tab bar.
-- Drag a chapter pill to reorder it among its siblings — same drag-and-drop as reordering pinned tabs or tags: drop directly on another pill to land in front of it, or on the bar's empty space to send it to the end.
-- The moment a note has its first chapter, an auto-generated **Table of Contents** chapter appears too — no button to press, it just shows up as an icon button ahead of the chapter strip (before every real chapter, not draggable) and disappears again the moment the last real chapter does, the same automatic show/hide the chapter panel itself already does. It lists every heading across the parent and all of its chapters, each one a working link — always, whether or not the parent or any chapter has an assigned \`$id\`/\`§id\`, since it navigates internally rather than through the same link syntax you'd hand-type. Following one lands you in whichever mode you were already in: reader scrolls to the heading, editor puts the caret on it, ready to type. The parent's own title sits at the top, bold and unbulleted, apart from the list below it; every \`##\` heading after that — the parent's own, and each chapter's title — is a bullet at the same level, with that heading's own deeper headings nested under it. It's regenerated fresh every time you open it, so it's always accurate without costing anything while you're not looking at it — meaning it's also read-only (anything you tried to type would just be overwritten on your next visit) and opens straight into the reader. Since it's a generated page rather than something you write, it has no [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}) of its own — the present-state circle stays live while viewing it, but re-runs the same regeneration instead of taking a save point (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})).
-- An auto-generated **Open Items** chapter appears beside the Table of Contents (same pinned, non-draggable treatment) the moment any checklist item (\`- [ ]\`) anywhere in the parent or one of its chapters is unchecked, and disappears again once none are left anywhere in the family — including whenever the last real chapter itself disappears. It groups every open item under whichever heading it falls under, linked the same way the Table of Contents is — headings with nothing open under them are skipped entirely, so it's a pruned outline, not a full copy of every heading. Unlike the Table of Contents, it isn't regenerated on every visit: it only updates when a checklist item is actually created or its checked state flips, patching in just that one note's own part — so if you're looking at it in one editor while checking something off in another, it can go briefly stale until the next change anywhere in the family refreshes it, or until you click its present-state circle to force a full refresh on demand (see [Present-State Circle](${guideLink('TIME-MACHINE', 'present-state-circle')})). Same as the Table of Contents, it's read-only, has no Time Machine Timeline of its own, and opens straight into the reader — but its own checkboxes are the one exception to "read-only": clicking one checks the real item off in its own source chapter without removing it from this list, so you can click it again to undo. The list itself doesn't update as you go — it only catches up (dropping anything actually checked off) the next time something elsewhere refreshes it, or when you force one with the present-state circle.
-- A chapter is a full note in its own right — its own regular tags don't exist; tags always belong to the parent — but it doesn't appear on its own in Date/Category/Find, only through its one parent's chapter bar. The exceptions are Trash, once deleted, and Archive, once archived (see below for both). A chapter belongs to exactly one parent, ever, and a chapter can't have chapters of its own. Dragging a note from the sidebar onto the chapter bar copies its content into a brand-new chapter and switches you to it, same as creating one any other way — the dragged note itself is untouched and stays independent, not linked to the copy. Dropping it on the bar's empty space adds it as the last chapter; dropping it directly on an existing chapter pill instead inserts it right in front of that one. Every heading in the copy shifts down one level (\`#\` becomes \`##\`, and so on) so its own title-heading nests under the parent's instead of competing with it — the original note's headings are untouched.
-- While a chapter is open, its parent stays the one shown as active in the sidebar and the tab bar — the chapter bar itself shows which chapter you're in.
-- A chapter's fate is tied to its parent's: permanently deleting a parent note permanently deletes all of its chapters with it.
-- Right-click a chapter tab to give it a short id (\`§1: ···\` becomes \`§1: INTRO\`, say) — same rules as a note's \`$id\`. Link straight to it with \`[text]($NOTE-ID§CHAPTER-ID)\`, optionally down to one of its own anchors with \`[text]($NOTE-ID§CHAPTER-ID#anchor-id)\`; opening it this way keeps the parent shown as active exactly like clicking the pill would.
-- Hold a right-click on a chapter pill to split it into two small buttons in place of the pill: archive and delete. Clicking delete removes the chapter from the bar and moves it to Trash, where it's prefixed \`§ \` to read as a chapter, with its parent's title (prefixed \`$ \`) shown in place of a created date; clicking archive does the same but moves it into its parent's own fold-out row in the Archive tree instead (see [Archiving and Trash](${guideLink('ARCHIVE-TRASH', 'archiving-and-trash')})). Restoring it there puts it back at its exact original position among its siblings, shifting whatever's there — and everything after it — back by one, as for a note (see [Restoring from Archive or Trash](${guideLink('ARCHIVE-TRASH', 'restoring-from-archive-or-trash')})). Moving the pointer off the split pill without clicking either button reverts it to normal.
-- Two small buttons flank the chapter tab strip. The scissors on the right cuts whatever's currently selected in the editor — or, with just a caret and nothing highlighted, everything from the caret to the end of the document — out of the note you're viewing (parent or chapter) and pastes it into a brand-new chapter, caret landing right after the pasted text. The new chapter always lands directly behind the one you cut from (or first, if you cut from the parent), pushing later chapters back by one; any blank-line run left behind at the cut site collapses down to a single blank line, and any blank lines swept up at the start or end of the extracted text itself are trimmed off. A quick way to split a long note as you write it. The merge icon on the left collapses the chapter you're currently viewing: its content is appended to the end of the previous chapter (or the parent, if it's the first chapter), the now-empty chapter is permanently deleted (chapters have no Trash of their own — its content has already been moved out), and you land in the destination note with the caret at the end. Collapsing a note's last remaining chapter this way leaves the chapter bar showing, same as it does for any note with no chapters yet — just its bookmark and house pills.
+- **New chapter**: the bookmark, or New Chapter in the Quick Actions Menu.
+- **Open**: click a chapter, or the house for the parent note. **Reorder**: drag.
+- **Set its id**: right-click a chapter.
+- **Archive or delete**: hold right-click on a chapter, then click one of the two buttons.
+- **Split off**: the scissors moves the selection, or everything after the caret, into a new chapter.
+- **Merge**: the merge button appends the chapter to the one before it.
+- **Copy a note in as a chapter**: drag it from the sidebar onto the chapter bar.
+- **Table of Contents** and **Open Items** (unticked checklist items) appear on their own. Clicking one of their links or checkboxes acts on the real note.
+- Tags belong to the parent note. Deleting the parent deletes its chapters.
 `,
   `## Archiving, Trash & Deletion
 
 ### [Archiving and Trash](#archiving-and-trash)
-
-> **Where?**
-> The icons a note card shows while you hover it: at the end of its title on the large cards (By date, Trash), in place of its modified time on the one-line cards.
-
-*Moves a note out of your active list without deleting it outright.*
-
-- Every action on a card is a **hold** on its icon, never a click: a click on an icon does nothing, and while you hold, the card shows what is about to happen to it.
-- A note offers the box (archive) and the trash can (to Trash). In Trash, the trash can deletes the note for good. A note opened from a file offers save and the X, which closes it without saving.
-- Under the hood, archived/deleted status is just the protected \`archived\`/\`deleted\` tag.
-- A parent note that isn't itself archived, but has one or more archived chapters (see [Chapters](${guideLink('SPLIT-VIEW-TABS', 'chapters')})), still shows up in the Archive tree — as a single row, same as any other note, but clicking it doesn't open it. It's a pure fold-out toggle instead: click it to show or hide its own archived chapters, indented underneath it. Clicking one of those, once visible, opens its parent with that chapter active, same as clicking any chapter pill.
-- A parent note that's archived itself shows in the Archive tree the same simple way any other archived note does — no fold-out, nothing indented under it. Clicking it opens it in the editor with its full chapter bar, showing *every* chapter regardless of whether any of them are also archived — the archived ones read a little dimmed, aren't draggable, and can't be right-click-renamed, since (unlike a live chapter) there's nowhere real for either of those to write to while a chapter sits archived. Nothing here changes their archived status; un-archive one the same way any archived chapter is un-archived, from its Archive-tree row.
+- **Archive or trash a note**: hover its card and hold the box or the trash can. In Trash, holding the trash can deletes it for good.
+- An external note offers save and close instead.
+- In Archive, a parent with archived chapters folds open to show them.
 
 ### [Restoring from Archive or Trash](#restoring-from-archive-or-trash)
-
-> **Where?**
-> The turning-back arrow on a hovered card in the Archive or in Trash.
-
-*Returns a note to normal, undoing an archive or trash action.*
-
-- Hold the arrow to restore the note.
-- Works the same way on a deleted chapter's row in Trash, or an archived chapter's row in its parent's Archive-tree fold-out — restoring puts it back into its parent's chapter bar at its exact original position, shifting later chapters back to make room (see [Chapters](${guideLink('SPLIT-VIEW-TABS', 'chapters')})).
+- **Restore**: hold the turning arrow on a card. A chapter returns to its old place.
 
 ### [Empty Trash](#empty-trash)
-
-> **Where?**
-> The Trash icon in the row of sections at the top of the Notes list.
-
-*Permanently purges every note currently in Trash, in one action.*
-
-- Hold the button to empty the trash; a click on it only opens Trash.
+- **Empty**: hold the Trash section's icon.
 `,
   `## Time Machine
 
 ### [Time Machine Timeline](#time-machine-timeline)
-
-> **Where?**
-> The slider beneath the editor, next to the word-count panel.
-
-*Shows every saved revision of the current note as a horizontal timeline.*
-
-- Each mark is a saved snapshot; time runs left (older) to right (present).
-- Automatic snapshots are taken as you work and are clustered/thinned automatically so the timeline doesn't get cluttered; manual snapshots are never thinned.
-- Hovering a mark shows its date/time and word count.
-- \`←\` / \`→\` on the focused slider steps between marks; \`Home\` / \`End\` jumps to the oldest / present.
-- Scroll the wheel over the slider to zoom the timescale it displays — the tooltip shows the current cut-off, e.g. "6 hours."
+- The slider below the editor holds the note's saved versions, oldest left.
+- **Step**: \`←\`/\`→\`; \`Home\`/\`End\` for oldest and present. **Zoom**: the mouse wheel.
 
 ### [Viewing a Past Revision](#viewing-a-past-revision)
-
-> **Where?**
-> Click any mark on the Time Machine timeline.
-
-*Loads that revision into the editor, read-only, without changing the note.*
-
-- Click the present-state circle, or navigate to the rightmost end of the slider, to return to the live document.
+- **View**: click a mark. **Return**: the present-state circle.
 
 ### [Present-State Circle](#present-state-circle)
-
-> **Where?**
-> The small circle next to the Time Machine slider.
-
-*Tracks and creates manual save points, and returns you to the present.*
-
-- Hollow means your text has changed since your last manual save; filled means it matches.
-- Click it to create a manual save point when hollow, or to jump back to the live present when you're viewing history.
-- Hold-click it to merge adjacent automatic snapshots — manual housekeeping, distinct from the automatic thinning described above.
-- On the auto-generated Table of Contents or Open Items chapter (see [Chapters](${guideLink('SPLIT-VIEW-TABS', 'chapters')})), there's no save-point history to track — clicking the circle instead refreshes that chapter's content from the family's current live state on the spot, without leaving the page. The Time Machine slider itself is hidden there for the same reason.
+- Hollow means changed since your last save point. **Make a save point**: click it.
+- **Tidy the automatic versions**: hold it.
+- On Table of Contents and Open Items it refreshes them.
 
 ### [Branching from History](#branching-from-history)
-
-> **Where?**
-> Hold a right-click on any history mark in the Time Machine timeline (not the present-state circle).
-
-*Starts a brand-new note as a copy of a past revision, leaving the original untouched.*
-
-- The original note and its full history are unaffected — branching only ever creates something new.
+- **Copy a version into a new note**: hold right-click on its mark.
 
 ### [Freezing a Note in Time](#freezing-a-note-in-time)
-
-> **Where?**
-> Switch the note to the reader, then click the snowflake button beneath the editor (in the same spot the line-numbers button sits in the editor).
-
-*Locks a note down so it can't be changed by accident — on purpose, permanently, until you unfreeze it.*
-
-- Freezing clears the note's entire Time Machine history (and that of its chapters) and switches it to always show in the reader — the editor is unreachable while frozen.
-- While frozen, nothing about the note can be changed: no typing, no tag edits, no chapter reordering/renaming/archiving/deleting, no new snapshots, no archiving or deleting the note itself. The one exception is unfreezing it.
-- Click the same (now lit) snowflake button again to unfreeze — the note goes back to being a normal, editable note. Its history stays gone; freezing doesn't keep a backup.
+- **Freeze or unfreeze**: the snowflake below the Reader.
+- A frozen note cannot be changed. Freezing deletes its history.
 `,
   `## Toolbar & Formatting
 
 ### [Toolbar Overview](#toolbar-overview)
-
-> **Where?**
-> The bar directly above the editor, shared by the whole window.
-
-*One global toolbar that always acts on whichever slot is currently active.*
-
-- Left: a split button pairing the dark-mode toggle (top) with double size (bottom). Switching between editor and reader is each slot's own business — \`Esc\` or the pen toggle at the right end of that slot's tab bar (see [Editor and Reader](${guideLink('NOTES-EDITING', 'edit-and-preview-modes')})); exporting is in the [Quick Actions Menu](${guideLink('NOTES-EDITING', 'quick-actions-menu')}); creating a note is \`Ctrl+N\`.
-- The rest of the bar holds the formatting group, always visible in both editor and reader.
+- **Dark mode**: the top half of the split button at the left; **double size**: the bottom half. Font sizes are kept separately for each size.
+- The rest are formatting buttons. They act on the active slot.
 
 ### [Formatting Group](#formatting-group)
-
-> **Where?**
-> The toolbar.
-
-*One-click Markdown formatting for the current selection or line.*
-
-- Bold, italic, strikethrough; heading levels H1–H3; bulleted, numbered, and checklist lists; blockquote; code block and inline code; horizontal rule; [table]($#tables); link insertion; table of contents.
-- The buttons resize themselves to the room the toolbar has: full-size squares on a single row whenever they all fit, and mini squares — wrapping onto a second row if they still don't fit — when they don't. Full-size, they carry the same glyph size and rounding as the chapter bar's own icon buttons, inset evenly from every edge of the toolbar. Nothing is ever dropped, and the toolbar keeps the same height either way, so widening or narrowing the window never shifts anything below it.
-- The group stays on screen in the reader too, so the toolbar doesn't change shape when you switch modes. While a slot is in the reader, clicking any of these buttons switches that slot to the editor instead of formatting — it deliberately doesn't also apply the formatting, so a stray click on a rendered note can't quietly edit it. Click again once you're in the editor to actually apply it. (On a chapter that's always rendered — an auto table of contents or Open Items — the buttons are disabled, since there's no editor to switch to.)
-- Each button reflects whether the current selection or line already has that formatting applied.
-- Most double as the keyboard shortcuts listed in [Keyboard Shortcuts](${guideLink('SHORTCUTS')}).
-- A checklist item's box (\`- [ ]\`) can be toggled two ways once the caret sits between its brackets: type any character to check it off with that character (type a space to uncheck it again), or click the caret itself — with the caret already there and not moving — to flip \`[ ]\`/\`[X]\` without touching the keyboard.
+- Bold, italic, strikethrough, headings, lists, checklists, quotes, code, rules, [tables]($#tables), links and table of contents.
+- In the Reader a formatting button switches to the Editor instead.
+- **Tick a checklist item in the Editor**: type a character between its brackets, or click the caret there.
 
 ### [Tables](#tables)
-
-> **Where?**
-> The table button in the toolbar, next to the horizontal rule — or just type a line starting with \`|\`.
-
-*Tables are ordinary Markdown text. A few keys work differently inside a table line, so you can build one cell by cell without counting pipes.*
-
-- **The button** starts a table: an empty cell, \`|   |\`, on the current line if it's empty or on a new line below it, with the caret inside. With the caret already in a table the button reads *Tidy table* and lines the whole table up instead.
-- **Typing into an empty cell** fills it from the middle, wherever in the cell the caret was, so \`|   |\` becomes \`| a |\`.
-- **\`Tab\`** goes to the next cell, and at the end of a row adds a new cell. Once the table has its divider (below), a row can't have more cells than the top row, so \`Tab\` from a full row goes on to the next row instead, starting a new one at the end. **\`Shift+Tab\`** goes back a cell. Inside a table, \`Tab\` never indents.
-- **\`Enter\`** on the first row adds the divider line under it (what makes it a table) and starts the next row. After that, \`Enter\` in any row starts a new row below it — it never splits a row in two. **\`Enter\` in an empty last row ends the table.** \`Enter\` on a first row that is a single empty cell cancels the table instead.
-- **A table with no header**: leave the first row's cells empty and press \`Enter\`. Markdown tables always have a header row, so this one is simply blank.
-- **Tidying**: leaving a row — with \`Enter\`, or with \`Tab\` / \`Shift+Tab\` into the next or previous row — lines that row up with the rest of the table, filling in any cells it's missing and removing any indentation (an indented table is no different in Markdown). Moving between cells of the same row tidies nothing. Only if that row sticks out — a wider cell, or more cells than the table has — is the whole table re-lined up to match. Ending a table tidies nothing. The tidy is its own undo step: after \`Enter\`, \`Ctrl+Z\` once takes back the new row and keeps the tidy, and a second \`Ctrl+Z\` takes back the tidy.
-- **Alignment**: click the divider line. The left part of a column's divider aligns that column left, the middle centres it, the right part aligns it right; clicking the part that matches the current alignment clears it again. (Clicking the divider changes it, so use the keyboard to put the caret there.)
-- **Selecting**: right-clicking in a table grows the selection by table steps instead of sentences — the word, then the whole cell, then the row, then the table. Right-click again inside the selection for the next step.
-- **Moving rows and columns**: \`Ctrl+Shift+←\`/\`→\` moves the caret's column, \`Ctrl+Shift+↑\`/\`↓\` its row; a column takes its alignment with it, and a row moved to the top becomes the header. With a whole cell selected, the selection travels with it, so you can walk a cell to where it belongs. Inside a table these keys no longer extend the selection by a word.
-- **Dragging a cell**: select a whole cell (right-click twice, or once on a one-word cell), then press on it and drag. The cell under the pointer lights up as selected to show where it will land; release, and the cell's row and column move so its content sits there. A click on the selection without dragging just places the caret; \`Esc\` while dragging cancels.
-- **Deleting a column**: \`Ctrl+Shift+Backspace\` in any of its cells, or press and hold its part of the divider line until the cursor's halo fills. Deleting the last column deletes the table. Every move and delete is its own undo step.
-- **Deleting**: \`Backspace\` and \`Delete\` work exactly as everywhere else, pipes included. **\`Shift+Backspace\`** empties the whole cell (and from an empty cell moves to the previous one). **\`Ctrl+Backspace\`** still deletes a word, but at the start of a cell it deletes the last word of the *previous* cell rather than the pipe between them.
-- **\`Shift+Enter\`** is a plain line break, for the rare time you want one in the middle of a table.
-- Tables you type or paste by hand get the same keys, and any \`|\` you add yourself counts: the next tidy makes room for it.
+- **Start or tidy a table**: the table button, or type \`|\`.
+- \`Tab\`/\`Shift+Tab\`: next or previous cell. \`Enter\`: new row; in an empty last row, ends the table.
+- **Align a column**: click the left, middle or right of its part of the divider line.
+- **Select cell, row, table**: right-click repeatedly.
+- **Move rows and columns**: \`Ctrl+Shift+Arrows\`, or drag a selected cell.
+- **Delete a column**: \`Ctrl+Shift+Backspace\`, or hold its part of the divider.
+- **Empty a cell**: \`Shift+Backspace\`.
 
 ### [Images](#images)
-
-*An image is ordinary Markdown, \`![alt](address)\`. Its size and placement are written in its title, so the note still reads correctly in any other Markdown editor.*
-
-- **\`Ctrl+Shift+←\`/\`→\`** with the caret in an image moves it left, to the centre, or right; text flows round a left or right image. **\`Ctrl+Shift+↑\`/\`↓\`** makes it bigger or smaller. **\`Shift+Backspace\`** puts it back to its natural size and place.
-- The keys write the title for you, e.g. \`"20em right"\`. Typed by hand: a width (\`12em\`, \`320px\`, \`50%\`), a height (\`x8em\`), both (\`12emx8em\`), and \`left\`, \`center\` or \`right\`. A title that looks like this but has a mistake in it is underlined with a wavy line, and the image ignores it.
-- **Drop or paste an image file** into a note to store it in the app (up to 20 MB). It is inserted as \`![name](&1)\`: \`&1\` is the stored image's id, and the note keeps showing it even if the original file moves or is deleted.
-- **In the reader**, \`Ctrl\`+drag an image onto another paragraph to move it there: dropped on the left third of the page it sits left, the middle centres it, the right third puts it right; dropped outside its slot, it is taken out of the note. \`Shift\`+drag resizes it (drag away from the side it is aligned to, or down, to grow), and \`Ctrl+Shift\`+drag changes width and height separately. \`Ctrl\`+drag near an edge or corner crops it instead, and \`Ctrl\`+right-click takes the crop off. Image files can be dropped onto a paragraph here too.
-- **The image button**, beside the word count, appears when a note has images: a globe while any of them is loaded from the web or a file, a database once all are stored in the app. **Hold left-click** to download and store them (this works with remote images turned off); **hold right-click** to point stored images back to where they came from. Either is one undo step. To give an image a name of your own before storing it, put \`&NAME\` in its title, as in \`"&LOGO 12em"\`.
-- **Image mode**: the toolbar's image button leaves an empty \`![]()\` at the caret and turns the sidebar to the Images view. **Images in Order** lists the note's images with their alt text, and **Images by Section** groups them by \`##\` and \`###\` headings. In both, click an image to go to it, and hold the pen or the X that appears on a hovered card to edit it in the slot or take it out of the note. Every action on an image card, in the vault and its trash too, is a hold on an icon that takes the size's place while you hover it. Images from the web or a file show a globe; **hold left-click** on one to store it in the app. **Image Archive** holds every stored image, grouped by its own tags. Drop image files or folders from your file manager on the Images view to store them there: what comes from a folder is tagged after it, the folder holding an image and that folder's parent (a dropped **pets** with **cats** and **dogs** inside tags its pictures pets, cats and pets, dogs). In the archive and the trash a **click** opens an image in the slot, with its tags below (drag them into order; right-click its id to rename it in every note). In every section a **right-click** shows an image whole in the sidebar, and a second folds it. To put an image into a note, **drag** it to its place, in the editor or the reader.
-- **Right-click** in an image selects its alt text, then its id (when it has one), then the whole image. Inside a table, the table's keys and right-click take precedence.
+- **Add**: drop or paste an image file, or drag one from the Images view.
+- **Align**: \`Ctrl+Shift+←\`/\`→\`. **Resize**: \`Ctrl+Shift+↑\`/\`↓\`. **Reset**: \`Shift+Backspace\`.
+- **In the Reader**: \`Ctrl\`+drag to move (or out of the slot to remove), \`Shift\`+drag to resize, \`Ctrl\`+drag an edge to crop, \`Ctrl\`+right-click to uncrop.
+- **Store web or file images in the app**: hold the image button beside the word count; hold right-click to point them back.
+- **Images view**: **Images in Order** and **Images by Section** list the note's images; click one to go to it. **Image Archive** holds every stored image by tag; drop files or folders on it to add them. Right-click an image to see it whole.
+- **Select alt text, id, image**: right-click repeatedly.
 `,
   `## Find & Replace
 
 ### [Find and Replace](#find-and-replace)
-
-> **Where?**
-> \`Ctrl+F\` / \`Ctrl+H\`, or the sidebar's Find view — the search field at the top of the sidebar.
-
-*Finds and optionally replaces text within the single open note.*
-
-- \`Ctrl+F\` opens the find field and focuses it; \`Ctrl+H\` opens it in replace mode, as does the mode toggle in the dock below the list.
-- Every search marks its first match as soon as it finds one; \`Enter\` in the find field (or, in replace mode, the replace field) takes you there.
-- \`Tab\` moves between the find and replace fields.
-- \`Ctrl+Enter\` replaces every match at once, as do the dock's replace-all button and a right-click on the sidebar's Find icon; its replace button replaces the marked match, or marks the next one.
-- The dock's **Aa** means "case-sensitive" in plain find mode; in replace mode it means *keep case*, searching case-insensitively but re-casing each replacement to match what it's replacing.
-- Its whole-word toggle finds only matches that do not continue a word on either side, so \`cat\` skips *concatenate*.
-- The pager at the dock's end shows the marked match and the count, \`12 | 544\`. Its carets step through the matches, wrapping at either end; holding one goes to the first or last match. Right-click the count to type a match number.
-- Past 100 matches the list is shown a page at a time, the page number shows on the scrollbar's thumb, and the pager's outer arrows turn the page, and the list follows the marked match. At most the first 9999 matches are listed; replacing all still replaces every one.
-- What gets searched follows where you are: in the editor, the note's Markdown exactly as you typed it; in the reader, only the text the page actually shows. A link's target, an image's URL, a heading's \`#\` marks are invisible there, so they never produce a match you can't see — searching \`anchor\` against a rendered \`[anchor](#anchor)\` finds the one word on screen, not two.
-- For searching across *all* notes rather than one, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}) instead.
+- **Find**: \`Ctrl+F\`. **Replace**: \`Ctrl+H\`, or the mode button in the dock.
+- **Go to the marked match**: \`Enter\`. **Switch fields**: \`Tab\`.
+- **Replace all**: \`Ctrl+Enter\`, the replace-all button, or right-click the Find icon.
+- **Aa**: match case; while replacing, keep the case. The whole-word button skips matches inside words.
+- **Step through matches**: the pager's arrows; right-click the count to type a number.
+- The Editor searches the Markdown, the Reader only the visible text.
+- To search all notes, use [Search](${guideLink('SIDEBAR-SEARCH', 'search')}).
 `,
   `## External Files
 
 ### [Opening an External File](#opening-an-external-file)
-
-> **Where?**
-> Your OS file explorer, a file association, or drag-and-drop onto the slot.
-
-*Edits a Markdown file from anywhere on your computer, in place.*
-
-- Becomes a temporary note tagged \`external\`, listed only in the External section of the Notes view (not Date, Category, Archive, or Trash).
-- Your edits autosave into the app's own database as you type, but never touch the original file until you explicitly save.
-- If the file changes on disk while the note is open, the note takes the new content, unless you have edited it too: then your text stays, and the file's version goes on the [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}), and the save button's tooltip says that saving will overwrite it.
-- Characters that do not fit the editor's grid (see [Characters the Editor Keeps](#characters-the-editor-keeps)) are removed when the file opens, so saving it writes the file back without them.
+- **Open**: open a Markdown file with Thockdown, or drop it on a slot. It is listed under Notes → External.
+- The file changes only when you save. If it changes on disk, the note follows, unless you edited it too.
+- [Characters the editor does not keep](${guideLink('NOTES-EDITING', 'characters-the-editor-keeps')}) are removed.
 
 ### [Saving an External File](#saving-an-external-file)
-
-> **Where?**
-> The Save icon on the external note's row.
-
-*Writes the note's current content back out to the original file on disk.*
-
-- If the saved database content and the on-disk file differ, the note shows as unsaved until you save again.
+- **Save**: the save icon on its card.
 
 ### [Converting an External File to a Regular Note](#converting-an-external-file-to-a-regular-note)
-
-> **Where?**
-> Remove the \`external\` tag from the note (tag-mode, see [Managing Tags](${guideLink('TAGS', 'managing-tags')})).
-
-*Adopts an external file into Thockdown permanently, as a normal internal note.*
-
-- The note's current content becomes an ordinary note; the original external file is left untouched.
-- External notes can't carry your own tags while the \`external\` tag is present, but still keep their own [Time Machine Timeline](${guideLink('TIME-MACHINE', 'time-machine-timeline')}) like any other note.
+- **Convert**: remove its \`external\` tag ([Managing Tags](${guideLink('TAGS', 'managing-tags')})). The file stays as it is.
 `,
   `## Import & Backup
 
+All in Options → Advanced → Data.
+
 ### [Export All Notes](#export-all-notes)
-
-> **Where?**
-> Options → Advanced → Data → Markdown → the export icon.
-
-*Writes every note and image into a new folder as plain files that any Markdown reader can open.*
-
-- \`notes\` holds the notes in folders by primary and secondary tag, archived ones under \`Archive\`. A note with chapters gets a folder of its own holding the note and its chapters.
-- \`images\` holds the image library, in folders by tag the same way.
-- Every file is named by its id: \`$ID.md\` for a note, \`§ID.md\` for a chapter, \`&ID.png\` for an image. Images inside notes point at their files, so other programs show them.
-- \`thockdown.json\` records everything else: tag order, chapter order, dates. Trashed notes and Time Machine history are not included.
+- Writes every note and image to a folder of plain Markdown and image files, sorted by tag.
 
 ### [Import](#import)
-
-> **Where?**
-> Options → Advanced → Data → Markdown → the import icon.
-
-*Brings Markdown files from anywhere on your computer into Thockdown as regular notes, or restores an exported folder.*
-
-- Pick \`.md\` or \`.txt\` files to add each as a new note. The files are copied in; later changes to them are not picked up.
-- Pick an exported folder's \`thockdown.json\` to restore that whole folder: notes with their ids, tags, chapters and dates, and the images.
-- Notes and images already identical to yours are skipped. When an id is already taken by something different, the toggle beside the import icon decides which side is renamed: the imported one gets \`-NEW\`, or yours gets \`-OLD\`. Links follow the rename. Ids an export holds twice are numbered \`-1\`, \`-2\`, and a numbered id like \`$12\` just takes the next free number.
+- **Add notes**: pick \`.md\` or \`.txt\` files.
+- **Restore an export**: pick its \`thockdown.json\`.
+- The toggle beside the button decides whether a clashing id is renamed on the imported side or on yours.
 
 ### [Back Up All Notes](#back-up-all-notes)
-
-> **Where?**
-> Options → Advanced → Data → Database → the database icon.
-
-*Saves a copy of the database, which holds every note, its chapters, tags and history, and shows it in your file explorer.*
-
-- A copy is also kept automatically each time the app starts, for the last three starts, in the same \`backups\` folder.
-- To get notes out as files other programs can read, use [Export All Notes](#export-all-notes).
+- **Back up**: the database button. A backup is also made on each start.
 `,
   `## Export
 
 ### [Export to PDF](#export-to-pdf)
-
-> **Where?**
-> Hold \`Esc\` → Export (or Export All), while in the reader.
-
-*Exports the rendered note as a PDF file.*
+- Hold \`Esc\` → Export, in the Reader.
 
 ### [Export to Markdown](#export-to-markdown)
-
-> **Where?**
-> Hold \`Esc\` → Export (or Export All), while in the editor.
-
-*Exports the raw note text as a \`.md\` file.*
+- Hold \`Esc\` → Export, in the Editor.
 
 ### [Export All](#export-all)
-
-- Which format you get follows the mode you're in: reader exports PDF, editor exports Markdown.
-- In a note with chapters, **Export** covers only the chapter (or parent) you're looking at. **Export All** assembles the parent and every chapter, in chapter order, into a single document named after the parent.
-- The auto-generated Table of Contents and Open Items chapters are not included.
-- The first export asks for a destination folder; later exports reuse it.
+- Exports the parent note and all its chapters as one document.
 `,
   `## Keyboard Shortcuts
 
-> **Where?**
-> Global — active anywhere the app has focus, except inside search/replace/tag fields (where \`Tab\` / \`Enter\` / \`Esc\` move focus back into the editor instead).
-
-*Every keyboard shortcut in the app, in one table. Hold \`F1\` to see the same list over the whole window for as long as you hold it; a quick press of \`F1\` opens or closes this guide.*
+Hold \`F1\` to see this list over the window.
 
 ${shortcutTable()}
-
-- Shortcuts that touch the editor apply to whichever slot is currently active.
 `,
   `## Window Controls
 
-> **Where?**
-> The top bar of the window.
-
-*Thockdown runs frameless, with no OS menu bar — every window action lives here.*
-
-- **Music player** — see [Music Player](${guideLink('MUSIC-PLAYER')}).
-- **Mini mode** — collapses the window into a compact strip; the music player stays fully usable, sound options included. The button that got you there expands back out, maximized — see [Music Player](${guideLink('MUSIC-PLAYER')}).
-- **Immersive mode** (\`Ctrl+Shift+Space\`) — the window goes full screen with just the editor you're working in, edge to edge: no sidebar, toolbar, tabs or other slots. Press it again to come back exactly as you were. Opening the sidebar any way you normally would (\`Ctrl+Space\`, \`Ctrl+F\`, \`Ctrl+H\`) also brings you back, with the sidebar showing. Not available from mini mode.
-  - In the editor the scrollbar lives in the grid itself: the rightmost column of boxes is the track, and the darker boxes show where you are. Click anywhere else on it to travel there; hold to jump straight there. Its colour is **Immersive Scroll Thumb** in the colour settings.
-- **Minimize / Maximize–Restore / Close** — standard window controls.
-- **User Guide (graduation cap)** — the upper half of the split maximize button. Opens this guide, exactly like the Quick Actions Menu's own Help cell, see [The User Guide](${guideLink('NOTES-EDITING', 'the-user-guide')}).
-- **Dark mode / Double size** — a split button in the toolbar's left cluster (not in this bar): the top half switches the whole app between light and dark presets, the bottom half is double size (2x). Double size doubles the app's page zoom and, to match, the window's minimum size, so 2x content gets 2x room instead of being squeezed into the same space. Toggling off relaxes the minimum again but doesn't shrink a window you've since resized larger. Persists across restarts. Font sizes — editor, reader and the interface — are remembered separately for normal and double size: set them once in each, and switching back and forth keeps both.
-- **How small the window goes** is worked out from what actually has to fit rather than being a fixed number: across, the sidebar, the toolbar's formatting buttons at three groups of three per row, and this bar; down, enough of the Date view to show four note cards. Both scale with the spacing setting, so a roomier spacing raises the floor and a tighter one lowers it. Hiding the sidebar drops the width floor by the sidebar's own width, and each extra split-view slot raises it once the slots need more room than the chrome does.
-- **Drag the toolbar or this top bar to move the window; double-click either to maximize/restore.** Dragging a maximized window from these areas restores it, ending up positioned under the cursor as if the drag had been followed the whole way. Dragging elsewhere in the app also moves the window, but won't restore it from maximized.
+- **Music player**: see [Music Player](${guideLink('MUSIC-PLAYER')}).
+- **Mini mode**: shrinks the window to the music player; the button on its right expands it again.
+- **Immersive mode**: \`Ctrl+Shift+Space\`. Only the active editor, full screen; the rightmost column of boxes is its scrollbar.
+- **User Guide**: the graduation cap. See [The User Guide](${guideLink('NOTES-EDITING', 'the-user-guide')}).
+- **Move the window**: drag the toolbar or this bar. **Maximize**: double-click either.
 `,
   `## Appearance & Options
 
 ### [Options](#settings-panel)
-
-> **Where?**
-> The cogwheel, the last of the sidebar's view icons.
-
-*The home for every appearance, sound, sync, and performance control in the app, in six sections: General, Layouts, Music, Glitz, Tools and Advanced. The soundscapes have a sidebar view of their own.*
-
-- The row of six buttons at the top picks the section; the panel reopens on the one you left. Each section holds collapsible subsections, and only Layouts belongs to the layout: everything else is the same for every layout. A search looks through every section.
-- Most controls apply live. Every subsection is shown, whichever mode you are in: where editor and reader differ, the editor's controls are headed "Editor" and the reader's "Reader" (Editor Font and Reader Font, Editor Text and Reader Text).
-- Every slider, and the draggable H/S/V/A and texture-control swatches, can also be adjusted by scrolling the mouse wheel over them — each notch moves the value by exactly one step. Hovering any of them shows a tooltip with the current value; it stays open and updates live as you scroll or drag, and only closes once the cursor actually leaves the control.
+- **Open**: the cogwheel in the sidebar. The buttons at the top pick a section.
+- Only **Layouts** belongs to a layout; every other setting is the same for all layouts.
+- **Adjust a slider**: drag or scroll over it; right-click to type a value.
 
 ### [Editor Font](#editor-font)
-
-> **Where?**
-> Options → General, below Feature Toggles, followed by Reader Font.
-
-*Font family, size, spacing, and padding: Editor Font for editor (font family, size, glyph padding, line height), Reader Font for the reader (font family, size, letter spacing, line height).*
-
-- You can also change these from the text itself: hold \`Ctrl\` and roll the wheel over the text of a note to change its size by one step per notch, \`Ctrl+Alt\` for the horizontal spacing (letter spacing in the reader, glyph padding in the editor), \`Ctrl+Shift\` for the line height. It changes the settings of whichever mode the pointer is over, not the slot you are typing in, so with a slot in the editor and a slot in the reader side by side you adjust each by pointing at it.
-
-### [Presets](#presets)
-
-> **Where?**
-> Options → Layouts → Presets.
-
-*The built-in light and dark presets, then your own layouts, in one list.*
-
-- **There is nothing to save**: anything you change is kept in the layout you are using, built-in ones included. The plus makes a new layout of your own, a copy of the one in use.
-- The row at the bottom of the sidebar is the layout in use, and works as the Soundscapes one does: click its icon to pick another, right-click its name to rename it, click the turning arrow to reset it to the neutral layout, and hold the last button to trash one of your own or restore a built-in one as shipped.
-- Hold right-click on one of your own layouts to export it.
-- Soundstages (Options → Sound → Soundstages), keystroke sounds and flashing work the same way; their row shows while their subsection is open.
-
-### [Feature Toggles](#feature-toggles)
-
-> **Where?**
-> Options → General → Feature Toggles.
-
-*Switches for [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), [Grid Beat](${guideLink('NOTES-EDITING', 'visualizer')}) and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}).*
-
-- A feature that is off does not run and costs nothing, but its settings stay in the panel, so you can tune it while it is off. Grid Beat only governs the beat in the editor and reader; the Visualizer keeps its own.
-- These switches are the same for every layout. A layout still decides how a feature looks and sounds, and can have silent keys of its own.
-
-### [Colors](#colors-and-textures)
-
-> **Where?**
-> Options → Layouts → Colors.
-
-*One staged colour, shown at the top of every section that has colours.*
-
-- Click a colour to link it: the picker takes its colour and paints it as you move the sliders. Click it again, choose a channel or fold the section to let go. The picker keeps the colour, so you can carry it to another section.
-- Right-click a colour to paint it with the picker's colour.
-- The H, S, V and A letters choose which channels a right-click paints; Shift adds or removes one. The colour button selects all four.
-- Right-click a slider to type a value.
-- Surface textures: link a surface to edit its texture with the seed and the sliders; **strength** sets how strongly the pattern shows (0 is colour only). Right-clicking another surface gives it the linked texture as well as the colour.
-
-### [Borders](#borders-and-spacing)
-
-> **Where?**
-> Options → Layouts → Borders.
-
-*Fine control over border widths, corner radii, and layout spacing throughout the UI.*
+- Options → General → Editor Font and Reader Font.
+- **From the text**: \`Ctrl\`+wheel for size, \`Ctrl+Alt\`+wheel for spacing, \`Ctrl+Shift\`+wheel for line height, in the mode under the pointer.
 
 ### [UI Font](#ui-font)
+- Options → General → UI Font: the font of the app's own controls.
 
-> **Where?**
-> Options → General → UI Font.
+### [Feature Toggles](#feature-toggles)
+- Options → General → Feature Toggles: [Spell Check](${guideLink('NOTES-EDITING', 'spell-check')}), the [custom cursor]($#mouse-options), [keystroke sounds]($#keystroke-sounds), [Grid Beat](${guideLink('NOTES-EDITING', 'visualizer')}) and [Typing Trail](${guideLink('NOTES-EDITING', 'typing-trail')}).
+- A feature that is off costs nothing; its settings stay adjustable.
 
-*Font family and size for the app's own chrome — sidebar, buttons, tags, tooltips — separate from the note fonts under [Editor Font]($#editor-font).*
+### [Presets](#presets)
+- Options → Layouts → Presets. Changes are kept in the layout you use; there is nothing to save.
+- **New layout**: the plus copies the current one.
+- **The dock at the bottom**: click the icon to pick another, right-click the name to rename, the turning arrow to reset, hold the last button to trash your own or restore a built-in one.
+- **Export a layout**: hold right-click on it.
+- Soundstages, keystroke sounds and flashing work the same way.
 
-- Twelve bundled UI fonts, from the general-purpose IBM Plex Sans to full-personality display fonts; Geo is the default.
-- The size slider scales UI text only; icons and button sizing stay fixed.
+### [Colors](#colors-and-textures)
+- Options → Layouts → Colors.
+- **Pick up a colour**: click it; the picker then paints it. **Paint with the picker's colour**: right-click a colour.
+- **H**, **S**, **V**, **A**: which channels a right-click paints.
+- **Textures**: pick up a surface to edit its texture.
+
+### [Borders](#borders-and-spacing)
+- Options → Layouts → Borders: border widths, corners and spacing.
 
 ### [Glaze](#glaze)
-
-> **Where?**
-> Options → Layouts → Glaze.
-
-*A decorative multi-layer light overlay on top of the UI — purely cosmetic.*
-
-- Independent linear ("glare") and radial ("flair") gradient layers, plus dark and light gradient accents ("gloom" and "sheen"), each with its own position, shape, opacity, and randomizable seed.
-- Safe to leave at defaults; a layout without glaze sets its opacities to zero.
+- Options → Layouts → Glaze: decorative light layers over the app.
 
 ### [Filters](#filters)
-
-> **Where?**
-> Options → Layouts → Filters.
-
-*Global CSS filters applied over the whole app.*
-
-- Invert, sepia, hue-rotate, brightness, contrast, saturate, and a colorize overlay.
-
-### [Animations](#animations)
-
-> **Where?**
-> Options → Advanced → Movement, Flashing and Tooltips.
-
-*How things move and how things flash. For what the wheel itself does, see [Scrolling]($#scrolling).*
-
-**Movement** tunes the easing curve of the scroll animations the app makes on your behalf — a search jump, a page key, a chapter change.
-
-- Controls for ramp, speed, maximum speed, and overall curve shape. Response is auto-derived from ramp.
-- **Maximum speed** does two jobs at once. It caps how fast a scroll animation travels, and it also caps how *long* one may take: the longest any scroll can run is the time it would take to cover 200,000 pixels at the speed you've set — 2 seconds at the top of the slider, 2.5 at the default. Wind the speed up and long journeys get shorter as well as quicker; wind it down and a trip across a very large note becomes a proper voyage. A journey that can't fit under both limits keeps the time one and exceeds the speed one, so you're never left waiting.
-- These settings aren't part of a layout — they stay as you left them across layout switches and app restarts, the same way the custom cursor toggle does.
-
-**Flashing** sets how anything that flashes does it; today that is the caret's blink.
-
-- **Presets** at the top work like [layout presets]($#presets), without export. They hold the curve and the cycle, not the matching; **Steady** does not flash at all.
-- The **curve** is the caret's opacity over one cycle,: click to add a point, drag it, right-drag up or down to round it (a handle of 0 makes a sharp corner, for a hard blink), right-click to remove it. The graph is a bar of twelve, dashed on the beats. The end runs on into the start, so the first and last points move together.
-- **Cycle** (100–5000ms) is how long one cycle takes.
-- **Matching** makes the cycle follow the music's beat instead, while Grid Beat is on, music plays and a beat is found; otherwise the cycle above runs. It reads in bar notation: **4/4** is one cycle a beat, **1/4** one a bar. The thirds run across the bar line on purpose.
-
-**Tooltips** sets how long a tooltip waits before it shows (0–5 seconds, or **never**), and which of its parts you see: the **intention** (what a click does), the **shortcut** key, the **gestures** (what a right press or a hold does, as **[Right]** or **[Hold right]**) and the current **value**. A tooltip with none of your chosen parts does not show at all. Once one tooltip has shown, the next shows at once while you move from control to control.
-
-### [Speed Reading](#speed-reading-settings)
-
-> **Where?**
-> Options → Tools → Speed Reading.
-
-*The pace of [Speed Reading]($#speed-reading) and how it eases.*
-
-- **Editor**: the editor's words per minute; **row**, its reading row in boxes; and **fixation**, the time every chunk stays before its letters are counted; a sentence's end adds one fixation and a comma half of one. Chunks also end at punctuation and around quotations, and a line break shows an empty row for one fixation. Pauses and fixations are taken out of your pace, not added to it, so the words go by at the figure shown; at high paces the fixation shortens to keep up.
-- **Reader**: the reader's words per minute.
-- **Curve**: **ramp**, **shape** and **speed** shape the ease into a held \`Space\` and out of and back from a pause, like the same three in [Animations]($#animations), with their own values.
-
-### [Scrolling](#scrolling)
-
-> **Where?**
-> Options → Advanced → Scrolling.
-
-*What your own hand does to the page: how far one turn of the wheel goes, and whether a spin of it keeps going after you let go.*
-
-- **Editor step** and **reader step** are how far one notch of the wheel scrolls, one for the editor and one for the reader. Editor counts in whole rows (1 to 10); reader counts in lines of text and will take fractions of one (0.5 to 5). Both are measured in text rather than pixels on purpose: make the text bigger, or the line spacing wider, and a notch still moves the same amount of *reading* rather than quietly moving less of it.
-- **Auto scroll** and **dampen** are a pair, and they work the same way in the editor and the reader. Spin the wheel — three notches in the same direction, each within the number of milliseconds **auto scroll** is set to — and the text keeps scrolling on its own at the speed you spun, without you having to keep turning. Slid all the way left, **auto scroll** reads “off” and the wheel behaves exactly as it always has.
-- **Dampen** decides how long the free scroll lasts before it winds down. It holds your speed for a good while and then lets go fairly quickly, rather than trailing off into a crawl; slide it right to have it let go sooner, left to make it last. At its leftmost position it never winds down at all — the text keeps going until you stop it. Either way, one more turn of the wheel stops it — as does typing, or clicking in the text. That stopping nudge only stops; it doesn't also scroll, so you can halt on the line you wanted rather than one past it.
-- **Cut off** is where the free scroll gives up: once the steps are arriving further apart than the number of milliseconds you set here, it stops. Between it and **dampen** you can have a scroll that eases off gently and ends early, or one that holds its pace and runs on until it hits the cut off.
-- In the reader the free scroll glides rather than stepping line to line — there is no row grid there to step between — but it is the same spin, at the same speed, from the same settings.
-- For half a second after a spin starts, the wheel is ignored. That's the tail of your own gesture: without it, the last few notches of the spin would either double the speed or cancel the scroll the instant it began.
-- These settings aren't part of a layout either — they stay as you left them across layout switches and app restarts.
+- Options → Layouts → Filters: colour filters over the whole app.
 
 ### [Cursor](#mouse-options)
-
-> **Where?**
-> Options → Layouts → Cursor.
-
-*An optional animated cursor replacement: orbiting dots with fading trails, a center dot, a soft halo, and a breathing pulse, all pinned to the real pointer position. On by default — switch it off in [Feature Toggles]($#quick-access); while it is on, the native cursor is hidden everywhere in the app, not just the editor.*
-
-- Its colors (central dot, halo, orbital dots, trail) are in [Colors and Textures]($#colors-and-textures), under Cursor.
-- Sliders: number of circling dots, orbit radius, spin speed (-4Hz to 4Hz, negative reverses direction, 0 freezes it), trail fade duration (how long a trail particle takes to decay after the head passes it — e.g. 1000ms at 1Hz spin sweeps exactly one full revolution), the Element Size group: trail width, orbital dot and central dot (each 0–12px, 0 hides it), the Halo group's radius (0 hides it, capped at the same max as orbit radius) and fall-off (0–100 — how far out the halo's glow stays near-opaque before fading to nothing at its edge; low values fade fast near the center, high values stay bright almost all the way to the rim), and a pulse effect that breathes the orbit's radius outward — magnitude 0 keeps it locked at its base size, magnitude 1 breathes up to 200% of it — at a given speed. The halo is rendered centered behind the center dot. Colors and these sliders are saved per layout, same as the rest of your theming.
-- Click response: left-click tightens the orbit (smaller radius, faster spin) and right-click widens it (larger radius, slower spin), up to 200% and down to 50% of your base radius/spin. Every click is handled the same way regardless of how long you hold it — a plain click is too fast to tell "tap" from "hold" apart — it rises to full strength, stays there while held, then eases back down to baseline on release instead of snapping. Six more sliders tune the feel, using the same bell-curve model as Animations' ramp/shape/speed/max-speed: click ramp (linear → bouncy), click shape (apex bias), click speed (how long the rise/fall takes — weighted so the high-speed end of the slider gives much finer control than the low-speed end), click max speed (how strong the effect gets), min impact (floors how long a click is treated as held internally, 0–200ms, so even a quick real click still registers instead of flickering), and click balance (center = radius and spin both affected equally; left = radius only; right = spin only).
-- Hold gestures show themselves in the cursor. Several controls do something different when you hold the button rather than click it (snapping a scrollbar, pinning a tab, archiving a note — each one is described where it lives). While you hold one, **the halo swells**, reaching its full size at the exact moment the gesture fires — so you can see how much longer to hold rather than guessing, and let go early if you have changed your mind. When it does fire, the orbit gives one brief flick against whatever the press was doing to it, which is how you know it landed even when the thing it did is off-screen. Both are scaled by click max speed, and both settle back on their own. There are only ever two hold lengths in the app: a short one for "I meant this control, not the one beside it", and a longer one for anything that can't be undone.
+- Options → Layouts → Cursor: the animated cursor. On or off in [Feature Toggles]($#feature-toggles); colours under Colors → Cursor.
+- While you hold a button for a hold gesture, the halo grows; it is full when the gesture happens.
 
 ### [Caret](#caret)
+- Options → Layouts → Caret: size, outline, halo and blur of the caret. Colours under [Colors]($#colors-and-textures).
 
-> **Where?**
-> Options → Layouts → Caret.
+### [Animations](#animations)
+- Options → Advanced → Movement: how the app's own scrolling moves.
+- Options → Advanced → Flashing: how the caret blinks. **Curve**: click to add a point, drag to move, right-drag to round, right-click to remove. **Matching** times the blink to the music's beat.
+- Options → Advanced → Tooltips: their delay, and which parts they show.
 
-*Shape and glow of the block caret in the editor. Its fill, outline and halo colors live with the rest of your theming in [Colors and Textures]($#colors-and-textures), and its blink in [Animations]($#animations).*
+### [Scrolling](#scrolling)
+- Options → Advanced → Scrolling.
+- **Step**: how far one wheel notch goes in the Editor and the Reader.
+- **Auto scroll**: spin the wheel and the text keeps going; one more notch, typing or a click stops it. **Dampen** and **cut off** set how long it runs.
 
-- The caret sits above the box grid and below your text, so the grid never draws lines across it and the caret never hides the character it's on — however big you make it, whatever color you give it.
-- **Size** (-5 to +5) grows or shrinks the caret on every side. 0 is the default: it fills a grid box's interior without covering the lines around it. -1 leaves a one-pixel gap to those lines; positive values spill past them into the neighbouring boxes.
-- **Outline** (0–5px) draws a border around the caret rectangle, in the outline color. 0 hides it.
-- **Halo** (0–20px) reaches a glow outward from the caret, in the halo color. 0 hides it.
-- **Blur** (0–20px) softens that glow's edge. At 0 the halo is a hard square ring that reads as part of the grid; wind it up and it feathers into a soft glow without reaching any further. Blur works on its own too — with halo at 0 it feathers the caret's own edge outward.
+### [Speed Reading](#speed-reading-settings)
+- Options → Tools → Speed Reading: the pace in each mode, the Editor's row and pause per chunk, and how it eases. See [Speed Reading](${guideLink('NOTES-EDITING', 'speed-reading')}).
 
 ### [Keystroke Sounds](#keystroke-sounds)
-
-> **Where?**
-> Options → Sound → Keystroke Sounds.
-
-*Optional mechanical-keyboard sound effects on typing, undo/redo, and navigation.*
-
-- Keystroke sounds belong to you, not to a layout: switching layouts keeps them. The **presets** at the top (five built-in ones, Vanilla to Needles, then your own; switch keystroke sounds off in Feature Toggles) work like [layout presets]($#presets), without export.
-- A keystroke is made of **channels**, layered: four click sets (Pops, Pins, Creamy, Forge) plus Bass and Treble. They work like soundscape channels: click one to show its **volume** , **jitter** (how far each press is pitched up or down at random) and **pitch**, hold it to turn it on, hold right-click to turn it off, and scroll over it to change its volume.
-- **Mix** acts on all channels together: volume, pitch, **variance** (how far each key is pitched apart from the others; a key always keeps its own sound), reverb and room.
-- **Spatial** slider adds stereo panning, centered (off) by default. Left of center pans by keyboard key position (left-hand keys sound from the left, right-hand keys from the right, non-character keys like arrows/Tab/Backspace stay centered); right of center pans by where the caret sits on the current line (line start sounds left, the far edge before an automatic wrap sounds right). The two modes don't blend — the slider picks one or the other by which side of center it's on, with distance from center setting how strong the effect is.
+- Options → Sound → Keystroke Sounds. On or off in [Feature Toggles]($#feature-toggles).
+- **Channels**: click to show one, hold to turn it on, hold right-click to turn it off, scroll to set its volume.
+- **Mix**: all channels together. **Spatial**: left pans by key position, right by caret position.
 
 ### [Soundscapes](#soundscapes)
-
-> **Where?**
-> The Soundscape button in the music player (the podcast icon) turns them on or off, and the player's Ambient slider sets their overall volume. The sidebar's Soundscapes view (the podcast icon) chooses the soundscape and adjusts the channels.
-
-*Generated sound — wind, surf, rain, thunder, running water, fire and wind chimes — that can play alongside the music player, all in one shared space and under one sky.*
-
-- **Overall volume** — the music player's Ambient slider. **Right-click** the player's Soundscape button to step to the next soundscape — through every factory one, then your own saved ones. The volume belongs to you rather than to a soundscape: switching soundscapes keeps it.
-- Choose a soundscape under **Presets**. **There is nothing to save**: anything you change is kept in the soundscape you are playing, factory ones included. The plus makes a new soundscape of your own, a copy of the one playing. The row at the bottom of the sidebar is the playing soundscape's: click its icon to pick another, hold the icon to restore it, right-click its name to rename it, click the turning arrow to switch every channel off and set the environment back, and hold the last button to trash one of your own or restore a factory one as shipped. Then choose a channel under **Channels** to show its controls below. There are eighteen channels, each marked by the icon of its kind: six **wind** (a gust), three **rain** (a cloud), three **thunder** (a lightning bolt), two **stream** (a drop), two **fire** (a flame) and two **chimes** (a bell). Click a channel to view it; hold left-click on a disabled channel to enable it, or hold right-click on an enabled channel to disable it — a disabled channel costs nothing to play. A short right-click solos a channel and shows its controls; right-click it again to clear solo, or right-click another channel to switch solo. The soloed button is highlighted. Disabled channels keep their settings, and their controls remain visible but cannot be changed. While hovering over an enabled channel button, scroll the mouse wheel to adjust its volume in 5% steps. On a touch screen, press and hold a channel to enable or disable it, double-tap it to solo it, and drag up or down out of an enabled channel to change its volume.
-- **Every channel's volume is in decibels**: each step of the slider changes the loudness by the same amount, and a channel keeps its level whatever else is playing — turning on another channel never makes this one quieter.
-- **Every channel has a distance**, one rule for all of them: near is direct and clear, far is darker, quieter and more of it heard in the space. Channels that sit somewhere have a **pan** as well, which also sets their width: in the centre they fill the whole stereo field, and panned toward a side they narrow onto it, to a single point at the edge. Layering the same kind near, in the middle and far away is what gives a soundscape depth.
-- The **environment**, the sliders between the presets and the channels, acts across every channel at once. It is still part of the soundscape: choosing one sets it, and changing it changes the soundscape. Its first slider is the soundscape's own **volume**: when the loudest moments of a soundscape make the rest of it duck for a moment, lower this one rather than the channels. Four of its sliders shape the **space**. Two of them make the place and are best read together: **size** is how big it is (how long sound takes to come back, how far apart its echoes are, how long it rings) and **foliage** is what fills it, from bare, hard surfaces that return clear echoes and a bright ring to dense, soft ones that scatter every echo into a dark, gentle wash and muffle distant sounds. Small and bare is a closed room, small and dense a room lined with foam, large and bare a mountain valley, large and dense a forest. Echoes are heard on sounds with a clear start, such as drops, chimes and thunder. **Brilliance** is how sharply you hear it all, from soft and warm through neutral in the middle to crisp and sparkling with fuller bass; it changes the character, not the volume. **Amount** is how much of the space you hear at all. The other two are the **weather**, one slow rhythm of gusts and lulls for the whole scene: **gusts** is how strong they are, **pace** how often they come. A channel's own **weather** slider decides how closely it follows them — wind grows louder and brighter in a gust, rain gets heavier, a fire is fanned, chimes are struck more often and harder, and thunder comes sooner. At zero a channel ignores the weather entirely.
-- **Wind channels** are wind, surf or a steady wash, depending on how they are set. **Colour** blends the noise itself from deep brown through balanced pink to bright white. **Bright** is where its filter sits, and **focus** turns that filter from a gentle darkening into a narrow, resonant band — a whistle at that pitch. Loudness holds while you move any of the three. Under **Motion**, **depth** is how far the level rises and falls, **period** how long one rise and fall takes, **curve** its shape (a sine in the middle; to the left it lingers loud and dips briefly, to the right it stays quiet and swells briefly) and **skew** where the peak falls — a fast rise and slow fall is a wave. **Sweep** makes the filter follow the swell: to the right it opens as the level rises, so a gust whistles higher and a wave brightens as it breaks; to the left it closes. **Vary** makes every cycle a little longer or shorter, stronger or weaker than the last. Under **Place**, **width** runs from a single point to all around you, and **sway** carries the channel from side to side, sweeping past the centre as it swells — easiest to hear on a narrow channel.
-- **Rain channels** are laid out in rows of three. The first row is the rain and what it falls on: **volume**, **surface** — soft to hard: **leaves**, **canvas** (a tent or an awning — a dull thump), the **street**, **tin** (a shed or a car roof) and **glass**, with everything between two of them a blend — and **ring**, how much the surface rings: dead to the left, as it is in the middle, twice as long to the right. The next four rows are its parts, each as how much, how loud (**level**: off at the far left, as it is at three quarters, louder above) and **tone**, its pitch. **Drops** are the ones heard one by one, from drizzle to downpour. The **wash** is the steady hiss of rain too dense to hear drop by drop, from a sparse patter to a smooth hiss; with its level off the drops play alone, which sounds like dripping — the wash is what makes it rain. **Drips** are large, heavy drops from gutters, eaves and branches. **Wet** is standing water: drops land in it with a bright splash, a spray of finer droplets and the rising *plip* of a trapped bubble, and its film deadens the surface's ring — a wet road is the street with wetness up; the splashes' tone moves their pitch and the bubbles' size together. Under **Place**, **width** runs from a single point at the pan to as wide as the pan allows.
-- **Thunder channels** rumble now and then rather than continuously; the first peal comes within a few seconds of enabling one. **Share** is how much of the time it thunders, shown as rumbling to silence — **1 : 99** with a 20-second peal means 20 seconds of thunder, then 33 minutes of quiet. **Length** is how long a peal rolls. **Character** is how harshly the deep boom breaks up, from a smooth swell to a choppy growl. **Contrast** pushes a peal's loud and quiet moments apart to the right, or draws them together to the left. **Random** varies the other controls again after every peal, by up to a quarter of each range, so no two peals come out alike. **Spread** is how much of the stereo field a peal fills around its pan.
-- **Stream channels** are a brook or a stream: a cloud of bubbles over the rush of the flow, each set on its own, in rows of three. The first row is the whole stream: **volume**, **tumble** (from an even flow to water arriving in bursts as it tumbles over stones, each easing in and out — it bunches the bubbles, and sways the rush only a little) and **width**. **Bubbles** is how many (a few to a froth), with their **level** and **size** (small, high, glassy bubbles to large, low gurgles). The next row shapes each bubble: **spread** is how much their sizes vary (all alike at the far left, as authored in the middle, far apart at the right), **rise** how far a bubble's pitch climbs as it surfaces (a flat plop to a chirp), and **ring** how long it sounds (a dead plop to a ringing note). The last row is the **rush** beneath them: its texture (a sparse, gravelly rattle to a smooth rush), its **level** (off leaves the bubbles alone) and its **tone**, two octaves either way.
-- **Fire channels** are laid out in rows of three. The first row is the whole fire: **volume**, **size** (from embers to a blaze — the weight and depth of the roar) and **width** (from a point at its pan to as wide as the pan allows). The next three rows are its crackle, its pops and its sizzle, each as how much, how loud (**level**: off at the far left, as it is at three quarters, louder above) and **tone**. **Crackle** is how often the wood crackles, and its tone moves the crackles' pitch two octaves either way. **Pops** are sap bursting — dry cracks with no ring — and their tone runs from a dull thud to a bright crack. **Sizzle** is the chance that a pop bursts open a pocket of moisture, which then sizzles on from that moment at the pop's own place — holding with only a gentle waver, then fading out over a few seconds; at most four sizzle at once. Every sizzle is a little different — its own loudness (mostly faint, now and then a loud one), its own place around the tone (its own pitch and frazzle), its own length, and a pitch that drifts as it goes; as it fades it sinks lower and grows more frazzled, as the pocket dries out. Its tone sets both the pitch, from 4 to 8 kHz, and the texture, without changing its loudness: to the left it is frazzled, a crackling fizz of tiny bursts; to the right a smooth hiss. The last row is how the flames themselves move: **flicker** is how far the roar swings (a steady burn to the left, surging and faltering to the right), **period** how long one movement lasts on average, and **dynamics** how abrupt and irregular the movements are — soft swells at an even pace to the left, sudden lurches at an uneven one to the right.
-- **Chimes channels** are a set of tubes hanging in a ring around a striker that the wind moves. **Pitch** is the lowest tube, in semitone steps from A440, **tubes** how many there are, **width** how far they are spread: to the left they hang together at the channel's pan and distance; to the right each tube has its own place, across the stereo field and from near to far, and keeps it, **ring** how long a struck tube keeps sounding, **activity** how often the striker is set moving before the wind has any say, and **hardness** runs from a soft striker, warm and round, to a hard one, bright with a tick. **Unison** is how much the chimes sound together: to the left each strike is a single note; to the right the striker rebounds across the ring into a quick cascade of several. **Material** is what the tubes are made of — **wood** (bamboo: a short, hollow knock), **metal** (the classic long ring), **glass** (brighter and shorter) and a **veil** of shimmering tones that swell in rather than strike — with everything between two of them a blend. **Scale** steps through fifty-one tunings, one at a time: the major pentatonic of an ordinary garden chime first, then other pentatonic scales from Japan, Okinawa, Ethiopia and Indonesia, just and microtonal tunings, six-note scales, scales of one interval stacked (semitones, whole tones, minor and major thirds, fourths, tritones, fifths), seven-note scales, maqam and raga, and finally stranger ones — equal divisions of the octave into 7, 9, 11, 17, 19, 22 and 31, the harmonic and subharmonic series, and Bohlen-Pierce, which repeats at the twelfth instead of the octave. Chimes follow the weather strongly by default — they are what the wind plays.
-- Disabling a channel removes it from the soundscape without changing its stored controls. The Soundscape button in the player turns soundscapes on or off without changing its settings. Selecting a soundscape starts playing it; music is not required.
-- Hold right-click on a soundscape to export it as a \`.tds\` file. Soundscapes are independent of appearance layouts.
+- **Play or stop**: the Soundscape button in the music player; right-click it for the next one. **Volume**: Ambient.
+- **Choose and edit**: the Soundscapes view in the sidebar. Changes are kept in the soundscape; the plus copies it. The dock works like the [layout dock]($#presets).
+- **Channels**: click to show, hold to turn on, hold right-click to turn off, right-click to solo, scroll for volume. On touch: hold to turn on or off, double-tap to solo, drag for volume.
+- **Environment**: the sliders above the channels act on all of them. **Size** and **foliage** make the place, **brilliance** the clarity, **amount** how much of the place you hear, **gusts** and **pace** the weather. A channel's **weather** slider sets how much it follows the weather.
+- Every channel has a **distance**; most have a **pan**. Layer one kind near and far for depth.
+- **Export a soundscape**: hold right-click on it.
 
 ### [Data](#data-synchronization-settings)
-
-> **Where?**
-> Options → Advanced → Data.
-
-*Note import and backup, and exporting or importing your whole appearance setup.*
-
-- [Export All Notes](${guideLink('IMPORT-BACKUP', 'export-all-notes')}), [Import](${guideLink('IMPORT-BACKUP', 'import')}) notes and [Back Up All Notes](${guideLink('IMPORT-BACKUP', 'back-up-all-notes')}).
-- Export or import your custom appearance presets as a \`.tdl\` file, so you can carry your look between machines.
-- Export or import your custom soundscapes as a \`.tds\` file the same way. Importing adds them after your own, skipping any you already have.
+- Options → Advanced → Data: [Export All Notes](${guideLink('IMPORT-BACKUP', 'export-all-notes')}), [Import](${guideLink('IMPORT-BACKUP', 'import')}), [Back Up All Notes](${guideLink('IMPORT-BACKUP', 'back-up-all-notes')}), and import or export of layouts (\`.tdl\`) and soundscapes (\`.tds\`).
 
 ### [Debugging](#debugging)
-
-> **Where?**
-> Options → Advanced → Debugging.
-
-*Tools for diagnosing problems, not intended for everyday use.*
-
-- A button opens a detached DevTools window.
+- Options → Advanced → Debugging: opens developer tools.
 `,
   `## Music Player
 
-> **Where?**
-> The window-controls bar, center.
+In the middle of the window's top bar.
 
-*A built-in music player with your own music sets and an independent soundscape switch.*
+- **Play or pause**: **Music**.
+- **Skip forward**: right-click **Music**. **Next song**: hold right-click on **Music**.
+- **Volume**: the **Music** and **Ambient** sliders.
+- **Filter what plays**: **Filter**, then type; it applies when you leave the field. \`Esc\` empties it.
+- **Soundstage**: **Headphones**, then pick one.
+- **Visualizer**: the eye, or \`F5\`. See [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}).
+- **Soundscape**: see [Soundscapes](${guideLink('APPEARANCE-SETTINGS', 'soundscapes')}).
+- **Media keys** and your system's media controls work too.
 
-- **Top row** — **Music** plays and pauses (with no set playing, it opens the Songs view instead); right-click it to skip four minutes ahead, or to the next song once less than six minutes are left, and hold right-click to play the next song wherever you are. **Filter** shows the song filter and **Headphones** the soundstages in the second row; the two take turns, and pressing the one showing brings the volume sliders back. **Visualizer**, in the centre, opens and closes the visualizer, as **F5** does. **Soundscape** plays and stops the soundscape; right-click it for the next one.
-- **Second row** — the **Music** and **Ambient** volume sliders. Moving the music volume also unmutes.
-- **Soundstages** — your first six soundstages (the five factory ones, then your first own). Click one to play the music through it.
-- **Filter** — the same filter as the visualizer's: type to narrow what plays; it applies when you leave the field (Enter), and Escape empties it. It stays in force while the field is hidden.
-- **Choosing what plays** — in the Music Library: click a set's icon to add it to what plays or take it out again, **hold** it to play from that set alone; a playing set is pressed in. The plus among the icons adds a set and dragging an icon reorders them. Right-click an icon to open its songs below; the open set has a dashed border. Click a song to play it; the song playing plays to its end whatever you change, and the next one comes from what is playing then. The open set's row below the songs renames it by right-click and adds songs with its file and folder buttons. Click its icon to choose another from the icons that replace the songs, filtered by the filter field; Escape or any view button leaves without choosing, and holding the icon restores the original. Hold its X to delete the set; a factory set cannot be deleted, so the hold restores it as shipped instead: empty, with its own name and icon. Hover a heading or a divider and hold the X that replaces its count to take all its songs out of the set, or the X that takes a hovered song's duration to take out that one.
-- **Empty sets** — an empty set cannot play; a set starts playing when its first song is added.
-- **Songs in sets** — a song can be in several sets. Removing it from one keeps it in your library while another set still holds it.
-- **Going back** — in the visualizer, a scrub that runs backward past the start of a song steps back through the last hundred songs played.
-- **Media keys and the system player** — your keyboard's media keys and your system's media controls drive this player and show the current song; next and previous step through the songs the visualizer lists.
-- **Mini mode** — the expand button on the player's right leaves mini mode and maximizes the window (its arrows point that way). Your previous window size isn't lost: un-maximizing returns to it.
-- **Resuming across restarts** — if music was playing when the app was last closed, it resumes on launch (same song and position), fading in over 10 seconds from silence and full reverb up to your usual volume/reverb settings.
+### Sets
+- **Choose what plays**: in the Songs view, click a set's icon to add or remove it; hold it to play that set alone.
+- **Open a set's songs**: right-click its icon. Click a song to play it.
+- **New set**: the plus. **Reorder**: drag the icons.
+- **Add songs**: the file and folder buttons below the songs, or drop files.
+- **Rename**: right-click the set's name. **Change its icon**: click it.
+- **Delete a set**: hold its X. **Remove songs**: hold the X on a song or a heading.
+- A song can be in several sets.
 `,
   `## Data Storage
 
-> **Where?**
-> Not a UI element — describes where your files live on disk.
-
-*Everything Thockdown stores is local to your machine.*
-
-- Notes, stored images, tags, ordering and snapshots live in a local database. App preferences are kept separately.
-- Nothing leaves your machine unless you explicitly export, sync to, or import from another location yourself.
+- Everything stays on your computer. Nothing leaves it unless you export it.
 `,
 ]
 
