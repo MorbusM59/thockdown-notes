@@ -333,7 +333,7 @@ import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
 import { CategoryTree, type CategoryTreeFolds } from './components/CategoryTree'
 import { areStringArraysEqual } from './shared/stringArrays'
 import { buildTagHierarchy, type TagPrimaryGroup } from './shared/tagHierarchy'
-import { importDroppedImageFiles, registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
+import { applyBackupRenames, importDroppedImageFiles, openNoteEditors, registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
 import type { ImageLibraryView } from './imageLibrary/imageLibraryViews'
 import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
 import { clamp } from '@thockdown/interaction/clamp'
@@ -1660,6 +1660,8 @@ function App() {
   // view's. The two views hold the same four sections, which is why this is
   // one flag beside the mode rather than four more modes.
   const [sidebarShowsImages, setSidebarShowsImages] = useState(false)
+  /** A Markdown backup's id conflicts rename the existing notes and images rather than the incoming ones (shared/notesBackup.ts). */
+  const [importRenamesExisting, setImportRenamesExisting] = useState(false)
   // The section each of those two views was on when it was last left; the
   // view on screen reads its section from `sidebarMode`
   // (shared/sidebarSections.ts).
@@ -3327,8 +3329,10 @@ function App() {
       adventure: overrides && 'adventure' in overrides ? overrides.adventure ?? null : adventureSave,
       allowRemoteImages: overrides?.allowRemoteImages ?? allowRemoteImages,
       sidebarShowsImages: effectiveShowsImages,
+      importRenamesExisting,
     }
   }, [
+    importRenamesExisting,
     documentFindOptions,
     archiveUnfoldedPrimary,
     archiveUnfoldedSecondary,
@@ -4106,7 +4110,10 @@ ${markdownHtml}
 
     setFileSyncStatus('Importing selected note files or folders...')
     try {
-      const result = await fileSyncApi.importNotes()
+      // Listed before the import: what it renames in them comes back as edits.
+      const editors = openNoteEditors()
+      const result = await fileSyncApi.importNotes({ openNoteIds: editors.map((editor) => editor.noteId), renameExisting: importRenamesExisting })
+      applyBackupRenames(editors, result.renamedNotes ?? [], result.renamedImages ?? [])
       await refreshNotes()
       if (result.errors && result.errors.length > 0) {
         setFileSyncStatus(`Imported ${result.imported} files with ${result.errors.length} errors.`)
@@ -4116,7 +4123,7 @@ ${markdownHtml}
     } catch (error) {
       setFileSyncStatus(`Import failed: ${String(error)}`)
     }
-  }, [persistenceReady, refreshNotes])
+  }, [importRenamesExisting, persistenceReady, refreshNotes])
 
   const backupDatabase = useCallback(async () => {
     const fileSyncApi = window.thockdownFileSync
@@ -5182,6 +5189,7 @@ ${markdownHtml}
             setKeystrokeSoundPreferences(sanitizeKeystrokeSoundPreferences(appState.menu.keystrokeSoundPresets))
             setRemoteImagesAllowed(appState.menu.allowRemoteImages === true)
             setSidebarShowsImages(appState.menu.sidebarShowsImages === true)
+            setImportRenamesExisting(appState.menu.importRenamesExisting === true)
             if (typeof appState.menu.musicVolume === 'number') setMusicVolume(appState.menu.musicVolume)
             if (typeof appState.menu.musicReverbAmount === 'number') setMusicReverbAmount(appState.menu.musicReverbAmount)
             if (typeof appState.menu.musicReverbRoom === 'number') setMusicReverbRoom(appState.menu.musicReverbRoom)
@@ -8682,6 +8690,8 @@ ${markdownHtml}
                         editorGlyphPaddingPx={editorGlyphPaddingPx}
                         setEditorGlyphPaddingPx={setEditorGlyphPaddingPx}
                         importNotes={importNotes}
+                        importRenamesExisting={importRenamesExisting}
+                        onImportRenamesExistingChange={setImportRenamesExisting}
                         backupDatabase={backupDatabase}
                         exportLayoutsTdl={exportLayoutsTdl}
                         importLayoutsTdl={importLayoutsTdl}

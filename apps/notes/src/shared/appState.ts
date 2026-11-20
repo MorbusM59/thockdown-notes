@@ -196,6 +196,8 @@ export interface PersistedMenuState {
   textureMaterials?: TextureMaterialsBySurface;
   /** The sidebar's list sections show the Images view rather than the Notes view (imageLibrary/). */
   sidebarShowsImages?: boolean;
+  /** Reading a Markdown backup back renames the existing notes and images on an id conflict (`-OLD`) rather than the incoming ones (`-NEW`); shared/notesBackup.ts. */
+  importRenamesExisting?: boolean;
   /** Remote (http/https) images in notes load. Off unless the reader held the toggle on; see src/shared/remoteImages.ts. */
   allowRemoteImages?: boolean;
   /** The keystroke sound presets (shared/keystrokeSounds.ts); the live settings are the active one's. */

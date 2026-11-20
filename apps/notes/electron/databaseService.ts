@@ -4766,6 +4766,29 @@ export class DatabaseService {
     })();
   }
 
+  /** Every image's former names (image_aliases), by the image they now lead to. */
+  listImageAliases(): Map<string, string[]> {
+    const aliases = new Map<string, string[]>();
+    for (const row of this.requireDb().prepare('SELECT oldId, imageId FROM image_aliases ORDER BY oldId').all() as Array<{ oldId: string; imageId: string }>) {
+      const list = aliases.get(row.imageId) ?? [];
+      list.push(row.oldId);
+      aliases.set(row.imageId, list);
+    }
+    return aliases;
+  }
+
+  /** Gives an image former names back (a restored backup); a name another image now has, or an alias already has, is left alone. */
+  addImageAliases(id: string, oldIds: readonly string[]): void {
+    const imageId = normalizeImageId(id);
+    const db = this.requireDb();
+    if (!imageId || !db.prepare('SELECT 1 FROM images WHERE id = ?').get(imageId)) return;
+    const insert = db.prepare('INSERT OR IGNORE INTO image_aliases (oldId, imageId) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM images WHERE id = ?)');
+    for (const raw of oldIds) {
+      const oldId = normalizeImageId(raw);
+      if (oldId && oldId !== imageId) insert.run(oldId, imageId, oldId);
+    }
+  }
+
   /** The ids of stored images a note's current text uses (the reference index). */
   listImageReferences(noteId: string): string[] {
     return (this.requireDb().prepare('SELECT imageId FROM image_refs WHERE noteId = ? ORDER BY imageId').all(noteId) as Array<{ imageId: string }>)

@@ -576,6 +576,8 @@ export interface SidebarOptionsPanelProps {
   setEditorGlyphPaddingPx: (value: number) => void
 
   importNotes: () => void
+  importRenamesExisting: boolean
+  onImportRenamesExistingChange: (value: boolean) => void
   backupDatabase: () => void
   exportLayoutsTdl: () => Promise<void>
   importLayoutsTdl: () => Promise<void>
@@ -812,6 +814,8 @@ export function SidebarOptionsPanel({
   editorGlyphPaddingPx,
   setEditorGlyphPaddingPx,
   importNotes,
+  importRenamesExisting,
+  onImportRenamesExistingChange,
   backupDatabase,
   exportLayoutsTdl,
   importLayoutsTdl,
@@ -3125,17 +3129,8 @@ export function SidebarOptionsPanel({
         heading="Data"
         iconClass="fa-database"
       >
-        <OptionsSubsectionLabel>Notes</OptionsSubsectionLabel>
-<div className="options-loadout-grid" role="group" aria-label="Note import and backup">
-          <button
-            type="button"
-            className="btn-icon options-color-swatch options-loadout-btn"
-            onClick={importNotes}
-            data-tooltip="Import notes from files or folders"
-            aria-label="Import notes from files or folders"
-          >
-            <span className="fa-solid fa-file-import" aria-hidden="true" />
-          </button>
+        <OptionsSubsectionLabel>Database</OptionsSubsectionLabel>
+        <div className="options-loadout-grid" role="group" aria-label="Database backup">
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
@@ -3146,19 +3141,39 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-database" aria-hidden="true" />
           </button>
         </div>
-        {/* EXPORT: every note as plain Markdown, in folders by primary tag,
-            secondary tag and chapter family (shared/notesMarkdownExport.ts),
-            readable without the app. */}
-        <OptionsSubsectionLabel>Export</OptionsSubsectionLabel>
-        <div className="options-loadout-grid" role="group" aria-label="Note export">
+        {/* MARKDOWN: every note and image as plain files in folders by tag
+            (shared/notesBackup.ts), readable without the app; importing its
+            thockdown.json reads it back. Plain .md/.txt files import as new
+            notes through the same button. */}
+        <OptionsSubsectionLabel>Markdown</OptionsSubsectionLabel>
+        <div className="options-loadout-grid" role="group" aria-label="Markdown export and import">
           <button
             type="button"
             className="btn-icon options-color-swatch options-loadout-btn"
             onClick={() => { void window.thockdownExport?.exportAllNotesMarkdown() }}
-            data-tooltip="Export all notes as Markdown"
-            aria-label="Export all notes as Markdown"
+            data-tooltip="Export all notes and images"
+            aria-label="Export all notes and images"
           >
-            <span className="fa-brands fa-markdown" aria-hidden="true" />
+            <span className="fa-solid fa-file-export" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={importNotes}
+            data-tooltip="Import notes or a backup"
+            aria-label="Import notes or a backup"
+          >
+            <span className="fa-solid fa-file-import" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${importRenamesExisting ? ' is-active' : ''}`}
+            onClick={() => onImportRenamesExistingChange(!importRenamesExisting)}
+            data-tooltip={importRenamesExisting ? 'Rename existing ids on conflict' : 'Rename imported ids on conflict'}
+            aria-label={importRenamesExisting ? 'Rename existing ids on conflict' : 'Rename imported ids on conflict'}
+            aria-pressed={importRenamesExisting}
+          >
+            <span className="fa-solid fa-right-left" aria-hidden="true" />
           </button>
         </div>
         <OptionsSubsectionLabel>Layouts</OptionsSubsectionLabel>

@@ -1,6 +1,8 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { IMAGE_DRAG_MIME_TYPE, IMAGE_DRAG_TRASHED_MIME_TYPE, imageReferenceRenameEdits, normalizeImageId, type ImageRenameResult, type StoredImageSummary } from '../shared/images'
 import { invalidateStoredImage, onStoredImagesChanged } from '../shared/storedImages'
+import { referenceRenameEdits } from '../shared/notesBackup'
+import { normalizeAssignedIdInput } from '../shared/assignedIds'
 
 // THE IMAGE LIBRARY'S LIST: every stored image, as the main process answers
 // (listImages), held in one module store. It is re-asked whenever something
@@ -145,4 +147,31 @@ export async function renameImage(id: string, rawNewId: string): Promise<ImageRe
   invalidateStoredImage(result.id)
   invalidateImageLibrary()
   return result
+}
+
+/**
+ * Applies ids a restored backup renamed (shared/notesBackup.ts) to the notes
+ * open here, which the main process left alone for the same reason a rename
+ * leaves them (renameImage above): each gets the change as one edit.
+ */
+export function applyBackupRenames(openEditors: OpenNoteEditor[], renamedNotes: ReadonlyArray<[string, string]>, renamedImages: ReadonlyArray<[string, string]>): void {
+  const noteRenames = new Map(renamedNotes.map(([from, to]) => [normalizeAssignedIdInput(from), to]))
+  const imageRenames = new Map(renamedImages)
+  if (noteRenames.size === 0 && imageRenames.size === 0) return
+  for (const editor of openEditors) {
+    const text = editor.readText()
+    const edits = referenceRenameEdits(text, noteRenames, imageRenames)
+    if (edits.length > 0) editor.applyEdit(edits, text)
+  }
+  for (const [from, to] of renamedImages) {
+    host.onImageRenamed(from, to, [])
+    invalidateStoredImage(from)
+    invalidateStoredImage(to)
+  }
+  invalidateImageLibrary()
+}
+
+/** The notes open in this window, as the host lists them. */
+export function openNoteEditors(): OpenNoteEditor[] {
+  return host.openNoteEditors()
 }

@@ -579,6 +579,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     // Strictly true: anything else, absence included, keeps the app local.
     allowRemoteImages: input?.allowRemoteImages === true,
     sidebarShowsImages: input?.sidebarShowsImages === true,
+    importRenamesExisting: input?.importRenamesExisting === true,
     keystrokeSoundPresets: input?.keystrokeSoundPresets === undefined ? undefined : sanitizeKeystrokeSoundPreferences(input.keystrokeSoundPresets),
     musicVolume: sanitizeOptionalNumber(input?.musicVolume),
     musicReverbAmount: sanitizeOptionalNumber(input?.musicReverbAmount),

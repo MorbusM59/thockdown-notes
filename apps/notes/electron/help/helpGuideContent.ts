@@ -698,25 +698,38 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 `,
   `## Import & Backup
 
+### [Export All Notes](#export-all-notes)
+
+> **Where?**
+> Options → Advanced → Data → Markdown → the export icon.
+
+*Writes every note and image into a new folder as plain files that any Markdown reader can open.*
+
+- \`notes\` holds the notes in folders by primary and secondary tag, archived ones under \`Archive\`. A note with chapters gets a folder of its own holding the note and its chapters.
+- \`images\` holds the image library, in folders by tag the same way.
+- Every file is named by its id: \`$ID.md\` for a note, \`§ID.md\` for a chapter, \`&ID.png\` for an image. Images inside notes point at their files, so other programs show them.
+- \`thockdown.json\` records everything else: tag order, chapter order, dates. Trashed notes and Time Machine history are not included.
+
 ### [Import](#import)
 
 > **Where?**
-> Options → Advanced → Data → the import icon.
+> Options → Advanced → Data → Markdown → the import icon.
 
-*Brings Markdown files from anywhere on your computer into Thockdown as regular notes.*
+*Brings Markdown files from anywhere on your computer into Thockdown as regular notes, or restores an exported folder.*
 
-- Opens a file/folder picker; you choose exactly what gets imported.
-- The files are copied in. Thockdown keeps every note in its own database, not as files on disk, so later changes to those files are not picked up.
+- Pick \`.md\` or \`.txt\` files to add each as a new note. The files are copied in; later changes to them are not picked up.
+- Pick an exported folder's \`thockdown.json\` to restore that whole folder: notes with their ids, tags, chapters and dates, and the images.
+- Notes and images already identical to yours are skipped. When an id is already taken by something different, the toggle beside the import icon decides which side is renamed: the imported one gets \`-NEW\`, or yours gets \`-OLD\`. Links follow the rename. Ids an export holds twice are numbered \`-1\`, \`-2\`, and a numbered id like \`$12\` just takes the next free number.
 
 ### [Back Up All Notes](#back-up-all-notes)
 
 > **Where?**
-> Options → Advanced → Data → the database icon.
+> Options → Advanced → Data → Database → the database icon.
 
 *Saves a copy of the database, which holds every note, its chapters, tags and history, and shows it in your file explorer.*
 
 - A copy is also kept automatically each time the app starts, for the last three starts, in the same \`backups\` folder.
-- To get notes out as files other programs can read, use [Export to Markdown](#export-to-markdown).
+- To get notes out as files other programs can read, use [Export All Notes](#export-all-notes).
 `,
   `## Export
 
@@ -975,7 +988,7 @@ ${shortcutTable()}
 
 *Note import and backup, and exporting or importing your whole appearance setup.*
 
-- [Import](${guideLink('IMPORT-BACKUP', 'import')}) notes and [Back Up All Notes](${guideLink('IMPORT-BACKUP', 'back-up-all-notes')}).
+- [Export All Notes](${guideLink('IMPORT-BACKUP', 'export-all-notes')}), [Import](${guideLink('IMPORT-BACKUP', 'import')}) notes and [Back Up All Notes](${guideLink('IMPORT-BACKUP', 'back-up-all-notes')}).
 - Export or import your custom appearance presets as a \`.tdl\` file, so you can carry your look between machines.
 - Export or import your custom soundscapes as a \`.tds\` file the same way. Importing adds them after your own, skipping any you already have.
 

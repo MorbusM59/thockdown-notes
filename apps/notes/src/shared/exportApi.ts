@@ -12,8 +12,8 @@ export interface ExportApi {
   exportPdf(folderPath: string, fileName: string, htmlContent?: string): Promise<ExportResult>;
   exportMarkdown(folderPath: string, fileName: string, markdownText: string): Promise<ExportResult>;
   /**
-   * Asks for a folder and writes every note into it as plain Markdown, in a
-   * new dated folder laid out by `notesMarkdownExport.ts`, then shows it.
+   * Asks for a folder and writes the Markdown backup into a new dated folder
+   * there (every note and image, laid out by `notesBackup.ts`), then shows it.
    * Resolves `ok: false` without an error when the reader cancels.
    */
   exportAllNotesMarkdown(): Promise<ExportResult>;

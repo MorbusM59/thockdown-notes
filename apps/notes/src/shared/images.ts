@@ -203,7 +203,7 @@ const CODE_SPAN = /(`+)(?:[^`\n]|\n(?!\n)|`(?!\1))*?\1(?!`)/g
  * is not taken for one. Fenced blocks are not recognised and still count:
  * that only keeps an image out of the archive, the harmless direction.
  */
-function withoutCodeSpans(text: string): string {
+export function withoutCodeSpans(text: string): string {
   if (!text.includes('`')) return text
   return text.replace(CODE_SPAN, (span) => ' '.repeat(span.length))
 }
@@ -222,24 +222,32 @@ export function imageReferencesIn(rawText: string): string[] {
 }
 
 /**
- * The edits that point every image reference to `fromId` in `text` at `toId`
- * instead (empty when it has none), in the text's own coordinates. Matches
- * the way imageReferencesIn finds them, so a rename reaches exactly what the
- * reference index counted.
+ * The edits that point every image reference in `text` somewhere else: each
+ * reference's normalized id goes to `rewrite`, and a string answered replaces
+ * the id where it is written (null leaves it). In the text's own coordinates,
+ * ascending. Matches the way imageReferencesIn finds references, so a rewrite
+ * reaches exactly what the reference index counted.
  */
-export function imageReferenceRenameEdits(text: string, fromId: string, toId: string): Array<{ from: number; to: number; insert: string }> {
-  const from = normalizeImageId(fromId)
-  if (!from) return []
+export function imageReferenceEditsBy(text: string, rewrite: (id: string) => string | null): Array<{ from: number; to: number; insert: string }> {
   const edits: Array<{ from: number; to: number; insert: string }> = []
   // Positions are the same in both: the spans are blanked, not removed.
   const scanned = withoutCodeSpans(text)
   IMAGE_REFERENCE_WITH_PREFIX.lastIndex = 0
   for (let match = IMAGE_REFERENCE_WITH_PREFIX.exec(scanned); match; match = IMAGE_REFERENCE_WITH_PREFIX.exec(scanned)) {
-    if (normalizeImageId(match[2]) !== from) continue
+    const id = normalizeImageId(match[2])
+    const insert = id ? rewrite(id) : null
+    if (insert === null) continue
     const at = match.index + match[1].length
-    edits.push({ from: at, to: at + match[2].length, insert: toId })
+    edits.push({ from: at, to: at + match[2].length, insert })
   }
   return edits
+}
+
+/** The edits that point every image reference to `fromId` in `text` at `toId` instead (empty when it has none). */
+export function imageReferenceRenameEdits(text: string, fromId: string, toId: string): Array<{ from: number; to: number; insert: string }> {
+  const from = normalizeImageId(fromId)
+  if (!from) return []
+  return imageReferenceEditsBy(text, (id) => (id === from ? toId : null))
 }
 
 /** `text` with imageReferenceRenameEdits applied, or null when there was nothing to rename. */
