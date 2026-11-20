@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS, BEAT_DELAY_OFFSET_MS } from '../shared/beatSettings'
+import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '../shared/beatSettings'
 import { CALIBRATION_MIN_TAPS, CALIBRATION_PERIOD_SEC, delayForLag, estimateLag, judgeCalibration } from './latencyCalibration'
 
 const P = CALIBRATION_PERIOD_SEC
@@ -29,10 +29,10 @@ describe('estimateLag', () => {
 })
 
 describe('delayForLag', () => {
-  it('inverts heardLagSec: output latency plus offset plus the setting is the lag', () => {
+  it('is what the audio path adds beyond the reported latency, without the visual offset', () => {
     const latency = 0.21
     for (const setting of [0, 120, 333, 500]) {
-      const lag = latency + (BEAT_DELAY_OFFSET_MS + setting) / 1000
+      const lag = latency + setting / 1000
       expect(delayForLag(((lag % P) + P) % P, latency)).toBe(setting)
     }
   })

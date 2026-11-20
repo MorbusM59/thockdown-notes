@@ -10,8 +10,8 @@
  * of reference the pulse is drawn in, whatever the element's position, the
  * output buffer and the device add up to, and no relation between the audio
  * clock and the page's clock is assumed: the tap's time on the listener clock
- * minus the click's media time IS the lag the pulse has to be drawn with
- * (`heardLagSec`), and the setting is solved from it.
+ * minus the click's media time is the lag the SOUND has on this device; the
+ * setting is solved from it (`delayForLag`), and `heardLagSec` adds the built-in visual offset on top.
  *
  * The reader's own anticipation (people tap a little ahead of a steady beat)
  * is measured with it, deliberately: what is wanted is the pulse landing
@@ -22,7 +22,7 @@
  * click track plays.
  */
 
-import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS, BEAT_DELAY_OFFSET_MS } from '../shared/beatSettings'
+import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '../shared/beatSettings'
 import { connectToOutput, resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import { outputLatencySec } from './musicBeat'
 import { SmoothClock } from './smoothClock'
@@ -99,15 +99,20 @@ export function estimateLag(lags: readonly number[], period: number = CALIBRATIO
 }
 
 /**
- * The setting that draws the pulse `lagSec` after the graph handles a sample:
- * `heardLagSec` is the output latency plus the built-in offset plus the
- * setting, solved for the setting. A lag is only known modulo the beat, so the
+ * The setting for a device whose sound reaches the reader `lagSec` after the
+ * graph handles it. The taps measure the AUDIO path only, and the setting is
+ * what that path adds beyond the latency the audio stack reports. The
+ * built-in offset (`BEAT_DELAY_OFFSET_MS`) is not part of it: it is the same
+ * on every device, set by ear on a wired headset where the taps agree with
+ * the reported latency to within a few milliseconds, so it corrects the
+ * VISUAL side (how late a drawn hit is perceived) and stays on top of
+ * whatever the taps find. A lag is only known modulo the beat, so the
  * one whole-beat shift that lands in the setting's range is taken (the period
  * is wider than the range, so there is one), then clamped for a device beyond it.
  */
 export function delayForLag(lagSec: number, outputLatency: number, period: number = CALIBRATION_PERIOD_SEC): number {
   const centre = (BEAT_DELAY_MIN_MS + BEAT_DELAY_MAX_MS) / 2
-  const raw = (lagSec - outputLatency) * 1000 - BEAT_DELAY_OFFSET_MS
+  const raw = (lagSec - outputLatency) * 1000
   const shifted = centre + wrapCentred(raw - centre, period * 1000)
   return Math.round(Math.max(BEAT_DELAY_MIN_MS, Math.min(BEAT_DELAY_MAX_MS, shifted)))
 }
