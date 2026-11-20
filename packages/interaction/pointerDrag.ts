@@ -59,7 +59,7 @@
 // starts and are untouched: they remain the browser's own drag events.
 
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { armHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from './holdTiming'
+import { armTouchDragHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from './holdTiming'
 import { holdTouchPanning } from './touchInput'
 import { beginCursorHold, endCursorHold } from './cursorHoldFeedback'
 
@@ -130,8 +130,7 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
 
   const isTouch = event.pointerType === 'touch'
   let cancelTouchHold: (() => void) | null = null
-  let pickedUp = false
-  let releasePanning: (() => void) | null = null
+  let isPickedUp = () => false
 
   let dataTransfer: DataTransfer | null = null
   const showsOnCursor = source.getAttribute(DRAG_PICTURE_ATTRIBUTE) === 'cursor'
@@ -212,7 +211,7 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
       if (!hasLeftHoldGrace(origin, moveEvent)) return
       // A finger that travels before it was picked up is scrolling, and one
       // whose press a hold of the source's own already claimed was that hold.
-      if (isTouch && (!pickedUp || holdCompletedDuringPress(pointerId))) {
+      if (isTouch && (!isPickedUp() || holdCompletedDuringPress(pointerId))) {
         finish(false)
         return
       }
@@ -256,7 +255,6 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     window.removeEventListener('keydown', onKeyDown, true)
     if (activeDragCancel === cancel) activeDragCancel = null
     cancelTouchHold?.()
-    releasePanning?.()
     if (!dataTransfer) return
 
     ghost?.remove()
@@ -282,11 +280,33 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
   window.addEventListener('keydown', onKeyDown, true)
 
   if (isTouch) {
-    cancelTouchHold = armHold(() => {
-      cancelTouchHold = null
-      pickedUp = true
-      releasePanning = holdTouchPanning()
-    }, HOLD_CONFIRM_MS, { isDragPickup: true })
+    const pickup = armTouchPickup()
+    cancelTouchHold = pickup.release
+    isPickedUp = pickup.isPickedUp
+  }
+}
+
+/**
+ * A FINGER PICKS UP BY HOLDING: the one rule (module comment) for every
+ * finger drag, a drag source's here and a drag of the app's own (the slot
+ * divider). Arms a hold of `HOLD_CONFIRM_MS` on the current press; once it
+ * completes the touch is kept from panning, until `release`. A drag that
+ * starts before `isPickedUp()` is a swipe, and is the caller's to abandon.
+ */
+export function armTouchPickup(): { isPickedUp: () => boolean; release: () => void } {
+  let pickedUp = false
+  let releasePanning: (() => void) | null = null
+  const cancelHold = armTouchDragHold(() => {
+    pickedUp = true
+    releasePanning = holdTouchPanning()
+  })
+  return {
+    isPickedUp: () => pickedUp,
+    release: () => {
+      cancelHold()
+      releasePanning?.()
+      releasePanning = null
+    },
   }
 }
 

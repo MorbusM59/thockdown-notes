@@ -335,7 +335,7 @@ import { areStringArraysEqual } from './shared/stringArrays'
 import { buildTagHierarchy, type TagPrimaryGroup } from './shared/tagHierarchy'
 import { applyBackupRenames, importDroppedImageFiles, openNoteEditors, registerImageLibraryHost } from './imageLibrary/imageLibraryStore'
 import type { ImageLibraryView } from './imageLibrary/imageLibraryViews'
-import { armPointerDrag } from '@thockdown/interaction/pointerDrag'
+import { armPointerDrag, armTouchPickup } from '@thockdown/interaction/pointerDrag'
 import { clamp } from '@thockdown/interaction/clamp'
 import { stableStringify } from './shared/stableStringify'
 
@@ -6134,8 +6134,13 @@ ${markdownHtml}
     const startRightWidthPx = rightEl.getBoundingClientRect().width
     const combinedWidthPx = startLeftWidthPx + startRightWidthPx
     const startClientX = event.clientX
+    // A finger resizes once it has held the divider (pointerDrag.ts's
+    // armTouchPickup, the rule every finger drag shares); before that its
+    // travel is nobody's.
+    const touchPickup = event.pointerType === 'touch' ? armTouchPickup() : null
 
     const handleMouseMove = (moveEvent: globalThis.PointerEvent) => {
+      if (touchPickup && !touchPickup.isPickedUp()) return
       const deltaX = moveEvent.clientX - startClientX
       const nextLeftWidthPx = clamp(startLeftWidthPx + deltaX, SLOT_MIN_WIDTH_PX, combinedWidthPx - SLOT_MIN_WIDTH_PX)
       const nextRightWidthPx = combinedWidthPx - nextLeftWidthPx
@@ -6144,6 +6149,7 @@ ${markdownHtml}
     }
 
     const handleMouseUp = () => {
+      touchPickup?.release()
       window.removeEventListener('pointermove', handleMouseMove)
       window.removeEventListener('pointerup', handleMouseUp)
       window.removeEventListener('pointercancel', handleMouseUp)

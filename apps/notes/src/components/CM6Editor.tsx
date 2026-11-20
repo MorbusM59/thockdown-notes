@@ -24,15 +24,11 @@ import { imageMarkdown, isImageFile } from '../shared/images';
 import { droppedLibraryImage } from '../imageLibrary/imageLibraryStore';
 import { malformedImageTitlesOnLine, resolveImageSelectionStep } from '../editor/MarkdownImageTransforms';
 import { hasTravelledDragThreshold } from '@thockdown/interaction/pointerDrag';
-import { createRowWheel } from '../scroll/rowWheel';
+import { createRowWheel, fingerCoastMinGapMs } from '../scroll/rowWheel';
 import { appendWheelTrace, isWheelTraceOn } from '../scroll/wheelTrace';
 import { getWheelSpinEffectiveThresholdMs } from '../scroll/wheelSpin';
 import { beginFingerPan, moveFingerPan, releaseFingerPan, type FingerPan } from '../scroll/fingerPan';
 import { TOUCH_SLOP_PX } from '@thockdown/interaction/touchGesture';
-import {
-  CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER,
-  resolveApexSpeedPxPerSecFromCurrentParams,
-} from '@thockdown/interaction/NonQuantizedSmoothScroll';
 import { createPageKeys, type PageKeys } from '../scroll/pageKeys';
 import { quantizeScrollTopToRow, scrollToQuantizedSmooth } from '../scroll/QuantizedSmoothScroll';
 import { cancelSmoothScroll, isSmoothScrollActive, onSmoothScrollArrival } from '@thockdown/interaction/smoothScrollRegistry';
@@ -572,7 +568,6 @@ function resolveCM6CaretTopInScroll(
 }
 
 const CARET_INSET_PX = 1;
-const EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER = CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER;
 
 /**
  * Alt-ArrowLeft/Right is reserved app-wide for switching editor sections
@@ -4666,12 +4661,9 @@ export function CM6Editor({
       const pan = fingerPan;
       fingerPan = null;
       if (event.type !== 'pointerup' || isEditScrollInteractionBlocked()) return;
-      // The fastest a coast may start: one row per row-height at the speed a
-      // held PageDown reaches (scroll/pageKeys.ts's release ramp).
       const lineHeightPx = lineHeightPxRef.current;
       const visibleRows = computeVisibleMiddleRows(view.scrollDOM.clientHeight, topBoundaryPxRef.current, bottomBoundaryPxRef.current, lineHeightPx);
-      const topSpeedPxPerSec = resolveApexSpeedPxPerSecFromCurrentParams(visibleRows * lineHeightPx) * EDITOR_PAGE_CONTINUOUS_SCROLL_APEX_MULTIPLIER;
-      const minGapMs = topSpeedPxPerSec > 0 ? (lineHeightPx / topSpeedPxPerSec) * 1000 : 0;
+      const minGapMs = fingerCoastMinGapMs(lineHeightPx, visibleRows * lineHeightPx);
       const coast = releaseFingerPan(pan, event.timeStamp, wheelSpinThresholdMs(), minGapMs);
       if (!coast) return;
       rowWheel.startCoast(coast.direction, coast.averageGapMs);

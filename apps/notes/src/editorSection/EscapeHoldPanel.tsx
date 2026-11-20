@@ -21,6 +21,8 @@ import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
 import type { EscapeHoldRingParams } from './escapeHoldRingLayout'
 import type { EscapeMenuContribution } from '../escapeMenu/escapeMenuContract'
 import { directionFromKey } from './escapeHoldDirection'
+import { angleAbout, offsetDeltaForAngle, offsetVelocity, swipeLanding } from './escapeHoldSwipe'
+import { installTouchSwipe, VELOCITY_WINDOW_MS, type SwipeSample } from '@thockdown/interaction/touchScroll'
 
 // Two staggered setTimeout delays, not rAF (see the doc comments on the
 // effect and handler that use these) -- setTimeout with different delays
@@ -701,6 +703,10 @@ export function EscapeHoldPanel({
     totalDurationSec: number,
     distance: number,
     onComplete: () => void,
+    // Told each position the leg draws, the last included (a swipe's carry
+    // sounds the slots it passes). Not the sampler's job: a later leg samples
+    // this one's sampler to splice from it.
+    onFrame?: (offset: number) => void,
   ) => {
     cancelDiscreteAnimation()
     const startSlot = rotationOffsetRef.current
@@ -718,6 +724,7 @@ export function EscapeHoldPanel({
       if (elapsedMs >= totalDurationMs) {
         rotationOffsetRef.current = startSlot + distance
         applyRotationOffsetToDom(rotationOffsetRef.current)
+        onFrame?.(rotationOffsetRef.current)
         discreteRafIdRef.current = null
         legSamplerRef.current = null
         onComplete()
@@ -726,6 +733,7 @@ export function EscapeHoldPanel({
 
       rotationOffsetRef.current = startSlot + sampler(elapsedMs / 1000)
       applyRotationOffsetToDom(rotationOffsetRef.current)
+      onFrame?.(rotationOffsetRef.current)
       discreteRafIdRef.current = requestAnimationFrame(animateFrame)
     }
 
@@ -1002,6 +1010,78 @@ export function EscapeHoldPanel({
     rotateOneStepRef.current(units < 0 ? -1 : 1)
   }, [])
   useNonPassiveWheel(ringRef, handleRingWheel)
+
+  /**
+   * A FINGER SWIPING THE RING TURNS THE DIAL (escapeHoldSwipe.ts): the cells
+   * follow the finger by angle while it is down, and at the lift the dial
+   * carries on by the finger's momentum to a whole slot, on the ring's own
+   * continuation curve -- the curve a key press splices in mid-turn, so the
+   * swipe and the keys move one dial. Which touches are swipes is
+   * touchScroll.ts's one rule: a tap on a cell stays the cell's, and a swipe
+   * that starts on one is taken from it. Every slot the dial passes plays
+   * the dial's own step, as an arrow key's would.
+   */
+  const swipeRef = useRef<{ angle: number; centreX: number; centreY: number; history: { offset: number; t: number }[] } | null>(null)
+  const playCrossings = (from: number, to: number) => {
+    const steps = Math.round(to) - Math.round(from)
+    for (let i = 0; i < Math.abs(steps); i += 1) void typingSoundManager.playRandomClick(dialStepVoice(steps > 0 ? 1 : -1))
+  }
+  const swipeHandlers = {
+    begin: (start: SwipeSample) => {
+      if (!isOpenRef.current || cellsRef.current.length === 0) return
+      // Whatever was turning stops where it is: the finger has the dial now.
+      cancelDiscreteAnimation()
+      const rect = ringRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const centreX = rect.left + rect.width / 2
+      const centreY = rect.top + rect.height / 2
+      swipeRef.current = { angle: angleAbout(start.x, start.y, centreX, centreY), centreX, centreY, history: [] }
+    },
+    move: (sample: SwipeSample) => {
+      const swipe = swipeRef.current
+      if (!swipe) return
+      const angle = angleAbout(sample.x, sample.y, swipe.centreX, swipe.centreY)
+      const before = rotationOffsetRef.current
+      const after = before + offsetDeltaForAngle(angle - swipe.angle, cellsRef.current.length)
+      swipe.angle = angle
+      rotationOffsetRef.current = after
+      applyRotationOffsetToDom(after)
+      playCrossings(before, after)
+      swipe.history.push({ offset: after, t: sample.t })
+      while (swipe.history.length > 2 && sample.t - swipe.history[0].t > VELOCITY_WINDOW_MS) swipe.history.shift()
+    },
+    end: (liftMs: number, lifted: boolean) => {
+      const swipe = swipeRef.current
+      swipeRef.current = null
+      const count = cellsRef.current.length
+      if (!swipe || count === 0) return
+      const last = swipe.history[swipe.history.length - 1]
+      // A finger that stopped before it lifted has asked for nothing more.
+      const velocity = lifted && last && liftMs - last.t <= VELOCITY_WINDOW_MS ? offsetVelocity(swipe.history) : 0
+      const start = rotationOffsetRef.current
+      const { target, durationSec } = swipeLanding(start, velocity, count, getRenderScrollTotalTimeSec())
+      lastAcceptedKeyTimeMsRef.current = performance.now()
+      pendingTargetSlotRef.current = target
+      setFocusedIndex(((target % count) + count) % count)
+      const plan = buildContinuationPlan(target - start, velocity, 0, durationSec)
+      let shown = start
+      playLeg((elapsedSec) => sampleContinuationPlan(plan, elapsedSec), plan.totalDurationSec, target - start, finalizeTopIndex, (position) => {
+        playCrossings(shown, position)
+        shown = position
+      })
+    },
+  }
+  const swipeHandlersRef = useRef(swipeHandlers)
+  swipeHandlersRef.current = swipeHandlers
+  useEffect(() => {
+    const ring = ringRef.current
+    if (!ring) return
+    return installTouchSwipe(ring, {
+      begin: (start) => swipeHandlersRef.current.begin(start),
+      move: (sample) => swipeHandlersRef.current.move(sample),
+      end: (_samples, liftMs, lifted) => swipeHandlersRef.current.end(liftMs, lifted),
+    })
+  }, [])
 
   /**
    * HOLDING SPACE PLAYS ON, at the mode's own rate, until the mode's own

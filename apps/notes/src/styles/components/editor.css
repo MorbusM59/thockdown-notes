@@ -847,6 +847,9 @@ html[data-beat-wash] .editor-section-column.is-active .editor-beat-wash.is-shown
 
 .editor-stage .editor-escape-hold-ring.is-visible {
   display: block;
+  /* A finger on the ring turns the dial (EscapeHoldPanel.tsx); left to the
+     browser it would pan and cancel the press. */
+  touch-action: none;
 }
 
 /* Centered label of whichever cell is focused/hovered (EscapeHoldPanel.tsx's

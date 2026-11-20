@@ -415,3 +415,10 @@
 .visualizer-scene.is-panels-hidden > .visualizer-exit {
   pointer-events: none;
 }
+
+/* A finger on a list turns it (scroll/rowWheel.ts's attachRowFingerPan); left
+   to the browser it would pan and cancel the press. */
+.visualizer-scene > .visualizer-song-list-hit,
+.visualizer-scene > .visualizer-bucket-hit {
+  touch-action: none;
+}

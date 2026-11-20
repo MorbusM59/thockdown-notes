@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { createRowWheel } from '../scroll/rowWheel'
+import { attachRowFingerPan, createRowWheel } from '../scroll/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { pressMusicSet } from '../sound/setPress'
@@ -176,12 +176,13 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
       returnHomeTimeout = null
     }
 
+    const scrollRows = (rows: number) => {
+      if (rows === 0) return false
+      stopTravel()
+      return setOffset(offset + rows)
+    }
     const wheel = createRowWheel({
-      scrollRows: (rows) => {
-        if (rows === 0) return false
-        stopTravel()
-        return setOffset(offset + rows)
-      },
+      scrollRows,
       isBlocked: () => maximumListOffset(orderedSets.length, slots.length) === 0,
     })
     const onEnter = () => {
@@ -189,12 +190,15 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
       clearReturnHomeTimeout()
       stopTravel()
     }
-    const onLeave = () => {
+    const onLeave = (event: PointerEvent) => {
       hovered = false
-      wheel.stop('left the list')
+      // A finger leaves on every lift, a swipe's included: its coast runs on
+      // until the return home below takes over.
+      if (event.pointerType !== 'touch') wheel.stop('left the list')
       clearReturnHomeTimeout()
       returnHomeTimeout = window.setTimeout(() => {
         returnHomeTimeout = null
+        wheel.stop('returning home')
         travelHome()
       }, LIST_RETURN_GRACE_MS)
     }
@@ -247,6 +251,12 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
       refresh()
     })
     hit.addEventListener('wheel', wheel.handleWheel, { passive: false })
+    // A finger swiping the list turns it a whole entry (two rows of boxes) at a time.
+    const detachFingerPan = attachRowFingerPan(hit, wheel, scrollRows, {
+      rowPx: () => boxPx * 2,
+      pagePx: () => hit.clientHeight,
+      isBlocked: () => maximumListOffset(orderedSets.length, slots.length) === 0,
+    })
     hit.addEventListener('pointerenter', onEnter)
     hit.addEventListener('pointerleave', onLeave)
     hit.addEventListener('pointerdown', onPress)
@@ -256,6 +266,7 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
       stopTravel()
       clearReturnHomeTimeout()
       wheel.stop('unmount')
+      detachFingerPan()
       hit.removeEventListener('wheel', wheel.handleWheel)
       hit.removeEventListener('pointerenter', onEnter)
       hit.removeEventListener('pointerleave', onLeave)

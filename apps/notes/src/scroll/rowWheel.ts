@@ -10,6 +10,9 @@
  * independent scrollers, and a spin in one has nothing to say about the other.
  */
 
+import { CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER, resolveApexSpeedPxPerSecFromCurrentParams } from '@thockdown/interaction/ScrollCurvePlan'
+import { installTouchSwipe } from '@thockdown/interaction/touchScroll'
+import { beginFingerPan, moveFingerPan, releaseFingerPan } from './fingerPan'
 import { createWheelNotchState, resolveWheelEventUnits, type WheelNotchState } from './wheelNotch'
 import { getWheelStepRows } from './wheelStep'
 import {
@@ -212,4 +215,55 @@ export function createRowWheel({ scrollRows, isBlocked, trace = null }: RowWheel
   }
 
   return { notchState: wheelNotchState, spinState: wheelSpinState, handleWheel, stop: stopWheelSpin, startCoast }
+}
+
+export interface RowFingerPanOptions {
+  /** The height of one row, in CSS px, read live. */
+  rowPx: () => number
+  /** How much of the surface is on screen, in CSS px, read at the lift: a page. */
+  pagePx: () => number
+  /** True while the surface may not scroll. */
+  isBlocked: () => boolean
+}
+
+/**
+ * A finger swiping `surface` turns its rows, as the edit view's does
+ * (scroll/fingerPan.ts: a row each time the finger has travelled a row, and
+ * a swipe still moving at the lift hands its rate to the wheel's coast).
+ * Which touches are swipes is `installTouchSwipe`'s one rule, so a tap stays
+ * the surface's own and a swipe that started on it is taken from it. The
+ * surface must be `touch-action: none`. Returns the uninstaller.
+ */
+export function attachRowFingerPan(surface: HTMLElement, wheel: RowWheel, scrollRows: RowWheelOptions['scrollRows'], options: RowFingerPanOptions): () => void {
+  let pan: ReturnType<typeof beginFingerPan> | null = null
+  return installTouchSwipe(surface, {
+    land: () => wheel.stop('finger landed'),
+    begin: (start) => {
+      pan = beginFingerPan(0, start.y, start.t)
+      pan.panning = true
+    },
+    move: (sample) => {
+      if (!pan || options.isBlocked()) return
+      const rows = moveFingerPan(pan, sample.y, sample.t, options.rowPx(), 0)
+      if (rows !== 0) scrollRows(rows, 'finger')
+    },
+    end: (_samples, liftMs, lifted) => {
+      const current = pan
+      pan = null
+      if (!current || !lifted || options.isBlocked()) return
+      const coast = releaseFingerPan(current, liftMs, getWheelSpinEffectiveThresholdMs(), fingerCoastMinGapMs(options.rowPx(), options.pagePx()))
+      if (coast) wheel.startCoast(coast.direction, coast.averageGapMs)
+    },
+  })
+}
+
+/**
+ * The fastest a finger's coast may start, as the gap between rows (ms): one
+ * row per row height at the speed a held PageDown reaches over a page of
+ * `pagePx` (scroll/pageKeys.ts's release ramp), so a flick never sends a
+ * surface off faster than the reader's own top scroll speed.
+ */
+export function fingerCoastMinGapMs(rowPx: number, pagePx: number): number {
+  const topSpeedPxPerSec = resolveApexSpeedPxPerSecFromCurrentParams(pagePx) * CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER
+  return topSpeedPxPerSec > 0 ? (rowPx / topSpeedPxPerSec) * 1000 : 0
 }

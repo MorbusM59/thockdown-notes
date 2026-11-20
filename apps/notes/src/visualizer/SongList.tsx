@@ -26,7 +26,8 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { createRowWheel } from '../scroll/rowWheel'
+import { hasLeftHoldGrace } from '@thockdown/interaction/holdTiming'
+import { attachRowFingerPan, createRowWheel } from '../scroll/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
 import { songListTitleText, type MusicSongEntry } from '../shared/audioPlayer'
@@ -197,12 +198,13 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       travel = requestAnimationFrame(step)
     }
 
+    const scrollRows = (rows: number) => {
+      if (rows === 0) return false
+      stopTravel()
+      return setOffset(offset + rows)
+    }
     const wheel = createRowWheel({
-      scrollRows: (rows) => {
-        if (rows === 0) return false
-        stopTravel()
-        return setOffset(offset + rows)
-      },
+      scrollRows,
       isBlocked: () => false,
     })
 
@@ -258,19 +260,40 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       returnHomeTimeout = null
       stopTravel()
     }
-    const onLeave = () => {
+    const onLeave = (event: PointerEvent) => {
       hovered = false
-      wheel.stop('left the list')
+      // A finger leaves on every lift, a swipe's included: its coast runs on
+      // until the return home below takes over.
+      if (event.pointerType !== 'touch') wheel.stop('left the list')
       if (returnHomeTimeout !== null) window.clearTimeout(returnHomeTimeout)
       returnHomeTimeout = window.setTimeout(() => {
         returnHomeTimeout = null
+        wheel.stop('returning home')
         travelHome()
       }, LIST_RETURN_GRACE_MS)
     }
     const onPress = (event: PointerEvent) => {
       if (event.button !== 0 || songs.length === 0) return
+      // A finger may be starting a swipe of the list: it plays on a lift
+      // inside the tap radius, and a swipe cancels it (touchScroll.ts).
+      if (event.pointerType === 'touch') {
+        const pointerId = event.pointerId
+        const origin = { pointerType: event.pointerType, screenX: event.screenX, screenY: event.screenY, clientX: event.clientX, clientY: event.clientY }
+        const end = (release: PointerEvent) => {
+          if (release.pointerId !== pointerId) return
+          window.removeEventListener('pointerup', end, true)
+          window.removeEventListener('pointercancel', end, true)
+          if (release.type === 'pointerup' && !hasLeftHoldGrace(origin, release)) play(event.clientY)
+        }
+        window.addEventListener('pointerup', end, true)
+        window.addEventListener('pointercancel', end, true)
+        return
+      }
+      play(event.clientY)
+    }
+    const play = (clientY: number) => {
       const rect = hit.getBoundingClientRect()
-      const row = Math.floor((event.clientY - rect.top) / boxPx)
+      const row = Math.floor((clientY - rect.top) / boxPx)
       if (row % 2 !== 0) return
       const slot = row / 2
       if (slot >= ring.length) return
@@ -282,6 +305,12 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       readNowPlaying().playFromPool(song.id)
     }
     hit.addEventListener('wheel', wheel.handleWheel, { passive: false })
+    // A finger swiping the list turns it a whole entry (two rows of boxes) at a time.
+    const detachFingerPan = attachRowFingerPan(hit, wheel, scrollRows, {
+      rowPx: () => boxPx * 2,
+      pagePx: () => hit.clientHeight,
+      isBlocked: () => false,
+    })
     hit.addEventListener('pointerenter', onEnter)
     hit.addEventListener('pointerleave', onLeave)
     hit.addEventListener('pointerdown', onPress)
@@ -293,6 +322,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       stopTravel()
       if (returnHomeTimeout !== null) window.clearTimeout(returnHomeTimeout)
       wheel.stop('unmount')
+      detachFingerPan()
       hit.removeEventListener('wheel', wheel.handleWheel)
       hit.removeEventListener('pointerenter', onEnter)
       hit.removeEventListener('pointerleave', onLeave)
