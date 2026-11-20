@@ -2,18 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { solidPointAt } from '../editor/EmptyStateScene'
 import { SWISH_CYLINDER, CYLINDER_RADIUS } from './swishCylinder'
 
-/** Where the marker face's centre (in front, (0, 0, -R), before any turn) is at `timeSec`. */
+/** Where the marker face's centre (on the far wall, (0, 0, R), before any turn) is at `timeSec`. */
 function markerAt(timeSec: number): { x: number; z: number } {
-  const [x, , z] = solidPointAt(SWISH_CYLINDER, [0, 0, -CYLINDER_RADIUS], timeSec)
+  const [x, , z] = solidPointAt(SWISH_CYLINDER, [0, 0, CYLINDER_RADIUS], timeSec)
   return { x, z }
 }
 
 describe('the swish cylinder', () => {
-  it('has the marker in front and centred at the swish apex, every second', () => {
+  it('has the marker straight ahead on the far wall at the swish apex, every second', () => {
     for (const t of [0.5, 1.5, 7.5]) {
       const { x, z } = markerAt(t)
       expect(x).toBeCloseTo(0, 9)
-      expect(z).toBeCloseTo(-CYLINDER_RADIUS, 9)
+      expect(z).toBeCloseTo(CYLINDER_RADIUS, 9)
     }
   })
 
