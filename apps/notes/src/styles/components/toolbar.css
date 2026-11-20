@@ -759,3 +759,40 @@
 .options-about-links-row {
   grid-template-columns: 1fr 1fr 1fr;
 }
+
+/* Options > Beat Detection's tap-along calibration (sidebar/BeatCalibration.tsx):
+   a two-by-two start/stop button and a four-by-two pad, large because the pad
+   is pressed in time and a small target costs aim. The pad fills from the
+   left as the taps it needs come in. */
+.beat-calibration > .beat-calibration-toggle {
+  grid-column: span 2;
+  grid-row:    span 2;
+}
+
+.beat-calibration > .beat-calibration-pad {
+  position:     relative;
+  grid-column:  span 4;
+  grid-row:     span 2;
+  touch-action: none;
+}
+
+.beat-calibration-pad::before {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  background:     var(--btn-border-default);
+  opacity:        0.35;
+  transform:      scaleX(var(--calibration-fill, 0));
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.beat-calibration-value {
+  position:    relative;
+  display:     inline-flex;
+  align-items: center;
+  gap:         var(--spacing-small);
+  font-size:   calc(16px * var(--ui-font-scale));
+  font-variant-numeric: tabular-nums;
+}
