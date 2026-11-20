@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { pulseCurve } from '@thockdown/look/visualizer'
+import { useBoxBevelImages } from '../shared/boxBevelStore'
 import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '../shared/beatSettings'
 import { useHoldToAdjust, type HoldToAdjustKeyboardController } from '../shared/useHoldToAdjust'
-import { lastHit, startBeatLoop, type LoopChannel, type LoopRun } from '../sound/beatLoopCalibration'
+import { lastHit, startBeatLoop, type LoopRun } from '../sound/beatLoopCalibration'
 
 /** The step Up and Down take, in ms; Left and Right take 1 and speed up while held. */
 const COARSE_STEP_MS = 10
@@ -15,31 +16,59 @@ const COARSE_STEP_MS = 10
  */
 const HOLD_TRAVEL_SEC = (BEAT_DELAY_MAX_MS - BEAT_DELAY_MIN_MS) / 100
 
+/** Boxes across the strip; it is one box high. */
+const BOXES = 6
+
+/** A fall as the visualizer's settings carry it (`VisualizerChannel`): its length and the shape of `pulseCurve`. */
+export interface LoopFall {
+  fallSec: number
+  shape: number
+}
+
 /**
- * The two effects, at a fixed and fairly strong setting: what each follows
- * (a share of each channel's hit, the largest taken), and its fall on the
- * grid beat's own curve (`pulseCurve`). The edge takes the kick and the
- * snare, the pane the snare and, faintly, the hats, so all three are seen.
+ * The three effects, one channel each, as the visualizer separates them:
+ * the kick on the EDGE, the snare on the box OUTLINES (the pane), the hats on
+ * the grid LINES (where the visualizer's wave runs). Each at a fixed strength,
+ * falling as the visualizer's own setting for it falls.
  */
-const EFFECTS: ReadonlyArray<{ variable: string; mix: Readonly<Record<LoopChannel, number>>; fallSec: number; shape: number }> = [
-  { variable: '--loop-edge', mix: { thump: 1, pierce: 0.7, tick: 0 }, fallSec: 0.3, shape: 0 },
-  { variable: '--loop-pane', mix: { thump: 0, pierce: 0.8, tick: 0.5 }, fallSec: 0.18, shape: 0 },
-]
+const EFFECTS = [
+  { variable: '--loop-edge', channel: 'thump', fall: 'edge' },
+  { variable: '--loop-outline', channel: 'pierce', fall: 'pane' },
+  { variable: '--loop-lines', channel: 'tick', fall: 'wave' },
+] as const
 
 /**
  * Options > Beat Detection's delay calibration (`sound/beatLoopCalibration.ts`):
  * one strip, six cells wide and one high. Pressing it plays a drum loop whose
- * hits are known, and the strip shows the grid beat's two effects on them,
- * an edge glow (kick and snare) and a pane flash (snare and hats), drawn as
- * late as the beat pulse would draw them. While it runs, Left and Right move
+ * hits are known, over a row of the visualizer's boxes, and shows them as
+ * the visualizer would: the kick on the edge, the snare on the box outlines,
+ * the hats on the grid lines, each falling as the visualizer's setting for
+ * it does, drawn as late as the beat pulse would draw them. While it runs, Left and Right move
  * the device's delay by 1 ms (held, faster, on the app's hold curve), Up and
  * Down by 10, until the effects land on the hits; Right draws later.
  * Pressing it again, Escape, or leaving Options stops it.
  */
-export function BeatLoopCalibration({ delayMs, onChange }: { delayMs: number; onChange: (delayMs: number) => void }) {
+export function BeatLoopCalibration({ delayMs, onChange, falls }: {
+  delayMs: number
+  onChange: (delayMs: number) => void
+  /** The visualizer's own falls for its edge, pane and wave. */
+  falls: Readonly<Record<'edge' | 'pane' | 'wave', LoopFall>>
+}) {
   const [running, setRunning] = useState(false)
   const [failed, setFailed] = useState(false)
   const stripRef = useRef<HTMLButtonElement>(null)
+  const fallsRef = useRef(falls)
+  fallsRef.current = falls
+  // The box: the strip's height in whole pixels, so six of them are the grid.
+  const [boxPx, setBoxPx] = useState(0)
+  useEffect(() => {
+    const strip = stripRef.current
+    if (!strip) return
+    const observer = new ResizeObserver(() => setBoxPx(Math.floor(strip.clientHeight)))
+    observer.observe(strip)
+    return () => observer.disconnect()
+  }, [])
+  const bevel = useBoxBevelImages(Math.max(1, boxPx), Math.max(1, boxPx))
   const delayRef = useRef(delayMs)
   delayRef.current = delayMs
   const onChangeRef = useRef(onChange)
@@ -69,14 +98,12 @@ export function BeatLoopCalibration({ delayMs, onChange }: { delayMs: number; on
     const written = EFFECTS.map(() => '')
     let frame = requestAnimationFrame(function tick(frameTimeMs) {
       const barSec = run.heardBarSec(frameTimeMs, delayRef.current / 1000)
-      EFFECTS.forEach(({ variable, mix, fallSec, shape }, index) => {
+      EFFECTS.forEach(({ variable, channel, fall }, index) => {
         let response = 0
         if (!Number.isNaN(barSec)) {
-          for (const channel of ['thump', 'pierce', 'tick'] as const) {
-            if (mix[channel] === 0) continue
-            const { strength, agoSec } = lastHit(channel, barSec)
-            response = Math.max(response, mix[channel] * strength * pulseCurve(agoSec / fallSec, shape))
-          }
+          const { strength, agoSec } = lastHit(channel, barSec)
+          const { fallSec, shape } = fallsRef.current[fall]
+          response = strength * pulseCurve(fallSec > 0 ? agoSec / fallSec : Infinity, shape)
         }
         // Quantized to the 1/255 a colour channel resolves, as the grid beat is; an unchanged value is not written.
         const value = (Math.round(response * 255) / 255).toFixed(4)
@@ -137,11 +164,28 @@ export function BeatLoopCalibration({ delayMs, onChange }: { delayMs: number; on
         data-live-tooltip={encodeTooltip({ intention, value: `${delayMs} ms` })}
         aria-label={intention}
       >
-        <span className="beat-loop-calibration-pane" aria-hidden="true" />
-        <span className="beat-loop-calibration-edge" aria-hidden="true" />
+        {boxPx > 0 && (
+          <span
+            className="beat-loop-calibration-grid"
+            aria-hidden="true"
+            style={{
+              width: BOXES * boxPx,
+              '--editor-cell-width': `${boxPx}px`,
+              '--editor-line-height': `${boxPx}px`,
+              '--grid-outline-tile': bevel.tile,
+              '--box-shading': bevel.shading,
+            } as CSSProperties}
+          >
+            <span className="thockdown-grid-outline-lines beat-loop-calibration-layer is-outline" />
+            <span className="thockdown-grid-lines beat-loop-calibration-layer" />
+            <span className="thockdown-grid-outline-lines beat-loop-calibration-layer is-outline is-outline-hit" />
+            <span className="beat-loop-calibration-layer is-lines-hit" />
+            <span className="beat-loop-calibration-edge" />
+          </span>
+        )}
         {running
           ? <span className="beat-loop-calibration-value">{delayMs}</span>
-          : <i className="fa-solid fa-drum" aria-hidden="true"></i>}
+          : <i className="fa-solid fa-drum beat-loop-calibration-value-icon" aria-hidden="true"></i>}
       </button>
     </div>
   )

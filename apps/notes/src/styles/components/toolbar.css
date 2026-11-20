@@ -761,42 +761,74 @@
 }
 
 /* Options > Beat Detection's delay calibration (sidebar/BeatLoopCalibration.tsx):
-   one strip, six cells wide and one high, carrying the grid beat's two
-   effects in the layout's own beat colours (the edit view's .editor-beat-edge
-   and pane, at the strength the strip writes as --loop-edge / --loop-pane),
-   and the delay at its right end while it runs. */
+   one strip, six boxes of the visualizer's grid (its outline and line
+   layers, index.css, at the strip's height as the box), and over them the
+   visualizer's three effects in the layout's own colours: the edge, the box
+   outlines (the beat pane: the outline pattern in the pane colour) and the
+   grid lines (where the wave runs, in the wave colour), each at the strength
+   the strip writes as --loop-edge / --loop-outline / --loop-lines. */
 .beat-loop-calibration > .beat-loop-calibration-strip {
   position:    relative;
   grid-column: span 6;
+  padding:     0;
   overflow:    hidden;
 }
 
-.beat-loop-calibration-edge,
-.beat-loop-calibration-pane {
-  position:       absolute;
-  inset:          0;
-  border-radius:  inherit;
-  pointer-events: none;
+.beat-loop-calibration-grid {
+  position:         absolute;
+  top:              0;
+  bottom:           0;
+  left:             50%;
+  transform:        translateX(-50%);
+  background-color: var(--color-bg-regular);
+  pointer-events:   none;
+}
+
+.beat-loop-calibration-layer,
+.beat-loop-calibration-edge {
+  position: absolute;
+  inset:    0;
+}
+
+.beat-loop-calibration-layer.is-outline {
+  background-position: 1px 1px;
+  mask-position:       1px 1px;
+}
+
+.beat-loop-calibration-layer.is-outline-hit {
+  background-color: var(--beat-pane-color, var(--color-caret));
+  opacity:          var(--loop-outline, 0);
+}
+
+.beat-loop-calibration-layer.is-lines-hit {
+  background-color: var(--visualizer-wave-color, var(--color-caret));
+  mask-image:
+    repeating-linear-gradient(to right, #000 0, #000 1px, transparent 1px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, #000 0, #000 1px, transparent 1px, transparent var(--editor-line-height));
+  mask-size:        var(--editor-cell-width) var(--editor-line-height);
+  mask-composite:   add;
+  opacity:          var(--loop-lines, 0);
 }
 
 .beat-loop-calibration-edge {
   box-shadow:
-    inset 0 0 4px 1px var(--beat-edge-color, var(--color-text-base)),
-    inset 0 0 14px 2px color-mix(in srgb, var(--beat-edge-color, var(--color-text-base)) 45%, transparent);
+    inset 0 0 4px 1px var(--beat-edge-color, var(--color-caret)),
+    inset 0 0 14px 2px color-mix(in srgb, var(--beat-edge-color, var(--color-caret)) 45%, transparent);
   opacity:    var(--loop-edge, 0);
-}
-
-.beat-loop-calibration-pane {
-  background-color: var(--beat-pane-color, var(--color-text-base));
-  opacity:          calc(0.5 * var(--loop-pane, 0));
 }
 
 .beat-loop-calibration-value {
   position:    absolute;
+  z-index:     1;
   right:       var(--spacing-small);
   top:         50%;
   transform:   translateY(-50%);
   font-size:   calc(16px * var(--ui-font-scale));
   font-variant-numeric: tabular-nums;
   pointer-events: none;
+}
+
+.beat-loop-calibration-value-icon {
+  position: relative;
+  z-index:  1;
 }
