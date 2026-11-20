@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { pulseCurve } from '@thockdown/look/visualizer'
+import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
 import { useBoxBevelImages } from '../shared/boxBevelStore'
 import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '../shared/beatSettings'
 import { useHoldToAdjust, type HoldToAdjustKeyboardController } from '../shared/useHoldToAdjust'
@@ -47,7 +48,8 @@ const EFFECTS = [
  * the hats on the grid lines, each falling as the visualizer's setting for
  * it does, drawn as late as the beat pulse would draw them. While it runs, Left and Right move
  * the device's delay by 1 ms (held, faster, on the app's hold curve), Up and
- * Down by 10, until the effects land on the hits; Right draws later.
+ * Down by 10 (the wheel over it as over a slider: a notch 1, with Shift 10),
+ * until the effects land on the hits; Right draws later.
  * Pressing it again, Escape, or leaving Options stops it.
  */
 export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, fontPerBox }: {
@@ -82,6 +84,18 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   const originX = boxPx > 0 ? centreX % boxPx : 0
   const originY = boxPx > 0 ? valueTop % boxPx : 0
   const valueText = String(delayMs).padStart(VALUE_BOXES, ' ')
+  // The wheel over the strip moves the delay as it moves a slider: a notch a millisecond, ten with Shift, up raising it.
+  useGracedWheel(stripRef, useCallback((event: WheelEvent) => {
+    const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
+    if (delta === 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const step = event.shiftKey ? COARSE_STEP_MS : 1
+    const next = Math.max(BEAT_DELAY_MIN_MS, Math.min(BEAT_DELAY_MAX_MS, delayRef.current + (delta > 0 ? -step : step)))
+    if (next === delayRef.current) return
+    delayRef.current = next
+    onChangeRef.current(next)
+  }, []))
   const bevel = useBoxBevelImages(Math.max(1, boxPx), Math.max(1, boxPx))
   const delayRef = useRef(delayMs)
   delayRef.current = delayMs

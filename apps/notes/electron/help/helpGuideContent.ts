@@ -130,7 +130,7 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 ### [Visualizer](#visualizer)
 - **Grid Beat**: the caret, the edge and the pane of the active slot follow the music. On or off in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}); tuned in Options → Glitz → Grid Beat.
 - **Visualizer scene**: \`F5\` or the eye in the music player. Tuned in Options → Glitz → Visualizer; its colours are part of the layout.
-- **Beat detection**: Options → Advanced → Beat Detection. Every effect mixes three kinds of hits: **Thump** (kick, bass), **Pierce** (snare, clap) and **Tick** (hats, shakers). To line the effects up with what you hear, press the strip at the top: a drum loop plays and the strip flashes on its kick, snare and hats. Use Left and Right (Up and Down for steps of 10) until the flashes land exactly on the drums. This sets the **delay** for your current output device.
+- **Beat detection**: Options → Advanced → Beat Detection. Every effect mixes three kinds of hits: **Thump** (kick, bass), **Pierce** (snare, clap) and **Tick** (hats, shakers). To line the effects up with what you hear, press the strip at the top: a drum loop plays and the strip flashes on its kick, snare and hats. Use Left and Right (Up and Down for steps of 10), or scroll over the strip, until the flashes land exactly on the drums. This sets the **delay** for your current output device.
 - In the scene:
   - **Play a song**: click it in the song list on the left.
   - **Add or remove a set**: click it in the list on the right; hold to play that set alone.
