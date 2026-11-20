@@ -61,19 +61,11 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
     handleTagDrop,
     handleTagContainerDrop,
     handleTagContextMenu,
-    activeTagsScrollerRef,
-    activeTagsCanScrollLeft,
-    activeTagsCanScrollRight,
-    updateActiveTagsScrollEdges,
-    handleActiveTagsWheel,
+    activeTagsStrip,
     isSuggestedTagsExpanded,
     toggleSuggestedTagsExpanded,
     suggestedTagsRowRef,
-    suggestedTagsScrollerRef,
-    suggestedTagsCanScrollLeft,
-    suggestedTagsCanScrollRight,
-    updateSuggestedTagsScrollEdges,
-    handleSuggestedTagsWheel,
+    suggestedTagsStrip,
   } = tabs
 
   /** Same write and same guards as useSectionTabs' own commitTabIdEditValue. */
@@ -191,7 +183,7 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
       <div className="tab-mode-shell" role="group" aria-label="Tag manager">
         {isSuggestedTagsExpanded ? (
           <div
-            className={`tabbar-tabs-scroll-shell${suggestedTagsCanScrollLeft ? ' fade-left' : ''}${suggestedTagsCanScrollRight ? ' fade-right' : ''}`}
+            className={`tabbar-tabs-scroll-shell${suggestedTagsStrip.fadeClassName}`}
             data-secondary-press="action"
             onContextMenu={(event) => {
               event.preventDefault()
@@ -201,9 +193,9 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
             <div
               className="tabbar-suggested-tags-expanded"
               aria-live="polite"
-              ref={suggestedTagsScrollerRef}
-              onScroll={updateSuggestedTagsScrollEdges}
-              onWheel={handleSuggestedTagsWheel}
+              ref={suggestedTagsStrip.ref}
+              onScroll={suggestedTagsStrip.onScroll}
+              onWheel={suggestedTagsStrip.onWheel}
             >
               {suggestedTags.length === 0 ? (
                 <span className="tabbar-tag-hint">Previously used tags appear here.</span>
@@ -253,13 +245,13 @@ export function TagBar({ tabs, persistenceReady, activeNoteId, identityNoteId, n
             {/* Same fade-masked horizontal scroller the tab and chapter bars
                 use for their own pill strips: tags past the right edge stay
                 reachable by wheel rather than being silently clipped. */}
-            <div className={`tabbar-tabs-scroll-shell${activeTagsCanScrollLeft ? ' fade-left' : ''}${activeTagsCanScrollRight ? ' fade-right' : ''}`}>
+            <div className={`tabbar-tabs-scroll-shell${activeTagsStrip.fadeClassName}`}>
               <div
                 className="tabbar-tags-display"
                 aria-live="polite"
-                ref={activeTagsScrollerRef}
-                onScroll={updateActiveTagsScrollEdges}
-                onWheel={handleActiveTagsWheel}
+                ref={activeTagsStrip.ref}
+                onScroll={activeTagsStrip.onScroll}
+                onWheel={activeTagsStrip.onWheel}
                 onDrop={handleTagContainerDrop}
               >
                 {!activeNoteId ? (

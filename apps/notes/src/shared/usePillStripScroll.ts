@@ -74,8 +74,8 @@ export interface PillStripScroll {
  * is more of it. That is a property of the BAR, not of what happens to be in
  * it, so a mode's narration strip gets it by using this rather than by
  * looking like it does: the alternative is a copy that drifts, which is this
- * codebase's characteristic failure and is already four copies deep in the
- * tab bar (see TODO.md).
+ * codebase's characteristic failure. The tab bar's three strips (tabs, a
+ * note's tags, suggested tags) were hand-written copies until they moved here.
  *
  * `contentKey` is a cheap primitive summarising what is IN the strip. The
  * observer below catches every change to the strip's own box, but not a

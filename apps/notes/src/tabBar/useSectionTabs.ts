@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Dispatch, DragEvent, KeyboardEvent, MouseEvent, MutableRefObject, RefObject, SetStateAction, WheelEvent as ReactWheelEvent } from 'react'
+import type { Dispatch, DragEvent, KeyboardEvent, MouseEvent, MutableRefObject, RefObject, SetStateAction } from 'react'
 import type { NoteSummary } from '../shared/noteLifecycle'
 import type { NoteTabEntry } from '../shared/tabs'
 import { PROTECTED_TAGS, normalizeTagName, isProtectedTagName, isExternalTagName } from '../shared/tags'
 import { isAutoAssignedId } from '../shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from '../shared/noteDrag'
 import { useInlinePillEdit } from '../shared/useInlinePillEdit'
+import { useObservedBoxRef, usePillStripScroll, type PillStripScroll } from '../shared/usePillStripScroll'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 
 /** How long the temp tab must be held down (left mouse button) before it's promoted to a permanent pinned tab. */
@@ -71,24 +72,14 @@ export interface UseSectionTabsResult {
   handleTagDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
   handleTagContainerDrop: (event: DragEvent<HTMLDivElement>) => void
   handleTagContextMenu: (event: MouseEvent<HTMLDivElement>, tagName: string) => void
-  /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
-  activeTagsScrollerRef: (element: HTMLDivElement | null) => void
-  activeTagsCanScrollLeft: boolean
-  activeTagsCanScrollRight: boolean
-  updateActiveTagsScrollEdges: () => void
-  handleActiveTagsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
+  activeTagsStrip: PillStripScroll
   /** Whether the suggested-tags row is occupying the whole tag bar (hiding the tag input and currently-assigned tags) -- toggled by clicking the identity tab while it's showing the assigned id. */
   isSuggestedTagsExpanded: boolean
   toggleSuggestedTagsExpanded: () => void
   /** The compact (non-expanded) suggested-tags row, measured so a suggestion the bar can't finish is dropped rather than sliced. */
   /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
   suggestedTagsRowRef: (element: HTMLDivElement | null) => void
-  /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
-  suggestedTagsScrollerRef: (element: HTMLDivElement | null) => void
-  suggestedTagsCanScrollLeft: boolean
-  suggestedTagsCanScrollRight: boolean
-  updateSuggestedTagsScrollEdges: () => void
-  handleSuggestedTagsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
+  suggestedTagsStrip: PillStripScroll
 
   // ── Tab bar ──
   chapterBarMode: 'tags' | 'tabs'
@@ -108,10 +99,7 @@ export interface UseSectionTabsResult {
   cancelTabIdEdit: () => void
   /** Which tab pill (if any) is mid held-right-click, arming for unpin -- distinct from unpinPrimedTabNoteId, which is the post-arm "click again to confirm" state. */
   unpinArmingTabNoteId: string | null
-  /** Callback ref -- attach with `ref={...}`; see useObservedBoxRef for why this is not an object ref. */
-  tabsScrollerRef: (element: HTMLDivElement | null) => void
-  tabsCanScrollLeft: boolean
-  tabsCanScrollRight: boolean
+  tabsStrip: PillStripScroll
   handleAddCurrentNoteToTabs: () => Promise<void>
   handleTabContextMenu: (event: MouseEvent<HTMLDivElement>) => void
   /** Arms the in-place assigned-id edit for a note -- the tab pills' quick-right-click gesture, reused by the tag bar's note-id pill. */
@@ -123,8 +111,6 @@ export interface UseSectionTabsResult {
   clearTabHoldTimer: () => void
   handleTempTabPointerDown: (event: MouseEvent<HTMLDivElement>, noteId: string) => void
   clearTempTabHoldTimer: () => void
-  updateTabsScrollEdges: () => void
-  handleTabsWheel: (event: ReactWheelEvent<HTMLDivElement>) => void
   handleTabDragStart: (event: DragEvent<HTMLDivElement>, index: number) => void
   handleTabDragEnd: () => void
   handleTabDrop: (event: DragEvent<HTMLDivElement>, targetIndex: number) => void
@@ -145,61 +131,6 @@ export interface UseSectionTabsResult {
  * beyond calling the `activateNote` it's given -- that's still owned by the
  * broader note-lifecycle machinery, injected in.
  */
-/**
- * Attaches a ResizeObserver to whatever element the returned callback ref is
- * placed on, mirroring that element into `elementRef` so measurement code can
- * still reach it.
- *
- * Two things here are load-bearing, both learned by getting them wrong:
- *
- * The observer, rather than a `window.addEventListener('resize', ...)`, which
- * is what every call site below used to have. A window listener notices only
- * one of the many things that resize these bars -- not the sidebar opening, a
- * section splitting, a typography slider, or a sibling flex item growing and
- * taking width away -- and even for a real window resize it fires against the
- * layout as it stood BEFORE React's response to it has landed, so the
- * measurement is a frame stale: the first frame shows the pre-resize answer
- * and only corrects on the NEXT resize event. ResizeObserver is delivered
- * after layout and before paint, so no frame is ever painted wrong.
- *
- * The CALLBACK ref, rather than reading `elementRef.current` inside the
- * effect. An effect with a stable dependency list runs exactly once, after
- * the first commit -- and every element observed here mounts later than that
- * (the editor stage starts empty, and the tag bar only exists in tag mode).
- * Reading the ref there found null, returned early, and silently observed
- * nothing at all, forever: an observer that looks entirely correct in the
- * source and never fires once. That is exactly how a sliced suggestion pill
- * survived the first attempt at this fix, and the reason the regression check
- * (scripts/perf/verifyTagBarSuggestionFit.mjs) squeezes the bar from outside
- * React instead of trusting the code to be right. A callback ref fires on
- * mount and unmount, so the effect re-runs with the real element.
- *
- * Every caller's `onResize` must be layout-neutral (toggling `visibility`, or
- * setting React state that doesn't resize the observed box) -- one that
- * resized its own element would loop.
- */
-function useObservedBoxRef<T extends HTMLElement>(
-  elementRef: MutableRefObject<T | null>,
-  onResize: () => void,
-  enabled = true,
-) {
-  const [element, setElement] = useState<T | null>(null)
-
-  const attach = useCallback((node: T | null) => {
-    elementRef.current = node
-    setElement(node)
-  }, [elementRef])
-
-  useEffect(() => {
-    if (!enabled || !element || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => onResize())
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [element, onResize, enabled])
-
-  return attach
-}
-
 export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsResult {
   const {
     sectionId,
@@ -598,31 +529,13 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
   // as the tab and chapter bars' pill strips -- a note with more tags than the
   // bar is wide stays fully reachable instead of having its overflow clipped
   // away with no way to see it.
-  const activeTagsScrollerElementRef = useRef<HTMLDivElement | null>(null)
-  const [activeTagsCanScrollLeft, setActiveTagsCanScrollLeft] = useState(false)
-  const [activeTagsCanScrollRight, setActiveTagsCanScrollRight] = useState(false)
-
-  const updateActiveTagsScrollEdges = useCallback(() => {
-    const el = activeTagsScrollerElementRef.current
-    if (!el) return
-    setActiveTagsCanScrollLeft(el.scrollLeft > 1)
-    setActiveTagsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
-  }, [])
-
-  useEffect(() => {
-    // suggestedTags is a dependency even though it renders elsewhere: the
-    // suggested row shares the well and gives its width up to this row as it
-    // collapses, so the tag strip's own overflow changes when it changes.
-    updateActiveTagsScrollEdges()
-  }, [orderedActiveTags, suggestedTags, isSuggestedTagsExpanded, updateActiveTagsScrollEdges])
-
-  const activeTagsScrollerRef = useObservedBoxRef(activeTagsScrollerElementRef, updateActiveTagsScrollEdges, !isSuggestedTagsExpanded)
-
-  const handleActiveTagsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    if (event.deltaY === 0) return
-    event.preventDefault()
-    event.currentTarget.scrollLeft += event.deltaY
-  }, [])
+  // suggestedTags is part of the key even though it renders elsewhere: the
+  // suggested row shares the well and gives its width up to this row as it
+  // collapses, so the tag strip's own overflow changes when it changes.
+  const activeTagsStrip = usePillStripScroll(
+    `${orderedActiveTags.join('\n')}\u0000${suggestedTags.join('\n')}`,
+    !isSuggestedTagsExpanded,
+  )
 
   // A suggestion is shown whole or not at all. The row is laid out row-reverse
   // (see tags.css), so it packs against the bar's right edge and anything that
@@ -666,28 +579,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   const suggestedTagsRowRef = useObservedBoxRef(suggestedTagsRowElementRef, updateSuggestedTagFit, !isSuggestedTagsExpanded)
 
-  const suggestedTagsScrollerElementRef = useRef<HTMLDivElement | null>(null)
-  const [suggestedTagsCanScrollLeft, setSuggestedTagsCanScrollLeft] = useState(false)
-  const [suggestedTagsCanScrollRight, setSuggestedTagsCanScrollRight] = useState(false)
-
-  const updateSuggestedTagsScrollEdges = useCallback(() => {
-    const el = suggestedTagsScrollerElementRef.current
-    if (!el) return
-    setSuggestedTagsCanScrollLeft(el.scrollLeft > 1)
-    setSuggestedTagsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
-  }, [])
-
-  useEffect(() => {
-    updateSuggestedTagsScrollEdges()
-  }, [suggestedTags, isSuggestedTagsExpanded, updateSuggestedTagsScrollEdges])
-
-  const suggestedTagsScrollerRef = useObservedBoxRef(suggestedTagsScrollerElementRef, updateSuggestedTagsScrollEdges, isSuggestedTagsExpanded)
-
-  const handleSuggestedTagsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    if (event.deltaY === 0) return
-    event.preventDefault()
-    event.currentTarget.scrollLeft += event.deltaY
-  }, [])
+  const suggestedTagsStrip = usePillStripScroll(suggestedTags.join('\n'), isSuggestedTagsExpanded)
 
   // The currently open note gets a temporary, unsaved "preview" tab at the
   // leftmost position whenever it isn't already pinned. It tracks whichever
@@ -939,30 +831,10 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
 
   // ── Tab bar horizontal scrolling (fixed-width tabs, wheel-scroll, edge fades) ──
 
-  const tabsScrollerElementRef = useRef<HTMLDivElement | null>(null)
-  const [tabsCanScrollLeft, setTabsCanScrollLeft] = useState(false)
-  const [tabsCanScrollRight, setTabsCanScrollRight] = useState(false)
-
-  const updateTabsScrollEdges = useCallback(() => {
-    const el = tabsScrollerElementRef.current
-    if (!el) return
-    setTabsCanScrollLeft(el.scrollLeft > 1)
-    setTabsCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
-  }, [])
-
-  useEffect(() => {
-    updateTabsScrollEdges()
-  }, [pinnedTabs, tempTabNoteId, chapterBarMode, updateTabsScrollEdges])
-
-  const tabsScrollerRef = useObservedBoxRef(tabsScrollerElementRef, updateTabsScrollEdges, chapterBarMode === 'tabs')
-
-  // Vertical wheel input scrolls the bar horizontally, regardless of
-  // browser/OS default wheel-axis behavior.
-  const handleTabsWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    if (event.deltaY === 0) return
-    event.preventDefault()
-    event.currentTarget.scrollLeft += event.deltaY
-  }, [])
+  const tabsStrip = usePillStripScroll(
+    `${pinnedTabs.map((tab) => tab.noteId).join('\n')}\u0000${tempTabNoteId ?? ''}`,
+    chapterBarMode === 'tabs',
+  )
 
   // ── Tab drag-and-drop: reorder within this bar, or hand off to a
   //    section-wide drop target (a different section, or nothing at all if
@@ -1065,17 +937,9 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     handleTagContextMenu,
     isSuggestedTagsExpanded,
     toggleSuggestedTagsExpanded,
-    activeTagsScrollerRef,
-    activeTagsCanScrollLeft,
-    activeTagsCanScrollRight,
-    updateActiveTagsScrollEdges,
-    handleActiveTagsWheel,
+    activeTagsStrip,
     suggestedTagsRowRef,
-    suggestedTagsScrollerRef,
-    suggestedTagsCanScrollLeft,
-    suggestedTagsCanScrollRight,
-    updateSuggestedTagsScrollEdges,
-    handleSuggestedTagsWheel,
+    suggestedTagsStrip,
 
     chapterBarMode,
     toggleChapterBarMode,
@@ -1092,9 +956,7 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     commitTabIdEdit,
     cancelTabIdEdit,
     unpinArmingTabNoteId,
-    tabsScrollerRef,
-    tabsCanScrollLeft,
-    tabsCanScrollRight,
+    tabsStrip,
     handleAddCurrentNoteToTabs,
     handleTabContextMenu,
     handleTabMouseLeave,
@@ -1104,8 +966,6 @@ export function useSectionTabs(options: UseSectionTabsOptions): UseSectionTabsRe
     clearTabHoldTimer,
     handleTempTabPointerDown,
     clearTempTabHoldTimer,
-    updateTabsScrollEdges,
-    handleTabsWheel,
     handleTabDragStart,
     handleTabDragEnd,
     handleTabDrop,
