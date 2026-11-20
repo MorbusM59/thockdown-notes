@@ -9,13 +9,19 @@ import type { CalibrationProgress, CalibrationRun } from '../sound/latencyCalibr
  * a start/stop button and a pad. A press on the pad, or Space while a run is
  * on, is a tap, taken on the PRESS from the event's own timestamp; the first
  * press on an idle pad also starts the run. A finished run stores its result
- * through `onResult`, which moves the delay slider below it.
+ * through `onResult`, which moves the delay slider below it. While the click
+ * track plays the pad FLASHES on every click, timed exactly as the beat pulse
+ * is with the delay the slider holds at that moment, so whether the delay is
+ * right can be checked by eye and ear without tapping.
  */
-export function BeatCalibration({ onResult }: { onResult: (delayMs: number) => void }) {
+export function BeatCalibration({ delayMs, onResult }: { delayMs: number; onResult: (delayMs: number) => void }) {
   const [progress, setProgress] = useState<CalibrationProgress | null>(null)
   const runRef = useRef<CalibrationRun | null>(null)
   const onResultRef = useRef(onResult)
   onResultRef.current = onResult
+  const delayRef = useRef(delayMs)
+  delayRef.current = delayMs
+  const padRef = useRef<HTMLButtonElement>(null)
   const running = progress?.phase === 'running'
 
   const start = () => {
@@ -24,6 +30,9 @@ export function BeatCalibration({ onResult }: { onResult: (delayMs: number) => v
       setProgress(next)
       if (next.phase === 'done') onResultRef.current(next.delayMs)
       if (next.phase !== 'running') runRef.current = null
+    }, {
+      delaySec: () => delayRef.current / 1000,
+      flash: () => padRef.current?.animate([{ filter: 'brightness(2)' }, { filter: 'none' }], { duration: 150, easing: 'ease-out' }),
     })
   }
   const stop = () => {
@@ -69,6 +78,7 @@ export function BeatCalibration({ onResult }: { onResult: (delayMs: number) => v
       </button>
       <button
         type="button"
+        ref={padRef}
         className={`options-loadout-btn beat-calibration-pad${running ? ' active' : ''}`}
         style={{ ['--calibration-fill' as string]: String(fill) }}
         onPointerDown={onPadDown}

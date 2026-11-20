@@ -3090,7 +3090,7 @@ export function SidebarOptionsPanel({
         heading="Beat Detection"
         iconClass="fa-drum"
       >
-          <BeatCalibration onResult={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
+          <BeatCalibration delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onResult={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
           <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
           <div className="utility-setting-slider-stack" aria-label="Beat timing">
             <OptionsSliderRows rows={[2]}>

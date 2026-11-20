@@ -185,7 +185,10 @@ export interface CalibrationRun {
  * Plays the click track and measures the taps; `onProgress` is told after
  * each tap and once at the end ('done' carries the setting to store).
  */
-export function startLatencyCalibration(onProgress: (progress: CalibrationProgress) => void): CalibrationRun {
+export function startLatencyCalibration(
+  onProgress: (progress: CalibrationProgress) => void,
+  check?: { delaySec: () => number; flash: () => void },
+): CalibrationRun {
   const element = new Audio(clickTrackUrl())
   const clock = new SmoothClock()
   const lags: number[] = []
@@ -211,8 +214,20 @@ export function startLatencyCalibration(onProgress: (progress: CalibrationProgre
     else finish(verdict === 'done' && delayMs !== null ? { phase: 'done', delayMs } : { phase: 'failed' })
   }
 
+  let flashedBeat = -1
   const tick = (frameTimeMs: number) => {
-    clock.read(element.currentTime, frameTimeMs / 1000)
+    const listener = clock.read(element.currentTime, frameTimeMs / 1000)
+    if (check) {
+      // The click drawn the way the beat pulse draws a hit: at the media time
+      // less the heard lag the pulse uses (`heardLagSec`), with the delay
+      // the slider holds now, so flash and click can be compared by ear.
+      const heard = listener - outputLatencySec() - check.delaySec() - LEAD_IN_SEC
+      const beat = Math.floor(heard / CALIBRATION_PERIOD_SEC)
+      if (heard >= 0 && beat !== flashedBeat) {
+        flashedBeat = beat
+        check.flash()
+      }
+    }
     frame = requestAnimationFrame(tick)
   }
 
