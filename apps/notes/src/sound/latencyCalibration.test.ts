@@ -11,7 +11,7 @@ function taps(lag: number, count: number, wobble = 0.01): number[] {
 
 describe('estimateLag', () => {
   it('recovers the lag whichever beat each tap belongs to, including across the beat boundary', () => {
-    for (const lag of [0.02, 0.25, 0.59, 0.005]) {
+    for (const lag of [0.02, 0.25, 0.79, 0.005]) {
       const estimate = estimateLag(taps(lag, 16))!
       const error = Math.abs(((estimate.lagSec - lag + P / 2) % P + P) % P - P / 2)
       expect(error).toBeLessThan(0.006)
@@ -34,6 +34,14 @@ describe('delayForLag', () => {
     for (const setting of [0, 120, 333, 500]) {
       const lag = latency + setting / 1000
       expect(delayForLag(((lag % P) + P) % P, latency)).toBe(setting)
+    }
+  })
+
+  it('reads a tap slightly ahead of the reported latency as 0, never as a beat later', () => {
+    const latency = 0.2
+    for (const early of [0.005, 0.014, 0.06, 0.15]) {
+      const lag = latency - early
+      expect(delayForLag(((lag % P) + P) % P, latency)).toBe(0)
     }
   })
 

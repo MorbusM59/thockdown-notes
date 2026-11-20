@@ -27,8 +27,21 @@ import { connectToOutput, resumedOutputContext } from '@thockdown/soundscape/aud
 import { outputLatencySec } from './musicBeat'
 import { SmoothClock } from './smoothClock'
 
-/** 100 BPM: a beat's period (0.6s) is wider than the delay's whole range (0.5s), so a tap's lag is never ambiguous by a beat. */
-export const CALIBRATION_PERIOD_SEC = 0.6
+/**
+ * 75 BPM: a tap's lag is only known modulo the beat, so the beat must be
+ * wider than every lag that can really occur. 0.8s covers a reader tapping
+ * up to 200ms AHEAD of the reported latency (anticipation; a device that
+ * reports more than it has) through 600ms behind it (a wireless headset),
+ * see `LAG_WINDOW_CENTRE_MS`.
+ */
+export const CALIBRATION_PERIOD_SEC = 0.8
+/**
+ * The middle of the window a measured lag is placed in, in ms beyond the
+ * reported latency: [-200, 600). Centring it on the setting's range instead
+ * put a tap slightly AHEAD of the reported latency (common on a wired
+ * headset) a whole beat later, at the top of the range.
+ */
+const LAG_WINDOW_CENTRE_MS = 200
 /** Beats in a bar; the first of each is accented. */
 const BAR_BEATS = 4
 /** Silence before the first click, so the element's start-up is over before anything is measured. */
@@ -106,14 +119,13 @@ export function estimateLag(lags: readonly number[], period: number = CALIBRATIO
  * on every device, set by ear on a wired headset where the taps agree with
  * the reported latency to within a few milliseconds, so it corrects the
  * VISUAL side (how late a drawn hit is perceived) and stays on top of
- * whatever the taps find. A lag is only known modulo the beat, so the
- * one whole-beat shift that lands in the setting's range is taken (the period
- * is wider than the range, so there is one), then clamped for a device beyond it.
+ * whatever the taps find. A lag is only known modulo the beat, so it is
+ * placed in the window around `LAG_WINDOW_CENTRE_MS`, then clamped to the
+ * setting's range (a tap ahead of the reported latency is 0).
  */
 export function delayForLag(lagSec: number, outputLatency: number, period: number = CALIBRATION_PERIOD_SEC): number {
-  const centre = (BEAT_DELAY_MIN_MS + BEAT_DELAY_MAX_MS) / 2
   const raw = (lagSec - outputLatency) * 1000
-  const shifted = centre + wrapCentred(raw - centre, period * 1000)
+  const shifted = LAG_WINDOW_CENTRE_MS + wrapCentred(raw - LAG_WINDOW_CENTRE_MS, period * 1000)
   return Math.round(Math.max(BEAT_DELAY_MIN_MS, Math.min(BEAT_DELAY_MAX_MS, shifted)))
 }
 
