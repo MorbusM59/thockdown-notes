@@ -3146,6 +3146,21 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-database" aria-hidden="true" />
           </button>
         </div>
+        {/* EXPORT: every note as plain Markdown, in folders by primary tag,
+            secondary tag and chapter family (shared/notesMarkdownExport.ts),
+            readable without the app. */}
+        <OptionsSubsectionLabel>Export</OptionsSubsectionLabel>
+        <div className="options-loadout-grid" role="group" aria-label="Note export">
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn"
+            onClick={() => { void window.thockdownExport?.exportAllNotesMarkdown() }}
+            data-tooltip="Export all notes as Markdown"
+            aria-label="Export all notes as Markdown"
+          >
+            <span className="fa-brands fa-markdown" aria-hidden="true" />
+          </button>
+        </div>
         <OptionsSubsectionLabel>Layouts</OptionsSubsectionLabel>
         <div className="options-loadout-grid" role="group" aria-label="Custom layouts">
           <button

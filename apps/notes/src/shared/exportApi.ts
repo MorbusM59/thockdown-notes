@@ -11,6 +11,12 @@ export interface ExportApi {
   selectExportFolder(): Promise<string | null>;
   exportPdf(folderPath: string, fileName: string, htmlContent?: string): Promise<ExportResult>;
   exportMarkdown(folderPath: string, fileName: string, markdownText: string): Promise<ExportResult>;
+  /**
+   * Asks for a folder and writes every note into it as plain Markdown, in a
+   * new dated folder laid out by `notesMarkdownExport.ts`, then shows it.
+   * Resolves `ok: false` without an error when the reader cancels.
+   */
+  exportAllNotesMarkdown(): Promise<ExportResult>;
   /** Opens an http(s) link in the system browser. */
   openExternalUrl(url: string): Promise<void>;
 }
@@ -19,5 +25,6 @@ export const EXPORT_CHANNELS = {
   selectExportFolder: 'select-export-folder',
   exportPdf: 'export-pdf',
   exportMarkdown: 'export-md',
+  exportAllNotesMarkdown: 'export-all-notes-md',
   openExternalUrl: 'open-external-url',
 } as const satisfies InvokeChannels<ExportApi>;

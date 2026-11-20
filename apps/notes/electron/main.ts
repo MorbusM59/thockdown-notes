@@ -2,7 +2,7 @@
 import { installHangLog } from './hangLog'
 import { SOUNDSCAPE_FILE_CHANNELS, type SoundscapeFileApi, SOUNDSCAPE_FILE_EXTENSION } from '@thockdown/soundscape/soundscapeFile';
 import { app, BrowserWindow, Menu, ipcMain, dialog, powerMonitor, protocol, shell, screen } from 'electron'
-import type { IpcMainEvent, IpcMainInvokeEvent, PrintToPDFOptions } from 'electron'
+import type { IpcMainEvent, IpcMainInvokeEvent, OpenDialogOptions, PrintToPDFOptions } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createReadStream, existsSync, promises as fsPromises } from 'node:fs'
@@ -13,6 +13,7 @@ import { ExternalFileWatcher } from './externalFileWatcher'
 import { writeFileDurably } from './durableWrite'
 import { createQuitRoutine, createRequestTracker, within } from './quitRoutine'
 import { FILE_SYNC_CHANNELS, type FileSyncApi } from '../src/shared/fileSync'
+import { planMarkdownExport } from '../src/shared/notesMarkdownExport'
 import { NOTE_LIFECYCLE_CHANNELS, NOTE_LIFECYCLE_EVENTS, type NoteLifecycleApi, type NoteLifecycleEvents } from '../src/shared/noteLifecycle'
 import { APP_STATE_CHANNELS, type AppStateApi, type WindowState } from '../src/shared/appState'
 import { StateService } from './stateService'
@@ -1055,6 +1056,39 @@ function registerIpcHandlers() {
     // file off disk: an "Export All" is the parent plus every chapter joined
     // in order, which exists as no single file -- and the renderer is the one
     // that holds the live, not-yet-autosaved text of whatever is open.
+    exportAllNotesMarkdown: async () => {
+      try {
+        const owner = win && !win.isDestroyed() ? win : null
+        const options: OpenDialogOptions = { title: 'Export all notes as Markdown', properties: ['openDirectory', 'createDirectory'] }
+        const { filePaths, canceled } = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options)
+        if (canceled || filePaths.length === 0) return { ok: false }
+        const records = databaseService!.listNoteRecords()
+        const notes = records.map((record) => ({
+          id: record.id,
+          title: record.title,
+          tags: databaseService!.getNoteTags(record.id),
+          isTimeless: record.isTimeless,
+          isGenerated: record.isAutoToc || record.isAutoOpenItems,
+        }))
+        const chapters = [...new Set(records.map((record) => record.chapterParentId).filter((id): id is string => Boolean(id)))]
+          .flatMap((parentId) => databaseService!.listChaptersForNote(parentId))
+        // Local time, to the second, so a second export never mixes into the first.
+        const now = new Date()
+        const two = (value: number) => String(value).padStart(2, '0')
+        const stamp = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())} ${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`
+        const root = path.join(filePaths[0], `Thockdown notes ${stamp}`)
+        for (const file of planMarkdownExport(notes, chapters)) {
+          const outPath = path.join(root, ...file.segments)
+          await fsPromises.mkdir(path.dirname(outPath), { recursive: true })
+          await fsPromises.writeFile(outPath, databaseService!.readStoredNoteContent(file.noteId) ?? '', 'utf8')
+        }
+        shell.showItemInFolder(root)
+        return { ok: true, path: root }
+      } catch (error) {
+        console.warn('[main] export-all-notes-md failed', error)
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
+      }
+    },
     exportMarkdown: async (_event, folderPath: string, fileName: string, markdownText: string) => {
       try {
         if (!folderPath || !fileName || typeof markdownText !== 'string') {
