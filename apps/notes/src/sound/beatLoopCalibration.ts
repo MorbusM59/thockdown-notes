@@ -37,8 +37,8 @@ export interface LoopHit {
   strength: number
 }
 
-/** The ticks with a rim shot on them (the 3rd, 6th and 15th of 24, at 0.333, 0.833 and 2.333): louder, so drawn stronger. */
-const RIM_SHOT_TICKS = new Set([2, 5, 14])
+/** The ticks with a rim shot on them (the 3rd, 6th, 15th and 18th of 24, at 0.333, 0.833, 2.333 and 2.833): louder, so drawn stronger. */
+const RIM_SHOT_TICKS = new Set([2, 5, 14, 17])
 /** An ordinary tick's strength beside a rim shot's 1. */
 const PLAIN_TICK = 0.5
 
@@ -46,7 +46,7 @@ const PLAIN_TICK = 0.5
  * The hits of one four-second bar, as the loop was programmed (its author's
  * figures). Measured against the audio, every snare and hat attack starts
  * within 2 ms of these (snare 0.998 and 2.999; hats 0.166, 0.330, 0.499 ...),
- * and the rim shots show as mid-range attacks at 0.330, 0.831 and 2.331.
+ * and the rim shots show as mid-range attacks at 0.330, 0.831 and 2.331 (the one at 2.833 is under the kick there).
  */
 export const LOOP_SCORE: Readonly<Record<LoopChannel, readonly LoopHit[]>> = {
   thump: [0, 0.8335, 2.3315, 2.8335].map((sec) => ({ sec, strength: 1 })),
