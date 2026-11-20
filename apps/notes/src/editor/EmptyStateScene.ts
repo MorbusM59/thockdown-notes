@@ -218,6 +218,11 @@ function rotateAroundAxis(p: Vec3, axis: Vec3, angleRad: number): Vec3 {
   ]
 }
 
+/** Where `point` of `scene` (in its own coordinates) is at `timeSec` of its turn. */
+export function solidPointAt(scene: SolidScene, point: Vec3, timeSec: number): Vec3 {
+  return rotateAroundAxis(point, scene.axis, scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec)
+}
+
 /** Simple perspective divide -- points nearer the viewer (more negative z) project larger. */
 function project(p: Vec3, scale: number, focal: number, cx: number, cy: number): Vec2 {
   const [x, y, z] = p
@@ -267,7 +272,17 @@ export interface SolidScene {
   strokeWidth: number
   /** Each face's own alpha, 0.1 to 0.5. */
   faceAlphas: number[]
+  /**
+   * The frame the solid is drawn in, width over height: absent is square
+   * (the empty scene's solids). A wider frame is VIEWBOX high and
+   * `VIEWBOX * aspect` wide, fitted into the canvas as large as it goes and
+   * centred, so a solid authored for it fills a strip rather than a square.
+   */
+  aspect?: number
 }
+
+/** The height of the frame a solid is authored in (`SolidScene.halfSize` and the projection are in its units). */
+export const SOLID_VIEWBOX = VIEWBOX
 
 /**
  * Picks one of the 5 Platonic solids and tumbles it around a fully random
@@ -453,8 +468,10 @@ export function drawSolidScene(
     context.fillStyle = stripes
     context.fillRect(0, 0, width, height)
   }
-  const restSide = Math.min(width, height)
-  for (const placement of placements) cutOutSolid(context, scratch, placement, restSide, dpr)
+  for (const placement of placements) {
+    const aspect = placement.scene.aspect ?? 1
+    cutOutSolid(context, scratch, placement, Math.min(width / aspect, height), dpr)
+  }
 }
 
 function cutOutSolid(
@@ -466,6 +483,7 @@ function cutOutSolid(
 ): void {
   const width = context.canvas.width
   const height = context.canvas.height
+  const aspect = scene.aspect ?? 1
   const side = restSide * scale
   const top = (height - side) / 2 + offsetY * restSide
   // Wholly outside the canvas (a solid falling away or not yet arrived): nothing to cut.
@@ -476,18 +494,18 @@ function cutOutSolid(
   // by the quantize.
   const size = Math.ceil(side / Math.max(1, dpr))
   if (size <= 0) return
+  const sizeX = Math.ceil(size * aspect)
   const { alpha, alphaContext: a } = scratch
-  if (alpha.width !== size || alpha.height !== size) {
-    alpha.width = size
+  if (alpha.width !== sizeX || alpha.height !== size) {
+    alpha.width = sizeX
     alpha.height = size
   }
   a.setTransform(1, 0, 0, 1, 0, 0)
-  a.clearRect(0, 0, size, size)
+  a.clearRect(0, 0, sizeX, size)
   const unit = size / VIEWBOX
   a.setTransform(unit, 0, 0, unit, 0, 0)
-  const angle = scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec
   const centre = VIEWBOX / 2
-  const projected = scene.vertices.map((vertex) => project(rotateAroundAxis(vertex, scene.axis, angle), scene.halfSize, scene.focal, centre, centre))
+  const projected = scene.vertices.map((vertex) => project(solidPointAt(scene, vertex, timeSec), scene.halfSize, scene.focal, centre * aspect, centre))
   a.fillStyle = '#000'
   scene.faces.forEach((face, faceIndex) => {
     a.globalAlpha = scene.faceAlphas[faceIndex]
@@ -515,7 +533,7 @@ function cutOutSolid(
   // edges, stepped to QUANTIZE_STEPS values from 0 to 1.
   context.filter = quantizeFilter()
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(alpha, (width - side) / 2, top, side, side)
+  context.drawImage(alpha, (width - side * aspect) / 2, top, side * aspect, side)
   context.globalCompositeOperation = 'source-over'
   context.filter = 'none'
 }
