@@ -16,8 +16,10 @@ const COARSE_STEP_MS = 10
  */
 const HOLD_TRAVEL_SEC = (BEAT_DELAY_MAX_MS - BEAT_DELAY_MIN_MS) / 100
 
-/** Boxes across the strip; it is one box high. */
-const BOXES = 6
+/** Boxes to the strip's height: half a row, three whole rows and half a row. */
+const ROWS = 4
+/** The delay's boxes, centred on the middle row: room for -200. */
+const VALUE_BOXES = 4
 
 /** A fall as the visualizer's settings carry it (`VisualizerChannel`): its length and the shape of `pulseCurve`. */
 export interface LoopFall {
@@ -48,26 +50,38 @@ const EFFECTS = [
  * Down by 10, until the effects land on the hits; Right draws later.
  * Pressing it again, Escape, or leaving Options stops it.
  */
-export function BeatLoopCalibration({ delayMs, onChange, falls }: {
+export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, fontPerBox }: {
   delayMs: number
   onChange: (delayMs: number) => void
   /** The visualizer's own falls for its edge, pane and wave. */
   falls: Readonly<Record<'edge' | 'pane' | 'wave', LoopFall>>
+  /** The visualizer's font, the delay's letters are written in. */
+  fontFamily: string
+  /** The visualizer's font size over its box size, so the letters sit in their boxes as there. */
+  fontPerBox: number
 }) {
   const [running, setRunning] = useState(false)
   const [failed, setFailed] = useState(false)
   const stripRef = useRef<HTMLButtonElement>(null)
   const fallsRef = useRef(falls)
   fallsRef.current = falls
-  // The box: the strip's height in whole pixels, so six of them are the grid.
-  const [boxPx, setBoxPx] = useState(0)
+  // The strip's size: the box is a quarter of its height, in whole pixels.
+  const [size, setSize] = useState({ width: 0, height: 0 })
   useEffect(() => {
     const strip = stripRef.current
     if (!strip) return
-    const observer = new ResizeObserver(() => setBoxPx(Math.floor(strip.clientHeight)))
+    const observer = new ResizeObserver(() => setSize({ width: strip.clientWidth, height: strip.clientHeight }))
     observer.observe(strip)
     return () => observer.disconnect()
   }, [])
+  const boxPx = Math.max(0, Math.round(size.height / ROWS))
+  // Grid lines through the strip's horizontal centre, and half a box above the middle row's
+  // top edge's row: the rows read half, whole, whole, whole, half, the middle row centred.
+  const centreX = Math.round(size.width / 2)
+  const valueTop = Math.round((size.height - boxPx) / 2)
+  const originX = boxPx > 0 ? centreX % boxPx : 0
+  const originY = boxPx > 0 ? valueTop % boxPx : 0
+  const valueText = String(delayMs).padStart(VALUE_BOXES, ' ')
   const bevel = useBoxBevelImages(Math.max(1, boxPx), Math.max(1, boxPx))
   const delayRef = useRef(delayMs)
   delayRef.current = delayMs
@@ -164,12 +178,13 @@ export function BeatLoopCalibration({ delayMs, onChange, falls }: {
         data-live-tooltip={encodeTooltip({ intention, value: `${delayMs} ms` })}
         aria-label={intention}
       >
-        {boxPx > 0 && (
+        {boxPx > 1 && (
           <span
             className="beat-loop-calibration-grid"
             aria-hidden="true"
             style={{
-              width: BOXES * boxPx,
+              '--loop-grid-x': `${originX}px`,
+              '--loop-grid-y': `${originY}px`,
               '--editor-cell-width': `${boxPx}px`,
               '--editor-line-height': `${boxPx}px`,
               '--grid-outline-tile': bevel.tile,
@@ -180,12 +195,18 @@ export function BeatLoopCalibration({ delayMs, onChange, falls }: {
             <span className="thockdown-grid-lines beat-loop-calibration-layer" />
             <span className="thockdown-grid-outline-lines beat-loop-calibration-layer is-outline is-outline-hit" />
             <span className="beat-loop-calibration-layer is-lines-hit" />
+            {Array.from(valueText).map((char, index) => (
+              <span
+                key={index}
+                className="beat-loop-calibration-letter"
+                style={{ left: centreX + (index - VALUE_BOXES / 2) * boxPx, top: valueTop, width: boxPx, height: boxPx, lineHeight: `${boxPx}px`, fontFamily, fontSize: `${boxPx * fontPerBox}px` }}
+              >
+                {char}
+              </span>
+            ))}
             <span className="beat-loop-calibration-edge" />
           </span>
         )}
-        {running
-          ? <span className="beat-loop-calibration-value">{delayMs}</span>
-          : <i className="fa-solid fa-drum beat-loop-calibration-value-icon" aria-hidden="true"></i>}
       </button>
     </div>
   )

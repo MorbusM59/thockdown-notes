@@ -776,10 +776,7 @@
 
 .beat-loop-calibration-grid {
   position:         absolute;
-  top:              0;
-  bottom:           0;
-  left:             50%;
-  transform:        translateX(-50%);
+  inset:            0;
   background-color: var(--color-bg-regular);
   pointer-events:   none;
 }
@@ -790,9 +787,25 @@
   inset:    0;
 }
 
+.thockdown-grid-lines.beat-loop-calibration-layer,
+.beat-loop-calibration-layer.is-lines-hit {
+  background-position: var(--loop-grid-x) var(--loop-grid-y);
+  mask-position:       var(--loop-grid-x) var(--loop-grid-y);
+}
+
 .beat-loop-calibration-layer.is-outline {
-  background-position: 1px 1px;
-  mask-position:       1px 1px;
+  background-position: calc(var(--loop-grid-x) + 1px) calc(var(--loop-grid-y) + 1px);
+  mask-position:       calc(var(--loop-grid-x) + 1px) calc(var(--loop-grid-y) + 1px);
+}
+
+/* The delay, a letter to a box as the visualizer writes its text: the box lit
+   in the accent (.visualizer-lit), the letter in the text colour. */
+.beat-loop-calibration-letter {
+  position:         absolute;
+  background-color: var(--visualizer-accent-color, var(--color-caret));
+  color:            var(--color-text-base);
+  text-align:       center;
+  white-space:      pre;
 }
 
 .beat-loop-calibration-layer.is-outline-hit {
@@ -815,20 +828,4 @@
     inset 0 0 4px 1px var(--beat-edge-color, var(--color-caret)),
     inset 0 0 14px 2px color-mix(in srgb, var(--beat-edge-color, var(--color-caret)) 45%, transparent);
   opacity:    var(--loop-edge, 0);
-}
-
-.beat-loop-calibration-value {
-  position:    absolute;
-  z-index:     1;
-  right:       var(--spacing-small);
-  top:         50%;
-  transform:   translateY(-50%);
-  font-size:   calc(16px * var(--ui-font-scale));
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-
-.beat-loop-calibration-value-icon {
-  position: relative;
-  z-index:  1;
 }
