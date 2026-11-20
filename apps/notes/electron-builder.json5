@@ -33,6 +33,19 @@
   // Rebuilding would compile it from source, needing a C++ toolchain and
   // Electron headers on every build machine for no gain.
   "npmRebuild": false,
+  "extraResources": [
+    // The notices the bundled dependencies' licences require, written by
+    // the build (scripts/thirdPartyNotices.mjs), placed beside the app as a
+    // plain file a reader can open.
+    {
+      "from": "dist/THIRD_PARTY_NOTICES.txt",
+      "to": "THIRD_PARTY_NOTICES.txt"
+    },
+    {
+      "from": "dist-electron/THIRD_PARTY_NOTICES.txt",
+      "to": "THIRD_PARTY_NOTICES-main.txt"
+    }
+  ],
   "mac": {
     "target": [
       "dmg"
