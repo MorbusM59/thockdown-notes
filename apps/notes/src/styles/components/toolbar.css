@@ -748,3 +748,14 @@
 .field-action-button:disabled {
   opacity: 0.45;
 }
+
+/* Options > Advanced > About (about/AboutOptions.tsx): the version across the
+   row, the three links side by side, one credit per row. */
+.options-about-version-row,
+.options-about-credit-row {
+  grid-template-columns: 1fr;
+}
+
+.options-about-links-row {
+  grid-template-columns: 1fr 1fr 1fr;
+}

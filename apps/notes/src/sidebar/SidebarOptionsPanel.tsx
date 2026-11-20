@@ -6,6 +6,7 @@ import { createDictionary, readDictionaries, renameDictionary, subscribeDictiona
 import { openDictionary } from './dictionaryView'
 import { DictionaryMark } from './DictionaryPanel'
 import { TextButton } from '../components/TextButton'
+import { AboutOptions } from '../about/AboutOptions'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
@@ -3459,6 +3460,17 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-comment-dots" aria-hidden="true" />
           </button>
         </div>
+      </AccordionSection>
+
+      {/* About: the version, where the app is published, where to report a
+          problem, and the credits (about/about.ts). */}
+      <AccordionSection
+        className="sidebar-options-section-about"
+        ariaLabel="About"
+        heading="About"
+        iconClass="fa-circle-info"
+      >
+        <AboutOptions />
       </AccordionSection>
 
       </>) : null}
