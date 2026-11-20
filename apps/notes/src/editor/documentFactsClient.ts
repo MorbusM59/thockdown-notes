@@ -60,6 +60,11 @@ type Pending = {
   work: BackgroundWorkHandle
   /** Total lines, for turning accumulated ranges into a real fraction. */
   totalLines: number
+  id: number
+  /** Askers that have not withdrawn. A request nobody wants is dropped while it is still queued. */
+  askers: number
+  /** Sent to the worker. A sent split runs to the end: the worker parses synchronously and cannot hear a withdrawal. */
+  posted: boolean
 }
 
 /**
@@ -82,6 +87,55 @@ const pendingImages = new Map<number, { resolve: (images: DocumentImage[]) => vo
 const inFlightByText = new Map<string, Promise<PreviewBlockSplitCache>>()
 /** The same entries as `pending`, keyed the way a joining caller can find them. */
 const pendingByText = new Map<string, Pending>()
+/**
+ * Splits not yet sent, oldest first. Only one split is in the worker at a
+ * time, so that a request whose askers have all withdrawn (a typing pause's
+ * prewarm overtaken by the next one, a pane that moved on to newer text) can
+ * be dropped before it is parsed. Posting them all at once, as before, queued
+ * them inside the worker where nothing can take them back: each held a copy
+ * of its text and cost a full parse whose answer was then discarded.
+ */
+const splitQueue: Pending[] = []
+let runningSplit: Pending | null = null
+
+function pumpSplits(active: Worker): void {
+  if (runningSplit) return
+  const next = splitQueue.shift()
+  if (!next) return
+  runningSplit = next
+  next.posted = true
+  const request: DocumentFactsRequest = { kind: 'split', id: next.id, text: next.text }
+  active.postMessage(request)
+}
+
+function dropUnwanted(entry: Pending): void {
+  if (entry.askers > 0 || entry.posted) return
+  const at = splitQueue.indexOf(entry)
+  if (at !== -1) splitQueue.splice(at, 1)
+  pending.delete(entry.id)
+  pendingByText.delete(entry.text)
+  inFlightByText.delete(entry.text)
+  entry.work.done()
+}
+
+/** Counts `signal`'s owner as an asker of `entry` until it aborts. */
+function enlist(entry: Pending, signal: AbortSignal | undefined, onPartial: PartialListener | undefined): void {
+  entry.askers += 1
+  if (onPartial) entry.listeners.add(onPartial)
+  if (!signal) return
+  if (signal.aborted) {
+    withdraw(entry, onPartial)
+    return
+  }
+  signal.addEventListener('abort', () => withdraw(entry, onPartial), { once: true })
+}
+
+function withdraw(entry: Pending, onPartial: PartialListener | undefined): void {
+  if (!pending.has(entry.id)) return
+  entry.askers -= 1
+  if (onPartial) entry.listeners.delete(onPartial)
+  dropUnwanted(entry)
+}
 
 function ensureWorker(): Worker | null {
   if (worker !== undefined) return worker
@@ -128,6 +182,8 @@ function ensureWorker(): Worker | null {
       inFlightByText.delete(request.text)
       request.work.done()
       request.resolve(cache)
+      if (runningSplit === request) runningSplit = null
+      pumpSplits(created)
     }
     created.onerror = () => {
       // One failure retires the worker for the session: whatever broke it is
@@ -143,6 +199,8 @@ function ensureWorker(): Worker | null {
       const orphaned = [...pending.values()]
       const orphanedFinds = [...pendingFinds.values()]
       pending.clear()
+      splitQueue.length = 0
+      runningSplit = null
       pendingByText.clear()
       inFlightByText.clear()
       pendingFinds.clear()
@@ -180,7 +238,9 @@ function ensureWorker(): Worker | null {
  * The full block map for `text`, parsed off the main thread where possible.
  *
  * Always resolves -- there is no error path a caller could do anything useful
- * with, since the answer is derivable here too, just slowly.
+ * with, since the answer is derivable here too, just slowly -- unless every
+ * asker withdraws through `signal` before the split is sent to the worker:
+ * then it is dropped and its promise never settles, since nobody is waiting.
  */
 export function requestFullBlockSplit(
   text: string,
@@ -191,13 +251,16 @@ export function requestFullBlockSplit(
    * final instalment would have carried.
    */
   onPartial?: PartialListener,
+  /** Aborted when the asker no longer wants the answer. */
+  signal?: AbortSignal,
 ): Promise<PreviewBlockSplitCache> {
   const active = ensureWorker()
   if (!active) return Promise.resolve(splitMarkdownIntoPreviewBlocksIncremental(text, null))
 
   const alreadyRunning = inFlightByText.get(text)
-  if (alreadyRunning) {
-    if (onPartial) pendingByText.get(text)?.listeners.add(onPartial)
+  const joined = pendingByText.get(text)
+  if (alreadyRunning && joined) {
+    enlist(joined, signal, onPartial)
     return alreadyRunning
   }
 
@@ -207,18 +270,22 @@ export function requestFullBlockSplit(
     resolve: () => {},
     text,
     ranges: [],
-    listeners: onPartial ? new Set([onPartial]) : new Set(),
+    listeners: new Set(),
     work: beginBackgroundWork('document-split'),
     totalLines: text.length === 0 ? 0 : text.split('\n').length,
+    id,
+    askers: 0,
+    posted: false,
   }
   const answer = new Promise<PreviewBlockSplitCache>((resolve) => {
     entry.resolve = resolve
-    pending.set(id, entry)
-    pendingByText.set(text, entry)
-    const request: DocumentFactsRequest = { kind: 'split', id, text }
-    active.postMessage(request)
   })
+  pending.set(id, entry)
+  pendingByText.set(text, entry)
   inFlightByText.set(text, answer)
+  splitQueue.push(entry)
+  enlist(entry, signal, onPartial)
+  if (pending.has(id)) pumpSplits(active)
   return answer
 }
 
