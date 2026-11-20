@@ -1030,6 +1030,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleTabDrop,
     handleTabsContainerDrop,
     unpinNoteTab,
+    closeActiveTab,
     pinNoteAsRightmostTab,
     applyTabsUpdate,
   }: UseSectionTabsResult = useSectionTabs({
@@ -1732,6 +1733,18 @@ export function EditorSection(rawProps: EditorSectionProps) {
     return null
   }, [escapeMenu?.activeMode, onEscapeHoldPanelClose, isShowingGuide, shownImageId, onCloseSlotOverlay])
 
+  // The slot's close button: whatever the slot shows, it closes that. An
+  // overlay leaves the way Escape does; an undocked note is set aside (kept,
+  // never discarded); a note leaves the collection for its right-most
+  // remaining tab. Kept apart from exitSlotOverlay because Escape in a note
+  // switches modes and must not start closing it.
+  const closeSlotResource = useMemo<(() => void) | null>(() => {
+    if (exitSlotOverlay) return exitSlotOverlay
+    if (isShowingUndockedNote) return onSetAsideUndockedNote
+    if (menuIdentityNoteId) return () => void closeActiveTab()
+    return null
+  }, [exitSlotOverlay, isShowingUndockedNote, onSetAsideUndockedNote, menuIdentityNoteId, closeActiveTab])
+
   const currentSectionHandle: SectionHandle = {
     ...editorSectionMountRest,
     // Destructured out of editorSectionMountRest above (activateNote writes
@@ -1802,6 +1815,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
     handleTabDrop,
     handleTabsContainerDrop,
     unpinNoteTab,
+    closeActiveTab,
     pinNoteAsRightmostTab,
     applyTabsUpdate,
     chapters,
@@ -2160,6 +2174,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
           handleTabDrop,
           handleTabsContainerDrop,
           unpinNoteTab,
+          closeActiveTab,
           pinNoteAsRightmostTab,
           applyTabsUpdate,
   }
@@ -2211,6 +2226,7 @@ export function EditorSection(rawProps: EditorSectionProps) {
         onIdentityClick={handleIdentityClick}
         onIdentityContextMenu={handleIdentityContextMenu}
         exitSlotOverlay={exitSlotOverlay}
+        closeSlotResource={closeSlotResource}
         isSectionPickerOpen={isSectionPickerOpen}
         swapCandidates={swapCandidates}
         onSectionPickerCandidateClick={handleSectionPickerCandidateClick}
