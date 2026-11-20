@@ -3,6 +3,7 @@ import type { EditorSelectionState, EditorTextEdit, EditorTransformResult } from
 import { applyEditToDocumentLineIndex, buildDocumentLineIndex, lineIndexAtOffset, type DocumentLineIndex } from './DocumentLineIndex'
 import { buildTransformResult, collapsedSelectionAt } from './TransformResult'
 import { clamp } from '@thockdown/interaction/clamp'
+import { lineStartAt } from './MarkdownTable'
 
 export type MarkdownListKind = 'ordered' | 'unordered' | null
 
@@ -60,8 +61,8 @@ function countLineIndex(text: string, offset: number): number {
   return count
 }
 
-function resolveLineBounds(text: string, start: number, end: number): { lineStart: number; lineEndExclusive: number } {
-  const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1
+export function resolveLineBounds(text: string, start: number, end: number): { lineStart: number; lineEndExclusive: number } {
+  const lineStart = lineStartAt(text, start)
   const endProbe = end > start ? end - 1 : end
   const lineEndNewline = text.indexOf('\n', endProbe)
   const lineEndExclusive = lineEndNewline === -1 ? text.length : lineEndNewline

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { EditorSelectionState } from './EditorContract'
 import {
   applyMarkdownEnter,
+  resolveLineBounds,
   indentSelectionByStep,
   resolveMarkdownSelectionContext,
   resolveMarkdownSelectionContextIncremental,
@@ -745,5 +746,12 @@ describe('applyMarkdownEnter with an inline-state cache', () => {
         ).toEqual(applyMarkdownEnter(text, selection))
       }
     }
+  })
+})
+
+describe('resolveLineBounds', () => {
+  it('finds the empty first line at offset 0 of a note beginning with a blank line', () => {
+    expect(resolveLineBounds('\nx', 0, 0)).toEqual({ lineStart: 0, lineEndExclusive: 0 })
+    expect(resolveLineBounds('\nx', 1, 1)).toEqual({ lineStart: 1, lineEndExclusive: 2 })
   })
 })

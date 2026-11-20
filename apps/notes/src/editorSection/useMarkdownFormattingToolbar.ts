@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { MutableRefObject } from 'react'
-import { isOffsetInFencedCodeBlock, resolveMarkdownSelectionContext, resolveMarkdownSelectionContextIncremental, type InlineStateLineCache } from '../editor/MarkdownContext'
+import { isOffsetInFencedCodeBlock, resolveLineBounds, resolveMarkdownSelectionContext, resolveMarkdownSelectionContextIncremental, type InlineStateLineCache } from '../editor/MarkdownContext'
 import { isTableLine } from '../editor/MarkdownTable'
 import { resolveTableToolbarTransform } from '../editor/MarkdownTableTransforms'
 import { normalizeInternalText } from '../editor/TextPolicy'
@@ -617,13 +617,7 @@ export function useMarkdownFormattingToolbar({
     applyProgrammaticEditorText(nextText, nextStart, nextEnd)
   }, [activeNoteId, applyProgrammaticEditorText, readEditorText, editorSelection, isSelectionWrappedBy, resolveSelectionBounds])
 
-  const resolveLineRange = useCallback((text: string, start: number, end: number) => {
-    const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1
-    const endProbe = end > start ? end - 1 : end
-    const lineEndNewline = text.indexOf('\n', endProbe)
-    const lineEndExclusive = lineEndNewline === -1 ? text.length : lineEndNewline
-    return { lineStart, lineEndExclusive }
-  }, [])
+  const resolveLineRange = resolveLineBounds
 
   const transformSelectedLinesForSelection = useCallback((
     sourceText: string,
