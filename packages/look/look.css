@@ -210,9 +210,8 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  /* Above the app-tooltip-layer's own z-index (see controls.css) -- glaze is
-     a color-grading effect meant to visually apply over the whole app,
-     tooltips included. */
+  /* Above the whole app shell: glaze is a colour-grading effect over the
+     app. Tooltips (.app-tooltip-layer, controls.css) sit above it on purpose. */
   z-index: 6000;
 }
 

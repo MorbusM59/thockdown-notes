@@ -8199,10 +8199,9 @@ ${markdownHtml}
         />
         {isVisualizerMode ? <VisualizerGlaze glaze={glazeSettings} immersive={visualizer.immersive} /> : null}
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of
-            it like MouseCursorOverlay) deliberately -- unlike the cursor
-            overlay, tooltips should still pick up this wrapper's own
-            filter/glaze/colorize layers, same as the rest of the app's UI.
-            See the component's own doc comment. */}
+            it like MouseCursorOverlay) deliberately: tooltips take this
+            wrapper's filter like the rest of the UI, but are stacked above
+            the glaze (controls.css) so it does not wash them out. */}
         <TooltipLayer settings={tooltipSettings} />
         {windowModeTransitionOverlayNonce > 0 ? (
           <div key={windowModeTransitionOverlayNonce} className="window-mode-transition-overlay" aria-hidden="true" />

@@ -69,11 +69,13 @@
   position:       fixed;
   inset:          0;
   pointer-events: none;
-  /* Above every normal UI element, below .app-saturate-wrapper's own
-     filter/glaze/colorize layers (glaze-overlay-stack, and the inline
-     colorize overlay at z-index 9999 in App.tsx) -- those are meant to
-     visually apply over tooltips too, same as over the rest of the app. */
-  z-index:        5000;
+  /* Above every UI element AND above the glaze (.glaze-overlay-stack, 6000)
+     and the visualizer's wave (6001): a tooltip is read, not part of the
+     scene, so the glaze's colour grading must not wash it out. It stays
+     inside .app-saturate-wrapper, so the wrapper's filter still applies, and
+     the invert/colorize blend overlays (ThemeBlendOverlays, above the
+     wrapper) still cover it like the rest of the app. */
+  z-index:        7000;
 }
 
 .app-tooltip-bubble {

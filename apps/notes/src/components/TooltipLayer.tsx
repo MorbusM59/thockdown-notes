@@ -43,9 +43,8 @@ function windowMarginPx(): number {
  * element keeps exactly the attribute it already had -- this component is
  * the only thing that changed to replace the old per-element CSS ::after
  * approach. Rendering into one fixed layer above the whole app (mounted
- * inside .app-saturate-wrapper in App.tsx, so it still sits under that
- * wrapper's own filter/glaze/colorize layers -- see the mount site's own
- * comment) means there's exactly one stacking context to reason about,
+ * inside .app-saturate-wrapper in App.tsx, so the wrapper's filter still
+ * applies, while it is stacked above the glaze -- see controls.css) means there's exactly one stacking context to reason about,
  * instead of a pile of per-container overflow/z-index workarounds each new
  * ancestor kept needing (options panel swatches, the sidebar's custom
  * scrollbar, the toolbar's container-query overflow, the search box's case
