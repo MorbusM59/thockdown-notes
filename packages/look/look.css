@@ -15,9 +15,19 @@
   width: 100%;
   display: grid;
   overflow: hidden;
+  /* THE one declaration of the UI text shadow: everything in the shell
+     inherits it, and only the editor's text (index.css's .editor-text, the
+     render view's markdown) declares a different one. */
   text-shadow:
     0 -1px 0px var(--text-shadow-emboss-ui-secondary),
     0 1px 0px var(--text-shadow-emboss-ui-main);
+}
+
+/* Chromium's user-agent stylesheet gives form controls `text-shadow: none`,
+   so every button, input and select dropped the shell's shadow above instead
+   of inheriting it. Zero specificity: any author rule still overrides it. */
+:where(.app-shell) :where(button, input, textarea, select) {
+  text-shadow: inherit;
 }
 
 /* =============================================================================
@@ -134,9 +144,6 @@ button.is-active,
   align-items:     center;
   justify-content: center;
   aspect-ratio:    1 / 1;
-  text-shadow:      
-    0 -1px 0px var(--text-shadow-emboss-ui-secondary),
-    0 1px 0px var(--text-shadow-emboss-ui-main);
 }
 
 * {
