@@ -47,7 +47,12 @@ export const WorkIndicatorGlyph = memo(function WorkIndicatorGlyph({ speedX, ram
   // centre (256, 256) exactly at the box's centre, which is where
   // `transform` pivots. The box keeps the font icon's footprint, 1.25em by
   // 1em, so nothing around it moves.
+  // The frame carries the UI text shadow as a filter: an SVG takes no
+  // text-shadow, and a filter on the rotating element itself would rotate
+  // its shadow with it. On the frame, which does not turn, the light stays
+  // where every other glyph's comes from.
   return (
+    <span className="view-toggle-options-glyph-frame">
     <svg
       className="view-toggle-options-glyph"
       viewBox="-64 0 640 512"
@@ -66,5 +71,6 @@ export const WorkIndicatorGlyph = memo(function WorkIndicatorGlyph({ speedX, ram
     >
       <path fill="currentColor" d={GEAR_PATH} />
     </svg>
+    </span>
   )
 })
