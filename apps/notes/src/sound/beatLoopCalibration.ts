@@ -70,9 +70,20 @@ export interface LoopHit {
 /** A sixteenth of the bar. */
 const SIXTEENTH_SEC = LOOP_BAR_SEC / 16
 
-/** Hits at sixteenths of the bar, each with its strength. */
+/**
+ * How late the off sixteenths (the 2nd and 4th of each beat) sound, in
+ * sixteenths: the loop is played with Ableton's "Swing 16-85" groove, and its
+ * hits on those sixteenths measure 0.40 to 0.46 of a sixteenth (32 to 37 ms)
+ * late against the straight ones.
+ */
+const SWING_SIXTEENTHS = 0.42
+
+/** Hits at sixteenths of the bar, each with its strength; an odd sixteenth is swung. */
 const atSixteenths = (hits: Readonly<Record<number, number>>): LoopHit[] =>
-  Object.entries(hits).map(([at, strength]) => ({ sec: Number(at) * SIXTEENTH_SEC, strength }))
+  Object.entries(hits).map(([at, strength]) => {
+    const sixteenth = Number(at)
+    return { sec: (sixteenth + (sixteenth % 2) * SWING_SIXTEENTHS) * SIXTEENTH_SEC, strength }
+  })
 
 /**
  * The hits of one bar, as the loop was programmed (its author's piano roll),
