@@ -29,6 +29,8 @@ const LOOP_MIME = 'audio/mp4; codecs="flac"'
 /** How much of the loop is kept queued ahead of the listener, and behind them before it is let go. */
 const AHEAD_SEC = 32
 const BEHIND_SEC = 4
+/** A loop fades in when it starts and out when it stops, so a start, a stop and a change of loop (the old one fading out as the new one fades in) never click. */
+const FADE_SEC = 0.1
 
 /** The file split where the media starts: the header boxes (ftyp, moov) and the fragment (moof, mdat); anything after (mfra) is not media. */
 function splitFragmentedMp4(bytes: Uint8Array<ArrayBuffer>): { init: Uint8Array<ArrayBuffer>; media: Uint8Array<ArrayBuffer> } {
@@ -258,6 +260,7 @@ export function startBeatLoop(loop: BeatLoop, onFailed: () => void): LoopRun {
   const mediaSource = new MediaSource()
   const clock = new SmoothClock()
   let source: MediaElementAudioSourceNode | null = null
+  let fade: GainNode | null = null
   let over = false
   const fail = () => {
     if (!over) onFailed()
@@ -297,8 +300,14 @@ export function startBeatLoop(loop: BeatLoop, onFailed: () => void): LoopRun {
       const context = await resumedOutputContext()
       if (over) return
       source = context.createMediaElementSource(element)
-      connectToOutput(source)
+      fade = context.createGain()
+      fade.gain.value = 0
+      source.connect(fade)
+      connectToOutput(fade)
       await element.play()
+      if (over) return
+      fade.gain.setValueAtTime(0, context.currentTime)
+      fade.gain.linearRampToValueAtTime(1, context.currentTime + FADE_SEC)
     } catch {
       fail()
     }
@@ -312,10 +321,19 @@ export function startBeatLoop(loop: BeatLoop, onFailed: () => void): LoopRun {
     },
     stop() {
       over = true
-      element.pause()
-      source?.disconnect()
-      element.removeAttribute('src')
-      element.load()
+      const release = () => {
+        element.pause()
+        source?.disconnect()
+        fade?.disconnect()
+        element.removeAttribute('src')
+        element.load()
+      }
+      if (!fade || element.paused) return release()
+      const now = fade.context.currentTime
+      fade.gain.cancelScheduledValues(now)
+      fade.gain.setValueAtTime(fade.gain.value, now)
+      fade.gain.linearRampToValueAtTime(0, now + FADE_SEC)
+      setTimeout(release, FADE_SEC * 1000 + 20)
     },
   }
 }
