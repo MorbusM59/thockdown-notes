@@ -115,6 +115,15 @@ const LOOP_04_SNARES: Readonly<Record<number, number>> = {
   0: 1, 1: 0.8, 2: 0.8, 3: 0.8, 3.5: 0.8, 4: 0.8, 5: 0.8, 6: 1, 7: 0.8, 7.5: 0.8, 8: 0.8, 9: 0.8, 10: 0.8, 11: 0.8, 11.5: 0.8, 12: 1, 13: 0.8, 14: 0.8, 15: 0.8, 15.5: 0.8,
 }
 
+/**
+ * 05: 100 BPM (460800 frames, 9.6 s), a two-bar pattern played twice, read
+ * off its author's roll in sixteenths of the two bars; strengths follow the
+ * roll's velocities (full, mid 0.7, soft 0.4). Played with Ableton's
+ * "Swing 16-45": its off sixteenths measure about 0.2 of a sixteenth (30 ms) late.
+ */
+const LOOP_05_BAR_SEC = 4.8
+const LOOP_05_SWING = 0.2
+
 /** The loops, in the order a press steps through them. */
 export const BEAT_LOOPS: readonly BeatLoop[] = [
   {
@@ -155,6 +164,17 @@ export const BEAT_LOOPS: readonly BeatLoop[] = [
       thump: LOOP_04_KICK_BEATS.map((beat) => ({ sec: beat * LOOP_04_BEAT_SEC, strength: 1 })),
       pierce: [0, 1, 2, 3].flatMap((bar) => atSixteenths(2, LOOP_04_SNARES).map((hit) => ({ ...hit, sec: hit.sec + bar * 2 }))),
       tick: [],
+    },
+  },
+  {
+    url: new URL('../assets/sounds/loops/05.mp4', import.meta.url).href,
+    trackSec: 9.6,
+    barSec: LOOP_05_BAR_SEC,
+    // Sixteenths counted on through both bars: given one bar (2.4 s), sixteenths 16 to 31 fall in the second.
+    score: {
+      thump: atSixteenths(LOOP_05_BAR_SEC / 2, { 0: 1, 9: 0.7, 11: 0.4, 16: 0.7, 25: 0.7, 27: 0.4, 29: 0.7, 30: 0.4, 31: 0.4 }, LOOP_05_SWING),
+      pierce: atSixteenths(LOOP_05_BAR_SEC / 2, { 4: 0.7, 12: 1, 20: 0.7, 28: 1 }, LOOP_05_SWING),
+      tick: atSixteenths(LOOP_05_BAR_SEC / 2, { 2: 1, 6: 0.7, 10: 0.7, 14: 1, 18: 0.7, 22: 0.7, 26: 1, 30: 0.7 }, LOOP_05_SWING),
     },
   },
 ]
