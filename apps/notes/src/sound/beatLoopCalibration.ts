@@ -138,6 +138,17 @@ const LOOP_06_TICK = { 0: 87, 1: 41, 2: 100, 3: 60, 4: 116, 5: 87, 6: 97, 8: 87,
 const byVelocity = (notes: Readonly<Record<number, number>>): Record<number, number> =>
   Object.fromEntries(Object.entries(notes).map(([at, velocity]) => [at, velocity / 127]))
 
+/**
+ * 07: 165 BPM, no swing: two bars, the whole track one pattern (139637
+ * frames: two bars are 139636.4, so the track's own length is what the loop
+ * keeps time by). From its MIDI, all at velocity 100: the kick (MIDI 36) is
+ * the thump, the snare (40) the pierce, the two closed hats (42, 44) the tick.
+ */
+const LOOP_07_SEC = 139637 / 48000
+const LOOP_07_THUMP = { 0: 100, 10: 100, 16: 100, 26: 100 }
+const LOOP_07_PIERCE = { 4: 100, 12: 100, 20: 100, 28: 100 }
+const LOOP_07_TICK = { 2: 100, 6: 100, 7: 100, 10: 100, 14: 100, 18: 100, 22: 100, 25: 100, 26: 100, 30: 100 }
+
 /** The loops, in the order a press steps through them. */
 export const BEAT_LOOPS: readonly BeatLoop[] = [
   {
@@ -200,6 +211,17 @@ export const BEAT_LOOPS: readonly BeatLoop[] = [
       thump: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_THUMP)),
       pierce: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_PIERCE)),
       tick: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_TICK)),
+    },
+  },
+  {
+    url: new URL('../assets/sounds/loops/07.mp4', import.meta.url).href,
+    trackSec: LOOP_07_SEC,
+    barSec: LOOP_07_SEC,
+    // Sixteenths counted on through both bars: given one bar, sixteenths 16 to 31 fall in the second.
+    score: {
+      thump: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_THUMP)),
+      pierce: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_PIERCE)),
+      tick: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_TICK)),
     },
   },
 ]
