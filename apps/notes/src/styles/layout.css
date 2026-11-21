@@ -220,6 +220,8 @@
 }
 
 .divider-sidebar {
+  /* A back panel surface: Back Panel texture over the opaque base. */
+  background:    var(--backdrop-surface-background);
   border:        1px solid hsla(0, 0%, 100%, 0.533);
   border-top:    none;
   border-bottom: none;

@@ -444,7 +444,13 @@ export function themeFrame(loadout: ThemeLoadout, options: ThemeOptions): ThemeF
     // `--backdrop-texture`) and the flipped border and shadow (`.shadow-flip`)
     // exist on the shell and not on :root. tokens.css carries the same three
     // for anything outside a shell, untextured.
-    '--backdrop-surface-background': 'var(--backdrop-texture, none) 0 0 / var(--texture-tile-size) var(--texture-tile-size) repeat',
+    // The texture is painted over the app base (the colour the window wrapper
+    // paints, which may carry alpha) over the page's own white, so a back
+    // panel is an opaque canvas of its own: the Chrome texture
+    // (.app-grid::before) never shows through where the back panel's mask
+    // thins out.
+    '--backdrop-surface-background': 'var(--backdrop-texture, none) 0 0 / var(--texture-tile-size) var(--texture-tile-size) repeat, var(--backdrop-surface-base)',
+    '--backdrop-surface-base': 'linear-gradient(var(--palette-parchment-lightest), var(--palette-parchment-lightest)) #ffffff',
     '--backdrop-surface-border': '1px solid var(--color-border-light-70)',
     '--backdrop-surface-shadow': 'var(--box-shadow-inverted)',
     '--btn-bg-default': colors.appButtons,
