@@ -63,6 +63,9 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   // The loop playing, by its place in BEAT_LOOPS; null while stopped.
   const [playing, setPlaying] = useState<number | null>(null)
   const running = playing !== null
+  // The loop a press starts: the one last played, so stopping and starting again keeps it.
+  const lastLoopRef = useRef(0)
+  if (playing !== null) lastLoopRef.current = playing
   const [failed, setFailed] = useState(false)
   const stripRef = useRef<HTMLButtonElement>(null)
   const fallsRef = useRef(falls)
@@ -181,7 +184,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
     }
   }, [running])
 
-  const intention = running ? 'Next loop' : 'Line the beat up with the drums'
+  const intention = running ? 'Stop' : 'Line the beat up with the drums'
   return (
     <div className="options-loadout-grid beat-loop-calibration" role="group" aria-label="Line the visuals up with the sound">
       <button
@@ -190,9 +193,15 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
         className={`options-loadout-btn beat-loop-calibration-strip${running ? ' active' : ''}${failed ? ' failed' : ''}`}
         onClick={() => {
           setFailed(false)
-          setPlaying((index) => (index === null ? 0 : (index + 1) % BEAT_LOOPS.length))
+          setPlaying((index) => (index === null ? lastLoopRef.current : null))
         }}
-        data-live-tooltip={encodeTooltip({ intention, value: `${delayMs} ms` })}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          setFailed(false)
+          setPlaying((index) => ((index ?? lastLoopRef.current) + (index === null ? 0 : 1)) % BEAT_LOOPS.length)
+        }}
+        data-secondary-press="action"
+        data-live-tooltip={encodeTooltip({ intention, value: `${delayMs} ms`, gestures: [{ press: 'right', intention: 'Next loop' }] })}
         aria-label={intention}
       >
         {boxPx > 1 && (
