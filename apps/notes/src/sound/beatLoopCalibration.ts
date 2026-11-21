@@ -124,6 +124,20 @@ const LOOP_04_SNARES: Readonly<Record<number, number>> = {
 const LOOP_05_BAR_SEC = 4.8
 const LOOP_05_SWING = 0.2
 
+/**
+ * 06: 120 BPM, no swing (384000 frames, 8 s): four bars, the whole track one
+ * pattern. From its MIDI, in sixteenths with their velocities (the loudest of
+ * several notes at once): the kick (MIDI 40) is the thump, the rim and the
+ * clap (38, 37) the pierce, and the four hats (39, 41, 42, 43) the tick.
+ */
+const LOOP_06_SEC = 8
+const LOOP_06_THUMP = { 0: 94, 10: 94, 13: 94, 16: 94, 26: 63, 32: 94, 42: 94, 45: 94, 48: 94, 56: 115, 58: 94 }
+const LOOP_06_PIERCE = { 4: 60, 12: 84, 20: 63, 28: 63, 36: 60, 44: 84, 52: 63, 60: 105 }
+const LOOP_06_TICK = { 0: 87, 1: 41, 2: 100, 3: 60, 4: 116, 5: 87, 6: 97, 8: 87, 9: 55, 10: 82, 11: 87, 12: 116, 13: 87, 14: 97, 16: 87, 17: 41, 18: 100, 19: 60, 20: 116, 21: 87, 22: 97, 24: 87, 25: 55, 26: 82, 27: 87, 28: 116, 29: 87, 30: 97, 32: 87, 33: 41, 34: 100, 35: 60, 36: 116, 37: 87, 38: 97, 40: 87, 41: 55, 42: 82, 43: 87, 44: 116, 45: 87, 46: 97, 48: 87, 49: 41, 50: 100, 51: 60, 52: 116, 53: 87, 54: 97, 56: 87, 57: 55, 58: 82, 59: 87, 60: 116, 61: 87, 62: 97 }
+/** MIDI velocities as strengths. */
+const byVelocity = (notes: Readonly<Record<number, number>>): Record<number, number> =>
+  Object.fromEntries(Object.entries(notes).map(([at, velocity]) => [at, velocity / 127]))
+
 /** The loops, in the order a press steps through them. */
 export const BEAT_LOOPS: readonly BeatLoop[] = [
   {
@@ -175,6 +189,17 @@ export const BEAT_LOOPS: readonly BeatLoop[] = [
       thump: atSixteenths(LOOP_05_BAR_SEC / 2, { 0: 1, 9: 0.7, 11: 0.4, 16: 0.7, 25: 0.7, 27: 0.4, 29: 0.7, 30: 0.4, 31: 0.4 }, LOOP_05_SWING),
       pierce: atSixteenths(LOOP_05_BAR_SEC / 2, { 4: 0.7, 12: 1, 20: 0.7, 28: 1 }, LOOP_05_SWING),
       tick: atSixteenths(LOOP_05_BAR_SEC / 2, { 2: 1, 6: 0.7, 10: 0.7, 14: 1, 18: 0.7, 22: 0.7, 26: 1, 30: 0.7 }, LOOP_05_SWING),
+    },
+  },
+  {
+    url: new URL('../assets/sounds/loops/06.mp4', import.meta.url).href,
+    trackSec: LOOP_06_SEC,
+    barSec: LOOP_06_SEC,
+    // Sixteenths counted on through all four bars: given one bar (2 s), sixteenths 16 to 63 fall in the later ones.
+    score: {
+      thump: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_THUMP)),
+      pierce: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_PIERCE)),
+      tick: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_TICK)),
     },
   },
 ]
