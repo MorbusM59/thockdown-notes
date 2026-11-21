@@ -102,6 +102,19 @@ const LOOP_02_RIM_SHOTS = new Set([2, 5, 14, 17])
 /** 03: eight bars at 120 BPM, no swing (768000 frames). */
 const LOOP_03_BAR_SEC = 2
 
+/**
+ * 04: 120 BPM, no swing (384000 frames, 8 s). Its kicks run over the whole
+ * track, four bars (in beats, from its author's roll), so the track is one
+ * pattern; its snare part, two stick sounds in sixteenths (from its MIDI,
+ * velocities 111 and 90 drawn as 1 and 0.8), repeats in each of the four bars.
+ */
+const LOOP_04_SEC = 8
+const LOOP_04_BEAT_SEC = 0.5
+const LOOP_04_KICK_BEATS = [0, 0.5, 4, 4.5, 6.5, 8, 8.5, 12, 12.5, 15.5]
+const LOOP_04_SNARES: Readonly<Record<number, number>> = {
+  0: 1, 1: 0.8, 2: 0.8, 3: 0.8, 3.5: 0.8, 4: 0.8, 5: 0.8, 6: 1, 7: 0.8, 7.5: 0.8, 8: 0.8, 9: 0.8, 10: 0.8, 11: 0.8, 11.5: 0.8, 12: 1, 13: 0.8, 14: 0.8, 15: 0.8, 15.5: 0.8,
+}
+
 /** The loops, in the order a press steps through them. */
 export const BEAT_LOOPS: readonly BeatLoop[] = [
   {
@@ -132,6 +145,16 @@ export const BEAT_LOOPS: readonly BeatLoop[] = [
       thump: atSixteenths(LOOP_03_BAR_SEC, { 0: 1, 10: 1, 13: 1 }),
       pierce: atSixteenths(LOOP_03_BAR_SEC, { 6: 1 }),
       tick: atSixteenths(LOOP_03_BAR_SEC, { 4: 1, 12: 1 }),
+    },
+  },
+  {
+    url: new URL('../assets/sounds/loops/04.mp4', import.meta.url).href,
+    trackSec: LOOP_04_SEC,
+    barSec: LOOP_04_SEC,
+    score: {
+      thump: LOOP_04_KICK_BEATS.map((beat) => ({ sec: beat * LOOP_04_BEAT_SEC, strength: 1 })),
+      pierce: [0, 1, 2, 3].flatMap((bar) => atSixteenths(2, LOOP_04_SNARES).map((hit) => ({ ...hit, sec: hit.sec + bar * 2 }))),
+      tick: [],
     },
   },
 ]
