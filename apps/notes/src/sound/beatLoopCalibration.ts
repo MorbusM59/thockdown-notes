@@ -1,8 +1,8 @@
 /**
  * Calibration of the visual delay (`BeatSettings.delayMsByDevice`) by
- * watching the grid beat on a track whose drums are KNOWN: `assets/sounds/loops/01.mp4`
- * (from `loops/01.wav`), four bars at 87 BPM built for this, its rhythm repeating every bar. The hits are
- * written down here (`LOOP_SCORE`) rather than detected, so what is judged is
+ * watching the grid beat on tracks whose drums are KNOWN: the loops in
+ * `assets/sounds/loops/` (`BEAT_LOOPS`), built for this. Their hits are
+ * written down here (each loop's `score`) rather than detected, so what is judged is
  * the timing alone; the reader moves the delay until the effects land on
  * what they hear (`sidebar/BeatLoopCalibration.tsx`).
  *
@@ -25,21 +25,9 @@ import { connectToOutput, resumedOutputContext } from '@thockdown/soundscape/aud
 import { outputLatencySec } from './musicBeat'
 import { SmoothClock } from './smoothClock'
 
-/**
- * The loop, `assets/sounds/loops/01.wav` (529656 frames at 48 kHz, four bars
- * at 87 BPM), stored losslessly as FLAC in one fragment of a fragmented MP4,
- * the form Media Source Extensions take:
- *   ffmpeg -i loops/01.wav -c:a flac -sample_fmt s16 -f mp4 \
- *     -movflags +frag_keyframe+empty_moov+default_base_moof+omit_tfhd_offset -frag_duration 12000000 loops/01.mp4
- */
-const LOOP_URL = new URL('../assets/sounds/loops/01.mp4', import.meta.url).href
 const LOOP_MIME = 'audio/mp4; codecs="flac"'
-/** The track's length, exactly: its frame count over its rate. */
-const LOOP_TRACK_SEC = 529656 / 48000
-/** Seconds after which the rhythm repeats: one bar; the track is four of them. */
-export const LOOP_BAR_SEC = LOOP_TRACK_SEC / 4
 /** How much of the loop is kept queued ahead of the listener, and behind them before it is let go. */
-const AHEAD_SEC = 2 * LOOP_TRACK_SEC
+const AHEAD_SEC = 32
 const BEHIND_SEC = 4
 
 /** The file split where the media starts: the header boxes (ftyp, moov) and the fragment (moof, mdat); anything after (mfra) is not media. */
@@ -67,47 +55,100 @@ export interface LoopHit {
   strength: number
 }
 
-/** A sixteenth of the bar. */
-const SIXTEENTH_SEC = LOOP_BAR_SEC / 16
+/** What a loop's score holds: every channel's hits in one bar. */
+export type LoopScore = Readonly<Record<LoopChannel, readonly LoopHit[]>>
 
 /**
- * How late the off sixteenths (the 2nd and 4th of each beat) sound, in
- * sixteenths: the loop is played with Ableton's "Swing 16-85" groove, and its
- * hits on those sixteenths measure 0.40 to 0.46 of a sixteenth (32 to 37 ms)
- * late against the straight ones.
+ * A calibration loop. Each `.mp4` is its `.wav` stored losslessly as FLAC in
+ * one fragment of a fragmented MP4, the form Media Source Extensions take:
+ *   ffmpeg -i NN.wav -c:a flac -sample_fmt s16 -f mp4 \
+ *     -movflags +frag_keyframe+empty_moov+default_base_moof+omit_tfhd_offset -frag_duration 16000000 NN.mp4
  */
-const SWING_SIXTEENTHS = 0.42
-
-/** Hits at sixteenths of the bar, each with its strength; an odd sixteenth is swung. */
-const atSixteenths = (hits: Readonly<Record<number, number>>): LoopHit[] =>
-  Object.entries(hits).map(([at, strength]) => {
-    const sixteenth = Number(at)
-    return { sec: (sixteenth + (sixteenth % 2) * SWING_SIXTEENTHS) * SIXTEENTH_SEC, strength }
-  })
-
-/**
- * The hits of one bar, as the loop was programmed (its author's piano roll),
- * in sixteenths from the bar's one; strengths follow the programmed velocities.
- */
-export const LOOP_SCORE: Readonly<Record<LoopChannel, readonly LoopHit[]>> = {
-  thump: atSixteenths({ 0: 1, 2: 1, 9: 0.3, 10: 1, 13: 1 }),
-  pierce: atSixteenths({ 4: 1, 7: 0.5, 12: 1 }),
-  tick: atSixteenths({ 0: 1, 2: 1, 4: 1, 6: 0.5, 8: 0.5, 10: 1, 12: 1, 14: 0.5 }),
+export interface BeatLoop {
+  url: string
+  /** The track's length, exactly: its frame count over its rate. */
+  trackSec: number
+  /** Seconds after which the rhythm repeats; the track is a whole number of them. */
+  barSec: number
+  /** The hits of one bar, as the loop was programmed (its author's piano roll or MIDI). */
+  score: LoopScore
 }
 
-/** The latest hit of `channel` at bar time `barSec` (0..LOOP_BAR_SEC), and how long ago it was; a hit late in the bar is still falling at the start of the next. */
-export function lastHit(channel: LoopChannel, barSec: number): { strength: number; agoSec: number } {
+/**
+ * Hits at sixteenths of a bar, each with its strength. `swing` delays the
+ * off sixteenths (the 2nd and 4th of each beat) by that share of a sixteenth.
+ */
+function atSixteenths(barSec: number, hits: Readonly<Record<number, number>>, swing = 0): LoopHit[] {
+  const sixteenthSec = barSec / 16
+  return Object.entries(hits).map(([at, strength]) => {
+    const sixteenth = Number(at)
+    return { sec: (sixteenth + (sixteenth % 2) * swing) * sixteenthSec, strength }
+  })
+}
+
+/** 01: four bars at 87 BPM (529656 frames at 48 kHz). */
+const LOOP_01_BAR_SEC = 529656 / 48000 / 4
+/**
+ * 01 is played with Ableton's "Swing 16-85" groove: its hits on the off
+ * sixteenths measure 0.40 to 0.46 of a sixteenth (32 to 37 ms) late.
+ */
+const LOOP_01_SWING = 0.42
+
+/** 02: 16 s (768000 frames), its rhythm repeating every four seconds; the ticks are sextuplets, 24 to the bar. */
+const LOOP_02_BAR_SEC = 4
+/** 02's ticks with a rim shot on them (the 3rd, 6th, 15th and 18th of 24): louder, so drawn stronger. */
+const LOOP_02_RIM_SHOTS = new Set([2, 5, 14, 17])
+
+/** 03: eight bars at 120 BPM, no swing (768000 frames). */
+const LOOP_03_BAR_SEC = 2
+
+/** The loops, in the order a press steps through them. */
+export const BEAT_LOOPS: readonly BeatLoop[] = [
+  {
+    url: new URL('../assets/sounds/loops/01.mp4', import.meta.url).href,
+    trackSec: 529656 / 48000,
+    barSec: LOOP_01_BAR_SEC,
+    score: {
+      thump: atSixteenths(LOOP_01_BAR_SEC, { 0: 1, 2: 1, 9: 0.3, 10: 1, 13: 1 }, LOOP_01_SWING),
+      pierce: atSixteenths(LOOP_01_BAR_SEC, { 4: 1, 7: 0.5, 12: 1 }, LOOP_01_SWING),
+      tick: atSixteenths(LOOP_01_BAR_SEC, { 0: 1, 2: 1, 4: 1, 6: 0.5, 8: 0.5, 10: 1, 12: 1, 14: 0.5 }, LOOP_01_SWING),
+    },
+  },
+  {
+    url: new URL('../assets/sounds/loops/02.mp4', import.meta.url).href,
+    trackSec: 16,
+    barSec: LOOP_02_BAR_SEC,
+    score: {
+      thump: [0, 0.8335, 2.3315, 2.8335].map((sec) => ({ sec, strength: 1 })),
+      pierce: [1, 3].map((sec) => ({ sec, strength: 1 })),
+      tick: Array.from({ length: 24 }, (_, i) => ({ sec: (i * LOOP_02_BAR_SEC) / 24, strength: LOOP_02_RIM_SHOTS.has(i) ? 1 : 0.5 })),
+    },
+  },
+  {
+    url: new URL('../assets/sounds/loops/03.mp4', import.meta.url).href,
+    trackSec: 16,
+    barSec: LOOP_03_BAR_SEC,
+    score: {
+      thump: atSixteenths(LOOP_03_BAR_SEC, { 0: 1, 10: 1, 13: 1 }),
+      pierce: atSixteenths(LOOP_03_BAR_SEC, { 6: 1 }),
+      tick: atSixteenths(LOOP_03_BAR_SEC, { 4: 1, 12: 1 }),
+    },
+  },
+]
+
+/** The latest hit of `channel` at bar time `barSec` (0..the loop's bar), and how long ago it was; a hit late in the bar is still falling at the start of the next. */
+export function lastHit(loop: BeatLoop, channel: LoopChannel, barSec: number): { strength: number; agoSec: number } {
   let latest = { strength: 0, agoSec: Infinity }
-  for (const hit of LOOP_SCORE[channel]) {
+  for (const hit of loop.score[channel]) {
     const ago = barSec - hit.sec
-    const agoSec = ago >= 0 ? ago : ago + LOOP_BAR_SEC
+    const agoSec = ago >= 0 ? ago : ago + loop.barSec
     if (agoSec < latest.agoSec) latest = { strength: hit.strength, agoSec }
   }
   return latest
 }
 
 export interface LoopRun {
-  /** Where in its bar (0..LOOP_BAR_SEC) the loop the reader is hearing now is; NaN before the first report. */
+  /** Where in its bar (0..its bar) the loop the reader is hearing now is; NaN before the first report. */
   heardBarSec(frameTimeMs: number, delaySec: number): number
   stop(): void
 }
@@ -122,7 +163,7 @@ export interface LoopRun {
  * AHEAD_SEC and what lies more than BEHIND_SEC behind is let go, so the
  * memory held stays at a few copies.
  */
-export function startBeatLoop(onFailed: () => void): LoopRun {
+export function startBeatLoop(loop: BeatLoop, onFailed: () => void): LoopRun {
   const element = new Audio()
   const mediaSource = new MediaSource()
   const clock = new SmoothClock()
@@ -134,7 +175,7 @@ export function startBeatLoop(onFailed: () => void): LoopRun {
 
   void (async () => {
     try {
-      const fetched = fetch(LOOP_URL).then((response) => response.arrayBuffer())
+      const fetched = fetch(loop.url).then((response) => response.arrayBuffer())
       element.src = URL.createObjectURL(mediaSource)
       await new Promise((resolve) => mediaSource.addEventListener('sourceopen', resolve, { once: true }))
       URL.revokeObjectURL(element.src)
@@ -151,8 +192,8 @@ export function startBeatLoop(onFailed: () => void): LoopRun {
         if (!initialised) {
           buffer.appendBuffer(init)
           initialised = true
-        } else if (copies * LOOP_TRACK_SEC < now + AHEAD_SEC) {
-          buffer.timestampOffset = copies * LOOP_TRACK_SEC
+        } else if (copies * loop.trackSec < now + AHEAD_SEC) {
+          buffer.timestampOffset = copies * loop.trackSec
           buffer.appendBuffer(media)
           copies++
         } else if (buffer.buffered.length > 0 && buffer.buffered.start(0) < now - BEHIND_SEC - 1) {
@@ -177,7 +218,7 @@ export function startBeatLoop(onFailed: () => void): LoopRun {
     heardBarSec(frameTimeMs, delaySec) {
       if (element.paused || element.readyState < 2) return NaN
       const heard = clock.read(element.currentTime, frameTimeMs / 1000) - outputLatencySec() - delaySec
-      return heard - Math.floor(heard / LOOP_BAR_SEC) * LOOP_BAR_SEC
+      return heard - Math.floor(heard / loop.barSec) * loop.barSec
     },
     stop() {
       over = true

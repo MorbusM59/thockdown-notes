@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { lastHit, LOOP_BAR_SEC, LOOP_SCORE } from './beatLoopCalibration'
+import { BEAT_LOOPS, lastHit } from './beatLoopCalibration'
 
-describe('the calibration loop score', () => {
-  it('is one bar at 87 BPM, hats on the eighths', () => {
-    expect(LOOP_BAR_SEC).toBeCloseTo((4 * 60) / 87, 4)
-    LOOP_SCORE.tick.forEach((h, i) => expect(h.sec).toBeCloseTo((i * LOOP_BAR_SEC) / 8, 9))
+describe('the calibration loops', () => {
+  it('fit a whole number of bars into each track, every hit inside its bar', () => {
+    for (const loop of BEAT_LOOPS) {
+      expect(loop.trackSec / loop.barSec).toBeCloseTo(Math.round(loop.trackSec / loop.barSec), 9)
+      for (const hits of Object.values(loop.score)) for (const { sec } of hits) expect(sec >= 0 && sec < loop.barSec).toBe(true)
+    }
   })
 
   it('finds the latest hit, carrying the last one of a bar over into the next', () => {
-    const snare = LOOP_BAR_SEC / 4
-    expect(lastHit('pierce', snare + 0.05)).toEqual({ strength: 1, agoSec: expect.closeTo(0.05, 9) })
-    expect(lastHit('pierce', 0.1).agoSec).toBeCloseTo(LOOP_BAR_SEC / 4 + 0.1, 9)
-    expect(lastHit('thump', 0).agoSec).toBe(0)
+    const loop = BEAT_LOOPS[1]
+    expect(lastHit(loop, 'pierce', 1.05)).toEqual({ strength: 1, agoSec: expect.closeTo(0.05, 9) })
+    expect(lastHit(loop, 'pierce', 0.5).agoSec).toBeCloseTo(1.5, 9)
+    expect(lastHit(loop, 'thump', 0).agoSec).toBe(0)
   })
 })

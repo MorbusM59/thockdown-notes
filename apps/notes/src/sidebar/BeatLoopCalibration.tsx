@@ -5,7 +5,7 @@ import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
 import { useBoxBevelImages } from '../shared/boxBevelStore'
 import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '../shared/beatSettings'
 import { useHoldToAdjust, type HoldToAdjustKeyboardController } from '../shared/useHoldToAdjust'
-import { lastHit, startBeatLoop, type LoopRun } from '../sound/beatLoopCalibration'
+import { BEAT_LOOPS, lastHit, startBeatLoop, type LoopRun } from '../sound/beatLoopCalibration'
 
 /** The step Up and Down take, in ms; Left and Right take 1 and speed up while held. */
 const COARSE_STEP_MS = 10
@@ -60,7 +60,9 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   /** The visualizer's font size over its box size, so the letters sit in their boxes as there. */
   fontPerBox: number
 }) {
-  const [running, setRunning] = useState(false)
+  // The loop playing, by its place in BEAT_LOOPS; null while stopped.
+  const [playing, setPlaying] = useState<number | null>(null)
+  const running = playing !== null
   const [failed, setFailed] = useState(false)
   const stripRef = useRef<HTMLButtonElement>(null)
   const fallsRef = useRef(falls)
@@ -116,10 +118,11 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   // The frame loop, only while running: each effect's response written to the strip.
   useEffect(() => {
     const strip = stripRef.current
-    if (!running || !strip) return
-    const run: LoopRun = startBeatLoop(() => {
+    if (playing === null || !strip) return
+    const loop = BEAT_LOOPS[playing]
+    const run: LoopRun = startBeatLoop(loop, () => {
       setFailed(true)
-      setRunning(false)
+      setPlaying(null)
     })
     const written = EFFECTS.map(() => '')
     let frame = requestAnimationFrame(function tick(frameTimeMs) {
@@ -129,7 +132,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
         if (!Number.isNaN(barSec)) {
           const { fallSec, shape } = fallsRef.current[fall]
           for (const { channel, weight } of channels) {
-            const { strength, agoSec } = lastHit(channel, barSec)
+            const { strength, agoSec } = lastHit(loop, channel, barSec)
             response = Math.max(response, weight * strength * pulseCurve(fallSec > 0 ? agoSec / fallSec : Infinity, shape))
           }
         }
@@ -144,14 +147,14 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
       run.stop()
       for (const { variable } of EFFECTS) strip.style.removeProperty(variable)
     }
-  }, [running])
+  }, [playing])
 
   // The keys, only while running, ahead of everything else (the window's capture phase).
   useEffect(() => {
     if (!running) return
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key
-      if (key === 'Escape') setRunning(false)
+      if (key === 'Escape') setPlaying(null)
       else if (key === 'ArrowLeft' || key === 'ArrowRight') {
         if (!event.repeat) keyboardRef.current?.start(key === 'ArrowLeft' ? 0 : 2)
       } else if (key === 'ArrowUp' || key === 'ArrowDown') {
@@ -178,7 +181,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
     }
   }, [running])
 
-  const intention = running ? 'Stop' : 'Line the beat up with the drums'
+  const intention = running ? 'Next loop' : 'Line the beat up with the drums'
   return (
     <div className="options-loadout-grid beat-loop-calibration" role="group" aria-label="Line the visuals up with the sound">
       <button
@@ -187,7 +190,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
         className={`options-loadout-btn beat-loop-calibration-strip${running ? ' active' : ''}${failed ? ' failed' : ''}`}
         onClick={() => {
           setFailed(false)
-          setRunning((on) => !on)
+          setPlaying((index) => (index === null ? 0 : (index + 1) % BEAT_LOOPS.length))
         }}
         data-live-tooltip={encodeTooltip({ intention, value: `${delayMs} ms` })}
         aria-label={intention}
