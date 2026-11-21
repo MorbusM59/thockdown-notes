@@ -1,7 +1,7 @@
 /**
  * Calibration of the visual delay (`BeatSettings.delayMsByDevice`) by
- * watching the grid beat on a track whose drums are KNOWN: `assets/sounds/loop.mp4`
- * (from `loop.wav`), 16 s built for this, its rhythm repeating every four seconds. The hits are
+ * watching the grid beat on a track whose drums are KNOWN: `assets/sounds/loops/01.mp4`
+ * (from `loops/01.wav`), four bars at 87 BPM built for this, its rhythm repeating every bar. The hits are
  * written down here (`LOOP_SCORE`) rather than detected, so what is judged is
  * the timing alone; the reader moves the delay until the effects land on
  * what they hear (`sidebar/BeatLoopCalibration.tsx`).
@@ -26,18 +26,18 @@ import { outputLatencySec } from './musicBeat'
 import { SmoothClock } from './smoothClock'
 
 /**
- * The loop, `assets/sounds/loop.wav` cut to exactly 16 s (768000 frames) and
- * stored losslessly as FLAC in one fragment of a fragmented MP4, the form
- * Media Source Extensions take:
- *   ffmpeg -i loop.wav -af atrim=end_sample=768000 -c:a flac -sample_fmt s16 -f mp4 \
- *     -movflags +frag_keyframe+empty_moov+default_base_moof+omit_tfhd_offset -frag_duration 16000000 loop.mp4
+ * The loop, `assets/sounds/loops/01.wav` (529656 frames at 48 kHz, four bars
+ * at 87 BPM), stored losslessly as FLAC in one fragment of a fragmented MP4,
+ * the form Media Source Extensions take:
+ *   ffmpeg -i loops/01.wav -c:a flac -sample_fmt s16 -f mp4 \
+ *     -movflags +frag_keyframe+empty_moov+default_base_moof+omit_tfhd_offset -frag_duration 12000000 loops/01.mp4
  */
-const LOOP_URL = new URL('../assets/sounds/loop.mp4', import.meta.url).href
+const LOOP_URL = new URL('../assets/sounds/loops/01.mp4', import.meta.url).href
 const LOOP_MIME = 'audio/mp4; codecs="flac"'
-/** The track's length, exactly. */
-const LOOP_TRACK_SEC = 16
-/** Seconds after which the rhythm repeats; the track is four of them. */
-export const LOOP_BAR_SEC = 4
+/** The track's length, exactly: its frame count over its rate. */
+const LOOP_TRACK_SEC = 529656 / 48000
+/** Seconds after which the rhythm repeats: one bar; the track is four of them. */
+export const LOOP_BAR_SEC = LOOP_TRACK_SEC / 4
 /** How much of the loop is kept queued ahead of the listener, and behind them before it is let go. */
 const AHEAD_SEC = 2 * LOOP_TRACK_SEC
 const BEHIND_SEC = 4
@@ -55,7 +55,7 @@ function splitFragmentedMp4(bytes: Uint8Array<ArrayBuffer>): { init: Uint8Array<
     if (size < 8) break
     at += size
   }
-  if (mediaStart < 0) throw new Error('loop.mp4 has no fragment')
+  if (mediaStart < 0) throw new Error('the loop has no fragment')
   return { init: bytes.subarray(0, mediaStart), media: bytes.subarray(mediaStart, mediaEnd) }
 }
 
@@ -67,22 +67,21 @@ export interface LoopHit {
   strength: number
 }
 
-/** The ticks with a rim shot on them (the 3rd, 6th, 15th and 18th of 24, at 0.333, 0.833, 2.333 and 2.833): louder, so drawn stronger. */
-const RIM_SHOT_TICKS = new Set([2, 5, 14, 17])
-/** An ordinary tick's strength beside a rim shot's 1. */
-const PLAIN_TICK = 0.5
+/** A sixteenth of the bar. */
+const SIXTEENTH_SEC = LOOP_BAR_SEC / 16
+
+/** Hits at sixteenths of the bar, each with its strength. */
+const atSixteenths = (hits: Readonly<Record<number, number>>): LoopHit[] =>
+  Object.entries(hits).map(([at, strength]) => ({ sec: Number(at) * SIXTEENTH_SEC, strength }))
 
 /**
- * The hits of one four-second bar, as the loop was programmed (its author's
- * figures). Measured against the audio, every snare and hat attack starts
- * within 2 ms of these (snare 0.998 and 2.999; hats 0.166, 0.330, 0.499 ...),
- * and the rim shots show as mid-range attacks at 0.330, 0.831 and 2.331 (the one at 2.833 is under the kick there).
+ * The hits of one bar, as the loop was programmed (its author's piano roll),
+ * in sixteenths from the bar's one; strengths follow the programmed velocities.
  */
 export const LOOP_SCORE: Readonly<Record<LoopChannel, readonly LoopHit[]>> = {
-  thump: [0, 0.8335, 2.3315, 2.8335].map((sec) => ({ sec, strength: 1 })),
-  pierce: [1, 3].map((sec) => ({ sec, strength: 1 })),
-  // Sextuplets: 24 to the bar, from 0.
-  tick: Array.from({ length: 24 }, (_, i) => ({ sec: (i * LOOP_BAR_SEC) / 24, strength: RIM_SHOT_TICKS.has(i) ? 1 : PLAIN_TICK })),
+  thump: atSixteenths({ 0: 1, 2: 1, 9: 0.3, 10: 1, 13: 1 }),
+  pierce: atSixteenths({ 4: 1, 7: 0.5, 12: 1 }),
+  tick: atSixteenths({ 0: 1, 2: 1, 4: 1, 6: 0.5, 8: 0.5, 10: 1, 12: 1, 14: 0.5 }),
 }
 
 /** The latest hit of `channel` at bar time `barSec` (0..LOOP_BAR_SEC), and how long ago it was; a hit late in the bar is still falling at the start of the next. */
@@ -106,7 +105,7 @@ export interface LoopRun {
  * Starts the loop; `onFailed` is told if it cannot play. Seamless: rather
  * than an element looping a file (which restarts it, with a gap, and jumps
  * its position back), the same fragment is appended to a MediaSource again
- * and again, each copy placed 16 s after the last (`timestampOffset`), so
+ * and again, each copy placed one track length after the last (`timestampOffset`), so
  * the element plays one endless track and its position only ever runs on.
  * Whenever the element reports its position, what is queued is topped up to
  * AHEAD_SEC and what lies more than BEHIND_SEC behind is let go, so the
