@@ -209,7 +209,11 @@ body {
 {
   position:absolute;
   inset: 0;
-  background-image: var(--glaze-sheen-background-image, linear-gradient(180deg, rgba(255, 255, 255, 0.000) -100%, rgba(255, 255, 255, 0.6) 38.5%, rgba(255, 255, 255, 0.000) 200%));
+  /* The sheen itself is painted by each app where its chrome is: the desktop
+     above its Chrome texture (layout.css's .app-grid::after), the mobile app
+     here on this element (mobile.css). --app-sheen-image is the one
+     definition of what it looks like. */
+  --app-sheen-image: var(--glaze-sheen-background-image, linear-gradient(180deg, rgba(255, 255, 255, 0.000) -100%, rgba(255, 255, 255, 0.6) 38.5%, rgba(255, 255, 255, 0.000) 200%));
 }
 
 /* Glaze overlay */

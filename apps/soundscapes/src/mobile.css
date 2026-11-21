@@ -1,3 +1,9 @@
+/* The sheen (look.css's --app-sheen-image): there is no Chrome texture here,
+   so it is painted straight on the sheen element under the shell. */
+.app-sheen {
+  background-image: var(--app-sheen-image);
+}
+
 /* Only what a phone needs on top of the desktop panel's own styles. */
 html, body, #root {
   height: 100%;

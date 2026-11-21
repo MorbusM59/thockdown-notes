@@ -207,6 +207,20 @@
   mask-position: 0 0;
 }
 
+/* The sheen (look.css's --app-sheen-image), ABOVE the Chrome texture so it
+   brightens the chrome as a whole rather than showing only through the
+   texture's thin spots, and below every panel (z-index 1), which are opaque
+   back panel surfaces it is not meant for. Same z-index as ::before and
+   later in paint order, so it is drawn over it. */
+.app-grid::after {
+  content:          '';
+  position:         absolute;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          0;
+  background-image: var(--app-sheen-image);
+}
+
 .app-grid > * {
   position: relative;
   z-index:  1;
