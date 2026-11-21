@@ -241,6 +241,7 @@ export function factoryLayoutIcon(id: number): string | null {
 export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
   // Layout 1: Light (default)
   buildPreset({
+    borderRadiusRegularPx: 20,
     boxShadowAlphaPercent: 80,
     cursorDotColor: 'rgba(0, 0, 0, 0.85)',
     cursorTrailColor: 'rgba(255, 255, 255, 1)',
@@ -336,6 +337,11 @@ export const LIGHT_FACTORY_PRESETS: UiLayoutLoadout[] = [
         "textureStrength": 0,
         "vSteps": 1,
       }
+    },
+    visualizerColors: {
+      ...NEUTRAL_BASE.visualizerColors,
+      pane: 'rgba(40, 0, 0, 0.353)',
+      wave: 'rgba(0, 0, 0, 0.196)',
     },
   }),
   // Layout 2: Sand
