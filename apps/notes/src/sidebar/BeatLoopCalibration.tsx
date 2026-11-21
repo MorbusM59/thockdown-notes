@@ -29,23 +29,21 @@ export interface LoopFall {
 }
 
 /**
- * The three effects, one channel each, as the visualizer separates them:
- * the kick on the EDGE, the snare on the box OUTLINES (the pane), the hats on
- * the grid LINES (where the visualizer's wave runs). Each at a fixed strength,
- * falling as the visualizer's own setting for it falls.
+ * The two effects, as the visualizer draws them: the kick on the EDGE, the
+ * snare on the box OUTLINES (the pane) with the hats at a third of their
+ * strength there too. Each falls as the visualizer's own setting for it falls.
  */
 const EFFECTS = [
-  { variable: '--loop-edge', channel: 'thump', fall: 'edge' },
-  { variable: '--loop-outline', channel: 'pierce', fall: 'pane' },
-  { variable: '--loop-lines', channel: 'tick', fall: 'wave' },
+  { variable: '--loop-edge', channels: [{ channel: 'thump', weight: 1 }], fall: 'edge' },
+  { variable: '--loop-outline', channels: [{ channel: 'pierce', weight: 1 }, { channel: 'tick', weight: 1 / 3 }], fall: 'pane' },
 ] as const
 
 /**
  * Options > Beat Detection's delay calibration (`sound/beatLoopCalibration.ts`):
  * one strip, six cells wide and one high. Pressing it plays a drum loop whose
  * hits are known, over a row of the visualizer's boxes, and shows them as
- * the visualizer would: the kick on the edge, the snare on the box outlines,
- * the hats on the grid lines, each falling as the visualizer's setting for
+ * the visualizer would: the kick on the edge, the snare on the box outlines
+ * and the hats there at a third, each falling as the visualizer's setting for
  * it does, drawn as late as the beat pulse would draw them. While it runs, Left and Right move
  * the device's delay by 1 ms (held, faster, on the app's hold curve), Up and
  * Down by 10 (the wheel over it as over a slider: a notch 1, with Shift 10),
@@ -55,8 +53,8 @@ const EFFECTS = [
 export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, fontPerBox }: {
   delayMs: number
   onChange: (delayMs: number) => void
-  /** The visualizer's own falls for its edge, pane and wave. */
-  falls: Readonly<Record<'edge' | 'pane' | 'wave', LoopFall>>
+  /** The visualizer's own falls for its edge and pane. */
+  falls: Readonly<Record<'edge' | 'pane', LoopFall>>
   /** The visualizer's font, the delay's letters are written in. */
   fontFamily: string
   /** The visualizer's font size over its box size, so the letters sit in their boxes as there. */
@@ -126,12 +124,14 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
     const written = EFFECTS.map(() => '')
     let frame = requestAnimationFrame(function tick(frameTimeMs) {
       const barSec = run.heardBarSec(frameTimeMs, delayRef.current / 1000)
-      EFFECTS.forEach(({ variable, channel, fall }, index) => {
+      EFFECTS.forEach(({ variable, channels, fall }, index) => {
         let response = 0
         if (!Number.isNaN(barSec)) {
-          const { strength, agoSec } = lastHit(channel, barSec)
           const { fallSec, shape } = fallsRef.current[fall]
-          response = strength * pulseCurve(fallSec > 0 ? agoSec / fallSec : Infinity, shape)
+          for (const { channel, weight } of channels) {
+            const { strength, agoSec } = lastHit(channel, barSec)
+            response = Math.max(response, weight * strength * pulseCurve(fallSec > 0 ? agoSec / fallSec : Infinity, shape))
+          }
         }
         // Quantized to the 1/255 a colour channel resolves, as the grid beat is; an unchanged value is not written.
         const value = (Math.round(response * 255) / 255).toFixed(4)
@@ -208,7 +208,6 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
             <span className="thockdown-grid-outline-lines beat-loop-calibration-layer is-outline" />
             <span className="thockdown-grid-lines beat-loop-calibration-layer" />
             <span className="thockdown-grid-outline-lines beat-loop-calibration-layer is-outline is-outline-hit" />
-            <span className="beat-loop-calibration-layer is-lines-hit" />
             {Array.from(valueText).map((char, index) => (
               <span
                 key={index}

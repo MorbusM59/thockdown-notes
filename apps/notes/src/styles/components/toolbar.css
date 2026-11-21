@@ -763,10 +763,9 @@
 /* Options > Beat Detection's delay calibration (sidebar/BeatLoopCalibration.tsx):
    one strip, six boxes of the visualizer's grid (its outline and line
    layers, index.css, at the strip's height as the box), and over them the
-   visualizer's three effects in the layout's own colours: the edge, the box
-   outlines (the beat pane: the outline pattern in the pane colour) and the
-   grid lines (where the wave runs, in the wave colour), each at the strength
-   the strip writes as --loop-edge / --loop-outline / --loop-lines. */
+   visualizer's two effects in the layout's own colours: the edge and the
+   box outlines (the beat pane: the outline pattern in the pane colour), at
+   the strength the strip writes as --loop-edge / --loop-outline. */
 .beat-loop-calibration > .beat-loop-calibration-strip {
   position:    relative;
   grid-column: span 6;
@@ -787,8 +786,7 @@
   inset:    0;
 }
 
-.thockdown-grid-lines.beat-loop-calibration-layer,
-.beat-loop-calibration-layer.is-lines-hit {
+.thockdown-grid-lines.beat-loop-calibration-layer {
   background-position: var(--loop-grid-x) var(--loop-grid-y);
   mask-position:       var(--loop-grid-x) var(--loop-grid-y);
 }
@@ -810,16 +808,6 @@
 .beat-loop-calibration-layer.is-outline-hit {
   background-color: var(--beat-pane-color, var(--color-caret));
   opacity:          var(--loop-outline, 0);
-}
-
-.beat-loop-calibration-layer.is-lines-hit {
-  background-color: var(--visualizer-wave-color, var(--color-caret));
-  mask-image:
-    repeating-linear-gradient(to right, #000 0, #000 1px, transparent 1px, transparent var(--editor-cell-width)),
-    repeating-linear-gradient(to bottom, #000 0, #000 1px, transparent 1px, transparent var(--editor-line-height));
-  mask-size:        var(--editor-cell-width) var(--editor-line-height);
-  mask-composite:   add;
-  opacity:          var(--loop-lines, 0);
 }
 
 .beat-loop-calibration-edge {
