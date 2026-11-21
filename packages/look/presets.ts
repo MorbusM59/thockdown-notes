@@ -8,7 +8,7 @@
 
 import { DEFAULT_TEXTURE_MATERIALS, type TextureMaterialSettings, type TextureColorHsva } from './textureTypes';
 import { DEFAULT_GLAZE_SETTINGS } from './glaze';
-import { DARK_PRESET_BOX_BEVEL, DEFAULT_BOX_BEVEL } from './boxBevel';
+import { DEFAULT_BOX_BEVEL } from './boxBevel';
 import { DEFAULT_CUSTOM_CURSOR_SETTINGS } from './cursorSettings';
 import { DEFAULT_CARET_SETTINGS } from './caretSettings';
 import { FALLBACK_SPELL_CHECK_COLOR, type UiLayoutLoadout } from './loadouts';

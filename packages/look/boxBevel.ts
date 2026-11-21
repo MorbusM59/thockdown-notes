@@ -171,6 +171,3 @@ export function boxBevelImages(width: number, height: number, settings: BoxBevel
 export function onScreenBoxBevel(settings: BoxBevelSettings, filterInvert: number): BoxBevelSettings {
   return filterInvert >= 0.5 && settings.shading !== 0 ? { ...settings, shading: -settings.shading } : settings
 }
-
-/** The bevel the factory's dark layouts start from (packages/look/presets.ts). */
-export const DARK_PRESET_BOX_BEVEL: BoxBevelSettings = { ...DEFAULT_BOX_BEVEL, shading: 0.08, shape: 0.2 }
