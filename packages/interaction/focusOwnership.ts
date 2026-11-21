@@ -23,7 +23,8 @@
 //   deliberately hands the keyboard to.
 //
 //   TEXT THE READER MAY SELECT -- read-only editor text (a sealed note, a
-//   snapshot preview). Suppressing the press default suppresses the native
+//   snapshot preview), and any surface that declares itself selectable with
+//   `data-selectable-text` (the reader pane). Suppressing the press default suppresses the native
 //   selection drag with it, so a carve-out here is what keeps select-and-copy
 //   working where there is nothing to type into.
 //
@@ -40,7 +41,7 @@ const TEXT_ENTRY_SELECTOR = 'input, textarea, select, [contenteditable=""], [con
  * press default, so a dragged row or pill keeps the keyboard where it was
  * like every other control.
  */
-const NATIVE_PRESS_SELECTOR = '[contenteditable="false"]'
+const NATIVE_PRESS_SELECTOR = '[contenteditable="false"], [data-selectable-text]'
 
 /**
  * Is this element one the reader types into?

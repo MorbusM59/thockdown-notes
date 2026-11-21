@@ -517,6 +517,9 @@ export function SectionEditorArea({
                 onScroll={handlePreviewScroll}
                 onCopy={handlePreviewCopy}
                 data-typography-surface="render"
+                // Reader text is selectable: a press here keeps its native
+                // default (the selection drag), focusOwnership.ts.
+                data-selectable-text=""
                 className={`markdown-preview thockdown-custom-scrollbar style-${viewStyle}`}
                 style={{
                   '--search-hit-color': highlightSearchColor,

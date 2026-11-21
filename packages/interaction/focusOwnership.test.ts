@@ -26,6 +26,12 @@ describe('a press', () => {
     expect(mayTakeFocusOnPress(document.querySelector('i'))).toBe(false)
   })
 
+  it('lets a surface declared selectable (the reader pane) take its native press', () => {
+    document.body.innerHTML = '<div data-selectable-text=""><p><em class="t">x</em></p><button><i></i></button></div>'
+    expect(mayTakeFocusOnPress(document.querySelector('.t'))).toBe(true)
+    expect(mayTakeFocusOnPress(document.querySelector('i'))).toBe(false)
+  })
+
   it('always lets text entry take the keyboard', () => {
     document.body.innerHTML = '<div data-drag-source=""><input /></div>'
     expect(mayTakeFocusOnPress(document.querySelector('input'))).toBe(true)
