@@ -315,7 +315,6 @@
   color:          var(--color-text-80);
   font-size:      calc(9px * var(--ui-font-scale));
   letter-spacing: 0.02em;
-  text-shadow:    none;
   user-select:    none;
   text-align:     center;
   align-content:  center;
