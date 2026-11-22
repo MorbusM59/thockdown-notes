@@ -234,6 +234,13 @@ const QUANTIZE_FILTER_ID = 'thockdown-solid-quantize'
  * so it runs where the canvas is rasterized: a per-pixel pass in script read
  * the drawing back from the GPU every frame and was the largest script cost
  * in the visualizer at 4x throttle. Added to the document once.
+ *
+ * Assigned to a context ONCE (`quantizedContext`, whenever its canvas is
+ * resized, which resets context state), never per frame: assigning a
+ * `url(#...)` filter resolves the reference against the document, which
+ * forces a style recalculation whenever anything dirtied style that frame --
+ * and in the visualizer something always has (about 3.7ms a frame at 6x
+ * throttle, 2026-11-22). Drawing through a filter already assigned does not.
  */
 function quantizeFilter(): string {
   if (!document.getElementById(QUANTIZE_FILTER_ID)) {
@@ -383,6 +390,14 @@ const STRIPE_INK = 'rgba(0, 0, 0, 0.15)'
 export interface SolidDrawScratch {
   alpha: HTMLCanvasElement
   alphaContext: CanvasRenderingContext2D
+  /**
+   * The cutout after the quantize, at the scene canvas's own size so it is
+   * resized only with it: its context carries the filter permanently (see
+   * `quantizeFilter`), and a canvas that followed the solid's size would be
+   * resized, and the filter re-assigned, on every frame of a thump.
+   */
+  quantized: HTMLCanvasElement
+  quantizedContext: CanvasRenderingContext2D
   stripes: CanvasPattern | null
   stripesDpr: number
 }
@@ -390,7 +405,9 @@ export interface SolidDrawScratch {
 export function createSolidDrawScratch(): SolidDrawScratch {
   const alpha = document.createElement('canvas')
   const alphaContext = alpha.getContext('2d') as CanvasRenderingContext2D
-  return { alpha, alphaContext, stripes: null, stripesDpr: 0 }
+  const quantized = document.createElement('canvas')
+  const quantizedContext = quantized.getContext('2d') as CanvasRenderingContext2D
+  return { alpha, alphaContext, quantized, quantizedContext, stripes: null, stripesDpr: 0 }
 }
 
 function stripePattern(context: CanvasRenderingContext2D, scratch: SolidDrawScratch, dpr: number): CanvasPattern | null {
@@ -513,9 +530,23 @@ function cutOutSolid(
 
   // Cut out through the quantize: the COMPOSITED alpha of the faces and
   // edges, stepped to QUANTIZE_STEPS values from 0 to 1.
-  context.filter = quantizeFilter()
+  // Drawn through the quantize into `quantized` at the scene's own pixel
+  // grid, then cut out 1:1 over the whole-pixel box around it, so the result
+  // is the same pixels as drawing through the filter straight onto the scene.
+  const { quantized, quantizedContext: q } = scratch
+  if (quantized.width !== width || quantized.height !== height) {
+    quantized.width = width
+    quantized.height = height
+    q.filter = quantizeFilter()
+  }
+  const left = (width - side) / 2
+  const x0 = Math.max(0, Math.floor(left))
+  const y0 = Math.max(0, Math.floor(top))
+  const x1 = Math.min(width, Math.ceil(left + side))
+  const y1 = Math.min(height, Math.ceil(top + side))
+  q.clearRect(x0, y0, x1 - x0, y1 - y0)
+  q.drawImage(alpha, left, top, side, side)
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(alpha, (width - side) / 2, top, side, side)
+  context.drawImage(quantized, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0)
   context.globalCompositeOperation = 'source-over'
-  context.filter = 'none'
 }
