@@ -1,3 +1,4 @@
+import { volumeGain } from '@thockdown/audio/volumeLaw';
 import { LiveRoom } from '@thockdown/audio/liveRoom';
 import { foliageNearCutoffHz, type RoomShape } from '@thockdown/audio/room';
 import { StereoWidth } from '@thockdown/audio/stereoWidth';
@@ -325,7 +326,7 @@ export class MusicPlayerService {
     const resumedAt = context.currentTime
     gain.gain.cancelScheduledValues(resumedAt)
     gain.gain.setValueAtTime(0, resumedAt)
-    gain.gain.linearRampToValueAtTime(this.config.volume, resumedAt + SEEK_FADE_IN_SEC)
+    gain.gain.linearRampToValueAtTime(this.volumeGain(), resumedAt + SEEK_FADE_IN_SEC)
   }
 
   private cancelSeekFade(): void {
@@ -343,7 +344,7 @@ export class MusicPlayerService {
       // music graph belongs to a context, so it is rebuilt with it.
       this.audioCtx = context;
       this.gainNode = context.createGain();
-      this.gainNode.gain.value = this.config.volume;
+      this.gainNode.gain.value = this.volumeGain();
 
       this.dryGain = context.createGain();
       this.dryGain.gain.value = 1 - this.config.reverbAmount;
@@ -410,7 +411,13 @@ export class MusicPlayerService {
 
   /** The gain that undoes the volume: none at all at silence, where there is nothing to undo. */
   private volumeCompensation(): number {
-    return this.config.volume > 1e-3 ? 1 / this.config.volume : 0;
+    const gain = this.volumeGain();
+    return gain > 1e-3 ? 1 / gain : 0;
+  }
+
+  /** The gain the volume slider's position means (`volumeGain`: -10 dB per halving). */
+  private volumeGain(): number {
+    return volumeGain(this.config.volume);
   }
 
   /** The EQ curve: the band gains are fitted to it here, once, and each band glides to its gain. */
@@ -434,7 +441,7 @@ export class MusicPlayerService {
     if (this.gainNode && this.audioCtx && cfg.volume !== undefined && cfg.volume !== prev.volume) {
       const now = this.audioCtx.currentTime;
       this.gainNode.gain.cancelAndHoldAtTime(now);
-      this.gainNode.gain.setTargetAtTime(this.config.volume, now, VOLUME_SMOOTHING_SEC);
+      this.gainNode.gain.setTargetAtTime(this.volumeGain(), now, VOLUME_SMOOTHING_SEC);
       for (const tap of this.processedTaps) {
         tap.gain.cancelAndHoldAtTime(now);
         tap.gain.setTargetAtTime(this.volumeCompensation(), now, VOLUME_SMOOTHING_SEC);
@@ -472,7 +479,8 @@ export class MusicPlayerService {
   beginFadeIn(durationSec: number): void {
     if (!this.gainNode || !this.dryGain || !this.wetGain || !this.audioCtx) return;
     const now = this.audioCtx.currentTime;
-    const { volume, reverbAmount } = this.config;
+    const { reverbAmount } = this.config;
+    const volume = this.volumeGain();
 
     this.gainNode.gain.cancelScheduledValues(now);
     this.gainNode.gain.setValueAtTime(0, now);
@@ -547,7 +555,7 @@ export class MusicPlayerService {
       if (this.gainNode && this.audioCtx) {
         const g = this.gainNode.gain;
         g.cancelScheduledValues(this.audioCtx.currentTime);
-        g.setValueAtTime(this.config.volume, this.audioCtx.currentTime);
+        g.setValueAtTime(this.volumeGain(), this.audioCtx.currentTime);
       }
 
       el.play()
@@ -626,7 +634,7 @@ export class MusicPlayerService {
     if (!this.gainNode || !this.audioCtx) return;
     const now = this.audioCtx.currentTime;
     this.gainNode.gain.cancelScheduledValues(now);
-    this.gainNode.gain.setValueAtTime(this.config.volume * 0.2, now);
+    this.gainNode.gain.setValueAtTime(this.volumeGain() * 0.2, now);
   }
 
   /** Restore full volume when scrubbing ends. */
@@ -634,7 +642,7 @@ export class MusicPlayerService {
     if (!this.gainNode || !this.audioCtx) return;
     const now = this.audioCtx.currentTime;
     this.gainNode.gain.cancelScheduledValues(now);
-    this.gainNode.gain.setValueAtTime(this.config.volume, now);
+    this.gainNode.gain.setValueAtTime(this.volumeGain(), now);
   }
 
   /**

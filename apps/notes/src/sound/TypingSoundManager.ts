@@ -245,7 +245,7 @@ export class TypingSoundManager {
     this.channels = { ...this.channels, [id]: { ...settings } }
   }
 
-  /** The sum of the channels, 0..1. */
+  /** The sum of the channels, as a gain 0..1 (volumeGain of the keystroke volume slider). */
   setVolume(volume: number): void {
     this.volume = Math.max(0, Math.min(1, volume))
     if (this.masterGain) this.masterGain.gain.value = this.volume
