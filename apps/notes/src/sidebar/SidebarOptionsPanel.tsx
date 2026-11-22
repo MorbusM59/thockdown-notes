@@ -61,6 +61,8 @@ import {
   POLE_ORBIT_RATE_MIN,
   POLE_ORBIT_RATE_MAX,
   SWAY_PUSH_MAX,
+  SWAY_CYCLE_MIN,
+  SWAY_CYCLE_MAX,
   PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
@@ -2522,7 +2524,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Glaze</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[3, 4, 3, 2]}>
+            <OptionsSliderRows rows={[3, 3, 3, 2, 2]}>
               {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, visualizerDefaults.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
@@ -2530,7 +2532,7 @@ export function SidebarOptionsPanel({
                 max={IMMERSIVE_GLAZE_STRENGTH_MAX}
                 step={0.005}
                 value={visualizer.immersive.glazeStrength}
-                trackLabel="glaze"
+                trackLabel="glare"
                 tooltipLabel="Glaze strength"
                 ariaLabel="Immersive: strength of the visualizer's glaze"
                 defaultValue={visualizerDefaults.immersive.glazeStrength}
@@ -2551,19 +2553,6 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeSpread: value } }))}
               />
               <CompactScrollbarSlider
-                id="visualizer-sway-range"
-                min={0}
-                max={IMMERSIVE_SWAY_RANGE_MAX}
-                step={1}
-                value={visualizer.immersive.swayRange}
-                trackLabel="range"
-                tooltipLabel="Sway range (arc minutes)"
-                ariaLabel="Immersive: how far the nearest glaze layer sways, in arc minutes"
-                defaultValue={visualizerDefaults.immersive.swayRange}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayRange: Math.round(value) } }))}
-              />
-              <CompactScrollbarSlider
                 id="visualizer-sway-spread"
                 min={0}
                 max={1}
@@ -2575,6 +2564,45 @@ export function SidebarOptionsPanel({
                 defaultValue={visualizerDefaults.immersive.swaySpread}
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-range"
+                min={0}
+                max={IMMERSIVE_SWAY_RANGE_MAX}
+                step={1}
+                value={visualizer.immersive.swayRange}
+                trackLabel="sway"
+                tooltipLabel="Sway range (arc minutes)"
+                ariaLabel="Immersive: how far the nearest glaze layer sways, in arc minutes"
+                defaultValue={visualizerDefaults.immersive.swayRange}
+                formatValue={(value) => Math.round(value).toString()}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayRange: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-cycle"
+                min={SWAY_CYCLE_MIN}
+                max={SWAY_CYCLE_MAX}
+                step={0.001}
+                value={visualizer.immersive.swayCycle}
+                trackLabel="sway cycle"
+                tooltipLabel="Sway (cycles per beat)"
+                ariaLabel="Immersive: sway cycles per beat of the glaze"
+                defaultValue={visualizerDefaults.immersive.swayCycle}
+                formatValue={(value) => value.toFixed(3)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayCycle: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-drift"
+                min={-SWAY_DRIFT_MAX}
+                max={SWAY_DRIFT_MAX}
+                step={1}
+                value={visualizer.immersive.swayDrift}
+                trackLabel="drift"
+                tooltipLabel="Drift (arc minutes per beat)"
+                ariaLabel="Immersive: steady drift of the glaze stripes, arc minutes per beat, negative drifts the other way"
+                defaultValue={visualizerDefaults.immersive.swayDrift}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-push"
@@ -2603,19 +2631,6 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayReturn: value } }))}
               />
               <CompactScrollbarSlider
-                id="visualizer-sway-drift"
-                min={-SWAY_DRIFT_MAX}
-                max={SWAY_DRIFT_MAX}
-                step={1}
-                value={visualizer.immersive.swayDrift}
-                trackLabel="drift"
-                tooltipLabel="A steady, endless drift of the glaze's light stripes across them, in arc minutes a second for the nearest: the centre holds them still, right drifts them one way and left the other"
-                ariaLabel="Immersive: steady drift of the glaze stripes, arc minutes per second, negative drifts the other way"
-                defaultValue={visualizerDefaults.immersive.swayDrift}
-                formatValue={(value) => String(Math.round(value))}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
-              />
-              <CompactScrollbarSlider
                 id="visualizer-pole-orbit"
                 min={0}
                 max={POLE_ORBIT_MAX}
@@ -2634,7 +2649,7 @@ export function SidebarOptionsPanel({
                 max={POLE_ORBIT_RATE_MAX}
                 step={0.001}
                 value={visualizer.immersive.poleOrbitRate}
-                trackLabel="orbit speed"
+                trackLabel="orbit cycle"
                 tooltipLabel="Vanishing point orbit (turns per beat)"
                 ariaLabel="Immersive: turns per beat of the glare's vanishing point orbit"
                 defaultValue={visualizerDefaults.immersive.poleOrbitRate}

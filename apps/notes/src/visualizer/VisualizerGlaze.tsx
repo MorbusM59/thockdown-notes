@@ -27,7 +27,7 @@ import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
 import { subscribeMusicTempo } from '../sound/musicBeat'
 import { beatAlignedStart } from '../sound/musicTempo'
 import { canUseShaderGlaze } from './glazeShaderSupport'
-import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, advanceSway, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /**
  * `index` counts from the nearest layer; `linearPosition` places a linear
@@ -126,7 +126,9 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   }, [orbiting])
   const pushPx = toPx(immersive.swayPush)
   const driftPx = toPx(immersive.swayDrift)
-  useEffect(() => setSwayMotion(pushPx, immersive.swayReturn, driftPx), [pushPx, immersive.swayReturn, driftPx])
+  useEffect(() => setSwayMotion(pushPx, immersive.swayReturn, driftPx, immersive.swayCycle), [pushPx, immersive.swayReturn, driftPx, immersive.swayCycle])
+  // The sway and the drift run on the app's one tempo too (`advanceSway`).
+  useEffect(() => subscribeMusicTempo((beats) => advanceSway(beats)), [])
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides
     // straight stacks along the heading and stays parallel.

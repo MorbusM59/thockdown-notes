@@ -27,7 +27,12 @@ import { pulseCurve } from '@thockdown/look/visualizer'
 const OWN_SHARE = 0.18
 /** Vertical motion relative to horizontal: a sway, wider than it is tall. */
 const VERTICAL_SHARE = 0.6
-/** The camera's periods, in seconds at normal speed, two per axis. */
+/**
+ * The camera's periods, two per axis, in units of the sway's PHASE: the
+ * phase advances by `PERIODS_X[0]` per cycle of the sway (`advanceSway`),
+ * so the largest horizontal wave turns once a cycle and the others keep
+ * their proportions to it.
+ */
 const PERIODS_X = [23, 9.7] as const
 const PERIODS_Y = [31, 13.3] as const
 const WEIGHTS = [0.7, 0.3] as const
@@ -97,12 +102,9 @@ export class MusicBreath {
 /** The widest the music ever makes the sway, as a share of the set range: what a layer's overscan has to cover. */
 export const BREATH_AMPLITUDE_MAX = 1.5
 
-/** The sway's width and speed for a breath: calm (0.6 and 0.8) in silence, 1 at the music's usual level, at most `BREATH_AMPLITUDE_MAX` and 1.3. */
-export function breathScales(breath: number): { amplitude: number; speed: number } {
-  return {
-    amplitude: Math.min(BREATH_AMPLITUDE_MAX, 0.6 + 0.4 * breath),
-    speed: Math.min(1.3, 0.8 + 0.2 * breath),
-  }
+/** The sway's width for a breath: calm (0.6) in silence, 1 at the music's usual level, at most `BREATH_AMPLITUDE_MAX`. Its speed is the music's tempo (`advanceSway`). */
+export function breathScales(breath: number): { amplitude: number } {
+  return { amplitude: Math.min(BREATH_AMPLITUDE_MAX, 0.6 + 0.4 * breath) }
 }
 
 /**
@@ -162,15 +164,31 @@ export function registerLinearSlide(index: number, depth: number, angleDeg: numb
   return () => { layers.delete(layer) }
 }
 
-/** The push per hit in px for the nearest stack (signed), the share of it slid back, and the drift in px per second of sway. */
+/** The push per hit in px for the nearest stack (signed), the share of it slid back, the drift in px per BEAT, and the sway's cycles per beat. */
 let pushPx = 0
 let returnShare = 1
-let driftPxPerSec = 0
+let driftPxPerBeat = 0
+let swayCyclesPerBeat = 0
 
-export function setSwayMotion(push: number, slideBack: number, drift: number): void {
+export function setSwayMotion(push: number, slideBack: number, driftPerBeat: number, cyclesPerBeat: number): void {
   pushPx = push
   returnShare = slideBack
-  driftPxPerSec = drift
+  driftPxPerBeat = driftPerBeat
+  swayCyclesPerBeat = cyclesPerBeat
+}
+
+/**
+ * The sway's clock is the music's TEMPO (`subscribeMusicTempo`, 60 BPM with
+ * no beat or no music): each frame's beats advance the sway's phase by its
+ * cycles per beat and the drift by its px per beat. Both are ACCUMULATED, so
+ * a change of either setting changes the speed and never jumps the glaze.
+ */
+let swayPhase = 0
+let driftedPx = 0
+
+export function advanceSway(beats: number): void {
+  swayPhase += beats * swayCyclesPerBeat * PERIODS_X[0]
+  driftedPx += beats * driftPxPerBeat
 }
 
 /**
@@ -253,8 +271,9 @@ export function wrapToPeriod(value: number, period: number): number {
   return value - period * Math.floor(value / period + 0.5)
 }
 
-/** Moves every registered layer to where the sway is at `phaseSec`, with the music's breath widening it by `breathAmplitude`. */
-export function applySway(phaseSec: number, breathAmplitude: number, nowMs: number = performance.now()): void {
+/** Moves every registered layer to where the sway has got to (`advanceSway`), with the music's breath widening it by `breathAmplitude`. */
+export function applySway(breathAmplitude: number, nowMs: number = performance.now()): void {
+  const phaseSec = swayPhase
   const amplitudePx = rangePx * breathAmplitude
   const pushedPx = keptPx + slidingNowPx(nowMs)
   for (const layer of layers) {
@@ -266,7 +285,7 @@ export function applySway(phaseSec: number, breathAmplitude: number, nowMs: numb
     // The gradient's direction on screen (CSS angles run clockwise from up; y points down).
     const radians = (layer.linear.angleDeg * Math.PI) / 180
     const along = x * Math.sin(radians) - y * Math.cos(radians)
-    const s = along + layer.depth * (driftPxPerSec * phaseSec + pushedPx)
+    const s = along + layer.depth * (driftedPx + pushedPx)
     if (layer.slide) {
       layer.slide(s)
       continue

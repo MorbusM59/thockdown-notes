@@ -4,7 +4,7 @@ import { applySway, registerSwayLayer, setSwayMotion, setSwayRange, setSwayRetur
 function offsetAt(nowMs: number): number {
   const element = { style: { transform: '' } } as unknown as HTMLElement
   const unregister = registerSwayLayer(element, 0, 1, { periodPx: 1e6, angleDeg: 90 })
-  applySway(0, 0, nowMs)
+  applySway(0, nowMs)
   const px = Number(/translate3d\((-?[\d.]+)px/.exec(element.style.transform)?.[1])
   unregister()
   return px
@@ -13,7 +13,7 @@ function offsetAt(nowMs: number): number {
 describe('the glaze push and its return', () => {
   it('a full return comes back to rest even when hits land faster than the fall', () => {
     setSwayRange(0)
-    setSwayMotion(10, 1, 0)
+    setSwayMotion(10, 1, 0, 0)
     setSwayReturnFall(0.5, 0)
     let t = 1000
     const start = offsetAt(t)
@@ -24,7 +24,7 @@ describe('the glaze push and its return', () => {
   })
 
   it('a return below 1 keeps the same share of every push, and a hit pushes in full', () => {
-    setSwayMotion(10, 0.8, 0)
+    setSwayMotion(10, 0.8, 0, 0)
     let t = 10_000
     const start = offsetAt(t)
     swaySnareHit(t)
@@ -36,7 +36,7 @@ describe('the glaze push and its return', () => {
 
 describe('a reverse push', () => {
   it('moves the other way and returns to rest the same', () => {
-    setSwayMotion(-10, 1, 0)
+    setSwayMotion(-10, 1, 0, 0)
     setSwayReturnFall(0.5, 0)
     const t = 50_000
     const start = offsetAt(t)

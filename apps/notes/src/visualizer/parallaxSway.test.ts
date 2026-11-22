@@ -55,9 +55,9 @@ describe('MusicBreath', () => {
   })
 
   it('widens the sway for a louder passage and keeps it within bounds', () => {
-    expect(breathScales(0)).toEqual({ amplitude: 0.6, speed: 0.8 })
+    expect(breathScales(0)).toEqual({ amplitude: 0.6 })
     expect(breathScales(1).amplitude).toBeCloseTo(1, 9)
-    expect(breathScales(3)).toEqual({ amplitude: 1.5, speed: 1.3 })
+    expect(breathScales(3)).toEqual({ amplitude: 1.5 })
   })
 })
 

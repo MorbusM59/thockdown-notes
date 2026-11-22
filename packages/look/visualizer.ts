@@ -173,6 +173,8 @@ export interface VisualizerImmersive {
   glazeSpread: number
   /** How far the nearest layer sways from rest, in arc minutes (`arcminToPx`), at the music's usual level. */
   swayRange: number
+  /** `SWAY_CYCLE_MIN` to `SWAY_CYCLE_MAX`: cycles of the sway's largest wave per BEAT of the music (`subscribeMusicTempo`, 60 BPM with no beat). */
+  swayCycle: number
   /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
   swaySpread: number
   /**
@@ -185,7 +187,7 @@ export interface VisualizerImmersive {
   swayPush: number
   /** 0 to 1: the share of each push the glaze slides back on the wave's fall; 0 keeps it all, 1 returns it fully. */
   swayReturn: number
-  /** -`SWAY_DRIFT_MAX_PX` to it: a steady drift of the linear stacks along their gradient, arc minutes a second for the nearest; 0 none. */
+  /** -`SWAY_DRIFT_MAX_PX` to it: a steady drift of the linear stacks along their gradient, arc minutes per BEAT for the nearest (60 BPM with no beat); 0 none. */
   swayDrift: number
   /** 0 to `POLE_ORBIT_MAX`: the radius of the circle the glare's vanishing point travels round its resting place, as a share of that place's distance from the centre; 0 none. */
   poleOrbit: number
@@ -238,7 +240,9 @@ export const SWAY_DRIFT_MAX = 1200
 export const POLE_ORBIT_MAX = 0.1
 export const POLE_ORBIT_RATE_MIN = 0.001
 export const POLE_ORBIT_RATE_MAX = 0.25
-export const SWAY_PUSH_MAX = 60
+export const SWAY_PUSH_MAX = 600
+export const SWAY_CYCLE_MIN = 0.001
+export const SWAY_CYCLE_MAX = 0.25
 
 /** An angle of the glaze's motion, in arc minutes, as the travel of the screen's centre in px (see `VisualizerImmersive`). */
 export function arcminToPx(arcmin: number, widthPx: number, heightPx: number): number {
@@ -266,7 +270,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRange: 210, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRange: 210, swayCycle: 0.03125, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -581,6 +585,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
     swayRange: Math.round(bounded(source.swayRange, 0, IMMERSIVE_SWAY_RANGE_MAX, d.swayRange)),
+    swayCycle: bounded(source.swayCycle, SWAY_CYCLE_MIN, SWAY_CYCLE_MAX, d.swayCycle),
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
     swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX, SWAY_PUSH_MAX, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),

@@ -366,7 +366,6 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
 
     let frame: number | null = null
     let lastMs = NaN
-    let phaseSec = 0
     const tick = (nowMs: number) => {
       frame = null
       const dt = Number.isNaN(lastMs) ? 0 : Math.min(MAX_FRAME_SEC, (nowMs - lastMs) / 1000)
@@ -408,11 +407,8 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
       draw()
       moveGap()
       const still = reducedMotion.matches
-      const { amplitude, speed } = breathScales(breath.step(tap ? tap.bassPower(levels) : 0, dt))
-      if (!still) {
-        phaseSec += dt * speed
-        applySway(phaseSec, amplitude)
-      }
+      const { amplitude } = breathScales(breath.step(tap ? tap.bassPower(levels) : 0, dt))
+      if (!still) applySway(amplitude)
       // Nothing left to move: the music is stopped, the bars have fallen and
       // the glaze holds still. Woken again by the music or the motion setting.
       if (still && !musicPlayerService.isPlaying && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
