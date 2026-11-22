@@ -129,10 +129,11 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   useEffect(() => setSwayMotion(pushPx, immersive.swayReturn, driftPx, immersive.swayCycle), [pushPx, immersive.swayReturn, driftPx, immersive.swayCycle])
   // The sway and the drift run on the app's one tempo too (`advanceSway`).
   useEffect(() => subscribeMusicTempo((beats) => advanceSway(beats)), [])
+  const { glareStrength, flairStrength, glareMinStacks, flairMinSources } = immersive
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides
     // straight stacks along the heading and stays parallel.
-    const settings = visualizerGlazeSettings(glaze, immersive)
+    const settings = visualizerGlazeSettings(glaze, { glareStrength, flairStrength, glareMinStacks, flairMinSources })
     // Nearest first: the top linear stack (each list is in stacking order,
     // the first drawn on top), unless radial sits above linear.
     const linear = buildLinearGlazeStacks(settings, 90).map(({ image, periodPx, stripes }) => ({ kind: 'linear' as const, image, periodPx, stripes }))
@@ -145,7 +146,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
       const linearPosition = layer.kind === 'linear' ? (linear.length > 1 ? 1 - linearIndex++ / (linear.length - 1) : 1) : null
       return { ...layer, key: `${layer.kind}-${index}`, index, depth: swayDepth(index, immersive.swaySpread), linearPosition }
     })
-  }, [glaze, immersive.glareStrength, immersive.flairStrength, immersive.glareMinStacks, immersive.flairMinSources, immersive.swaySpread])
+  }, [glaze, glareStrength, flairStrength, glareMinStacks, flairMinSources, immersive.swaySpread])
 
   // The linear stacks on the shader (GlazeStripesCanvas.tsx) where it can
   // run: one canvas instead of a promoted layer per stack, and composited
