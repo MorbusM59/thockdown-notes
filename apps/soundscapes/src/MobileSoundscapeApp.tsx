@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
+import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
@@ -172,7 +173,7 @@ export function MobileSoundscapeApp() {
     const named = new Set(events.map((event) => event.presetId))
     void nativeSoundscape!.setSchedule({
       enabled: schedule.enabled,
-      masterVolume: preferences.masterVolume,
+      masterVolume: volumeGain(preferences.masterVolume),
       events,
       entries: presets
         .filter((preset) => named.has(preset.id))
@@ -209,7 +210,7 @@ export function MobileSoundscapeApp() {
   const currentName = currentSoundscapeName(preferences)
   useEffect(() => {
     if (!native) return
-    void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: preferences.masterVolume })
+    void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: volumeGain(preferences.masterVolume) })
   }, [native, entries, currentId, currentName, preferences.masterVolume])
 
   // Follow the session: when a media control, the schedule or the system

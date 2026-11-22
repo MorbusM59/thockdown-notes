@@ -46,7 +46,7 @@ export interface SessionState {
 /** The schedule as the native side runs it (schedule.ts works it out). */
 export interface NativeSchedule {
   enabled: boolean
-  /** The listener's volume, for a run started with no web page to ask. */
+  /** The listener's volume as a GAIN (volumeGain of the slider), for a run started with no web page to ask. */
   masterVolume: number
   events: ScheduleEvent[]
   /** Every soundscape the events name. */

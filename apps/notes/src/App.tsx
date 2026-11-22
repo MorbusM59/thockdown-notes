@@ -1,3 +1,4 @@
+import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
 import { CanonicalScrollRail } from './components/CanonicalScrollRail'
@@ -6324,7 +6325,7 @@ ${markdownHtml}
   // early when their value did not move).
   useEffect(() => {
     for (const id of KEYSTROKE_CHANNEL_IDS) typingSoundManager.setChannel(id, keystrokeSound.channels[id])
-    typingSoundManager.setVolume(keystrokeSound.volume)
+    typingSoundManager.setVolume(volumeGain(keystrokeSound.volume))
     typingSoundManager.setTypingSoundVariance(keystrokeSound.variance)
     typingSoundManager.setTypingSoundPitch(keystrokeSound.pitch)
     typingSoundManager.setReverbStrength(keystrokeSound.reverb)

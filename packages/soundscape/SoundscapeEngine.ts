@@ -34,6 +34,7 @@ import {
 import { toGeneratorConfiguration } from './soundscapeDsp';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
 import { createLivePlayback } from './soundscapeLivePlayback';
+import { volumeGain } from '@thockdown/audio/volumeLaw';
 
 /** How long the output takes to fade out before it is closed. */
 const SOUNDSCAPE_DISCONNECT_MS = 180;
@@ -46,7 +47,7 @@ export interface SoundscapePlayback {
    * soundscape), otherwise a change of soundscape crossfaded over that long.
    */
   configure(configuration: ConfigureMessage, transitionSec: number): void;
-  /** The listener's volume (0..1); the output glides to it over about `timeConstantSec`. */
+  /** The listener's volume as a GAIN (volumeGain of the slider); the output glides to it over about `timeConstantSec`. */
   setVolume(volume: number, timeConstantSec: number): void;
   close(): void;
 }
@@ -171,7 +172,7 @@ export class SoundscapeEngine {
       // A glide reaching ~98% of the target in four time constants.
       const fade = this.volumeTarget < 0 && this.startFadeSec !== null ? this.startFadeSec / 4 : VOLUME_TIME_CONSTANT_SEC;
       this.startFadeSec = null;
-      playback.setVolume(preferences.masterVolume, fade);
+      playback.setVolume(volumeGain(preferences.masterVolume), fade);
       this.volumeTarget = preferences.masterVolume;
     }
     const configuration = soundscapeConfiguration(preferences.settings);
