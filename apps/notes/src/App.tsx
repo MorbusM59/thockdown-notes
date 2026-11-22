@@ -1798,7 +1798,7 @@ function App() {
   const isDoubleSizeModeRef = useRef(isDoubleSizeMode)
   isDoubleSizeModeRef.current = isDoubleSizeMode
   // Whether double size is possible, as the main process judges it: always
-  // in a window, and in full screen only where it fits the display
+  // in a free window, and maximized or full screen only where it fits the display
   // (electron/doubleSizeFits.ts). Where it stops fitting the main process has
   // already set the zoom back to 1; here the MODE goes off with
   // it and is saved, exactly as a press of the button would, so the button
@@ -5308,10 +5308,17 @@ ${markdownHtml}
             // the zoom/minimum-size at boot from its own copy of this same
             // saved state (see electron/main.ts's createWindow) -- this just
             // syncs the renderer's own toggle/button state to match.
-            // The window never starts in full screen, so double size is
-            // always possible here.
-            isDoubleSizeModeRef.current = appState.menu.isDoubleSizeMode ?? false
-            setIsDoubleSizeMode(appState.menu.isDoubleSizeMode ?? false)
+            // A window restored maximized on a display too small for double
+            // size has already been turned to regular by the main process;
+            // the mode follows, and that is saved. (Where availability
+            // arrives after this, its own handler turns the mode off.)
+            {
+              const savedDoubleSize = appState.menu.isDoubleSizeMode ?? false
+              const restoredDoubleSize = savedDoubleSize && isDoubleSizeAvailableRef.current
+              isDoubleSizeModeRef.current = restoredDoubleSize
+              setIsDoubleSizeMode(restoredDoubleSize)
+              if (restoredDoubleSize !== savedDoubleSize) persistMenuStateNowRef.current({ isDoubleSizeMode: false })
+            }
             const restoredReviewGutterVisibleBySection = appState.menu.reviewGutterVisibleBySection ?? {}
             setReviewGutterVisibleBySection(restoredReviewGutterVisibleBySection)
             // Legacy migration: states saved before the line-number/review-flag

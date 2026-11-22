@@ -280,15 +280,16 @@ let currentSectionCount = 1;
 // squeezing sections/sidebar into less room than they'd get at 1x. See
 // 'window-control:double-size-mode' below.
 //
-// Double size is limited ONLY IN FULL SCREEN, and only by the display the
-// window is full screen on (doubleSizeAvailable, see doubleSizeFits.ts). A
-// window has unlimited room: it can run off screen and be dragged, across
-// monitors too, so a window never refuses it. In full screen there is no more
-// room than the display: entering full screen on a display too small for
-// double size (a portrait monitor, above all) turns the mode OFF in the same
-// step, exactly as the button would, and the renderer saves that; while full
-// screen stays too small, the button refuses. There is ONE mode and no
-// remembered wish: nothing turns it back on but the reader.
+// Double size is limited ONLY WHILE THE WINDOW IS BOUND TO ITS DISPLAY --
+// maximized (the work area) or full screen (the whole display), see
+// DisplayBinding -- and only by that display (doubleSizeAvailable, see
+// doubleSizeFits.ts). A free window has unlimited room: it can run off screen
+// and be dragged, across monitors too, so it never refuses double size. Bound,
+// there is no more room than the display: entering a binding on a display too
+// small for double size (a portrait monitor, above all) turns the mode OFF in
+// the same step, exactly as the button would, and the renderer saves that;
+// while the binding stays too small, the button refuses. There is ONE mode and
+// no remembered wish: nothing turns it back on but the reader.
 let currentDoubleSizeMode = false;
 let doubleSizeAvailable = true;
 
@@ -334,14 +335,42 @@ function computeMinSizeAt(double: boolean): { width: number; height: number } {
 }
 
 /**
- * Whether double size is possible for the window: always outside full screen,
- * and in full screen (`fullScreen`, passed so a full screen about to be
- * entered can be judged before it is) only where its doubled minimum fits the
- * display the window is on.
+ * How the window is held by its display: FREE (it may be any size and run off
+ * screen), or bound to it -- MAXIMIZED to its work area, or FULL SCREEN on the
+ * whole of it. The OS's half-screen snaps are free here: Electron reports them
+ * as ordinary bounds, and the window's minimum still applies to them.
  */
-function doubleSizePossible(windowRef: BrowserWindow, fullScreen: boolean): boolean {
-  if (!fullScreen) return true;
-  return doubleSizeFits(computeMinSizeAt(true), screen.getDisplayMatching(windowRef.getBounds()).bounds);
+type DisplayBinding = 'free' | 'maximized' | 'fullscreen';
+
+function displayBindingOf(windowRef: BrowserWindow): DisplayBinding {
+  if (windowRef.isFullScreen()) return 'fullscreen';
+  if (windowRef.isMaximized()) return 'maximized';
+  return 'free';
+}
+
+/**
+ * Whether double size is possible for the window under `binding` (passed so a
+ * binding about to be entered can be judged before it is): always when free,
+ * and when bound only where its doubled minimum fits the space the display
+ * gives that binding.
+ */
+function doubleSizePossible(windowRef: BrowserWindow, binding: DisplayBinding): boolean {
+  if (binding === 'free') return true;
+  const display = screen.getDisplayMatching(windowRef.getBounds());
+  return doubleSizeFits(computeMinSizeAt(true), binding === 'fullscreen' ? display.bounds : display.workArea);
+}
+
+/**
+ * The one way the app binds its window to the display: double size is judged
+ * against the binding FIRST, so where it does not fit it goes off in the same
+ * step as the window is maximized or goes full screen rather than after.
+ * Bindings the OS makes itself (a title-bar double-click, a keyboard shortcut)
+ * are caught by the 'maximize' and 'enter-full-screen' events, a step late.
+ */
+function bindWindowToDisplay(windowRef: BrowserWindow, binding: 'maximized' | 'fullscreen'): void {
+  reconcileDoubleSize(windowRef, binding);
+  if (binding === 'fullscreen') windowRef.setFullScreen(true);
+  else windowRef.maximize();
 }
 
 /**
@@ -353,9 +382,9 @@ function doubleSizePossible(windowRef: BrowserWindow, fullScreen: boolean): bool
  * is left alone: its window is deliberately smaller than any minimum, and
  * leaving it runs this again (applyNormalWindowConstraints).
  */
-function reconcileDoubleSize(windowRef: BrowserWindow, fullScreen = windowRef.isFullScreen()): void {
+function reconcileDoubleSize(windowRef: BrowserWindow, binding: DisplayBinding = displayBindingOf(windowRef)): void {
   if (windowIsUtilityCollapsed) return;
-  const available = doubleSizePossible(windowRef, fullScreen);
+  const available = doubleSizePossible(windowRef, binding);
   if (available !== doubleSizeAvailable) {
     doubleSizeAvailable = available;
     emitWindowEvent(windowRef.webContents, 'doubleSizeAvailable', available);
@@ -772,7 +801,7 @@ function registerIpcHandlers() {
       if (win.isMaximized()) {
         win.unmaximize()
       } else {
-        win.maximize()
+        bindWindowToDisplay(win, 'maximized')
       }
     },
     close: () => {
@@ -976,11 +1005,8 @@ function registerIpcHandlers() {
           return
         }
         if (next) preFullScreenWindowState = readCurrentWindowState(win)
-        // Judged on the way IN, so double size goes off in the same step as
-        // the window goes full screen rather than after it has (the renderer
-        // commits its sizes in the frame the zoom lands).
-        if (next) reconcileDoubleSize(win, true)
-        win.setFullScreen(next)
+        if (next) bindWindowToDisplay(win, 'fullscreen')
+        else win.setFullScreen(false)
       } catch (error) {
         console.warn('Failed to toggle full screen', error)
       }
@@ -1003,7 +1029,7 @@ function registerIpcHandlers() {
         // which `toggleMaximize` also calls on its way to deciding
         // maximize-vs-unmaximize itself; maximizing in there would fight it.
         if (restored && !win.isMaximized()) {
-          win.maximize()
+          bindWindowToDisplay(win, 'maximized')
         }
         return restored
       }
@@ -1721,8 +1747,8 @@ async function createWindow() {
   // renderer -- so this starts at the default of 1 and the renderer corrects
   // it via 'window-control:section-count' shortly after bootstrap resolves.
   currentSidebarVisible = initialSidebarVisible;
-  // The window never starts in full screen (see did-finish-load), so double
-  // size is always possible here.
+  // Judged against the binding once the window exists (bindWindowToDisplay
+  // below, for a window restored maximized); until then it is free.
   doubleSizeAvailable = true;
   currentDoubleSizeMode = savedAppState?.menu?.isDoubleSizeMode ?? false;
   const initialMinSize = computeEffectiveMinSize();
@@ -1783,7 +1809,7 @@ async function createWindow() {
   })
 
   if (savedWindowState.isMaximized) {
-    win.maximize();
+    bindWindowToDisplay(win, 'maximized');
   }
 
   // Debounced: a drag or a resize raises these events many times a second,
@@ -1804,12 +1830,14 @@ async function createWindow() {
   win.on('maximize', () => {
     persistWindowState()
     if (win && !win.isDestroyed()) {
+      reconcileDoubleSize(win)
       emitWindowEvent(win.webContents, 'maximizeState', true)
     }
   });
   win.on('unmaximize', () => {
     persistWindowState()
     if (win && !win.isDestroyed()) {
+      reconcileDoubleSize(win)
       emitWindowEvent(win.webContents, 'maximizeState', false)
     }
   });
