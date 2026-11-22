@@ -58,11 +58,9 @@ import {
   PULSE_SEC_MAX,
   SWAY_DRIFT_MAX,
   POLE_ORBIT_MAX,
-  POLE_ORBIT_RATE_MIN,
-  POLE_ORBIT_RATE_MAX,
   SWAY_PUSH_MAX,
-  SWAY_CYCLE_MIN,
-  SWAY_CYCLE_MAX,
+  CYCLE_BEATS,
+  cycleBeatsIndex,
   PULSE_SEC_MIN,
   SPECTRUM_DELAY_MAX_SEC,
   SPECTRUM_GRAVITY_MIN,
@@ -2608,16 +2606,16 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-cycle"
-                min={SWAY_CYCLE_MIN}
-                max={SWAY_CYCLE_MAX}
-                step={0.001}
-                value={visualizer.immersive.swayCycle}
-                trackLabel="sway cycle"
-                tooltipLabel="Sway (cycles per beat)"
-                ariaLabel="Immersive: sway cycles per beat of the glaze"
-                defaultValue={visualizerDefaults.immersive.swayCycle}
-                formatValue={(value) => value.toFixed(3)}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayCycle: value } }))}
+                min={0}
+                max={CYCLE_BEATS.length - 1}
+                step={1}
+                value={cycleBeatsIndex(visualizer.immersive.swayCycle)}
+                trackLabel="cycle"
+                tooltipLabel="Beats per sway cycle"
+                ariaLabel="Immersive: beats per cycle of the glaze's sway"
+                defaultValue={cycleBeatsIndex(visualizerDefaults.immersive.swayCycle)}
+                formatValue={(value) => String(CYCLE_BEATS[Math.round(value)])}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayCycle: CYCLE_BEATS[Math.round(value)] } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-drift"
@@ -2673,16 +2671,16 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="visualizer-pole-orbit-rate"
-                min={POLE_ORBIT_RATE_MIN}
-                max={POLE_ORBIT_RATE_MAX}
-                step={0.001}
-                value={visualizer.immersive.poleOrbitRate}
-                trackLabel="orbit cycle"
-                tooltipLabel="Vanishing point orbit (turns per beat)"
-                ariaLabel="Immersive: turns per beat of the glare's vanishing point orbit"
-                defaultValue={visualizerDefaults.immersive.poleOrbitRate}
-                formatValue={(value) => value.toFixed(3)}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, poleOrbitRate: value } }))}
+                min={0}
+                max={CYCLE_BEATS.length - 1}
+                step={1}
+                value={cycleBeatsIndex(visualizer.immersive.poleOrbitCycle)}
+                trackLabel="cycle"
+                tooltipLabel="Beats per orbit cycle"
+                ariaLabel="Immersive: beats per turn of the glare's vanishing point orbit"
+                defaultValue={cycleBeatsIndex(visualizerDefaults.immersive.poleOrbitCycle)}
+                formatValue={(value) => String(CYCLE_BEATS[Math.round(value)])}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, poleOrbitCycle: CYCLE_BEATS[Math.round(value)] } }))}
               />
             </OptionsSliderRows>
           </div>
@@ -2724,8 +2722,8 @@ export function SidebarOptionsPanel({
                 max={WAVE_TURN_MAX}
                 step={1}
                 value={visualizer.immersive.waveTurn}
-                trackLabel="turn"
-                tooltipLabel="Beats per turn"
+                trackLabel="cycle"
+                tooltipLabel="Beats per cycle"
                 ariaLabel="Immersive: beats per turn of the grid wave's fastest pivot, negative counter-clockwise, 0 still"
                 defaultValue={visualizerDefaults.immersive.waveTurn}
                 formatValue={(value) => String(waveTertiaryBeats(Math.round(value)) ?? 0)}

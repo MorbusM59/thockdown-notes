@@ -181,7 +181,7 @@ export interface VisualizerImmersive {
   glazeSpread: number
   /** How far the nearest layer sways from rest, in arc minutes (`arcminToPx`), at the music's usual level. */
   swayRange: number
-  /** `SWAY_CYCLE_MIN` to `SWAY_CYCLE_MAX`: cycles of the sway's largest wave per BEAT of the music (`subscribeMusicTempo`, 60 BPM with no beat). */
+  /** Beats per cycle of the sway's largest wave, one of `CYCLE_BEATS` (the music's beats, `subscribeMusicTempo`, 60 BPM with no beat). */
   swayCycle: number
   /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
   swaySpread: number
@@ -199,8 +199,8 @@ export interface VisualizerImmersive {
   swayDrift: number
   /** 0 to `POLE_ORBIT_MAX`: the radius of the circle the glare's vanishing point travels round its resting place, as a share of that place's distance from the centre; 0 none. */
   poleOrbit: number
-  /** `POLE_ORBIT_RATE_MIN` to `POLE_ORBIT_RATE_MAX`: turns of the orbit's largest circle per BEAT of the music (so 0.25 is one a bar, 0.5 Hz at 120 BPM). */
-  poleOrbitRate: number
+  /** Beats per turn of the orbit's largest circle, one of `CYCLE_BEATS` (4 is one a bar). */
+  poleOrbitCycle: number
   /** The grid wave's length, in boxes, from one band's peak to the next. */
   waveBoxes: number
   /** Beats of the music (`subscribeMusicTempo`) a wave band takes to travel one wave length. */
@@ -259,11 +259,15 @@ export const IMMERSIVE_GLAZE_STRENGTH_MAX = 4
 export const IMMERSIVE_SWAY_RANGE_MAX = 1200
 export const SWAY_DRIFT_MAX = 1200
 export const POLE_ORBIT_MAX = 0.1
-export const POLE_ORBIT_RATE_MIN = 0.001
-export const POLE_ORBIT_RATE_MAX = 0.25
 export const SWAY_PUSH_MAX = 600
-export const SWAY_CYCLE_MIN = 0.001
-export const SWAY_CYCLE_MAX = 0.25
+/** The beats per cycle a beat-synced motion may take (the sway, the glare's orbit): powers of two, so every cycle starts on a bar line. */
+export const CYCLE_BEATS = [1, 2, 4, 8, 16, 32, 64, 128, 256] as const
+/** The entry of `CYCLE_BEATS` nearest a number of beats, as its index, for a slider stepping through them. */
+export function cycleBeatsIndex(beats: number): number {
+  let best = 0
+  CYCLE_BEATS.forEach((entry, index) => { if (Math.abs(Math.log2(entry) - Math.log2(Math.max(beats, 1e-6))) < Math.abs(Math.log2(CYCLE_BEATS[best]) - Math.log2(Math.max(beats, 1e-6)))) best = index })
+  return best
+}
 
 /** An angle of the glaze's motion, in arc minutes, as the travel of the screen's centre in px (see `VisualizerImmersive`). */
 export function arcminToPx(arcmin: number, widthPx: number, heightPx: number): number {
@@ -291,7 +295,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 2, flairStrength: 2, glareMinStacks: 5, flairMinSources: 4, glazeSpread: 0, swayRange: 210, swayCycle: 0.03125, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 2, flairStrength: 2, glareMinStacks: 5, flairMinSources: 4, glazeSpread: 0, swayRange: 210, swayCycle: 32, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitCycle: 16, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -609,13 +613,13 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     flairMinSources: Math.round(bounded(source.flairMinSources, 0, 4, d.flairMinSources)),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
     swayRange: Math.round(bounded(source.swayRange, 0, IMMERSIVE_SWAY_RANGE_MAX, d.swayRange)),
-    swayCycle: bounded(source.swayCycle, SWAY_CYCLE_MIN, SWAY_CYCLE_MAX, d.swayCycle),
+    swayCycle: CYCLE_BEATS[cycleBeatsIndex(bounded(source.swayCycle, 1, 256, d.swayCycle))],
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
     swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX, SWAY_PUSH_MAX, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),
     swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX, SWAY_DRIFT_MAX, d.swayDrift),
     poleOrbit: bounded(source.poleOrbit, 0, POLE_ORBIT_MAX, d.poleOrbit),
-    poleOrbitRate: bounded(source.poleOrbitRate, POLE_ORBIT_RATE_MIN, POLE_ORBIT_RATE_MAX, d.poleOrbitRate),
+    poleOrbitCycle: CYCLE_BEATS[cycleBeatsIndex(bounded(source.poleOrbitCycle, 1, 256, d.poleOrbitCycle))],
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     waveBeats: Math.round(bounded(source.waveBeats, WAVE_BEATS_MIN, WAVE_BEATS_MAX, d.waveBeats)),
     waveMix: sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix),

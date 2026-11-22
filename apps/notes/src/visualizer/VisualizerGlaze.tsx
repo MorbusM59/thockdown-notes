@@ -111,7 +111,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   const rangePx = toPx(immersive.swayRange)
   const overscan = swayOverscanPx(rangePx * BREATH_AMPLITUDE_MAX)
   useEffect(() => setSwayRange(rangePx), [rangePx])
-  useEffect(() => setPoleOrbit(immersive.poleOrbit, immersive.poleOrbitRate), [immersive.poleOrbit, immersive.poleOrbitRate])
+  useEffect(() => setPoleOrbit(immersive.poleOrbit, 1 / immersive.poleOrbitCycle), [immersive.poleOrbit, immersive.poleOrbitCycle])
   // The orbit moves at the app's one tempo (`musicTempo.ts`).
   const orbiting = immersive.poleOrbit > 0
   useEffect(() => {
@@ -126,7 +126,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   }, [orbiting])
   const pushPx = toPx(immersive.swayPush)
   const driftPx = toPx(immersive.swayDrift)
-  useEffect(() => setSwayMotion(pushPx, immersive.swayReturn, driftPx, immersive.swayCycle), [pushPx, immersive.swayReturn, driftPx, immersive.swayCycle])
+  useEffect(() => setSwayMotion(pushPx, immersive.swayReturn, driftPx, 1 / immersive.swayCycle), [pushPx, immersive.swayReturn, driftPx, immersive.swayCycle])
   // The sway and the drift run on the app's one tempo too (`advanceSway`).
   useEffect(() => subscribeMusicTempo((beats) => advanceSway(beats)), [])
   const { glareStrength, flairStrength, glareMinStacks, flairMinSources } = immersive
