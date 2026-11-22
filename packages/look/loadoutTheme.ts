@@ -45,6 +45,9 @@ import {
   GLAZE_LINEAR_OPACITY_MAX,
   GLAZE_RADIAL_OPACITY_MAX,
   GLAZE_SHEEN_OPACITY_MAX,
+  glazeRayFan,
+  glazeRayScale,
+  type GlazeRayFan,
   type GlazeSettings,
 } from './glaze'
 import type { UiLayoutLoadout } from './loadouts'
@@ -212,7 +215,11 @@ function mulberry32(seed: number): () => number {
 
 /** One `background-image` per linear stack, in stacking order (the first is drawn on top). */
 export function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
-  return buildLinearGlazeStacks(settings, 45).map((stack) => stack.image)
+  // Sized for the screen the window is on; a resize does not rebuild the
+  // still glaze, so a fan sized on another screen is only slightly off.
+  const vmaxPx = typeof window === 'undefined' ? 1920 : Math.max(window.innerWidth, window.innerHeight)
+  const fan = glazeRayFan(settings, vmaxPx)
+  return buildLinearGlazeStacks(settings, 45).map((stack) => fannedStackImage(stack.stripes, stack.periodPx, fan))
 }
 
 /**
@@ -266,6 +273,32 @@ export function buildLinearGlazeStacks(settings: GlazeSettings, angleDeg: number
   }
 
   return layers
+}
+
+/**
+ * A stack drawn by the fan (`glazeRayFan` says how a pixel reads its
+ * pattern): parallel, a linear gradient across the fan with the stops
+ * tightened by the density; converging, a conic gradient around the
+ * vanishing point, starting from the direction back to the centre, the
+ * pattern's px turned into degrees by `glazeRayScale`.
+ */
+function fannedStackImage(stripes: GlazeStripe[], periodPx: number, fan: GlazeRayFan): string {
+  const parallel = fan.k === 0
+  const unitPerPx = parallel ? 1 / fan.density : 180 / (Math.PI * glazeRayScale(fan, periodPx))
+  const unit = parallel ? 'px' : 'deg'
+  const at = (px: number) => `${(px * unitPerPx).toFixed(3)}${unit}`
+  const stops: string[] = []
+  for (const { startPx, endPx, rgba: [r, g, b, a] } of stripes) {
+    const color = `rgba(${r}, ${g}, ${b}, ${a})`
+    stops.push(`transparent ${at(startPx)}`, `${color} ${at(startPx)}`, `${color} ${at(endPx)}`, `transparent ${at(endPx)}`)
+  }
+  stops.push(`transparent ${at(periodPx)}`)
+  if (parallel) return `repeating-linear-gradient(${fan.acrossDeg}deg, ${stops.join(', ')})`
+  const distance = 1 / fan.k
+  const x = (fan.normal.x * distance).toFixed(1)
+  const y = (fan.normal.y * distance).toFixed(1)
+  const from = (Math.atan2(-fan.normal.x, fan.normal.y) * 180) / Math.PI
+  return `repeating-conic-gradient(from ${from.toFixed(2)}deg at calc(50% + ${x}px) calc(50% + ${y}px), ${stops.join(', ')})`
 }
 
 /** One `background-image` per radial source, in stacking order (the first is drawn on top). */

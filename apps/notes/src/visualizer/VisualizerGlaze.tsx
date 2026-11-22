@@ -96,6 +96,8 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   useEffect(() => setSwayRange(immersive.swayRangePx), [immersive.swayRangePx])
   useEffect(() => setSwayMotion(immersive.swayPush, immersive.swayReturn, immersive.swayDrift), [immersive.swayPush, immersive.swayReturn, immersive.swayDrift])
   const layers = useMemo<Layer[]>(() => {
+    // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides
+    // straight stacks at LINEAR_ANGLE_DEG and stays parallel.
     const settings = visualizerGlazeSettings(glaze, immersive.glazeStrength)
     // Nearest first: the top linear stack (each list is in stacking order,
     // the first drawn on top), unless radial sits above linear.
@@ -134,7 +136,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
           className="glaze-overlay-layer glaze-overlay-layer-linear"
           stacks={shaderStacks.stacks}
           sway={shaderStacks.sway}
-          angleDeg={LINEAR_ANGLE_DEG}
+          glaze={glaze}
         />
       ) : null}
       {[...layers].reverse().filter((layer) => !(shaderStacks && layer.kind === 'linear')).map((layer) => (

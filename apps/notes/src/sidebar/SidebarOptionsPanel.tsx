@@ -224,6 +224,9 @@ import {
   GLAZE_LINEAR_OPACITY_MAX,
   GLAZE_RADIAL_OPACITY_MAX,
   GLAZE_SHEEN_OPACITY_MAX,
+  GLAZE_RAY_CURVATURE_MAX,
+  GLAZE_RAY_DENSITY_MIN,
+  GLAZE_RAY_DENSITY_MAX,
   DEFAULT_GLAZE_SETTINGS,
   type GlazeSettings,
 } from '@thockdown/look/glaze'
@@ -1752,6 +1755,51 @@ export function SidebarOptionsPanel({
                   ...current,
                   sheenOpacity: clamp(value, 0, GLAZE_SHEEN_OPACITY_MAX),
                 }))
+              }}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-ray-curvature"
+              min={0}
+              max={GLAZE_RAY_CURVATURE_MAX}
+              step={0.05}
+              value={glazeSettings.rayCurvature}
+              trackLabel="converge"
+              ariaLabel="How strongly the glare converges"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.rayCurvature}
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({ ...current, rayCurvature: clamp(value, 0, GLAZE_RAY_CURVATURE_MAX) }))
+              }}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-ray-angle"
+              min={0}
+              max={360}
+              step={1}
+              value={glazeSettings.rayAngle}
+              trackLabel="heading"
+              ariaLabel="Direction of the glare"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.rayAngle}
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({ ...current, rayAngle: clamp(value, 0, 360) }))
+              }}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-ray-density"
+              min={GLAZE_RAY_DENSITY_MIN}
+              max={GLAZE_RAY_DENSITY_MAX}
+              step={0.05}
+              value={glazeSettings.rayDensity}
+              trackLabel="rays"
+              ariaLabel="How tightly the glare is stacked"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.rayDensity}
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({ ...current, rayDensity: clamp(value, GLAZE_RAY_DENSITY_MIN, GLAZE_RAY_DENSITY_MAX) }))
               }}
             />
           </div>

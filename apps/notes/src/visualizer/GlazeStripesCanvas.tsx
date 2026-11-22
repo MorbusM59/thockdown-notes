@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { linkProgram, useWebGL2Canvas } from './useWebGL2Canvas'
 import type { GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { registerLinearSlide } from './parallaxSway'
+import { glazeRayFan, glazeRayScale, type GlazeSettings } from '@thockdown/look/glaze'
 
 /*
  * The glaze's linear stacks, drawn by ONE WebGL2 shader on ONE canvas rather
@@ -56,7 +57,11 @@ uniform int count;
 uniform float period[${MAX_STACKS}];   // CSS px
 uniform float offset[${MAX_STACKS}];   // CSS px along the gradient (the sway)
 uniform float share[${MAX_STACKS}];    // each stack's opacity
-uniform vec2 dir;               // the gradient's direction on screen (y down)
+uniform vec2 dir;               // across the stripes (glazeRayFan's 'across')
+uniform vec2 normal;            // towards the vanishing point
+uniform float k;                // curvature in 1/px; 0 = parallel
+uniform float density;
+uniform float turnScale[${MAX_STACKS}];  // pattern px per radian around the point (glazeRayScale)               // the gradient's direction on screen (y down)
 uniform vec2 sizeCss;
 uniform float dpr;
 out vec4 color;
@@ -71,12 +76,15 @@ vec4 rowAt(int i, float u) {
 }
 void main() {
   vec2 p = vec2(gl_FragCoord.x, sizeCss.y * dpr - gl_FragCoord.y) / dpr - sizeCss * 0.5;
-  float along = dot(p, dir);
+  // glazeRayFan: the angle around the vanishing point, which tends to the
+  // parallel projection as k -> 0 and is exactly it at 0.
+  float w = dot(p, dir);
+  float theta = k > 0.0 ? atan(w * k, 1.0 - dot(p, normal) * k) : 0.0;
   vec4 acc = vec4(0.0);
   // Farthest (last) first, so the nearest ends on top.
   for (int i = ${MAX_STACKS - 1}; i >= 0; i--) {
     if (i >= count) continue;
-    vec4 c = rowAt(i, along - offset[i]) * share[i];
+    vec4 c = rowAt(i, (k > 0.0 ? theta * turnScale[i] : w * density) - offset[i]) * share[i];
     acc = c + acc * (1.0 - c.a);
   }
   color = acc;
@@ -112,12 +120,12 @@ function buildRows(stacks: ShaderStack[]): { data: Uint8Array; width: number } {
   return { data, width }
 }
 
-export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {
+export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
   stacks: ShaderStack[]
   /** Per stack, in the same order; omit for the still glaze. */
   sway?: StackSway[]
-  /** The gradient's CSS angle (clockwise from up). */
-  angleDeg: number
+  /** The layout's glaze: the stripes' fan (`glazeRayFan`). */
+  glaze: GlazeSettings
   className?: string
 }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
@@ -141,8 +149,6 @@ export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
     const u = (name: string) => gl.getUniformLocation(program, name)
-    const radians = (angleDeg * Math.PI) / 180
-    gl.uniform2f(u('dir'), Math.sin(radians), -Math.cos(radians))
     gl.uniform1i(u('count'), used.length)
     const pad = (values: number[]) => { const out = new Float32Array(MAX_STACKS); out.set(values); return out }
     gl.uniform1fv(u('period'), pad(used.map((s) => s.periodPx)))
@@ -170,6 +176,15 @@ export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.uniform2f(u('sizeCss'), cssW, cssH)
       gl.uniform1f(u('dpr'), dpr)
+      // Converging, the sway's offset (pattern px) is a rotation about the
+      // point: one period of it is 1/repeats of a turn.
+      // The curvature is per screen px, so the fan is re-derived with the size.
+      const fan = glazeRayFan(glaze, Math.max(cssW, cssH))
+      gl.uniform2f(u('dir'), fan.across.x, fan.across.y)
+      gl.uniform2f(u('normal'), fan.normal.x, fan.normal.y)
+      gl.uniform1f(u('k'), fan.k)
+      gl.uniform1f(u('density'), fan.density)
+      if (fan.k > 0) gl.uniform1fv(u('turnScale'), pad(used.map((s) => glazeRayScale(fan, s.periodPx))))
       // Drawn now rather than on the next frame: a ResizeObserver runs before
       // the frame paints, so the stripes at the new size land in the same
       // frame as the layout that resized them.
@@ -181,7 +196,7 @@ export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {
     resize()
     // The sway hands each stack its offset once a frame; the redraw waits for the frame.
     const unregister = (sway ?? []).slice(0, used.length).map((entry, i) => entry
-      ? registerLinearSlide(entry.index, entry.depth, angleDeg, (along) => { offsets[i] = along; request() })
+      ? registerLinearSlide(entry.index, entry.depth, glaze.rayAngle - 90, (along) => { offsets[i] = along; request() })
       : () => {})
     return () => {
       for (const off of unregister) off()
@@ -191,7 +206,7 @@ export function GlazeStripesCanvas({ stacks, sway, angleDeg, className }: {
       gl.deleteBuffer(buffer)
       gl.deleteProgram(program)
     }
-  }, [stacks, sway, angleDeg])
+  }, [stacks, sway, glaze.rayCurvature, glaze.rayAngle, glaze.rayDensity])
   return (
     <canvas
       ref={ref}
