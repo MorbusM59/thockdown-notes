@@ -1,3 +1,4 @@
+import { poleOrbitOffset } from '@thockdown/look/glaze'
 import { pulseCurve } from '@thockdown/look/visualizer'
 /**
  * The visualizer mode's swaying glaze: a slow camera drifting over glaze
@@ -214,7 +215,7 @@ export function swaySnareHit(nowMs: number = performance.now()): void {
 }
 
 /**
- * The glare's vanishing point travels a circle round its resting place
+ * The glare's vanishing point travels round its resting place on stacked circles
  * (`orbitGlazeRayFan`): its radius as a share of the point's distance, and
  * turns a second. Read by the shader canvas when it draws, which the sway
  * loop asks for each frame, so the orbit adds no loop of its own and stops
@@ -228,9 +229,9 @@ export function setPoleOrbit(share: number, hz: number): void {
   orbitHz = hz
 }
 
-/** The orbit now: its radius share and its phase in radians. */
-export function poleOrbitAt(nowMs: number): { share: number; phase: number } {
-  return { share: orbitHz > 0 ? orbitShare : 0, phase: 2 * Math.PI * orbitHz * (nowMs / 1000) }
+/** The orbit now: its radius share and where on its disc the point is (`poleOrbitOffset`). */
+export function poleOrbitAt(nowMs: number): { share: number; offset: { x: number; y: number } } {
+  return { share: orbitHz > 0 ? orbitShare : 0, offset: poleOrbitOffset(orbitHz * (nowMs / 1000)) }
 }
 
 /** `value` wrapped into [-period/2, period/2). */

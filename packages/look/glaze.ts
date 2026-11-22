@@ -92,19 +92,45 @@ export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: 
 
 /**
  * The fan with its vanishing point moved round its resting place on a circle
- * of `orbit` x its distance from the centre, at `phase` radians. Written on
+ * of `orbit` x its distance from the centre, `offset` (length at most 1) being
+ * where on that disc it is now (`poleOrbitOffset`). Written on
  * the point's direction alone (normal + orbit x (cos, sin), then normalised),
  * so it holds as the point goes to infinity: at k = 0 the parallel stripes
  * swing through the same angles, and nothing is singular. `linearScale` is
  * what the parallel path multiplies by, the limit of the turned fan's
  * k'/k, so the two paths agree as k -> 0.
  */
-export function orbitGlazeRayFan(fan: GlazeRayFan, orbit: number, phase: number): { k: number; normal: { x: number; y: number }; across: { x: number; y: number }; linearScale: number } {
-  const x = fan.normal.x + orbit * Math.cos(phase);
-  const y = fan.normal.y + orbit * Math.sin(phase);
+export function orbitGlazeRayFan(fan: GlazeRayFan, orbit: number, offset: { x: number; y: number }): { k: number; normal: { x: number; y: number }; across: { x: number; y: number }; linearScale: number } {
+  const x = fan.normal.x + orbit * offset.x;
+  const y = fan.normal.y + orbit * offset.y;
   const length = Math.hypot(x, y);
   const normal = { x: x / length, y: y / length };
   return { k: fan.k / length, normal, across: { x: normal.y, y: -normal.x }, linearScale: fan.density / length };
+}
+
+/**
+ * The vanishing point's path round its resting place: three circles stacked
+ * (epicycles), each turning on the one before, at 1, -phi and 1 + sqrt 2
+ * times the base rate. The ratios are irrational to each other, so the path
+ * never closes and never repeats, and the radii sum to 1, so it stays inside
+ * the unit disc and the orbit's margin holds (`glazeRayFan`). `turns` is the
+ * base circle's turns so far.
+ */
+const ORBIT_EPICYCLES: ReadonlyArray<{ radius: number; rate: number; phase: number }> = [
+  { radius: 0.5, rate: 1, phase: 0 },
+  { radius: 0.3, rate: -1.618034, phase: 2.1 },
+  { radius: 0.2, rate: 2.414214, phase: 4.4 },
+];
+
+export function poleOrbitOffset(turns: number): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  for (const { radius, rate, phase } of ORBIT_EPICYCLES) {
+    const angle = 2 * Math.PI * turns * rate + phase;
+    x += radius * Math.cos(angle);
+    y += radius * Math.sin(angle);
+  }
+  return { x, y };
 }
 
 /**

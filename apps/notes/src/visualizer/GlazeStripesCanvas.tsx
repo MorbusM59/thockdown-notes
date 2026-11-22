@@ -167,7 +167,7 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
         const orbit = poleOrbitAt(performance.now())
         const share = sway ? orbit.share : 0
         const fan = glazeRayFan(glaze, sizeCss.w, sizeCss.h, share)
-        const moved = orbitGlazeRayFan(fan, share, orbit.phase)
+        const moved = orbitGlazeRayFan(fan, share, orbit.offset)
         if (fan.k > 0) gl.uniform1f(u('turnScale'), glazeRayScale(fan))
         gl.uniform2f(u('dir'), moved.across.x, moved.across.y)
         gl.uniform2f(u('normal'), moved.normal.x, moved.normal.y)
