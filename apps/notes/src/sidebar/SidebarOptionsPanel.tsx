@@ -1778,16 +1778,16 @@ export function SidebarOptionsPanel({
           </div>
           <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
-              id="glaze-ray-angle"
+              id="glaze-ray-position"
               min={0}
               max={360}
               step={1}
-              value={glazeSettings.rayAngle}
-              trackLabel="heading"
-              ariaLabel="Direction of the glare"
-              defaultValue={DEFAULT_GLAZE_SETTINGS.rayAngle}
+              value={glazeSettings.rayPosition}
+              trackLabel="position"
+              ariaLabel="Position of the glare"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.rayPosition}
               onCommit={(value) => {
-                setGlazeSettings((current) => ({ ...current, rayAngle: clamp(value, 0, 360) }))
+                setGlazeSettings((current) => ({ ...current, rayPosition: clamp(value, 0, 360) }))
               }}
             />
           </div>

@@ -20,8 +20,14 @@ export type GlazeSettings = {
    * nothing singular on the way there (`glazeRayFan`).
    */
   rayCurvature: number;
-  /** The direction of the vanishing point from the centre, degrees clockwise from up; parallel stripes run along it. */
-  rayAngle: number;
+  /**
+   * Where the vanishing point sits round the centre, 0..360: 180 is straight
+   * overhead, and either end is straight below, so the slider's middle is up
+   * and moving away from it swings the point round either side. The direction
+   * it names (degrees clockwise from up) is `glazeRayAngle`; parallel stripes
+   * run along it.
+   */
+  rayPosition: number;
   /** How tightly the stripes (or rays) are stacked: 1 is the pattern's own spacing, 2 twice as tight. */
   rayDensity: number;
 };
@@ -71,8 +77,13 @@ export type GlazeRayFan = {
  * resting place (`orbitGlazeRayFan`); the resting place is pushed out by it,
  * so the orbit's nearest point keeps the margin along the heading.
  */
+/** The vanishing point's direction from the centre, degrees clockwise from up (`rayPosition` 180 is 0, overhead). */
+export function glazeRayAngle(settings: GlazeSettings): number {
+  return settings.rayPosition - 180;
+}
+
 export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: number, orbit = 0): GlazeRayFan {
-  const radians = (settings.rayAngle * Math.PI) / 180;
+  const radians = (glazeRayAngle(settings) * Math.PI) / 180;
   const normal = { x: Math.sin(radians), y: -Math.cos(radians) };
   // The centre's distance to the screen's edge along `normal`.
   const edgePx = Math.min(
@@ -83,7 +94,7 @@ export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: 
     k: (settings.rayCurvature * (1 - orbit)) / (GLAZE_RAY_NEAREST * edgePx),
     normal,
     across: { x: normal.y, y: -normal.x },
-    acrossDeg: settings.rayAngle - 90,
+    acrossDeg: glazeRayAngle(settings) - 90,
     density: settings.rayDensity,
     widthPx,
     heightPx,
@@ -161,7 +172,7 @@ export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   sheenOpacity: 0,
   rayCurvature: 0,
   // Parallel stripes at this angle run across the CSS 45deg gradient every glaze was drawn with before.
-  rayAngle: 135,
+  rayPosition: 315,
   rayDensity: 1,
 };
 
@@ -198,7 +209,7 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
     sheenShape: clamp(toFinite(source.sheenShape, fallback.sheenShape), 0, 2),
     sheenOpacity: clamp(toFinite(source.sheenOpacity, fallback.sheenOpacity), 0, GLAZE_SHEEN_OPACITY_MAX),
     rayCurvature: clamp(toFinite(source.rayCurvature, fallback.rayCurvature), 0, GLAZE_RAY_CURVATURE_MAX),
-    rayAngle: clamp(toFinite(source.rayAngle, fallback.rayAngle), 0, 360),
+    rayPosition: clamp(toFinite(source.rayPosition, fallback.rayPosition), 0, 360),
     rayDensity: clamp(toFinite(source.rayDensity, fallback.rayDensity), GLAZE_RAY_DENSITY_MIN, GLAZE_RAY_DENSITY_MAX),
   };
 }

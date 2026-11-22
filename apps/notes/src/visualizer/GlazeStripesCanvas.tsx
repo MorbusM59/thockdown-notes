@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { linkProgram, useWebGL2Canvas } from './useWebGL2Canvas'
 import type { GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { poleOrbitAt, registerLinearSlide } from './parallaxSway'
-import { glazeRayFan, glazeRayScale, orbitGlazeRayFan, type GlazeSettings } from '@thockdown/look/glaze'
+import { glazeRayAngle, glazeRayFan, glazeRayScale, orbitGlazeRayFan, type GlazeSettings } from '@thockdown/look/glaze'
 
 /*
  * The glaze's linear stacks, drawn by ONE WebGL2 shader on ONE canvas rather
@@ -207,7 +207,7 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
     resize()
     // The sway hands each stack its offset once a frame; the redraw waits for the frame.
     const unregister = (sway ?? []).slice(0, used.length).map((entry, i) => entry
-      ? registerLinearSlide(entry.index, entry.depth, glaze.rayAngle - 90, (along) => { offsets[i] = along; request() })
+      ? registerLinearSlide(entry.index, entry.depth, glazeRayAngle(glaze) - 90, (along) => { offsets[i] = along; request() })
       : () => {})
     return () => {
       for (const off of unregister) off()
@@ -217,7 +217,7 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
       gl.deleteBuffer(buffer)
       gl.deleteProgram(program)
     }
-  }, [stacks, sway, glaze.rayCurvature, glaze.rayAngle, glaze.rayDensity])
+  }, [stacks, sway, glaze.rayCurvature, glaze.rayPosition, glaze.rayDensity])
   return (
     <canvas
       ref={ref}

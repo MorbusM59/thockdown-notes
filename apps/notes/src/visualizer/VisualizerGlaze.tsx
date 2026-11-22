@@ -20,7 +20,7 @@
  */
 
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
-import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
+import { glazeRayAngle, visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
@@ -155,7 +155,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
             key={layer.key}
             layer={layer}
             overscan={overscan}
-            angleDeg={glaze.rayAngle - 90}
+            angleDeg={glazeRayAngle(glaze) - 90}
             opacity={layer.linearPosition === null ? 1 : glazeLayerShare(layer.linearPosition, immersive.glazeSpread)}
           />
         ))}
