@@ -240,6 +240,16 @@
   pointer-events: none;
 }
 
+/* The flair, raised over the glare when "flair above glare" is on. The blend
+   is on this layer, so the flair dodges the whole scene beneath it. */
+.visualizer-flair-over {
+  position: fixed;
+  inset: 0;
+  z-index: 6003;
+  pointer-events: none;
+  mix-blend-mode: color-dodge;
+}
+
 .visualizer-glaze-layer {
   will-change: transform;
 }
