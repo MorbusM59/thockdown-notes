@@ -54,7 +54,7 @@
  * which decides what is worth writing), and of 0 when the loop stops.
  */
 
-import { createTempoFollower } from './musicTempo'
+import { createTempoFollower, TEMPO_GLIDE_SEC } from './musicTempo'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
@@ -163,7 +163,7 @@ const clocks = new Set<Clock>()
 
 /** A TEMPO subscriber: the beats that passed this frame and the rate, from the one follower (`musicTempo.ts`). */
 interface Counter {
-  listener: (beats: number, beatsPerSec: number) => void
+  listener: (beats: number, beatsPerSec: number, count: number) => void
 }
 /** The app's one tempo follower, fed once a frame. */
 const tempo = createTempoFollower()
@@ -232,6 +232,11 @@ let mapTime = NaN
 let mapPhase = NaN
 let mapPeriod = NaN
 
+/** The map's caret `TEMPO_GLIDE_SEC` ahead as last answered: its phase at media time `aheadTime` (already ahead) and its period, held through gaps like the caret's. */
+let aheadTime = NaN
+let aheadPhase = NaN
+let aheadPeriod = NaN
+
 /** The map's counted beat as last answered (`BeatMap.barBeatAt`): the beat at media time `barBeatTime` and the beat's period. */
 let barBeatTime = NaN
 let barBeat = NaN
@@ -298,6 +303,13 @@ function receive(answer: AnalysisAnswer): void {
     mapPeriod = answer.caretPeriod
   } else if (!(answer.heardTime - mapTime < MAP_BEAT_LOSS_SEC)) {
     mapTime = mapPhase = mapPeriod = NaN
+  }
+  if (!Number.isNaN(answer.aheadPhase) && answer.aheadPeriod > 0) {
+    aheadTime = answer.heardTime + TEMPO_GLIDE_SEC
+    aheadPhase = answer.aheadPhase
+    aheadPeriod = answer.aheadPeriod
+  } else if (!(answer.heardTime + TEMPO_GLIDE_SEC - aheadTime < MAP_BEAT_LOSS_SEC)) {
+    aheadTime = aheadPhase = aheadPeriod = NaN
   }
   if (!Number.isNaN(answer.barBeat) && answer.beatPeriod > 0) {
     barBeatTime = answer.heardTime
@@ -449,12 +461,13 @@ function pulse(subscriber: Clock, listenerTime: number): number {
   return 1 - flashLevelAt(levels, flashPhaseAt(beat, cyclesPerBeat))
 }
 
-/** The tempo's frame: the time heard and the period of the same steady beat the caret follows (NaN while there is none), eased once for every reader. */
+/** The tempo's frame: the time heard and the map's beat `TEMPO_GLIDE_SEC` ahead of it (NaN while there is none), glided onto once for every reader. */
 function countTempo(listenerTime: number): void {
   if (counters.size === 0) return
-  const { phase, period } = mapCaretAt(listenerTime)
-  const { beats, beatsPerSec } = tempo(listenerTime, Number.isNaN(phase) ? NaN : period)
-  for (const counter of counters) counter.listener(beats, beatsPerSec)
+  const at = listenerTime + TEMPO_GLIDE_SEC
+  const ahead = Number.isNaN(aheadPhase) || !(aheadPeriod > 0) ? NaN : aheadPhase + (at - aheadTime) / aheadPeriod
+  const { beats, beatsPerSec, count } = tempo(listenerTime, ahead - Math.floor(ahead), aheadPeriod)
+  for (const counter of counters) counter.listener(beats, beatsPerSec, count)
 }
 
 function publish(subscriber: Band | Clock, response: number): void {
@@ -687,13 +700,13 @@ export function subscribeMusicClock(flash: FlashClock, listener: BeatListener, l
 /**
  * THE tempo (`musicTempo.ts`), every frame while music plays: the beats that
  * passed since the last frame and the rate in beats a second, the same for
- * every reader. 60 BPM while the beat map holds no beat, every change glided
- * over `TEMPO_EASE_SEC`. Tempo and not position, deliberately: the beat
- * clock re-seats after a seek or a change of section and its position jumps
- * by up to half a beat, while the tempo is continuous; a frame across a seek
- * passes no beats. Nothing is called while the music is stopped.
+ * every reader, and the count, whose whole numbers fall on the map's beats.
+ * 60 BPM while the beat map holds no beat, every change one glide of
+ * `TEMPO_GLIDE_SEC` that lands on the new grid as it is heard. The count is
+ * continuous, unlike the beat clock, which re-seats after a seek or a change
+ * of section; a frame across a seek passes no beats. Nothing is called while the music is stopped.
  */
-export function subscribeMusicTempo(listener: (beats: number, beatsPerSec: number) => void): () => void {
+export function subscribeMusicTempo(listener: (beats: number, beatsPerSec: number, count: number) => void): () => void {
   const counter: Counter = { listener }
   counters.add(counter)
   added()

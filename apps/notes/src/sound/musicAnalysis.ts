@@ -1,3 +1,4 @@
+import { TEMPO_GLIDE_SEC } from './musicTempo'
 /**
  * The beat pulse's ANALYSIS, run in a worker (`musicAnalysis.worker.ts`) so
  * that decoding and measuring the music never takes a frame from the page.
@@ -113,6 +114,9 @@ export interface AnalysisAnswer {
   /** The caret's beat at `heardTime` (`BeatMap.caretAt`): how far into it, 0..1, and its period (s); NaN where there is none. */
   caretPhase: number
   caretPeriod: number
+  /** The caret's beat `TEMPO_GLIDE_SEC` after `heardTime`, the same way: what the tempo glides onto, so it lands as the change is heard. */
+  aheadPhase: number
+  aheadPeriod: number
   /** The beat counted at `heardTime` (`BeatMap.barBeatAt`): from a bar's one, modulo 12, and the beat's period (s); NaN where there is none. */
   barBeat: number
   beatPeriod: number
@@ -372,6 +376,7 @@ export class MusicAnalysis {
       if (this.readers.size > 0) this.writeScore(heardTime)
     }
     const caret = this.map ? this.map.caretAt(heardTime) : { phase: NaN, period: NaN }
+    const ahead = this.map ? this.map.caretAt(heardTime + TEMPO_GLIDE_SEC) : { phase: NaN, period: NaN }
     const counted = this.map ? this.map.barBeatAt(heardTime) : { beat: NaN, period: NaN }
     let semitones: AnalysisAnswer['semitones']
     if (this.semitoneScore && this.semitoneBands > 0) {
@@ -421,6 +426,8 @@ export class MusicAnalysis {
       peak: this.peaks.isEmpty ? NaN : this.peaks.peakSince(heardTime - LEAD_SEC),
       caretPhase: caret.phase,
       caretPeriod: caret.period,
+      aheadPhase: ahead.phase,
+      aheadPeriod: ahead.period,
       barBeat: counted.beat,
       beatPeriod: counted.period,
       traceLines,
