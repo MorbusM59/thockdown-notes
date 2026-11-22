@@ -84,7 +84,7 @@
   font-size: 17px;
 }
 
-/* Double size does not fit this screen: the choice is kept, regular size is shown. */
+/* Double size does not fit this screen: the mode is off and the button refuses. */
 .display-modes-split-btn.double-size.is-unavailable .double-size-glyph {
   opacity: 0.35;
 }

@@ -1798,13 +1798,23 @@ function App() {
   const isDoubleSizeModeRef = useRef(isDoubleSizeMode)
   isDoubleSizeModeRef.current = isDoubleSizeMode
   // Whether double size fits the space the window has, as the main process
-  // judges it (electron/doubleSizeFits.ts). While it does not, the choice
-  // above stays as the reader left it and regular size is what is applied;
-  // the main process applies double again by itself once it fits.
+  // judges it (electron/doubleSizeFits.ts). Where it stops fitting the main
+  // process has already set the zoom back to 1; here the MODE goes off with
+  // it and is saved, exactly as a press of the button would, so the button
+  // and the mode never disagree. Nothing turns it back on but the reader,
+  // and the toggle refuses while it does not fit.
   const [isDoubleSizeAvailable, setIsDoubleSizeAvailable] = useState(true)
   const isDoubleSizeAvailableRef = useRef(isDoubleSizeAvailable)
   isDoubleSizeAvailableRef.current = isDoubleSizeAvailable
-  useEffect(() => window.windowControls?.onDoubleSizeAvailableChange?.(setIsDoubleSizeAvailable), [])
+  useEffect(() => window.windowControls?.onDoubleSizeAvailableChange?.((available) => {
+    isDoubleSizeAvailableRef.current = available
+    setIsDoubleSizeAvailable(available)
+    if (!available && isDoubleSizeModeRef.current) {
+      isDoubleSizeModeRef.current = false
+      setIsDoubleSizeMode(false)
+      persistMenuStateNowRef.current({ isDoubleSizeMode: false })
+    }
+  }), [])
   const setActiveModeFontSize = useCallback((key: keyof FontSizeSet, value: number) => {
     const mode = isDoubleSizeApplied ? 'double' : 'regular'
     setFontSizesByMode((previous) => ({ ...previous, [mode]: { ...previous[mode], [key]: value } }))
@@ -2114,6 +2124,8 @@ function App() {
 
   const handleToggleDoubleSizeMode = useCallback(() => {
     const next = !isDoubleSizeModeRef.current
+    // Double size does not fit this screen: refused, as the dimmed button says.
+    if (next && !isDoubleSizeAvailableRef.current) return
     isDoubleSizeModeRef.current = next
     // The zoom is set HERE, in the page, and the sizes keyed to it are
     // committed in the same task (flushSync), so the next frame is the new
@@ -2122,13 +2134,9 @@ function App() {
     // sizes at the other's zoom. The main process still applies the doubled
     // window minimum, and its setZoomFactor finds the zoom already there.
     // Without window controls (browser mode) there is no zoom to follow.
-    // What is APPLIED is the choice where double size fits and regular where
-    // it does not -- the same decision the main process takes
-    // (reconcileDoubleSize), from the availability it last told us.
     if (window.windowControls) {
-      const applied = next && isDoubleSizeAvailableRef.current
-      window.windowControls.setPageZoomFactor(applied ? 2 : 1)
-      flushSync(() => setIsDoubleSizeApplied(applied))
+      window.windowControls.setPageZoomFactor(next ? 2 : 1)
+      flushSync(() => setIsDoubleSizeApplied(next))
       window.windowControls.setDoubleSizeMode(next)
     }
     setIsDoubleSizeMode(next)
@@ -5299,7 +5307,14 @@ ${markdownHtml}
             // the zoom/minimum-size at boot from its own copy of this same
             // saved state (see electron/main.ts's createWindow) -- this just
             // syncs the renderer's own toggle/button state to match.
-            setIsDoubleSizeMode(appState.menu.isDoubleSizeMode ?? false)
+            // Where double size does not fit, main has already started in
+            // regular size; the mode follows, and that is saved.
+            {
+              const restoredDoubleSize = (appState.menu.isDoubleSizeMode ?? false) && isDoubleSizeAvailableRef.current
+              isDoubleSizeModeRef.current = restoredDoubleSize
+              setIsDoubleSizeMode(restoredDoubleSize)
+              if (restoredDoubleSize !== (appState.menu.isDoubleSizeMode ?? false)) persistMenuStateNowRef.current({ isDoubleSizeMode: false })
+            }
             const restoredReviewGutterVisibleBySection = appState.menu.reviewGutterVisibleBySection ?? {}
             setReviewGutterVisibleBySection(restoredReviewGutterVisibleBySection)
             // Legacy migration: states saved before the line-number/review-flag

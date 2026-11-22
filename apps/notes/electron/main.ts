@@ -280,16 +280,12 @@ let currentSectionCount = 1;
 // squeezing sections/sidebar into less room than they'd get at 1x. See
 // 'window-control:double-size-mode' below.
 //
-// Two facts, kept apart: the reader's CHOICE (doubleSizePreferred, what the
-// button and F3 toggle and what is saved) and what is APPLIED
-// (currentDoubleSizeMode). Applied is the choice AND whether double size fits
-// the space the window can have (doubleSizeAvailable, see doubleSizeFits.ts).
-// A screen too small for double's minimum -- a portrait monitor in full
-// screen, above all -- therefore shows regular size while the choice stays
-// double, and the next change of space that fits (leaving full screen,
-// rotating the display, moving to a larger one, closing a slot) applies it
-// again. reconcileDoubleSize is the one place applied is decided.
-let doubleSizePreferred = false;
+// Double size is only possible where it fits the space the window can have
+// (doubleSizeAvailable, see doubleSizeFits.ts). There is ONE mode and no
+// remembered wish: where the space stops fitting -- a portrait monitor in
+// full screen, above all -- reconcileDoubleSize turns the mode OFF, exactly
+// as the button would, and the renderer saves that; nothing ever turns it
+// back on but the reader. While it does not fit, the button refuses.
 let currentDoubleSizeMode = false;
 let doubleSizeAvailable = true;
 
@@ -345,12 +341,11 @@ function spaceForWindow(windowRef: BrowserWindow): { width: number; height: numb
 }
 
 /**
- * Decides whether double size is applied, from the reader's choice and the
- * space the window has now, and applies the change: the zoom (the renderer
- * commits its sizes in the frame the zoom lands, App.tsx's
- * isDoubleSizeApplied), the window minimum, and the window grown to it when
- * double comes back on in a window smaller than its minimum. Tells the
- * renderer when availability changes, for the double-size button. Mini mode
+ * Judges whether double size fits the space the window has now, tells the
+ * renderer when that changes (it turns the mode off and saves that, and the
+ * button refuses), turns double size off where it no longer fits (the
+ * renderer commits its sizes in the frame the zoom lands, App.tsx's
+ * isDoubleSizeApplied), and sets the window minimum. Mini mode
  * is left alone: its window is deliberately smaller than any minimum, and
  * leaving it runs this again (applyNormalWindowConstraints).
  */
@@ -361,13 +356,12 @@ function reconcileDoubleSize(windowRef: BrowserWindow): void {
     doubleSizeAvailable = available;
     emitWindowEvent(windowRef.webContents, 'doubleSizeAvailable', available);
   }
-  const applied = doubleSizePreferred && available;
-  const changed = applied !== currentDoubleSizeMode;
-  currentDoubleSizeMode = applied;
-  if (changed) windowRef.webContents.setZoomFactor(applied ? 2 : 1);
+  if (currentDoubleSizeMode && !available) {
+    currentDoubleSizeMode = false;
+    windowRef.webContents.setZoomFactor(1);
+  }
   const { width: minWidth, height: minHeight } = computeEffectiveMinSize();
   windowRef.setMinimumSize(minWidth, minHeight);
-  if (changed && applied) growWindowToMinimumSizeIfNeeded(windowRef, minWidth, minHeight);
 }
 
 /** Grows the window's current bounds if they're now smaller than minWidth/minHeight -- never shrinks it. */
@@ -945,14 +939,18 @@ function registerIpcHandlers() {
     // instead of being squeezed the way plain browser zoom would squeeze it.
     // Disabling relaxes the minimum back down but -- consistent with the
     // sidebar/section-count handlers above -- never shrinks the window itself.
-    // `enabled` is the reader's CHOICE; whether it is applied is
-    // reconcileDoubleSize's to decide (the renderer has already set the zoom
-    // that decision gives, from the availability it was told).
+    // Refused where double size does not fit (the renderer refuses first,
+    // from the availability it was told).
     setDoubleSizeMode: (_event, enabled: unknown) => {
       try {
         if (!win || win.isDestroyed()) return
-        doubleSizePreferred = Boolean(enabled)
+        currentDoubleSizeMode = Boolean(enabled) && doubleSizeAvailable
+        win.webContents.setZoomFactor(currentDoubleSizeMode ? 2 : 1)
         reconcileDoubleSize(win)
+        if (currentDoubleSizeMode) {
+          const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
+          growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
+        }
       } catch (error) {
         console.warn('Failed to apply double-size-mode window constraints', error)
       }
@@ -1715,7 +1713,6 @@ async function createWindow() {
   // renderer -- so this starts at the default of 1 and the renderer corrects
   // it via 'window-control:section-count' shortly after bootstrap resolves.
   currentSidebarVisible = initialSidebarVisible;
-  doubleSizePreferred = savedAppState?.menu?.isDoubleSizeMode ?? false;
   // The window does not exist yet, so the space is the work area of the
   // display it will open on (a reload never starts in full screen, see
   // did-finish-load). reconcileDoubleSize takes over once it exists.
@@ -1723,7 +1720,7 @@ async function createWindow() {
     ? screen.getDisplayMatching({ x: savedWindowState.x, y: savedWindowState.y, width: savedWindowState.width, height: savedWindowState.height })
     : screen.getPrimaryDisplay();
   doubleSizeAvailable = doubleSizeFits(computeMinSizeAt(true), startDisplay.workArea);
-  currentDoubleSizeMode = doubleSizePreferred && doubleSizeAvailable;
+  currentDoubleSizeMode = (savedAppState?.menu?.isDoubleSizeMode ?? false) && doubleSizeAvailable;
   const initialMinSize = computeEffectiveMinSize();
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
