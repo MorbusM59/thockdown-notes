@@ -240,14 +240,15 @@
   pointer-events: none;
 }
 
-/* The flair, raised over the glare when "flair above glare" is on. The blend
-   is on this layer, so the flair dodges the whole scene beneath it. */
+/* The flair, raised over the glare when "flair above glare" is on. The
+   wrapper draws no box, so each source keeps its own colour-dodge against the
+   whole scene: a blended wrapper is a group of its own, and its sources then
+   blended against nothing, which turned the scene black. */
 .visualizer-flair-over {
-  position: fixed;
-  inset: 0;
+  display: contents;
+}
+.visualizer-flair-over > .glaze-overlay-layer {
   z-index: 6003;
-  pointer-events: none;
-  mix-blend-mode: color-dodge;
 }
 
 .visualizer-glaze-layer {
