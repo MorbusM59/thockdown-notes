@@ -294,11 +294,14 @@ function fannedStackImage(stripes: GlazeStripe[], periodPx: number, fan: GlazeRa
   }
   stops.push(`transparent ${at(periodPx)}`)
   if (parallel) return `repeating-linear-gradient(${fan.acrossDeg}deg, ${stops.join(', ')})`
+  // Placed in percent of the screen, so a change of the window's CSS size
+  // (double size mode is a zoom) keeps the point where it was relative to
+  // the centre; the fan was sized for this window (`buildLinearGlazeLayers`).
   const distance = 1 / fan.k
-  const x = (fan.normal.x * distance).toFixed(1)
-  const y = (fan.normal.y * distance).toFixed(1)
+  const x = ((fan.normal.x * distance * 100) / fan.widthPx).toFixed(3)
+  const y = ((fan.normal.y * distance * 100) / fan.heightPx).toFixed(3)
   const from = (Math.atan2(-fan.normal.x, fan.normal.y) * 180) / Math.PI
-  return `repeating-conic-gradient(from ${from.toFixed(2)}deg at calc(50% + ${x}px) calc(50% + ${y}px), ${stops.join(', ')})`
+  return `repeating-conic-gradient(from ${from.toFixed(2)}deg at calc(50% + ${x}%) calc(50% + ${y}%), ${stops.join(', ')})`
 }
 
 /** One `background-image` per radial source, in stacking order (the first is drawn on top). */

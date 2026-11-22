@@ -222,10 +222,9 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
     <canvas
       ref={ref}
       className={className}
-      // The class gives it the linear layer's place in the stack, and with it the
-      // still glaze's background image (look.css), which would show through
-      // as a second, static set of stripes under the shader's own.
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', backgroundImage: 'none', mixBlendMode: CANVAS_BLEND_MODE as never }}
+      // The blend is the host layer's (`.visualizer-glare-over`): a blend here
+      // would meet only that layer's empty backdrop.
+      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
     />
   )
 }

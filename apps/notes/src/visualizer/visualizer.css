@@ -232,6 +232,14 @@
 
 /* Each swayed layer is promoted once and only moved after that, so a frame
    of the sway composites and never repaints. */
+/* The glare, over the grid wave and pulse (6001) and under tooltips. */
+.visualizer-glare-over {
+  position: fixed;
+  inset: 0;
+  z-index: 6002;
+  pointer-events: none;
+}
+
 .visualizer-glaze-layer {
   will-change: transform;
 }

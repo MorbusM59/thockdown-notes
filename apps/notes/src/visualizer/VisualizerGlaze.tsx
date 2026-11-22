@@ -23,7 +23,7 @@ import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
-import { GlazeStripesCanvas } from './GlazeStripesCanvas'
+import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
 import { canUseShaderGlaze } from './glazeShaderSupport'
 import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
@@ -135,25 +135,33 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
 
   // Drawn farthest first, so the nearest is on top within its kind (the
   // kinds' own order is the stack's z-index rule, as in the ordinary glaze).
+  // The glare (the shader's linear stacks) is drawn ABOVE the grid wave and
+  // the pulse (z-index 6001, visualizer.css), the rest of the glaze below
+  // them. Its own fixed layer carries the blend, so it blends with the whole
+  // scene beneath it, wave and pulse included; a blend on the canvas alone
+  // would only meet this layer's own (empty) backdrop.
   return (
-    <div className={`glaze-overlay-stack visualizer-glaze${glaze.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
+    <>
+      <div className={`glaze-overlay-stack visualizer-glaze${glaze.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
+        {[...layers].reverse().filter((layer) => !(shaderStacks && layer.kind === 'linear')).map((layer) => (
+          <SwayLayer
+            key={layer.key}
+            layer={layer}
+            overscan={overscan}
+            angleDeg={glaze.rayAngle - 90}
+            opacity={layer.linearPosition === null ? 1 : glazeLayerShare(layer.linearPosition, immersive.glazeSpread)}
+          />
+        ))}
+      </div>
       {shaderStacks && shaderStacks.stacks.length > 0 ? (
-        <GlazeStripesCanvas
-          className="glaze-overlay-layer glaze-overlay-layer-linear"
-          stacks={shaderStacks.stacks}
-          sway={shaderStacks.sway}
-          glaze={glaze}
-        />
+        <div className="visualizer-glare-over" style={{ mixBlendMode: CANVAS_BLEND_MODE as CSSProperties['mixBlendMode'] }} aria-hidden="true">
+          <GlazeStripesCanvas
+            stacks={shaderStacks.stacks}
+            sway={shaderStacks.sway}
+            glaze={glaze}
+          />
+        </div>
       ) : null}
-      {[...layers].reverse().filter((layer) => !(shaderStacks && layer.kind === 'linear')).map((layer) => (
-        <SwayLayer
-          key={layer.key}
-          layer={layer}
-          overscan={overscan}
-          angleDeg={glaze.rayAngle - 90}
-          opacity={layer.linearPosition === null ? 1 : glazeLayerShare(layer.linearPosition, immersive.glazeSpread)}
-        />
-      ))}
-    </div>
+    </>
   )
 }

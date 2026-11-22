@@ -61,6 +61,9 @@ export type GlazeRayFan = {
   /** CSS angle of `across` (a linear gradient's direction). */
   acrossDeg: number;
   density: number;
+  /** The screen the fan was sized for. */
+  widthPx: number;
+  heightPx: number;
 };
 
 /**
@@ -82,6 +85,8 @@ export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: 
     across: { x: normal.y, y: -normal.x },
     acrossDeg: settings.rayAngle - 90,
     density: settings.rayDensity,
+    widthPx,
+    heightPx,
   };
 }
 
