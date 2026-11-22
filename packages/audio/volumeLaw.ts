@@ -15,3 +15,13 @@ export function volumeGain(position: number): number {
   if (!(position > 0)) return 0;
   return position >= 1 ? 1 : position ** VOLUME_EXPONENT;
 }
+
+/** A slider position in decibels (-Infinity at 0). */
+export function volumeDb(position: number): number {
+  return position > 0 ? 20 * Math.log10(volumeGain(position)) : -Infinity;
+}
+
+/** The slider position that is `db` decibels from unity (the inverse of volumeDb). */
+export function volumePositionForDb(db: number): number {
+  return Math.min(1, 2 ** (db / VOLUME_DB_PER_HALVING));
+}

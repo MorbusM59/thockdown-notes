@@ -456,14 +456,15 @@ const BED_SWELL_PERIOD_SEC = 2.5;
 
 
 /**
- * A fader position (0-1) as a gain; mirrors soundscapeFaderGain in
- * packages/soundscape/soundscape.ts, which soundscape-generator.test.ts holds it to.
- * Thunder needs it here because randomness moves each peal's fader.
+ * A fader position (0-1) as a gain; mirrors volumeGain in
+ * packages/audio/volumeLaw.ts (-10 dB per halving), which
+ * soundscape-generator.test.ts holds it to. This script is built standalone,
+ * so it cannot import it. Thunder needs it because randomness moves each peal's fader.
  */
-const FADER_RANGE_DB = 48;
+const FADER_EXPONENT = 10 / (20 * Math.log10(2));
 function faderGain(position) {
   if (!(position > 0)) return 0;
-  return 10 ** ((-FADER_RANGE_DB * (1 - Math.min(1, position))) / 20);
+  return position >= 1 ? 1 : position ** FADER_EXPONENT;
 }
 
 /**

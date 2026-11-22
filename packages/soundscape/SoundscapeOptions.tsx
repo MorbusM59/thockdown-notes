@@ -1,3 +1,4 @@
+import { volumeDb } from '@thockdown/audio/volumeLaw'
 import { type HTMLAttributes, type PointerEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
@@ -31,7 +32,6 @@ import {
   DEFAULT_SOUNDSCAPE_SPACE,
   DEFAULT_SOUNDSCAPE_WEATHER,
   MAX_SOUNDSCAPE_CUSTOM_PRESETS,
-  soundscapeFaderDb,
   soundscapePartDb,
   applySoundscapePreset,
   createSoundscape,
@@ -94,7 +94,7 @@ function formatPan(value: number): string {
 }
 
 function formatVolume(value: number): string {
-  const db = soundscapeFaderDb(value)
+  const db = volumeDb(value)
   return db === -Infinity ? 'Off' : `${Math.round(db)} dB`
 }
 

@@ -4,6 +4,7 @@
  * thread than per block in the generator -- gains, the distance rule, the
  * noise cycle and filter-gain tables, the chimes' tuning.
  */
+import { volumeGain } from '@thockdown/audio/volumeLaw';
 import { foliageNearCutoffHz } from '@thockdown/audio/room';
 import {
   SOUNDSCAPE_NOISE_SWEEP_OCTAVES,
@@ -14,7 +15,6 @@ import {
   SOUNDSCAPE_THUNDER_LENGTH_MIN_SEC,
   SOUNDSCAPE_CHIME_RATE_MAX_PER_SEC,
   SOUNDSCAPE_CHIME_RATE_MIN_PER_SEC,
-  soundscapeFaderGain,
   type SoundscapeChannelKind,
   type SoundscapeChannelSettings,
   type SoundscapeSettings,
@@ -203,7 +203,7 @@ export interface SoundscapeWorkletConfiguration {
   channels: SoundscapeWorkletChannel[];
   weather: SoundscapeSettings['weather'];
   /**
-   * The soundscape's own volume as a gain (soundscapeFaderGain). Carried with
+   * The soundscape's own volume as a gain (volumeGain). Carried with
    * the channels so the generator changes both in the same block.
    */
   level: number;
@@ -213,14 +213,14 @@ export interface SoundscapeWorkletConfiguration {
 export function toGeneratorConfiguration(settings: SoundscapeSettings): SoundscapeWorkletConfiguration {
   return {
     weather: { ...settings.weather },
-    level: soundscapeFaderGain(settings.volume),
+    level: volumeGain(settings.volume),
     channels: settings.channels.map((channel) => toGeneratorChannel(channel, settings.space.foliage)),
   };
 }
 
 /** A channel as the generator takes it; `foliage` is the space's (see resolveSoundscapeSpace). */
 export function toGeneratorChannel(channel: SoundscapeChannelSettings, foliage: number): SoundscapeWorkletChannel {
-  const gain = soundscapeFaderGain(channel.volume) * SOUNDSCAPE_KIND_GAIN[channel.kind];
+  const gain = volumeGain(channel.volume) * SOUNDSCAPE_KIND_GAIN[channel.kind];
   switch (channel.kind) {
     case 'noise':
       return {

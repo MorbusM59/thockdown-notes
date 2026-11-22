@@ -7,8 +7,6 @@ import {
   SOUNDSCAPE_SPACE_BOUNDS,
   SOUNDSCAPE_WEATHER_BOUNDS,
   DEFAULT_SOUNDSCAPE_SETTINGS,
-  soundscapeFaderDb,
-  soundscapeFaderGain,
   soundscapeSettingsSignature,
   applySoundscapePreset,
   activeSoundscape,
@@ -225,15 +223,6 @@ describe('stepping through soundscapes', () => {
     const next = applySoundscapePreset(soloed, SOUNDSCAPE_FACTORY_PRESETS[3]);
     expect(next.enabled).toBe(true);
     expect(next.settings.channels.filter((channel) => channel.solo).map((channel) => channel.id)).toEqual([]);
-  });
-});
-
-describe('the fader', () => {
-  it('is silent at 0, unity at the top, and even in decibels between', () => {
-    expect(soundscapeFaderGain(0)).toBe(0);
-    expect(soundscapeFaderGain(1)).toBe(1);
-    expect(soundscapeFaderDb(0.5)).toBeCloseTo(-24, 9);
-    expect(soundscapeFaderDb(0.75) - soundscapeFaderDb(0.5)).toBeCloseTo(soundscapeFaderDb(0.5) - soundscapeFaderDb(0.25), 9);
   });
 });
 

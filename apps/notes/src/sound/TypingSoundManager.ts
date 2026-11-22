@@ -1,3 +1,4 @@
+import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { KEYSTROKE_CHANNEL_IDS, type KeystrokeChannelId, type KeystrokeChannelSettings } from '../shared/keystrokeSounds'
 import { KEYSTROKE_CHANNEL_ASSETS } from './typingSounds'
 
@@ -325,7 +326,7 @@ export class TypingSoundManager {
         if (rate !== 1) source.playbackRate.value = rate
         if (detune !== 0) source.detune.value = detune
         const gain = context.createGain()
-        gain.gain.value = channel.volume * gainScale * (strike === 0 ? 1 : Math.pow(echo!.decay, strike))
+        gain.gain.value = volumeGain(channel.volume) * gainScale * (strike === 0 ? 1 : Math.pow(echo!.decay, strike))
         source.connect(gain)
         if (output) gain.connect(output)
         else this.connectToOutput(gain)

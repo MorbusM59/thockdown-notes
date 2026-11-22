@@ -21,6 +21,7 @@
  * that every surface named here has a profile there.
  */
 
+import { volumePositionForDb } from '@thockdown/audio/volumeLaw';
 import { CHIME_SCALE_MAX_ID } from './soundscapeChimeScales';
 import { clamp } from '@thockdown/interaction/clamp';
 import { logLerp } from '@thockdown/audio/curves';
@@ -70,8 +71,8 @@ export function rainSurfaceAt(name: SoundscapeRainSurfaceName): number {
 
 /**
  * Every layer's common state. `volume` is a FADER position, 0-1, not a gain:
- * soundscapeFaderGain turns it into one on a decibel law, so equal travel is an
- * equal change in loudness and the top half of the slider is not wasted.
+ * volumeGain (packages/audio/volumeLaw.ts) turns it into one, -10 dB for every
+ * halving of the slider, the law every volume slider in the app shares.
  */
 export interface SoundscapeChannelBaseSettings {
   id: string;
@@ -365,7 +366,7 @@ export interface SoundscapeSettings {
   space: SoundscapeSpaceSettings;
   weather: SoundscapeWeatherSettings;
   /**
-   * The soundscape's own volume, a fader position (soundscapeFaderGain): 1 is
+   * The soundscape's own volume, a fader position (volumeGain): 1 is
    * as authored. Applied to the whole mix ahead of the engine's compressor,
    * so it is how a loud soundscape is kept out of compression; the listener's
    * masterVolume sits on top of it and belongs to the listener, not to the
@@ -429,7 +430,6 @@ export interface SoundscapePreferences {
 // ---------------------------------------------------------------------------
 // Ranges. Every control's bounds are here, read by the sanitizer and the UI.
 
-export const SOUNDSCAPE_FADER_RANGE_DB = 48;
 export const SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ = 80;
 export const SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ = 18000;
 export const SOUNDSCAPE_NOISE_SWEEP_OCTAVES = 2;
@@ -464,21 +464,6 @@ export const SOUNDSCAPE_WEATHER_PACE_MAX_SEC = 60;
 /** Not a design limit, only a bound on a list nobody should reach. */
 export const MAX_SOUNDSCAPE_CUSTOM_PRESETS = 100;
 export const SOUNDSCAPE_DEFAULT_MASTER_VOLUME = 1;
-
-/**
- * A fader position (0-1) as a gain: silence at 0, and otherwise
- * SOUNDSCAPE_FADER_RANGE_DB below unity at the bottom rising evenly in decibels
- * to unity at the top.
- */
-export function soundscapeFaderGain(position: number): number {
-  if (!(position > 0)) return 0;
-  return 10 ** ((-SOUNDSCAPE_FADER_RANGE_DB * (1 - Math.min(1, position))) / 20);
-}
-
-/** A fader position in decibels (-Infinity at 0). */
-export function soundscapeFaderDb(position: number): number {
-  return position > 0 ? -SOUNDSCAPE_FADER_RANGE_DB * (1 - Math.min(1, position)) : -Infinity;
-}
 
 /**
  * A part's level slider (a fire's crackle, a rain's wash, ...): silence at
@@ -552,13 +537,13 @@ type KindDefaults = { [K in SoundscapeChannelKind]: Readonly<Omit<SoundscapeChan
  */
 export const SOUNDSCAPE_CHANNEL_DEFAULTS: KindDefaults = {
   noise: {
-    kind: 'noise', enabled: true, solo: false, volume: 0.7, distance: 0,
+    kind: 'noise', enabled: true, solo: false, volume: 0.369, distance: 0,
     colour: 0.5, brightnessHz: SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ, focus: 0,
     depth: 0.3, periodSec: 12, curve: 0.5, skew: 0.5, sweep: 0,
     variation: 0.3, sway: 0, width: 1, weather: 0,
   },
   rain: {
-    kind: 'rain', enabled: true, solo: false, volume: 0.7, distance: 0.4,
+    kind: 'rain', enabled: true, solo: false, volume: 0.369, distance: 0.4,
     surface: rainSurfaceAt('street'), resonance: 0.5,
     intensity: 0.6, dropLevel: 0.75, dropTone: 0.5,
     washDensity: 0.5, washLevel: 0.626, washTone: 0.5,
@@ -567,21 +552,21 @@ export const SOUNDSCAPE_CHANNEL_DEFAULTS: KindDefaults = {
     pan: 0, width: 1, weather: 0,
   },
   thunder: {
-    kind: 'thunder', enabled: true, solo: false, volume: 0.8, distance: 0.7,
+    kind: 'thunder', enabled: true, solo: false, volume: 0.514, distance: 0.7,
     share: 0.05, pan: 0, spread: 0.5, character: 0.5, contrast: 0, randomness: 0.5, lengthSec: 15, weather: 0,
   },
   water: {
-    kind: 'water', enabled: true, solo: false, volume: 0.7, distance: 0.3,
+    kind: 'water', enabled: true, solo: false, volume: 0.369, distance: 0.3,
     turbulence: 0.5, width: 1, bubbles: 0.5, bubbleLevel: 0.75, size: 0.4, sizeSpread: 0.5, rise: 0.5, ring: 0.5,
     rush: 1, rushLevel: 0.75, rushTone: 0.5, pan: 0,
   },
   fire: {
-    kind: 'fire', enabled: true, solo: false, volume: 0.7, distance: 0.15,
+    kind: 'fire', enabled: true, solo: false, volume: 0.369, distance: 0.15,
     size: 0.5, width: 1, crackle: 0.5, crackleLevel: 0.75, crackleTone: 0.5, pops: 0.3, popLevel: 0.75, popTone: 0.7,
     sizzle: 0.5, sizzleLevel: 0.75, sizzleTone: 0.2, flicker: 0.6, flickerPeriodSec: 0.4, flickerDynamics: 0.4, pan: 0, weather: 0,
   },
   chimes: {
-    kind: 'chimes', enabled: true, solo: false, volume: 0.6, distance: 0.35,
+    kind: 'chimes', enabled: true, solo: false, volume: 0.264, distance: 0.35,
     pitchHz: chimeSemitoneHz(3), tubes: 5, ringSec: 6, activity: 0.3, hardness: 0.6, unison: 0.3, material: 1 / 3, scale: 0, pan: 0, width: 0, weather: 0.8,
   },
 };
@@ -644,13 +629,11 @@ export const FACTORY_SOUNDSCAPE_ICONS: Readonly<Record<string, string>> = {
 
 /**
  * A factory soundscape's own volume, written in decibels: the fader position
- * (soundscapeFaderGain) that is `db` below unity. Each is set by ear so the
+ * (volumeGain, packages/audio/volumeLaw.ts) that is `db` below unity. Each is set by ear so the
  * soundscape plays clear of the engine's compressor (SoundscapeEngine's
  * SOUNDSCAPE_MIX_GAIN); one that is not given one plays as authored.
  */
-function volumeDb(db: number): number {
-  return 1 + (db / SOUNDSCAPE_FADER_RANGE_DB);
-}
+const volumeDb = volumePositionForDb;
 
 /** The factory soundscapes, in the order the settings panel shows them. */
 export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
@@ -659,14 +642,14 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     name: 'Stormy Night',
     icon: null,
     settings: soundscape({
-      'chimes-1': { activity: 0.79, distance: 0.86, hardness: 1, material: 0.68, pan: -0.61, pitchHz: chimeSemitoneHz(-10), ringSec: 15, scale: 1, tubes: 8, unison: 0, volume: 0.66 },
-      'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 1, unison: 0.84, volume: 0.57, weather: 1 },
-      'noise-1': { brightnessHz: 1232.94, colour: 0.8, curve: 0.58, depth: 0.35, distance: 0.6, focus: 0.28, periodSec: 10.706, sweep: 0.38, variation: 0.64, volume: 0.76, weather: 0.5, width: 0.98 },
-      'noise-2': { brightnessHz: 661.36, volume: 0.79 },
-      'noise-3': { brightnessHz: 120.09, colour: 0, focus: 0.35, volume: 0.75 },
-      'rain-1': { distance: 0.1, drips: 0.55, intensity: 0.55, pan: -0.5, resonance: 0.15, splashLevel: 0.57, surface: 0.39, volume: 0.74, washDensity: 0.85, washLevel: 0.77, washTone: 0.23, wetness: 0.73 },
-      'rain-2': { distance: 0.5, drips: 0.72, dropLevel: 0.74, intensity: 0.45, pan: 0.3, resonance: 0.83, splashLevel: 0.51, volume: 0.69, washDensity: 0.95, washLevel: 0.84, washTone: 0.23, wetness: 0.51 },
-      'rain-3': { distance: 0.9, drips: 0.38, dropLevel: 0.681, intensity: 0.85, resonance: 0.82, splashLevel: 0.49, surface: 0.44, volume: 0.97, washDensity: 0.69, washLevel: 0.89, washTone: 0.46, wetness: 0.7 },
+      'chimes-1': { activity: 0.79, distance: 0.86, hardness: 1, material: 0.68, pan: -0.61, pitchHz: chimeSemitoneHz(-10), ringSec: 15, scale: 1, tubes: 8, unison: 0, volume: 0.323 },
+      'chimes-2': { activity: 0.69, distance: 0.8, hardness: 0.22, material: 0.06, pan: 0.57, pitchHz: chimeSemitoneHz(2), ringSec: 15, scale: 1, unison: 0.84, volume: 0.239, weather: 1 },
+      'noise-1': { brightnessHz: 1232.94, colour: 0.8, curve: 0.58, depth: 0.35, distance: 0.6, focus: 0.28, periodSec: 10.706, sweep: 0.38, variation: 0.64, volume: 0.45, weather: 0.5, width: 0.98 },
+      'noise-2': { brightnessHz: 661.36, volume: 0.497 },
+      'noise-3': { brightnessHz: 120.09, colour: 0, focus: 0.35, volume: 0.435 },
+      'rain-1': { distance: 0.1, drips: 0.55, intensity: 0.55, pan: -0.5, resonance: 0.15, splashLevel: 0.57, surface: 0.39, volume: 0.421, washDensity: 0.85, washLevel: 0.77, washTone: 0.23, wetness: 0.73 },
+      'rain-2': { distance: 0.5, drips: 0.72, dropLevel: 0.74, intensity: 0.45, pan: 0.3, resonance: 0.83, splashLevel: 0.51, volume: 0.357, washDensity: 0.95, washLevel: 0.84, washTone: 0.23, wetness: 0.51 },
+      'rain-3': { distance: 0.9, drips: 0.38, dropLevel: 0.681, intensity: 0.85, resonance: 0.82, splashLevel: 0.49, surface: 0.44, volume: 0.905, washDensity: 0.69, washLevel: 0.89, washTone: 0.46, wetness: 0.7 },
       'thunder-1': { character: 0.87, contrast: 0.47, distance: 0.6, lengthSec: 30, pan: -0.28, randomness: 0.11, share: 0.67, spread: 1, volume: 1 },
     }, { amount: 0.294, foliage: 0.82, size: 0.76 }, { gustiness: 0.88, paceSec: 4.681 }, volumeDb(-5)),
   },
@@ -675,12 +658,12 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     name: 'Wild Sea',
     icon: null,
     settings: soundscape({
-      'noise-1': { brightnessHz: 327.08, colour: 0.48, depth: 0.73, sweep: -0.24, volume: 0.83, weather: 1 },
+      'noise-1': { brightnessHz: 327.08, colour: 0.48, depth: 0.73, sweep: -0.24, volume: 0.568, weather: 1 },
       'noise-2': { brightnessHz: 1450.47, sweep: 0.34, weather: 1 },
       'noise-3': { brightnessHz: 11358.92, curve: 0.46, sweep: 0.52, weather: 1 },
-      'noise-4': { brightnessHz: 717.34, colour: 0.15, focus: 0.82, sweep: 0.03, volume: 0.35, weather: 1 },
-      'noise-5': { brightnessHz: 149.14, colour: 0.08, depth: 0.56, focus: 0.52, periodSec: 29.26, skew: 0.32, sweep: 0.04, variation: 0.73, volume: 0.91, weather: 1 },
-      'noise-6': { colour: 0.79, distance: 0.27, focus: 0.1, sway: 0.08, volume: 0.62, weather: 0.8 },
+      'noise-4': { brightnessHz: 717.34, colour: 0.15, focus: 0.82, sweep: 0.03, volume: 0.115, weather: 1 },
+      'noise-5': { brightnessHz: 149.14, colour: 0.08, depth: 0.56, focus: 0.52, periodSec: 29.26, skew: 0.32, sweep: 0.04, variation: 0.73, volume: 0.741, weather: 1 },
+      'noise-6': { colour: 0.79, distance: 0.27, focus: 0.1, sway: 0.08, volume: 0.282, weather: 0.8 },
       'rain-1': { dripLevel: 0, drips: 0, dropLevel: 0, intensity: 0, volume: 1, washDensity: 1, washLevel: 0.84, washTone: 0.17, weather: 1 },
       'thunder-1': { distance: 0.21, enabled: false, pan: -0.36, share: 0.71, spread: 0.85, weather: 0.65 },
       'thunder-2': { character: 0.85, contrast: 0.38, lengthSec: 26, randomness: 0.78, share: 0.32, spread: 0.77, weather: 0.94 },
@@ -692,12 +675,12 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     name: 'Snowy Peaks',
     icon: null,
     settings: soundscape({
-      'noise-1': { brightnessHz: 113.76, colour: 0.88, focus: 0.75, periodSec: 38.074, skew: 0.25, sweep: 0.24, variation: 0.81, volume: 0.75 },
+      'noise-1': { brightnessHz: 113.76, colour: 0.88, focus: 0.75, periodSec: 38.074, skew: 0.25, sweep: 0.24, variation: 0.81, volume: 0.435 },
       'noise-2': { brightnessHz: 1167.94, colour: 0.26, focus: 0.42, skew: 0.34, sweep: 0.2, weather: 1 },
       'noise-3': { brightnessHz: 562.18, colour: 0.17, curve: 0.13, distance: 0.67, focus: 0.11, periodSec: 29.969, skew: 0.23, sway: 0.03, sweep: 0.2, variation: 0.44, volume: 1, weather: 0.91 },
-      'noise-4': { brightnessHz: 2778.24, colour: 0.7, focus: 0.19, periodSec: 14.615, skew: 0.28, sweep: 0.18, volume: 0.66, weather: 0.75 },
-      'noise-5': { colour: 0.45, depth: 0.11, distance: 0.39, periodSec: 9.729, skew: 0.28, sway: 0.19, sweep: 0.22, variation: 0.92, volume: 0.76, weather: 0.63 },
-      'noise-6': { brightnessHz: 5930.28, colour: 0.65, focus: 0.11, periodSec: 4.012, sway: 0.01, variation: 0.87, volume: 0.54, weather: 0.83 },
+      'noise-4': { brightnessHz: 2778.24, colour: 0.7, focus: 0.19, periodSec: 14.615, skew: 0.28, sweep: 0.18, volume: 0.323, weather: 0.75 },
+      'noise-5': { colour: 0.45, depth: 0.11, distance: 0.39, periodSec: 9.729, skew: 0.28, sway: 0.19, sweep: 0.22, variation: 0.92, volume: 0.45, weather: 0.63 },
+      'noise-6': { brightnessHz: 5930.28, colour: 0.65, focus: 0.11, periodSec: 4.012, sway: 0.01, variation: 0.87, volume: 0.216, weather: 0.83 },
       'thunder-2': { character: 0.95, contrast: 0.28, distance: 0.72, lengthSec: 24, randomness: 0.81, share: 0.825, spread: 1, volume: 1, weather: 0.63 },
     }, {}, { paceSec: 13 }, volumeDb(-5)),
   },
@@ -707,11 +690,11 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     icon: null,
     settings: soundscape({
       'noise-1': { brightnessHz: 200.89, colour: 0.02, periodSec: 14.615, sweep: 0.04, volume: 1 },
-      'noise-2': { brightnessHz: 86.77, colour: 0, focus: 0.58, skew: 0.19, sway: 0.18, sweep: 0.12, volume: 0.88, width: 0.87 },
-      'noise-3': { brightnessHz: 170.76, colour: 0, depth: 0.24, focus: 0.79, periodSec: 28.568, skew: 0.31, sway: 0.06, variation: 0, volume: 0.78 },
-      'noise-4': { brightnessHz: 80, colour: 0.02, depth: 0.28, focus: 0.31, skew: 0.38, sweep: 0.36, variation: 0, volume: 0.84 },
-      'water-1': { bubbleLevel: 0.62, bubbles: 0.26, distance: 0.32, ring: 0.33, rise: 0.13, rushLevel: 0.79, rushTone: 0.2, size: 0.9, sizeSpread: 0.62, turbulence: 0.7, volume: 0.52 },
-      'water-2': { bubbleLevel: 0.8, bubbles: 0.34, distance: 0.54, ring: 0.23, rise: 0.35, rush: 0.66, rushLevel: 0, rushTone: 0.84, sizeSpread: 0.48, turbulence: 0.73, volume: 0.26 },
+      'noise-2': { brightnessHz: 86.77, colour: 0, focus: 0.58, skew: 0.19, sway: 0.18, sweep: 0.12, volume: 0.671, width: 0.87 },
+      'noise-3': { brightnessHz: 170.76, colour: 0, depth: 0.24, focus: 0.79, periodSec: 28.568, skew: 0.31, sway: 0.06, variation: 0, volume: 0.481 },
+      'noise-4': { brightnessHz: 80, colour: 0.02, depth: 0.28, focus: 0.31, skew: 0.38, sweep: 0.36, variation: 0, volume: 0.587 },
+      'water-1': { bubbleLevel: 0.62, bubbles: 0.26, distance: 0.32, ring: 0.33, rise: 0.13, rushLevel: 0.79, rushTone: 0.2, size: 0.9, sizeSpread: 0.62, turbulence: 0.7, volume: 0.203 },
+      'water-2': { bubbleLevel: 0.8, bubbles: 0.34, distance: 0.54, ring: 0.23, rise: 0.35, rush: 0.66, rushLevel: 0, rushTone: 0.84, sizeSpread: 0.48, turbulence: 0.73, volume: 0.085 },
     }, { foliage: 0.35, size: 0.6 }, { paceSec: 13 }, volumeDb(0)),
   },
   {
@@ -719,12 +702,12 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     name: 'River Camp',
     icon: null,
     settings: soundscape({
-      'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.424 },
-      'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.82, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.43, volume: 0.984, width: 0.15 },
-      'noise-1': { brightnessHz: 4775.16, colour: 0.73, depth: 0.75, distance: 0.73, periodSec: 11.782, skew: 0.41, sweep: -0.08, variation: 0.65, volume: 0.714 },
-      'noise-2': { brightnessHz: 153.23, colour: 0.22, depth: 0.42, focus: 0.84, skew: 0.28, sway: 0.19, variation: 0.98, volume: 0.744 },
-      'noise-3': { brightnessHz: 223.87, colour: 0.04, distance: 0.1, focus: 0.76, volume: 0.584 },
-      'water-1': { bubbleLevel: 0.7, bubbles: 0.45, distance: 0.57, pan: -0.37, ring: 0.39, rise: 0.27, rushLevel: 0.98, rushTone: 0.62, size: 0.85, sizeSpread: 0.82, turbulence: 0.46, volume: 0.694, width: 0.56 },
+      'chimes-1': { activity: 0.77, distance: 0, hardness: 0.34, material: 0.08, pan: 0.38, pitchHz: 440, ringSec: 13.644, scale: 30, tubes: 4, unison: 0.7, volume: 0.147 },
+      'fire-1': { crackle: 0.77, flicker: 0.27, flickerDynamics: 0.82, flickerPeriodSec: 0.207, pan: 0.3, size: 0.81, sizzleLevel: 0.43, volume: 0.948, width: 0.15 },
+      'noise-1': { brightnessHz: 4775.16, colour: 0.73, depth: 0.75, distance: 0.73, periodSec: 11.782, skew: 0.41, sweep: -0.08, variation: 0.65, volume: 0.386 },
+      'noise-2': { brightnessHz: 153.23, colour: 0.22, depth: 0.42, focus: 0.84, skew: 0.28, sway: 0.19, variation: 0.98, volume: 0.427 },
+      'noise-3': { brightnessHz: 223.87, colour: 0.04, distance: 0.1, focus: 0.76, volume: 0.251 },
+      'water-1': { bubbleLevel: 0.7, bubbles: 0.45, distance: 0.57, pan: -0.37, ring: 0.39, rise: 0.27, rushLevel: 0.98, rushTone: 0.62, size: 0.85, sizeSpread: 0.82, turbulence: 0.46, volume: 0.361, width: 0.56 },
     // At the soundscape fader's top already, so its +5 dB is on its layers (5/48 of a fader each).
     }, { amount: 0.49, size: 0.06 }, { paceSec: 11.927 }),
   },
@@ -733,16 +716,16 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     name: 'Thunderstorm',
     icon: null,
     settings: soundscape({
-      'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sway: 0.32, sweep: 0.3, variation: 0.6, volume: 0.81, weather: 0.82 },
-      'noise-2': { brightnessHz: 6976.55, colour: 0.76, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sway: 0.26, sweep: 1, variation: 0.65, volume: 0.79, weather: 0.97 },
-      'noise-3': { brightnessHz: 8432.71, colour: 0.2, focus: 0.12, sway: 0.28, sweep: 0.08, variation: 0.51, volume: 0.57, weather: 0.84 },
-      'noise-4': { brightnessHz: 13005.93, colour: 0.29, depth: 0.81, distance: 0.55, focus: 0.14, periodSec: 43.955, skew: 0.68, sway: 0.23, sweep: 0.97, variation: 1, volume: 0.91, weather: 0.9 },
+      'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sway: 0.32, sweep: 0.3, variation: 0.6, volume: 0.531, weather: 0.82 },
+      'noise-2': { brightnessHz: 6976.55, colour: 0.76, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sway: 0.26, sweep: 1, variation: 0.65, volume: 0.497, weather: 0.97 },
+      'noise-3': { brightnessHz: 8432.71, colour: 0.2, focus: 0.12, sway: 0.28, sweep: 0.08, variation: 0.51, volume: 0.239, weather: 0.84 },
+      'noise-4': { brightnessHz: 13005.93, colour: 0.29, depth: 0.81, distance: 0.55, focus: 0.14, periodSec: 43.955, skew: 0.68, sway: 0.23, sweep: 0.97, variation: 1, volume: 0.741, weather: 0.9 },
       'noise-5': { brightnessHz: 5930.28, colour: 0.23, curve: 0.32, depth: 0.74, distance: 0.38, periodSec: 43.955, skew: 0.16, sway: 0.47, sweep: 0.93, variation: 0.62, weather: 1 },
-      'rain-1': { distance: 0.5, dripLevel: 0.32, dripTone: 0.4, drips: 0.82, dropLevel: 0.62, dropTone: 0.01, intensity: 0.87, resonance: 0, splashLevel: 0.77, splashTone: 0.76, surface: 0.73, volume: 0.93, washDensity: 0.96, washLevel: 0.85, washTone: 0.14, wetness: 0.32 },
-      'rain-2': { distance: 0.3, dripLevel: 0.6, drips: 0.85, dropTone: 0.1, resonance: 0.74, splashLevel: 0.57, surface: 0.01, volume: 0.92, washDensity: 0.25, washLevel: 0.9, washTone: 0.31, wetness: 0.75, width: 0.65 },
-      'rain-3': { distance: 0, dripLevel: 0.5, dripTone: 0.55, drips: 0.59, dropLevel: 0.63, dropTone: 0, intensity: 0.85, resonance: 0.54, splashLevel: 0.53, splashTone: 0.3, surface: 0.14, volume: 0.69, washDensity: 0.82, washLevel: 0.81, washTone: 0.09, weather: 0.94, wetness: 0.36 },
-      'thunder-1': { character: 0.94, contrast: 0.77, pan: -0.3, share: 0.715, spread: 0.89, volume: 0.91 },
-      'thunder-2': { character: 0.81, contrast: 0.28, distance: 0.29, lengthSec: 25, share: 0.865, volume: 0.92 },
+      'rain-1': { distance: 0.5, dripLevel: 0.32, dripTone: 0.4, drips: 0.82, dropLevel: 0.62, dropTone: 0.01, intensity: 0.87, resonance: 0, splashLevel: 0.77, splashTone: 0.76, surface: 0.73, volume: 0.792, washDensity: 0.96, washLevel: 0.85, washTone: 0.14, wetness: 0.32 },
+      'rain-2': { distance: 0.3, dripLevel: 0.6, drips: 0.85, dropTone: 0.1, resonance: 0.74, splashLevel: 0.57, surface: 0.01, volume: 0.766, washDensity: 0.25, washLevel: 0.9, washTone: 0.31, wetness: 0.75, width: 0.65 },
+      'rain-3': { distance: 0, dripLevel: 0.5, dripTone: 0.55, drips: 0.59, dropLevel: 0.63, dropTone: 0, intensity: 0.85, resonance: 0.54, splashLevel: 0.53, splashTone: 0.3, surface: 0.14, volume: 0.357, washDensity: 0.82, washLevel: 0.81, washTone: 0.09, weather: 0.94, wetness: 0.36 },
+      'thunder-1': { character: 0.94, contrast: 0.77, pan: -0.3, share: 0.715, spread: 0.89, volume: 0.741 },
+      'thunder-2': { character: 0.81, contrast: 0.28, distance: 0.29, lengthSec: 25, share: 0.865, volume: 0.766 },
       'thunder-3': { pan: 0.49, share: 0.705, spread: 0.92, weather: 0.76 },
     }, { foliage: 0.35, size: 0.51 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-5)),
   },
@@ -751,19 +734,19 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     name: 'Temple Grounds',
     icon: null,
     settings: soundscape({
-      'chimes-1': { activity: 0.9, distance: 0.95, hardness: 0.52, material: 0.13, pan: -0.5, pitchHz: chimeSemitoneHz(-5), ringSec: 13.829565, scale: 64, tubes: 8, unison: 1, volume: 0.7, weather: 1 },
+      'chimes-1': { activity: 0.9, distance: 0.95, hardness: 0.52, material: 0.13, pan: -0.5, pitchHz: chimeSemitoneHz(-5), ringSec: 13.829565, scale: 64, tubes: 8, unison: 1, volume: 0.369, weather: 1 },
       'chimes-2': { activity: 1, distance: 0.55, hardness: 0.65, material: 0.04, pan: 0.26, pitchHz: chimeSemitoneHz(-3), ringSec: 15, scale: 64, unison: 0.62, weather: 1 },
-      'fire-2': { distance: 0.3, flicker: 0.66, flickerDynamics: 0.77, flickerPeriodSec: 0.426598, pan: -0.34, size: 0.44, sizzleLevel: 0, volume: 0.84, weather: 1, width: 0 },
-      'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sway: 0.32, sweep: 0.3, variation: 0.6, volume: 0.81, weather: 0.82 },
-      'noise-2': { brightnessHz: 821.350394, colour: 0.45, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sway: 0.26, sweep: 1, variation: 0.65, volume: 0.79, weather: 0.97 },
-      'noise-3': { brightnessHz: 1531.191323, colour: 0.42, focus: 0.12, sway: 0.28, sweep: 0.08, variation: 0.51, volume: 0.57, weather: 0.84 },
-      'noise-4': { brightnessHz: 992.784203, colour: 0.12, curve: 0.8, depth: 0.81, distance: 0.55, focus: 0.28, periodSec: 43.955, skew: 0.86, sway: 0.23, sweep: 0.86, variation: 1, volume: 0.94, weather: 0.9 },
+      'fire-2': { distance: 0.3, flicker: 0.66, flickerDynamics: 0.77, flickerPeriodSec: 0.426598, pan: -0.34, size: 0.44, sizzleLevel: 0, volume: 0.587, weather: 1, width: 0 },
+      'noise-1': { brightnessHz: 562.18, colour: 0.14, depth: 0.65, distance: 0.41, periodSec: 16.083, sway: 0.32, sweep: 0.3, variation: 0.6, volume: 0.531, weather: 0.82 },
+      'noise-2': { brightnessHz: 821.350394, colour: 0.45, curve: 0.4, depth: 0.54, distance: 0.9, periodSec: 30, sway: 0.26, sweep: 1, variation: 0.65, volume: 0.497, weather: 0.97 },
+      'noise-3': { brightnessHz: 1531.191323, colour: 0.42, focus: 0.12, sway: 0.28, sweep: 0.08, variation: 0.51, volume: 0.239, weather: 0.84 },
+      'noise-4': { brightnessHz: 992.784203, colour: 0.12, curve: 0.8, depth: 0.81, distance: 0.55, focus: 0.28, periodSec: 43.955, skew: 0.86, sway: 0.23, sweep: 0.86, variation: 1, volume: 0.819, weather: 0.9 },
       'noise-5': { brightnessHz: 5930.28, colour: 0.23, curve: 0.32, depth: 0.74, distance: 0.38, enabled: false, periodSec: 43.955, skew: 0.16, sway: 0.47, sweep: 0.93, variation: 0.62, weather: 1 },
-      'rain-1': { distance: 0.95, dripLevel: 0.6, dripTone: 0.31, drips: 0.64, dropLevel: 0.63, dropTone: 0.2, intensity: 0.43, resonance: 0.39, splashLevel: 0.77, splashTone: 0.42, surface: 0.59, volume: 0.9, washDensity: 1, washLevel: 0.75, washTone: 0.14, weather: 1, wetness: 0.3 },
-      'rain-2': { distance: 0.48, dripLevel: 0.49, drips: 0.85, dropLevel: 0.34, dropTone: 0.32, intensity: 0.63, resonance: 0.74, splashLevel: 0.57, surface: 0.37, volume: 0.94, washDensity: 1, washLevel: 0.69, washTone: 0.31, weather: 0.74, wetness: 0.12 },
+      'rain-1': { distance: 0.95, dripLevel: 0.6, dripTone: 0.31, drips: 0.64, dropLevel: 0.63, dropTone: 0.2, intensity: 0.43, resonance: 0.39, splashLevel: 0.77, splashTone: 0.42, surface: 0.59, volume: 0.717, washDensity: 1, washLevel: 0.75, washTone: 0.14, weather: 1, wetness: 0.3 },
+      'rain-2': { distance: 0.48, dripLevel: 0.49, drips: 0.85, dropLevel: 0.34, dropTone: 0.32, intensity: 0.63, resonance: 0.74, splashLevel: 0.57, surface: 0.37, volume: 0.819, washDensity: 1, washLevel: 0.69, washTone: 0.31, weather: 0.74, wetness: 0.12 },
       'rain-3': { distance: 0, dripLevel: 0.5, dripTone: 0.55, drips: 0.59, dropLevel: 0.63, dropTone: 0, enabled: false, intensity: 0.85, resonance: 0.54, splashLevel: 0.53, splashTone: 0.3, surface: 0.14, volume: 1, washDensity: 0.82, washLevel: 0.81, washTone: 0.09, weather: 0.94, wetness: 0.36 },
-      'thunder-1': { character: 1, contrast: 1, lengthSec: 26, pan: -0.2, randomness: 1, share: 0.715, spread: 0.89, volume: 0.91, weather: 0.72 },
-      'thunder-2': { character: 0.29, contrast: -0.2, distance: 1, lengthSec: 25, randomness: 1, share: 0.865, spread: 1, volume: 0.84, weather: 1 },
+      'thunder-1': { character: 1, contrast: 1, lengthSec: 26, pan: -0.2, randomness: 1, share: 0.715, spread: 0.89, volume: 0.741, weather: 0.72 },
+      'thunder-2': { character: 0.29, contrast: -0.2, distance: 1, lengthSec: 25, randomness: 1, share: 0.865, spread: 1, volume: 0.587, weather: 1 },
       'thunder-3': { character: 1, contrast: 1, lengthSec: 23, pan: 0.2, randomness: 1, share: 0.95, spread: 1, volume: 1, weather: 0.79 },
       'water-2': { bubbleLevel: 0.45, bubbles: 0.22, distance: 0.78, pan: -0.26, ring: 0.21, rise: 0, rushLevel: 0.54, rushTone: 0.29, size: 0.53, sizeSpread: 0.79, turbulence: 0.21, volume: 1, width: 0.2 },
     }, { amount: 0.7, brilliance: 0.07, foliage: 0.17, size: 1 }, { gustiness: 1, paceSec: 4.681 }, volumeDb(-1.24)),
@@ -773,11 +756,11 @@ export const SOUNDSCAPE_FACTORY_PRESETS: readonly SoundscapePreset[] = [
     name: 'Cloudburst',
     icon: null,
     settings: soundscape({
-      'noise-1': { brightnessHz: 1850.78, colour: 0.09, distance: 0.7, focus: 0.1, sweep: 0.28, volume: 0.51, weather: 0.95 },
-      'noise-2': { brightnessHz: 452.68, colour: 0.42, distance: 0.5, focus: 0.12, sweep: 0.52, volume: 0.84, weather: 1 },
+      'noise-1': { brightnessHz: 1850.78, colour: 0.09, distance: 0.7, focus: 0.1, sweep: 0.28, volume: 0.196, weather: 0.95 },
+      'noise-2': { brightnessHz: 452.68, colour: 0.42, distance: 0.5, focus: 0.12, sweep: 0.52, volume: 0.587, weather: 1 },
       'rain-1': { distance: 0.8, dripLevel: 0.41, dripTone: 0.16, drips: 0.57, dropTone: 0.16, intensity: 1, resonance: 0.15, splashLevel: 0.64, splashTone: 0.82, surface: 0.4, volume: 1, washDensity: 1, washLevel: 1, washTone: 0.26, weather: 0.33, wetness: 0.85 },
-      'rain-2': { distance: 0.51, dripTone: 0.43, dropTone: 0.2, intensity: 1, splashLevel: 0.48, splashTone: 0, volume: 0.96, washDensity: 1, washLevel: 1, washTone: 0.31, weather: 0.68 },
-      'rain-3': { distance: 0.21, dripLevel: 0.31, dripTone: 0.32, drips: 0.59, dropTone: 0.18, intensity: 1, resonance: 0.3, splashLevel: 0.56, splashTone: 0, surface: 0.27, volume: 0.92, washDensity: 0.34, washLevel: 1, washTone: 0.23, weather: 0.94, wetness: 0.78 },
+      'rain-2': { distance: 0.51, dripTone: 0.43, dropTone: 0.2, intensity: 1, splashLevel: 0.48, splashTone: 0, volume: 0.875, washDensity: 1, washLevel: 1, washTone: 0.31, weather: 0.68 },
+      'rain-3': { distance: 0.21, dripLevel: 0.31, dripTone: 0.32, drips: 0.59, dropTone: 0.18, intensity: 1, resonance: 0.3, splashLevel: 0.56, splashTone: 0, surface: 0.27, volume: 0.766, washDensity: 0.34, washLevel: 1, washTone: 0.23, weather: 0.94, wetness: 0.78 },
       'thunder-3': { character: 0.78, contrast: 0.08, distance: 0.19, lengthSec: 24, randomness: 0.19, share: 0.75, spread: 1, volume: 1, weather: 1 },
     }, { amount: 0.7, brilliance: 0.8, foliage: 0.09, size: 1 }, { gustiness: 1, paceSec: 29.877 }, volumeDb(-7)),
   },

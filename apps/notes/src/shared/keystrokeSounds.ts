@@ -72,7 +72,7 @@ export const KEYSTROKE_CHANNEL_RANGES = {
   pitch: [-100, 100],
 } as const satisfies Record<(typeof KEYSTROKE_CHANNEL_NUMBER_KEYS)[number], readonly [number, number]>
 
-export const DEFAULT_KEYSTROKE_CHANNEL: Readonly<KeystrokeChannelSettings> = { on: false, volume: 0.5, jitter: 0, pitch: 0 }
+export const DEFAULT_KEYSTROKE_CHANNEL: Readonly<KeystrokeChannelSettings> = { on: false, volume: 0.659, jitter: 0, pitch: 0 }
 
 type ChannelOverrides = Partial<Record<KeystrokeChannelId, Partial<KeystrokeChannelSettings>>>
 const preset = (channels: ChannelOverrides, globals: Partial<Omit<KeystrokeSoundSettings, 'channels'>> = {}): KeystrokeSoundSettings => ({
@@ -89,15 +89,15 @@ const preset = (channels: ChannelOverrides, globals: Partial<Omit<KeystrokeSound
 /** Every channel off, the mix neutral. Also what the dock's reset writes into the active preset. */
 export const NEUTRAL_KEYSTROKE_SOUND: Readonly<KeystrokeSoundSettings> = preset({})
 
-const VANILLA = preset({ creamy: { jitter: 0.05 }, bass: { volume: 0.2, jitter: 0.05 } }, { variance: 0.05 })
+const VANILLA = preset({ creamy: { jitter: 0.05 }, bass: { volume: 0.379, jitter: 0.05 } }, { variance: 0.05 })
 
 /** The factory presets, in the order the grid shows them. */
 export const FACTORY_KEYSTROKE_SOUNDS: readonly Preset<KeystrokeSoundSettings>[] = [
   { id: 'vanilla', name: 'Vanilla', icon: 'fa-ice-cream', settings: VANILLA },
-  { id: 'footsteps', name: 'Footsteps', icon: 'fa-shoe-prints', settings: preset({ bass: { volume: 0.2, jitter: 0.05, pitch: -100 }, treble: { volume: 0.2, jitter: 0.05, pitch: 100 } }, { variance: 0.2, pitch: 20, reverb: 0.1 }) },
-  { id: 'vestiges', name: 'Vestiges', icon: 'fa-archway', settings: preset({ creamy: {}, bass: { volume: 0.07 } }, { reverb: 0.29 }) },
-  { id: 'bubblegum', name: 'Bubblegum', icon: 'fa-burst', settings: preset({ pops: { volume: 0.15, jitter: 0.1 }, creamy: { volume: 0.15, jitter: 0.3, pitch: -100 }, bass: { volume: 0.3 }, treble: { volume: 0.05, jitter: 0.1, pitch: 100 } }, { reverb: 0.14 }) },
-  { id: 'needles', name: 'Needles', icon: 'fa-map-pin', settings: preset({ pins: { volume: 0.52 }, bass: { volume: 0.17 }, treble: { volume: 0.29 } }, { reverb: 0.13 }) },
+  { id: 'footsteps', name: 'Footsteps', icon: 'fa-shoe-prints', settings: preset({ bass: { volume: 0.379, jitter: 0.05, pitch: -100 }, treble: { volume: 0.379, jitter: 0.05, pitch: 100 } }, { variance: 0.2, pitch: 20, reverb: 0.1 }) },
+  { id: 'vestiges', name: 'Vestiges', icon: 'fa-archway', settings: preset({ creamy: {}, bass: { volume: 0.202 } }, { reverb: 0.29 }) },
+  { id: 'bubblegum', name: 'Bubblegum', icon: 'fa-burst', settings: preset({ pops: { volume: 0.319, jitter: 0.1 }, creamy: { volume: 0.319, jitter: 0.3, pitch: -100 }, bass: { volume: 0.484 }, treble: { volume: 0.165, jitter: 0.1, pitch: 100 } }, { reverb: 0.14 }) },
+  { id: 'needles', name: 'Needles', icon: 'fa-map-pin', settings: preset({ pins: { volume: 0.675 }, bass: { volume: 0.344 }, treble: { volume: 0.475 } }, { reverb: 0.13 }) },
 ]
 
 /** A fresh install plays Vanilla. */

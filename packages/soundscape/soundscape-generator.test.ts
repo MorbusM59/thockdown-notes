@@ -1,8 +1,8 @@
+import { volumeGain } from '@thockdown/audio/volumeLaw';
 import { describe, expect, it } from 'vitest';
 import {
   SOUNDSCAPE_RAIN_DRIPS_MAX_PER_SEC,
   SOUNDSCAPE_RAIN_SURFACE_ANCHORS,
-  soundscapeFaderGain,
   rainDropsPerSecond,
   soundscapePartGain,
   type SoundscapeChannelSettings,
@@ -60,7 +60,7 @@ describe('the soundscape worklet', () => {
   it('uses the same fader law as the settings', () => {
     const { constants } = createProcessor([]);
     for (const position of [0, 0.01, 0.25, 0.5, 0.75, 1]) {
-      expect(constants.faderGain(position)).toBeCloseTo(soundscapeFaderGain(position), 12);
+      expect(constants.faderGain(position)).toBeCloseTo(volumeGain(position), 12);
     }
   });
 
