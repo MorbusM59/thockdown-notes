@@ -1,4 +1,4 @@
-import { pulseCurve } from '@thockdown/look/visualizer'
+import { DEFAULT_VISUALIZER_IMMERSIVE, pulseCurve } from '@thockdown/look/visualizer'
 
 /**
  * The visualizer mode's spectrum analyser, as numbers: which frequencies a
@@ -64,12 +64,27 @@ export const SEMITONE_FADE_SHAPE = -0.2
 export const TILT_DB_PER_OCTAVE = 1.5
 const TILT_PIVOT_HZ = 1000
 
-/** How fast a bar falls once its band gets quieter, in dB per second. A rise is immediate. */
-export const RELEASE_DB_PER_SEC = 36
-/** How long a peak box hangs at the highest point a bar reached before it starts to fall. */
-export const PEAK_HOLD_SEC = 0.7
-/** How fast a falling peak box speeds up, in dB per second per second. */
-export const PEAK_GRAVITY_DB_PER_SEC2 = 120
+/**
+ * How the bars and their crests (the peak boxes) fall, from Options >
+ * Visualizer > Spectrum (`VisualizerImmersive`'s spectrum fields). A bar
+ * hangs for `delaySec` after it last rose, then falls with constant
+ * acceleration `gravity` (dB per second squared). A crest hangs for
+ * `delaySec + crestDelaySec` and falls at `gravity x (1 - crestFallReduction)`.
+ */
+export type SpectrumFall = {
+  delaySec: number
+  gravity: number
+  crestDelaySec: number
+  crestFallReduction: number
+}
+
+const FALL_DEFAULTS = DEFAULT_VISUALIZER_IMMERSIVE
+let spectrumFall: SpectrumFall = { delaySec: FALL_DEFAULTS.spectrumDelaySec, gravity: FALL_DEFAULTS.spectrumGravity, crestDelaySec: FALL_DEFAULTS.crestDelaySec, crestFallReduction: FALL_DEFAULTS.crestFallReduction }
+
+/** Sets the fall every meter reads on its next step (read once per step, never per band). */
+export function setSpectrumFall(next: SpectrumFall): void {
+  spectrumFall = next
+}
 
 /** The `count + 1` band edges, geometrically spaced from `minHz` to `maxHz`. Band `i` is `[edges[i], edges[i + 1])`. */
 export function logBandEdges(count: number, minHz = SPECTRUM_MIN_HZ, maxHz = SPECTRUM_MAX_HZ): Float64Array {
@@ -742,22 +757,26 @@ export class SemitoneActivityFilter {
 }
 
 /**
- * The drawn bars' motion, per band: a bar RISES AT ONCE to a louder level and
- * FALLS at `RELEASE_DB_PER_SEC`, which is how a meter reads as both quick
- * and calm. Each band also keeps a PEAK, the highest point the bar has
- * reached recently, which hangs for `PEAK_HOLD_SEC` and then falls with
- * gravity until the bar catches it. Every step takes the real time since the
- * last one, so the motion is the same at any frame rate.
+ * The drawn bars' motion, per band: a bar RISES AT ONCE to a louder level,
+ * then hangs and falls with gravity (`SpectrumFall`). Each band also keeps a
+ * PEAK, the highest point the bar has reached recently, which hangs longer
+ * and falls with its own gravity until the bar catches it. Every step takes
+ * the real time since the last one, so the motion is the same at any frame
+ * rate.
  */
 export class SpectrumBallistics {
   readonly levels: Float32Array
   readonly peaks: Float32Array
+  private readonly levelHolds: Float32Array
+  private readonly levelSpeeds: Float32Array
   private readonly holds: Float32Array
   private readonly speeds: Float32Array
 
   constructor(readonly bands: number) {
     this.levels = new Float32Array(bands).fill(-Infinity)
     this.peaks = new Float32Array(bands).fill(-Infinity)
+    this.levelHolds = new Float32Array(bands)
+    this.levelSpeeds = new Float32Array(bands)
     this.holds = new Float32Array(bands)
     this.speeds = new Float32Array(bands)
   }
@@ -777,6 +796,8 @@ export class SpectrumBallistics {
       const from = Math.min(previous.bands - 1, Math.floor(((band + 0.5) * previous.bands) / bands))
       meter.levels[band] = previous.levels[from]
       meter.peaks[band] = previous.peaks[from]
+      meter.levelHolds[band] = previous.levelHolds[from]
+      meter.levelSpeeds[band] = previous.levelSpeeds[from]
       meter.holds[band] = previous.holds[from]
       meter.speeds[band] = previous.speeds[from]
     }
@@ -786,20 +807,43 @@ export class SpectrumBallistics {
   /** Moves every bar toward `targets` (dB per band) over `dtSec`. */
   step(targets: Float32Array, dtSec: number): void {
     const dt = Math.max(0, dtSec)
+    const { delaySec, gravity, crestDelaySec, crestFallReduction } = spectrumFall
+    const crestHold = delaySec + crestDelaySec
+    const crestGravity = gravity * (1 - crestFallReduction)
     for (let band = 0; band < this.bands; band += 1) {
       const target = targets[band]
-      const fallen = this.levels[band] - RELEASE_DB_PER_SEC * dt
-      const level = target > fallen ? target : fallen
+      let level = this.levels[band]
+      if (target >= level) {
+        level = target
+        this.levelHolds[band] = delaySec
+        this.levelSpeeds[band] = 0
+      } else {
+        // The part of this step left once the hold has run out falls, exactly
+        // for constant acceleration, so the motion does not depend on the frame rate.
+        const hold = this.levelHolds[band]
+        const fall = hold >= dt ? 0 : dt - hold
+        this.levelHolds[band] = hold >= dt ? hold - dt : 0
+        if (fall > 0) {
+          const speed = this.levelSpeeds[band]
+          const fallen = level - (speed + 0.5 * gravity * fall) * fall
+          this.levelSpeeds[band] = speed + gravity * fall
+          level = target > fallen ? target : fallen
+        }
+      }
       this.levels[band] = level
       if (level >= this.peaks[band]) {
         this.peaks[band] = level
-        this.holds[band] = PEAK_HOLD_SEC
+        this.holds[band] = crestHold
         this.speeds[band] = 0
-      } else if (this.holds[band] > 0) {
-        this.holds[band] = Math.max(0, this.holds[band] - dt)
       } else {
-        this.speeds[band] += PEAK_GRAVITY_DB_PER_SEC2 * dt
-        this.peaks[band] = Math.max(level, this.peaks[band] - this.speeds[band] * dt)
+        const hold = this.holds[band]
+        const fall = hold >= dt ? 0 : dt - hold
+        this.holds[band] = hold >= dt ? hold - dt : 0
+        if (fall > 0) {
+          const speed = this.speeds[band]
+          this.peaks[band] = Math.max(level, this.peaks[band] - (speed + 0.5 * crestGravity * fall) * fall)
+          this.speeds[band] = speed + crestGravity * fall
+        }
       }
     }
   }

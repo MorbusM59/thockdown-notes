@@ -38,6 +38,7 @@ import type { BeatSettings } from '../shared/beatSettings'
 import { musicPlayerService } from '../sound/MusicPlayerService'
 import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix, type FlashClock, type MusicClockSubscription } from '../sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
+import { setSpectrumFall } from '../visualizer/spectrumBands'
 import { setLiveStyle } from '../shared/liveStyle'
 
 type BlockName = 'edge' | 'pane' | 'wash'
@@ -149,6 +150,8 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const { waveBoxes, waveBeats, waveTurn, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseSoftness, pulseBoost, cutoutRound, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix } = visualizer.immersive
   const { shape: edgeShape, fallSec: edgeFallSec } = visualizer.edge
   useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, glazePushes: swayPush !== 0, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, pulseSoftness, pulseBoost])
+  const { spectrumDelaySec, spectrumGravity, crestDelaySec, crestFallReduction } = visualizer.immersive
+  useEffect(() => setSpectrumFall({ delaySec: spectrumDelaySec, gravity: spectrumGravity, crestDelaySec, crestFallReduction }), [spectrumDelaySec, spectrumGravity, crestDelaySec, crestFallReduction])
   useEffect(() => {
     const root = document.documentElement.style
     root.setProperty('--beat-edge-color', edgeColor)

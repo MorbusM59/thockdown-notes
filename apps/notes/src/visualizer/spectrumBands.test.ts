@@ -1,14 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { FftPlan } from '@thockdown/soundscape/fft'
 import { pulseCurve } from '@thockdown/look/visualizer'
 import {
   SPECTRUM_MAX_HZ,
-  PEAK_HOLD_SEC,
   SEMITONE_BRIGHTNESS_CEILING_DB,
   SEMITONE_CONTRAST_DB,
   SEMITONE_FADE_SEC,
   SEMITONE_FADE_SHAPE,
-  RELEASE_DB_PER_SEC,
+  setSpectrumFall,
   SPECTRUM_CEILING_DB,
   SPECTRUM_FLOOR_DB,
   SemitoneActivityFilter,
@@ -374,12 +373,28 @@ describe('SemitoneFade', () => {
 })
 
 describe('SpectrumBallistics', () => {
-  it('rises at once and falls at the release rate', () => {
+  const fall = { delaySec: 0, gravity: 120, crestDelaySec: 0.7, crestFallReduction: 0 }
+  beforeEach(() => setSpectrumFall(fall))
+
+  it('rises at once, hangs for the delay, then falls with gravity', () => {
+    setSpectrumFall({ ...fall, delaySec: 0.2 })
     const meter = new SpectrumBallistics(1)
     meter.step(Float32Array.of(-20), 1 / 60)
     expect(meter.levels[0]).toBe(-20)
-    meter.step(Float32Array.of(-Infinity), 0.5)
-    expect(meter.levels[0]).toBeCloseTo(-20 - RELEASE_DB_PER_SEC * 0.5, 4)
+    meter.step(Float32Array.of(-Infinity), 0.15)
+    expect(meter.levels[0]).toBe(-20)
+    meter.step(Float32Array.of(-Infinity), 0.55)
+    expect(meter.levels[0]).toBeCloseTo(-20 - 0.5 * 120 * 0.5 * 0.5, 4)
+  })
+
+  it('holds the crest for both delays and falls it at the reduced gravity', () => {
+    setSpectrumFall({ delaySec: 0.2, gravity: 100, crestDelaySec: 0.3, crestFallReduction: 0.5 })
+    const meter = new SpectrumBallistics(1)
+    meter.step(Float32Array.of(-20), 1 / 60)
+    meter.step(Float32Array.of(-90), 0.45)
+    expect(meter.peaks[0]).toBe(-20)
+    meter.step(Float32Array.of(-90), 0.45)
+    expect(meter.peaks[0]).toBeCloseTo(-20 - 0.5 * 50 * 0.4 * 0.4, 4)
   })
 
   it('holds a peak, then lets it fall until the bar catches it', () => {
@@ -387,7 +402,7 @@ describe('SpectrumBallistics', () => {
     meter.step(Float32Array.of(-20), 1 / 60)
     const quiet = Float32Array.of(-60)
     let elapsed = 0
-    while (elapsed < PEAK_HOLD_SEC - 0.05) { meter.step(quiet, 1 / 60); elapsed += 1 / 60 }
+    while (elapsed < fall.crestDelaySec - 0.05) { meter.step(quiet, 1 / 60); elapsed += 1 / 60 }
     expect(meter.peaks[0]).toBe(-20)
     for (let i = 0; i < 600; i += 1) meter.step(quiet, 1 / 60)
     expect(meter.peaks[0]).toBe(-60)

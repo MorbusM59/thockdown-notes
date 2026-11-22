@@ -232,7 +232,20 @@ export interface VisualizerImmersive {
   pulseBoost: number
   /** 0 to 1: how round the centre cutout's corners are, as a share of half its side; 0 square (the cutout as it always was), 1 a circle. The grid's square hole stays the same whole boxes either way. */
   cutoutRound: number
+  /** Seconds a spectrum bar hangs after it last rose before it falls (`spectrumBands.ts`'s `SpectrumFall`). */
+  spectrumDelaySec: number
+  /** The spectrum bars' fall acceleration, dB per second squared. */
+  spectrumGravity: number
+  /** Seconds a crest (peak box) hangs on top of `spectrumDelaySec`. */
+  crestDelaySec: number
+  /** 0 to `CREST_FALL_REDUCTION_MAX`: the share by which a crest's fall acceleration is below the bars'. */
+  crestFallReduction: number
 }
+
+export const SPECTRUM_DELAY_MAX_SEC = 2
+export const SPECTRUM_GRAVITY_MIN = 10
+export const SPECTRUM_GRAVITY_MAX = 1000
+export const CREST_FALL_REDUCTION_MAX = 0.95
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
 export const IMMERSIVE_SWAY_RANGE_MAX = 1200
@@ -270,7 +283,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRange: 210, swayCycle: 0.03125, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRange: 210, swayCycle: 0.03125, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -609,6 +622,10 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     pulseSoftness: bounded(source.pulseSoftness, 0, 1, d.pulseSoftness),
     pulseBoost: bounded(source.pulseBoost, 0, 1, d.pulseBoost),
     cutoutRound: bounded(source.cutoutRound, 0, 1, d.cutoutRound),
+    spectrumDelaySec: bounded(source.spectrumDelaySec, 0, SPECTRUM_DELAY_MAX_SEC, d.spectrumDelaySec),
+    spectrumGravity: bounded(source.spectrumGravity, SPECTRUM_GRAVITY_MIN, SPECTRUM_GRAVITY_MAX, d.spectrumGravity),
+    crestDelaySec: bounded(source.crestDelaySec, 0, SPECTRUM_DELAY_MAX_SEC, d.crestDelaySec),
+    crestFallReduction: bounded(source.crestFallReduction, 0, CREST_FALL_REDUCTION_MAX, d.crestFallReduction),
   }
 }
 

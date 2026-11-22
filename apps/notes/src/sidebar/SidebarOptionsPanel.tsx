@@ -64,6 +64,10 @@ import {
   SWAY_CYCLE_MIN,
   SWAY_CYCLE_MAX,
   PULSE_SEC_MIN,
+  SPECTRUM_DELAY_MAX_SEC,
+  SPECTRUM_GRAVITY_MIN,
+  SPECTRUM_GRAVITY_MAX,
+  CREST_FALL_REDUCTION_MAX,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
   WAVE_BEATS_MIN,
@@ -2789,6 +2793,65 @@ export function SidebarOptionsPanel({
                 defaultValue={visualizerDefaults.immersive.cutoutRound}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, cutoutRound: value } }))}
+              />
+            </OptionsSliderRows>
+          </div>
+          <div className="utility-setting-button-row" role="group" aria-label="Spectrum controls">
+            <OptionsSubsectionLabel>Spectrum</OptionsSubsectionLabel>
+          </div>
+          <div className="utility-setting-slider-stack" aria-label="Spectrum fall settings">
+            <OptionsSliderRows rows={[2, 2]}>
+              <CompactScrollbarSlider
+                id="visualizer-spectrum-delay"
+                min={0}
+                max={SPECTRUM_DELAY_MAX_SEC}
+                step={0.01}
+                value={visualizer.immersive.spectrumDelaySec}
+                trackLabel="delay"
+                tooltipLabel="Bar hang time (ms)"
+                ariaLabel="Spectrum: how long a bar hangs before it falls, milliseconds"
+                defaultValue={visualizerDefaults.immersive.spectrumDelaySec}
+                formatValue={(value) => String(Math.round(value * 1000))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, spectrumDelaySec: Math.round(value * 100) / 100 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-spectrum-gravity"
+                min={SPECTRUM_GRAVITY_MIN}
+                max={SPECTRUM_GRAVITY_MAX}
+                step={10}
+                value={visualizer.immersive.spectrumGravity}
+                trackLabel="fall"
+                tooltipLabel="Bar fall speed (dB/s²)"
+                ariaLabel="Spectrum: how fast a bar falls, decibels per second squared"
+                defaultValue={visualizerDefaults.immersive.spectrumGravity}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, spectrumGravity: Math.round(value / 10) * 10 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-crest-delay"
+                min={0}
+                max={SPECTRUM_DELAY_MAX_SEC}
+                step={0.01}
+                value={visualizer.immersive.crestDelaySec}
+                trackLabel="crest"
+                tooltipLabel="Extra crest hang time (ms)"
+                ariaLabel="Spectrum: how much longer a crest hangs than its bar, milliseconds"
+                defaultValue={visualizerDefaults.immersive.crestDelaySec}
+                formatValue={(value) => String(Math.round(value * 1000))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, crestDelaySec: Math.round(value * 100) / 100 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-crest-fall"
+                min={0}
+                max={CREST_FALL_REDUCTION_MAX}
+                step={0.01}
+                value={visualizer.immersive.crestFallReduction}
+                trackLabel="slower"
+                tooltipLabel="Slower crest fall (%)"
+                ariaLabel="Spectrum: how much slower a crest falls than its bar, percent"
+                defaultValue={visualizerDefaults.immersive.crestFallReduction}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, crestFallReduction: Math.round(value * 100) / 100 } }))}
               />
             </OptionsSliderRows>
           </div>
