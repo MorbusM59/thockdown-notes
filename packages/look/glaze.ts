@@ -172,7 +172,7 @@ export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   sheenOpacity: 0,
   rayCurvature: 0,
   // Parallel stripes at this angle run across the CSS 45deg gradient every glaze was drawn with before.
-  rayPosition: 315,
+  rayPosition: 135,
   rayDensity: 1,
 };
 
