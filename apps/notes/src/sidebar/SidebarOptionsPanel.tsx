@@ -67,6 +67,7 @@ import {
   SPECTRUM_GRAVITY_MIN,
   SPECTRUM_GRAVITY_MAX,
   CREST_FALL_REDUCTION_MAX,
+  SPECTRUM_STRIP_ROWS_MAX,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
   WAVE_BEATS_MIN,
@@ -2830,7 +2831,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Spectrum</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Spectrum fall settings">
-            <OptionsSliderRows rows={[2, 2]}>
+            <OptionsSliderRows rows={[2, 2, 1]}>
               <CompactScrollbarSlider
                 id="visualizer-spectrum-delay"
                 min={0}
@@ -2882,6 +2883,19 @@ export function SidebarOptionsPanel({
                 defaultValue={visualizerDefaults.immersive.crestFallReduction}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, crestFallReduction: Math.round(value * 100) / 100 } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-spectrum-rows"
+                min={0}
+                max={SPECTRUM_STRIP_ROWS_MAX}
+                step={1}
+                value={visualizer.immersive.spectrumStripRows}
+                trackLabel="rows"
+                tooltipLabel="Spectrum height (rows)"
+                ariaLabel="Spectrum: rows of the bottom strip, 0 for the volume bar alone"
+                defaultValue={visualizerDefaults.immersive.spectrumStripRows}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, spectrumStripRows: Math.round(value) } }))}
               />
             </OptionsSliderRows>
           </div>

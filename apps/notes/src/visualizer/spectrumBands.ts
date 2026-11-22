@@ -81,6 +81,25 @@ export type SpectrumFall = {
 const FALL_DEFAULTS = DEFAULT_VISUALIZER_IMMERSIVE
 let spectrumFall: SpectrumFall = { delaySec: FALL_DEFAULTS.spectrumDelaySec, gravity: FALL_DEFAULTS.spectrumGravity, crestDelaySec: FALL_DEFAULTS.crestDelaySec, crestFallReduction: FALL_DEFAULTS.crestFallReduction }
 
+let spectrumStripRows = FALL_DEFAULTS.spectrumStripRows
+const stripListeners = new Set<() => void>()
+
+/** Sets the rows the bottom strip asks for (Options > Visualizer > Spectrum); the scene re-lays out on a change. */
+export function setSpectrumStripRows(rows: number): void {
+  if (rows === spectrumStripRows) return
+  spectrumStripRows = rows
+  for (const listener of stripListeners) listener()
+}
+
+export function readSpectrumStripRows(): number {
+  return spectrumStripRows
+}
+
+export function subscribeSpectrumStripRows(listener: () => void): () => void {
+  stripListeners.add(listener)
+  return () => { stripListeners.delete(listener) }
+}
+
 /** Sets the fall every meter reads on its next step (read once per step, never per band). */
 export function setSpectrumFall(next: SpectrumFall): void {
   spectrumFall = next

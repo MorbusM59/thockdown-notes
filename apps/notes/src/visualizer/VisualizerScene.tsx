@@ -39,6 +39,8 @@ import {
   SemitoneActivityFilter,
   SemitoneFade,
   SpectrumBallistics,
+  readSpectrumStripRows,
+  subscribeSpectrumStripRows,
   litRows,
   semitoneLoudnessOffsetDb,
   semitoneShare,
@@ -180,7 +182,8 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
   const { width, height } = useBoxSize(scene)
   const { boxPx, fontSizePx } = fitVisualizerBox(height, readerBoxPx, readerFontSizePx, EMPTY_SCENE_DIAMETER_PX)
   const bevel = useBoxBevelImages(boxPx, boxPx)
-  const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX), [width, height, boxPx])
+  const bottomRowsAsked = useSyncExternalStore(subscribeSpectrumStripRows, readSpectrumStripRows)
+  const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX, bottomRowsAsked), [width, height, boxPx, bottomRowsAsked])
   const { columns, originXPx, originYPx, stripRows, bottomStripRow, spectrumRow, spectrumRows, chromaRow, cutout } = layout
   const cutoutRound = useSyncExternalStore(subscribeGridWaveSettings, readCutoutRound)
   const songArea = useMemo(() => songListArea(layout), [layout])

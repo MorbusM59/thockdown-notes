@@ -14,9 +14,10 @@
  *
  * TWO STRIPS frame the scene. The top one is `STRIP_ROWS` full rows (fewer
  * only on a screen too short for both and a row between them); the bottom
- * one is at least as tall and grows, for the spectrum, up to a third of the
- * screen's rows (`BOTTOM_STRIP_SHARE`), as long as the volume bar keeps an
- * empty row below the cutout. The
+ * one is as many rows as Options > Visualizer > Spectrum asks for
+ * (`spectrumStripRows`, 0 leaving only the volume bar), up to the top one's
+ * height always, and past it only as far as the volume bar keeps an empty
+ * row below the cutout and the middle keeps the smallest scene's rows. The
  * TOP strip, from its first row: empty, the credits (the artist, then
  * `CREDITS_GAP_BOXES` empty boxes, then the album), empty, the title, empty,
  * the semitone row, empty. The BOTTOM strip: empty, then the spectrum in the
@@ -33,8 +34,6 @@
  */
 
 export const STRIP_ROWS = 7
-/** The most of the screen's rows the bottom strip (the spectrum's) may take. */
-export const BOTTOM_STRIP_SHARE = 1 / 3
 /** Boxes left empty at each screen edge by the text rows. */
 export const ROW_INSET_BOXES = 1
 export const CREDITS_GAP_BOXES = 3
@@ -72,7 +71,7 @@ export type VisualizerLayout = {
 }
 
 /** The scene's layout for a `widthPx` by `heightPx` slot with square boxes of `boxPx`, and a cutout of about `cutoutPx`. */
-export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx: number, cutoutPx: number): VisualizerLayout {
+export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx: number, cutoutPx: number, bottomRowsAsked: number = STRIP_ROWS): VisualizerLayout {
   const box = Math.max(1, boxPx)
   // The cutout is sized against the rows a grid of this box can always hold,
   // and the grid is then phased so the cutout sits dead centre: the part boxes
@@ -94,14 +93,15 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
   const creditsRow = topRow(1)
   const titleRow = topRow(3)
   const chromaRow = columns > 0 ? topRow(5) : null
-  // The bottom strip grows past the top one's height up to a third of the
-  // rows, while the volume bar (its row above) keeps an empty row below the
-  // cutout, so what sits beside the cutout still spans the cutout's rows; and
-  // it takes only rows beyond `MIN_SCENE_ROWS`, so the middle never holds less
-  // than the smallest scene's.
+  // The bottom strip takes the rows asked for, always up to the top one's
+  // height; past it only while the volume bar (its row above) keeps an empty
+  // row below the cutout, so what sits beside the cutout still spans the
+  // cutout's rows, and only rows beyond `MIN_SCENE_ROWS`, so the middle never
+  // holds less than the smallest scene's.
   const cutoutEndRow = (cutTopPx - originYPx) / box + size
-  const bottomStripRows = stripRows <= 0 ? 0
-    : Math.max(stripRows, Math.min(Math.floor(rows * BOTTOM_STRIP_SHARE), rows - cutoutEndRow - 2, rows - MIN_SCENE_ROWS + stripRows))
+  const asked = Math.max(0, Math.round(bottomRowsAsked))
+  const roomBeyond = Math.min(rows - cutoutEndRow - 2, rows - MIN_SCENE_ROWS + stripRows)
+  const bottomStripRows = stripRows <= 0 ? 0 : Math.min(asked, Math.max(stripRows, roomBeyond))
   const bottomStripRow = rows - bottomStripRows
   // The two bars sit just outside the strips, on the middle section's first
   // and last rows, when the middle has room for both and a row between.

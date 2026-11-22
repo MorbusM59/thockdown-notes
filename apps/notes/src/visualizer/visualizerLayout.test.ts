@@ -11,7 +11,7 @@ describe('computeVisualizerLayout', () => {
   it('lays out the top strip and the bottom strip row by row', () => {
     const layout = computeVisualizerLayout(1920, 1080, 20, 220)
     expect(layout).toMatchObject({ creditsRow: 1, titleRow: 3, chromaRow: 5, progressRow: 7, stripRows: 7, contentTopRow: 9 })
-    expect(layout.bottomStripRows).toBe(Math.floor(layout.rows / 3))
+    expect(layout.bottomStripRows).toBe(7)
     expect(layout.bottomStripRow).toBe(layout.rows - layout.bottomStripRows)
     expect(layout.volumeRow).toBe(layout.bottomStripRow - 1)
     expect(layout.contentBottomRow).toBe(layout.bottomStripRow - 3)
@@ -20,9 +20,12 @@ describe('computeVisualizerLayout', () => {
     expect(layout.volumeRow! - 1).toBeGreaterThanOrEqual(layout.cutout.row + layout.cutout.size)
   })
 
-  it('keeps the bottom strip at the top strip\'s height where the screen has no rows to spare', () => {
-    const layout = computeVisualizerLayout(1920, 620, 20, 20)
-    expect(layout.bottomStripRows).toBe(layout.stripRows)
+  it('gives the bottom strip the rows asked for, as far as the screen has room', () => {
+    expect(computeVisualizerLayout(1920, 1080, 20, 220, 0)).toMatchObject({ bottomStripRows: 0, spectrumRows: 0 })
+    const tall = computeVisualizerLayout(1920, 1080, 20, 220, 50)
+    expect(tall.bottomStripRows).toBeGreaterThan(7)
+    expect(tall.volumeRow! - 1).toBeGreaterThanOrEqual(tall.cutout.row + tall.cutout.size)
+    expect(computeVisualizerLayout(1920, 620, 20, 20, 50).bottomStripRows).toBe(7)
   })
 
   it('keeps the two strips and the cutout inside the full boxes, never overlapping', () => {
