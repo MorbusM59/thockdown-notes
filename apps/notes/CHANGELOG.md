@@ -19,7 +19,7 @@ Alpha Release #27. A Visualizer button in the music bar, a new soundstage, tidie
 
 - **Edge spacing.** Every border, including the end of the sidebar's scrollbar, now sits one regular spacing from the window's edge.
 - **Layout switching** happens in a single step, with no intermediate looks while textures and colours change.
-- **Double size switching** (F3) happens in a single step, slots included.
+- **Double size switching** (F2) happens in a single step, slots included.
 - **Large notes open faster** in the Reader.
 
 #### Bug fixes
