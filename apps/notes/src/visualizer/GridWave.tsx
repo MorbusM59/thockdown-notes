@@ -45,6 +45,7 @@ import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge,
 import { canUseShaderPulse } from './glazeShaderSupport'
 import { PulseRingsCanvas, type PulseRingsHandle } from './PulseRingsCanvas'
 import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
+import { beatAlignedStart } from '../sound/musicTempo'
 import { emitPulseHit, pulseAmount, subscribePulseHits } from './pulseHits'
 import { setSwayReturnFall, swaySnareHit } from './parallaxSway'
 import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
@@ -136,7 +137,11 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     if (!turn) return
     turn.style.transform = ''
     let angles = WAVE_ANGLES_AT_REST
-    return subscribeMusicTempo((beats) => {
+    let aligned = false
+    return subscribeMusicTempo((passed, _rate, count) => {
+      // The first frame takes the count's share of a beat, so every step of
+      // the turn lands on a beat (`beatAlignedStart`).
+      const beats = aligned ? passed : beatAlignedStart(count)
       const { waveTurn: step, widthPx: width, periodPx } = turnInputs.current
       if (step === 0) {
         if (angles !== WAVE_ANGLES_AT_REST) {
@@ -146,6 +151,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
         return
       }
       if (beats <= 0 || width === 0 || reducedMotion.matches) return
+      aligned = true
       angles = advanceWaveAngles(angles, step, beats)
       turn.style.transform = waveTurnTransform(angles, width, periodPx)
     })
@@ -164,9 +170,12 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     if (!bands) return
     bands.style.transform = ''
     let share = 0
-    return subscribeMusicTempo((beats) => {
+    let aligned = false
+    return subscribeMusicTempo((passed, _rate, count) => {
+      const beats = aligned ? passed : beatAlignedStart(count)
       const { waveBeats: perLength, periodPx } = travelInputs.current
       if (beats <= 0 || reducedMotion.matches) return
+      aligned = true
       share = (share + beats / perLength) % 1
       bands.style.transform = `translateX(${(share * periodPx).toFixed(2)}px)`
     })

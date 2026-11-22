@@ -25,8 +25,9 @@ import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visua
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
 import { subscribeMusicTempo } from '../sound/musicBeat'
+import { beatAlignedStart } from '../sound/musicTempo'
 import { canUseShaderGlaze } from './glazeShaderSupport'
-import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /**
  * `index` counts from the nearest layer; `linearPosition` places a linear
@@ -105,7 +106,13 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   const orbiting = immersive.poleOrbit > 0
   useEffect(() => {
     if (!orbiting) return
-    return subscribeMusicTempo((beats) => advancePoleOrbit(beats))
+    // The first frame takes the count's share of a beat, so the orbit's laps start on beats (`beatAlignedStart`).
+    let aligned = false
+    return subscribeMusicTempo((passed, _rate, count) => {
+      if (!aligned) restartPoleOrbit()
+      advancePoleOrbit(aligned ? passed : beatAlignedStart(count))
+      aligned = true
+    })
   }, [orbiting])
   useEffect(() => setSwayMotion(immersive.swayPush, immersive.swayReturn, immersive.swayDrift), [immersive.swayPush, immersive.swayReturn, immersive.swayDrift])
   const layers = useMemo<Layer[]>(() => {

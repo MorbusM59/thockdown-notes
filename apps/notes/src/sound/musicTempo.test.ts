@@ -49,10 +49,14 @@ describe('createTempoFollower', () => {
     expect(frames.find((f) => f.t >= 10.02)!.beatsPerSec).toBeCloseTo(1, 1)
   })
 
-  it('passes no beats across a seek', () => {
+  it('passes no beats across a seek, then glides onto the new grid without jumping', () => {
     const follow = createTempoFollower()
-    follow(0, 0, 0.5)
-    follow(1 / 60, 0.03, 0.5)
-    expect(follow(50, 0, 0.5).beats).toBe(0)
+    const before = run(() => ({ beatAt: 0, period: 0.5 }), 0, 2, follow).frames.at(-1)!
+    // The grid at the seek's destination is a quarter beat out from the count.
+    const after = run(() => ({ beatAt: 0.125, period: 0.5 }), 50, 60, follow).frames
+    expect(after[0].beats).toBe(0)
+    expect(after[0].count).toBe(before.count)
+    const landed = after.find((f) => f.t >= 54)!
+    expect(offGrid(landed.count - (landed.t - 0.125) / 0.5)).toBeLessThan(0.02)
   })
 })

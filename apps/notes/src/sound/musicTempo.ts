@@ -19,6 +19,11 @@
  * ahead (the map is planned a minute ahead of the listener), so a glide that
  * starts now lands at the moment the change is heard, never four seconds
  * after it.
+ *
+ * Readers that move "per beat" stay ON the beat by starting from the count's
+ * share of a beat (`beatAlignedStart`) and then adding the beats each frame
+ * passes, which are exactly the count's steps: their phase is the count's for
+ * as long as they run, while a change of their own rate never jumps them.
  */
 
 /** The beat period while there is no beat: 60 BPM. */
@@ -40,9 +45,10 @@ export type TempoFrame = { beats: number; beatsPerSec: number; count: number }
  * Turns the time heard and the map's beat as it will be `TEMPO_GLIDE_SEC`
  * later (its phase 0..1 and period at `timeSec + TEMPO_GLIDE_SEC`, NaN while
  * the map holds no beat there), frame by frame, into the beats that passed,
- * the rate in beats a second and the count. The first frame, and the first
- * after a seek or a stall (which passes no beats), takes the grid as it is;
- * every other change is a glide that lands on it at `timeSec + TEMPO_GLIDE_SEC`.
+ * the rate in beats a second and the count. The first frame takes the grid
+ * as it is;
+ * every other change, a seek or a stall included (which passes no beats),
+ * is a glide that lands on it at `timeSec + TEMPO_GLIDE_SEC`.
  */
 export function createTempoFollower(): (timeSec: number, aheadPhase: number, aheadPeriod: number) => TempoFrame {
   let lastTime = NaN
@@ -97,13 +103,18 @@ export function createTempoFollower(): (timeSec: number, aheadPhase: number, ahe
       : { free: true, period: NO_BEAT_PERIOD_SEC }
     const dt = timeSec - lastTime
     lastTime = timeSec
-    if (!(dt > 0 && dt < MAX_FRAME_SEC) || !grid) {
-      // Taken as it is: the count joins the grid where it stands now.
+    if (!grid) {
+      // The first frame: the count joins the grid where it stands now.
       rate = 1 / next.period
       grid = next
       t0 = t1 = timeSec
-      b1 = next.free ? count : count + (((timeSec - next.beatAt) / next.period - count) % 1 + 1.5) % 1 - 0.5
-      count = b1
+      count = b1 = next.free ? 0 : (timeSec - next.beatAt) / next.period
+      return { beats: 0, beatsPerSec: rate, count }
+    }
+    if (!(dt > 0 && dt < MAX_FRAME_SEC)) {
+      // A seek or a stall: no beats pass, and the count glides from where it
+      // stands onto whatever grid is there, so it never jumps.
+      glideTo(next, timeSec)
       return { beats: 0, beatsPerSec: rate, count }
     }
     const [pos, vel] = planAt(timeSec)
@@ -113,4 +124,9 @@ export function createTempoFollower(): (timeSec: number, aheadPhase: number, ahe
     if (!sameGrid(next, at)) glideTo(next, timeSec)
     return { beats, beatsPerSec: rate, count }
   }
+}
+
+/** What a per-beat reader adds on its first frame, so that from then on its beats keep the count's phase: the count's share of a beat. */
+export function beatAlignedStart(count: number): number {
+  return count - Math.floor(count)
 }

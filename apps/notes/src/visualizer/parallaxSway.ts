@@ -232,6 +232,11 @@ export function setPoleOrbit(share: number, turnsPerBeat: number): void {
   orbitRate = turnsPerBeat
 }
 
+/** Puts the orbit back at its start, for a reader that aligns it to the beat from here. */
+export function restartPoleOrbit(): void {
+  orbitTurns = 0
+}
+
 export function advancePoleOrbit(beats: number): void {
   // Kept within one turn so the phase never loses precision.
   orbitTurns = (orbitTurns + beats * orbitRate) % 1
