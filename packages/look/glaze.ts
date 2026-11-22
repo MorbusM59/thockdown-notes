@@ -110,16 +110,16 @@ export function orbitGlazeRayFan(fan: GlazeRayFan, orbit: number, offset: { x: n
 
 /**
  * The vanishing point's path round its resting place: three circles stacked
- * (epicycles), each turning on the one before, at 1, -phi and 1 + sqrt 2
- * times the base rate. The ratios are irrational to each other, so the path
- * never closes and never repeats, and the radii sum to 1, so it stays inside
- * the unit disc and the orbit's margin holds (`glazeRayFan`). `turns` is the
- * base circle's turns so far.
+ * (epicycles), each turning on the one before at twice the rate of the one
+ * it rides, radii 1/2, 1/3 and 1/6. At the fastest setting (a turn a bar)
+ * that is a bar, half a bar and a beat. The radii sum to 1, so the path stays
+ * inside the unit disc and the orbit's margin holds (`glazeRayFan`). `turns`
+ * is the largest circle's turns so far.
  */
 const ORBIT_EPICYCLES: ReadonlyArray<{ radius: number; rate: number; phase: number }> = [
-  { radius: 0.5, rate: 1, phase: 0 },
-  { radius: 0.3, rate: -1.618034, phase: 2.1 },
-  { radius: 0.2, rate: 2.414214, phase: 4.4 },
+  { radius: 1 / 2, rate: 1, phase: 0 },
+  { radius: 1 / 3, rate: 2, phase: 0 },
+  { radius: 1 / 6, rate: 4, phase: 0 },
 ];
 
 export function poleOrbitOffset(turns: number): { x: number; y: number } {

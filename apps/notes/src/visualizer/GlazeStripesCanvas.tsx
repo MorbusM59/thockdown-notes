@@ -164,7 +164,7 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
         // by the orbit, glazeRayFan) and the point's place on the orbit now.
         // The turn scale stays the resting one, so the rays keep their width
         // as the point travels.
-        const orbit = poleOrbitAt(performance.now())
+        const orbit = poleOrbitAt()
         const share = sway ? orbit.share : 0
         const fan = glazeRayFan(glaze, sizeCss.w, sizeCss.h, share)
         const moved = orbitGlazeRayFan(fan, share, orbit.offset)

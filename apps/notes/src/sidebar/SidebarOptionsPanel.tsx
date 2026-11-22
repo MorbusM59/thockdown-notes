@@ -58,7 +58,8 @@ import {
   PULSE_SEC_MAX,
   SWAY_DRIFT_MAX_PX,
   POLE_ORBIT_MAX,
-  POLE_ORBIT_HZ_MAX,
+  POLE_ORBIT_RATE_MIN,
+  POLE_ORBIT_RATE_MAX,
   SWAY_PUSH_MAX_PX,
   PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
@@ -2628,17 +2629,17 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, poleOrbit: value } }))}
               />
               <CompactScrollbarSlider
-                id="visualizer-pole-orbit-hz"
-                min={0}
-                max={POLE_ORBIT_HZ_MAX}
-                step={0.01}
-                value={visualizer.immersive.poleOrbitHz}
+                id="visualizer-pole-orbit-rate"
+                min={POLE_ORBIT_RATE_MIN}
+                max={POLE_ORBIT_RATE_MAX}
+                step={0.001}
+                value={visualizer.immersive.poleOrbitRate}
                 trackLabel="orbit speed"
-                tooltipLabel="Vanishing point orbit (Hz)"
-                ariaLabel="Immersive: turns a second of the glare's vanishing point orbit"
-                defaultValue={visualizerDefaults.immersive.poleOrbitHz}
-                formatValue={(value) => value.toFixed(2)}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, poleOrbitHz: value } }))}
+                tooltipLabel="Vanishing point orbit (turns per beat)"
+                ariaLabel="Immersive: turns per beat of the glare's vanishing point orbit"
+                defaultValue={visualizerDefaults.immersive.poleOrbitRate}
+                formatValue={(value) => value.toFixed(3)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, poleOrbitRate: value } }))}
               />
             </OptionsSliderRows>
           </div>

@@ -24,8 +24,10 @@ import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/gla
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
+import { createTempoFollower } from './gridWaveTurn'
+import { subscribeMusicTempo } from '../sound/musicBeat'
 import { canUseShaderGlaze } from './glazeShaderSupport'
-import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /**
  * `index` counts from the nearest layer; `linearPosition` places a linear
@@ -99,7 +101,14 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   // The widest the music ever carries the nearest layer, which no layer exceeds.
   const overscan = swayOverscanPx(immersive.swayRangePx * BREATH_AMPLITUDE_MAX)
   useEffect(() => setSwayRange(immersive.swayRangePx), [immersive.swayRangePx])
-  useEffect(() => setPoleOrbit(immersive.poleOrbit, immersive.poleOrbitHz), [immersive.poleOrbit, immersive.poleOrbitHz])
+  useEffect(() => setPoleOrbit(immersive.poleOrbit, immersive.poleOrbitRate), [immersive.poleOrbit, immersive.poleOrbitRate])
+  // The orbit moves at the music's tempo, eased like the grid wave's turn.
+  const orbiting = immersive.poleOrbit > 0
+  useEffect(() => {
+    if (!orbiting) return
+    const follow = createTempoFollower()
+    return subscribeMusicTempo((timeSec, periodSec) => advancePoleOrbit(follow(timeSec, periodSec)))
+  }, [orbiting])
   useEffect(() => setSwayMotion(immersive.swayPush, immersive.swayReturn, immersive.swayDrift), [immersive.swayPush, immersive.swayReturn, immersive.swayDrift])
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides

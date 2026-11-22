@@ -215,23 +215,31 @@ export function swaySnareHit(nowMs: number = performance.now()): void {
 }
 
 /**
- * The glare's vanishing point travels round its resting place on stacked circles
- * (`orbitGlazeRayFan`): its radius as a share of the point's distance, and
- * turns a second. Read by the shader canvas when it draws, which the sway
- * loop asks for each frame, so the orbit adds no loop of its own and stops
- * when the sway does.
+ * The glare's vanishing point travels round its resting place on stacked
+ * circles (`poleOrbitOffset`): its radius as a share of the point's distance,
+ * and how far round it has come, counted in turns of the largest circle and
+ * advanced by the music's beats (`advancePoleOrbit`, fed from
+ * `subscribeMusicTempo`), so it holds still while there is no beat. Read by
+ * the shader canvas when it draws, which the sway loop asks for each frame,
+ * so the orbit adds no loop of its own.
  */
 let orbitShare = 0
-let orbitHz = 0
+let orbitRate = 0
+let orbitTurns = 0
 
-export function setPoleOrbit(share: number, hz: number): void {
+export function setPoleOrbit(share: number, turnsPerBeat: number): void {
   orbitShare = share
-  orbitHz = hz
+  orbitRate = turnsPerBeat
 }
 
-/** The orbit now: its radius share and where on its disc the point is (`poleOrbitOffset`). */
-export function poleOrbitAt(nowMs: number): { share: number; offset: { x: number; y: number } } {
-  return { share: orbitHz > 0 ? orbitShare : 0, offset: poleOrbitOffset(orbitHz * (nowMs / 1000)) }
+export function advancePoleOrbit(beats: number): void {
+  // Kept within one turn so the phase never loses precision.
+  orbitTurns = (orbitTurns + beats * orbitRate) % 1
+}
+
+/** The orbit now: its radius share and where on its disc the point is. */
+export function poleOrbitAt(): { share: number; offset: { x: number; y: number } } {
+  return { share: orbitShare, offset: poleOrbitOffset(orbitTurns) }
 }
 
 /** `value` wrapped into [-period/2, period/2). */
