@@ -15,7 +15,8 @@ export interface WindowControlsApi {
   reportBackgroundColor(hex: string): void;
   setSidebarVisible(visible: boolean): void;
   setSectionCount(count: number): void;
-  setChromeMinSize(size: { width: number; widthWithoutSidebar: number; height: number }): void;
+  /** `doubleSize`: which size mode was on screen when the chrome was measured (main keeps one per mode). */
+  setChromeMinSize(size: { width: number; widthWithoutSidebar: number; height: number; doubleSize: boolean }): void;
   setDoubleSizeMode(enabled: boolean): void;
   setFullScreen(enabled: boolean): void;
   /** The page's own zoom factor (double size mode's 2x), independent of the display's scaling. */
@@ -36,6 +37,11 @@ export interface WindowControlsApi {
   onMaximizeStateChange(callback: (isMaximized: boolean) => void): () => void;
   onCollapsedStateChange(callback: (isCollapsed: boolean) => void): () => void;
   onFullScreenStateChange(callback: (isFullScreen: boolean) => void): () => void;
+  /**
+   * Whether double size fits the space the window has (electron/doubleSizeFits.ts).
+   * While it does not, double size stays the reader's choice but is not applied.
+   */
+  onDoubleSizeAvailableChange(callback: (isAvailable: boolean) => void): () => void;
   /**
    * The app is quitting (electron/quitRoutine.ts): the window writes
    * everything it holds and then answers `quitPrepared` with the same token.
@@ -71,6 +77,7 @@ export interface WindowEvents {
   maximizeState: boolean;
   collapsedState: boolean;
   fullScreenState: boolean;
+  doubleSizeAvailable: boolean;
   prepareToQuit: number;
 }
 
@@ -78,5 +85,6 @@ export const WINDOW_EVENT_CHANNELS = {
   maximizeState: 'window-maximize-state',
   collapsedState: 'window-collapsed-state',
   fullScreenState: 'window-fullscreen-state',
+  doubleSizeAvailable: 'window-double-size-available',
   prepareToQuit: 'window-prepare-to-quit',
 } as const satisfies EventChannels<WindowEvents>;

@@ -84,6 +84,11 @@
   font-size: 17px;
 }
 
+/* Double size does not fit this screen: the choice is kept, regular size is shown. */
+.display-modes-split-btn.double-size.is-unavailable .double-size-glyph {
+  opacity: 0.35;
+}
+
 .display-modes-split > .btn-icon.display-modes-split-btn.is-active {
   border-color: var(--btn-border-active);
   box-shadow: var(--box-shadow-inverted-harsh-active);

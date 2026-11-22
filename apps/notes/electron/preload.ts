@@ -61,6 +61,7 @@ const windowControls: WindowControlsApi = {
   onMaximizeStateChange: (callback) => onWindowEvent('maximizeState', callback),
   onCollapsedStateChange: (callback) => onWindowEvent('collapsedState', callback),
   onFullScreenStateChange: (callback) => onWindowEvent('fullScreenState', callback),
+  onDoubleSizeAvailableChange: (callback) => onWindowEvent('doubleSizeAvailable', callback),
   onPrepareToQuit: (callback) => onWindowEvent('prepareToQuit', callback),
 }
 

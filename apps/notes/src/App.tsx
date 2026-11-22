@@ -1797,6 +1797,14 @@ function App() {
   const [isDoubleSizeMode, setIsDoubleSizeMode] = useState(false)
   const isDoubleSizeModeRef = useRef(isDoubleSizeMode)
   isDoubleSizeModeRef.current = isDoubleSizeMode
+  // Whether double size fits the space the window has, as the main process
+  // judges it (electron/doubleSizeFits.ts). While it does not, the choice
+  // above stays as the reader left it and regular size is what is applied;
+  // the main process applies double again by itself once it fits.
+  const [isDoubleSizeAvailable, setIsDoubleSizeAvailable] = useState(true)
+  const isDoubleSizeAvailableRef = useRef(isDoubleSizeAvailable)
+  isDoubleSizeAvailableRef.current = isDoubleSizeAvailable
+  useEffect(() => window.windowControls?.onDoubleSizeAvailableChange?.(setIsDoubleSizeAvailable), [])
   const setActiveModeFontSize = useCallback((key: keyof FontSizeSet, value: number) => {
     const mode = isDoubleSizeApplied ? 'double' : 'regular'
     setFontSizesByMode((previous) => ({ ...previous, [mode]: { ...previous[mode], [key]: value } }))
@@ -2067,8 +2075,9 @@ function App() {
       width: appShellMinWidthPx,
       widthWithoutSidebar: appShellMinWidthPx - (sidebarWidthPx + GRID_DIVIDER_PX),
       height: appShellMinHeightPx,
+      doubleSize: isDoubleSizeApplied,
     })
-  }, [appShellMinWidthPx, appShellMinHeightPx, sidebarWidthPx])
+  }, [appShellMinWidthPx, appShellMinHeightPx, sidebarWidthPx, isDoubleSizeApplied])
 
   const toggleSidebarVisible = useCallback(() => {
     // From immersive mode the sidebar is off screen whatever its setting, so a
@@ -2113,9 +2122,13 @@ function App() {
     // sizes at the other's zoom. The main process still applies the doubled
     // window minimum, and its setZoomFactor finds the zoom already there.
     // Without window controls (browser mode) there is no zoom to follow.
+    // What is APPLIED is the choice where double size fits and regular where
+    // it does not -- the same decision the main process takes
+    // (reconcileDoubleSize), from the availability it last told us.
     if (window.windowControls) {
-      window.windowControls.setPageZoomFactor(next ? 2 : 1)
-      flushSync(() => setIsDoubleSizeApplied(next))
+      const applied = next && isDoubleSizeAvailableRef.current
+      window.windowControls.setPageZoomFactor(applied ? 2 : 1)
+      flushSync(() => setIsDoubleSizeApplied(applied))
       window.windowControls.setDoubleSizeMode(next)
     }
     setIsDoubleSizeMode(next)
@@ -9145,6 +9158,7 @@ ${markdownHtml}
               uiMode={uiMode}
               toggleUiMode={toggleUiMode}
               isDoubleSizeMode={isDoubleSizeMode}
+              isDoubleSizeAvailable={isDoubleSizeAvailable}
               handleToggleDoubleSizeMode={handleToggleDoubleSizeMode}
               activeDecorationFormats={activeSection?.activeDecorationFormats ?? EMPTY_DECORATION_FORMATS}
               activeHeadingLevel={activeSection?.activeHeadingLevel ?? 0}

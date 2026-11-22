@@ -87,6 +87,8 @@ export interface EditorToolbarProps extends UseMarkdownFormattingToolbarResult {
   uiMode: string
   toggleUiMode: () => void
   isDoubleSizeMode: boolean
+  /** False while double size does not fit the screen: the button still holds the choice, and its glyph dims. */
+  isDoubleSizeAvailable: boolean
   handleToggleDoubleSizeMode: () => void
 }
 
@@ -112,6 +114,7 @@ export function EditorToolbar({
   uiMode,
   toggleUiMode,
   isDoubleSizeMode,
+  isDoubleSizeAvailable,
   handleToggleDoubleSizeMode,
   activeDecorationFormats,
   activeHeadingLevel,
@@ -178,8 +181,8 @@ export function EditorToolbar({
           </button>
           <button
             type="button"
-            className={`btn-icon display-modes-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}`}
-            data-tooltip={encodeTooltip({ intention: isDoubleSizeMode ? 'Exit double size' : 'Double size', shortcut: 'doubleSize' })}
+            className={`btn-icon display-modes-split-btn double-size${isDoubleSizeMode ? ' is-active' : ''}${isDoubleSizeAvailable ? '' : ' is-unavailable'}`}
+            data-tooltip={encodeTooltip({ intention: `${isDoubleSizeMode ? 'Exit double size' : 'Double size'}${isDoubleSizeAvailable ? '' : ' (no room)'}`, shortcut: 'doubleSize' })}
             aria-label={isDoubleSizeMode ? 'Exit double size mode' : 'Enable double size mode'}
             aria-pressed={isDoubleSizeMode}
             onClick={handleToggleDoubleSizeMode}

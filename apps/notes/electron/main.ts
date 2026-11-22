@@ -28,6 +28,7 @@ import { LOADOUT_CHANNELS, type UiLoadoutApi } from '@thockdown/look/loadouts'
 import { AUDIO_PLAYER_CHANNELS, type AudioPlayerApi, AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
 import type { MusicPoolQuery, PlaylistSlot } from '../src/shared/audioPlayer'
 import { NOTE_TABS_CHANNELS, type NoteTabsApi } from '../src/shared/tabs'
+import { doubleSizeFits } from './doubleSizeFits'
 import { eventEmitter, registerInvokeHandlers, registerSendHandlers } from '../src/shared/ipcContract'
 import { WINDOW_CONTROL_INVOKE_CHANNELS, WINDOW_CONTROL_SEND_CHANNELS, WINDOW_EVENT_CHANNELS, type WindowControlsApi, type WindowEvents } from '../src/shared/windowControls'
 import { computeWindowControlsWidthPx, DEFAULT_SPACING_REGULAR_PX } from '../src/shared/windowChromeMetrics'
@@ -250,7 +251,23 @@ const APP_WINDOW_MIN_WIDTH_PX = SIDEBAR_WIDTH_PX + GRID_DIVIDER_PX + TOOLBAR_MIN
 // ('window-control:chrome-min-size', sent whenever it changes); from then on
 // that reported size is what the window minimum is built from, and dragging the
 // spacing slider moves the window's real minimum with it.
-let reportedChromeMinSize: { width: number; widthWithoutSidebar: number; height: number } | null = null;
+//
+// Kept PER SIZE MODE, because the two modes have their own interface font
+// scale and so their own chrome: double size's fit is judged against what the
+// renderer reported while double size was on screen, never against regular
+// size's figures doubled. Judged against whichever mode happens to be on
+// screen, a fit could flip with the mode it switches to -- regular says it
+// fits, double reports a larger chrome and says it does not -- and the two
+// would chase each other.
+type ChromeMinSize = { width: number; widthWithoutSidebar: number; height: number };
+const reportedChromeMinSizeByMode: { regular: ChromeMinSize | null; double: ChromeMinSize | null } = { regular: null, double: null };
+
+/** The chrome minimum of one size mode: its own report, else the other's, else the default-spacing constants. */
+function chromeMinSizeOf(double: boolean): ChromeMinSize | null {
+  return double
+    ? reportedChromeMinSizeByMode.double ?? reportedChromeMinSizeByMode.regular
+    : reportedChromeMinSizeByMode.regular ?? reportedChromeMinSizeByMode.double;
+}
 
 // Tracked here (not just derived per-call) because the sidebar-visibility and
 // section-count constraints compose -- each handler needs to know the other's
@@ -262,9 +279,21 @@ let currentSectionCount = 1;
 // with a doubled window minimum, so content renders twice as big without
 // squeezing sections/sidebar into less room than they'd get at 1x. See
 // 'window-control:double-size-mode' below.
+//
+// Two facts, kept apart: the reader's CHOICE (doubleSizePreferred, what the
+// button and F3 toggle and what is saved) and what is APPLIED
+// (currentDoubleSizeMode). Applied is the choice AND whether double size fits
+// the space the window can have (doubleSizeAvailable, see doubleSizeFits.ts).
+// A screen too small for double's minimum -- a portrait monitor in full
+// screen, above all -- therefore shows regular size while the choice stays
+// double, and the next change of space that fits (leaving full screen,
+// rotating the display, moving to a larger one, closing a slot) applies it
+// again. reconcileDoubleSize is the one place applied is decided.
+let doubleSizePreferred = false;
 let currentDoubleSizeMode = false;
+let doubleSizeAvailable = true;
 
-function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: number): number {
+function computeAppWindowMinWidthPx(reportedChromeMinSize: ChromeMinSize | null, sidebarVisible: boolean, sectionCount: number): number {
   // Two independent constraints; the window minimum is whichever is larger:
   // 1. The chrome floor -- the base minimum the toolbar/window-controls row
   //    needs (minus the sidebar columns when it's hidden).
@@ -293,11 +322,52 @@ function computeAppWindowMinWidthPx(sidebarVisible: boolean, sectionCount: numbe
  * into less visual room than it had at 1x.
  */
 function computeEffectiveMinSize(): { width: number; height: number } {
-  const multiplier = currentDoubleSizeMode ? 2 : 1;
+  return computeMinSizeAt(currentDoubleSizeMode);
+}
+
+function computeMinSizeAt(double: boolean): { width: number; height: number } {
+  const multiplier = double ? 2 : 1;
+  const reportedChromeMinSize = chromeMinSizeOf(double);
   return {
-    width: computeAppWindowMinWidthPx(currentSidebarVisible, currentSectionCount) * multiplier,
+    width: computeAppWindowMinWidthPx(reportedChromeMinSize, currentSidebarVisible, currentSectionCount) * multiplier,
     height: (reportedChromeMinSize?.height ?? APP_WINDOW_MIN_HEIGHT_PX) * multiplier,
   };
+}
+
+/**
+ * The space the window can have on the display it is on: the whole display in
+ * full screen, the work area (taskbar and docks excluded) otherwise. A
+ * maximized window is the work area too, so windowed and maximized agree.
+ */
+function spaceForWindow(windowRef: BrowserWindow): { width: number; height: number } {
+  const display = screen.getDisplayMatching(windowRef.getBounds());
+  return windowRef.isFullScreen() ? display.bounds : display.workArea;
+}
+
+/**
+ * Decides whether double size is applied, from the reader's choice and the
+ * space the window has now, and applies the change: the zoom (the renderer
+ * commits its sizes in the frame the zoom lands, App.tsx's
+ * isDoubleSizeApplied), the window minimum, and the window grown to it when
+ * double comes back on in a window smaller than its minimum. Tells the
+ * renderer when availability changes, for the double-size button. Mini mode
+ * is left alone: its window is deliberately smaller than any minimum, and
+ * leaving it runs this again (applyNormalWindowConstraints).
+ */
+function reconcileDoubleSize(windowRef: BrowserWindow): void {
+  if (windowIsUtilityCollapsed) return;
+  const available = doubleSizeFits(computeMinSizeAt(true), spaceForWindow(windowRef));
+  if (available !== doubleSizeAvailable) {
+    doubleSizeAvailable = available;
+    emitWindowEvent(windowRef.webContents, 'doubleSizeAvailable', available);
+  }
+  const applied = doubleSizePreferred && available;
+  const changed = applied !== currentDoubleSizeMode;
+  currentDoubleSizeMode = applied;
+  if (changed) windowRef.webContents.setZoomFactor(applied ? 2 : 1);
+  const { width: minWidth, height: minHeight } = computeEffectiveMinSize();
+  windowRef.setMinimumSize(minWidth, minHeight);
+  if (changed && applied) growWindowToMinimumSizeIfNeeded(windowRef, minWidth, minHeight);
 }
 
 /** Grows the window's current bounds if they're now smaller than minWidth/minHeight -- never shrinks it. */
@@ -761,6 +831,9 @@ function registerIpcHandlers() {
 
     endWindowDrag: () => {
       windowDragState = null
+      // The app moves its own window (setPosition), which does not reliably
+      // fire 'moved', so the end of a drag is where it may have changed display.
+      if (win && !win.isDestroyed()) reconcileDoubleSize(win)
     },
 
     // Fired on genuine mouseup after a drag started on a maximized window's
@@ -807,8 +880,8 @@ function registerIpcHandlers() {
       try {
         if (!win || win.isDestroyed()) return
         currentSidebarVisible = Boolean(visible)
+        reconcileDoubleSize(win)
         const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-        win.setMinimumSize(minWidth, minHeight)
 
         // If enabling the sidebar and the current width is smaller than the new minimum,
         // expand the window so the toolbar and other content meet the min width.
@@ -830,8 +903,8 @@ function registerIpcHandlers() {
         if (!win || win.isDestroyed()) return
         const parsedCount = Number(sectionCount)
         currentSectionCount = Number.isFinite(parsedCount) ? Math.max(1, Math.round(parsedCount)) : 1
+        reconcileDoubleSize(win)
         const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-        win.setMinimumSize(minWidth, minHeight)
         growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
       } catch (error) {
         console.warn('Failed to apply section-count window constraints', error)
@@ -851,18 +924,17 @@ function registerIpcHandlers() {
     setChromeMinSize: (_event, size: unknown) => {
       try {
         if (!win || win.isDestroyed()) return
-        const candidate = size as { width?: unknown; widthWithoutSidebar?: unknown; height?: unknown } | null
+        const candidate = size as { width?: unknown; widthWithoutSidebar?: unknown; height?: unknown; doubleSize?: unknown } | null
         const width = Number(candidate?.width)
         const widthWithoutSidebar = Number(candidate?.widthWithoutSidebar)
         const height = Number(candidate?.height)
         if (![width, widthWithoutSidebar, height].every((value) => Number.isFinite(value) && value > 0)) return
-        reportedChromeMinSize = {
+        reportedChromeMinSizeByMode[candidate?.doubleSize === true ? 'double' : 'regular'] = {
           width: Math.ceil(width),
           widthWithoutSidebar: Math.ceil(widthWithoutSidebar),
           height: Math.ceil(height),
         }
-        const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-        win.setMinimumSize(minWidth, minHeight)
+        reconcileDoubleSize(win)
       } catch (error) {
         console.warn('Failed to apply reported chrome minimum size', error)
       }
@@ -873,16 +945,14 @@ function registerIpcHandlers() {
     // instead of being squeezed the way plain browser zoom would squeeze it.
     // Disabling relaxes the minimum back down but -- consistent with the
     // sidebar/section-count handlers above -- never shrinks the window itself.
+    // `enabled` is the reader's CHOICE; whether it is applied is
+    // reconcileDoubleSize's to decide (the renderer has already set the zoom
+    // that decision gives, from the availability it was told).
     setDoubleSizeMode: (_event, enabled: unknown) => {
       try {
         if (!win || win.isDestroyed()) return
-        currentDoubleSizeMode = Boolean(enabled)
-        win.webContents.setZoomFactor(currentDoubleSizeMode ? 2 : 1)
-        const { width: minWidth, height: minHeight } = computeEffectiveMinSize()
-        win.setMinimumSize(minWidth, minHeight)
-        if (currentDoubleSizeMode) {
-          growWindowToMinimumSizeIfNeeded(win, minWidth, minHeight)
-        }
+        doubleSizePreferred = Boolean(enabled)
+        reconcileDoubleSize(win)
       } catch (error) {
         console.warn('Failed to apply double-size-mode window constraints', error)
       }
@@ -1512,8 +1582,7 @@ function applyUtilityCollapseWindowConstraints(windowRef: BrowserWindow): void {
 
 function applyNormalWindowConstraints(windowRef: BrowserWindow): void {
   windowRef.setResizable(true);
-  const { width, height } = computeEffectiveMinSize();
-  windowRef.setMinimumSize(width, height);
+  reconcileDoubleSize(windowRef);
 }
 
 // Mini mode is the only thing that puts the window on top, so leaving it
@@ -1646,7 +1715,15 @@ async function createWindow() {
   // renderer -- so this starts at the default of 1 and the renderer corrects
   // it via 'window-control:section-count' shortly after bootstrap resolves.
   currentSidebarVisible = initialSidebarVisible;
-  currentDoubleSizeMode = savedAppState?.menu?.isDoubleSizeMode ?? false;
+  doubleSizePreferred = savedAppState?.menu?.isDoubleSizeMode ?? false;
+  // The window does not exist yet, so the space is the work area of the
+  // display it will open on (a reload never starts in full screen, see
+  // did-finish-load). reconcileDoubleSize takes over once it exists.
+  const startDisplay = typeof savedWindowState.x === 'number' && typeof savedWindowState.y === 'number'
+    ? screen.getDisplayMatching({ x: savedWindowState.x, y: savedWindowState.y, width: savedWindowState.width, height: savedWindowState.height })
+    : screen.getPrimaryDisplay();
+  doubleSizeAvailable = doubleSizeFits(computeMinSizeAt(true), startDisplay.workArea);
+  currentDoubleSizeMode = doubleSizePreferred && doubleSizeAvailable;
   const initialMinSize = computeEffectiveMinSize();
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
@@ -1737,6 +1814,7 @@ async function createWindow() {
   });
   win.on('enter-full-screen', () => {
     if (win && !win.isDestroyed()) {
+      reconcileDoubleSize(win)
       emitWindowEvent(win.webContents, 'fullScreenState', true)
     }
   });
@@ -1745,8 +1823,24 @@ async function createWindow() {
     preFullScreenWindowState = null
     persistWindowState()
     if (win && !win.isDestroyed()) {
+      reconcileDoubleSize(win)
       emitWindowEvent(win.webContents, 'fullScreenState', false)
     }
+  });
+  // The space double size is judged against changes with the display: a
+  // rotation or a scaling change (metrics), a display arriving or leaving,
+  // and the window landing on another one ('moved' fires once a move ends).
+  const reconcileOnDisplayChange = () => {
+    if (win && !win.isDestroyed()) reconcileDoubleSize(win)
+  };
+  screen.on('display-metrics-changed', reconcileOnDisplayChange);
+  screen.on('display-added', reconcileOnDisplayChange);
+  screen.on('display-removed', reconcileOnDisplayChange);
+  win.on('moved', reconcileOnDisplayChange);
+  win.on('closed', () => {
+    screen.off('display-metrics-changed', reconcileOnDisplayChange);
+    screen.off('display-added', reconcileOnDisplayChange);
+    screen.off('display-removed', reconcileOnDisplayChange);
   });
   // Closing the window is a way out like any other, so it goes through the
   // quit routine rather than letting the page unload under unfinished
@@ -1794,6 +1888,7 @@ async function createWindow() {
   win.webContents.on('did-finish-load', () => {
     if (win) emitWindowEvent(win.webContents, 'maximizeState', win.isMaximized())
     if (win) emitWindowEvent(win.webContents, 'collapsedState', windowIsUtilityCollapsed)
+    if (win) emitWindowEvent(win.webContents, 'doubleSizeAvailable', doubleSizeAvailable)
     // Immersive mode is renderer state, which a reload resets; a window left
     // full screen by it would outlive the mode that put it there.
     if (win?.isFullScreen()) win.setFullScreen(false)
