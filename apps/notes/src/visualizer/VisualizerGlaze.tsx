@@ -135,11 +135,11 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     // straight stacks along the heading and stays parallel.
     const settings = visualizerGlazeSettings(glaze, { glareStrength, flairStrength, glareMinStacks, flairMinSources })
     // Nearest first: the top linear stack (each list is in stacking order,
-    // the first drawn on top), unless radial sits above linear.
+    // the first drawn on top); the glare is always above the flair.
     const linear = buildLinearGlazeStacks(settings, 90).map(({ image, periodPx, stripes }) => ({ kind: 'linear' as const, image, periodPx, stripes }))
     const radialImages = buildRadialGlazeLayers(settings)
     const radial = radialImages.length > 0 ? [{ kind: 'radial' as const, image: radialImages.join(', '), periodPx: 0, stripes: [] }] : []
-    const nearestFirst = glaze.radialAboveLinear ? [...radial, ...linear] : [...linear, ...radial]
+    const nearestFirst = [...linear, ...radial]
     let linearIndex = 0
     return nearestFirst.map((layer, index) => {
       // A lone stack is the nearest, so it keeps its share at either end of the spread.
@@ -171,7 +171,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   // would only meet this layer's own (empty) backdrop.
   return (
     <>
-      <div className={`glaze-overlay-stack visualizer-glaze${glaze.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
+      <div className="glaze-overlay-stack visualizer-glaze" aria-hidden="true">
         {[...layers].reverse().filter((layer) => !(shaderStacks && layer.kind === 'linear')).map((layer) => (
           <SwayLayer
             key={layer.key}

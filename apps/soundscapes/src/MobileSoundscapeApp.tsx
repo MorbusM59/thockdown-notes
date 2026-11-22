@@ -350,7 +350,7 @@ export function MobileSoundscapeApp() {
   return (
     <div className="app-root" style={theme.rootVariables}>
       <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
-        <ThemeGlazeLayers glaze={theme.glaze} radialAboveLinear={loadout.glaze.radialAboveLinear} />
+        <ThemeGlazeLayers glaze={theme.glaze} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
             <div className="mobile-page">

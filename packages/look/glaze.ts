@@ -5,7 +5,6 @@ export type GlazeSettings = {
   radialCount: number;
   radialOpacity: number;
   radialSeed: number;
-  radialAboveLinear: boolean;
   gloomPosition: number;
   gloomShape: number;
   gloomOpacity: number;
@@ -163,7 +162,6 @@ export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   radialCount: 2,
   radialOpacity: 0,
   radialSeed: 94021,
-  radialAboveLinear: false,
   gloomPosition: 0.5,
   gloomShape: 0.38,
   gloomOpacity: 0,
@@ -201,7 +199,6 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
     radialCount: clamp(Math.round(toFinite(source.radialCount, fallback.radialCount)), 0, GLAZE_RADIAL_COUNT_MAX),
     radialOpacity: clamp(toFinite(source.radialOpacity, fallback.radialOpacity), 0, GLAZE_RADIAL_OPACITY_MAX),
     radialSeed: clamp(Math.round(toFinite(source.radialSeed, fallback.radialSeed)), 0, 1000000),
-    radialAboveLinear: typeof source.radialAboveLinear === 'boolean' ? source.radialAboveLinear : fallback.radialAboveLinear,
     gloomPosition: clamp(toFinite(source.gloomPosition, fallback.gloomPosition), -0.5, 1.5),
     gloomShape: clamp(toFinite(source.gloomShape, fallback.gloomShape), 0, 2),
     gloomOpacity: clamp(toFinite(source.gloomOpacity, fallback.gloomOpacity), 0, GLAZE_GLOOM_OPACITY_MAX),

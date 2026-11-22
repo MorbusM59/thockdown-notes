@@ -8228,7 +8228,6 @@ ${markdownHtml}
             VisualizerGlaze at full count; gloom and sheen stay as they are. */}
         <ThemeGlazeLayers
           glaze={isVisualizerMode ? { ...theme.glaze, linear: 'none', radial: 'none' } : theme.glaze}
-          radialAboveLinear={glazeSettings.radialAboveLinear}
         />
         {isVisualizerMode ? <VisualizerGlaze glaze={glazeSettings} immersive={visualizer.immersive} /> : null}
         {/* Mounted here (inside .app-saturate-wrapper, not as a sibling of

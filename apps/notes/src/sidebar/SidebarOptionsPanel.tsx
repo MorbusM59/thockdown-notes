@@ -1504,22 +1504,7 @@ export function SidebarOptionsPanel({
               )}
             </div>
           </div>
-          <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-center">
-            <button
-              type="button"
-              className={`btn-icon options-color-swatch options-glaze-layer-order-btn${glazeSettings.radialAboveLinear ? ' is-active' : ''}`}
-              aria-label={glazeSettings.radialAboveLinear ? 'Flair above glare' : 'Flair above glare'}
-              data-tooltip={glazeSettings.radialAboveLinear ? 'Flair above glare' : 'Flair above glare'}
-              onClick={() => {
-                setGlazeSettings((current) => ({
-                  ...current,
-                  radialAboveLinear: !current.radialAboveLinear,
-                }))
-              }}
-            >
-              <span className="fa-solid fa-layer-group" aria-hidden="true" />
-            </button>
-          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-center" />
           <div className="options-glaze-cell options-glaze-cell-span-2 options-glaze-top-right">
             <div className="options-seed-editor" aria-label="Radial glaze seed">
               {isGlazeRadialSeedEditing ? (

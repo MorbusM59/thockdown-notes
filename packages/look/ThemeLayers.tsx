@@ -13,9 +13,9 @@ import type { ThemeFrame, ThemeGlazeImages } from './loadoutTheme'
  * repaint underneath (every keystroke's repaint of the editor), so a layer is
  * mounted only when its glaze setting is active.
  */
-export function ThemeGlazeLayers({ glaze, radialAboveLinear }: { glaze: ThemeGlazeImages; radialAboveLinear: boolean }) {
+export function ThemeGlazeLayers({ glaze }: { glaze: ThemeGlazeImages }) {
   return (
-    <div className={`glaze-overlay-stack${radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
+    <div className="glaze-overlay-stack" aria-hidden="true">
       {glaze.linear !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-linear" />}
       {glaze.radial !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-radial" />}
       {glaze.gloom !== 'none' && <div className="glaze-overlay-layer glaze-overlay-layer-gloom" />}
