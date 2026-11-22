@@ -215,10 +215,9 @@ function mulberry32(seed: number): () => number {
 
 /** One `background-image` per linear stack, in stacking order (the first is drawn on top). */
 export function buildLinearGlazeLayers(settings: GlazeSettings): string[] {
-  // Sized for the screen the window is on; a resize does not rebuild the
-  // still glaze, so a fan sized on another screen is only slightly off.
-  const vmaxPx = typeof window === 'undefined' ? 1920 : Math.max(window.innerWidth, window.innerHeight)
-  const fan = glazeRayFan(settings, vmaxPx)
+  // Sized for the window as it is when the glaze is built; a resize does not
+  // rebuild the still glaze, so the point keeps its place in px.
+  const fan = typeof window === 'undefined' ? glazeRayFan(settings, 1920, 1080) : glazeRayFan(settings, window.innerWidth, window.innerHeight)
   return buildLinearGlazeStacks(settings, 45).map((stack) => fannedStackImage(stack.stripes, stack.periodPx, fan))
 }
 

@@ -180,6 +180,10 @@ export interface VisualizerImmersive {
   swayReturn: number
   /** -`SWAY_DRIFT_MAX_PX` to it: a steady drift of the linear stacks along their gradient, px a second for the nearest; 0 none. */
   swayDrift: number
+  /** 0 to `POLE_ORBIT_MAX`: the radius of the circle the glare's vanishing point travels round its resting place, as a share of that place's distance from the centre; 0 none. */
+  poleOrbit: number
+  /** 0 to `POLE_ORBIT_HZ_MAX`: turns a second of that circle. */
+  poleOrbitHz: number
   /** The grid wave's length, in boxes, from one band's peak to the next. */
   waveBoxes: number
   /** Beats of the music (`subscribeMusicTempo`) a wave band takes to travel one wave length. */
@@ -224,6 +228,8 @@ export interface VisualizerImmersive {
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
 export const IMMERSIVE_SWAY_RANGE_MAX_PX = 200
 export const SWAY_DRIFT_MAX_PX = 200
+export const POLE_ORBIT_MAX = 0.1
+export const POLE_ORBIT_HZ_MAX = 2
 export const SWAY_PUSH_MAX_PX = 10
 export const WAVE_BOXES_MIN = 2
 export const WAVE_BOXES_MAX = 256
@@ -253,7 +259,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitHz: 0, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -572,6 +578,8 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX_PX, SWAY_PUSH_MAX_PX, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),
     swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX_PX, SWAY_DRIFT_MAX_PX, d.swayDrift),
+    poleOrbit: bounded(source.poleOrbit, 0, POLE_ORBIT_MAX, d.poleOrbit),
+    poleOrbitHz: bounded(source.poleOrbitHz, 0, POLE_ORBIT_HZ_MAX, d.poleOrbitHz),
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
     // A layout saved before the travel counted beats (2026-11-03) saved seconds, read at the fallback tempo.
     waveBeats: Math.round(bounded(source.waveBeats ?? (typeof source.waveSec === 'number' ? source.waveSec / WAVE_FALLBACK_BEAT_SEC : undefined), WAVE_BEATS_MIN, WAVE_BEATS_MAX, d.waveBeats)),

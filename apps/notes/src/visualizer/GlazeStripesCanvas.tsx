@@ -1,8 +1,8 @@
 import { useRef } from 'react'
 import { linkProgram, useWebGL2Canvas } from './useWebGL2Canvas'
 import type { GlazeStripe } from '@thockdown/look/loadoutTheme'
-import { registerLinearSlide } from './parallaxSway'
-import { glazeRayFan, glazeRayScale, type GlazeSettings } from '@thockdown/look/glaze'
+import { poleOrbitAt, registerLinearSlide } from './parallaxSway'
+import { glazeRayFan, glazeRayScale, orbitGlazeRayFan, type GlazeRayFan, type GlazeSettings } from '@thockdown/look/glaze'
 
 /*
  * The glaze's linear stacks, drawn by ONE WebGL2 shader on ONE canvas rather
@@ -60,7 +60,7 @@ uniform float share[${MAX_STACKS}];    // each stack's opacity
 uniform vec2 dir;               // across the stripes (glazeRayFan's 'across')
 uniform vec2 normal;            // towards the vanishing point
 uniform float k;                // curvature in 1/px; 0 = parallel
-uniform float density;
+uniform float linearScale;     // the parallel path's scale (orbitGlazeRayFan)
 uniform float turnScale[${MAX_STACKS}];  // pattern px per radian around the point (glazeRayScale)               // the gradient's direction on screen (y down)
 uniform vec2 sizeCss;
 uniform float dpr;
@@ -84,7 +84,7 @@ void main() {
   // Farthest (last) first, so the nearest ends on top.
   for (int i = ${MAX_STACKS - 1}; i >= 0; i--) {
     if (i >= count) continue;
-    vec4 c = rowAt(i, (k > 0.0 ? theta * turnScale[i] : w * density) - offset[i]) * share[i];
+    vec4 c = rowAt(i, (k > 0.0 ? theta * turnScale[i] : w * linearScale) - offset[i]) * share[i];
     acc = c + acc * (1.0 - c.a);
   }
   color = acc;
@@ -155,9 +155,20 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
     gl.uniform1fv(u('share'), pad(used.map((s) => s.share)))
     const offsets = new Float32Array(MAX_STACKS)
 
+    let fan: GlazeRayFan | null = null
     let frame = 0
     const draw = () => {
       frame = 0
+      if (fan) {
+        // Only the uniforms move; the per-stack turn scales stay those of the
+        // resting point, so the rays neither appear nor vanish as it travels.
+        const orbit = poleOrbitAt(performance.now())
+        const moved = orbitGlazeRayFan(fan, sway ? orbit.share : 0, orbit.phase)
+        gl.uniform2f(u('dir'), moved.across.x, moved.across.y)
+        gl.uniform2f(u('normal'), moved.normal.x, moved.normal.y)
+        gl.uniform1f(u('k'), moved.k)
+        gl.uniform1f(u('linearScale'), moved.linearScale)
+      }
       gl.uniform1fv(u('offset'), offsets)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
     }
@@ -176,15 +187,12 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.uniform2f(u('sizeCss'), cssW, cssH)
       gl.uniform1f(u('dpr'), dpr)
+      // The curvature is per screen px, so the fan is re-derived with the size.
       // Converging, the sway's offset (pattern px) is a rotation about the
       // point: one period of it is 1/repeats of a turn.
-      // The curvature is per screen px, so the fan is re-derived with the size.
-      const fan = glazeRayFan(glaze, Math.max(cssW, cssH))
-      gl.uniform2f(u('dir'), fan.across.x, fan.across.y)
-      gl.uniform2f(u('normal'), fan.normal.x, fan.normal.y)
-      gl.uniform1f(u('k'), fan.k)
-      gl.uniform1f(u('density'), fan.density)
-      if (fan.k > 0) gl.uniform1fv(u('turnScale'), pad(used.map((s) => glazeRayScale(fan, s.periodPx))))
+      const resting = glazeRayFan(glaze, cssW, cssH)
+      fan = resting
+      if (resting.k > 0) gl.uniform1fv(u('turnScale'), pad(used.map((s) => glazeRayScale(resting, s.periodPx))))
       // Drawn now rather than on the next frame: a ResizeObserver runs before
       // the frame paints, so the stripes at the new size land in the same
       // frame as the layout that resized them.

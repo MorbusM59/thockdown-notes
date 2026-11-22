@@ -57,6 +57,8 @@ import {
   WAVE_BEATS_MAX,
   PULSE_SEC_MAX,
   SWAY_DRIFT_MAX_PX,
+  POLE_ORBIT_MAX,
+  POLE_ORBIT_HZ_MAX,
   SWAY_PUSH_MAX_PX,
   PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
@@ -2519,7 +2521,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Glaze</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[3, 4, 3]}>
+            <OptionsSliderRows rows={[3, 4, 3, 2]}>
               {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, visualizerDefaults.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-glaze-strength"
@@ -2611,6 +2613,32 @@ export function SidebarOptionsPanel({
                 defaultValue={visualizerDefaults.immersive.swayDrift}
                 formatValue={(value) => String(Math.round(value))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pole-orbit"
+                min={0}
+                max={POLE_ORBIT_MAX}
+                step={0.001}
+                value={visualizer.immersive.poleOrbit}
+                trackLabel="orbit"
+                tooltipLabel="Vanishing point orbit (%)"
+                ariaLabel="Immersive: radius of the glare's vanishing point orbit, percent of its distance"
+                defaultValue={visualizerDefaults.immersive.poleOrbit}
+                formatValue={(value) => (value * 100).toFixed(1)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, poleOrbit: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-pole-orbit-hz"
+                min={0}
+                max={POLE_ORBIT_HZ_MAX}
+                step={0.01}
+                value={visualizer.immersive.poleOrbitHz}
+                trackLabel="orbit speed"
+                tooltipLabel="Vanishing point orbit (Hz)"
+                ariaLabel="Immersive: turns a second of the glare's vanishing point orbit"
+                defaultValue={visualizerDefaults.immersive.poleOrbitHz}
+                formatValue={(value) => value.toFixed(2)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, poleOrbitHz: value } }))}
               />
             </OptionsSliderRows>
           </div>

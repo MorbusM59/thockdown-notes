@@ -213,6 +213,26 @@ export function swaySnareHit(nowMs: number = performance.now()): void {
   slideStartMs = nowMs
 }
 
+/**
+ * The glare's vanishing point travels a circle round its resting place
+ * (`orbitGlazeRayFan`): its radius as a share of the point's distance, and
+ * turns a second. Read by the shader canvas when it draws, which the sway
+ * loop asks for each frame, so the orbit adds no loop of its own and stops
+ * when the sway does.
+ */
+let orbitShare = 0
+let orbitHz = 0
+
+export function setPoleOrbit(share: number, hz: number): void {
+  orbitShare = share
+  orbitHz = hz
+}
+
+/** The orbit now: its radius share and its phase in radians. */
+export function poleOrbitAt(nowMs: number): { share: number; phase: number } {
+  return { share: orbitHz > 0 ? orbitShare : 0, phase: 2 * Math.PI * orbitHz * (nowMs / 1000) }
+}
+
 /** `value` wrapped into [-period/2, period/2). */
 export function wrapToPeriod(value: number, period: number): number {
   if (!(period > 0)) return 0

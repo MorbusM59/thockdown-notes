@@ -25,7 +25,7 @@ import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visua
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { GlazeStripesCanvas } from './GlazeStripesCanvas'
 import { canUseShaderGlaze } from './glazeShaderSupport'
-import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /**
  * `index` counts from the nearest layer; `linearPosition` places a linear
@@ -94,6 +94,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   // The widest the music ever carries the nearest layer, which no layer exceeds.
   const overscan = swayOverscanPx(immersive.swayRangePx * BREATH_AMPLITUDE_MAX)
   useEffect(() => setSwayRange(immersive.swayRangePx), [immersive.swayRangePx])
+  useEffect(() => setPoleOrbit(immersive.poleOrbit, immersive.poleOrbitHz), [immersive.poleOrbit, immersive.poleOrbitHz])
   useEffect(() => setSwayMotion(immersive.swayPush, immersive.swayReturn, immersive.swayDrift), [immersive.swayPush, immersive.swayReturn, immersive.swayDrift])
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides

@@ -13,10 +13,11 @@ export type GlazeSettings = {
   sheenShape: number;
   sheenOpacity: number;
   /**
-   * How strongly the glare's stripes converge, as the curvature of their
-   * fan: 1 / the vanishing point's distance from the screen's centre, in
-   * halves of the screen's longer side. 0 is exactly parallel (the point at
-   * infinity), and nothing is singular on the way there (`glazeRayFan`).
+   * How strongly the glare's stripes converge, 0 to 1: the vanishing point
+   * sits at `GLAZE_RAY_NEAREST` x (the centre's distance to the screen's
+   * edge in its direction) / this, so 1 is as near as it may come, always
+   * off screen, and 0 is exactly parallel (the point at infinity), with
+   * nothing singular on the way there (`glazeRayFan`).
    */
   rayCurvature: number;
   /** The direction of the vanishing point from the centre, degrees clockwise from up; parallel stripes run along it. */
@@ -31,13 +32,14 @@ export const GLAZE_GLOOM_OPACITY_MAX = 0.5;
 export const GLAZE_SHEEN_OPACITY_MAX = 0.5;
 export const GLAZE_LINEAR_STACK_MAX = 5;
 export const GLAZE_RADIAL_COUNT_MAX = 4;
-/** Curvature at the top of its range: the vanishing point a twentieth of the screen from its centre. */
-export const GLAZE_RAY_CURVATURE_MAX = 10;
+export const GLAZE_RAY_CURVATURE_MAX = 1;
+/** The nearest the vanishing point comes, as a multiple of the centre's distance to the screen's edge in its direction. */
+export const GLAZE_RAY_NEAREST = 1.2;
 export const GLAZE_RAY_DENSITY_MIN = 0.25;
 export const GLAZE_RAY_DENSITY_MAX = 4;
 
 /**
- * The glare's stripes on a screen of `vmaxPx` (its longer side), as a fan
+ * The glare's stripes on a screen of `widthPx` x `heightPx`, as a fan
  * around a vanishing point at distance 1/k from the centre along `normal`.
  * A pixel p (px from the centre, y down) reads its stack's pattern at
  *
@@ -61,16 +63,38 @@ export type GlazeRayFan = {
   density: number;
 };
 
-export function glazeRayFan(settings: GlazeSettings, vmaxPx: number): GlazeRayFan {
+export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: number): GlazeRayFan {
   const radians = (settings.rayAngle * Math.PI) / 180;
   const normal = { x: Math.sin(radians), y: -Math.cos(radians) };
+  // The centre's distance to the screen's edge along `normal`.
+  const edgePx = Math.min(
+    Math.abs(normal.x) > 1e-9 ? widthPx / 2 / Math.abs(normal.x) : Infinity,
+    Math.abs(normal.y) > 1e-9 ? heightPx / 2 / Math.abs(normal.y) : Infinity,
+  );
   return {
-    k: settings.rayCurvature / (vmaxPx / 2),
+    k: settings.rayCurvature / (GLAZE_RAY_NEAREST * edgePx),
     normal,
     across: { x: normal.y, y: -normal.x },
     acrossDeg: settings.rayAngle - 90,
     density: settings.rayDensity,
   };
+}
+
+/**
+ * The fan with its vanishing point moved round its resting place on a circle
+ * of `orbit` x its distance from the centre, at `phase` radians. Written on
+ * the point's direction alone (normal + orbit x (cos, sin), then normalised),
+ * so it holds as the point goes to infinity: at k = 0 the parallel stripes
+ * swing through the same angles, and nothing is singular. `linearScale` is
+ * what the parallel path multiplies by, the limit of the turned fan's
+ * k'/k, so the two paths agree as k -> 0.
+ */
+export function orbitGlazeRayFan(fan: GlazeRayFan, orbit: number, phase: number): { k: number; normal: { x: number; y: number }; across: { x: number; y: number }; linearScale: number } {
+  const x = fan.normal.x + orbit * Math.cos(phase);
+  const y = fan.normal.y + orbit * Math.sin(phase);
+  const length = Math.hypot(x, y);
+  const normal = { x: x / length, y: y / length };
+  return { k: fan.k / length, normal, across: { x: normal.y, y: -normal.x }, linearScale: fan.density / length };
 }
 
 /**
