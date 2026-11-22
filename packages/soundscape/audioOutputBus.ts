@@ -37,6 +37,15 @@ const OUTPUT_BUFFER_SEC = 0.2;
 
 let context: AudioContext | null = null;
 let limiter: DynamicsCompressorNode | null = null;
+let duck: GainNode | null = null;
+let duckHolders = 0;
+
+/**
+ * How long the ducked sources take to fall silent or come back. Linear in
+ * gain from wherever the ramp stood, so a release during a fall turns round
+ * without a step.
+ */
+const DUCK_FADE_SEC = 0.1;
 
 /** The shared context, built on first use and rebuilt if it was closed. */
 export function outputContext(): AudioContext {
@@ -49,6 +58,9 @@ export function outputContext(): AudioContext {
     limiter.attack.value = 0.003;
     limiter.release.value = 0.08;
     limiter.connect(context.destination);
+    duck = context.createGain();
+    duck.connect(limiter);
+    duckHolders = 0;
   }
   return context;
 }
@@ -60,11 +72,42 @@ export async function resumedOutputContext(): Promise<AudioContext> {
   return ctx;
 }
 
-/** Route `source` into the shared limiter. `source` must belong to `outputContext()`. */
-export function connectToOutput(source: AudioNode): void {
+/**
+ * Route `source` into the shared limiter. `source` must belong to
+ * `outputContext()`. Everything routed here (the music, the soundscape) is
+ * silenced while something holds the output alone (`holdOutputAlone`); a
+ * source that must stay audible meanwhile passes `alone`.
+ */
+export function connectToOutput(source: AudioNode, alone = false): void {
   const ctx = outputContext();
-  if (source.context !== ctx || !limiter) {
+  if (source.context !== ctx || !limiter || !duck) {
     throw new Error('Audio output input must use the shared output audio context.');
   }
-  source.connect(limiter);
+  source.connect(alone ? limiter : duck);
+}
+
+/**
+ * Fades every source not connected `alone` to silence over DUCK_FADE_SEC and
+ * returns the release, which fades them back. They keep playing underneath
+ * (nothing is paused, so nothing has to start again), and holds are counted,
+ * so two holders cannot release each other's. The release is idempotent.
+ */
+export function holdOutputAlone(): () => void {
+  outputContext();
+  let held = true;
+  if (duckHolders++ === 0) rampDuck(0);
+  return () => {
+    if (!held) return;
+    held = false;
+    if (--duckHolders === 0) rampDuck(1);
+  };
+}
+
+function rampDuck(target: number): void {
+  if (!duck) return;
+  const gain = duck.gain;
+  const now = duck.context.currentTime;
+  gain.cancelScheduledValues(now);
+  gain.setValueAtTime(gain.value, now);
+  gain.linearRampToValueAtTime(target, now + DUCK_FADE_SEC);
 }

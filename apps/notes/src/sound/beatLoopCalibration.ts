@@ -21,7 +21,7 @@
  * shows on the very next frame.
  */
 
-import { connectToOutput, resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
+import { connectToOutput, holdOutputAlone, resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import { outputLatencySec } from './musicBeat'
 import { SmoothClock } from './smoothClock'
 
@@ -262,6 +262,7 @@ export function startBeatLoop(loop: BeatLoop, onFailed: () => void): LoopRun {
   let source: MediaElementAudioSourceNode | null = null
   let fade: GainNode | null = null
   let over = false
+  let releaseOutput: (() => void) | null = null
   const fail = () => {
     if (!over) onFailed()
   }
@@ -303,7 +304,9 @@ export function startBeatLoop(loop: BeatLoop, onFailed: () => void): LoopRun {
       fade = context.createGain()
       fade.gain.value = 0
       source.connect(fade)
-      connectToOutput(fade)
+      // The loop is heard alone: the music and the soundscape fall silent under it and come back where they are when it stops.
+      connectToOutput(fade, true)
+      releaseOutput = holdOutputAlone()
       await element.play()
       if (over) return
       fade.gain.setValueAtTime(0, context.currentTime)
@@ -321,6 +324,7 @@ export function startBeatLoop(loop: BeatLoop, onFailed: () => void): LoopRun {
     },
     stop() {
       over = true
+      releaseOutput?.()
       const release = () => {
         element.pause()
         source?.disconnect()
