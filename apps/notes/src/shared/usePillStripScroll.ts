@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type MutableRefObject, type WheelEvent as ReactWheelEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MutableRefObject, type WheelEvent as ReactWheelEvent } from 'react'
 import { useRef } from 'react'
 
 /**
@@ -111,10 +111,11 @@ export function usePillStripScroll(contentKey: string | number, enabled = true):
     event.currentTarget.scrollLeft += event.deltaY
   }, [])
 
-  return {
-    ref,
-    fadeClassName: `${canScrollLeft ? ' fade-left' : ''}${canScrollRight ? ' fade-right' : ''}`,
-    onScroll: update,
-    onWheel,
-  }
+  // One object per change of what it holds, never one per render: callers
+  // pass it on whole (EditorSection's section handle, which App compares key
+  // by key and re-renders on any new identity), so a fresh literal every
+  // render re-rendered App, which re-rendered the section, which built a new
+  // literal -- a render loop that never settled.
+  const fadeClassName = `${canScrollLeft ? ' fade-left' : ''}${canScrollRight ? ' fade-right' : ''}`
+  return useMemo(() => ({ ref, fadeClassName, onScroll: update, onWheel }), [ref, fadeClassName, update, onWheel])
 }
