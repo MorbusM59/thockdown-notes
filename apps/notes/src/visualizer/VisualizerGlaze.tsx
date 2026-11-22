@@ -24,7 +24,6 @@ import { visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/gla
 import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
-import { createTempoFollower } from './gridWaveTurn'
 import { subscribeMusicTempo } from '../sound/musicBeat'
 import { canUseShaderGlaze } from './glazeShaderSupport'
 import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
@@ -102,12 +101,11 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   const overscan = swayOverscanPx(immersive.swayRangePx * BREATH_AMPLITUDE_MAX)
   useEffect(() => setSwayRange(immersive.swayRangePx), [immersive.swayRangePx])
   useEffect(() => setPoleOrbit(immersive.poleOrbit, immersive.poleOrbitRate), [immersive.poleOrbit, immersive.poleOrbitRate])
-  // The orbit moves at the music's tempo, eased like the grid wave's turn.
+  // The orbit moves at the app's one tempo (`musicTempo.ts`).
   const orbiting = immersive.poleOrbit > 0
   useEffect(() => {
     if (!orbiting) return
-    const follow = createTempoFollower()
-    return subscribeMusicTempo((timeSec, periodSec) => advancePoleOrbit(follow(timeSec, periodSec)))
+    return subscribeMusicTempo((beats) => advancePoleOrbit(beats))
   }, [orbiting])
   useEffect(() => setSwayMotion(immersive.swayPush, immersive.swayReturn, immersive.swayDrift), [immersive.swayPush, immersive.swayReturn, immersive.swayDrift])
   const layers = useMemo<Layer[]>(() => {

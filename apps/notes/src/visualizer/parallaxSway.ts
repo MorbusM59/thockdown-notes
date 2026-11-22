@@ -219,7 +219,7 @@ export function swaySnareHit(nowMs: number = performance.now()): void {
  * circles (`poleOrbitOffset`): its radius as a share of the point's distance,
  * and how far round it has come, counted in turns of the largest circle and
  * advanced by the music's beats (`advancePoleOrbit`, fed from
- * `subscribeMusicTempo`), so it holds still while there is no beat. Read by
+ * `subscribeMusicTempo`, 60 BPM while there is no beat). Read by
  * the shader canvas when it draws, which the sway loop asks for each frame,
  * so the orbit adds no loop of its own.
  */

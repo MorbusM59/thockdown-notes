@@ -54,6 +54,7 @@
  * which decides what is worth writing), and of 0 when the loop stops.
  */
 
+import { createTempoFollower } from './musicTempo'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
@@ -160,10 +161,12 @@ function setLocked(subscriber: Clock, locked: boolean): void {
 
 const clocks = new Set<Clock>()
 
-/** A TEMPO subscriber: the heard media time and the steady beat's period, every frame (NaN while there is no beat). */
+/** A TEMPO subscriber: the beats that passed this frame and the rate, from the one follower (`musicTempo.ts`). */
 interface Counter {
-  listener: (timeSec: number, periodSec: number) => void
+  listener: (beats: number, beatsPerSec: number) => void
 }
+/** The app's one tempo follower, fed once a frame. */
+const tempo = createTempoFollower()
 
 const counters = new Set<Counter>()
 interface SemitoneSubscriber {
@@ -446,10 +449,12 @@ function pulse(subscriber: Clock, listenerTime: number): number {
   return 1 - flashLevelAt(levels, flashPhaseAt(beat, cyclesPerBeat))
 }
 
-/** A tempo subscriber's frame: the time heard and the period of the same steady beat the caret follows. */
-function count(counter: Counter, listenerTime: number): void {
+/** The tempo's frame: the time heard and the period of the same steady beat the caret follows (NaN while there is none), eased once for every reader. */
+function countTempo(listenerTime: number): void {
+  if (counters.size === 0) return
   const { phase, period } = mapCaretAt(listenerTime)
-  counter.listener(listenerTime, Number.isNaN(phase) ? NaN : period)
+  const { beats, beatsPerSec } = tempo(listenerTime, Number.isNaN(phase) ? NaN : period)
+  for (const counter of counters) counter.listener(beats, beatsPerSec)
 }
 
 function publish(subscriber: Band | Clock, response: number): void {
@@ -528,7 +533,7 @@ function tick(frameTimeMs: number): void {
     if (response - subscriber.published > 0.3) drawnDips++
     publish(subscriber, response)
   }
-  for (const counter of counters) count(counter, heardTime)
+  countTempo(heardTime)
   framesSinceTrace++
   traceCaret(listenerTime, heardTime)
   // Asked one frame AHEAD: the answer is back before the next frame, which
@@ -564,7 +569,6 @@ function stop(): void {
     publish(subscriber, 0)
     setLocked(subscriber, false)
   }
-  for (const counter of counters) counter.listener(NaN, NaN)
   for (const subscriber of semitoneSubscribers) subscriber.listener(NaN, null, null, NaN)
 }
 
@@ -681,17 +685,16 @@ export function subscribeMusicClock(flash: FlashClock, listener: BeatListener, l
 }
 
 /**
- * The steady beat's TEMPO every frame while music plays: the media time heard
- * and the period, in seconds, of the beat the caret follows (the header's
- * CLOCK), with NaN for both whenever there is no beat: paused, hidden, or a
- * track not yet read. Tempo and not position, deliberately: a clock that
- * re-seats after a seek or a change of section takes the new grid's PHASE as
- * it is, so its position jumps by up to half a beat, while its period is
- * continuous apart from a change of tempo. A reader that only needs to move
- * at the music's rate integrates time over period and never sees the jump.
+ * THE tempo (`musicTempo.ts`), every frame while music plays: the beats that
+ * passed since the last frame and the rate in beats a second, the same for
+ * every reader. 60 BPM while the beat map holds no beat, every change glided
+ * over `TEMPO_EASE_SEC`. Tempo and not position, deliberately: the beat
+ * clock re-seats after a seek or a change of section and its position jumps
+ * by up to half a beat, while the tempo is continuous; a frame across a seek
+ * passes no beats. Nothing is called while the music is stopped.
  */
-export function subscribeMusicTempo(listener: (timeSec: number, periodSec: number) => void): () => void {
-  const counter: Counter = { listener: (timeSec, periodSec) => listener(timeSec, periodSec) }
+export function subscribeMusicTempo(listener: (beats: number, beatsPerSec: number) => void): () => void {
+  const counter: Counter = { listener }
   counters.add(counter)
   added()
   return () => {

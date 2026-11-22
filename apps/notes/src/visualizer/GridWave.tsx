@@ -41,13 +41,13 @@
 import { cutoutClosure } from './cutoutRing'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal, flushSync } from 'react-dom'
-import { FALL_MIN_SEC, WAVE_FALLBACK_BEAT_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, roundedSquareOffsetGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
+import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, roundedSquareOffsetGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
 import { canUseShaderPulse } from './glazeShaderSupport'
 import { PulseRingsCanvas, type PulseRingsHandle } from './PulseRingsCanvas'
 import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
 import { emitPulseHit, pulseAmount, subscribePulseHits } from './pulseHits'
 import { setSwayReturnFall, swaySnareHit } from './parallaxSway'
-import { WAVE_ANGLES_AT_REST, createTempoFollower, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
+import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
 const PULSE_RING_SHARE = 0.25
@@ -119,14 +119,13 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   const turnRef = useRef<HTMLDivElement>(null)
   const { waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, glazePushes, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
-  // The rotation turns at the music's TEMPO (`subscribeMusicTempo`), one
-  // transform written per frame on the beat loop's own frame: each frame
-  // advances by the time heard over the beat period, so the angle never takes
-  // the beat clock's phase jumps when it re-seats after a seek or a change of
-  // section. The rate itself follows the period exponentially (`createTempoFollower`), so a new tempo, or a grid found at double or half the
-  // last one, is eased into rather than stepped. A frame far (a seek, a stall) moves nothing. Entering
-  // the visualizer starts upright; no beat holds the angle reached. Step 0
-  // does not listen at all and rests upright.
+  // The rotation turns at the app's one TEMPO (`subscribeMusicTempo`,
+  // `musicTempo.ts`), one transform written per frame on the beat loop's own
+  // frame: each frame advances by the beats that passed, so the angle never
+  // takes the beat clock's phase jumps after a seek or a change of section,
+  // and every change of tempo, a beat found or lost included, is the one
+  // shared glide. With no beat it turns at 60 BPM. Entering the visualizer
+  // starts upright; step 0 rests upright.
   // ONE subscription for the visualizer's whole stay: the settings and the
   // scene's size are read through a ref, so moving a slider or resizing the
   // window changes the rate or the shift and never the angle reached.
@@ -137,9 +136,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     if (!turn) return
     turn.style.transform = ''
     let angles = WAVE_ANGLES_AT_REST
-    const follow = createTempoFollower()
-    return subscribeMusicTempo((timeSec, periodSec) => {
-      const beats = follow(timeSec, periodSec)
+    return subscribeMusicTempo((beats) => {
       const { waveTurn: step, widthPx: width, periodPx } = turnInputs.current
       if (step === 0) {
         if (angles !== WAVE_ANGLES_AT_REST) {
@@ -155,11 +152,8 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   }, [host])
 
   // The bands TRAVEL one wave length every `waveBeats` beats, at the same
-  // eased tempo the turn follows (`createTempoFollower`), so a seek's phase
-  // jump never moves them. While the beat map has no beat (its warm-up, or a
-  // passage it cannot follow) they keep travelling at WAVE_FALLBACK_BEAT_SEC,
-  // eased into and out of like any change of tempo, so the wave never freezes
-  // under a hit. Frames run only while music plays; a pause holds the place
+  // app's one tempo (`subscribeMusicTempo`, `musicTempo.ts`), so a seek's
+  // phase jump never moves them, and with no beat they travel at its 60 BPM. Frames run only while music plays; a pause holds the place
   // reached. The place is a share of one wave length, so a change of length
   // or of beats changes the speed and never jumps the bands.
   const bandsRef = useRef<HTMLDivElement>(null)
@@ -170,9 +164,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     if (!bands) return
     bands.style.transform = ''
     let share = 0
-    const follow = createTempoFollower()
-    return subscribeMusicTempo((timeSec, periodSec) => {
-      const beats = follow(timeSec, periodSec > 0 ? periodSec : (Number.isFinite(timeSec) ? WAVE_FALLBACK_BEAT_SEC : NaN))
+    return subscribeMusicTempo((beats) => {
       const { waveBeats: perLength, periodPx } = travelInputs.current
       if (beats <= 0 || reducedMotion.matches) return
       share = (share + beats / perLength) % 1

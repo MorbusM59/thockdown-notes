@@ -236,12 +236,6 @@ export const WAVE_BOXES_MIN = 2
 export const WAVE_BOXES_MAX = 256
 export const WAVE_BEATS_MIN = 1
 export const WAVE_BEATS_MAX = 64
-/**
- * The tempo the wave travels at while the beat map has no beat (its warm-up
- * at the start of a track or after a seek, or a passage it cannot follow),
- * and the tempo a layout saved in seconds (before 2026-11-03) is read at.
- */
-export const WAVE_FALLBACK_BEAT_SEC = 0.5
 export const PULSE_SPEED_MIN = 2
 export const PULSE_SPEED_MAX = 100
 export const PULSE_SEC_MIN = 0.1
@@ -570,7 +564,7 @@ function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): Visualiz
 }
 
 function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null, legacyWaveMix: VisualizerMix | null): VisualizerImmersive {
-  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive | 'waveSec', unknown>>
+  const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive, unknown>>
   return {
     glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
@@ -582,8 +576,7 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     poleOrbit: bounded(source.poleOrbit, 0, POLE_ORBIT_MAX, d.poleOrbit),
     poleOrbitRate: bounded(source.poleOrbitRate, POLE_ORBIT_RATE_MIN, POLE_ORBIT_RATE_MAX, d.poleOrbitRate),
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),
-    // A layout saved before the travel counted beats (2026-11-03) saved seconds, read at the fallback tempo.
-    waveBeats: Math.round(bounded(source.waveBeats ?? (typeof source.waveSec === 'number' ? source.waveSec / WAVE_FALLBACK_BEAT_SEC : undefined), WAVE_BEATS_MIN, WAVE_BEATS_MAX, d.waveBeats)),
+    waveBeats: Math.round(bounded(source.waveBeats, WAVE_BEATS_MIN, WAVE_BEATS_MAX, d.waveBeats)),
     waveMix: sanitizeMix(source.waveMix, legacyWaveMix ?? d.waveMix),
     // A layout saved before the glaze had its own mix (2026-11-01) was pushed by the wave's;
     // only a layout that SAVED a wave mix is one of those, so one that saved neither takes the default.
