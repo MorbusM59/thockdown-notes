@@ -162,11 +162,6 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     }
   }, [shader, layers, immersive.glazeSpread])
 
-  // With "flair above glare" on, the flair (the radial sources) is raised
-  // over the glare's own layer as well (z-index 6003, visualizer.css), so the
-  // toggle keeps meaning what it says while the glare sits above the wave.
-  const flairOver = Boolean(shaderStacks && shaderStacks.stacks.length > 0 && glaze.radialAboveLinear)
-
   // Drawn farthest first, so the nearest is on top within its kind (the
   // kinds' own order is the stack's z-index rule, as in the ordinary glaze).
   // The glare (the shader's linear stacks) is drawn ABOVE the grid wave and
@@ -177,7 +172,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   return (
     <>
       <div className={`glaze-overlay-stack visualizer-glaze${glaze.radialAboveLinear ? ' radial-above-linear' : ''}`} aria-hidden="true">
-        {[...layers].reverse().filter((layer) => !(shaderStacks && layer.kind === 'linear') && !(flairOver && layer.kind === 'radial')).map((layer) => (
+        {[...layers].reverse().filter((layer) => !(shaderStacks && layer.kind === 'linear')).map((layer) => (
           <SwayLayer
             key={layer.key}
             layer={layer}
@@ -194,19 +189,6 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
             sway={shaderStacks.sway}
             glaze={glaze}
           />
-        </div>
-      ) : null}
-      {flairOver ? (
-        <div className="visualizer-flair-over" aria-hidden="true">
-          {layers.filter((layer) => layer.kind === 'radial').map((layer) => (
-            <SwayLayer
-              key={layer.key}
-              layer={layer}
-              overscan={overscan}
-              angleDeg={glazeRayAngle(glaze) - 90}
-              opacity={1}
-            />
-          ))}
         </div>
       ) : null}
     </>
