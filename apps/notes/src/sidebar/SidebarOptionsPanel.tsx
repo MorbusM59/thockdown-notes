@@ -50,7 +50,8 @@ import {
   BEAT_CONTRAST_MAX,
   FALL_MAX_SEC,
   FALL_MIN_SEC,
-  IMMERSIVE_GLAZE_STRENGTH_MAX,
+  IMMERSIVE_FLAIR_STRENGTH_MAX,
+  IMMERSIVE_GLARE_STRENGTH_MAX,
   IMMERSIVE_SWAY_RANGE_MAX,
   WAVE_BOXES_MAX,
   WAVE_BOXES_MIN,
@@ -2536,7 +2537,7 @@ export function SidebarOptionsPanel({
               <CompactScrollbarSlider
                 id="visualizer-flair-strength"
                 min={0}
-                max={IMMERSIVE_GLAZE_STRENGTH_MAX}
+                max={IMMERSIVE_FLAIR_STRENGTH_MAX}
                 step={0.01}
                 value={visualizer.immersive.flairStrength}
                 trackLabel="flair"
@@ -2562,7 +2563,7 @@ export function SidebarOptionsPanel({
               <CompactScrollbarSlider
                 id="visualizer-glare-strength"
                 min={0}
-                max={IMMERSIVE_GLAZE_STRENGTH_MAX}
+                max={IMMERSIVE_GLARE_STRENGTH_MAX}
                 step={0.01}
                 value={visualizer.immersive.glareStrength}
                 trackLabel="glare"

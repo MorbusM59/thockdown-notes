@@ -254,7 +254,8 @@ export const SPECTRUM_GRAVITY_MIN = 10
 export const SPECTRUM_GRAVITY_MAX = 1000
 export const CREST_FALL_REDUCTION_MAX = 0.95
 
-export const IMMERSIVE_GLAZE_STRENGTH_MAX = 4
+export const IMMERSIVE_GLARE_STRENGTH_MAX = 8
+export const IMMERSIVE_FLAIR_STRENGTH_MAX = 4
 export const IMMERSIVE_SWAY_RANGE_MAX = 1200
 export const SWAY_DRIFT_MAX = 1200
 export const POLE_ORBIT_MAX = 0.1
@@ -294,7 +295,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 2, flairStrength: 2, glareMinStacks: 5, flairMinSources: 4, swayRange: 210, swayCycle: 32, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitCycle: 16, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 4, flairStrength: 2, glareMinStacks: 3, flairMinSources: 2, swayRange: 360, swayCycle: 8, swaySpread: 0.5, swayPush: 60, swayReturn: 0.4, swayDrift: -90, poleOrbit: 0.04, poleOrbitCycle: 32, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 export const BEAT_CONTRAST_MAX = 0.95
 /**
@@ -594,8 +595,8 @@ function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): Visualiz
 function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null, legacyWaveMix: VisualizerMix | null): VisualizerImmersive {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive, unknown>>
   return {
-    glareStrength: bounded(source.glareStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glareStrength),
-    flairStrength: bounded(source.flairStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.flairStrength),
+    glareStrength: bounded(source.glareStrength, 0, IMMERSIVE_GLARE_STRENGTH_MAX, d.glareStrength),
+    flairStrength: bounded(source.flairStrength, 0, IMMERSIVE_FLAIR_STRENGTH_MAX, d.flairStrength),
     glareMinStacks: Math.round(bounded(source.glareMinStacks, 0, 5, d.glareMinStacks)),
     flairMinSources: Math.round(bounded(source.flairMinSources, 0, 4, d.flairMinSources)),
     swayRange: Math.round(bounded(source.swayRange, 0, IMMERSIVE_SWAY_RANGE_MAX, d.swayRange)),
