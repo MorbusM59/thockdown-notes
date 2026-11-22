@@ -280,12 +280,15 @@ let currentSectionCount = 1;
 // squeezing sections/sidebar into less room than they'd get at 1x. See
 // 'window-control:double-size-mode' below.
 //
-// Double size is only possible where it fits the space the window can have
-// (doubleSizeAvailable, see doubleSizeFits.ts). There is ONE mode and no
-// remembered wish: where the space stops fitting -- a portrait monitor in
-// full screen, above all -- reconcileDoubleSize turns the mode OFF, exactly
-// as the button would, and the renderer saves that; nothing ever turns it
-// back on but the reader. While it does not fit, the button refuses.
+// Double size is limited ONLY IN FULL SCREEN, and only by the display the
+// window is full screen on (doubleSizeAvailable, see doubleSizeFits.ts). A
+// window has unlimited room: it can run off screen and be dragged, across
+// monitors too, so a window never refuses it. In full screen there is no more
+// room than the display: entering full screen on a display too small for
+// double size (a portrait monitor, above all) turns the mode OFF in the same
+// step, exactly as the button would, and the renderer saves that; while full
+// screen stays too small, the button refuses. There is ONE mode and no
+// remembered wish: nothing turns it back on but the reader.
 let currentDoubleSizeMode = false;
 let doubleSizeAvailable = true;
 
@@ -331,17 +334,18 @@ function computeMinSizeAt(double: boolean): { width: number; height: number } {
 }
 
 /**
- * The space the window can have on the display it is on: the whole display in
- * full screen, the work area (taskbar and docks excluded) otherwise. A
- * maximized window is the work area too, so windowed and maximized agree.
+ * Whether double size is possible for the window: always outside full screen,
+ * and in full screen (`fullScreen`, passed so a full screen about to be
+ * entered can be judged before it is) only where its doubled minimum fits the
+ * display the window is on.
  */
-function spaceForWindow(windowRef: BrowserWindow): { width: number; height: number } {
-  const display = screen.getDisplayMatching(windowRef.getBounds());
-  return windowRef.isFullScreen() ? display.bounds : display.workArea;
+function doubleSizePossible(windowRef: BrowserWindow, fullScreen: boolean): boolean {
+  if (!fullScreen) return true;
+  return doubleSizeFits(computeMinSizeAt(true), screen.getDisplayMatching(windowRef.getBounds()).bounds);
 }
 
 /**
- * Judges whether double size fits the space the window has now, tells the
+ * Judges whether double size is possible now (doubleSizePossible), tells the
  * renderer when that changes (it turns the mode off and saves that, and the
  * button refuses), turns double size off where it no longer fits (the
  * renderer commits its sizes in the frame the zoom lands, App.tsx's
@@ -349,9 +353,9 @@ function spaceForWindow(windowRef: BrowserWindow): { width: number; height: numb
  * is left alone: its window is deliberately smaller than any minimum, and
  * leaving it runs this again (applyNormalWindowConstraints).
  */
-function reconcileDoubleSize(windowRef: BrowserWindow): void {
+function reconcileDoubleSize(windowRef: BrowserWindow, fullScreen = windowRef.isFullScreen()): void {
   if (windowIsUtilityCollapsed) return;
-  const available = doubleSizeFits(computeMinSizeAt(true), spaceForWindow(windowRef));
+  const available = doubleSizePossible(windowRef, fullScreen);
   if (available !== doubleSizeAvailable) {
     doubleSizeAvailable = available;
     emitWindowEvent(windowRef.webContents, 'doubleSizeAvailable', available);
@@ -972,6 +976,10 @@ function registerIpcHandlers() {
           return
         }
         if (next) preFullScreenWindowState = readCurrentWindowState(win)
+        // Judged on the way IN, so double size goes off in the same step as
+        // the window goes full screen rather than after it has (the renderer
+        // commits its sizes in the frame the zoom lands).
+        if (next) reconcileDoubleSize(win, true)
         win.setFullScreen(next)
       } catch (error) {
         console.warn('Failed to toggle full screen', error)
@@ -1713,14 +1721,10 @@ async function createWindow() {
   // renderer -- so this starts at the default of 1 and the renderer corrects
   // it via 'window-control:section-count' shortly after bootstrap resolves.
   currentSidebarVisible = initialSidebarVisible;
-  // The window does not exist yet, so the space is the work area of the
-  // display it will open on (a reload never starts in full screen, see
-  // did-finish-load). reconcileDoubleSize takes over once it exists.
-  const startDisplay = typeof savedWindowState.x === 'number' && typeof savedWindowState.y === 'number'
-    ? screen.getDisplayMatching({ x: savedWindowState.x, y: savedWindowState.y, width: savedWindowState.width, height: savedWindowState.height })
-    : screen.getPrimaryDisplay();
-  doubleSizeAvailable = doubleSizeFits(computeMinSizeAt(true), startDisplay.workArea);
-  currentDoubleSizeMode = (savedAppState?.menu?.isDoubleSizeMode ?? false) && doubleSizeAvailable;
+  // The window never starts in full screen (see did-finish-load), so double
+  // size is always possible here.
+  doubleSizeAvailable = true;
+  currentDoubleSizeMode = savedAppState?.menu?.isDoubleSizeMode ?? false;
   const initialMinSize = computeEffectiveMinSize();
   windowIsUtilityCollapsed = false;
   utilityCollapseRestoreState = null;
