@@ -252,8 +252,8 @@ export interface VisualizerImmersive {
 }
 
 export const SPECTRUM_DELAY_MAX_SEC = 2
-export const SPECTRUM_GRAVITY_MIN = 10
-export const SPECTRUM_GRAVITY_MAX = 1000
+export const SPECTRUM_GRAVITY_MIN = 0
+export const SPECTRUM_GRAVITY_MAX = 4000
 export const CREST_FALL_REDUCTION_MAX = 0.95
 export const SPECTRUM_STRIP_ROWS_MAX = 50
 
@@ -298,7 +298,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 1, flairStrength: 0.5, glareMinStacks: 3, flairMinSources: 2, swayRange: 180, swayCycle: 8, swaySpread: 0.5, swayPush: 60, swayReturn: 0.4, swayDrift: -30, poleOrbit: 0.04, poleOrbitCycle: 32, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, spectrumStripRows: 7, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 1, flairStrength: 0.5, glareMinStacks: 3, flairMinSources: 2, swayRange: 180, swayCycle: 8, swaySpread: 0.5, swayPush: 60, swayReturn: 0.4, swayDrift: -30, poleOrbit: 0.04, poleOrbitCycle: 32, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 1000, crestDelaySec: 0.7, crestFallReduction: 0, spectrumStripRows: 7, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 export const BEAT_CONTRAST_MAX = 0.95
 /**

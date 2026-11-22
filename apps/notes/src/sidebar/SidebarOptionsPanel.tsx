@@ -2838,7 +2838,7 @@ export function SidebarOptionsPanel({
                 max={SPECTRUM_DELAY_MAX_SEC}
                 step={0.01}
                 value={visualizer.immersive.spectrumDelaySec}
-                trackLabel="delay"
+                trackLabel="base delay"
                 tooltipLabel="Bar hang time (ms)"
                 ariaLabel="Spectrum: how long a bar hangs before it falls, milliseconds"
                 defaultValue={visualizerDefaults.immersive.spectrumDelaySec}
@@ -2851,7 +2851,7 @@ export function SidebarOptionsPanel({
                 max={SPECTRUM_GRAVITY_MAX}
                 step={10}
                 value={visualizer.immersive.spectrumGravity}
-                trackLabel="fall"
+                trackLabel="base fall"
                 tooltipLabel="Bar fall speed (dB/s²)"
                 ariaLabel="Spectrum: how fast a bar falls, decibels per second squared"
                 defaultValue={visualizerDefaults.immersive.spectrumGravity}
@@ -2864,7 +2864,7 @@ export function SidebarOptionsPanel({
                 max={SPECTRUM_DELAY_MAX_SEC}
                 step={0.01}
                 value={visualizer.immersive.crestDelaySec}
-                trackLabel="crest"
+                trackLabel="crest delay"
                 tooltipLabel="Extra crest hang time (ms)"
                 ariaLabel="Spectrum: how much longer a crest hangs than its bar, milliseconds"
                 defaultValue={visualizerDefaults.immersive.crestDelaySec}
@@ -2877,7 +2877,7 @@ export function SidebarOptionsPanel({
                 max={CREST_FALL_REDUCTION_MAX}
                 step={0.01}
                 value={visualizer.immersive.crestFallReduction}
-                trackLabel="slower"
+                trackLabel="crest fall"
                 tooltipLabel="Slower crest fall (%)"
                 ariaLabel="Spectrum: how much slower a crest falls than its bar, percent"
                 defaultValue={visualizerDefaults.immersive.crestFallReduction}
