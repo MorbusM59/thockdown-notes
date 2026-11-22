@@ -295,7 +295,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 4, flairStrength: 2, glareMinStacks: 3, flairMinSources: 2, swayRange: 360, swayCycle: 8, swaySpread: 0.5, swayPush: 60, swayReturn: 0.4, swayDrift: -90, poleOrbit: 0.04, poleOrbitCycle: 32, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 4, flairStrength: 2, glareMinStacks: 3, flairMinSources: 2, swayRange: 360, swayCycle: 8, swaySpread: 0.5, swayPush: 60, swayReturn: 0.4, swayDrift: -60, poleOrbit: 0.04, poleOrbitCycle: 32, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 export const BEAT_CONTRAST_MAX = 0.95
 /**
@@ -400,7 +400,6 @@ export const DEFAULT_VISUALIZER: VisualizerSettings = {
   },
   immersive: {
     ...DEFAULT_VISUALIZER_IMMERSIVE,
-    swayRange: 0, swayPush: -15, swayReturn: 1, swayDrift: 50,
     waveBoxes: 72, waveBeats: 4, waveTurn: 4, waveShape: -0.5, waveFallSec: 1.5,
     waveMix: { thump: 0, pierce: 1, tick: 0 },
     glazeMix: { thump: 0, pierce: 1, tick: 0 },
