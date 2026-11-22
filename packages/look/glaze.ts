@@ -41,8 +41,8 @@ export const GLAZE_RADIAL_COUNT_MAX = 4;
 export const GLAZE_RAY_CURVATURE_MAX = 1;
 /** The nearest the vanishing point comes, as a multiple of the centre's distance to the screen's edge in its direction. */
 export const GLAZE_RAY_NEAREST = 1.2;
-export const GLAZE_RAY_DENSITY_MIN = 0.25;
-export const GLAZE_RAY_DENSITY_MAX = 4;
+export const GLAZE_RAY_DENSITY_MIN = 0.01;
+export const GLAZE_RAY_DENSITY_MAX = 2;
 
 /**
  * The glare's stripes on a screen of `widthPx` x `heightPx`, as a fan

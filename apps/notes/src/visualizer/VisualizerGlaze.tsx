@@ -19,9 +19,9 @@
  * moved by `parallaxSway.ts`'s `applySway`, which the scene's loop calls.
  */
 
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { glazeRayAngle, visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
-import { glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
+import { arcminToPx, glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
 import { subscribeMusicTempo } from '../sound/musicBeat'
@@ -99,8 +99,18 @@ function SwayLayer({ layer, overscan, opacity, angleDeg }: { layer: Layer; overs
 
 export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; immersive: VisualizerImmersive }) {
   // The widest the music ever carries the nearest layer, which no layer exceeds.
-  const overscan = swayOverscanPx(immersive.swayRangePx * BREATH_AMPLITUDE_MAX)
-  useEffect(() => setSwayRange(immersive.swayRangePx), [immersive.swayRangePx])
+  // The motion is set in arc minutes and drawn as the centre's travel in px,
+  // which depends on the screen's size (`arcminToPx`).
+  const [screen, setScreen] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }))
+  useEffect(() => {
+    const onResize = () => setScreen({ w: window.innerWidth, h: window.innerHeight })
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const toPx = (arcmin: number) => arcminToPx(arcmin, screen.w, screen.h)
+  const rangePx = toPx(immersive.swayRange)
+  const overscan = swayOverscanPx(rangePx * BREATH_AMPLITUDE_MAX)
+  useEffect(() => setSwayRange(rangePx), [rangePx])
   useEffect(() => setPoleOrbit(immersive.poleOrbit, immersive.poleOrbitRate), [immersive.poleOrbit, immersive.poleOrbitRate])
   // The orbit moves at the app's one tempo (`musicTempo.ts`).
   const orbiting = immersive.poleOrbit > 0
@@ -114,7 +124,9 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
       aligned = true
     })
   }, [orbiting])
-  useEffect(() => setSwayMotion(immersive.swayPush, immersive.swayReturn, immersive.swayDrift), [immersive.swayPush, immersive.swayReturn, immersive.swayDrift])
+  const pushPx = toPx(immersive.swayPush)
+  const driftPx = toPx(immersive.swayDrift)
+  useEffect(() => setSwayMotion(pushPx, immersive.swayReturn, driftPx), [pushPx, immersive.swayReturn, driftPx])
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides
     // straight stacks along the heading and stays parallel.

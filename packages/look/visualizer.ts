@@ -1,3 +1,4 @@
+import { GLAZE_RAY_NEAREST } from './glaze'
 /**
  * The visualizer: elements of the look that follow the playing music.
  * Independent BLOCKS, each following the trackers through its own mix with
@@ -158,19 +159,25 @@ export interface VisualizerPaneModes {
  * every linear stack and radial source of the layout's glaze, each drawn at
  * `glazeStrength` (in place of the layout's own linear and radial strengths),
  * a linear stack times its share under `glazeSpread` (`glazeLayerShare`), and
- * swaying as far as `swayRangePx` and `swaySpread` say.
+ * swaying as far as `swayRange` and `swaySpread` say.
+ *
+ * The glaze's MOTION (sway, push, drift) is an ANGLE, in arc minutes, so it
+ * does not depend on how tightly the rays are stacked: `arcminToPx` turns it
+ * into the travel of the screen's centre, as the rotation it is about the
+ * vanishing point at its nearest (`GLAZE_RAY_NEAREST` x half the screen's
+ * shorter side); parallel rays move by that same travel.
  */
 export interface VisualizerImmersive {
   glazeStrength: number
   /** -1 to 1, the linear stacks only: 0 draws every stack at full strength; -1 ramps from nothing at the farthest to full at the nearest; 1 the reverse. */
   glazeSpread: number
-  /** How far the nearest layer sways from rest, in px, at the music's usual level. */
-  swayRangePx: number
+  /** How far the nearest layer sways from rest, in arc minutes (`arcminToPx`), at the music's usual level. */
+  swayRange: number
   /** 0 to 1: at 0 every layer sways as far as the nearest; at 1 each sways half as far as the one in front of it. */
   swaySpread: number
   /**
    * -`SWAY_PUSH_MAX_PX` to `SWAY_PUSH_MAX_PX`: how far each snare hit pushes
-   * the linear glaze stacks along their gradient, in px for the nearest,
+   * the linear glaze stacks along their gradient, in arc minutes for the nearest,
    * signed: positive forward, negative in reverse, 0 not at all
    * (`parallaxSway.ts`). The
    * radial sources do not take it.
@@ -178,7 +185,7 @@ export interface VisualizerImmersive {
   swayPush: number
   /** 0 to 1: the share of each push the glaze slides back on the wave's fall; 0 keeps it all, 1 returns it fully. */
   swayReturn: number
-  /** -`SWAY_DRIFT_MAX_PX` to it: a steady drift of the linear stacks along their gradient, px a second for the nearest; 0 none. */
+  /** -`SWAY_DRIFT_MAX_PX` to it: a steady drift of the linear stacks along their gradient, arc minutes a second for the nearest; 0 none. */
   swayDrift: number
   /** 0 to `POLE_ORBIT_MAX`: the radius of the circle the glare's vanishing point travels round its resting place, as a share of that place's distance from the centre; 0 none. */
   poleOrbit: number
@@ -226,12 +233,17 @@ export interface VisualizerImmersive {
 }
 
 export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
-export const IMMERSIVE_SWAY_RANGE_MAX_PX = 200
-export const SWAY_DRIFT_MAX_PX = 200
+export const IMMERSIVE_SWAY_RANGE_MAX = 1200
+export const SWAY_DRIFT_MAX = 1200
 export const POLE_ORBIT_MAX = 0.1
 export const POLE_ORBIT_RATE_MIN = 0.001
 export const POLE_ORBIT_RATE_MAX = 0.25
-export const SWAY_PUSH_MAX_PX = 10
+export const SWAY_PUSH_MAX = 60
+
+/** An angle of the glaze's motion, in arc minutes, as the travel of the screen's centre in px (see `VisualizerImmersive`). */
+export function arcminToPx(arcmin: number, widthPx: number, heightPx: number): number {
+  return ((arcmin * Math.PI) / 10800) * GLAZE_RAY_NEAREST * (Math.min(widthPx, heightPx) / 2)
+}
 export const WAVE_BOXES_MIN = 2
 export const WAVE_BOXES_MAX = 256
 export const WAVE_BEATS_MIN = 1
@@ -254,7 +266,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRangePx: 40, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRange: 210, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -371,7 +383,7 @@ export const DEFAULT_VISUALIZER: VisualizerSettings = {
   },
   immersive: {
     ...DEFAULT_VISUALIZER_IMMERSIVE,
-    glazeStrength: 0.06, glazeSpread: -1, swayRangePx: 0, swayPush: -3, swayReturn: 1, swayDrift: 10,
+    glazeStrength: 0.06, glazeSpread: -1, swayRange: 0, swayPush: -15, swayReturn: 1, swayDrift: 50,
     waveBoxes: 72, waveBeats: 4, waveTurn: 4, waveShape: -0.5, waveFallSec: 1.5,
     waveMix: { thump: 0, pierce: 1, tick: 0 },
     glazeMix: { thump: 0, pierce: 1, tick: 0 },
@@ -568,11 +580,11 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
   return {
     glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
-    swayRangePx: Math.round(bounded(source.swayRangePx, 0, IMMERSIVE_SWAY_RANGE_MAX_PX, d.swayRangePx)),
+    swayRange: Math.round(bounded(source.swayRange, 0, IMMERSIVE_SWAY_RANGE_MAX, d.swayRange)),
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),
-    swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX_PX, SWAY_PUSH_MAX_PX, d.swayPush),
+    swayPush: bounded(source.swayPush, -SWAY_PUSH_MAX, SWAY_PUSH_MAX, d.swayPush),
     swayReturn: bounded(source.swayReturn, 0, 1, d.swayReturn),
-    swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX_PX, SWAY_DRIFT_MAX_PX, d.swayDrift),
+    swayDrift: bounded(source.swayDrift, -SWAY_DRIFT_MAX, SWAY_DRIFT_MAX, d.swayDrift),
     poleOrbit: bounded(source.poleOrbit, 0, POLE_ORBIT_MAX, d.poleOrbit),
     poleOrbitRate: bounded(source.poleOrbitRate, POLE_ORBIT_RATE_MIN, POLE_ORBIT_RATE_MAX, d.poleOrbitRate),
     waveBoxes: Math.round(bounded(source.waveBoxes, WAVE_BOXES_MIN, WAVE_BOXES_MAX, d.waveBoxes)),

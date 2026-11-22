@@ -51,16 +51,16 @@ import {
   FALL_MAX_SEC,
   FALL_MIN_SEC,
   IMMERSIVE_GLAZE_STRENGTH_MAX,
-  IMMERSIVE_SWAY_RANGE_MAX_PX,
+  IMMERSIVE_SWAY_RANGE_MAX,
   WAVE_BOXES_MAX,
   WAVE_BOXES_MIN,
   WAVE_BEATS_MAX,
   PULSE_SEC_MAX,
-  SWAY_DRIFT_MAX_PX,
+  SWAY_DRIFT_MAX,
   POLE_ORBIT_MAX,
   POLE_ORBIT_RATE_MIN,
   POLE_ORBIT_RATE_MAX,
-  SWAY_PUSH_MAX_PX,
+  SWAY_PUSH_MAX,
   PULSE_SEC_MIN,
   PULSE_SPEED_MAX,
   PULSE_SPEED_MIN,
@@ -1796,7 +1796,7 @@ export function SidebarOptionsPanel({
               id="glaze-ray-density"
               min={GLAZE_RAY_DENSITY_MIN}
               max={GLAZE_RAY_DENSITY_MAX}
-              step={0.05}
+              step={0.01}
               value={glazeSettings.rayDensity}
               trackLabel="rays"
               ariaLabel="How tightly the glare is stacked"
@@ -2553,15 +2553,15 @@ export function SidebarOptionsPanel({
               <CompactScrollbarSlider
                 id="visualizer-sway-range"
                 min={0}
-                max={IMMERSIVE_SWAY_RANGE_MAX_PX}
+                max={IMMERSIVE_SWAY_RANGE_MAX}
                 step={1}
-                value={visualizer.immersive.swayRangePx}
+                value={visualizer.immersive.swayRange}
                 trackLabel="range"
-                tooltipLabel="Sway range (px)"
-                ariaLabel="Immersive: how far the nearest glaze layer sways, in pixels"
-                defaultValue={visualizerDefaults.immersive.swayRangePx}
+                tooltipLabel="Sway range (arc minutes)"
+                ariaLabel="Immersive: how far the nearest glaze layer sways, in arc minutes"
+                defaultValue={visualizerDefaults.immersive.swayRange}
                 formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayRangePx: Math.round(value) } }))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayRange: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-spread"
@@ -2578,16 +2578,16 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-push"
-                min={-SWAY_PUSH_MAX_PX}
-                max={SWAY_PUSH_MAX_PX}
-                step={0.1}
+                min={-SWAY_PUSH_MAX}
+                max={SWAY_PUSH_MAX}
+                step={1}
                 value={visualizer.immersive.swayPush}
                 trackLabel="push"
-                tooltipLabel="Push per hit (px)"
-                ariaLabel="Immersive: how far each hit of the glaze mix pushes the glaze stripes, pixels"
+                tooltipLabel="Push per hit (arc minutes)"
+                ariaLabel="Immersive: how far each hit of the glaze mix pushes the glaze stripes, arc minutes"
                 defaultValue={visualizerDefaults.immersive.swayPush}
-                formatValue={(value) => value.toFixed(1)}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: Math.round(value * 10) / 10 } }))}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayPush: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-return"
@@ -2604,13 +2604,13 @@ export function SidebarOptionsPanel({
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-drift"
-                min={-SWAY_DRIFT_MAX_PX}
-                max={SWAY_DRIFT_MAX_PX}
+                min={-SWAY_DRIFT_MAX}
+                max={SWAY_DRIFT_MAX}
                 step={1}
                 value={visualizer.immersive.swayDrift}
                 trackLabel="drift"
-                tooltipLabel="A steady, endless drift of the glaze's light stripes across them, in px a second for the nearest: the centre holds them still, right drifts them one way and left the other"
-                ariaLabel="Immersive: steady drift of the glaze stripes, pixels per second, negative drifts the other way"
+                tooltipLabel="A steady, endless drift of the glaze's light stripes across them, in arc minutes a second for the nearest: the centre holds them still, right drifts them one way and left the other"
+                ariaLabel="Immersive: steady drift of the glaze stripes, arc minutes per second, negative drifts the other way"
                 defaultValue={visualizerDefaults.immersive.swayDrift}
                 formatValue={(value) => String(Math.round(value))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}

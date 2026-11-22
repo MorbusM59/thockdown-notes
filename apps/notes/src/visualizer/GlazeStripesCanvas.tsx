@@ -55,7 +55,7 @@ precision highp float;
 uniform sampler2D rows;         // one row per stack, premultiplied RGBA, 1 texel per CSS px
 uniform int count;
 uniform float period[${MAX_STACKS}];   // CSS px
-uniform float offset[${MAX_STACKS}];   // CSS px along the gradient (the sway)
+uniform float offset[${MAX_STACKS}];   // pattern px: the sway's travel of the screen's centre in CSS px times the density, so the motion does not depend on it
 uniform float share[${MAX_STACKS}];    // each stack's opacity
 uniform vec2 dir;               // across the stripes (glazeRayFan's 'across')
 uniform vec2 normal;            // towards the vanishing point
@@ -207,7 +207,7 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
     resize()
     // The sway hands each stack its offset once a frame; the redraw waits for the frame.
     const unregister = (sway ?? []).slice(0, used.length).map((entry, i) => entry
-      ? registerLinearSlide(entry.index, entry.depth, glazeRayAngle(glaze) - 90, (along) => { offsets[i] = along; request() })
+      ? registerLinearSlide(entry.index, entry.depth, glazeRayAngle(glaze) - 90, (along) => { offsets[i] = along * glaze.rayDensity; request() })
       : () => {})
     return () => {
       for (const off of unregister) off()

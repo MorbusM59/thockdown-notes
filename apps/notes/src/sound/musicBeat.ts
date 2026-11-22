@@ -563,7 +563,36 @@ function tick(frameTimeMs: number): void {
   frame = requestAnimationFrame(tick)
 }
 
+/**
+ * THE tempo while no music plays: its own frame loop, run only while a tempo
+ * reader is subscribed, the page is visible and the music is not playing,
+ * feeding the follower the wall clock and no beat, so every reader carries
+ * on at the 60 BPM fallback (one glide down from the music's tempo, and one
+ * glide back onto it when the music resumes, the change of clock being a
+ * jump the follower glides across).
+ */
+let idleFrame: number | null = null
+
+function idleTick(frameTimeMs: number): void {
+  idleFrame = null
+  if (counters.size === 0 || document.hidden || musicPlayerService.isPlaying) return
+  const { beats, beatsPerSec, count } = tempo(frameTimeMs / 1000, NaN, NaN)
+  for (const counter of counters) counter.listener(beats, beatsPerSec, count)
+  idleFrame = requestAnimationFrame(idleTick)
+}
+
+function startIdleTempo(): void {
+  if (idleFrame !== null || counters.size === 0 || document.hidden || musicPlayerService.isPlaying) return
+  idleFrame = requestAnimationFrame(idleTick)
+}
+
+function stopIdleTempo(): void {
+  if (idleFrame !== null) cancelAnimationFrame(idleFrame)
+  idleFrame = null
+}
+
 function start(): void {
+  startIdleTempo()
   if (frame !== null || subscriberCount() === 0 || !musicPlayerService.isPlaying || document.hidden) return
   frame = requestAnimationFrame(tick)
 }
@@ -571,6 +600,7 @@ function start(): void {
 function stop(): void {
   if (frame !== null) cancelAnimationFrame(frame)
   frame = null
+  startIdleTempo()
   lastNow = NaN
   listenerClock.reset()
   latestSemitoneScore = null
@@ -586,8 +616,10 @@ function stop(): void {
 }
 
 function onVisibility(): void {
-  if (document.hidden) stop()
-  else start()
+  if (document.hidden) {
+    stop()
+    stopIdleTempo()
+  } else start()
 }
 
 export interface MusicMixSubscription {
@@ -626,6 +658,7 @@ function removed(): void {
     return
   }
   stop()
+  stopIdleTempo()
   run++
   send({ type: 'dispose' })
   worker?.terminate()
@@ -704,7 +737,7 @@ export function subscribeMusicClock(flash: FlashClock, listener: BeatListener, l
  * 60 BPM while the beat map holds no beat, every change one glide of
  * `TEMPO_GLIDE_SEC` that lands on the new grid as it is heard. The count is
  * continuous, unlike the beat clock, which re-seats after a seek or a change
- * of section; a frame across a seek passes no beats. Nothing is called while the music is stopped.
+ * of section; a frame across a seek passes no beats. While no music plays it runs on at the 60 BPM fallback (`idleTick`).
  */
 export function subscribeMusicTempo(listener: (beats: number, beatsPerSec: number, count: number) => void): () => void {
   const counter: Counter = { listener }
