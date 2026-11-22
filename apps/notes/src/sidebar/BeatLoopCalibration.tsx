@@ -90,13 +90,16 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
     }
   }, [])
   const boxPx = Math.max(0, Math.round(size.height / ROWS))
-  // The delay's digits centred on the strip, as many boxes as it has, and the
-  // grid phased on them so each digit sits in a box whatever their count; the
-  // whole row centred vertically: the rows read half, whole, half.
+  // The grid is fixed by the strip alone, a line through its horizontal
+  // centre, so it never moves under the pointer as the value changes; the
+  // digits take as many boxes as they have, centred on that line, an odd
+  // count half a box to the right. The whole row is centred vertically: the
+  // rows read half, whole, half.
+  const centreX = Math.round(size.width / 2)
   const valueText = String(delayMs)
-  const valueLeft = Math.round(size.width / 2 - (valueText.length * boxPx) / 2)
+  const valueLeft = centreX - Math.floor(valueText.length / 2) * boxPx
   const valueTop = Math.round((size.height - boxPx) / 2)
-  const originX = boxPx > 0 ? valueLeft % boxPx : 0
+  const originX = boxPx > 0 ? centreX % boxPx : 0
   const originY = boxPx > 0 ? valueTop % boxPx : 0
   // The wheel over the strip moves the delay as it moves a slider: a notch a millisecond, ten with Shift, up raising it.
   useGracedWheel(stripRef, useCallback((event: WheelEvent) => {
