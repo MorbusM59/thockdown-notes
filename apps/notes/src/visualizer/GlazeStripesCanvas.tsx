@@ -41,7 +41,7 @@ export const STACK_GAIN = 1
 export const EDGE_SOFTNESS_PX = 0
 // -----------------------------------------------------------------------------
 
-export type ShaderStack = { stripes: GlazeStripe[]; periodPx: number; share: number }
+export type ShaderStack = { stripes: GlazeStripe[]; periodPx: number }
 /** Index and depth per stack (as `swayDepth` gives them) when the stacks sway; null for the still glaze. */
 export type StackSway = { index: number; depth: number } | null
 
@@ -56,7 +56,6 @@ uniform sampler2D rows;         // one row per stack, premultiplied RGBA, 1 texe
 uniform int count;
 uniform float period[${MAX_STACKS}];   // CSS px
 uniform float offset[${MAX_STACKS}];   // pattern px: the sway's travel of the screen's centre in CSS px times the density, so the motion does not depend on it
-uniform float share[${MAX_STACKS}];    // each stack's opacity
 uniform vec2 dir;               // across the stripes (glazeRayFan's 'across')
 uniform vec2 normal;            // towards the vanishing point
 uniform float k;                // curvature in 1/px; 0 = parallel
@@ -84,7 +83,7 @@ void main() {
   // Farthest (last) first, so the nearest ends on top.
   for (int i = ${MAX_STACKS - 1}; i >= 0; i--) {
     if (i >= count) continue;
-    vec4 c = rowAt(i, (k > 0.0 ? theta * turnScale : w * linearScale) - offset[i]) * share[i];
+    vec4 c = rowAt(i, (k > 0.0 ? theta * turnScale : w * linearScale) - offset[i]);
     acc = c + acc * (1.0 - c.a);
   }
   color = acc;
@@ -152,7 +151,6 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
     gl.uniform1i(u('count'), used.length)
     const pad = (values: number[]) => { const out = new Float32Array(MAX_STACKS); out.set(values); return out }
     gl.uniform1fv(u('period'), pad(used.map((s) => s.periodPx)))
-    gl.uniform1fv(u('share'), pad(used.map((s) => s.share)))
     const offsets = new Float32Array(MAX_STACKS)
 
     let sizeCss = { w: 0, h: 0 }

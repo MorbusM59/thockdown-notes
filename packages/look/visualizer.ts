@@ -159,7 +159,7 @@ export interface VisualizerPaneModes {
  * the layout's glaze with at least `glareMinStacks` linear stacks and
  * `flairMinSources` radial sources, the stacks drawn at `glareStrength` and
  * the sources at `flairStrength` times the layout's own strengths,
- * a linear stack times its share under `glazeSpread` (`glazeLayerShare`), and
+ * each linear stack sharing that strength by the layout's glare spread (`glazeLayerShare`), and
  * swaying as far as `swayRange` and `swaySpread` say.
  *
  * The glaze's MOTION (sway, push, drift) is an ANGLE, in arc minutes, so it
@@ -178,7 +178,6 @@ export interface VisualizerImmersive {
   /** The fewest radial sources drawn, 0 to 4: the layout's count when it has more. */
   flairMinSources: number
   /** -1 to 1, the linear stacks only: 0 draws every stack at full strength; -1 ramps from nothing at the farthest to full at the nearest; 1 the reverse. */
-  glazeSpread: number
   /** How far the nearest layer sways from rest, in arc minutes (`arcminToPx`), at the music's usual level. */
   swayRange: number
   /** Beats per cycle of the sway's largest wave, one of `CYCLE_BEATS` (the music's beats, `subscribeMusicTempo`, 60 BPM with no beat). */
@@ -295,19 +294,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 2, flairStrength: 2, glareMinStacks: 5, flairMinSources: 4, glazeSpread: 0, swayRange: 210, swayCycle: 32, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitCycle: 16, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
-
-/**
- * A swayed layer's share of the glaze strength, from its place in the stack
- * (`position`: 0 the farthest, 1 the nearest) and the spread. At 0 every layer
- * has all of it; towards -1 the share blends to `position` (nothing at the
- * back, all at the front); towards 1 to `1 - position` (the reverse).
- */
-export function glazeLayerShare(position: number, spread: number): number {
-  const ramp = spread < 0 ? position : 1 - position
-  const amount = Math.abs(spread)
-  return 1 - amount + amount * ramp
-}
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 2, flairStrength: 2, glareMinStacks: 5, flairMinSources: 4, swayRange: 210, swayCycle: 32, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitCycle: 16, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 export const BEAT_CONTRAST_MAX = 0.95
 /**
@@ -412,7 +399,7 @@ export const DEFAULT_VISUALIZER: VisualizerSettings = {
   },
   immersive: {
     ...DEFAULT_VISUALIZER_IMMERSIVE,
-    glazeSpread: -1, swayRange: 0, swayPush: -15, swayReturn: 1, swayDrift: 50,
+    swayRange: 0, swayPush: -15, swayReturn: 1, swayDrift: 50,
     waveBoxes: 72, waveBeats: 4, waveTurn: 4, waveShape: -0.5, waveFallSec: 1.5,
     waveMix: { thump: 0, pierce: 1, tick: 0 },
     glazeMix: { thump: 0, pierce: 1, tick: 0 },
@@ -611,7 +598,6 @@ function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMi
     flairStrength: bounded(source.flairStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.flairStrength),
     glareMinStacks: Math.round(bounded(source.glareMinStacks, 0, 5, d.glareMinStacks)),
     flairMinSources: Math.round(bounded(source.flairMinSources, 0, 4, d.flairMinSources)),
-    glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
     swayRange: Math.round(bounded(source.swayRange, 0, IMMERSIVE_SWAY_RANGE_MAX, d.swayRange)),
     swayCycle: CYCLE_BEATS[cycleBeatsIndex(bounded(source.swayCycle, 1, 256, d.swayCycle))],
     swaySpread: bounded(source.swaySpread, 0, 1, d.swaySpread),

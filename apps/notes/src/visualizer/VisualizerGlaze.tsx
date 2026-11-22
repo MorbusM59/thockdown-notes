@@ -3,11 +3,9 @@
  * the layout's linear stacks and radial sources at full count
  * (`visualizerGlazeSettings`), at the strength set under Options > Visualizer
  * > Immersive, each stack on an element of its own at its own depth, so they
- * can shift against each other. The glaze spread there gives each linear
- * stack its share of that strength by its place among the stacks
- * (`glazeLayerShare`), as the element's opacity, so a change of spread
- * re-draws no gradient; the sway range and its spread set how far each layer
- * travels (`swayDepth`). The radial sources move
+ * can shift against each other (the layout's glare spread is already in each
+ * stack's stripes, `buildLinearGlazeStacks`); the sway range and its spread
+ * set how far each layer travels (`swayDepth`). The radial sources move
  * as one, behind the stacks, or in front of them when the layout puts
  * radial above linear. Gloom and sheen stay with the ordinary glaze and do
  * not move.
@@ -21,7 +19,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { glazeRayAngle, visualizerGlazeSettings, type GlazeSettings } from '@thockdown/look/glaze'
-import { arcminToPx, glazeLayerShare, type VisualizerImmersive } from '@thockdown/look/visualizer'
+import { arcminToPx, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
 import { subscribeMusicTempo } from '../sound/musicBeat'
@@ -29,15 +27,8 @@ import { beatAlignedStart } from '../sound/musicTempo'
 import { canUseShaderGlaze } from './glazeShaderSupport'
 import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, advanceSway, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
-/**
- * `index` counts from the nearest layer; `linearPosition` places a linear
- * stack among the linear stacks alone (0 the farthest, 1 the nearest), and is
- * null for the radial sources, which the glaze spread does not touch: they
- * blend by colour-dodge and the stacks by luminosity, so sharing strength
- * between the two kinds would turn the picture brighter or darker rather
- * than deeper.
- */
-type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: number; stripes: GlazeStripe[]; depth: number; index: number; linearPosition: number | null }
+/** `index` counts from the nearest layer. */
+type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: number; stripes: GlazeStripe[]; depth: number; index: number }
 
 /**
  * The side a band turned to `angleDeg` needs to cover a w x h screen, both
@@ -62,7 +53,7 @@ function bandSide(angleDeg: number): string {
  * `angleDeg`, the glaze's heading, so moving it along the gradient is one
  * translateX (`parallaxSway.ts`). It cannot converge, so it stays parallel.
  */
-function SwayLayer({ layer, overscan, opacity, angleDeg }: { layer: Layer; overscan: number; opacity: number; angleDeg: number }) {
+function SwayLayer({ layer, overscan, angleDeg }: { layer: Layer; overscan: number; angleDeg: number }) {
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const element = ref.current
@@ -76,10 +67,9 @@ function SwayLayer({ layer, overscan, opacity, angleDeg }: { layer: Layer; overs
   // and turned to the stacks' angle; its sway across the stripes is
   // invisible, so it needs no overscan that way.
   const style: CSSProperties = layer.kind === 'radial'
-    ? { backgroundImage: layer.image, inset: -overscan, opacity }
+    ? { backgroundImage: layer.image, inset: -overscan }
     : {
       backgroundImage: layer.image,
-      opacity,
       inset: 'auto',
       left: '50%',
       top: '50%',
@@ -140,12 +130,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     const radialImages = buildRadialGlazeLayers(settings)
     const radial = radialImages.length > 0 ? [{ kind: 'radial' as const, image: radialImages.join(', '), periodPx: 0, stripes: [] }] : []
     const nearestFirst = [...linear, ...radial]
-    let linearIndex = 0
-    return nearestFirst.map((layer, index) => {
-      // A lone stack is the nearest, so it keeps its share at either end of the spread.
-      const linearPosition = layer.kind === 'linear' ? (linear.length > 1 ? 1 - linearIndex++ / (linear.length - 1) : 1) : null
-      return { ...layer, key: `${layer.kind}-${index}`, index, depth: swayDepth(index, immersive.swaySpread), linearPosition }
-    })
+    return nearestFirst.map((layer, index) => ({ ...layer, key: `${layer.kind}-${index}`, index, depth: swayDepth(index, immersive.swaySpread) }))
   }, [glaze, glareStrength, flairStrength, glareMinStacks, flairMinSources, immersive.swaySpread])
 
   // The linear stacks on the shader (GlazeStripesCanvas.tsx) where it can
@@ -157,10 +142,10 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     if (!shader) return null
     const linear = layers.filter((layer) => layer.kind === 'linear')
     return {
-      stacks: linear.map((layer) => ({ stripes: layer.stripes, periodPx: layer.periodPx, share: glazeLayerShare(layer.linearPosition ?? 1, immersive.glazeSpread) })),
+      stacks: linear.map((layer) => ({ stripes: layer.stripes, periodPx: layer.periodPx })),
       sway: linear.map((layer) => ({ index: layer.index, depth: layer.depth })),
     }
-  }, [shader, layers, immersive.glazeSpread])
+  }, [shader, layers])
 
   // Drawn farthest first, so the nearest is on top within its kind (the
   // kinds' own order is the stack's z-index rule, as in the ordinary glaze).
@@ -178,7 +163,6 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
             layer={layer}
             overscan={overscan}
             angleDeg={glazeRayAngle(glaze) - 90}
-            opacity={layer.linearPosition === null ? 1 : glazeLayerShare(layer.linearPosition, immersive.glazeSpread)}
           />
         ))}
       </div>

@@ -1566,7 +1566,25 @@ export function SidebarOptionsPanel({
           </div>
 
           <OptionsSubsectionLabel>Light</OptionsSubsectionLabel>
-          <div className="options-glaze-cell options-glaze-cell-span-3">
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-linear-opacity"
+              min={0}
+              max={GLAZE_LINEAR_OPACITY_MAX}
+              step={0.005}
+              value={glazeSettings.linearOpacity}
+              trackLabel="glare"
+              ariaLabel="Linear gradient stack opacity"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.linearOpacity}
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  linearOpacity: clamp(value, 0, GLAZE_LINEAR_OPACITY_MAX),
+                }))
+              }}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
             <CompactScrollbarSlider
               id="glaze-linear-stack-count"
               min={0}
@@ -1580,6 +1598,45 @@ export function SidebarOptionsPanel({
                 setGlazeSettings((current) => ({
                   ...current,
                   linearStackCount: clamp(Math.round(value), 0, 5),
+                }))
+              }}
+            />
+          </div>
+          <div className="options-glaze-cell options-glaze-cell-span-2">
+            <CompactScrollbarSlider
+              id="glaze-linear-spread"
+              min={-1}
+              max={1}
+              step={0.01}
+              value={glazeSettings.linearSpread}
+              trackLabel="spread"
+              tooltipLabel="How the glare is shared between its stacks by depth: the centre gives every stack all of it; left fades the farthest out and keeps the nearest, right the reverse"
+              ariaLabel="Glare spread across its stacks, negative favours the nearest"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.linearSpread}
+              formatValue={(value) => value.toFixed(2)}
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  linearSpread: clamp(value, -1, 1),
+                }))
+              }}
+            />
+          </div>
+
+          <div className="options-glaze-cell options-glaze-cell-span-3">
+            <CompactScrollbarSlider
+              id="glaze-radial-opacity"
+              min={0}
+              max={GLAZE_RADIAL_OPACITY_MAX}
+              step={0.005}
+              value={glazeSettings.radialOpacity}
+              trackLabel="flair"
+              ariaLabel="Radial gradient stack opacity"
+              defaultValue={DEFAULT_GLAZE_SETTINGS.radialOpacity}
+              onCommit={(value) => {
+                setGlazeSettings((current) => ({
+                  ...current,
+                  radialOpacity: clamp(value, 0, GLAZE_RADIAL_OPACITY_MAX),
                 }))
               }}
             />
@@ -1598,43 +1655,6 @@ export function SidebarOptionsPanel({
                 setGlazeSettings((current) => ({
                   ...current,
                   radialCount: clamp(Math.round(value), 0, 4),
-                }))
-              }}
-            />
-          </div>
-
-          <div className="options-glaze-cell options-glaze-cell-span-3">
-            <CompactScrollbarSlider
-              id="glaze-linear-opacity"
-              min={0}
-              max={GLAZE_LINEAR_OPACITY_MAX}
-              step={0.005}
-              value={glazeSettings.linearOpacity}
-              trackLabel="glare"
-              ariaLabel="Linear gradient stack opacity"
-              defaultValue={DEFAULT_GLAZE_SETTINGS.linearOpacity}
-              onCommit={(value) => {
-                setGlazeSettings((current) => ({
-                  ...current,
-                  linearOpacity: clamp(value, 0, GLAZE_LINEAR_OPACITY_MAX),
-                }))
-              }}
-            />
-          </div>
-          <div className="options-glaze-cell options-glaze-cell-span-3">
-            <CompactScrollbarSlider
-              id="glaze-radial-opacity"
-              min={0}
-              max={GLAZE_RADIAL_OPACITY_MAX}
-              step={0.005}
-              value={glazeSettings.radialOpacity}
-              trackLabel="flair"
-              ariaLabel="Radial gradient stack opacity"
-              defaultValue={DEFAULT_GLAZE_SETTINGS.radialOpacity}
-              onCommit={(value) => {
-                setGlazeSettings((current) => ({
-                  ...current,
-                  radialOpacity: clamp(value, 0, GLAZE_RADIAL_OPACITY_MAX),
                 }))
               }}
             />
@@ -2511,7 +2531,7 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Glaze</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[3, 2, 2, 2, 3, 2, 2]}>
+            <OptionsSliderRows rows={[3, 2, 2, 2, 2, 2, 2]}>
               {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, visualizerDefaults.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-flair-strength"
@@ -2566,19 +2586,6 @@ export function SidebarOptionsPanel({
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glareMinStacks: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
-                id="visualizer-glaze-spread"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={visualizer.immersive.glazeSpread}
-                trackLabel="spread"
-                tooltipLabel="How the visualizer's glaze strength is shared between its layers by depth: the centre gives every layer all of it; left fades the farthest out and keeps the nearest, right the reverse"
-                ariaLabel="Immersive: spread of the visualizer's glaze strength across its layers, negative favours the nearest"
-                defaultValue={visualizerDefaults.immersive.glazeSpread}
-                formatValue={(value) => value.toFixed(2)}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeSpread: value } }))}
-              />
-              <CompactScrollbarSlider
                 id="visualizer-sway-spread"
                 min={0}
                 max={1}
@@ -2590,6 +2597,19 @@ export function SidebarOptionsPanel({
                 defaultValue={visualizerDefaults.immersive.swaySpread}
                 formatValue={(value) => value.toFixed(2)}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swaySpread: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-sway-drift"
+                min={-SWAY_DRIFT_MAX}
+                max={SWAY_DRIFT_MAX}
+                step={1}
+                value={visualizer.immersive.swayDrift}
+                trackLabel="drift"
+                tooltipLabel="Drift (arc minutes per beat)"
+                ariaLabel="Immersive: steady drift of the glaze stripes, arc minutes per beat, negative drifts the other way"
+                defaultValue={visualizerDefaults.immersive.swayDrift}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-range"
@@ -2616,19 +2636,6 @@ export function SidebarOptionsPanel({
                 defaultValue={cycleBeatsIndex(visualizerDefaults.immersive.swayCycle)}
                 formatValue={(value) => String(CYCLE_BEATS[Math.round(value)])}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayCycle: CYCLE_BEATS[Math.round(value)] } }))}
-              />
-              <CompactScrollbarSlider
-                id="visualizer-sway-drift"
-                min={-SWAY_DRIFT_MAX}
-                max={SWAY_DRIFT_MAX}
-                step={1}
-                value={visualizer.immersive.swayDrift}
-                trackLabel="drift"
-                tooltipLabel="Drift (arc minutes per beat)"
-                ariaLabel="Immersive: steady drift of the glaze stripes, arc minutes per beat, negative drifts the other way"
-                defaultValue={visualizerDefaults.immersive.swayDrift}
-                formatValue={(value) => String(Math.round(value))}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, swayDrift: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-sway-push"

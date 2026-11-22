@@ -45,6 +45,7 @@ import {
   GLAZE_LINEAR_OPACITY_MAX,
   GLAZE_RADIAL_OPACITY_MAX,
   GLAZE_SHEEN_OPACITY_MAX,
+  glazeLayerShare,
   glazeRayFan,
   glazeRayScale,
   type GlazeRayFan,
@@ -241,6 +242,8 @@ export function buildLinearGlazeStacks(settings: GlazeSettings, angleDeg: number
 
   for (let layerIndex = 0; layerIndex < settings.linearStackCount; layerIndex += 1) {
     const phase = rand() * averageDistancePx
+    // Index 0 is the nearest stack, drawn on top.
+    const share = glazeLayerShare(settings.linearStackCount > 1 ? 1 - layerIndex / (settings.linearStackCount - 1) : 1, settings.linearSpread)
     const stops: string[] = []
     const stripes: GlazeStripe[] = []
     let cursor = 0
@@ -250,7 +253,7 @@ export function buildLinearGlazeStacks(settings: GlazeSettings, angleDeg: number
       const distance = Math.max(12, averageDistancePx * (0.55 + (rand() * 1.05)))
       const litWidth = Math.max(3, distance * lightRatio * (0.7 + (rand() * 0.65)))
       const clearWidth = Math.max(4, distance - litWidth)
-      const lightAlpha = clamp(settings.linearOpacity * (0.55 + (rand() * 0.9)), 0, GLAZE_LINEAR_OPACITY_MAX)
+      const lightAlpha = clamp(settings.linearOpacity * (0.55 + (rand() * 0.9)), 0, GLAZE_LINEAR_OPACITY_MAX) * share
       const warmJitter = Math.round((rand() * 22) - 11)
       const red = clamp(245 + warmJitter, 0, 255)
       const green = clamp(245 + warmJitter, 0, 255)

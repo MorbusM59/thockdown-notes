@@ -1,6 +1,12 @@
 export type GlazeSettings = {
   linearStackCount: number;
   linearOpacity: number;
+  /**
+   * How the glare's strength is shared among its stacks by depth, -1..1
+   * (`glazeLayerShare`): 0 gives every stack all of it, towards -1 the
+   * farthest fades out, towards 1 the nearest does.
+   */
+  linearSpread: number;
   linearSeed: number;
   radialCount: number;
   radialOpacity: number;
@@ -158,6 +164,7 @@ export function glazeRayScale(fan: GlazeRayFan): number {
 export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {
   linearStackCount: 3,
   linearOpacity: 0,
+  linearSpread: -0.5,
   linearSeed: 132147,
   radialCount: 2,
   radialOpacity: 0,
@@ -195,6 +202,7 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
   return {
     linearStackCount: clamp(Math.round(toFinite(source.linearStackCount, fallback.linearStackCount)), 0, GLAZE_LINEAR_STACK_MAX),
     linearOpacity: clamp(toFinite(source.linearOpacity, fallback.linearOpacity), 0, GLAZE_LINEAR_OPACITY_MAX),
+    linearSpread: clamp(toFinite(source.linearSpread, fallback.linearSpread), -1, 1),
     linearSeed: clamp(Math.round(toFinite(source.linearSeed, fallback.linearSeed)), 0, 1000000),
     radialCount: clamp(Math.round(toFinite(source.radialCount, fallback.radialCount)), 0, GLAZE_RADIAL_COUNT_MAX),
     radialOpacity: clamp(toFinite(source.radialOpacity, fallback.radialOpacity), 0, GLAZE_RADIAL_OPACITY_MAX),
@@ -229,4 +237,16 @@ export function visualizerGlazeSettings(
     linearOpacity: Math.min(1, settings.linearOpacity * tuning.glareStrength),
     radialOpacity: Math.min(1, settings.radialOpacity * tuning.flairStrength),
   };
+}
+
+/**
+ * A linear stack's share of the glare strength, from its place in the stack
+ * (`position`: 0 the farthest, 1 the nearest) and the spread. At 0 every stack
+ * has all of it; towards -1 the share blends to `position` (nothing at the
+ * back, all at the front); towards 1 to `1 - position` (the reverse).
+ */
+export function glazeLayerShare(position: number, spread: number): number {
+  const ramp = spread < 0 ? position : 1 - position
+  const amount = Math.abs(spread)
+  return 1 - amount + amount * ramp
 }
