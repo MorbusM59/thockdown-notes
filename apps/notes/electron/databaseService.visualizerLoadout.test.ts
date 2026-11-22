@@ -109,7 +109,7 @@ describe('DatabaseService visualizer loadout', () => {
     const migrated = (await new StateService(dataRoot).loadAppState()).menu?.visualizer
     expect(migrated?.edge).toEqual({ effect: -0.7, mix: { thump: 0.4, pierce: 0.6, tick: 0.2 }, shape: -0.8, fallSec: 0.15, spreadPx: 14, blurPx: 70 })
     expect(migrated?.trackers).toEqual(legacy.trackers)
-    expect(migrated?.immersive).toMatchObject({ glazeStrength: 0.15, waveBoxes: 40 })
+    expect(migrated?.immersive).toMatchObject({ waveBoxes: 40 })
 
     // Once: a later tuning is not overwritten by the layout's.
     const tuned = { ...DEFAULT_VISUALIZER, edge: { ...DEFAULT_VISUALIZER.edge, fallSec: 0.9 } }

@@ -2528,20 +2528,59 @@ export function SidebarOptionsPanel({
             <OptionsSubsectionLabel>Glaze</OptionsSubsectionLabel>
           </div>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[3, 3, 3, 2, 2]}>
+            <OptionsSliderRows rows={[3, 2, 2, 2, 3, 2, 2]}>
               {renderMixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, visualizerDefaults.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
-                id="visualizer-glaze-strength"
+                id="visualizer-flair-strength"
                 min={0}
                 max={IMMERSIVE_GLAZE_STRENGTH_MAX}
-                step={0.005}
-                value={visualizer.immersive.glazeStrength}
+                step={0.01}
+                value={visualizer.immersive.flairStrength}
+                trackLabel="flair"
+                tooltipLabel="Flair strength (% of the layout)"
+                ariaLabel="Immersive: flair strength, percent of the layout's"
+                defaultValue={visualizerDefaults.immersive.flairStrength}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, flairStrength: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-flair-sources"
+                min={0}
+                max={4}
+                step={1}
+                value={visualizer.immersive.flairMinSources}
+                trackLabel="sources"
+                tooltipLabel="Fewest flair sources"
+                ariaLabel="Immersive: fewest flair sources drawn"
+                defaultValue={visualizerDefaults.immersive.flairMinSources}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, flairMinSources: Math.round(value) } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-glare-strength"
+                min={0}
+                max={IMMERSIVE_GLAZE_STRENGTH_MAX}
+                step={0.01}
+                value={visualizer.immersive.glareStrength}
                 trackLabel="glare"
-                tooltipLabel="Glaze strength"
-                ariaLabel="Immersive: strength of the visualizer's glaze"
-                defaultValue={visualizerDefaults.immersive.glazeStrength}
-                formatValue={(value) => value.toFixed(3)}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeStrength: value } }))}
+                tooltipLabel="Glare strength (% of the layout)"
+                ariaLabel="Immersive: glare strength, percent of the layout's"
+                defaultValue={visualizerDefaults.immersive.glareStrength}
+                formatValue={(value) => String(Math.round(value * 100))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glareStrength: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-glare-stacks"
+                min={0}
+                max={5}
+                step={1}
+                value={visualizer.immersive.glareMinStacks}
+                trackLabel="stacks"
+                tooltipLabel="Fewest glare stacks"
+                ariaLabel="Immersive: fewest glare stacks drawn"
+                defaultValue={visualizerDefaults.immersive.glareMinStacks}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glareMinStacks: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-glaze-spread"

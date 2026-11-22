@@ -132,7 +132,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides
     // straight stacks along the heading and stays parallel.
-    const settings = visualizerGlazeSettings(glaze, immersive.glazeStrength)
+    const settings = visualizerGlazeSettings(glaze, immersive)
     // Nearest first: the top linear stack (each list is in stacking order,
     // the first drawn on top), unless radial sits above linear.
     const linear = buildLinearGlazeStacks(settings, 90).map(({ image, periodPx, stripes }) => ({ kind: 'linear' as const, image, periodPx, stripes }))
@@ -145,7 +145,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
       const linearPosition = layer.kind === 'linear' ? (linear.length > 1 ? 1 - linearIndex++ / (linear.length - 1) : 1) : null
       return { ...layer, key: `${layer.kind}-${index}`, index, depth: swayDepth(index, immersive.swaySpread), linearPosition }
     })
-  }, [glaze, immersive.glazeStrength, immersive.swaySpread])
+  }, [glaze, immersive.glareStrength, immersive.flairStrength, immersive.glareMinStacks, immersive.flairMinSources, immersive.swaySpread])
 
   // The linear stacks on the shader (GlazeStripesCanvas.tsx) where it can
   // run: one canvas instead of a promoted layer per stack, and composited

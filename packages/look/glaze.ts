@@ -215,17 +215,21 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
 }
 /**
  * The glaze the notes app's visualizer mode sways: the layout's own seeds
- * and shapes, with every linear stack and every radial source on, all at
- * `strength` (the visualizer's own setting, `VisualizerImmersive`), whatever
- * the layout's linear and radial strengths are. Gloom and sheen are not
+ * and shapes, at least `glareMinStacks` linear stacks and `flairMinSources`
+ * radial sources, and the layout's linear and radial strengths scaled by
+ * `glareStrength` and `flairStrength` (the visualizer's own settings,
+ * `VisualizerImmersive`), so up to four times the layout's own limits. Gloom and sheen are not
  * swayed and are left exactly as the layout has them.
  */
-export function visualizerGlazeSettings(settings: GlazeSettings, strength: number): GlazeSettings {
+export function visualizerGlazeSettings(
+  settings: GlazeSettings,
+  tuning: { glareStrength: number; flairStrength: number; glareMinStacks: number; flairMinSources: number },
+): GlazeSettings {
   return {
     ...settings,
-    linearStackCount: GLAZE_LINEAR_STACK_MAX,
-    radialCount: GLAZE_RADIAL_COUNT_MAX,
-    linearOpacity: strength,
-    radialOpacity: strength,
+    linearStackCount: Math.min(GLAZE_LINEAR_STACK_MAX, Math.max(settings.linearStackCount, tuning.glareMinStacks)),
+    radialCount: Math.min(GLAZE_RADIAL_COUNT_MAX, Math.max(settings.radialCount, tuning.flairMinSources)),
+    linearOpacity: Math.min(1, settings.linearOpacity * tuning.glareStrength),
+    radialOpacity: Math.min(1, settings.radialOpacity * tuning.flairStrength),
   };
 }

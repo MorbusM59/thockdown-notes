@@ -156,8 +156,9 @@ export interface VisualizerPaneModes {
 
 /**
  * The glaze the visualizer mode sways (apps/notes's VisualizerGlaze.tsx):
- * every linear stack and radial source of the layout's glaze, each drawn at
- * `glazeStrength` (in place of the layout's own linear and radial strengths),
+ * the layout's glaze with at least `glareMinStacks` linear stacks and
+ * `flairMinSources` radial sources, the stacks drawn at `glareStrength` and
+ * the sources at `flairStrength` times the layout's own strengths,
  * a linear stack times its share under `glazeSpread` (`glazeLayerShare`), and
  * swaying as far as `swayRange` and `swaySpread` say.
  *
@@ -168,7 +169,14 @@ export interface VisualizerPaneModes {
  * shorter side); parallel rays move by that same travel.
  */
 export interface VisualizerImmersive {
-  glazeStrength: number
+  /** The glare's (linear stacks') strength as a share of the layout's, 0 to 4. */
+  glareStrength: number
+  /** The flair's (radial sources') strength as a share of the layout's, 0 to 4. */
+  flairStrength: number
+  /** The fewest linear stacks drawn, 0 to 5: the layout's count when it has more. */
+  glareMinStacks: number
+  /** The fewest radial sources drawn, 0 to 4: the layout's count when it has more. */
+  flairMinSources: number
   /** -1 to 1, the linear stacks only: 0 draws every stack at full strength; -1 ramps from nothing at the farthest to full at the nearest; 1 the reverse. */
   glazeSpread: number
   /** How far the nearest layer sways from rest, in arc minutes (`arcminToPx`), at the music's usual level. */
@@ -247,7 +255,7 @@ export const SPECTRUM_GRAVITY_MIN = 10
 export const SPECTRUM_GRAVITY_MAX = 1000
 export const CREST_FALL_REDUCTION_MAX = 0.95
 
-export const IMMERSIVE_GLAZE_STRENGTH_MAX = 0.2
+export const IMMERSIVE_GLAZE_STRENGTH_MAX = 4
 export const IMMERSIVE_SWAY_RANGE_MAX = 1200
 export const SWAY_DRIFT_MAX = 1200
 export const POLE_ORBIT_MAX = 0.1
@@ -283,7 +291,7 @@ export function waveTertiaryBeats(waveTurn: number): number | null {
   return Math.sign(waveTurn) * WAVE_TURN_BEATS[Math.abs(waveTurn) - 1]
 }
 /** The base every layout's immersive block is built from; neither side's default as it stands (`defaultVisualizer`). */
-export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glazeStrength: 0.1, glazeSpread: 0, swayRange: 210, swayCycle: 0.03125, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
+export const DEFAULT_VISUALIZER_IMMERSIVE: VisualizerImmersive = { glareStrength: 2, flairStrength: 2, glareMinStacks: 5, flairMinSources: 4, glazeSpread: 0, swayRange: 210, swayCycle: 0.03125, swaySpread: 0.5, swayPush: 0, swayReturn: 1, swayDrift: 0, poleOrbit: 0, poleOrbitRate: 0.0625, waveBoxes: 128, waveBeats: 4, waveTurn: 0, waveShape: 0, waveFallSec: 0.25, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, pulseSoftness: 1, pulseBoost: 1, cutoutRound: 0, spectrumDelaySec: 0, spectrumGravity: 120, crestDelaySec: 0.7, crestFallReduction: 0, waveMix: { thump: 0, pierce: 1, tick: 0 }, glazeMix: { thump: 0, pierce: 1, tick: 0 }, pulseMix: { thump: 1, pierce: 0, tick: 0 } }
 
 /**
  * A swayed layer's share of the glaze strength, from its place in the stack
@@ -400,7 +408,7 @@ export const DEFAULT_VISUALIZER: VisualizerSettings = {
   },
   immersive: {
     ...DEFAULT_VISUALIZER_IMMERSIVE,
-    glazeStrength: 0.06, glazeSpread: -1, swayRange: 0, swayPush: -15, swayReturn: 1, swayDrift: 50,
+    glazeSpread: -1, swayRange: 0, swayPush: -15, swayReturn: 1, swayDrift: 50,
     waveBoxes: 72, waveBeats: 4, waveTurn: 4, waveShape: -0.5, waveFallSec: 1.5,
     waveMix: { thump: 0, pierce: 1, tick: 0 },
     glazeMix: { thump: 0, pierce: 1, tick: 0 },
@@ -595,7 +603,10 @@ function sanitizeEdgeChannel(input: unknown, d: VisualizerEdgeChannel): Visualiz
 function sanitizeImmersive(input: unknown, d: VisualizerImmersive, legacyPulseMix: VisualizerMix | null, legacyWaveMix: VisualizerMix | null): VisualizerImmersive {
   const source = (input && typeof input === 'object' ? input : {}) as Partial<Record<keyof VisualizerImmersive, unknown>>
   return {
-    glazeStrength: bounded(source.glazeStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glazeStrength),
+    glareStrength: bounded(source.glareStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.glareStrength),
+    flairStrength: bounded(source.flairStrength, 0, IMMERSIVE_GLAZE_STRENGTH_MAX, d.flairStrength),
+    glareMinStacks: Math.round(bounded(source.glareMinStacks, 0, 5, d.glareMinStacks)),
+    flairMinSources: Math.round(bounded(source.flairMinSources, 0, 4, d.flairMinSources)),
     glazeSpread: bounded(source.glazeSpread, -1, 1, d.glazeSpread),
     swayRange: Math.round(bounded(source.swayRange, 0, IMMERSIVE_SWAY_RANGE_MAX, d.swayRange)),
     swayCycle: bounded(source.swayCycle, SWAY_CYCLE_MIN, SWAY_CYCLE_MAX, d.swayCycle),
