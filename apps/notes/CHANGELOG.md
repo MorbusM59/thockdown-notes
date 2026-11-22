@@ -6,6 +6,33 @@ were collected from the GitHub releases of the time, tagged `v<version>`; later
 releases are tagged `notes-v<version>`.
 
 
+## 0.9.4 (2026-11-22)
+
+Alpha Release #28. A richer Visualizer glaze, a spectrum you can tune, volume that follows your ears, and a smarter double size.
+
+#### New features
+
+- **Converging glare.** The glare's rays can now converge on a vanishing point, placed with the new Position slider. In the Visualizer the vanishing point orbits in time with the music.
+- **Spectrum settings.** Options > Visualizer > Spectrum sets how long the bars and their crests hang before falling, how fast they fall, and how tall the spectrum is.
+- **Visualizer glaze sliders.** Glare and flair strength (as a share of the layout's own), the fewest glare stacks and flair sources, and the sway's push, return and drift.
+- **Beats per cycle.** The glaze's sway, the glare's orbit and the wave's turn are set in beats per cycle, so they stay in step with the music. Without music they keep time at 60 BPM.
+
+#### Changes
+
+- **Volume sliders** follow one perceptual curve everywhere: half the slider is 10 dB quieter. Factory presets sound as before.
+- **Glare spread** is now a layout setting (Options > Layouts > Glaze), shared by the app and the Visualizer.
+- **The glare is always above the flair.** The layer-order toggle is gone.
+- **Glaze motion** no longer depends on ray density.
+- **Double size** is limited only when the window is maximized or full screen and the display is too small for it. Double size then turns off and stays off until you turn it on again.
+- **Beat calibration loops** play alone: music and soundscape fade out while a loop plays.
+- **Factory layouts** updated: Sand, Sky, Gold, Bubblegum, Metal, Ocean and Ancient, with new border radii.
+
+#### Bug fixes
+
+- Fixed high CPU use caused by a render loop in the pill strips.
+- The Visualizer's centre solid costs less to draw.
+- Fixed the flair blacking out the Visualizer.
+
 ## 0.9.3 (2026-11-19)
 
 Alpha Release #27. A Visualizer button in the music bar, a new soundstage, tidier edges, and smoother switching.
