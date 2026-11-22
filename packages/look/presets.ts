@@ -1040,7 +1040,7 @@ export const DARK_FACTORY_PRESETS: UiLayoutLoadout[] = [
       radialOpacity: 0.1,
       radialSeed: 674661,
       rayCurvature: 0.5,
-      rayDensity: 0.6,
+      rayDensity: 0.25,
       rayPosition: 165,
       sheenOpacity: 0.3,
       sheenPosition: 0.095,
