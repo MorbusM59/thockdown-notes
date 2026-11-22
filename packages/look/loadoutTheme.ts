@@ -279,11 +279,12 @@ export function buildLinearGlazeStacks(settings: GlazeSettings, angleDeg: number
  * pattern): parallel, a linear gradient across the fan with the stops
  * tightened by the density; converging, a conic gradient around the
  * vanishing point, starting from the direction back to the centre, the
- * pattern's px turned into degrees by `glazeRayScale`.
+ * pattern's px turned into degrees by `glazeRayScale`. The repeat need not
+ * close a turn: its seam lies off screen (`glazeRayScale`).
  */
 function fannedStackImage(stripes: GlazeStripe[], periodPx: number, fan: GlazeRayFan): string {
   const parallel = fan.k === 0
-  const unitPerPx = parallel ? 1 / fan.density : 180 / (Math.PI * glazeRayScale(fan, periodPx))
+  const unitPerPx = parallel ? 1 / fan.density : 180 / (Math.PI * glazeRayScale(fan))
   const unit = parallel ? 'px' : 'deg'
   const at = (px: number) => `${(px * unitPerPx).toFixed(3)}${unit}`
   const stops: string[] = []

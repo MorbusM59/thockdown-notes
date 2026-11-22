@@ -63,7 +63,12 @@ export type GlazeRayFan = {
   density: number;
 };
 
-export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: number): GlazeRayFan {
+/**
+ * `orbit` is the share of its distance the point may travel round its
+ * resting place (`orbitGlazeRayFan`); the resting place is pushed out by it,
+ * so the orbit's nearest point keeps the margin along the heading.
+ */
+export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: number, orbit = 0): GlazeRayFan {
   const radians = (settings.rayAngle * Math.PI) / 180;
   const normal = { x: Math.sin(radians), y: -Math.cos(radians) };
   // The centre's distance to the screen's edge along `normal`.
@@ -72,7 +77,7 @@ export function glazeRayFan(settings: GlazeSettings, widthPx: number, heightPx: 
     Math.abs(normal.y) > 1e-9 ? heightPx / 2 / Math.abs(normal.y) : Infinity,
   );
   return {
-    k: settings.rayCurvature / (GLAZE_RAY_NEAREST * edgePx),
+    k: (settings.rayCurvature * (1 - orbit)) / (GLAZE_RAY_NEAREST * edgePx),
     normal,
     across: { x: normal.y, y: -normal.x },
     acrossDeg: settings.rayAngle - 90,
@@ -98,14 +103,15 @@ export function orbitGlazeRayFan(fan: GlazeRayFan, orbit: number, phase: number)
 }
 
 /**
- * Pattern px per radian around the point, for a stack of `periodPx`: the
- * fan's density / k, rounded so one turn holds the period a whole number of
- * times (the seam at the far side of the point then falls on a period
- * boundary). Only meaningful when k > 0.
+ * Pattern px per radian around the point: the fan's density / k, so a ray
+ * is as wide at the centre as the parallel stripe. A turn need not hold a
+ * whole number of periods: the seam at the atan's +-pi runs from the point
+ * directly away from the centre, and with the point outside the screen
+ * (`GLAZE_RAY_NEAREST` > 1) and the screen convex around the centre, that
+ * ray never crosses it. Only meaningful when k > 0.
  */
-export function glazeRayScale(fan: GlazeRayFan, periodPx: number): number {
-  const repeats = Math.max(1, Math.round((2 * Math.PI * fan.density) / (fan.k * periodPx)));
-  return (repeats * periodPx) / (2 * Math.PI);
+export function glazeRayScale(fan: GlazeRayFan): number {
+  return fan.density / fan.k;
 }
 
 export const DEFAULT_GLAZE_SETTINGS: GlazeSettings = {

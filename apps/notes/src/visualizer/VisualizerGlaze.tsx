@@ -38,33 +38,38 @@ import { BREATH_AMPLITUDE_MAX, registerSwayLayer, setPoleOrbit, setSwayMotion, s
 type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: number; stripes: GlazeStripe[]; depth: number; index: number; linearPosition: number | null }
 
 /**
- * The angle the ordinary glaze draws its linear stacks at. Here each stack's
- * gradient is drawn along its element's own x axis (90deg) and the element is
- * turned to this angle, so moving it along the gradient is one translateX
- * (`parallaxSway.ts`).
- */
-const LINEAR_ANGLE_DEG = 45
-/**
- * The side a band turned 45deg needs to cover a w x h screen, both along and
- * across its stripes: the screen's extent projected onto a 45deg axis,
- * (w + h) / sqrt(2), plus a pixel each side for rounding. Not 1.415 x vmax,
+ * The side a band turned to `angleDeg` needs to cover a w x h screen, both
+ * along and across its stripes: at most w x m + h x m with m the larger of
+ * |cos| and |sin|, which at 45deg is the screen's extent projected onto a
+ * 45deg axis, (w + h) / sqrt(2), plus a pixel each side for rounding. Not 1.415 x vmax,
  * which this was: that is the diagonal of a SQUARE screen and oversized a
  * 16:9 band by 28% each way. Each stack is promoted (it moves by transform
  * alone) and rasterized whole, five of them at full count, so the band's area
  * is the visualizer's largest tile-memory cost and exceeding the
  * compositor's budget left tiles undrawn.
  */
-const BAND_SIDE = 'calc((100vw + 100vh) * 0.70711 + 2px)'
+function bandSide(angleDeg: number): string {
+  const radians = (angleDeg * Math.PI) / 180
+  const m = Math.max(Math.abs(Math.cos(radians)), Math.abs(Math.sin(radians)))
+  return `calc((100vw + 100vh) * ${m.toFixed(5)} + 2px)`
+}
 
-function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: number; opacity: number }) {
+/**
+ * A CSS stack (the fallback where WebGL2 is unavailable): its gradient drawn
+ * along its element's own x axis (90deg) and the element turned to
+ * `angleDeg`, the glaze's heading, so moving it along the gradient is one
+ * translateX (`parallaxSway.ts`). It cannot converge, so it stays parallel.
+ */
+function SwayLayer({ layer, overscan, opacity, angleDeg }: { layer: Layer; overscan: number; opacity: number; angleDeg: number }) {
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     const element = ref.current
     if (!element) return
-    return registerSwayLayer(element, layer.index, layer.depth, layer.kind === 'linear' ? { periodPx: layer.periodPx, angleDeg: LINEAR_ANGLE_DEG } : null)
-  }, [layer.index, layer.depth, layer.kind, layer.periodPx])
+    return registerSwayLayer(element, layer.index, layer.depth, layer.kind === 'linear' ? { periodPx: layer.periodPx, angleDeg } : null)
+  }, [layer.index, layer.depth, layer.kind, layer.periodPx, angleDeg])
+  const side = bandSide(angleDeg)
   // A radial layer reaches past the screen by the sway's overscan. A linear
-  // stack is a band as tall as BAND_SIDE and longer than it by
+  // stack is a band as tall as `side` and longer than it by
   // one period (half each end, what wrapping its position needs), centred
   // and turned to the stacks' angle; its sway across the stripes is
   // invisible, so it needs no overscan that way.
@@ -76,10 +81,10 @@ function SwayLayer({ layer, overscan, opacity }: { layer: Layer; overscan: numbe
       inset: 'auto',
       left: '50%',
       top: '50%',
-      width: `calc(${BAND_SIDE} + ${layer.periodPx}px)`,
-      height: BAND_SIDE,
+      width: `calc(${side} + ${layer.periodPx}px)`,
+      height: side,
       translate: '-50% -50%',
-      rotate: `${LINEAR_ANGLE_DEG - 90}deg`,
+      rotate: `${angleDeg - 90}deg`,
     }
   return (
     <div
@@ -98,7 +103,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
   useEffect(() => setSwayMotion(immersive.swayPush, immersive.swayReturn, immersive.swayDrift), [immersive.swayPush, immersive.swayReturn, immersive.swayDrift])
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides
-    // straight stacks at LINEAR_ANGLE_DEG and stays parallel.
+    // straight stacks along the heading and stays parallel.
     const settings = visualizerGlazeSettings(glaze, immersive.glazeStrength)
     // Nearest first: the top linear stack (each list is in stacking order,
     // the first drawn on top), unless radial sits above linear.
@@ -145,6 +150,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
           key={layer.key}
           layer={layer}
           overscan={overscan}
+          angleDeg={glaze.rayAngle - 90}
           opacity={layer.linearPosition === null ? 1 : glazeLayerShare(layer.linearPosition, immersive.glazeSpread)}
         />
       ))}
