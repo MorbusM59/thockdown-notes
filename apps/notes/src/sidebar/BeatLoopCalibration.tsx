@@ -19,8 +19,6 @@ const HOLD_TRAVEL_SEC = (BEAT_DELAY_MAX_MS - BEAT_DELAY_MIN_MS) / 100
 
 /** Boxes to the strip's height: half a row, a whole row and half a row. */
 const ROWS = 2
-/** The delay's boxes, centred on the middle row: room for -200. */
-const VALUE_BOXES = 4
 
 /** A fall as the visualizer's settings carry it (`VisualizerChannel`): its length and the shape of `pulseCurve`. */
 export interface LoopFall {
@@ -48,7 +46,7 @@ const EFFECTS = [
  * the device's delay by 1 ms (held, faster, on the app's hold curve), Up and
  * Down by 10 (the wheel over it as over a slider: a notch 1, with Shift 10),
  * until the effects land on the hits; Right draws later.
- * Pressing it again, Escape, or leaving Options stops it.
+ * Pressing it again or Escape stops it, and so does the strip leaving the screen by any route.
  */
 export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, fontPerBox }: {
   delayMs: number
@@ -77,16 +75,29 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
     if (!strip) return
     const observer = new ResizeObserver(() => setSize({ width: strip.clientWidth, height: strip.clientHeight }))
     observer.observe(strip)
-    return () => observer.disconnect()
+    // The loop plays only while the strip can be seen: a sound whose visuals
+    // are not on screen calibrates nothing. Not on screen covers every way it
+    // goes: its fold closed (a closed <details> renders no content), another
+    // fold or Options section opened, the sidebar switched or hidden, the
+    // strip scrolled out of view. So no close path has to remember to stop it.
+    const visibility = new IntersectionObserver((entries) => {
+      if (!entries[entries.length - 1].isIntersecting) setPlaying(null)
+    })
+    visibility.observe(strip)
+    return () => {
+      observer.disconnect()
+      visibility.disconnect()
+    }
   }, [])
   const boxPx = Math.max(0, Math.round(size.height / ROWS))
-  // Grid lines through the strip's horizontal centre, and the whole row centred
-  // vertically: the rows read half, whole, half.
-  const centreX = Math.round(size.width / 2)
+  // The delay's digits centred on the strip, as many boxes as it has, and the
+  // grid phased on them so each digit sits in a box whatever their count; the
+  // whole row centred vertically: the rows read half, whole, half.
+  const valueText = String(delayMs)
+  const valueLeft = Math.round(size.width / 2 - (valueText.length * boxPx) / 2)
   const valueTop = Math.round((size.height - boxPx) / 2)
-  const originX = boxPx > 0 ? centreX % boxPx : 0
+  const originX = boxPx > 0 ? valueLeft % boxPx : 0
   const originY = boxPx > 0 ? valueTop % boxPx : 0
-  const valueText = String(delayMs).padStart(VALUE_BOXES, ' ')
   // The wheel over the strip moves the delay as it moves a slider: a notch a millisecond, ten with Shift, up raising it.
   useGracedWheel(stripRef, useCallback((event: WheelEvent) => {
     const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
@@ -224,7 +235,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
               <span
                 key={index}
                 className="beat-loop-calibration-letter"
-                style={{ left: centreX + (index - VALUE_BOXES / 2) * boxPx, top: valueTop, width: boxPx, height: boxPx, lineHeight: `${boxPx}px`, fontFamily, fontSize: `${boxPx * fontPerBox}px` }}
+                style={{ left: valueLeft + index * boxPx, top: valueTop, width: boxPx, height: boxPx, lineHeight: `${boxPx}px`, fontFamily, fontSize: `${boxPx * fontPerBox}px` }}
               >
                 {char}
               </span>
