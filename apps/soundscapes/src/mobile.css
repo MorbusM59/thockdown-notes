@@ -71,6 +71,13 @@ body {
   padding-inline: calc(var(--spacing-large) + var(--spacing-regular) + 1px);
 }
 
+/* A shared panel that brings its own content element (the Songs tab's
+   MusicLibraryPanel, as on the desktop, where it is the whole panel) sits
+   inside the tab's: the inset is the tab's, taken once. */
+.mobile-app-shell .sidebar-options-content .sidebar-options-content {
+  padding: 0;
+}
+
 .mobile-app-shell .options-loadout-grid > * {
   aspect-ratio: 1;
   font-size: var(--mobile-button-icon-size);
@@ -188,31 +195,29 @@ body {
   gap: 6px;
 }
 
-/* The assigned button, split on its diagonal: the song set top left, the
-   soundscape bottom right, each mark centered in its half's corner. */
+/* The assigned button, split on the diagonal from its top right to its
+   bottom left: two half buttons glued together, the song set's mark in the
+   top-left half and the soundscape's in the bottom-right one, each at full
+   size, centered on the button and cut along the line. */
 .mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape.is-assigned {
   position: relative;
-  background-image: linear-gradient(to top right, transparent calc(50% - 0.5px), var(--color-text-40) 50%, transparent calc(50% + 0.5px));
+  background-image: linear-gradient(to bottom right, transparent calc(50% - 0.5px), var(--color-text-40) 50%, transparent calc(50% + 0.5px));
 }
 
 .mobile-schedule-assigned {
   position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 50%;
-  height: 50%;
-  font-size: calc(var(--mobile-button-icon-size) * 0.8);
 }
 
 .mobile-schedule-assigned.is-set {
-  top: 6%;
-  left: 6%;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
 .mobile-schedule-assigned.is-soundscape {
-  right: 6%;
-  bottom: 6%;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
 
 .mobile-schedule-row.is-off > :not(.mobile-schedule-soundscape, .mobile-schedule-start) {
