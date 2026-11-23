@@ -98,8 +98,9 @@ export type VisualizerSceneProps = {
   /**
    * How many screen pixels one of the page's CSS pixels covers when the host
    * draws the whole page at reduced resolution and scales it up (the phone's
-   * x n mode). The box, its font and the cutout are divided by it, so on
-   * screen the scene keeps the same composition at every scale. 1 when absent.
+   * x n mode). The box and its font are fitted to the screen as at x1 and
+   * kept in the page's pixels, so on screen they are n times larger and n
+   * times fewer fit; the cutout keeps its x1 size on screen. 1 when absent.
    */
   pixelScale?: number
   /** The empty scene's seed (EmptyStateScene.ts), whose tumble the cutout's solid takes; the solid itself names the music's EQ preset. */
@@ -190,7 +191,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
   const cutoutPx = EMPTY_SCENE_DIAMETER_PX / pixelScale
-  const { boxPx, fontSizePx } = fitVisualizerBox(width, height, readerBoxPx / pixelScale, readerFontSizePx / pixelScale, cutoutPx)
+  const { boxPx, fontSizePx } = fitVisualizerBox(width * pixelScale, height * pixelScale, readerBoxPx, readerFontSizePx, EMPTY_SCENE_DIAMETER_PX)
   const bevel = useBoxBevelImages(boxPx, boxPx)
   const bottomRowsAsked = useSyncExternalStore(subscribeSpectrumStripRows, readSpectrumStripRows)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, cutoutPx, bottomRowsAsked), [width, height, boxPx, cutoutPx, bottomRowsAsked])
