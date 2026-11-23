@@ -59,7 +59,8 @@
 // oversensitive. They still accumulate against the standing unit, which is
 // exactly the behavior a trackpad had before any of this.
 
-import { PIXELS_PER_WHEEL_UNIT } from '../editor/LayoutConstants'
+/** Pixels one wheel notch is worth before a device teaches otherwise (the editor's row height maths reads it as `PIXELS_PER_WHEEL_UNIT`). */
+export const PIXELS_PER_WHEEL_UNIT = 100
 
 /** The notch size assumed until a device demonstrates its own. */
 export const WHEEL_NOTCH_DEFAULT_PX = PIXELS_PER_WHEEL_UNIT

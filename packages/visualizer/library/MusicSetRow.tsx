@@ -2,7 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
 import { isFactoryMusicSet, PLAYLIST_SLOT_THEMES, type MusicSet, musicSetMarkOf } from '@thockdown/visualizer/shared/audioPlayer'
-import { isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
+import { isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 

@@ -10,7 +10,7 @@ import {
 } from '@thockdown/interaction/ScrollCurvePlan'
 import { buildEscapeHoldRotationPlan, pixelsPerSlotAt } from './escapeHoldRotationCurve'
 import { computeEscapeHoldPointAtSlot, escapeHoldRingHalfExtentPx } from './escapeHoldRingLayout'
-import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/visualizer/scroll/wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/interaction/wheelNotch'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { TYPING_SOUND_SAMPLES_PER_SET } from '../sound/typingSounds'
 import {
@@ -975,7 +975,7 @@ export function EscapeHoldPanel({
    *
    * WHETHER this event is a notch is not decided here:
    * `resolveWheelEventUnits` already answers that for the whole app
-   * (scroll/wheelNotch.ts), learning the device's real notch size instead of
+   * (packages/interaction/wheelNotch.ts), learning the device's real notch size instead of
    * assuming one, and returning 0 for a trackpad's sub-notch stream. A
    * second answer to that question here is how the two panes drifted apart
    * last time.

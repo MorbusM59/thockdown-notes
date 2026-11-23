@@ -8,10 +8,10 @@ import {
   soundscapePresets,
   type SoundscapePreferences,
 } from '@thockdown/soundscape/soundscape'
-import { SelectorRows } from './SelectorRows'
+import { SelectorRows } from '@thockdown/interaction/SelectorRows'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
-import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
+import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 
 /**
  * The sidebar's Soundscapes view: the package's view, its presets shown in a

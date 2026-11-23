@@ -424,7 +424,7 @@ export function AccordionSection({
         <summary
           ref={summaryRef}
           className={`sidebar-options-section-heading${marker !== undefined ? ' has-count' : ''}${headingClassName ? ` ${headingClassName}` : ''}`}
-          // A heading is a row whose marker may carry hover actions (apps/notes components/HoverActions.tsx).
+          // A heading is a row whose marker may carry hover actions (apps/notes packages/interaction/HoverActions.tsx).
           data-hover-host=""
           onClick={handleClick}
           data-secondary-press="action"

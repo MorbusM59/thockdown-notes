@@ -29,7 +29,7 @@ import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/f
 import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection } from '../src/shared/optionsSections';
-import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping } from '../src/shared/musicSetList';
+import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping } from '@thockdown/visualizer/packages/visualizer/shared/musicSetList';
 import { sanitizeSidebarSections } from '../src/shared/sidebarSections';
 import { sanitizeBoxBevel } from '@thockdown/look/boxBevel';
 import { DEFAULT_TEXTURE_MATERIALS, TEXTURE_SURFACES, type TextureColorHsva, type TextureMaterialSettings, type TextureMaterialsBySurface, type TextureSurfaceKey } from '@thockdown/look/textureTypes';

@@ -12,6 +12,6 @@ export const CELL_WIDTH_PX = 10;
  * Reported as "scrolling up only moves a line on every other notch"; it
  * applied to both directions. The handler now measures the notch instead of
  * assuming it, and this is only the starting guess. See
- * `resolveWheelNotchPx` in scroll/wheelNotch.ts.
+ * `resolveWheelNotchPx` in packages/interaction/wheelNotch.ts.
  */
-export const PIXELS_PER_WHEEL_UNIT = 100;
+export { PIXELS_PER_WHEEL_UNIT } from '@thockdown/interaction/wheelNotch';

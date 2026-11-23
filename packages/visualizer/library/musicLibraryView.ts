@@ -1,6 +1,6 @@
 import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import type { PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
-import { closeIconPick, readIconPick } from './iconPicker/iconPick'
+import { closeIconPick, readIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 
 /**
  * Which music set the MUSIC LIBRARY shows. The Music Library is the sidebar's

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
-import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/visualizer/scroll/wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/interaction/wheelNotch'
 
 /** How many rows a growing selector shows before it scrolls: three rows of six, eighteen sections. */
 const SELECTOR_VISIBLE_ROWS = 3
@@ -23,7 +23,7 @@ function edgeScrollIntervalMs(distance: number, pitch: number): number {
  * sets and the Soundscapes view's presets. It shows up to
  * `SELECTOR_VISIBLE_ROWS` whole rows; past that it scrolls ONE ROW PER WHEEL
  * NOTCH, whatever the notch's size (the escape ring's dial rule, through the
- * app's one notch resolver, `scroll/wheelNotch.ts`), and fades the outer third
+ * app's one notch resolver, `packages/interaction/wheelNotch.ts`), and fades the outer third
  * of the edge row on whichever side has rows out of sight.
  *
  * The rows are measured from the grid as laid out (its first cell's height

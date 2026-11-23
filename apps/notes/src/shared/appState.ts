@@ -1,6 +1,6 @@
 import type { KeystrokeSoundPreferences } from './keystrokeSounds';
 import type { OptionsSectionId } from './optionsSections';
-import type { MusicSetListGrouping } from './musicSetList';
+import type { MusicSetListGrouping } from '@thockdown/visualizer/packages/visualizer/shared/musicSetList';
 import type { SidebarSections } from './sidebarSections';
 import type { EqPoint } from '@thockdown/visualizer/shared/musicEqCurve';
 import type { SoundstagePreferences } from '@thockdown/visualizer/shared/soundstages';
@@ -49,7 +49,7 @@ export interface PersistedMenuState {
   optionsSearchQuery?: string;
   /** The options panel's selected section (shared/optionsSections.ts). */
   optionsSection?: OptionsSectionId;
-  /** How the Music Library groups a set's songs (shared/musicSetList.ts). */
+  /** How the Music Library groups a set's songs (packages/visualizer/shared/musicSetList.ts). */
   musicSetListGrouping?: MusicSetListGrouping;
   /** The music set the Music Library last showed; absent or gone, it shows the first set. */
   musicLibrarySlot?: number;

@@ -70,7 +70,7 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
 
   { section: 'find', action: 'click', button: 'right', label: "on Find icon: replace all" },
 
-  // components/HoverActions.tsx: every row action icon (archive, trash, close) is a short hold; a click does nothing.
+  // packages/interaction/HoverActions.tsx: every row action icon (archive, trash, close) is a short hold; a click does nothing.
   { section: 'category', action: 'hold', button: 'left', label: 'on a row icon: archive, trash, close' },
 
   { section: 'menu', action: 'wheel', label: 'turn dial' },

@@ -3,7 +3,7 @@
  * scrolls in whole rows: the edit view (CM6Editor.tsx) and the visualizer's
  * song list (visualizer/SongList.tsx). A surface hands over the one write it
  * knows how to make -- move by N rows, and say whether anything moved -- and
- * gets back the notch resolution (scroll/wheelNotch.ts), the reader's step
+ * gets back the notch resolution (packages/interaction/wheelNotch.ts), the reader's step
  * (scroll/wheelStep.ts) and the spin-to-keep-scrolling coast
  * (scroll/wheelSpin.ts) exactly as the edit view has them, so a wheel feels
  * the same wherever it turns rows. Per instance: two surfaces are two
@@ -13,7 +13,7 @@
 import { CONTINUOUS_SCROLL_APEX_SPEED_MULTIPLIER, resolveApexSpeedPxPerSecFromCurrentParams } from '@thockdown/interaction/ScrollCurvePlan'
 import { installTouchSwipe } from '@thockdown/interaction/touchScroll'
 import { beginFingerPan, moveFingerPan, releaseFingerPan } from './fingerPan'
-import { createWheelNotchState, resolveWheelEventUnits, type WheelNotchState } from './wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits, type WheelNotchState } from '@thockdown/interaction/wheelNotch'
 import { getWheelStepRows } from './wheelStep'
 import {
   cancelWheelSpin,
@@ -128,7 +128,7 @@ export function createRowWheel({ scrollRows, isBlocked, trace = null }: RowWheel
     if (event.deltaY === 0) return;
     event.preventDefault();
 
-    // How many notches (scroll/wheelNotch.ts, shared with the render view
+    // How many notches (packages/interaction/wheelNotch.ts, shared with the render view
     // so the same gesture reads the same way in both panes) times what the
     // reader has said a notch is worth (scroll/wheelStep.ts).
     const notches = resolveWheelEventUnits(event, wheelNotchState, performance.now());

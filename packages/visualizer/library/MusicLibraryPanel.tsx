@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
-import { TextButton } from '../components/TextButton'
+import { TextButton } from '@thockdown/interaction/TextButton'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
-} from '../shared/musicSetList'
+} from '@thockdown/visualizer/packages/visualizer/shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { pressMusicSet } from '@thockdown/visualizer/sound/setPress'
-import { HoverActions } from '../components/HoverActions'
+import { HoverActions } from '@thockdown/interaction/HoverActions'
 import { MusicSetRow, SetMark } from './MusicSetRow'
-import { SelectorRows } from './SelectorRows'
+import { SelectorRows } from '@thockdown/interaction/SelectorRows'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
-import { closeIconPick } from './iconPicker/iconPick'
+import { closeIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 
@@ -117,7 +117,7 @@ function useOpenMusicSet(): MusicSet | undefined {
 }
 
 /**
- * The MUSIC LIBRARY, the sidebar's Songs view (`shared/musicSetList.ts`), in
+ * The MUSIC LIBRARY, the sidebar's Songs view (`packages/visualizer/shared/musicSetList.ts`), in
  * the options panel's own structure. The selector bar holds the sets, as the
  * view's sections; each folder or artist of the open set is a subsection and
  * each file type or album a divider; a song is a row of the curve editor's

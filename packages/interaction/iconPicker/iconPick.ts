@@ -1,4 +1,3 @@
-import type { PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 
 /**
  * The ICON PICKER: while it is open for an entry (a music set, a soundscape, a soundstage, a keystroke sound, a flashing preset, a visualizer preset, a layout, a dictionary),
@@ -13,7 +12,7 @@ import type { PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
  * filtered exactly as it was, with nothing saved and restored.
  */
 export type IconPickTarget =
-  | { kind: 'musicSet'; slot: PlaylistSlot }
+  | { kind: 'musicSet'; slot: number }
   | { kind: 'soundscape'; id: string }
   | { kind: 'soundstage'; id: string }
   | { kind: 'keystrokeSound'; id: string }

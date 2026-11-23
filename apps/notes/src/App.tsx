@@ -177,15 +177,15 @@ import { useBeatFeedback } from '@thockdown/visualizer/beat/useBeatFeedback'
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId, type PresetSubsectionId } from './shared/optionsSections'
-import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
-import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './sidebar/musicLibraryView'
-import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from './sidebar/MusicLibraryPanel'
+import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from '@thockdown/visualizer/packages/visualizer/shared/musicSetList'
+import { addDroppedFilesToMusicLibrary, readMusicLibrarySlot, registerMusicLibraryPresenter, selectMusicLibrarySet, subscribeMusicLibrarySlot } from '@thockdown/visualizer/library/musicLibraryView'
+import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { DictionaryDock, DictionaryIconPicker, DictionaryPanel } from './sidebar/DictionaryPanel'
 import { closeDictionary, readOpenDictionary, registerDictionaryPresenter, subscribeOpenDictionary } from './sidebar/dictionaryView'
 import { readDictionaries, subscribeDictionaries } from './spellCheck/dictionaryStore'
 import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
-import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from './sidebar/iconPicker/iconPick'
+import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { FieldActionButton } from './components/FieldActionButton'
 import { Pager } from './components/Pager'
 import { pagerFigure } from './shared/pagerFigure'
@@ -330,7 +330,7 @@ import { useTextureSurface } from './textures/useTextureSurface'
 import { prepareLookTextures, TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE } from './textures/textureStore'
 import { useTintedTexture } from './textures/useTintedTexture'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
-import { HoverActions, type HoverAction } from './components/HoverActions'
+import { HoverActions, type HoverAction } from '@thockdown/interaction/HoverActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
 import { ImageLibraryList } from './imageLibrary/ImageLibraryList'
 import { CategoryTree, type CategoryTreeFolds } from './components/CategoryTree'
@@ -1000,7 +1000,7 @@ type NoteRowActions = {
 }
 
 /**
- * A note row's hover actions (components/HoverActions.tsx), by the note's
+ * A note row's hover actions (packages/interaction/HoverActions.tsx), by the note's
  * state. A note from a file is saved or closed; a trashed note is restored,
  * archived or deleted for good; an archived one restored or trashed; any
  * other archived or trashed. Chapters are archived and trashed from the
@@ -6648,7 +6648,7 @@ ${markdownHtml}
 
   const isFindMode = sidebarMode === 'find'
   const isSongsSearchMode = sidebarMode === 'songs'
-  // While an entry's icon is being picked (sidebar/iconPicker/iconPick.ts),
+  // While an entry's icon is being picked (packages/interaction/iconPicker/iconPick.ts),
   // its view's filter field filters the icons, with a query of the picker's
   // own: the view's filter is left as it was and is simply back when the
   // picker closes.

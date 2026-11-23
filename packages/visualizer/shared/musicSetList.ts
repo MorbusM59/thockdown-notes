@@ -2,7 +2,7 @@ import { createPoolFilterMatcher, songAlbumText, songArtistText, songListTitleTe
 
 /**
  * The SET LIST: one music set's songs, as the Music Library shows them in the
- * sidebar (`sidebar/MusicLibraryPanel.tsx`), grouped one of two ways.
+ * sidebar (`packages/visualizer/library/MusicLibraryPanel.tsx`), grouped one of two ways.
  * By FOLDER, each folder is a subsection named by its last folder level and
  * divided by file type; by ARTIST, each artist is a subsection divided by
  * album. Songs are alphabetical inside a divider. Kept free of the DOM so the

@@ -22,7 +22,7 @@ import {
 } from '@thockdown/interaction/presetList'
 
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
-import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
+import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 
 /** The icon picker target kinds whose entries are a PRESET LIST in Options. */
 export type PresetPickKind = 'soundstage' | 'keystrokeSound' | 'flashing' | 'visualizer'

@@ -3,14 +3,14 @@ import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } fr
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
-import { HoverActions } from '../components/HoverActions'
+import { HoverActions } from '@thockdown/interaction/HoverActions'
 import { DEFAULT_DICTIONARY_ICON, USER_DICTIONARY_ICON, type SpellCheckDictionary } from '../shared/spellCheck'
 import { groupDictionaryWords } from '../shared/dictionaryWordList'
 import {
   addDictionaryText, installDictionaries, loadDictionaryWords, readDictionaries, removeDictionaryWords,
   renameDictionary, resetDictionary, setDictionaryIcon, subscribeDictionaries,
 } from '../spellCheck/dictionaryStore'
-import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
+import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { closeDictionary, openDictionary, readOpenDictionary, subscribeOpenDictionary } from './dictionaryView'
 
 /** The dictionary the sidebar is open on (dictionaryView.ts), while it exists. */

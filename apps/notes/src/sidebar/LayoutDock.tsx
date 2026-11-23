@@ -7,7 +7,7 @@ import { idKind, type UiLoadoutApi, type UiLoadoutEntry, type UiLoadoutListResul
 import { factoryLayoutIcon } from '@thockdown/look/presets'
 
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
-import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
+import { closeIconPick, isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 
 /** Runs a layout action and applies whatever it leaves active (App.tsx's `changeLoadouts`). */
 type ChangeLoadouts = (action: (api: UiLoadoutApi) => Promise<UiLoadoutListResult>) => Promise<void>

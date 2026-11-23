@@ -1,4 +1,4 @@
-import { TextButton } from '../components/TextButton'
+import { TextButton } from '@thockdown/interaction/TextButton'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { ABOUT_LINKS, APP_VERSION, CREDITS } from './about'
 

@@ -4539,7 +4539,7 @@ export function CM6Editor({
     // Built for, and immediately decisive on, "scrolling up only produces a
     // line movement on every other wheel position": the deltas it printed
     // were 50px, against a handler that assumed 100 (see
-    // scroll/wheelNotch.ts). Kept, because the shape of that report --
+    // packages/interaction/wheelNotch.ts). Kept, because the shape of that report --
     // "scrolling feels wrong" -- has exactly one useful first question, what
     // the device is actually sending, and nothing else in the app can answer
     // it.

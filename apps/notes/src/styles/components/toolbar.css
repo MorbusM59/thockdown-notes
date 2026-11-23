@@ -484,7 +484,7 @@
 }
 
 
-/* A text button (components/TextButton.tsx): a micro button's height, its
+/* A text button (packages/interaction/TextButton.tsx): a micro button's height, its
    column's width, and a few words in place of an icon, cut with an ellipsis
    rather than wrapped when the column is too narrow. */
 .options-curve-button.text-button {
@@ -575,7 +575,7 @@
   box-shadow:   var(--box-shadow-inverted);
 }
 
-/* The Music Library (sidebar/MusicLibraryPanel.tsx): a song's name and its remove button. */
+/* The Music Library (packages/visualizer/library/MusicLibraryPanel.tsx): a song's name and its remove button. */
 .options-music-song-row {
   grid-template-columns: 1fr;
   /* A long set is thousands of rows; only those on screen are painted. */
@@ -629,7 +629,7 @@
   text-align: start;
 }
 
-/* A growing selector's window (sidebar/SelectorRows.tsx): whole rows, moved
+/* A growing selector's window (packages/interaction/SelectorRows.tsx): whole rows, moved
    by a row per notch, the outer third of an edge row faded where more rows
    lie beyond it. */
 .selector-rows {

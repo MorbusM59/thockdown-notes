@@ -47,7 +47,7 @@ thumb arithmetic in `packages/interaction/`):
   `scrollTrackHold.ts` for click-travels, hold-snaps.
 - **Not scrollers**: the escape ring and the growing section selectors (the
   Music Library's sets and the Soundscapes view's presets, both in
-  `sidebar/SelectorRows.tsx`: three rows shown, one row per notch, the edge
+  `packages/interaction/SelectorRows.tsx`: three rows shown, one row per notch, the edge
   row's outer third faded where rows lie beyond) step by notch DIRECTION
   (`wheelNotch.ts` only), because a notch there is one choice. The Soundscapes app's `PageScrollbar.tsx` is a touch page's only
   scroll, worked from its whole column, and shares the thumb arithmetic
@@ -338,7 +338,7 @@ any of them is a defect.
   for rather than what the device happened to send. It also makes the two
   panes answer a wheel the same way, which they visibly did not before.
 - **What counts as a nudge is decided identically**, by the one
-  `scroll/wheelNotch.ts` accumulator both panes learn the device on. The
+  `packages/interaction/wheelNotch.ts` accumulator both panes learn the device on. The
   same wheel on the same desk makes a nudge in both at the same moment, and
   a trackpad's sub-notch stream makes one in neither.
 - **The render view's coast is continuous, not stepped**
@@ -371,7 +371,7 @@ any of them is a defect.
   gesture already in flight; it applies to the next one. The auto-scroll
   threshold's off position is the exception, and stops a running coast at
   once -- switching a feature off is a request to stop now.
-- **A single notch is travelled, not jumped** (`apps/notes/src/scroll/wheelNotchTravel.ts`).
+- **A single notch is travelled, not jumped** (`packages/interaction/wheelNotchTravel.ts`).
   Owning the notch means nothing animates it any more, and an instantaneous
   write of several line heights is the one kind of motion the eye cannot
   follow at all. So a notch is played across time instead.

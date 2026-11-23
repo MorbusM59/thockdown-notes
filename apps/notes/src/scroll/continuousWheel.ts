@@ -27,7 +27,7 @@
 import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
 import { cancelSmoothScroll, isSmoothScrollActive } from '@thockdown/interaction/smoothScrollRegistry'
 import { clamp } from '@thockdown/interaction/clamp'
-import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/visualizer/scroll/wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/interaction/wheelNotch'
 import { getWheelStepLines } from '@thockdown/visualizer/scroll/wheelStep'
 import { appendWheelTrace, isWheelTraceOn } from './wheelTrace'
 import {

@@ -41,7 +41,7 @@ export interface UseNoteProtectionActionsOptions {
 /**
  * The note actions a sidebar row offers (archive, trash, restore, delete for
  * good, save and close for a note from a file), each carried out by a HOLD
- * on its icon (components/HoverActions.tsx), and the Trash section button's
+ * on its icon (packages/interaction/HoverActions.tsx), and the Trash section button's
  * hold that empties the trash. Nothing is primed: a hold is the decision.
  */
 export function useNoteProtectionActions({

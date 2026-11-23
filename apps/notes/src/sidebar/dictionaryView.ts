@@ -1,4 +1,4 @@
-import { closeIconPick, readIconPick } from './iconPicker/iconPick'
+import { closeIconPick, readIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 
 /**
  * Which dictionary the sidebar is open on, if any. A dictionary is opened
