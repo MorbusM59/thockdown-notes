@@ -10,8 +10,11 @@
  *   calendar chip tapped) or `none` (held). Turning the override off brings
  *   the saved days back; changing a day while it is on saves the override's
  *   days with that change (`toggleDay`).
- * - Only ACTIVE entries with a soundscape play, and where two overlap the
- *   one HIGHER in the list wins: the list's order is the priority.
+ * - An entry assigns a soundscape, a song set, or both: two CHANNELS. Only
+ *   ACTIVE entries play, and each channel is decided on its own: where two
+ *   entries that assign the same channel overlap, the one HIGHER in the list
+ *   wins it, and an entry that leaves a channel empty does not claim it. So
+ *   a song set scheduled over an all-night soundscape plays with it.
  *
  * This module is the only place those rules are written. The native
  * session, which must run the schedule with the app closed, is handed the
@@ -33,6 +36,8 @@ export interface ScheduleEntry {
   readonly id: string
   /** The soundscape it plays, or null when that soundscape was deleted. */
   presetId: string | null
+  /** The song set it plays (musicLibrary.ts's set slot), or null for none. */
+  setId: number | null
   active: boolean
   /** Minutes of the day, on the five-minute grid. */
   start: number
@@ -83,6 +88,7 @@ export function newEntry(presetId: string | null): ScheduleEntry {
   return {
     id: `entry-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     presetId,
+    setId: null,
     active: true,
     start: 0,
     stop: 0,
@@ -139,6 +145,7 @@ export function sanitizeSchedule(input: unknown, presets: readonly SoundscapePre
       return [{
         id: entry.id,
         presetId: typeof entry.presetId === 'string' && known.has(entry.presetId) ? entry.presetId : null,
+        setId: typeof entry.setId === 'number' && Number.isInteger(entry.setId) ? entry.setId : null,
         active: entry.active === true,
         start: isTime(entry.start) ? entry.start : 0,
         stop: isTime(entry.stop) ? entry.stop : 0,
@@ -156,12 +163,18 @@ function entryMinutes(entry: ScheduleEntry): number {
     : MINUTES_PER_DAY
 }
 
-/** The entry that plays at each minute of the week, by the rules above. */
-function weekOwners(schedule: Schedule): Array<ScheduleEntry | null> {
+/** A channel of the schedule: what an entry assigns to it, or null when it leaves it empty. */
+type Channel<K> = (entry: ScheduleEntry) => K | null
+
+const soundscapeChannel: Channel<string> = (entry) => entry.presetId
+const musicChannel: Channel<number> = (entry) => entry.setId
+
+/** The entry that owns `channel` at each minute of the week, by the rules above. */
+function weekOwners<K>(schedule: Schedule, channel: Channel<K>): Array<ScheduleEntry | null> {
   const owner: Array<ScheduleEntry | null> = Array.from({ length: MINUTES_PER_WEEK }, () => null)
   // Lowest priority first, so a higher entry paints over it.
   for (const entry of [...schedule.entries].reverse()) {
-    if (!entry.active || entry.presetId === null) continue
+    if (!entry.active || channel(entry) === null) continue
     const length = entryMinutes(entry)
     effectiveDays(entry).forEach((on, day) => {
       if (!on) return
@@ -172,30 +185,63 @@ function weekOwners(schedule: Schedule): Array<ScheduleEntry | null> {
   return owner
 }
 
-/** What plays at each minute of the week, by the rules above. */
-export function weekTimeline(schedule: Schedule): Array<string | null> {
-  return weekOwners(schedule).map((entry) => entry?.presetId ?? null)
+/** What `channel` plays at each minute of the week. */
+function timeline<K>(schedule: Schedule, channel: Channel<K>): Array<K | null> {
+  return weekOwners(schedule, channel).map((entry) => (entry === null ? null : channel(entry)))
 }
 
-/** The events the schedule comes to, in order of their minute of the week. */
-export function scheduleEvents(schedule: Schedule): ScheduleEvent[] {
-  const owner = weekOwners(schedule)
-  const events: ScheduleEvent[] = []
+/** The changes `channel` comes to, in order of their minute of the week. */
+function channelEvents<K>(schedule: Schedule, channel: Channel<K>): Array<{ minute: number; kind: ScheduleEvent['kind']; value: K | null; fadeSec: number }> {
+  const owner = weekOwners(schedule, channel)
+  const valueAt = (minute: number) => {
+    const entry = owner[minute]
+    return entry === null ? null : channel(entry)
+  }
+  const events: Array<{ minute: number; kind: ScheduleEvent['kind']; value: K | null; fadeSec: number }> = []
   for (let minute = 0; minute < MINUTES_PER_WEEK; minute += 1) {
-    const now = owner[minute]?.presetId ?? null
-    const beforeEntry = owner[(minute + MINUTES_PER_WEEK - 1) % MINUTES_PER_WEEK]
-    const before = beforeEntry?.presetId ?? null
+    const previous = (minute + MINUTES_PER_WEEK - 1) % MINUTES_PER_WEEK
+    const now = valueAt(minute)
+    const before = valueAt(previous)
     if (now === before) continue
     // A start fades the entry in; a stop or a switch fades out the one ending.
-    const fading = before === null ? owner[minute]! : beforeEntry!
+    const fading = before === null ? owner[minute]! : owner[previous]!
     events.push({
       minute,
       kind: before === null ? 'start' : now === null ? 'stop' : 'switch',
-      presetId: now,
+      value: now,
       fadeSec: fadeSecFor(entryMinutes(fading) * 60),
     })
   }
-  // Playing all week through one soundscape: one switch says what plays.
-  if (events.length === 0 && owner[0] !== null) events.push({ minute: 0, kind: 'switch', presetId: owner[0].presetId, fadeSec: 0 })
+  // Playing all week through one value: one switch says what plays.
+  const always = valueAt(0)
+  if (events.length === 0 && always !== null) events.push({ minute: 0, kind: 'switch', value: always, fadeSec: 0 })
   return events
+}
+
+/** What soundscape plays at each minute of the week. */
+export function weekTimeline(schedule: Schedule): Array<string | null> {
+  return timeline(schedule, soundscapeChannel)
+}
+
+/** What song set plays at each minute of the week. */
+export function weekMusicTimeline(schedule: Schedule): Array<number | null> {
+  return timeline(schedule, musicChannel)
+}
+
+/** The soundscape's events, in order of their minute of the week. */
+export function scheduleEvents(schedule: Schedule): ScheduleEvent[] {
+  return channelEvents(schedule, soundscapeChannel).map(({ value, ...event }) => ({ ...event, presetId: value }))
+}
+
+/** A change of the scheduled song set, as ScheduleEvent is of the soundscape. */
+export interface MusicScheduleEvent {
+  minute: number
+  kind: ScheduleEvent['kind']
+  setId: number | null
+  fadeSec: number
+}
+
+/** The song set's events, in order of their minute of the week. */
+export function musicScheduleEvents(schedule: Schedule): MusicScheduleEvent[] {
+  return channelEvents(schedule, musicChannel).map(({ value, ...event }) => ({ ...event, setId: value }))
 }

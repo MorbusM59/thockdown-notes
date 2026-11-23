@@ -23,7 +23,9 @@
 import { useRef, useState, type DragEvent } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { selectorDragType, useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
+import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { type SoundscapePreset } from '@thockdown/soundscape/soundscape'
+import { musicSetMarkOf, type MusicSet } from '@thockdown/visualizer/shared/audioPlayer'
 import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import {
   calendarPress,
@@ -44,6 +46,8 @@ const DAY_NAMES = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 interface ScheduleRowsProps {
   schedule: Schedule
   presets: readonly SoundscapePreset[]
+  /** The song sets an entry may play. */
+  musicSets: readonly MusicSet[]
   /** The soundscape that plays: what the "+" adds. */
   currentPresetId: string
   onChange: (update: (schedule: Schedule) => Schedule) => void
@@ -97,6 +101,46 @@ function TimeField({ time, unit, label, onChange }: { time: number; unit: 'hour'
   )
 }
 
+function SetMark({ set }: { set: MusicSet }) {
+  const mark = musicSetMarkOf(set)
+  return 'iconClass' in mark ? <span className={mark.iconClass} aria-hidden="true" /> : <span aria-hidden="true">{mark.letters}</span>
+}
+
+/** What the start chip shows: the music icon, the soundscape icon, or play for both (or nothing yet). */
+function startIcon(entry: ScheduleEntry): string {
+  if (entry.setId !== null && entry.presetId === null) return 'fa-music'
+  if (entry.presetId !== null && entry.setId === null) return 'fa-podcast'
+  return 'fa-play'
+}
+
+/** A picker grid: fa-ban (none) first, then each choice; the assigned one lit. */
+function PickerGrid<K>({ label, choices, assigned, onPick }: {
+  label: string
+  choices: ReadonlyArray<{ key: K; name: string; mark: JSX.Element }>
+  assigned: K | null
+  onPick: (key: K | null) => void
+}) {
+  const cell = (key: K | null, name: string, mark: JSX.Element) => (
+    <button
+      key={key === null ? 'none' : String(key)}
+      type="button"
+      className={`btn-icon options-color-swatch options-loadout-btn${assigned === key ? ' is-active' : ''}`}
+      aria-pressed={assigned === key}
+      aria-label={name}
+      data-secondary-press="none"
+      onClick={() => onPick(key)}
+    >
+      {mark}
+    </button>
+  )
+  return (
+    <div className="options-loadout-grid" role="group" aria-label={label}>
+      {cell(null, `No ${label.toLowerCase()}`, <span className="fa-solid fa-ban" aria-hidden="true" />)}
+      {choices.map((choice) => cell(choice.key, choice.name, choice.mark))}
+    </div>
+  )
+}
+
 /** A chip that does `action` when held, and `tap` (if any) when tapped. */
 function HoldChip({ className, label, icon, tap, held }: { className: string; label: string; icon: string; tap?: () => void; held: () => void }) {
   const cancelRef = useRef<(() => void) | null>(null)
@@ -137,7 +181,9 @@ function HoldChip({ className, label, icon, tap, held }: { className: string; la
   )
 }
 
-export function ScheduleRows({ schedule, presets, currentPresetId, onChange }: ScheduleRowsProps) {
+export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, onChange }: ScheduleRowsProps) {
+  // The entry whose pickers are open below it, one at a time.
+  const [pickingId, setPickingId] = useState<string | null>(null)
   const reorder = useSelectorReorder('schedule-entry', (dragged, target) => onChange((current) => moveEntry(current, dragged, target)), { picture: 'copy' })
   const drop = useSoundscapeDrop((target, presetId) => onChange((current) => (target === '+'
     ? { ...current, entries: [...current.entries, newEntry(presetId)] }
@@ -149,6 +195,8 @@ export function ScheduleRows({ schedule, presets, currentPresetId, onChange }: S
 
   const row = (entry: ScheduleEntry) => {
     const preset = presets.find((candidate) => candidate.id === entry.presetId) ?? null
+    const set = musicSets.find((candidate) => candidate.slot === entry.setId) ?? null
+    const picking = pickingId === entry.id
     const cell = reorder(entry.id)
     const accepts = drop.handlers(entry.id)
     const days = effectiveDays(entry)
@@ -173,25 +221,37 @@ export function ScheduleRows({ schedule, presets, currentPresetId, onChange }: S
         {DAY_NAMES[index]}
       </button>
     )
+    const assigned = [set?.name, preset?.name].filter(Boolean).join(' and ') || 'Nothing'
     return (
-      <div key={entry.id} className={`mobile-schedule-row${entry.active ? '' : ' is-off'}`}>
+      <div key={entry.id} className="mobile-schedule-entry">
+      <div className={`mobile-schedule-row${entry.active ? '' : ' is-off'}`}>
         <button
           type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-soundscape${entry.active ? ' is-active' : ''}${drop.over === entry.id ? ' is-drop-target' : ''}`}
-          aria-pressed={entry.active}
-          aria-label={`${preset?.name ?? 'No soundscape'}, ${entry.active ? 'on' : 'off'}`}
+          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-soundscape is-assigned${picking ? ' is-active' : ''}${drop.over === entry.id ? ' is-drop-target' : ''}`}
+          aria-expanded={picking}
+          aria-label={`${assigned}: choose what plays`}
           data-secondary-press="none"
           onPointerDown={cell.onPointerDown}
           {...cell.props}
           onDragOver={(event) => { if (!accepts.onDragOver(event)) cell.props.onDragOver(event) }}
           onDragLeave={accepts.onDragLeave}
           onDrop={(event) => { if (!accepts.onDrop(event)) cell.props.onDrop(event) }}
-          onClick={() => update(entry.id, (current) => ({ ...current, active: !current.active }))}
+          onClick={() => setPickingId((current) => (current === entry.id ? null : entry.id))}
           onContextMenu={(event) => event.preventDefault()}
         >
-          {preset ? <SoundscapeMark preset={preset} /> : null}
+          <span className="mobile-schedule-assigned is-set">{set ? <SetMark set={set} /> : null}</span>
+          <span className="mobile-schedule-assigned is-soundscape">{preset ? <SoundscapeMark preset={preset} /> : null}</span>
         </button>
-        <button type="button" tabIndex={-1} className="btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-label is-start" aria-hidden="true"><span className="fa-solid fa-play" /></button>
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-start${entry.active ? ' is-active' : ''}`}
+          aria-pressed={entry.active}
+          aria-label={entry.active ? 'Turn off' : 'Turn on'}
+          data-secondary-press="none"
+          onClick={() => update(entry.id, (current) => ({ ...current, active: !current.active }))}
+        >
+          <span className={`fa-solid ${startIcon(entry)}`} aria-hidden="true" />
+        </button>
         {time('start', 'hour')}
         {time('start', 'minute')}
         <HoldChip
@@ -212,6 +272,27 @@ export function ScheduleRows({ schedule, presets, currentPresetId, onChange }: S
           icon="fa-trash-can"
           held={() => onChange((current) => ({ ...current, entries: current.entries.filter((candidate) => candidate.id !== entry.id) }))}
         />
+      </div>
+      {picking ? (
+        <AccordionGroup>
+          <AccordionSection ariaLabel="Song Set" heading="Song Set" iconClass="fa-music">
+            <PickerGrid
+              label="Song set"
+              choices={musicSets.map((candidate) => ({ key: candidate.slot, name: candidate.name, mark: <SetMark set={candidate} /> }))}
+              assigned={entry.setId}
+              onPick={(setId) => update(entry.id, (current) => ({ ...current, setId }))}
+            />
+          </AccordionSection>
+          <AccordionSection ariaLabel="Soundscape" heading="Soundscape" iconClass="fa-podcast">
+            <PickerGrid
+              label="Soundscape"
+              choices={presets.map((candidate) => ({ key: candidate.id, name: candidate.name, mark: <SoundscapeMark preset={candidate} /> }))}
+              assigned={entry.presetId}
+              onPick={(presetId) => update(entry.id, (current) => ({ ...current, presetId }))}
+            />
+          </AccordionSection>
+        </AccordionGroup>
+      ) : null}
       </div>
     )
   }

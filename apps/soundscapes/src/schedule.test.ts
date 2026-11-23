@@ -5,10 +5,12 @@ import {
   MINUTES_PER_DAY,
   MINUTES_PER_WEEK,
   moveEntry,
+  musicScheduleEvents,
   newEntry,
   scheduleEvents,
   stepTime,
   toggleDay,
+  weekMusicTimeline,
   weekTimeline,
   type Schedule,
   type ScheduleEntry,
@@ -105,5 +107,30 @@ describe('schedule', () => {
     const ids = (next: Schedule) => next.entries.map((e) => e.presetId)
     expect(ids(moveEntry(s, s.entries[0].id, s.entries[2].id))).toEqual(['b', 'c', 'a'])
     expect(ids(moveEntry(s, s.entries[2].id, s.entries[0].id))).toEqual(['c', 'a', 'b'])
+  })
+
+  it('decides each channel on its own: a song set over a soundscape plays with it', () => {
+    // A soundscape all night (lower), music 22:00-23:00 above it with no soundscape.
+    const night = entry('a', 21 * 60, 6 * 60, [0])
+    const music = entry('m', 22 * 60, 23 * 60, [0], { presetId: null, setId: 7 })
+    const s = schedule(music, night)
+    expect(weekTimeline(s)[at(0, 22, 30)]).toBe('a')
+    expect(weekMusicTimeline(s)[at(0, 22, 30)]).toBe(7)
+    expect(strip(scheduleEvents(s))).toEqual([
+      { minute: at(0, 21), kind: 'start', presetId: 'a' },
+      { minute: at(1, 6), kind: 'stop', presetId: null },
+    ])
+    expect(musicScheduleEvents(s).map(({ fadeSec: _fade, ...event }) => event)).toEqual([
+      { minute: at(0, 22), kind: 'start', setId: 7 },
+      { minute: at(0, 23), kind: 'stop', setId: null },
+    ])
+  })
+
+  it('gives a channel to the higher of two entries that both assign it', () => {
+    const low = entry('a', 8 * 60, 12 * 60, [0], { setId: 1 })
+    const high = entry('b', 9 * 60, 10 * 60, [0], { presetId: null, setId: 2 })
+    const s = schedule(high, low)
+    expect(weekMusicTimeline(s)[at(0, 9, 30)]).toBe(2)
+    expect(weekTimeline(s)[at(0, 9, 30)]).toBe('a')
   })
 })

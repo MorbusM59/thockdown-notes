@@ -12,7 +12,8 @@
  * same preferences state on its return (followSession), so those controls
  * are more controls, not a second path to the engine.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
@@ -167,13 +168,17 @@ export function MobileSoundscapeApp() {
     void nativeMusic?.setStage({ stage: JSON.stringify(musicStageOf(activeStage)) })
   }, [activeStage])
   // The music library and player the shared music views read (mobileMusicPlayer.ts).
+  const [libraryLoaded, setLibraryLoaded] = useState(false)
   useEffect(() => {
     if (!nativeMusic) return
     let stop: (() => void) | null = null
     let cancelled = false
     void startMobileMusicPlayer(nativeMusic).then((stopPlayer) => {
       if (cancelled) stopPlayer()
-      else stop = stopPlayer
+      else {
+        stop = stopPlayer
+        setLibraryLoaded(true)
+      }
     })
     return () => { cancelled = true; stop?.() }
   }, [])
@@ -208,6 +213,16 @@ export function MobileSoundscapeApp() {
   useEffect(() => saveSchedule(schedule), [schedule])
   // A deleted soundscape leaves the schedule rows that held it empty.
   useEffect(() => setSchedule((current) => sanitizeSchedule(current, presets)), [presets])
+  // A deleted song set leaves the schedule rows that held it without one,
+  // once the library has been read (before, no set is known yet).
+  const { musicSets } = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  useEffect(() => {
+    if (!libraryLoaded) return
+    const known = new Set(musicSets.map((set) => set.slot))
+    setSchedule((current) => (current.entries.every((entry) => entry.setId === null || known.has(entry.setId))
+      ? current
+      : { ...current, entries: current.entries.map((entry) => (entry.setId === null || known.has(entry.setId) ? entry : { ...entry, setId: null })) }))
+  }, [libraryLoaded, musicSets])
   const events = useMemo(() => scheduleEvents(schedule), [schedule])
   useEffect(() => {
     if (!native) return
@@ -575,6 +590,7 @@ export function MobileSoundscapeApp() {
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleRows
                     schedule={schedule}
                     presets={presets}
+                    musicSets={musicSets}
                     currentPresetId={preferences.activePresetId}
                     onChange={setSchedule}
                   />}

@@ -165,7 +165,46 @@ body {
   pointer-events: none;
 }
 
-.mobile-schedule-row.is-off > :not(.mobile-schedule-soundscape) {
+.mobile-schedule-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The assigned button, split on its diagonal: the song set top left, the
+   soundscape bottom right, each mark centered in its half's corner. */
+/* The pickers span the row. */
+.mobile-schedule-entry > .options-section {
+  width: auto;
+  margin-inline: 0;
+}
+
+.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape.is-assigned {
+  position: relative;
+  background-image: linear-gradient(to top right, transparent calc(50% - 0.5px), var(--color-text-40) 50%, transparent calc(50% + 0.5px));
+}
+
+.mobile-schedule-assigned {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50%;
+  height: 50%;
+  font-size: calc(var(--mobile-button-icon-size) * 0.8);
+}
+
+.mobile-schedule-assigned.is-set {
+  top: 6%;
+  left: 6%;
+}
+
+.mobile-schedule-assigned.is-soundscape {
+  right: 6%;
+  bottom: 6%;
+}
+
+.mobile-schedule-row.is-off > :not(.mobile-schedule-soundscape, .mobile-schedule-start) {
   opacity: 0.4;
 }
 
