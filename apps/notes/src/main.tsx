@@ -4,6 +4,8 @@ import { installBrowserMockBridges } from './dev/installBrowserMockBridges.ts'
 import { installHoverTracking } from '@thockdown/interaction/hoverTracking'
 import { installPressTracking } from '@thockdown/interaction/pressTracking'
 import { installTouchInput } from '@thockdown/interaction/touchInput'
+import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
+import { desktopMusicListening } from '@thockdown/visualizer/sound/desktopMusicListening'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
 import { installEntryFieldOutsidePress } from './sidebar/entryFieldOutsidePress'
 import { installFieldRightClickSelection } from './shared/fieldRightClickSelection'
@@ -14,6 +16,7 @@ import '@fortawesome/fontawesome-free/css/all.min.css'
 installBrowserMockBridges()
 // First: it must see every touch pointer event before any other window listener.
 installTouchInput()
+setMusicListening(desktopMusicListening)
 installPressTracking()
 installHoverTracking()
 installScrollTrackTokens(1)

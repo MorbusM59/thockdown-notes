@@ -22,7 +22,7 @@
  */
 
 import { connectToOutput, holdOutputAlone, resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
-import { outputLatencySec } from '@thockdown/visualizer/sound/musicBeat'
+import { outputLatencySec } from '@thockdown/visualizer/sound/desktopMusicListening'
 import { SmoothClock } from '@thockdown/visualizer/sound/smoothClock'
 
 const LOOP_MIME = 'audio/mp4; codecs="flac"'

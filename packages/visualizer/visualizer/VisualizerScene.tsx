@@ -30,7 +30,7 @@
 
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
-import { musicPlayerService } from '../sound/MusicPlayerService'
+import { musicListening } from '../sound/musicListening'
 import { subscribeMusicMix, subscribeMusicSemitoneScore } from '../sound/musicBeat'
 import { MUSIC_SEMITONE_CONFIRM_SEC } from '../sound/musicSemitoneScore'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
@@ -44,8 +44,10 @@ import {
   litRows,
   semitoneLoudnessOffsetDb,
   semitoneShare,
+  bassBandCount,
+  bassPower,
+  logBandEdges,
 } from './spectrumBands'
-import { SpectrumTap } from './spectrumTap'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
 import { readPanelsShown, subscribePanelsShown } from './panelsShown'
@@ -231,7 +233,9 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
   useLayoutEffect(() => {
     const canvas = canvasRef.current
     if (!scene || columns <= 0) return
-    const tap = spectrumRows > 0 ? new SpectrumTap(columns) : null
+    const edges = logBandEdges(columns)
+    const bassBands = bassBandCount(edges)
+    const tap = spectrumRows > 0 ? musicListening().createSpectrum(edges) : null
     tap?.start()
     const meter = SpectrumBallistics.continuing(meterRef.current, columns)
     meterRef.current = meter
@@ -279,7 +283,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           (strength, timeSec) => semitoneActivity.recordTransient(timeSec, strength),
         )
       : null
-    let activityTrackUrl = musicPlayerService.trackUrl
+    let activityTrackUrl = musicListening().trackUrl
     if (canvas) {
       canvas.width = Math.round(columns * boxPx * dpr)
       canvas.height = Math.round(spectrumRows * boxPx * dpr)
@@ -309,8 +313,8 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
     // The gap is React's to draw (`gapColumn`); the loop only says when the
     // playhead has crossed into another box, which is seconds apart.
     const moveGap = () => {
-      const duration = musicPlayerService.currentDurationSec
-      setGapColumn(readNowPlaying().song ? playheadColumn(progressColumns, musicPlayerService.currentTime, duration) : null)
+      const duration = musicListening().currentDurationSec
+      setGapColumn(readNowPlaying().song ? playheadColumn(progressColumns, musicListening().currentTime, duration) : null)
     }
 
     const draw = () => {
@@ -388,7 +392,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
         tap.sample(nowMs / 1000, levels)
         meter.step(levels, dt)
       }
-      const trackUrl = musicPlayerService.trackUrl
+      const trackUrl = musicListening().trackUrl
       if (trackUrl !== activityTrackUrl) {
         activityTrackUrl = trackUrl
         semitoneTime = NaN
@@ -421,11 +425,11 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
       draw()
       moveGap()
       const still = reducedMotion.matches
-      const { amplitude } = breathScales(breath.step(tap ? tap.bassPower(levels) : 0, dt))
+      const { amplitude } = breathScales(breath.step(tap ? bassPower(levels, bassBands) : 0, dt))
       if (!still) applySway(amplitude)
       // Nothing left to move: the music is stopped, the bars have fallen and
       // the glaze holds still. Woken again by the music or the motion setting.
-      if (still && !musicPlayerService.isPlaying && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
+      if (still && !musicListening().isPlaying && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
         lastMs = NaN
         return
       }
@@ -436,7 +440,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
     }
     draw()
     wake()
-    const unsubscribePlaying = musicPlayerService.subscribePlaying(wake)
+    const unsubscribePlaying = musicListening().subscribePlaying(wake)
     const unsubscribeSong = subscribeNowPlaying(wake)
     reducedMotion.addEventListener('change', wake)
 
@@ -459,7 +463,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
     const press = progressPress(progressColumns, column)
     if (press.kind === 'previous') readNowPlaying().jumpSong(-1)
     else if (press.kind === 'next') readNowPlaying().jumpSong(1)
-    else if (press.kind === 'seek') void musicPlayerService.setCurrentTimeFraction(press.fraction)
+    else if (press.kind === 'seek') musicListening().setCurrentTimeFraction(press.fraction)
   }, [boxPx, progressColumns])
 
   const box = boxPx

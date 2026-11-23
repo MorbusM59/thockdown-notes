@@ -35,7 +35,7 @@ import { setGridWaveSettings } from '@thockdown/visualizer/visualizer/gridWaveTu
 import { useEffect, useRef } from 'react'
 import type { VisualizerChannel, VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
-import { musicPlayerService } from '@thockdown/visualizer/sound/MusicPlayerService'
+import { musicListening } from '@thockdown/visualizer/sound/musicListening'
 import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix, type FlashClock, type MusicClockSubscription } from '@thockdown/visualizer/sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
 import { setSpectrumFall, setSpectrumStripRows } from '@thockdown/visualizer/visualizer/spectrumBands'
@@ -73,7 +73,7 @@ function useBeatBlock<T extends BlockSettings>(name: BlockName, channel: T, on: 
     const attribute = `data-beat-${name}`
     const subscription = subscribeTo(channelRef.current, (response) => {
       const { effect } = channelRef.current
-      const value = !musicPlayerService.isPlaying ? 0 : effect < 0 ? -effect * (1 - response) : effect * response
+      const value = !musicListening().isPlaying ? 0 : effect < 0 ? -effect * (1 - response) : effect * response
       // Quantized to the 1/255 an 8-bit colour channel resolves: every step
       // that can change a pixel is written, and nothing finer (setLiveStyle
       // skips a value equal to the last).
@@ -112,7 +112,7 @@ function useFlashBeat(on: boolean, flash: FlashClock | null): void {
     const root = document.documentElement
     const subscription = subscribeMusicClock(flashRef.current, (response) => {
       // Quantized to the 1/255 an 8-bit colour channel resolves (as `useBeatBlock`).
-      const steps = Math.round((musicPlayerService.isPlaying ? response : 0) * 255)
+      const steps = Math.round((musicListening().isPlaying ? response : 0) * 255)
       setLiveStyle('--beat-caret', steps <= 0 ? null : (steps / 255).toFixed(4))
     }, (present) => root.toggleAttribute('data-beat-caret', present))
     subscriptionRef.current = subscription

@@ -55,12 +55,11 @@
  */
 
 import { createTempoFollower, TEMPO_GLIDE_SEC } from './musicTempo'
-import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import type { VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
 import { SmoothClock } from './smoothClock'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
-import { musicPlayerService } from './MusicPlayerService'
+import { musicListening } from './musicListening'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
 import { loudnessGain } from './peakWindow'
 import { flashLevelAt, flashPhaseAt, FLASH_BEATS_REPEAT } from '../shared/flashing'
@@ -276,7 +275,7 @@ function traceCaret(listenerTime: number, heardTime: number): void {
   if (!isBeatTraceOn() || Math.abs(heardTime - lastCaretTrace) < 1) return
   lastCaretTrace = heardTime
   const map = mapCaretAt(heardTime)
-  appendBeatTrace(`caret el=${musicPlayerService.currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} drawn=${drawnDips} clocks=${clocks.size} frames=${framesSinceTrace}`)
+  appendBeatTrace(`caret el=${musicListening().currentTime.toFixed(3)} listener=${listenerTime.toFixed(3)} heard=${heardTime.toFixed(3)} mapBeat=${(heardTime - map.phase * map.period).toFixed(3)} mapPer=${map.period.toFixed(4)} drawn=${drawnDips} clocks=${clocks.size} frames=${framesSinceTrace}`)
   drawnDips = 0
   framesSinceTrace = 0
 }
@@ -395,7 +394,7 @@ function rebuildAskReaders(): void {
 function restartAnalysis(listenerTime: number): void {
   stale = false
   latestSemitoneScore = null
-  const url = musicPlayerService.trackUrl
+  const url = musicListening().trackUrl
   for (const band of bands) band.peak = 0
   pendingRaw.fill(0)
   trackerRaw.fill(0)
@@ -492,39 +491,25 @@ export function setBeatVisualDelaySec(sec: number): void {
 }
 
 /**
- * How far behind the media time the listener hears it. Chromium's
- * `outputLatency` is the whole way from the graph to the speaker, the output
- * buffer `baseLatency` names included (measured on Windows: base 170 ms,
- * output 202 ms at a 8192-frame buffer), so the two are not added: their sum
- * counted the buffer twice and drew everything 170 ms late. The larger is
- * taken so a platform that reports only the hardware's part still has the
- * buffer as its floor.
- */
-export function outputLatencySec(): number {
-  const context = outputContext()
-  return Math.max(context.baseLatency || 0, context.outputLatency || 0)
-}
-
-/**
  * How long after the audio graph handles a sample it should be DRAWN: what
  * the audio stack reports plus the visual timing offset. The beat pulse and
- * the visualizer mode's spectrum (`visualizer/spectrumTap.ts`) both draw on
+ * the visualizer mode's spectrum (`musicListening.ts`'s `SpectrumSource`) both draw on
  * it, so they cannot disagree about when the listener hears something.
  */
 export function heardLagSec(): number {
-  return outputLatencySec() + visualDelaySec
+  return musicListening().outputLatencySec() + visualDelaySec
 }
 
 const listenerClock = new SmoothClock()
 
 function tick(frameTimeMs: number): void {
   frame = null
-  if (!musicPlayerService.isPlaying || document.hidden || subscriberCount() === 0) {
+  if (!musicListening().isPlaying || document.hidden || subscriberCount() === 0) {
     stop()
     return
   }
   const now = frameTimeMs / 1000
-  const listenerTime = listenerClock.read(musicPlayerService.currentTime, now)
+  const listenerTime = listenerClock.read(musicListening().currentTime, now)
   // Where the listener would be had nothing jumped: carried on by the
   // clock from the last frame, or where it was when the music stopped.
   const frameSec = Number.isNaN(lastNow) ? 0 : now - lastNow
@@ -532,7 +517,7 @@ function tick(frameTimeMs: number): void {
   const jumped = !(Math.abs(listenerTime - expected) <= RESYNC_SEC)
   lastListener = listenerTime
   lastNow = now
-  if (stale || jumped || analysedUrl !== musicPlayerService.trackUrl) restartAnalysis(listenerTime)
+  if (stale || jumped || analysedUrl !== musicListening().trackUrl) restartAnalysis(listenerTime)
   const heardTime = listenerTime - heardLagSec()
   // What the answers since the last frame said, each hit taken once (and cleared, so the next frame reads none unless
   // another lands).
@@ -575,14 +560,14 @@ let idleFrame: number | null = null
 
 function idleTick(frameTimeMs: number): void {
   idleFrame = null
-  if (counters.size === 0 || document.hidden || musicPlayerService.isPlaying) return
+  if (counters.size === 0 || document.hidden || musicListening().isPlaying) return
   const { beats, beatsPerSec, count } = tempo(frameTimeMs / 1000, NaN, NaN)
   for (const counter of counters) counter.listener(beats, beatsPerSec, count)
   idleFrame = requestAnimationFrame(idleTick)
 }
 
 function startIdleTempo(): void {
-  if (idleFrame !== null || counters.size === 0 || document.hidden || musicPlayerService.isPlaying) return
+  if (idleFrame !== null || counters.size === 0 || document.hidden || musicListening().isPlaying) return
   idleFrame = requestAnimationFrame(idleTick)
 }
 
@@ -593,7 +578,7 @@ function stopIdleTempo(): void {
 
 function start(): void {
   startIdleTempo()
-  if (frame !== null || subscriberCount() === 0 || !musicPlayerService.isPlaying || document.hidden) return
+  if (frame !== null || subscriberCount() === 0 || !musicListening().isPlaying || document.hidden) return
   frame = requestAnimationFrame(tick)
 }
 
@@ -642,7 +627,7 @@ function added(): void {
   if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
   ensureWorker()
   if (subscriberCount() === 1) {
-    unsubscribePlaying = musicPlayerService.subscribePlaying((playing) => (playing ? start() : stop()))
+    unsubscribePlaying = musicListening().subscribePlaying((playing) => (playing ? start() : stop()))
     document.addEventListener('visibilitychange', onVisibility)
   }
   start()

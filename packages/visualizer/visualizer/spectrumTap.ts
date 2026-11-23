@@ -1,6 +1,6 @@
 /**
- * The visualizer mode's ears: the processed music read by two analysers and
- * delayed until the listener hears it. The arithmetic is `spectrumBands.ts`;
+ * The desktop's spectrum (`musicListening.ts`'s `SpectrumSource`): the
+ * processed music read by two analysers and delayed until the listener hears it. The arithmetic is `spectrumBands.ts`;
  * this is the Web Audio half and the timing. The semitone score is prepared
  * from decoded track audio in `musicSemitoneScore.ts`.
  *
@@ -19,13 +19,13 @@
  * frame in the past already, so each resolution waits that much less.
  */
 
-import { musicPlayerService } from '../sound/MusicPlayerService'
+import type { MusicPlayerService } from '../sound/MusicPlayerService'
 import { heardLagSec } from '../sound/musicBeat'
+import type { SpectrumSource } from '../sound/musicListening'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   createBandLevelPlan,
   bandCentreHz,
-  logBandEdges,
   writeBandLevelsWithPlan,
   type BandLevelPlan,
 } from './spectrumBands'
@@ -43,16 +43,13 @@ const HISTORY = 128
  * finer than the bass bands it feeds can change.
  */
 const LONG_READ_SHARE = 0.25
-/** The bands the sway's music response listens to. */
-const BASS_MAX_HZ = 150
 
 type Frame = { timeSec: number; levels: Float32Array }
 
-export class SpectrumTap {
-  readonly edges: Float64Array
+export class SpectrumTap implements SpectrumSource {
+  readonly bands: number
   /** The first band read from the short frame; every band below it reads the long one. */
   private readonly split: number
-  private readonly bassBands: number
   private long: AnalyserNode | null = null
   private short: AnalyserNode | null = null
   private longBins: Float32Array<ArrayBuffer> | null = null
@@ -67,14 +64,12 @@ export class SpectrumTap {
   private newest = -1
   private count = 0
 
-  constructor(readonly bands: number) {
-    this.edges = logBandEdges(bands)
+  constructor(private readonly player: MusicPlayerService, readonly edges: Float64Array) {
+    const bands = edges.length - 1
+    this.bands = bands
     let split = 0
     while (split < bands && bandCentreHz(this.edges, split) < CROSSOVER_HZ) split += 1
     this.split = split
-    let bass = 0
-    while (bass < bands && bandCentreHz(this.edges, bass) < BASS_MAX_HZ) bass += 1
-    this.bassBands = bass
     this.longLevels = new Float32Array(bands).fill(-Infinity)
     this.history = Array.from({ length: HISTORY }, () => ({
       timeSec: -Infinity,
@@ -95,7 +90,7 @@ export class SpectrumTap {
     const input = context.createGain()
     input.connect(long)
     input.connect(short)
-    const untap = musicPlayerService.tapProcessed(input)
+    const untap = this.player.tapProcessed(input)
     this.long = long
     this.short = short
     this.longBins = new Float32Array(long.frequencyBinCount)
@@ -137,7 +132,7 @@ export class SpectrumTap {
    * With the music stopped nothing is read and `out` is silence.
    */
   sample(nowSec: number, out: Float32Array): void {
-    if (!this.long || !this.short || !this.longBins || !this.shortBins || !this.longPlan || !this.shortPlan || !musicPlayerService.isPlaying) {
+    if (!this.long || !this.short || !this.longBins || !this.shortBins || !this.longPlan || !this.shortPlan || !this.player.isPlaying) {
       out.fill(-Infinity)
       this.count = 0
       this.longReadSec = -Infinity
@@ -161,15 +156,6 @@ export class SpectrumTap {
     const longAt = nowSec - Math.max(0, lag - LONG_FFT / 2 / this.long.context.sampleRate)
     this.copyHeard(longAt, 0, this.split, out)
     this.copyHeard(nowSec - Math.max(0, lag - SHORT_FFT / 2 / this.short.context.sampleRate), this.split, this.bands, out)
-  }
-
-  /** The power (linear) of the bass bands in `levels`, for the sway's music response. */
-  bassPower(levels: Float32Array): number {
-    let power = 0
-    for (let band = 0; band < this.bassBands; band += 1) {
-      if (levels[band] > -400) power += 10 ** (levels[band] / 10)
-    }
-    return power
   }
 
   /** Copies bands `[from, to)` of the newest frame taken at or before `atSec`, or of the oldest kept if none is that old yet. */

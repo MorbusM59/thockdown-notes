@@ -875,3 +875,23 @@ export class SpectrumBallistics {
     return true
   }
 }
+
+/** The top of the bands the sway's music response listens to. */
+const BASS_MAX_HZ = 150
+
+/** How many of the bands over `edges` are bass (centred below `BASS_MAX_HZ`). */
+export function bassBandCount(edges: Float64Array): number {
+  const bands = edges.length - 1
+  let bass = 0
+  while (bass < bands && bandCentreHz(edges, bass) < BASS_MAX_HZ) bass += 1
+  return bass
+}
+
+/** The power (linear) of the first `bassBands` bands of `levels` (dB), for the sway's music response. */
+export function bassPower(levels: Float32Array, bassBands: number): number {
+  let power = 0
+  for (let band = 0; band < bassBands; band += 1) {
+    if (levels[band] > -400) power += 10 ** (levels[band] / 10)
+  }
+  return power
+}

@@ -17,6 +17,11 @@ import { nextDisplayScale, readDisplay, setDisplayScale, setLandscape, setVisual
 import { useEffect, useRef, useState } from 'react'
 import { VisualizerScene } from '@thockdown/visualizer/visualizer/VisualizerScene'
 import { musicPlayerService } from '@thockdown/visualizer/sound/MusicPlayerService'
+import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
+import { desktopMusicListening } from '@thockdown/visualizer/sound/desktopMusicListening'
+
+// The prototype plays through the WebView's Web Audio player until the native player feeds the visualizer.
+setMusicListening(desktopMusicListening)
 import { publishNowPlaying, readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import type { MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
 import '@thockdown/visualizer/visualizer/visualizer.css'

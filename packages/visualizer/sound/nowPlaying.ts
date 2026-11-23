@@ -3,8 +3,8 @@
  * music player (`components/AudioControls.tsx`, which owns the song, the
  * play history and the rules for explicit previous/next commands) for
  * anything elsewhere in the window that shows or steers it -- the visualizer
- * mode's now-playing strip. Position and seeking need no port: they are the
- * player service's own (`musicPlayerService.currentTime`, `setCurrentTime`).
+ * mode's now-playing strip. Position and seeking are the platform player's,
+ * through `musicListening.ts`.
  */
 
 import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistCountsResult, PlaylistSlot, SetSelection } from '../shared/audioPlayer'
