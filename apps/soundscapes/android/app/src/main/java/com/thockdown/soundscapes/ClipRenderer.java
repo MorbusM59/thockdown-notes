@@ -20,7 +20,7 @@ import org.json.JSONObject;
  * given, at the soundscape's own level: the listener's volume is how loud
  * they hear it, not part of the soundscape.
  *
- * The renderer returns samples at half scale (SoundscapeAudioOutput's
+ * The renderer returns samples at half scale (OutputLane's
  * HEADROOM); they are scaled back and clipped at full scale, as the live
  * output does at full volume. The clip fades in over FADE_IN_SEC and out
  * over FADE_OUT_SEC, so it neither starts nor stops on a click.
@@ -63,7 +63,7 @@ final class ClipRenderer {
         MediaMuxer muxer = null;
         boolean muxerStarted = false;
         try {
-            isolate = SharedSandbox.openRendererIsolate(context);
+            isolate = SharedSandbox.openRendererIsolate(context, SharedSandbox.SOUNDSCAPE_RENDERER);
             JSONObject init = new JSONObject();
             init.put("sampleRate", SAMPLE_RATE);
             init.put("seed", (int) (System.nanoTime() & 0x7fffffff));
@@ -119,7 +119,7 @@ final class ClipRenderer {
                         for (short[] samples : decoded) {
                             for (int frame = 0; frame < samples.length / CHANNELS && written < take; frame += 1, written += 1) {
                                 long at = rendered + written;
-                                double gain = SoundscapeAudioOutput.HEADROOM
+                                double gain = OutputLane.HEADROOM
                                     * Math.min(1, Math.min((at + 1) / (double) fadeIn, (total - at) / (double) fadeOut));
                                 for (int channel = 0; channel < CHANNELS; channel += 1) {
                                     long value = Math.round(samples[(frame * CHANNELS) + channel] * gain);

@@ -5,7 +5,7 @@
  * RENDER_LEAD_SEC of finished stereo audio queued at the OUTPUT, so the
  * output only plays samples it already holds. ANDROID ONLY: it runs in the
  * app's native service (soundscapeSandbox.ts, SoundscapeRenderer.java) and
- * the output is Android's own (SoundscapeAudioOutput.java), so a stall or
+ * the output is Android's own (AudioOutput.java, OutputLane.java), so a stall or
  * pause of the WebView, heard on every switch to another app, cannot reach
  * what is already queued. Offline clips render through it too
  * (ClipRenderer.java). The desktop does not render ahead: it plays live

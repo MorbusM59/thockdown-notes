@@ -8,7 +8,7 @@ import org.json.JSONObject;
 
 /**
  * Renders the soundscape in the app's own process, ahead of playback, into
- * SoundscapeAudioOutput.
+ * its lane of the app's output (OutputLane, AudioOutput).
  *
  * The renderer is the web build's own code (packages/soundscape/soundscapeSandbox.ts,
  * built into assets/soundscape-renderer.js): the generator, the mix and the
@@ -43,7 +43,7 @@ final class SoundscapeRenderer {
     private static final double SPLICE_SLACK_SEC = 0.05;
 
     private final Context context;
-    private final SoundscapeAudioOutput output;
+    private final OutputLane output;
     private final Listener listener;
     private final Thread thread;
     private final Object signal = new Object();
@@ -56,7 +56,7 @@ final class SoundscapeRenderer {
     /** The length a pending change carries to mean a restart rather than a configure or a transition. */
     private static final double RESTART = -1;
 
-    SoundscapeRenderer(Context context, SoundscapeAudioOutput output, Listener listener) {
+    SoundscapeRenderer(Context context, OutputLane output, Listener listener) {
         this.context = context.getApplicationContext();
         this.output = output;
         this.listener = listener;
@@ -105,7 +105,7 @@ final class SoundscapeRenderer {
     private void run() {
         JavaScriptIsolate isolate = null;
         try {
-            isolate = SharedSandbox.openRendererIsolate(context);
+            isolate = SharedSandbox.openRendererIsolate(context, SharedSandbox.SOUNDSCAPE_RENDERER);
             JSONObject init = new JSONObject();
             init.put("sampleRate", output.sampleRate);
             init.put("seed", (int) (System.nanoTime() & 0x7fffffff));
