@@ -8,37 +8,8 @@
  * can be judged on a device before their content is.
  */
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { MOBILE_TABS, type MobileTab } from './mobileTabList'
 
-export const MOBILE_TABS = [
-  { tab: 'songs', label: 'Songs', icon: 'fa-solid fa-compact-disc' },
-  { tab: 'soundscapes', label: 'Soundscapes', icon: 'fa-solid fa-podcast' },
-  { tab: 'schedules', label: 'Schedules', icon: 'fa-solid fa-clock' },
-  { tab: 'soundstages', label: 'Soundstages', icon: 'fa-solid fa-sliders' },
-  { tab: 'visualizer', label: 'Visualizer', icon: 'fa-solid fa-eye' },
-  { tab: 'settings', label: 'Settings', icon: 'fa-solid fa-gear' },
-] as const
-
-export type MobileTab = typeof MOBILE_TABS[number]['tab']
-
-const TAB_KEY = 'thockdown:mobile-tab'
-
-/** The tab last shown, or Soundscapes (the app's first purpose) on a first launch. */
-export function loadTab(): MobileTab {
-  try {
-    const stored = localStorage.getItem(TAB_KEY)
-    return MOBILE_TABS.find((entry) => entry.tab === stored)?.tab ?? 'soundscapes'
-  } catch {
-    return 'soundscapes'
-  }
-}
-
-export function saveTab(tab: MobileTab): void {
-  try {
-    localStorage.setItem(TAB_KEY, tab)
-  } catch {
-    // Storage refused: the tab is simply not remembered.
-  }
-}
 
 export function MobileTabSelector({ tab, onChange }: { tab: MobileTab; onChange: (tab: MobileTab) => void }) {
   return (
