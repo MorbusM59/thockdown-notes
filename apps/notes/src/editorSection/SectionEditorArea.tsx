@@ -557,7 +557,7 @@ export function SectionEditorArea({
               aria-label={isEscapeHoldActive ? 'Quick note panel' : undefined}
               aria-live={isEscapeHoldActive ? 'polite' : undefined}
             >
-              <SolidCanvas className="empty-state-solid" seed={emptyStateSceneSeed} animateTo={steppedSceneSeed} active={isEmptyStateVisible} />
+              <SolidCanvas className="empty-state-solid" seed={emptyStateSceneSeed} animateTo={steppedSceneSeed} active={isEmptyStateVisible} cornerRadiusPx={borderRadiusRegularPx * 6} />
               <EscapeHoldPanel
                 isOpen={isEscapeHoldActive}
                 isSectionActive={isSectionActive}

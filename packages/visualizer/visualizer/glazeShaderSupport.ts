@@ -15,6 +15,14 @@ export function canUseShaderPulse(): boolean {
   return hasWebGL2()
 }
 
+/** false = the cutout's solid is drawn by the 2D canvas path (for comparing against editor/solidShader.ts). */
+export const USE_SHADER_SOLID = true
+
+export function canUseShaderSolid(): boolean {
+  if (!USE_SHADER_SOLID || typeof document === 'undefined') return false
+  return hasWebGL2()
+}
+
 let webgl2: boolean | null = null
 
 /**

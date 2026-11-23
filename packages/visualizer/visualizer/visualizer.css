@@ -175,10 +175,6 @@
   box-shadow: var(--box-shadow-inverted-filtered);
 }
 
-.visualizer-cutout-face > .empty-state-solid {
-  border-radius: inherit;
-}
-
 /* The glass cover: a sphere's lighting over the whole face, lit from above
    (a white crescent fading down from the top rim) and shaded below (a dark
    crescent rising from the bottom rim), with a soft rim and a faint bounce
@@ -444,6 +440,6 @@
   height:         100%;
   z-index:        -1;
   pointer-events: none;
-  border-radius:  calc(var(--border-radius-regular) *6);
+  /* Corners rounded by the canvas itself (SolidCanvas's cornerRadiusPx). */
 }
 

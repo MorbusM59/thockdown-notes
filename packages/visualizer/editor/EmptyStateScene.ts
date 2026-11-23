@@ -378,7 +378,9 @@ export function emptyStateSolid(seed: string): SolidScene {
 
 /** The 45deg needle stripes the solid is cut out of: 2px of 15% black in every 4px, as the CSS texture it replaces. */
 const STRIPE_PERIOD_PX = 4
-const STRIPE_INK = 'rgba(0, 0, 0, 0.15)'
+/** The stripes' ink alpha, shared with a renderer that draws them itself. */
+export const SOLID_STRIPE_ALPHA = 0.15
+const STRIPE_INK = `rgba(0, 0, 0, ${SOLID_STRIPE_ALPHA})`
 
 /** Reusable buffers for `drawSolidScene`, so a frame allocates nothing. */
 export interface SolidDrawScratch {
@@ -428,6 +430,19 @@ function stripePattern(context: CanvasRenderingContext2D, scratch: SolidDrawScra
   return scratch.stripes
 }
 
+/**
+ * The solid's vertices at `timeSec`, projected into its square in viewBox
+ * units (0..VIEWBOX, y down). Both renderers (`drawSolidScene` and
+ * `solidShader.ts`) place the same projection.
+ */
+export function projectSolid(scene: SolidScene, timeSec: number): Vec2[] {
+  const angle = scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec
+  const centre = VIEWBOX / 2
+  return scene.vertices.map((vertex) => project(rotateAroundAxis(vertex, scene.axis, angle), scene.halfSize, scene.focal, centre, centre))
+}
+
+export { VIEWBOX as SOLID_VIEWBOX, QUANTIZE_STEPS as SOLID_QUANTIZE_STEPS, STRIPE_PERIOD_PX as SOLID_STRIPE_PERIOD_PX }
+
 /** One solid as drawn: which, at what moment of its turn, how large and where. */
 export interface SolidPlacement {
   scene: SolidScene
@@ -445,12 +460,16 @@ export interface SolidPlacement {
  * canvas's shorter side (as `mask-size: contain` placed it); a placement
  * grows it by `scale` about its centre and moves it down by `offsetY` sides.
  * More than one placement is a change of solid in flight (SolidCanvas.tsx).
+ * The canvas's corners are rounded by `cornerRadiusPx` (CSS px). This is the
+ * fallback where WebGL2 is unavailable; `solidShader.ts` draws the same
+ * picture on the GPU.
  */
 export function drawSolidScene(
   context: CanvasRenderingContext2D,
   scratch: SolidDrawScratch,
   placements: readonly SolidPlacement[],
   dpr: number,
+  cornerRadiusPx: number,
 ): void {
   const width = context.canvas.width
   const height = context.canvas.height
@@ -459,8 +478,17 @@ export function drawSolidScene(
   context.clearRect(0, 0, width, height)
   const stripes = stripePattern(context, scratch, dpr)
   if (stripes) {
+    context.save()
+    // The canvas rounds its own corners (a CSS border-radius would clip it
+    // through a mask layer the compositor fills every frame).
+    if (cornerRadiusPx > 0) {
+      context.beginPath()
+      context.roundRect(0, 0, width, height, cornerRadiusPx * dpr)
+      context.clip()
+    }
     context.fillStyle = stripes
     context.fillRect(0, 0, width, height)
+    context.restore()
   }
   const restSide = Math.min(width, height)
   for (const placement of placements) cutOutSolid(context, scratch, placement, restSide, dpr)
@@ -494,9 +522,7 @@ function cutOutSolid(
   a.clearRect(0, 0, size, size)
   const unit = size / VIEWBOX
   a.setTransform(unit, 0, 0, unit, 0, 0)
-  const angle = scene.startPhase + (scene.dir * Math.PI * 2 * timeSec) / scene.durationSec
-  const centre = VIEWBOX / 2
-  const projected = scene.vertices.map((vertex) => project(rotateAroundAxis(vertex, scene.axis, angle), scene.halfSize, scene.focal, centre, centre))
+  const projected = projectSolid(scene, timeSec)
   a.fillStyle = '#000'
   scene.faces.forEach((face, faceIndex) => {
     a.globalAlpha = scene.faceAlphas[faceIndex]

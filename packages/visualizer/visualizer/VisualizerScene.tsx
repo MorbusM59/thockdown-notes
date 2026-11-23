@@ -625,7 +625,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
               data-secondary-press="action"
             >
               <div className="visualizer-cutout-face">
-                <SolidCanvas className="empty-state-solid" seed={solid} animateTo={solid} active subscribeThump={subscribeSolidThump} maxPixelRatio={solidMaxPixelRatio} />
+                <SolidCanvas className="empty-state-solid" seed={solid} animateTo={solid} active subscribeThump={subscribeSolidThump} maxPixelRatio={solidMaxPixelRatio} cornerRadiusPx={closure?.faceRadiusPx ?? 0} />
               </div>
               <div className="visualizer-cutout-orb" />
             </div>
