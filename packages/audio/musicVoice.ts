@@ -37,6 +37,8 @@ export interface MusicCue {
   /** The stream frame its first sample sits at. */
   frame: number;
   songId: number;
+  /** How far into the song that sample is (a seek starts past its beginning), in output frames. */
+  offsetFrames: number;
 }
 
 /** The songs as one stream at the output's rate (see THE STREAM above). */
@@ -56,9 +58,9 @@ export class MusicInput {
     return this.base + this.length;
   }
 
-  /** The next audio appended is `songId`'s first sample. */
-  cue(songId: number): void {
-    this.cues.push({ frame: this.end, songId });
+  /** The next audio appended is `songId`'s, from `offsetFrames` into it. */
+  cue(songId: number, offsetFrames = 0): void {
+    this.cues.push({ frame: this.end, songId, offsetFrames });
     this.ended = false;
   }
 
@@ -111,7 +113,7 @@ export class MusicInput {
   at(frame: number): { songId: number; offsetFrames: number } | null {
     for (let index = this.cues.length - 1; index >= 0; index -= 1) {
       const cue = this.cues[index];
-      if (cue.frame <= frame) return { songId: cue.songId, offsetFrames: frame - cue.frame };
+      if (cue.frame <= frame) return { songId: cue.songId, offsetFrames: cue.offsetFrames + frame - cue.frame };
     }
     return null;
   }

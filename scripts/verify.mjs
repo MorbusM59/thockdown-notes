@@ -116,6 +116,7 @@ const steps = [
   ['build: desktop', 'npx', ['vite', 'build', '--config', 'apps/notes/vite.config.ts']],
   ['build: mobile web app', 'npx', ['vite', 'build', '--config', 'apps/soundscapes/vite.config.ts']],
   ['build: mobile sandbox renderer', 'npx', ['vite', 'build', '--config', 'apps/soundscapes/vite.renderer.config.ts']],
+  ['build: mobile music renderer', 'npx', ['vite', 'build', '--config', 'apps/soundscapes/vite.music-renderer.config.ts']],
 ].filter(Boolean)
 
 for (const [name, command, args] of steps) {
