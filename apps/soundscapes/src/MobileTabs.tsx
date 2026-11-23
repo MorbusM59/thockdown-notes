@@ -45,8 +45,8 @@ export function TabPlaceholder({ name }: { name: string }) {
   )
 }
 
-/** The Visualizer tab: for now the way into the full-screen visualizer; its settings follow. */
-export function VisualizerTab({ onOpen }: { onOpen: () => void }) {
+/** The Visualizer tab: the way into the full-screen visualizer, then its settings (the desktop's, shared). */
+export function VisualizerTab({ onOpen, children }: { onOpen: () => void; children: ReactNode }) {
   return (
     <div className="utility-setting-slider-stack">
       <OptionsSubsectionLabel>Visualizer</OptionsSubsectionLabel>
@@ -55,6 +55,7 @@ export function VisualizerTab({ onOpen }: { onOpen: () => void }) {
           <span className="fa-solid fa-eye" aria-hidden="true" />
         </button>
       </div>
+      {children}
     </div>
   )
 }

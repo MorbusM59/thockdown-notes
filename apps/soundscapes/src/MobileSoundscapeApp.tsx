@@ -82,6 +82,7 @@ import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { startMobileMusicPlayer } from './mobileMusicPlayer'
 import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
+import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
 import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
@@ -606,7 +607,9 @@ export function MobileSoundscapeApp() {
                 </div>
                 </>) : null}
                 {tab === 'soundstages' ? <SoundstagesTab preferences={soundstages} onChange={setSoundstages} /> : null}
-                {tab === 'visualizer' ? <VisualizerTab onOpen={() => setVisualizerOpen(true)} /> : null}
+                {tab === 'visualizer' ? <VisualizerTab onOpen={() => setVisualizerOpen(true)}>
+                  <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} />
+                </VisualizerTab> : null}
                 {tab === 'settings' ? <SettingsTab
                   beatDetection={<BeatDetectionControls
                     beatSettings={beatSettings}
