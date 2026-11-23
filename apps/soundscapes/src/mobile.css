@@ -244,6 +244,10 @@ body {
   padding: 2px 4px;
   border: none;
 }
+.visualizer-prototype-orientation {
+  left: auto;
+  right: 4px;
+}
 .visualizer-prototype-stage {
   position: absolute;
   inset: 0;

@@ -12,7 +12,7 @@
  * (median and 95th percentile) and how many frames took longer than 1.5x the
  * display's own frame, the units a stutter is felt in.
  */
-import { nextDisplayScale, readDisplayScale, setDisplayScale } from './displayScale'
+import { nextDisplayScale, readDisplay, setDisplayScale, setLandscape } from './display'
 import { useEffect, useRef, useState } from 'react'
 import { VisualizerScene } from '@thockdown/visualizer/visualizer/VisualizerScene'
 import { musicPlayerService } from '@thockdown/visualizer/sound/MusicPlayerService'
@@ -56,7 +56,7 @@ function FrameReadout({ scale, setScale }: { scale: number; setScale: (scale: nu
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [])
-  // A tap steps the x n mode (displayScale.ts), so its cost can be read
+  // A tap steps the x n mode (display.ts), so its cost can be read
   // off this readout as it changes.
   return (
     <button
@@ -80,7 +80,13 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
   useBeatFeedback(true, DEFAULT_BEAT_SETTINGS, DEFAULT_VISUALIZER, colors, null, true, mode)
   const [songs, setSongs] = useState<Picked[]>([])
   const [scale, setScale] = useState(1)
-  useEffect(() => { void readDisplayScale().then(setScale) }, [])
+  const [landscape, setLandscapeState] = useState(false)
+  useEffect(() => {
+    void readDisplay().then((display) => {
+      setScale(display.scale)
+      setLandscapeState(display.landscape)
+    })
+  }, [])
   const indexRef = useRef(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -138,6 +144,18 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
       )}
       </div>
       <FrameReadout scale={scale} setScale={setScale} />
+      {/* The orientation switch: the screen turns only when this is pressed. */}
+      <button
+        type="button"
+        className="visualizer-prototype-readout visualizer-prototype-orientation"
+        style={{ fontSize: 12 / scale }}
+        onClick={() => {
+          setLandscapeState(!landscape)
+          void setLandscape(!landscape)
+        }}
+      >
+        <i className={`fa-solid ${landscape ? 'fa-mobile-screen-button fa-rotate-90' : 'fa-mobile-screen-button'}`} aria-hidden="true" />
+      </button>
     </div>
   )
 }

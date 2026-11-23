@@ -1,6 +1,7 @@
 package com.thockdown.soundscapes;
 
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -29,7 +30,7 @@ public class MainActivity extends BridgeActivity {
     private int webViewAccessibility;
 
     static final int MIN_DISPLAY_SCALE = 1;
-    static final int MAX_DISPLAY_SCALE = 4;
+    static final int MAX_DISPLAY_SCALE = 2;
     private static final String DISPLAY_PREFERENCES = "display";
     private static final String DISPLAY_SCALE_KEY = "scale";
     /**
@@ -42,6 +43,13 @@ public class MainActivity extends BridgeActivity {
      * rasterizes at the screen's own resolution.
      */
     private int displayScale = MIN_DISPLAY_SCALE;
+    private static final String LANDSCAPE_KEY = "landscape";
+    /**
+     * The screen's orientation, a switch the reader turns rather than the
+     * phone's sensor: portrait (the manifest's default) or landscape, either
+     * way up.
+     */
+    private boolean landscape = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -52,7 +60,7 @@ public class MainActivity extends BridgeActivity {
         // Local plugins must be registered before the bridge is created.
         registerPlugin(BackgroundAudioPlugin.class);
         registerPlugin(LaunchPlugin.class);
-        registerPlugin(DisplayScalePlugin.class);
+        registerPlugin(DisplayPlugin.class);
         super.onCreate(savedInstanceState);
         // The page draws its own scrollbar (src/PageScrollbar.tsx), the only
         // way it scrolls; the WebView's would be a second one beside it,
@@ -60,7 +68,10 @@ public class MainActivity extends BridgeActivity {
         getBridge().getWebView().setVerticalScrollBarEnabled(false);
         getBridge().getWebView().setHorizontalScrollBarEnabled(false);
         addLaunchOverlay();
-        displayScale = getSharedPreferences(DISPLAY_PREFERENCES, MODE_PRIVATE).getInt(DISPLAY_SCALE_KEY, MIN_DISPLAY_SCALE);
+        SharedPreferences display = getSharedPreferences(DISPLAY_PREFERENCES, MODE_PRIVATE);
+        displayScale = Math.max(MIN_DISPLAY_SCALE, Math.min(MAX_DISPLAY_SCALE, display.getInt(DISPLAY_SCALE_KEY, MIN_DISPLAY_SCALE)));
+        landscape = display.getBoolean(LANDSCAPE_KEY, false);
+        applyOrientation();
         View webView = getBridge().getWebView();
         ((View) webView.getParent()).addOnLayoutChangeListener((parent, l, t, r, b, ol, ot, or, ob) -> {
             if (r - l != or - ol || b - t != ob - ot) applyDisplayScale();
@@ -77,6 +88,22 @@ public class MainActivity extends BridgeActivity {
         SharedPreferences.Editor editor = getSharedPreferences(DISPLAY_PREFERENCES, MODE_PRIVATE).edit();
         editor.putInt(DISPLAY_SCALE_KEY, scale).apply();
         runOnUiThread(this::applyDisplayScale);
+    }
+
+    boolean landscape() {
+        return landscape;
+    }
+
+    void setLandscape(boolean value) {
+        landscape = value;
+        getSharedPreferences(DISPLAY_PREFERENCES, MODE_PRIVATE).edit().putBoolean(LANDSCAPE_KEY, value).apply();
+        runOnUiThread(this::applyOrientation);
+    }
+
+    private void applyOrientation() {
+        setRequestedOrientation(landscape
+            ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
     }
 
     /** Sizes and scales the WebView for the current x n mode against its parent's size. */
