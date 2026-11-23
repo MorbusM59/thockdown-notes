@@ -11,7 +11,7 @@ import type { VisualizerFont } from './visualizerFont';
 import type { VisualizerSettings } from '@thockdown/look/visualizer';
 import type { VisualizerPresetPreferences } from './visualizerPresets';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
-import type { BeatSettings } from './beatSettings';
+import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings';
 import type { FlashShapePreferences } from '@thockdown/visualizer/shared/flashing';
 import type { TooltipSettings } from './tooltipSettings';
 import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';

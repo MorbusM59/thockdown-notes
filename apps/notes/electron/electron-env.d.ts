@@ -30,7 +30,6 @@ interface Window {
   thockdownTextures?: import('../src/shared/textures').TextureCacheApi
   thockdownSpellCheck?: import('../src/shared/spellCheck').SpellCheckApi
   thockdownLoadouts?: import('@thockdown/look/loadouts').UiLoadoutApi
-  thockdownAudioPlayer?: import('@thockdown/visualizer/shared/audioPlayer').AudioPlayerApi
   thockdownTabs?: import('../src/shared/tabs').NoteTabsApi
   thockdownSections?: import('../src/shared/sections').EditorSectionsApi
   thockdownChapters?: import('../src/shared/chapters').ChaptersApi

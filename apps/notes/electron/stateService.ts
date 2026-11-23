@@ -22,7 +22,7 @@ import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeVisualizerPresetPreferences } from '../src/shared/visualizerPresets';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
-import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
+import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '@thockdown/visualizer/shared/beatSettings';
 import { DEFAULT_TOOLTIP_SETTINGS, sanitizeTooltipSettings } from '../src/shared/tooltipSettings';
 import { FLASH_MATCHING_DEFAULT, sanitizeFlashMatching, sanitizeFlashShapePreferences } from '@thockdown/visualizer/shared/flashing';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';

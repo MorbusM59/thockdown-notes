@@ -12,7 +12,7 @@ import { buildTokenPresentation } from '../editor/MarkdownLineClassification';
 import { suppressNextPlainTypingSoundOnce, typingSoundManager } from '../sound/TypingSoundManager';
 import { typingTrail } from '../typingTrail/typingTrail';
 import { spellCheckExtension } from '../spellCheck/spellCheckExtension';
-import { liveStyleTarget } from '../shared/liveStyle';
+import { liveStyleTarget } from '@thockdown/visualizer/shared/liveStyle';
 
 import { ARROW_KEY_VOICES, SHIFT_TAB_KEY_VOICE, TAB_KEY_VOICE } from '../sound/keyVoices';
 import { readSelectionRect, type SelectionRect } from '../editor/CaretRect';

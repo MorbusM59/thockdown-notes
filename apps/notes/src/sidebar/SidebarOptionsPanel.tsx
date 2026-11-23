@@ -45,7 +45,7 @@ import {
   BEAT_RESPONSE_MIN_DB,
   DEFAULT_BEAT_SETTINGS,
   type BeatSettings,
-} from '../shared/beatSettings'
+} from '@thockdown/visualizer/shared/beatSettings'
 import {
   BEAT_CONTRAST_MAX,
   FALL_MAX_SEC,
@@ -243,7 +243,7 @@ import { idKind, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdow
 import { VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '../shared/visualizerPresets'
 import { KEYSTROKE_SOUND_KIND, KEYSTROKE_SOUND_RANGES, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
-import { useOutputDevice } from '../sound/outputDevice'
+import { useOutputDevice } from '@thockdown/visualizer/sound/outputDevice'
 import { BeatLoopCalibration } from './BeatLoopCalibration'
 import { resolveEditorFontFamily } from '../editor/EditorTypography'
 import {

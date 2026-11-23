@@ -15,7 +15,7 @@ import { GLAZE_RAY_NEAREST } from './glaze'
  * flashing curve, matched to the beat (`packages/visualizer/shared/flashing.ts`).
  *
  * Whether the visualizer is on, the per-device visual delay and the
- * response are not here either (`apps/notes/src/shared/beatSettings.ts`).
+ * response are not here either (`packages/visualizer/shared/beatSettings.ts`).
  * The engine is the notes app's `sound/musicBeat.ts`; this file is only the
  * shapes, their defaults and their sanitizers, shared by the renderer and
  * the main process.

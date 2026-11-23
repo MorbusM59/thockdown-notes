@@ -251,3 +251,42 @@ body {
   mix-blend-mode: difference;
   z-index: 0;
 }
+
+/* The box grid every grid surface draws (the editor's, the visualizer's, the
+   beat pane's copy), shared so each app that shows one gets it. */
+/* The box outline: its colour, shaded by the box bevel (--box-shading),
+   through the outline tile (--grid-outline-tile), both built for this
+   element's cell size by shared/boxBevelStore.ts; see
+   packages/look/boxBevel.ts for its geometry). Every element that shows it
+   (the editor's grid, the visualizer's, the beat pane's copy) places the
+   tile and the shading one pixel AFTER its grid line. One tile = exactly
+   one grid cell, never the whole container: a container-sized tile's
+   wraparound copy shows a window-size-dependent residue the moment its
+   position is nonzero. */
+.thockdown-grid-outline-lines {
+  background-color: var(--color-grid-outline);
+  background-image: var(--box-shading, none);
+  background-size: var(--editor-cell-width) var(--editor-line-height);
+  background-repeat: repeat;
+  mask-image: var(--grid-outline-tile);
+  mask-repeat: repeat;
+  mask-size: var(--editor-cell-width) var(--editor-line-height);
+  /* Both images are bitmaps at one pixel per CSS pixel (boxBevelStore.ts):
+     scaled up whole, so double size shows every pixel as a 2x2 block. */
+  image-rendering: pixelated;
+}
+
+.thockdown-grid-lines {
+  /* Exactly draw the 1px grid lines across the absolute width/height using the --color-grid-bg paper color to create the "plates" effect. */
+  background-image:
+    repeating-linear-gradient(to right, var(--color-grid-bg) 0, var(--color-grid-bg) 1px, transparent 1px, transparent var(--editor-cell-width)),
+    repeating-linear-gradient(to bottom, var(--color-grid-bg) 0, var(--color-grid-bg) 1px, transparent 1px, transparent var(--editor-line-height));
+  /* See thockdown-grid-outline-lines's own comment: one tile = one grid
+     cell, not the whole container, so a shifted background-position can't
+     expose a container-size-dependent wraparound seam. */
+  background-size: var(--editor-cell-width) var(--editor-line-height);
+
+  /* FLUSH ALIGNMENT: Start exactly at 0px 0px so grid lines land perfectly on 24px row boundaries */
+  background-position: 0px 0px;
+}
+

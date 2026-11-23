@@ -69,6 +69,7 @@ import { installTouchScroll } from '@thockdown/interaction/touchScroll'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
+import { VisualizerPrototype } from './VisualizerPrototype'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
 installSoundscapeFiles()
@@ -136,6 +137,8 @@ export function MobileSoundscapeApp() {
   // controls (helpText.ts). The system's back gesture ends it (takeBack,
   // below).
   const [helpMode, setHelpMode] = useState(false)
+  // PROTOTYPE: the visualizer page, opened from the eye button beside Look.
+  const [visualizerOpen, setVisualizerOpen] = useState(false)
   // While help is up, the system's back gesture closes it rather than
   // leaving the app.
   useEffect(() => {
@@ -353,6 +356,7 @@ export function MobileSoundscapeApp() {
         <ThemeGlazeLayers glaze={theme.glaze} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
+            {visualizerOpen ? <VisualizerPrototype onExit={() => setVisualizerOpen(false)} colors={loadout.visualizerColors} mode={look.mode} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <div ref={pageScrollerRef} className={`options-content sidebar-options-content thockdown-custom-scrollbar mobile-page-scroller`}>
@@ -447,6 +451,15 @@ export function MobileSoundscapeApp() {
                         : clipDrag.adjusting
                           ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
                           : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon options-color-swatch options-loadout-btn"
+                      data-tooltip="Visualizer"
+                      data-secondary-press="none"
+                      onClick={() => setVisualizerOpen(true)}
+                    >
+                      <span className="fa-solid fa-eye" aria-hidden="true" />
                     </button>
                     <LookButton
                       look={look}
