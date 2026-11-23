@@ -122,7 +122,7 @@ public class BackgroundAudioPlugin extends Plugin {
     }
 
     /**
-     * The schedule: `{ enabled, masterVolume, events, entries }` (see
+     * The schedule: `{ enabled, masterVolume, events, musicEvents, entries }` (see
      * SoundscapeSchedule). Stored and armed; turning it on also applies its
      * state at this moment, so a run in progress starts playing.
      */
@@ -135,6 +135,7 @@ public class BackgroundAudioPlugin extends Plugin {
             // Turned on or off, or its slots changed under a run: either way
             // what is heard may have changed.
             session.applyScheduleState();
+            MusicSession.get(getContext()).applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
             SoundscapeSchedule.arm(getContext());
             call.resolve();
         } catch (Exception error) {

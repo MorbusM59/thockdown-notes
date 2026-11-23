@@ -20,6 +20,13 @@ import java.nio.charset.StandardCharsets;
  * storage, written durably (a sibling, then renamed over the original), so a
  * power cut leaves the old document or the new one.
  *
+ * THE SCHEDULE plays music too (schedule.ts's music channel, events kept by
+ * SoundscapeSchedule): a scheduled run plays its song set alone
+ * (MusicRenderer.setPoolSet), faded in and out over the event's fade. Music
+ * the listener started overrules it, as regular mode overrules the
+ * soundscape's schedule: the schedule then changes nothing until the music
+ * is stopped, and a play during a scheduled run makes it the listener's.
+ *
  * What is heard (a song and how far into it, at which output frame) is
  * passed to the listener (the page, while it exists) as the renderer reports
  * it, and the visualizer's spectrum while it asks for one (`setSpectrum`).
@@ -37,6 +44,8 @@ final class MusicSession {
 
     private static final String CATALOG_FILE = "music-catalog.json";
     private static final String ROTATION_FILE = "music-rotation.json";
+    /** The last soundstage, so a scheduled run with no page plays with it. */
+    private static final String STAGE_FILE = "music-stage.json";
     /** musicLibrary.ts's EMPTY_CATALOG. */
     private static final String EMPTY_CATALOG = "{\"songs\":[],\"activeSetIds\":[],\"filter\":{\"query\":\"\"}}";
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.05;
@@ -48,6 +57,13 @@ final class MusicSession {
     private OutputLane output;
     private MusicRenderer renderer;
     private String stage;
+    /** Whether the music playing is the schedule's run rather than the listener's. */
+    private boolean scheduledRun = false;
+    /** The set the scheduled run plays, so a schedule re-sent unchanged changes nothing. */
+    private Integer scheduledSet = null;
+    /** Ends a scheduled run once its fade out is done. */
+    private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable endScheduledRun = this::endScheduledRun;
     private float volume = 1f;
     private Integer heardId = null;
     private double heardSeconds = 0;
@@ -89,12 +105,19 @@ final class MusicSession {
 
     /** Play with `stageJson` (MusicStage), starting the music if it is not playing; the soundstage otherwise. */
     synchronized void play(String stageJson) {
-        stage = stageJson;
+        setStoredStage(stageJson);
+        handler.removeCallbacks(endScheduledRun);
         if (renderer == null) {
             open();
-        } else if (output.isPaused()) {
-            output.setPaused(false);
+        } else {
+            if (output.isPaused()) output.setPaused(false);
+            // A scheduled run the listener plays on becomes theirs: their sets, at full level.
+            if (scheduledRun) {
+                renderer.setPoolSet(null, false);
+                output.setFade(1f, 0);
+            }
         }
+        scheduledRun = false;
         renderer.setStage(stageJson);
         report();
         if (!SoundscapePlaybackService.sourceChanged(context, true)) {
@@ -107,7 +130,7 @@ final class MusicSession {
 
     /** A new soundstage, heard at once if music plays. */
     synchronized void setStage(String stageJson) {
-        stage = stageJson;
+        setStoredStage(stageJson);
         if (renderer != null) renderer.setStage(stageJson);
     }
 
@@ -143,10 +166,62 @@ final class MusicSession {
 
     /** End the music: the renderer and the lane close. */
     synchronized void stop() {
+        handler.removeCallbacks(endScheduledRun);
+        scheduledRun = false;
         close();
         heardId = null;
         report();
         SoundscapePlaybackService.sourceChanged(context, false);
+    }
+
+    /**
+     * Follow the schedule's music channel as it stands now, a change taking
+     * `fadeSec`: its set plays (faded in, or moved on to at once if a run
+     * already plays), or the run fades out and ends. Music the listener
+     * started is left alone.
+     */
+    synchronized void applySchedule(double fadeSec) {
+        if (output != null && !scheduledRun) return;
+        SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
+        Integer set = schedule.musicSetAt(System.currentTimeMillis());
+        handler.removeCallbacks(endScheduledRun);
+        if (set == null) {
+            if (output == null) return;
+            output.setFade(0f, fadeSec);
+            handler.postDelayed(endScheduledRun, Math.round(fadeSec * 1000));
+            return;
+        }
+        if (output != null) {
+            if (!set.equals(scheduledSet)) renderer.setPoolSet(set, true);
+            scheduledSet = set;
+            output.setFade(1f, fadeSec);
+            return;
+        }
+        if (stage == null) stage = read(STAGE_FILE, null);
+        if (stage == null) return;
+        open();
+        scheduledRun = true;
+        scheduledSet = set;
+        output.fadeFrom(0f, 1f, fadeSec);
+        renderer.setPoolSet(set, false);
+        renderer.setStage(stage);
+        report();
+        if (!SoundscapePlaybackService.sourceChanged(context, true)) {
+            scheduledRun = false;
+            close();
+            report();
+        }
+    }
+
+    private synchronized void endScheduledRun() {
+        if (!scheduledRun) return;
+        stop();
+    }
+
+    private void setStoredStage(String stageJson) {
+        if (stageJson.equals(stage)) return;
+        stage = stageJson;
+        write(STAGE_FILE, stageJson);
     }
 
     /** Whether there is music, playing or paused (the service and its controls follow it). */

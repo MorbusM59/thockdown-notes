@@ -56,7 +56,7 @@ import {
   type MobileLook,
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
-import { sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
+import { musicScheduleEvents, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleRows } from './ScheduleRows'
 import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
@@ -81,6 +81,8 @@ import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { startMobileMusicPlayer } from './mobileMusicPlayer'
+import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
+import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
 installSoundscapeFiles()
@@ -169,6 +171,11 @@ export function MobileSoundscapeApp() {
   }, [activeStage])
   // The music library and player the shared music views read (mobileMusicPlayer.ts).
   const [libraryLoaded, setLibraryLoaded] = useState(false)
+  // The visualizer's and beat detection's settings (visualizerStore.ts).
+  const [visualizer, setVisualizer] = useState(loadVisualizerSettings)
+  useEffect(() => saveVisualizerSettings(visualizer), [visualizer])
+  const [beatSettings, setBeatSettings] = useState(loadBeatSettings)
+  useEffect(() => saveBeatSettings(beatSettings), [beatSettings])
   useEffect(() => {
     if (!nativeMusic) return
     let stop: (() => void) | null = null
@@ -224,6 +231,7 @@ export function MobileSoundscapeApp() {
       : { ...current, entries: current.entries.map((entry) => (entry.setId === null || known.has(entry.setId) ? entry : { ...entry, setId: null })) }))
   }, [libraryLoaded, musicSets])
   const events = useMemo(() => scheduleEvents(schedule), [schedule])
+  const musicEvents = useMemo(() => musicScheduleEvents(schedule), [schedule])
   useEffect(() => {
     if (!native) return
     const named = new Set(events.map((event) => event.presetId))
@@ -231,11 +239,12 @@ export function MobileSoundscapeApp() {
       enabled: schedule.enabled,
       masterVolume: volumeGain(preferences.masterVolume),
       events,
+      musicEvents,
       entries: presets
         .filter((preset) => named.has(preset.id))
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
-  }, [native, schedule.enabled, events, presets, preferences.masterVolume])
+  }, [native, schedule.enabled, events, musicEvents, presets, preferences.masterVolume])
 
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.
@@ -409,7 +418,7 @@ export function MobileSoundscapeApp() {
         <ThemeGlazeLayers glaze={theme.glaze} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
-            {visualizerOpen ? <VisualizerPrototype onExit={() => setVisualizerOpen(false)} colors={loadout.visualizerColors} mode={look.mode} /> : null}
+            {visualizerOpen ? <VisualizerPrototype onExit={() => setVisualizerOpen(false)} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <MobileTabSelector tab={tab} onChange={selectTab} />
@@ -598,7 +607,15 @@ export function MobileSoundscapeApp() {
                 </>) : null}
                 {tab === 'soundstages' ? <SoundstagesTab preferences={soundstages} onChange={setSoundstages} /> : null}
                 {tab === 'visualizer' ? <VisualizerTab onOpen={() => setVisualizerOpen(true)} /> : null}
-                {tab === 'settings' ? <SettingsTab /> : null}
+                {tab === 'settings' ? <SettingsTab
+                  beatDetection={<BeatDetectionControls
+                    beatSettings={beatSettings}
+                    outputDevice={PHONE_OUTPUT_DEVICE}
+                    onBeatSettings={setBeatSettings}
+                    trackers={visualizer.trackers}
+                    onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))}
+                  />}
+                /> : null}
               </div>
               </SidebarFrame>
             </div>

@@ -14,7 +14,7 @@
  * controls, clips or saving to files.
  */
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
-import type { ScheduleEvent } from './schedule'
+import type { MusicScheduleEvent, ScheduleEvent } from './schedule'
 
 /** One soundscape the media controls step through. */
 export interface SessionEntry {
@@ -49,6 +49,8 @@ export interface NativeSchedule {
   /** The listener's volume as a GAIN (volumeGain of the slider), for a run started with no web page to ask. */
   masterVolume: number
   events: ScheduleEvent[]
+  /** The song set's events (schedule.ts's music channel), played by the native music session. */
+  musicEvents: MusicScheduleEvent[]
   /** Every soundscape the events name. */
   entries: SessionEntry[]
 }

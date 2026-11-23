@@ -21,6 +21,10 @@ import org.json.JSONObject;
  * act with the app closed and after a restart or a reboot, when no web page
  * exists to ask.
  *
+ * Two CHANNELS, each with its own events (schedule.ts decides each on its
+ * own): the soundscape's (`events`, played by SoundscapeSession) and the
+ * music's (`musicEvents`, a song set each, played by MusicSession).
+ *
  * It ARMS one exact alarm at a time, for the next event, which
  * ScheduleReceiver hands to the session (SoundscapeSession.applyScheduleEvents)
  * before arming the one after. An exact alarm is also what allows the
@@ -34,6 +38,8 @@ final class SoundscapeSchedule {
         /** "start", "switch" or "stop": see ScheduleEvent in schedule.ts. */
         final String kind;
         final String presetId;
+        /** The song set a music event plays (null for a stop, and on a soundscape event). */
+        final Integer setId;
         /** How long the change takes (timer.ts's fade rule, worked out by schedule.ts). */
         final double fadeSec;
         /**
@@ -43,10 +49,11 @@ final class SoundscapeSchedule {
          */
         final int at;
 
-        Event(int minute, String kind, String presetId, double fadeSec) {
+        Event(int minute, String kind, String presetId, Integer setId, double fadeSec) {
             this.minute = minute;
             this.kind = kind;
             this.presetId = presetId;
+            this.setId = setId;
             this.fadeSec = fadeSec;
             int lead = "start".equals(kind) ? 0 : (int) Math.round(fadeSec);
             this.at = Math.floorMod(minute * 60 - lead, SECONDS_PER_WEEK);
@@ -69,16 +76,22 @@ final class SoundscapeSchedule {
     final boolean enabled;
     final float masterVolume;
     final List<Event> events;
+    final List<Event> musicEvents;
     final List<SoundscapeSession.Entry> entries;
 
-    private SoundscapeSchedule(boolean enabled, float masterVolume, List<Event> events, List<SoundscapeSession.Entry> entries) {
+    private SoundscapeSchedule(boolean enabled, float masterVolume, List<Event> events, List<Event> musicEvents, List<SoundscapeSession.Entry> entries) {
         this.enabled = enabled;
         this.masterVolume = masterVolume;
-        // In the order they BEGIN: a fade's lead can put a change before the one listed ahead of it.
+        this.events = ordered(events);
+        this.musicEvents = ordered(musicEvents);
+        this.entries = entries;
+    }
+
+    /** In the order they BEGIN: a fade's lead can put a change before the one listed ahead of it. */
+    private static List<Event> ordered(List<Event> events) {
         List<Event> ordered = new ArrayList<>(events);
         ordered.sort((a, b) -> Integer.compare(a.at, b.at));
-        this.events = Collections.unmodifiableList(ordered);
-        this.entries = entries;
+        return Collections.unmodifiableList(ordered);
     }
 
     /** From the web page's `setSchedule` call, or the stored copy of one. */
@@ -88,7 +101,14 @@ final class SoundscapeSchedule {
         for (int index = 0; index < eventArray.length(); index += 1) {
             JSONObject event = eventArray.getJSONObject(index);
             events.add(new Event(event.getInt("minute"), event.getString("kind"),
-                event.isNull("presetId") ? null : event.getString("presetId"), event.optDouble("fadeSec", 0)));
+                event.isNull("presetId") ? null : event.getString("presetId"), null, event.optDouble("fadeSec", 0)));
+        }
+        List<Event> musicEvents = new ArrayList<>();
+        JSONArray musicArray = json.optJSONArray("musicEvents");
+        for (int index = 0; musicArray != null && index < musicArray.length(); index += 1) {
+            JSONObject event = musicArray.getJSONObject(index);
+            musicEvents.add(new Event(event.getInt("minute"), event.getString("kind"),
+                null, event.isNull("setId") ? null : event.getInt("setId"), event.optDouble("fadeSec", 0)));
         }
         List<SoundscapeSession.Entry> entries = new ArrayList<>();
         JSONArray entryArray = json.getJSONArray("entries");
@@ -97,7 +117,7 @@ final class SoundscapeSchedule {
             entries.add(new SoundscapeSession.Entry(entry.getString("id"), entry.getString("name"), entry.getString("configuration")));
         }
         return new SoundscapeSchedule(json.getBoolean("enabled"), (float) json.getDouble("masterVolume"),
-            events, Collections.unmodifiableList(entries));
+            events, musicEvents, Collections.unmodifiableList(entries));
     }
 
     static SoundscapeSchedule load(Context context) {
@@ -109,7 +129,7 @@ final class SoundscapeSchedule {
                 // Unreadable: as if there were none.
             }
         }
-        return new SoundscapeSchedule(false, 1f, Collections.emptyList(), Collections.emptyList());
+        return new SoundscapeSchedule(false, 1f, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
     }
 
     /** Store `json` (a schedule as fromJson reads it). */
@@ -158,6 +178,15 @@ final class SoundscapeSchedule {
      * after now.
      */
     List<Event> dueSince(int fromAt) {
+        return dueSince(events, fromAt);
+    }
+
+    /** dueSince for the music's events. */
+    List<Event> musicDueSince(int fromAt) {
+        return dueSince(musicEvents, fromAt);
+    }
+
+    private static List<Event> dueSince(List<Event> events, int fromAt) {
         int span = Math.floorMod(secondOfWeek(Calendar.getInstance()) - fromAt, SECONDS_PER_WEEK);
         List<Event> due = new ArrayList<>();
         for (Event event : events) {
@@ -177,12 +206,25 @@ final class SoundscapeSchedule {
         if (!enabled) return null;
         Calendar at = Calendar.getInstance();
         at.setTimeInMillis(millis);
-        Event event = holdingAt(secondOfWeek(at));
+        Event event = holdingAt(events, secondOfWeek(at));
         return event == null || "stop".equals(event.kind) ? null : entry(event.presetId);
     }
 
-    /** The event whose state holds at second `now` of the week. */
+    /** The song set the schedule plays at wall-clock time `millis`, or null: off, or no music run then. */
+    Integer musicSetAt(long millis) {
+        if (!enabled) return null;
+        Calendar at = Calendar.getInstance();
+        at.setTimeInMillis(millis);
+        Event event = holdingAt(musicEvents, secondOfWeek(at));
+        return event == null || "stop".equals(event.kind) ? null : event.setId;
+    }
+
     private Event holdingAt(int now) {
+        return holdingAt(events, now);
+    }
+
+    /** The event of `events` whose state holds at second `now` of the week. */
+    private static Event holdingAt(List<Event> events, int now) {
         if (events.isEmpty()) return null;
         Event latest = events.get(events.size() - 1);
         for (Event event : events) {
@@ -231,15 +273,19 @@ final class SoundscapeSchedule {
         Intent intent = new Intent(app, ScheduleReceiver.class).setAction(ACTION_ALARM);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
         SoundscapeSchedule schedule = load(app);
-        if (!schedule.enabled || schedule.events.isEmpty() || !canArm(app)) {
+        // Both channels' events: the alarm is for whichever begins next.
+        List<Event> all = new ArrayList<>(schedule.events);
+        all.addAll(schedule.musicEvents);
+        all.sort((a, b) -> Integer.compare(a.at, b.at));
+        if (!schedule.enabled || all.isEmpty() || !canArm(app)) {
             alarms.cancel(PendingIntent.getBroadcast(app, 0, intent, flags));
             return;
         }
         Calendar now = Calendar.getInstance();
         int nowSec = secondOfWeek(now);
         // The first event to begin after this second, or next week's first.
-        Event next = schedule.events.get(0);
-        for (Event event : schedule.events) {
+        Event next = all.get(0);
+        for (Event event : all) {
             if (event.at > nowSec) {
                 next = event;
                 break;

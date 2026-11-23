@@ -52,6 +52,9 @@ body {
 .mobile-app-shell {
   /* The icon size of the phone's regular buttons, which a 2x2 schedule button shares. */
   --mobile-button-icon-size: 24px;
+  /* The panel's content is the page's whole width here, not the desktop
+     sidebar's six-button column, so the shared sections fill it. */
+  --sidebar-options-content-width: 100%;
 }
 
 .mobile-app-shell .options-loadout-grid > * {
@@ -173,12 +176,6 @@ body {
 
 /* The assigned button, split on its diagonal: the song set top left, the
    soundscape bottom right, each mark centered in its half's corner. */
-/* The pickers span the row. */
-.mobile-schedule-entry > .options-section {
-  width: auto;
-  margin-inline: 0;
-}
-
 .mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape.is-assigned {
   position: relative;
   background-image: linear-gradient(to top right, transparent calc(50% - 0.5px), var(--color-text-40) 50%, transparent calc(50% + 0.5px));

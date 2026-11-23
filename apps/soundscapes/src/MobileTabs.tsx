@@ -8,6 +8,7 @@
  * can be judged on a device before their content is.
  */
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import type { ReactNode } from 'react'
 import { AboutPanel } from '@thockdown/interaction/AboutPanel'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { ABOUT_LINKS, APP_VERSION, CREDITS, openAboutLink } from './about'
@@ -59,11 +60,11 @@ export function VisualizerTab({ onOpen }: { onOpen: () => void }) {
 }
 
 /** Settings: Beat Detection, Debugging and About, the desktop's Options sections as accordions. */
-export function SettingsTab() {
+export function SettingsTab({ beatDetection }: { beatDetection: ReactNode }) {
   return (
     <AccordionGroup>
       <AccordionSection ariaLabel="Beat Detection" heading="Beat Detection" iconClass="fa-drum">
-        <p className="mobile-tab-placeholder">Coming soon.</p>
+        {beatDetection}
       </AccordionSection>
       <AccordionSection ariaLabel="Debugging" heading="Debugging" iconClass="fa-bug">
         <p className="mobile-tab-placeholder">Coming soon.</p>

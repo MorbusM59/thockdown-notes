@@ -110,6 +110,20 @@ final class MusicRenderer {
         post(() -> isolate.evaluateJavaScriptAsync("musicCatalog(" + JSONObject.quote(catalogJson) + ")").get());
     }
 
+    /**
+     * The song set the schedule plays (null for none: the catalog's own
+     * sets); `skip` moves on to it at once rather than at the song's end.
+     */
+    void setPoolSet(Integer setId, boolean skip) {
+        post(() -> {
+            isolate.evaluateJavaScriptAsync("musicPoolSet(" + (setId == null ? -1 : setId) + ")").get();
+            if (!skip || stage == null) return;
+            settle();
+            configure(true);
+            startSong(next(heardId), 0);
+        });
+    }
+
     /** The soundstage (MusicStage as JSON); the first one starts playback with the pool's first pick. */
     void setStage(String stageJson) {
         post(() -> {

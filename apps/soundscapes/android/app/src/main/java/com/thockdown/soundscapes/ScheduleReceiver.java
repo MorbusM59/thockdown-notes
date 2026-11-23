@@ -36,10 +36,13 @@ public class ScheduleReceiver extends BroadcastReceiver {
                     List<SoundscapeSchedule.Event> due = schedule.dueSince(at);
                     // The latest change decides how long it takes.
                     if (!due.isEmpty()) session.applyScheduleEvents(due.get(due.size() - 1).fadeSec);
+                    List<SoundscapeSchedule.Event> musicDue = schedule.musicDueSince(at);
+                    if (!musicDue.isEmpty()) MusicSession.get(context).applySchedule(musicDue.get(musicDue.size() - 1).fadeSec);
                 }
             }
         } else if (SoundscapeSchedule.ACTION_APPLY_STATE.equals(action)) {
             session.applyScheduleState();
+            MusicSession.get(context).applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
         } else if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             SoundscapeSchedule.armApplyState(context);
         }
