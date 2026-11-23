@@ -16,4 +16,5 @@ INTERNET permission in the manifest), eighteen layers (`ROSTER_COUNTS` in
 `packages/soundscape/soundscape.ts`), and the notification and alarm permissions it
 names. A change to any of those is a change to `listing.txt` as well.
 
-The privacy policy the listing links to is `../PRIVACY.md`.
+The privacy policy the listing links to is `../PRIVACY.md`; the Data
+safety form's answers, which follow from it, are `DATA_SAFETY.md`.

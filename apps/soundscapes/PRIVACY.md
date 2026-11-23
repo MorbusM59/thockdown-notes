@@ -3,10 +3,17 @@
 Thockdown Soundscapes does not collect, store, transmit or share any personal
 data, and it contains no advertising, analytics or tracking of any kind.
 
-Everything the app keeps (your soundscapes, your schedule and your settings)
-stays on your device. The app has no network access. Files you export, such
-as soundscapes or recorded clips, are saved only where you choose to save
-them.
+Everything the app keeps (your soundscapes, your schedule, your music library
+and your settings) stays on your device. The app has no network access.
+
+Music plays from folders you pick yourself. The app reads only the folders you
+grant it, through the system's folder picker, and never asks for access to
+your storage as a whole. It keeps a list of those songs (file locations and
+the title, artist and album written in the files) on your device, and
+removing a folder from every song set gives the access back.
+
+Files you export, such as soundscapes or recorded clips, are saved only where
+you choose to save them.
 
 Permissions the app asks for, and why:
 
