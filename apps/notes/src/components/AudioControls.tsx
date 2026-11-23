@@ -10,7 +10,7 @@ import {
   type SetSelection,
   isFactoryMusicSet,
 } from '@thockdown/visualizer/shared/audioPlayer'
-import { adjacentSongInPool } from '../shared/musicPool'
+import { adjacentSongInPool } from '@thockdown/visualizer/shared/musicPool'
 import { activeSoundscape, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   fromDisplayLevel,

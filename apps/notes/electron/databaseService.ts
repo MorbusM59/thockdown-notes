@@ -80,7 +80,15 @@ import type {
 import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult, type ImageRenameResult, type StoredImageSummary, renameImageReferences } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
-import { rotatePoolTo } from '../src/shared/musicPool';
+import {
+  afterPlay,
+  favorited,
+  pickFromPool,
+  rotatePoolTo,
+  skipped,
+  unfavorited,
+  type LibrarySong,
+} from '@thockdown/visualizer/shared/musicPool';
 import {
   AUDIO_EXTENSIONS,
   defaultMusicSetName,
@@ -3756,13 +3764,8 @@ export class DatabaseService {
   }
 
   pickNextMusicSong(query: MusicPoolQuery): MusicSongEntry | null {
-    const pool = this.musicPool(query);
-    if (pool.length === 0) return null;
-    // A random song among those sharing the lowest priority.
-    const lowest = pool[0].row['priority'];
-    let count = 1;
-    while (count < pool.length && pool[count].row['priority'] === lowest) count += 1;
-    return pool[Math.floor(Math.random() * count)].song;
+    const pool = this.musicPool(query).map(({ row, song }) => ({ id: row['id'] as number, priority: row['priority'] as number, song }));
+    return pickFromPool(pool)?.song ?? null;
   }
 
   /** Rotate the pool so `id` is the unique next pick, keeping its order (`shared/musicPool.ts`). */
@@ -3783,77 +3786,48 @@ export class DatabaseService {
     return chosen;
   }
 
+  /** Every song's place in the rotation (`shared/musicPool.ts`'s rules read the whole library). */
+  private musicLibrary(): LibrarySong[] {
+    return this.requireDb().prepare('SELECT id, priority, favorability FROM music_songs').all() as LibrarySong[];
+  }
+
+  private writeMusicSong(song: LibrarySong): void {
+    this.requireDb().prepare('UPDATE music_songs SET priority = ?, favorability = ? WHERE id = ?').run(song.priority, song.favorability, song.id);
+  }
+
+  /** Apply one of the rotation's single-song rules to `id`, returning the song as it now is. */
+  private changeMusicSong(id: number, rule: (song: LibrarySong, librarySize: number) => LibrarySong): MusicSongEntry | null {
+    const db = this.requireDb();
+    db.transaction(() => {
+      const library = this.musicLibrary();
+      const song = library.find((entry) => entry.id === id);
+      if (song) this.writeMusicSong(rule(song, library.length));
+    })();
+    const row = db.prepare(
+      `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
+    ).get(id) as Record<string, unknown> | undefined;
+    return row ? this.rowToSongEntry(row) : null;
+  }
+
   afterMusicPlay(id: number): void {
     const db = this.requireDb();
-
-    const tx = db.transaction(() => {
-      // Count total songs in the database (for max priority).
-      const { total } = db.prepare('SELECT COUNT(*) AS total FROM music_songs').get() as { total: number };
-      if (total === 0) return;
-
-      // Set the played song to the lowest priority.
-      db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?').run(total, id);
-
-      // Decrease priority value (increase priority) for all others by their favorability, clamped to 1.
-      db.prepare(`
-        UPDATE music_songs
-        SET priority = MAX(1, priority - favorability)
-        WHERE id != ?
-      `).run(id);
-    });
-
-    tx();
+    db.transaction(() => {
+      const update = db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?');
+      for (const [songId, priority] of afterPlay(this.musicLibrary(), id)) update.run(priority, songId);
+    })();
   }
 
   favoriteMusicSong(id: number): MusicSongEntry | null {
-    const db = this.requireDb();
-    const tx = db.transaction(() => {
-      db.prepare(`
-        UPDATE music_songs
-        SET priority = 0,
-            favorability = MIN(10, favorability + 1)
-        WHERE id = ?
-      `).run(id);
-    });
-    tx();
-    const row = db.prepare(
-      `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
-    ).get(id) as Record<string, unknown> | undefined;
-    return row ? this.rowToSongEntry(row) : null;
+    return this.changeMusicSong(id, favorited);
   }
 
-  /**
-   * Take the replay marker off a favourited song without disturbing how much
-   * it is liked.
-   *
-   * The priority it lands on is the same one `afterMusicPlay` gives a song
-   * that just finished -- the bottom of the rotation -- so un-favouriting
-   * leaves the library in the state it would have been in had the song simply
-   * played through, rather than in a state only this button can produce.
-   * Favorability is untouched, which is the whole difference from
-   * `skipMusicSong`.
-   */
+  /** Off the replay marker, to the back, as liked as before (`shared/musicPool.ts`'s `unfavorited`). */
   unfavoriteMusicSong(id: number): MusicSongEntry | null {
-    const db = this.requireDb();
-    const tx = db.transaction(() => {
-      const { total } = db.prepare('SELECT COUNT(*) AS total FROM music_songs').get() as { total: number };
-      if (total === 0) return;
-      db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?').run(total, id);
-    });
-    tx();
-    const row = db.prepare(
-      `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
-    ).get(id) as Record<string, unknown> | undefined;
-    return row ? this.rowToSongEntry(row) : null;
+    return this.changeMusicSong(id, unfavorited);
   }
 
   skipMusicSong(id: number): void {
-    const db = this.requireDb();
-    const tx = db.transaction(() => {
-      const { total } = db.prepare('SELECT COUNT(*) AS total FROM music_songs').get() as { total: number };
-      db.prepare('UPDATE music_songs SET priority = ?, favorability = 1 WHERE id = ?').run(total, id);
-    });
-    tx();
+    this.changeMusicSong(id, skipped);
   }
 
   getMusicPlaylistCounts(): PlaylistCountsResult {

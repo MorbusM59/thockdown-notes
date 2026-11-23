@@ -1,6 +1,7 @@
 /**
  * The ORDER of the music pool and how a chosen song is moved to its front,
- * as pure rules shared by the database (which applies them) and the tests.
+ * as pure rules shared by the desktop's database and the Android service,
+ * which apply them.
  *
  * THE POOL is every song in the active playlist slots
  * that pass its filter (`databaseService.ts`'s `musicPool`, the one place
@@ -65,4 +66,56 @@ export function rotatePoolTo(pool: readonly PoolSong[], chosenId: number): Array
     if (priority !== song.priority) changes.push([song.id, priority])
   }
   return changes
+}
+
+/**
+ * THE ROTATION, over the whole library (not only the pool): what a play, a
+ * favorite and a skip do to the songs' priorities. Pure, so the desktop's
+ * database and the Android service apply the same rules.
+ *
+ * - A song that PLAYS goes to the back (priority = the library's size) and
+ *   every other song moves up by its FAVORABILITY, not below 1; a liked
+ *   song comes round again sooner.
+ * - FAVORITING puts a song at the front (priority 0, ahead of the clamp at
+ *   1, so it is the next pick) and likes it one more, up to MAX_FAVORABILITY.
+ * - UNFAVORITING sends it to the back without changing how much it is liked.
+ * - SKIPPING sends it to the back and forgets that it was liked.
+ */
+export interface LibrarySong extends PoolSong {
+  favorability: number
+}
+
+export const MAX_FAVORABILITY = 10
+
+/** A random song among those sharing the pool's lowest priority; `pool` in pick order. */
+export function pickFromPool<T extends PoolSong>(pool: readonly T[], random: () => number = Math.random): T | null {
+  if (pool.length === 0) return null
+  let count = 1
+  while (count < pool.length && pool[count].priority === pool[0].priority) count += 1
+  return pool[Math.floor(random() * count)]
+}
+
+/** The library after `playedId` played, as [id, priority] pairs for the songs that change. */
+export function afterPlay(library: readonly LibrarySong[], playedId: number): Array<[number, number]> {
+  const changes: Array<[number, number]> = []
+  for (const song of library) {
+    const priority = song.id === playedId ? library.length : Math.max(1, song.priority - song.favorability)
+    if (priority !== song.priority) changes.push([song.id, priority])
+  }
+  return changes
+}
+
+/** The song after a favorite: next to play, and liked one more. */
+export function favorited(song: LibrarySong): LibrarySong {
+  return { ...song, priority: 0, favorability: Math.min(MAX_FAVORABILITY, song.favorability + 1) }
+}
+
+/** The song after an unfavorite: to the back, as liked as before. */
+export function unfavorited(song: LibrarySong, librarySize: number): LibrarySong {
+  return { ...song, priority: librarySize }
+}
+
+/** The song after a skip: to the back, and no longer liked. */
+export function skipped(song: LibrarySong, librarySize: number): LibrarySong {
+  return { ...song, priority: librarySize, favorability: 1 }
 }
