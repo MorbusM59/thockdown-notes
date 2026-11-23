@@ -34,7 +34,7 @@ public class MainActivity extends BridgeActivity {
     private static final String DISPLAY_PREFERENCES = "display";
     private static final String DISPLAY_SCALE_KEY = "scale";
     /**
-     * The x n mode: the WebView is laid out at 1/n of its parent and drawn n
+     * The visualizer's x n mode (applied only while it is open): the WebView is laid out at 1/n of its parent and drawn n
      * times larger, into a hardware layer of its own size. The page sees a
      * screen n times smaller, so everything on it is n times larger and
      * there are n squared fewer pixels to draw: every filter, mask and
@@ -103,7 +103,10 @@ public class MainActivity extends BridgeActivity {
 
     void setVisualizerOpen(boolean open) {
         visualizerOpen = open;
-        runOnUiThread(this::applyOrientation);
+        runOnUiThread(() -> {
+            applyOrientation();
+            applyDisplayScale();
+        });
     }
 
     private void applyOrientation() {
@@ -116,7 +119,8 @@ public class MainActivity extends BridgeActivity {
     private void applyDisplayScale() {
         View webView = getBridge().getWebView();
         View parent = (View) webView.getParent();
-        int n = displayScale;
+        // Only the visualizer is drawn at x n; the rest of the app always at x1.
+        int n = visualizerOpen ? displayScale : MIN_DISPLAY_SCALE;
         ViewGroup.LayoutParams params = webView.getLayoutParams();
         int width = parent.getWidth();
         int height = parent.getHeight();

@@ -1,6 +1,6 @@
 /**
- * The display switches the reader turns (MainActivity, DisplayPlugin): the
- * x n mode -- the whole page drawn at 1/n of the screen's resolution and
+ * The visualizer's display switches (MainActivity, DisplayPlugin), both
+ * applied only while it is open: the x n mode -- the whole page drawn at 1/n of the screen's resolution and
  * scaled up n times, so everything is n times larger and costs n squared
  * less to draw -- and the visualizer's orientation, portrait or landscape,
  * chosen rather than detected, applied only while the visualizer is open
