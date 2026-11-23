@@ -35,6 +35,8 @@ export interface NativeMusicPlugin {
   /** The visualizer's spectrum in `bands` log bands, sent as `spectrum` events while it is on; 0 stops it. */
   setSpectrum(options: { bands: number }): Promise<void>
   getState(): Promise<{ playing: boolean }>
+  /** What the music's output is doing, as text, for the Debugging section. */
+  getDiagnostics(): Promise<{ text: string }>
   /** What is heard changed (a new song, another second, play or pause): the song and the seconds into it at the output's playhead `frame`. */
   addListener(event: 'heard', listener: (data: { songId: number | null; seconds: number; frame: number; sampleRate: number; playing: boolean }) => void): Promise<PluginListenerHandle>
   /** Spectrum frames (spectrumFrames.ts's batches, as JSON text; nativeMusicListening.ts reads them). */

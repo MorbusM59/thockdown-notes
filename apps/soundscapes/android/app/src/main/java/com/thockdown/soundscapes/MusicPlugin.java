@@ -190,6 +190,13 @@ public class MusicPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getDiagnostics(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("text", session.diagnostics());
+        call.resolve(out);
+    }
+
+    @PluginMethod
     public void getState(PluginCall call) {
         JSObject out = new JSObject();
         out.put("playing", session.isPlaying());

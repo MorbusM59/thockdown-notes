@@ -64,6 +64,8 @@ final class OutputLane {
     /** A value the fade must start from, taken at the next block; NaN for none. */
     private float fadeStart = Float.NaN;
     private boolean paused = false;
+    /** The largest sample this lane added to the mix since `diagnostics` last read it, at full scale 1. */
+    private float peak = 0f;
 
     OutputLane(AudioOutput output, Listener listener) {
         this.output = output;
@@ -210,8 +212,11 @@ final class OutputLane {
             if (index >= available) continue;
             float gain = volume * fade * HEADROOM / 32768f;
             int slot = (int) ((playhead + index) % capacity) * 2;
-            mix[index * 2] += ring[slot] * gain;
-            mix[(index * 2) + 1] += ring[slot + 1] * gain;
+            float left = ring[slot] * gain;
+            float right = ring[slot + 1] * gain;
+            mix[index * 2] += left;
+            mix[(index * 2) + 1] += right;
+            peak = Math.max(peak, Math.max(Math.abs(left), Math.abs(right)));
         }
         if (!started) return false;
         // Silence still moves the playhead: positions are time.
@@ -220,6 +225,17 @@ final class OutputLane {
         if (sinceReport < REPORT_FRAMES) return false;
         sinceReport = 0;
         return true;
+    }
+
+    /** The lane's state for the app's Debugging section; resets the peak. */
+    String diagnostics() {
+        synchronized (output) {
+            String text = String.format(java.util.Locale.ROOT,
+                "started %b, paused %b, volume %.3f (target %.3f, listener %.3f), fade %.3f, playhead %d, queued %d frames, peak %.4f",
+                started, paused, volume, volumeTarget, listenerVolume, fade, playhead, end - playhead, peak);
+            peak = 0f;
+            return text;
+        }
     }
 
     /** Called by the output, outside its lock, when `mixInto` said a report is due. */
