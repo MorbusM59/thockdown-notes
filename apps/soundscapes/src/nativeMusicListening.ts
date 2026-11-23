@@ -149,6 +149,12 @@ class NativeSpectrum implements SpectrumSource {
   }
 
   private receive(batches: SpectrumBatch[]): void {
+    // Frames behind the playhead go even if nothing draws (a spectrum started but not sampled).
+    const behind = this.lastAtOrBefore(this.playheadFrame(performance.now() / 1000))
+    if (behind > 0) {
+      this.positions.splice(0, behind)
+      this.levels.splice(0, behind)
+    }
     for (const batch of batches) {
       // A batch replaces every frame held from its `from` on (a splice re-rendered them).
       const keep = this.lastAtOrBefore(batch.from - 1) + 1

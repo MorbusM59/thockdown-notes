@@ -98,6 +98,8 @@ export class SpectrumFrames {
   private written = -Infinity
   /** How far back the history still reaches. */
   private start = 0
+  /** Frames held by a reader from here on are stale (a rewind or a gap not yet reported); Infinity when none. */
+  private invalidFrom = Infinity
   /** The next frame to compute. */
   private next = 0
   private readonly levels: Float32Array
@@ -133,8 +135,10 @@ export class SpectrumFrames {
         this.next = Math.min(this.next, (Math.floor((at - half) / this.hop) + 1) * this.hop)
       }
       this.longAt = -Infinity
+      // A reader drops what it holds from here: every frame from the first whose window reaches `at`.
+      this.invalidFrom = Math.min(this.next, (Math.floor((at - half) / this.hop) + 1) * this.hop)
     }
-    const from = this.next
+    const from = Math.min(this.invalidFrom, this.next)
     const mask = this.history.length - 1
     for (let i = 0; i < left.length; i += 1) this.history[(at + i) & mask] = (left[i] + right[i]) * 0.5
     this.written = at + left.length
@@ -142,6 +146,7 @@ export class SpectrumFrames {
 
     const count = Math.max(0, Math.floor((this.written - half - this.next) / this.hop) + 1)
     if (count === 0) return null
+    this.invalidFrom = Infinity
     const out = new Uint8Array(count * this.bands)
     const first = this.next
     for (let frame = 0; frame < count; frame += 1) {

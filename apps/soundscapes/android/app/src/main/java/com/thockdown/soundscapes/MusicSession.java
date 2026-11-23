@@ -67,6 +67,8 @@ final class MusicSession {
 
     synchronized void setListener(Listener listener) {
         this.listener = listener;
+        // With no page there is nothing to draw a spectrum: the renderer stops computing one.
+        if (listener == null) setSpectrum(0);
     }
 
     /** The catalog as stored (an empty one before the page has written any). */

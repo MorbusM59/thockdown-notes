@@ -10,7 +10,6 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
-import java.io.FileInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,25 +62,42 @@ final class MusicFileServer extends BridgeWebViewClient {
 
     private WebResourceResponse serve(Uri document, String range) throws IOException {
         ContentResolver resolver = context.getContentResolver();
-        AssetFileDescriptor file = resolver.openAssetFileDescriptor(document, "r");
-        if (file == null) return status(404, "Not Found");
-        long length = file.getLength();
-        FileInputStream in = file.createInputStream();
-        if (length < 0) length = in.getChannel().size();
+        long length;
+        try (AssetFileDescriptor file = resolver.openAssetFileDescriptor(document, "r")) {
+            if (file == null) return status(404, "Not Found");
+            length = file.getLength();
+        }
+        if (length < 0) return status(404, "Not Found");
         long first = 0;
         long last = length - 1;
         boolean partial = range != null && range.startsWith("bytes=");
         if (partial) {
-            String[] bounds = range.substring("bytes=".length()).split("-", 2);
-            if (!bounds[0].isEmpty()) first = Long.parseLong(bounds[0].trim());
-            if (bounds.length > 1 && !bounds[1].trim().isEmpty()) last = Math.min(last, Long.parseLong(bounds[1].trim()));
+            String[] bounds = range.substring("bytes=".length()).split(",")[0].split("-", 2);
+            String start = bounds[0].trim();
+            String end = bounds.length > 1 ? bounds[1].trim() : "";
+            if (start.isEmpty()) {
+                // A suffix: the last `end` bytes.
+                first = Math.max(0, length - Long.parseLong(end));
+            } else {
+                first = Long.parseLong(start);
+                if (!end.isEmpty()) last = Math.min(last, Long.parseLong(end));
+            }
             if (first > last) {
-                in.close();
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Content-Range", "bytes */" + length);
                 return new WebResourceResponse(null, null, 416, "Range Not Satisfiable", headers, null);
             }
-            in.getChannel().position(file.getStartOffset() + first);
+        }
+        InputStream in = resolver.openInputStream(document);
+        if (in == null) return status(404, "Not Found");
+        // Skipped rather than positioned: a provider's stream may keep its own offset.
+        for (long skipped = 0; skipped < first; ) {
+            long step = in.skip(first - skipped);
+            if (step <= 0) {
+                if (in.read() < 0) break;
+                step = 1;
+            }
+            skipped += step;
         }
         long count = last - first + 1;
         Map<String, String> headers = new HashMap<>();
