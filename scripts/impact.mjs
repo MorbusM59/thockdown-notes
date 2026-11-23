@@ -27,7 +27,7 @@ export const HIGH_IMPACT = [
   /(^|\/)capacitor\.config\.ts$/,
   /^apps\/soundscapes\/src\/(backgroundAudioHost|nativeSoundscapePlayback|launchHandover)\.ts$/,
   /^packages\/soundscape\/(soundscapeRenderAhead|soundscapeSandbox|soundscapeGeneratorHost|halfScalePcm)\.ts$/,
-  /^packages\/audio\/renderAhead\.ts$/,
+  /^packages\/audio\/(renderAhead|musicVoice)\.ts$/,
   /(^|\/)package(-lock)?\.json$/,
   /^\.github\/workflows\//,
   /^scripts\/(verify|impact|land|release)\.mjs$/,
