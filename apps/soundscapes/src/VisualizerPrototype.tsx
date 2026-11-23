@@ -12,6 +12,7 @@
  * (median and 95th percentile) and how many frames took longer than 1.5x the
  * display's own frame, the units a stutter is felt in.
  */
+import { nextDisplayScale, readDisplayScale, setDisplayScale } from './displayScale'
 import { useEffect, useRef, useState } from 'react'
 import { VisualizerScene } from '@thockdown/visualizer/visualizer/VisualizerScene'
 import { musicPlayerService } from '@thockdown/visualizer/sound/MusicPlayerService'
@@ -55,7 +56,23 @@ function FrameReadout() {
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
   }, [])
-  return <div className="visualizer-prototype-readout" aria-hidden="true">{text}</div>
+  // A tap steps the x n mode (displayScale.ts), so its cost can be read
+  // off this readout as it changes.
+  const [scale, setScale] = useState(1)
+  useEffect(() => { void readDisplayScale().then(setScale) }, [])
+  return (
+    <button
+      type="button"
+      className="visualizer-prototype-readout"
+      onClick={() => {
+        const next = nextDisplayScale(scale)
+        setScale(next)
+        void setDisplayScale(next)
+      }}
+    >
+      {`x${scale} | ${text}`}
+    </button>
+  )
 }
 
 export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => void; colors: VisualizerColors; mode: 'light' | 'dark' }) {
