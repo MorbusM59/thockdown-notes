@@ -12,6 +12,7 @@
  * (median and 95th percentile) and how many frames took longer than 1.5x the
  * display's own frame, the units a stutter is felt in.
  */
+import { runVisualizerProfile } from './visualizerProfile'
 import { nextDisplayScale, readDisplay, setDisplayScale, setLandscape, setVisualizerOpen } from './display'
 import { useEffect, useRef, useState } from 'react'
 import { VisualizerScene } from '@thockdown/visualizer/visualizer/VisualizerScene'
@@ -81,6 +82,9 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
   const [songs, setSongs] = useState<Picked[]>([])
   const [scale, setScale] = useState(1)
   const [landscape, setLandscapeState] = useState(false)
+  // The profiling run (visualizerProfile.ts): the step running, then the report.
+  const [profileStep, setProfileStep] = useState<string | null>(null)
+  const [report, setReport] = useState<string | null>(null)
   useEffect(() => {
     void setVisualizerOpen(true)
     return () => { void setVisualizerOpen(false) }
@@ -148,6 +152,30 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
       )}
       </div>
       <FrameReadout scale={scale} setScale={setScale} />
+      {songs.length > 0 && (
+        <button
+          type="button"
+          className="visualizer-prototype-readout visualizer-prototype-profile"
+          style={{ fontSize: 12 / scale }}
+          disabled={profileStep !== null}
+          onClick={() => {
+            setProfileStep('starting')
+            void runVisualizerProfile(scale, setProfileStep).then((text) => {
+              setProfileStep(null)
+              setReport(text)
+            })
+          }}
+        >
+          {profileStep ?? <i className="fa-solid fa-stopwatch" aria-hidden="true" />}
+        </button>
+      )}
+      {report !== null && (
+        <div className="visualizer-prototype-report" style={{ fontSize: 12 / scale }}>
+          <textarea readOnly value={report} />
+          <button type="button" onClick={() => { void navigator.clipboard.writeText(report) }}>Copy</button>
+          <button type="button" onClick={() => setReport(null)}>Close</button>
+        </div>
+      )}
       {/* The visualizer's orientation switch: it turns only when this is pressed. */}
       <button
         type="button"

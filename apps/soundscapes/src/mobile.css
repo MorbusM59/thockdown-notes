@@ -248,6 +248,32 @@ body {
   left: auto;
   right: 4px;
 }
+.visualizer-prototype-profile {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.visualizer-prototype-report {
+  position: fixed;
+  inset: 10% 4px;
+  z-index: 61;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 4px;
+}
+.visualizer-prototype-report textarea {
+  flex: 1 1 100%;
+  height: calc(100% - 3em);
+  font: inherit;
+  font-family: monospace;
+  color: #fff;
+  background: transparent;
+}
+.visualizer-prototype-report button {
+  font: inherit;
+  padding: 0.4em 1em;
+}
 .visualizer-prototype-stage {
   position: absolute;
   inset: 0;
