@@ -529,24 +529,22 @@ function cutOutSolid(
   a.stroke()
 
   // Cut out through the quantize: the COMPOSITED alpha of the faces and
-  // edges, stepped to QUANTIZE_STEPS values from 0 to 1.
-  // Drawn through the quantize into `quantized` at the scene's own pixel
-  // grid, then cut out 1:1 over the whole-pixel box around it, so the result
-  // is the same pixels as drawing through the filter straight onto the scene.
+  // edges, stepped to QUANTIZE_STEPS values from 0 to 1. The quantize runs
+  // at the alpha's own CSS-pixel size and the result is scaled onto the
+  // scene: a canvas filter is applied per pixel on the CPU on a phone, so at
+  // a device pixel ratio of 2.6 filtering at device resolution cost ~50ms a
+  // frame (measured, 4x CPU throttle, 412x915 at 2.625), while its stepped
+  // edges are already softer than a device pixel can show.
   const { quantized, quantizedContext: q } = scratch
-  if (quantized.width !== width || quantized.height !== height) {
-    quantized.width = width
-    quantized.height = height
+  if (quantized.width !== size || quantized.height !== size) {
+    quantized.width = size
+    quantized.height = size
     q.filter = quantizeFilter()
   }
+  q.clearRect(0, 0, size, size)
+  q.drawImage(alpha, 0, 0)
   const left = (width - side) / 2
-  const x0 = Math.max(0, Math.floor(left))
-  const y0 = Math.max(0, Math.floor(top))
-  const x1 = Math.min(width, Math.ceil(left + side))
-  const y1 = Math.min(height, Math.ceil(top + side))
-  q.clearRect(x0, y0, x1 - x0, y1 - y0)
-  q.drawImage(alpha, left, top, side, side)
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(quantized, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0)
+  context.drawImage(quantized, left, top, side, side)
   context.globalCompositeOperation = 'source-over'
 }
