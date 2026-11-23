@@ -105,7 +105,7 @@ final class SoundscapeRenderer {
     private void run() {
         JavaScriptIsolate isolate = null;
         try {
-            isolate = SharedSandbox.openRendererIsolate(context);
+            isolate = SharedSandbox.openRendererIsolate(context, SharedSandbox.SOUNDSCAPE_RENDERER);
             JSONObject init = new JSONObject();
             init.put("sampleRate", output.sampleRate);
             init.put("seed", (int) (System.nanoTime() & 0x7fffffff));

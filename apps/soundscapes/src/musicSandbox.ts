@@ -14,8 +14,8 @@
  * the Android app's assets.
  *
  * The functions it defines on globalThis:
- * - musicInit(json): `{ sampleRate, spliceMarginSec, bands }`, the EQ bands
- *   as `{ frequencyHz, q }`;
+ * - musicInit(json): `{ sampleRate, spliceMarginSec }`; the EQ bands are the
+ *   desktop's (musicEqCurve.ts's EQ_BAND_FREQUENCIES_HZ at EQ_BAND_Q);
  * - musicConfigure(json): MusicSettings (the soundstage; `cut` for a skip or
  *   a seek, which drops the stream from the splice on);
  * - musicSong(songId, sourceRate, offsetFrames): the audio appended next is
@@ -29,9 +29,9 @@
  *   is heard at the playhead.
  */
 import { MusicVoice, type MusicSettings } from '@thockdown/audio/musicVoice';
-import type { MusicEqBand } from '@thockdown/audio/musicMix';
 import { RenderAheadEngine, type RenderedChunk } from '@thockdown/audio/renderAhead';
 import { StreamResampler } from '@thockdown/audio/resampler';
+import { EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q } from '@thockdown/visualizer/shared/musicEqCurve';
 import { decodeFullScaleStereo, encodeHalfScaleStereo } from '@thockdown/soundscape/halfScalePcm';
 
 let engine: RenderAheadEngine<MusicSettings> | null = null;
@@ -44,7 +44,8 @@ const rendered: RenderedChunk[] = [];
 const scope = globalThis as unknown as Record<string, unknown>;
 
 scope.musicInit = (json: string): string => {
-  const { sampleRate, spliceMarginSec, bands } = JSON.parse(json) as { sampleRate: number; spliceMarginSec: number; bands: MusicEqBand[] };
+  const { sampleRate, spliceMarginSec } = JSON.parse(json) as { sampleRate: number; spliceMarginSec: number };
+  const bands = EQ_BAND_FREQUENCIES_HZ.map((frequencyHz) => ({ frequencyHz, q: EQ_BAND_Q }));
   outputRate = sampleRate;
   voice = new MusicVoice(sampleRate, bands);
   resampler = null;

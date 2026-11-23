@@ -63,7 +63,7 @@ final class ClipRenderer {
         MediaMuxer muxer = null;
         boolean muxerStarted = false;
         try {
-            isolate = SharedSandbox.openRendererIsolate(context);
+            isolate = SharedSandbox.openRendererIsolate(context, SharedSandbox.SOUNDSCAPE_RENDERER);
             JSONObject init = new JSONObject();
             init.put("sampleRate", SAMPLE_RATE);
             init.put("seed", (int) (System.nanoTime() & 0x7fffffff));

@@ -10,8 +10,7 @@ import { RENDER_CHUNK_FRAMES, RENDER_LEAD_SEC } from '@thockdown/audio/renderAhe
 const root = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
 const OUTPUT_RATE = 8000;
 const SOURCE_RATE = 11025;
-const BANDS = [{ frequencyHz: 100, q: 1.5 }, { frequencyHz: 1000, q: 1.5 }];
-const STAGE = { eqGainsDb: [0, 0], reverbAmount: 0, size: 0.3, foliage: 0, width: 1 };
+const STAGE = { eqGainsDb: new Array(31).fill(0), reverbAmount: 0, size: 0.3, foliage: 0, width: 1 };
 
 let bundle = '';
 
@@ -34,7 +33,7 @@ function sandbox() {
     musicEnd(): string;
     musicStep(playedFrame: number, maxChunks: number): string;
   };
-  api.musicInit(JSON.stringify({ sampleRate: OUTPUT_RATE, spliceMarginSec: 0.15, bands: BANDS }));
+  api.musicInit(JSON.stringify({ sampleRate: OUTPUT_RATE, spliceMarginSec: 0.15}));
   return { ...api, step: (played: number, max = 1000) => JSON.parse(api.musicStep(played, max)) as Step };
 }
 

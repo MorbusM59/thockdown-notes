@@ -10,9 +10,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 /**
- * The process's one JavaScriptSandbox, shared by everything that runs the
- * soundscape renderer: the live renderer (SoundscapeRenderer) and a clip
- * being rendered (ClipRenderer) may run at once, each in its own isolate.
+ * The process's one JavaScriptSandbox, shared by everything that renders
+ * in JavaScript: the soundscape's live renderer (SoundscapeRenderer), a clip
+ * being rendered (ClipRenderer) and the music's renderer (MusicRenderer) may
+ * run at once, each in its own isolate.
  *
  * A process can be connected to only one sandbox at a time, so it is
  * counted rather than created per user: the first isolate opened connects
@@ -28,12 +29,17 @@ final class SharedSandbox {
         return JavaScriptSandbox.isSupported();
     }
 
+    /** The soundscape's renderer script, built from packages/soundscape/soundscapeSandbox.ts. */
+    static final String SOUNDSCAPE_RENDERER = "soundscape-renderer.js";
+    /** The music's renderer script, built from apps/soundscapes/src/musicSandbox.ts. */
+    static final String MUSIC_RENDERER = "music-renderer.js";
+
     /**
-     * A new isolate with the renderer script (assets/soundscape-renderer.js)
-     * already evaluated in it. Blocks; call from a worker thread. Each one
+     * A new isolate with a renderer script (an asset, SOUNDSCAPE_RENDERER or
+     * MUSIC_RENDERER) already evaluated in it. Blocks; call from a worker thread. Each one
      * opened must be given back to `close`.
      */
-    static JavaScriptIsolate openRendererIsolate(Context context) throws Exception {
+    static JavaScriptIsolate openRendererIsolate(Context context, String script) throws Exception {
         JavaScriptSandbox connected;
         synchronized (SharedSandbox.class) {
             if (sandbox == null) sandbox = JavaScriptSandbox.createConnectedInstanceAsync(context.getApplicationContext()).get();
@@ -47,7 +53,7 @@ final class SharedSandbox {
                 parameters.setMaxHeapSizeBytes(256L * 1024 * 1024);
             }
             JavaScriptIsolate isolate = connected.createIsolate(parameters);
-            isolate.evaluateJavaScriptAsync(readAsset(context, "soundscape-renderer.js")).get();
+            isolate.evaluateJavaScriptAsync(readAsset(context, script)).get();
             return isolate;
         } catch (Exception error) {
             release();
