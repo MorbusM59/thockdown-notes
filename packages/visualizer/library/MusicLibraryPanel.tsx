@@ -31,7 +31,7 @@ function formatSongDuration(seconds: number): string {
  * creating a set, as the Soundscapes view's presets end in theirs. The order is
  * the sets' one order, the music player's buttons included.
  */
-function SetSelector({ slot }: { slot: PlaylistSlot }) {
+function SetSelector({ slot }: { slot: PlaylistSlot | null }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
   const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
@@ -148,7 +148,17 @@ export function MusicSetIconPicker({ query }: { query: string }) {
 
 export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetListGrouping; filter: string }) {
   const set = useOpenMusicSet()
-  if (!set) return <div className="options-content sidebar-options-content" aria-label="Songs" />
+  // With no set yet (the phone starts with none) the selector is still
+  // there, holding only its plus, so the first set can be made.
+  if (!set) {
+    return (
+      <div className="options-content sidebar-options-content" aria-label="Songs">
+        <div className="preset-section">
+          <SetSelector slot={null} />
+        </div>
+      </div>
+    )
+  }
   return <MusicLibrarySet set={set} grouping={grouping} filter={filter} />
 }
 

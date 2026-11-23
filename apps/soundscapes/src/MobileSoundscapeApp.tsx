@@ -75,7 +75,7 @@ import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { MusicLibraryDock, MusicLibraryPanel } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
 import { MobileTabSelector, SettingsTab, VisualizerTab } from './MobileTabs'
-import { SoundstagesTab } from './SoundstagesTab'
+import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
 import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
@@ -426,12 +426,23 @@ export function MobileSoundscapeApp() {
               <SidebarFrame
                 panelMode
                 contentRef={pageScrollerRef}
-                dock={tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} /> : null}
+                dock={tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
+                  : tab === 'soundscapes' ? (
+                    <SoundscapeDock
+                      preferences={preferences}
+                      onChange={setPreferences}
+                      picking={iconQuery !== null}
+                      onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
+                      detail={timeLeft}
+                    />
+                  )
+                  : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
+                  : null}
                 scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
               >
               <div className="options-content sidebar-options-content mobile-tab-content">
                 {tab === 'songs' ? <MusicLibraryPanel grouping={songsGrouping} filter="" /> : null}
-                {tab === 'soundscapes' ? (<>
+                {tab === 'soundscapes' && iconQuery === null ? (<>
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Master')!} /> : (<>
@@ -524,15 +535,6 @@ export function MobileSoundscapeApp() {
                           ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
                           : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
                     </button>
-                    <button
-                      type="button"
-                      className="btn-icon options-color-swatch options-loadout-btn"
-                      data-tooltip="Visualizer"
-                      data-secondary-press="none"
-                      onClick={() => setVisualizerOpen(true)}
-                    >
-                      <span className="fa-solid fa-eye" aria-hidden="true" />
-                    </button>
                     <LookButton
                       look={look}
                       presetCount={PRESETS[look.mode].length}
@@ -560,40 +562,33 @@ export function MobileSoundscapeApp() {
                   <OptionsSubsectionLabel>Timer</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Timer')!} /> : <TimerRow timer={timer} onChange={setTimer} />}
                 </div>
-                <SoundscapeControls
+                </>) : null}
+                {/* Picking the active soundscape's icon (its dock's icon
+                    button) replaces the page with the picker, as on the
+                    desktop. */}
+                {tab === 'soundscapes' ? (iconQuery !== null ? (<>
+                  <input
+                    className="options-curve-cell options-curve-field mobile-icon-filter"
+                    aria-label="Filter the icons"
+                    placeholder="Filter icons..."
+                    value={iconQuery}
+                    onChange={(event) => setIconQuery(event.target.value)}
+                  />
+                  <IconPickerGrid
+                    label={activeSoundscape(preferences).name}
+                    current={activeSoundscape(preferences).icon}
+                    query={iconQuery}
+                    onPick={(icon) => {
+                      setIconQuery(null)
+                      setPreferences((current) => setSoundscapeIcon(current, activeSoundscape(current).id, icon))
+                    }}
+                  />
+                </>) : <SoundscapeControls
                   preferences={preferences}
                   onChange={handleChange}
                   presetReorder={presetReorder}
                   help={help}
-                  activeSoundscapeContent={iconQuery === null ? null : (<>
-                    <input
-                      className="options-curve-cell options-curve-field mobile-icon-filter"
-                      aria-label="Filter the icons"
-                      placeholder="Filter icons..."
-                      value={iconQuery}
-                      onChange={(event) => setIconQuery(event.target.value)}
-                    />
-                    <IconPickerGrid
-                      label={activeSoundscape(preferences).name}
-                      current={activeSoundscape(preferences).icon}
-                      query={iconQuery}
-                      onPick={(icon) => {
-                        setIconQuery(null)
-                        setPreferences((current) => setSoundscapeIcon(current, activeSoundscape(current).id, icon))
-                      }}
-                    />
-                  </>)}
-                  presetsDock={(
-                    <SoundscapeDock
-                      preferences={preferences}
-                      onChange={setPreferences}
-                      picking={iconQuery !== null}
-                      onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
-                      detail={timeLeft}
-                    />
-                  )}
-                />
-                </>) : null}
+                />) : null}
                 {tab === 'schedules' ? (<>
                 <div className="utility-setting-slider-stack" aria-label="Schedule">
                   <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>

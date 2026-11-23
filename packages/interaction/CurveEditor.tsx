@@ -295,6 +295,7 @@ export function CurveEditor(props: CurveEditorProps) {
             <span
               key={index}
               data-curve-point={index}
+              data-touch-handle=""
               className={`utility-setting-scrollbar-thumb options-curve-point${index === active ? ' is-active' : ''}`}
               style={{ left: `${(xOf(point.x) / WIDTH) * 100}%`, top: `${(yOf(point.y) / HEIGHT) * 100}%` }}
             />

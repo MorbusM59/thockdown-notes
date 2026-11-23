@@ -36,8 +36,9 @@ body {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  /* No right padding: the scrollbar's column is the right margin. */
-  padding: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px) 12px;
+  /* No side padding: the panel's frame meets the screen's left edge, and the
+     scrollbar's column is the right margin. */
+  padding: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px) 0;
 }
 
 /* Every button grid is six equal columns spanning the row, with square
@@ -214,17 +215,21 @@ body {
    in the desktop's styles). A finger scrolls it, but by the app's rule
    rather than the browser's (touchScroll.ts): the browser would claim every
    first movement, before a control could say the press was its own. */
-.mobile-page-scroller {
+.mobile-app-shell .sidebar-content.is-scrollbar-mode {
   touch-action: none;
 }
 
-/* The page's scrollbar, at the right edge where the system's would be: a
-   column a fingertip wide, the desktop's track drawn in its middle, and the
-   whole column grabs (PageScrollbar.tsx). */
+/* The page's scrollbar, in the frame's scrollbar slot at the right edge
+   where the system's would be: a column a fingertip wide, the desktop's
+   track drawn in its middle, and the whole column grabs (PageScrollbar.tsx).
+   It fills the slot, which is the frame's height. */
+.mobile-app-shell {
+  --sidebar-scrollbar-slot-width: 44px;
+}
+
 .mobile-scrollbar-slot {
-  position: relative;
-  flex: 0 0 44px;
-  margin: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px);
+  position: absolute;
+  inset: 0;
   touch-action: none;
 }
 
@@ -328,4 +333,11 @@ body {
 .mobile-tab-placeholder {
   opacity: 0.6;
   margin: 0;
+}
+
+/* A curve's points (the soundstage EQ) at a fingertip's size: the desktop's
+   are sized for a mouse. The plot's inset follows the size, so a point at
+   either end still sits whole inside the graph. */
+.mobile-app-shell .options-curve-graph {
+  --curve-point-size: 28px;
 }

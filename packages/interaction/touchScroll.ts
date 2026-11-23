@@ -12,6 +12,10 @@
  *   keeps the finger, whatever direction it then moves;
  * - the press is on a SLIDER (`[data-touch-slider]`, which needs no hold)
  *   and the move is not vertical: the slider keeps it;
+ * - the press is on a HANDLE (`[data-touch-handle]`: a thing the finger
+ *   grabs and moves in two dimensions, such as a curve's point): the handle
+ *   keeps it, whatever direction it moves, since any direction is a move of
+ *   the handle. A press beside it (the curve's empty graph) still swipes;
  * - otherwise it is a SWIPE: the control gets a `pointercancel` (the app's
  *   one way of abandoning a press, which every press handler already obeys)
  *   and sees nothing more of this finger, and the page scrolls with it, and
@@ -38,11 +42,21 @@ export const VELOCITY_WINDOW_MS = 80
 export type TouchOwner = 'control' | 'scroll'
 
 /** Who owns a touch that has left the tap radius by (dx, dy). Pure: the rule above. */
-export function touchOwner(dx: number, dy: number, taken: boolean, onSlider: boolean): TouchOwner {
-  if (taken) return 'control'
+export type TouchGrip = 'none' | 'slider' | 'handle'
+
+export function touchOwner(dx: number, dy: number, taken: boolean, grip: TouchGrip): TouchOwner {
+  if (taken || grip === 'handle') return 'control'
+  const onSlider = grip === 'slider'
   const vertical = Math.abs(dy) > VERTICAL_RATIO * Math.abs(dx)
   if (onSlider && !vertical) return 'control'
   return 'scroll'
+}
+
+/** What the press landed on, as far as the rule above cares. */
+function gripOf(target: Element): TouchGrip {
+  if (target.closest('[data-touch-handle]')) return 'handle'
+  if (target.closest('[data-touch-slider]')) return 'slider'
+  return 'none'
 }
 
 /** A position of a swiping finger, with the event's time stamp. */
@@ -128,7 +142,7 @@ export function installTouchSwipe(surface: HTMLElement, handlers: SwipeHandlers 
       const dx = event.clientX - current.x
       const dy = event.clientY - current.y
       if (Math.hypot(dx, dy) <= HOLD_GRACE_TOUCH_PX) return
-      current.owner = touchOwner(dx, dy, pressTakenByHold(current.pointerId), current.target.closest('[data-touch-slider]') !== null)
+      current.owner = touchOwner(dx, dy, pressTakenByHold(current.pointerId), gripOf(current.target))
       if (current.owner === 'control') return
       takeFromControl(current)
       handlers.begin?.({ x: current.x, y: current.y, t: event.timeStamp })

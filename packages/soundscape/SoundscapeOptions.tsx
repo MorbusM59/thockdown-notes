@@ -407,8 +407,6 @@ interface SoundscapeControlsProps extends SoundscapeOptionsProps {
    * one, the grid grows with what it holds (the mobile app).
    */
   framePresets?: (grid: ReactNode) => ReactNode
-  /** Content owned by the active soundscape section, directly below its dock. */
-  activeSoundscapeContent?: ReactNode
   /**
    * Dragging a soundscape to reorder it, which a host may offer (the desktop's
    * Soundscapes view, through its selector's drag): per soundscape, the press
@@ -554,24 +552,16 @@ export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & Pi
  * controls as its whole interface, where a heading would have nothing to
  * collapse against.
  */
-export function SoundscapeControls({ presetsDock, activeSoundscapeContent, ...props }: SoundscapeControlsProps & { presetsDock?: ReactNode }) {
+export function SoundscapeControls(props: SoundscapeControlsProps) {
   return (
     <SoundscapeParts
       {...props}
       arrangement="labelled"
       arrange={({ presets, environment, channels, presetsLabel, channelsLabel }) => (
         <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
-          {/* The dock for the soundscape that plays (SoundscapeDock), above
-              the soundscapes it is one of; the desktop keeps it below its
-              view instead. Help covers it. */}
-          {props.help?.('Presets') ? presetsLabel : (
-            <>
-              <OptionsSubsectionLabel>Active Soundscape</OptionsSubsectionLabel>
-              {presetsDock}
-              {activeSoundscapeContent}
-              {presetsLabel}
-            </>
-          )}
+          {/* The dock for the soundscape that plays (SoundscapeDock) is the
+              host's, below the page as on the desktop. */}
+          {presetsLabel}
           {presets}
           {environment}
           {channelsLabel}
