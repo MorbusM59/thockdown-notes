@@ -3932,7 +3932,7 @@ export class DatabaseService {
         timestamp TEXT NOT NULL,
         isManual INTEGER NOT NULL DEFAULT 0,
         -- A snapshot of what was on DISK, for an external note. Its own kind
-        -- rather than a flavour of isManual: the original an external note is
+        -- rather than a flavor of isManual: the original an external note is
         -- compared against has to be identifiable outright, and code that
         -- looked for "the one that isn't manual" would find the wrong row the
         -- moment a second automatic snapshot existed. Carries the FILE's

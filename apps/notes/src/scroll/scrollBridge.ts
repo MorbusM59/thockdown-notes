@@ -218,7 +218,7 @@ function openScrollBridge(surface: CurtainSurface): ScrollBridge | null {
 
   const teardown = () => {
     if (root) {
-      traceScroll(() => `bridge end     last travelled=${lastTravelledPx === null ? 'never advanced' : Math.round(lastTravelledPx)}`
+      traceScroll(() => `bridge end     last traveled=${lastTravelledPx === null ? 'never advanced' : Math.round(lastTravelledPx)}`
         + ` of sweep=${Math.round(sweepDistancePx)}`
         + (lastTravelledPx === null ? ' <-- curtain was raised but NEVER MOVED' : ''))
     }
@@ -331,13 +331,13 @@ function openScrollBridge(surface: CurtainSurface): ScrollBridge | null {
       // advance and then only when cover starts or ends, so a bridge costs a
       // handful of lines rather than one per frame.
       if (lastTravelledPx === null) {
-        traceScroll(() => `bridge advance first travelled=${Math.round(travelled)}`)
+        traceScroll(() => `bridge advance first traveled=${Math.round(travelled)}`)
       } else if (travelled !== lastTravelledPx) {
         const stepPx = travelled - lastTravelledPx
         const covering = travelled >= viewportHeightPx && travelled <= bandHeightPx
         if (covering !== wasCovering) {
           wasCovering = covering
-          traceScroll(() => `bridge ${covering ? 'COVERS ' : 'uncover'} travelled=${Math.round(travelled)}`
+          traceScroll(() => `bridge ${covering ? 'COVERS ' : 'uncover'} traveled=${Math.round(travelled)}`
             + ` step=${Math.round(stepPx)}px/frame`
             + ` =${(stepPx / Math.max(1, viewportHeightPx)).toFixed(2)} viewports`
             + `, ${(stepPx / Math.max(1, tileHeightForTrace)).toFixed(3)} tiles`

@@ -488,7 +488,7 @@ export const COMBAT_CLASSES: readonly CombatClass[] = [
         damageShare: 1.9,
         critShare: 0.4,
         ignoresArmor: true,
-        flavour: 'Judgement falls heaviest on the unbowed.',
+        flavour: 'Judgment falls heaviest on the unbowed.',
       },
       {
         id: 'templar:absolve',

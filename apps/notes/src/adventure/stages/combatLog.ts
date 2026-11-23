@@ -157,7 +157,7 @@ function damageOf(blow: Blow): string | null {
   const band = banded ? ` (${low}-${high}, best of ${math.rolls})` : ''
   const terms = [`${rolled}${band}`]
   if (math.critMultiplier !== 1) terms.push(`x ${math.critMultiplier} crit`)
-  if (math.absorbed > 0) terms.push(`- ${Math.round(math.absorbed)} armour`)
+  if (math.absorbed > 0) terms.push(`- ${Math.round(math.absorbed)} armor`)
   // The short form only where there is genuinely nothing to show: no band to
   // have been drawn from, no crit, no armour. Testing the TERMS rather than
   // the band threw away the band it had just written, which is how a live

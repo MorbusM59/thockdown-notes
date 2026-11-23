@@ -8870,7 +8870,7 @@ ${markdownHtml}
                     // The Colors subsection's picker, docked directly above the
                     // layout's dock row so it stays in reach however far down
                     // the subsection the reader is setting colours.
-                    <div className="sidebar-plain-dock" aria-label="Colour picker">
+                    <div className="sidebar-plain-dock" aria-label="Color picker">
                       <ColorPickerRow />
                     </div>
                   ) : null}

@@ -57,7 +57,7 @@ export const TACTIC_EXPLANATIONS: Readonly<Record<TacticKey, string>> = {
   mark: 'a share of the round\'s first blow is added to its last',
   setup: 'a share of the fight\'s first blow is added to every blow against a maimed foe',
   counter: 'a free attack every time you answer a blow, worth a share of an ordinary one',
-  thorns: 'armour that stops a blow throws a share of itself back',
+  thorns: 'armor that stops a blow throws a share of itself back',
 }
 
 /**

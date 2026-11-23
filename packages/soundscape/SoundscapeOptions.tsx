@@ -209,7 +209,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
       label: 'Sound',
       controls: [
         VOLUME,
-        unit('colour', 'colour', 'The noise itself: deep brown, balanced pink, bright white, and every blend between', (value) => formatScale(value, COLOUR_POINTS)),
+        unit('colour', 'color', 'The noise itself: deep brown, balanced pink, bright white, and every blend between', (value) => formatScale(value, COLOUR_POINTS)),
         { key: 'brightnessHz', track: 'bright', tooltip: 'Filter position', min: SOUNDSCAPE_NOISE_BRIGHTNESS_MIN_HZ, max: SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ, log: true, format: (value) => (value >= SOUNDSCAPE_NOISE_BRIGHTNESS_MAX_HZ * 0.99 ? 'Open' : formatHz(value)) },
         unit('focus', 'focus', 'A gentle low-pass to a narrow resonant band: a whistle at the brightness', (value) => formatAmount(value, 'Broad', 'Whistle')),
       ],
@@ -230,7 +230,7 @@ const CONTROLS: { [K in SoundscapeChannelKind]: ControlGroup[] } = {
       controls: [
         DISTANCE,
         unit('width', 'width', 'Two unrelated sides, enveloping, to a single point', (value) => formatAmount(value, 'Point', 'Wide')),
-        unit('sway', 'sway', 'How far it sways across the field, crossing centre at each peak', (value) => formatAmount(value, 'Still')),
+        unit('sway', 'sway', 'How far it sways across the field, crossing center at each peak', (value) => formatAmount(value, 'Still')),
         WEATHER,
       ],
     },

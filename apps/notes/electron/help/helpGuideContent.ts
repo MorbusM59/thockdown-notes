@@ -125,11 +125,11 @@ const HELP_GUIDE_CHAPTER_CONTENTS: string[] = [
 - **Correct a word**: \`Shift+Space\` replaces the nearest marked word before the caret; press again for the next suggestion.
 
 ### [Typing Trail](#typing-trail)
-- A trail along the line you are typing in. **On or off**: [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}). **Tune**: Options → Glitz → Typing Trail. **Colour**: Colors → Editor Boxes.
+- A trail along the line you are typing in. **On or off**: [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}). **Tune**: Options → Glitz → Typing Trail. **Color**: Colors → Editor Boxes.
 
 ### [Visualizer](#visualizer)
 - **Grid Beat**: the caret, the edge and the pane of the active slot follow the music. On or off in [Feature Toggles](${guideLink('APPEARANCE-SETTINGS', 'feature-toggles')}); tuned in Options → Glitz → Grid Beat.
-- **Visualizer scene**: \`F5\` or the eye in the music player. Tuned in Options → Glitz → Visualizer; its colours are part of the layout.
+- **Visualizer scene**: \`F5\` or the eye in the music player. Tuned in Options → Glitz → Visualizer; its colors are part of the layout.
 - **Beat detection**: Options → Advanced → Beat Detection. Every effect mixes three kinds of hits: **Thump** (kick, bass), **Pierce** (snare, clap) and **Tick** (hats, shakers). To line the effects up with what you hear, press the strip at the top: a drum loop plays and the strip flashes on its kick, snare and hats. Right-click for the next loop; press again or Escape to stop. Use Left and Right (Up and Down for steps of 10), or scroll over the strip, until the flashes land exactly on the drums. This sets the **delay** for your current output device.
 - In the scene:
   - **Play a song**: click it in the song list on the left.
@@ -382,7 +382,7 @@ ${shortcutTable()}
 
 ### [Colors](#colors-and-textures)
 - Options → Layouts → Colors.
-- **Pick up a colour**: click it; the picker then paints it. **Paint with the picker's colour**: right-click a colour.
+- **Pick up a color**: click it; the picker then paints it. **Paint with the picker's color**: right-click a color.
 - **H**, **S**, **V**, **A**: which channels a right-click paints.
 - **Textures**: pick up a surface to edit its texture.
 
@@ -393,14 +393,14 @@ ${shortcutTable()}
 - Options → Layouts → Glaze: decorative light layers over the app.
 
 ### [Filters](#filters)
-- Options → Layouts → Filters: colour filters over the whole app.
+- Options → Layouts → Filters: color filters over the whole app.
 
 ### [Cursor](#mouse-options)
-- Options → Layouts → Cursor: the animated cursor. On or off in [Feature Toggles]($#feature-toggles); colours under Colors → Cursor.
+- Options → Layouts → Cursor: the animated cursor. On or off in [Feature Toggles]($#feature-toggles); colors under Colors → Cursor.
 - While you hold a button for a hold gesture, the halo grows; it is full when the gesture happens.
 
 ### [Caret](#caret)
-- Options → Layouts → Caret: size, outline, halo and blur of the caret. Colours under [Colors]($#colors-and-textures).
+- Options → Layouts → Caret: size, outline, halo and blur of the caret. Colors under [Colors]($#colors-and-textures).
 
 ### [Animations](#animations)
 - Options → Advanced → Movement: how the app's own scrolling moves.

@@ -12,7 +12,7 @@ const HELP: Record<string, string[]> = {
     'Clock button: Turns the schedule on or off. A dashed frame means a scheduled soundscape is playing.',
     'Files button: Tap to load soundscapes from a file. Hold to save your own soundscapes to a file.',
     'Record button: Tap to save the playing soundscape as an audio file. Hold and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
-    'Look button: Tap to switch between light and dark mode. Hold and drag up or down to change the colour theme.',
+    'Look button: Tap to switch between light and dark mode. Hold and drag up or down to change the color theme.',
     'Volume: Sets the volume of the app.',
   ],
   Schedule: [

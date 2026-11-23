@@ -57,7 +57,7 @@ export function ColorPickerRow() {
   const pointerTypeRef = useRef('mouse')
 
   return (
-    <div className="options-color-picker-row" role="group" aria-label="Staged colour">
+    <div className="options-color-picker-row" role="group" aria-label="Staged color">
       <button
         type="button"
         className={`btn-icon options-color-swatch options-color-picker-current${allActive ? ' is-active' : ''}`}
@@ -95,7 +95,7 @@ export function ColorPickerRow() {
               step={1}
               value={channelValue(color, channel)}
               trackLabel={CHANNEL_NAMES[channel]}
-              ariaLabel={`Staged colour ${CHANNEL_NAMES[channel].toLowerCase()}`}
+              ariaLabel={`Staged color ${CHANNEL_NAMES[channel].toLowerCase()}`}
               secondaryPress="type"
               dimmed={!mask[channel]}
               onCommit={(value) => setStagedColor((previous) => withChannelValue(previous, channel, value))}

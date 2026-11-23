@@ -238,7 +238,7 @@ const TRAITS: readonly ModifierTemplate[] = [
   {
     id: 'wary-traveller',
     kind: 'trait',
-    name: 'Wary Traveller',
+    name: 'Wary Traveler',
     icon: 'fa-solid fa-person-walking',
     derived: ['hitChance', 'encounterChoices'],
     verbose: ['mark', 'studied'],

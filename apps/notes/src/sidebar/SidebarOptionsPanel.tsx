@@ -26,7 +26,7 @@ import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBeve
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
 const BOX_BEVEL_SLIDERS: ReadonlyArray<{ field: keyof BoxBevelSettings; min: number; max: number; step: number; trackLabel: string; ariaLabel: string }> = [
-  { field: 'shading', min: -1, max: 1, step: 0.01, trackLabel: 'shading', ariaLabel: 'Box bevel shading -- centre leaves the outline unchanged, left darkens and right brightens, up to a full black or white overlay at the ends' },
+  { field: 'shading', min: -1, max: 1, step: 0.01, trackLabel: 'shading', ariaLabel: 'Box bevel shading -- center leaves the outline unchanged, left darkens and right brightens, up to a full black or white overlay at the ends' },
   { field: 'shape', min: 0, max: 1, step: 0.01, trackLabel: 'shape', ariaLabel: 'Box bevel shape -- how far the outline fills into the corners of each box, from the outline alone to everything outside an ellipse the size of the box' },
   { field: 'softness', min: 0, max: 1, step: 0.01, trackLabel: 'softness', ariaLabel: 'Box bevel softness -- how soft the edge of the filled corners is' },
   { field: 'contrast', min: 0, max: 1, step: 0.01, trackLabel: 'contrast', ariaLabel: 'Box bevel contrast -- 0 shades the box evenly; to the right the far side fades out, and past the middle turns to the opposite shading' },
@@ -929,7 +929,7 @@ export function SidebarOptionsPanel({
         step={0.01}
         value={fall.shape}
         trackLabel="shape"
-        tooltipLabel={`The shape of ${what}'s fall. Right of centre a sharp point that drops at once into a long, low tail, like a ride cymbal; left of centre it holds its full weight and then lets go, like a heavy thump`}
+        tooltipLabel={`The shape of ${what}'s fall. Right of center a sharp point that drops at once into a long, low tail, like a ride cymbal; left of center it holds its full weight and then lets go, like a heavy thump`}
         ariaLabel={`${ariaPrefix}: fall shape`}
         defaultValue={defaults.shape}
         formatValue={(value) => value.toFixed(2)}
@@ -1063,7 +1063,7 @@ export function SidebarOptionsPanel({
                 step={0.01}
                 value={channel.effect}
                 trackLabel="effect"
-                tooltipLabel={`How far ${effect} at a full response. Right of centre a hit adds it; left of centre it is inverted, resting at that much while music plays and a hit takes it away; the centre turns it off`}
+                tooltipLabel={`How far ${effect} at a full response. Right of center a hit adds it; left of center it is inverted, resting at that much while music plays and a hit takes it away; the center turns it off`}
                 ariaLabel={`${label}: effect, negative inverts`}
                 defaultValue={defaults.effect}
                 onCommit={(value) => set({ effect: value } as Partial<C>)}
@@ -1417,12 +1417,12 @@ export function SidebarOptionsPanel({
         </div>
           <OptionsSubsectionLabel>Visualizer</OptionsSubsectionLabel>
           <div className="options-color-grid options-element-grid options-row-grid options-row-grid-middle" role="group" aria-label="Visualizer colors">
-            <ColorTargetButton color={visualizerColors.edge} glyph="fa-solid fa-square" tooltip="Edge colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, edge: css }))} />
-            <ColorTargetButton color={visualizerColors.pane} glyph="fa-regular fa-square" tooltip="Pane colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, pane: css }))} />
-            <ColorTargetButton color={visualizerColors.wave} glyph="fa-solid fa-water" tooltip="Wave colour: the wave travelling along the grid in the visualizer mode (F5), shown on each hit of its mix" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, wave: css }))} />
-            <ColorTargetButton color={visualizerColors.pulse} glyph="fa-solid fa-bullseye" tooltip="Pulse colour: the ring that leaves the centre on each hit of its mix, in the visualizer mode (F5)" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, pulse: css }))} />
-            <ColorTargetButton color={visualizerColors.accent || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent colour: the spectrum, the progress track and the song text in the visualizer mode (F5). Until picked it follows the caret colour" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, accent: css }))} />
-            <ColorTargetButton color={visualizerColors.letterbox || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox colour: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, letterbox: css }))} />
+            <ColorTargetButton color={visualizerColors.edge} glyph="fa-solid fa-square" tooltip="Edge color" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, edge: css }))} />
+            <ColorTargetButton color={visualizerColors.pane} glyph="fa-regular fa-square" tooltip="Pane color" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, pane: css }))} />
+            <ColorTargetButton color={visualizerColors.wave} glyph="fa-solid fa-water" tooltip="Wave color: the wave traveling along the grid in the visualizer mode (F5), shown on each hit of its mix" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, wave: css }))} />
+            <ColorTargetButton color={visualizerColors.pulse} glyph="fa-solid fa-bullseye" tooltip="Pulse color: the ring that leaves the center on each hit of its mix, in the visualizer mode (F5)" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, pulse: css }))} />
+            <ColorTargetButton color={visualizerColors.accent || highlightColors.caret} glyph="fa-solid fa-chart-simple" tooltip="Accent color: the spectrum, the progress track and the song text in the visualizer mode (F5). Until picked it follows the caret color" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, accent: css }))} />
+            <ColorTargetButton color={visualizerColors.letterbox || highlightColors.topBackground} glyph="fa-solid fa-film" tooltip="Letterbox color: the strips above and below the scene in the visualizer mode (F5). Until picked they follow the editor's top and bottom sections" onApply={(css) => setVisualizerColors((prev) => ({ ...prev, letterbox: css }))} />
           </div>
         {/* The custom cursor does not exist on Linux (shared/platform.ts). */}
         {!IS_LINUX_DESKTOP ? (<>
@@ -1617,7 +1617,7 @@ export function SidebarOptionsPanel({
               step={0.01}
               value={glazeSettings.linearSpread}
               trackLabel="spread"
-              tooltipLabel="How the glare is shared between its stacks by depth: the centre gives every stack all of it; left fades the farthest out and keeps the nearest, right the reverse"
+              tooltipLabel="How the glare is shared between its stacks by depth: the center gives every stack all of it; left fades the farthest out and keeps the nearest, right the reverse"
               ariaLabel="Glare spread across its stacks, negative favours the nearest"
               defaultValue={DEFAULT_GLAZE_SETTINGS.linearSpread}
               formatValue={(value) => value.toFixed(2)}
@@ -2487,7 +2487,7 @@ export function SidebarOptionsPanel({
       >
           {renderBeatChannel('grid-beat-edge', 'Edge', 'the active editor\'s edge shows', shownGrid.edge, gridDefaults.edge, setGrid('edge'))}
           {renderBeatChannel('grid-beat-editor-pane', 'Editor Pane', 'the box outlines show in the editor', shownGrid.editorPane, gridDefaults.editorPane, setGrid('editorPane'))}
-          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane colour shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
+          {renderBeatChannel('grid-beat-reader-pane', 'Reader Pane', 'a flat wash of the pane color shows in the reader', shownGrid.readerPane, gridDefaults.readerPane, setGrid('readerPane'))}
       </AccordionSection>
 
       <AccordionSection
@@ -2770,7 +2770,7 @@ export function SidebarOptionsPanel({
                 value={visualizer.immersive.pulseSpeed}
                 trackLabel="pulse"
                 tooltipLabel="Pulse speed (boxes/s)"
-                ariaLabel="Immersive: centre pulse starting speed, boxes per second"
+                ariaLabel="Immersive: center pulse starting speed, boxes per second"
                 defaultValue={visualizerDefaults.immersive.pulseSpeed}
                 formatValue={(value) => String(Math.round(value))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSpeed: Math.round(value) } }))}
@@ -2782,8 +2782,8 @@ export function SidebarOptionsPanel({
                 step={0.1}
                 value={visualizer.immersive.pulseHalfLifeSec}
                 trackLabel="slow"
-                tooltipLabel="How quickly the centre pulse slows, in milliseconds: its speed halves every this long. A short half-life can stop the ring before it leaves the screen"
-                ariaLabel="Immersive: centre pulse speed half-life, milliseconds"
+                tooltipLabel="How quickly the center pulse slows, in milliseconds: its speed halves every this long. A short half-life can stop the ring before it leaves the screen"
+                ariaLabel="Immersive: center pulse speed half-life, milliseconds"
                 defaultValue={visualizerDefaults.immersive.pulseHalfLifeSec}
                 formatValue={(value) => String(Math.round(value * 1000))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseHalfLifeSec: Math.round(value * 10) / 10 } }))}
@@ -2796,7 +2796,7 @@ export function SidebarOptionsPanel({
                 value={visualizer.immersive.pulseBoost}
                 trackLabel="boost"
                 tooltipLabel="Pulse boost (%)"
-                ariaLabel="Immersive: centre pulse signal boost, percent"
+                ariaLabel="Immersive: center pulse signal boost, percent"
                 defaultValue={visualizerDefaults.immersive.pulseBoost}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseBoost: value } }))}
@@ -2809,7 +2809,7 @@ export function SidebarOptionsPanel({
                 value={visualizer.immersive.pulseFadeSec}
                 trackLabel="fade"
                 tooltipLabel="Pulse fade (ms)"
-                ariaLabel="Immersive: centre pulse fade duration, milliseconds"
+                ariaLabel="Immersive: center pulse fade duration, milliseconds"
                 defaultValue={visualizerDefaults.immersive.pulseFadeSec}
                 formatValue={(value) => String(Math.round(value * 1000))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseFadeSec: Math.round(value * 10) / 10 } }))}
@@ -2822,7 +2822,7 @@ export function SidebarOptionsPanel({
                 value={visualizer.immersive.pulseSoftness}
                 trackLabel="soft"
                 tooltipLabel="Ring softness (%)"
-                ariaLabel="Immersive: centre pulse edge softness, percent"
+                ariaLabel="Immersive: center pulse edge softness, percent"
                 defaultValue={visualizerDefaults.immersive.pulseSoftness}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseSoftness: value } }))}
@@ -2835,7 +2835,7 @@ export function SidebarOptionsPanel({
                 value={visualizer.immersive.cutoutRound}
                 trackLabel="round"
                 tooltipLabel="Corner roundness (%)"
-                ariaLabel="Immersive: centre panel corner roundness, percent"
+                ariaLabel="Immersive: center panel corner roundness, percent"
                 defaultValue={visualizerDefaults.immersive.cutoutRound}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, cutoutRound: value } }))}

@@ -319,7 +319,7 @@ function installUndeclaredSecondaryPressWarning(): void {
       if (!event.defaultPrevented || secondaryPressMeaning(target) !== null) return
       console.warn(
         `[pressTracking] a right-click was handled on an element with no ${SECONDARY_PRESS_ATTRIBUTE}, `
-        + `so it will never look pressed. Declare "action" (or "none") where the behaviour is wired.`,
+        + `so it will never look pressed. Declare "action" (or "none") where the behavior is wired.`,
         target,
       )
     })

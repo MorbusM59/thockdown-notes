@@ -55,6 +55,6 @@ export const CREDITS: readonly Credit[] = [
   { label: 'French dictionary (MPL-2.0)', usedFor: 'Spell checking', url: 'https://github.com/wooorm/dictionaries/tree/main/dictionaries/fr' },
   { label: 'German dictionary (GPL)', usedFor: 'Spell checking (igerman98, GPL-2.0 or GPL-3.0)', url: 'https://github.com/wooorm/dictionaries/tree/main/dictionaries/de' },
   { label: 'Universal Declaration of Human Rights', usedFor: 'The text passing by on a long jump in Reader mode (United Nations, public domain)', url: 'https://www.un.org/en/about-us/universal-declaration-of-human-rights' },
-  { label: 'Electron and Chromium', usedFor: 'The app\'s runtime; their licences ship with the app as LICENSES.chromium.html', url: 'https://www.electronjs.org' },
-  { label: 'CodeMirror, remark, React and more', usedFor: 'Every bundled library\'s licence notice ships beside the app as THIRD_PARTY_NOTICES.txt', url: `${REPOSITORY_URL}/blob/main/package.json` },
+  { label: 'Electron and Chromium', usedFor: 'The app\'s runtime; their licenses ship with the app as LICENSES.chromium.html', url: 'https://www.electronjs.org' },
+  { label: 'CodeMirror, remark, React and more', usedFor: 'Every bundled library\'s license notice ships beside the app as THIRD_PARTY_NOTICES.txt', url: `${REPOSITORY_URL}/blob/main/package.json` },
 ]

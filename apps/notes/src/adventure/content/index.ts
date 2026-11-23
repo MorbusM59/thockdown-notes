@@ -258,7 +258,7 @@ export function validateContent(content: Content): string[] {
       // species is not carried and cannot be dropped, so its toughness is
       // natural armour -- the half decay cannot touch.
       if (effect.kind === 'armorSlot') {
-        problems.push(`species "${species.id}" carries ${effect.kind}: a species has no decaying pool, only natural armour`)
+        problems.push(`species "${species.id}" carries ${effect.kind}: a species has no decaying pool, only natural armor`)
       }
     }
   }

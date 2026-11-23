@@ -294,7 +294,7 @@ export function scrollToNonQuantizedSmooth(
 
       if (!jumped && covering) {
         jumped = true;
-        traceScroll(() => `journey CUT     covered at travelled=${Math.round(travelledPx)}px,`
+        traceScroll(() => `journey CUT     covered at traveled=${Math.round(travelledPx)}px,`
           + ` relocating destination`);
         // The pane is fully covered: the one moment a caller may put its
         // destination somewhere else entirely. Re-read the geometry

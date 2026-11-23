@@ -76,7 +76,7 @@ export const SPELLS: readonly Spell[] = [
     level: 0,
     name: 'Singe',
     icon: 'fa-solid fa-fire-flame-simple',
-    lines: ['Never misses', 'Through armour'],
+    lines: ['Never misses', 'Through armor'],
   },
   {
     id: 'plague',
@@ -113,7 +113,7 @@ export const SPELLS: readonly Spell[] = [
     level: 5,
     name: 'Meteor Strike',
     icon: 'fa-solid fa-meteor',
-    lines: ['Double damage, through armour', 'Ends the round for both of you'],
+    lines: ['Double damage, through armor', 'Ends the round for both of you'],
   },
 ]
 

@@ -55,7 +55,7 @@ precision highp float;
 uniform sampler2D rows;         // one row per stack, premultiplied RGBA, 1 texel per CSS px
 uniform int count;
 uniform float period[${MAX_STACKS}];   // CSS px
-uniform float offset[${MAX_STACKS}];   // pattern px: the sway's travel of the screen's centre in CSS px times the density, so the motion does not depend on it
+uniform float offset[${MAX_STACKS}];   // pattern px: the sway's travel of the screen's center in CSS px times the density, so the motion does not depend on it
 uniform vec2 dir;               // across the stripes (glazeRayFan's 'across')
 uniform vec2 normal;            // towards the vanishing point
 uniform float k;                // curvature in 1/px; 0 = parallel
