@@ -213,7 +213,7 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
       if ((readNowPlaying().pool?.counts[set.slot] ?? 0) > 0) {
         pressMusicSet(event, {
           toggle: () => readNowPlaying().selectSlot(set.slot, 'toggle'),
-          solo: () => readNowPlaying().selectSlot(set.slot, 'solo'),
+          hold: () => readNowPlaying().selectSlot(set.slot, 'solo'),
         })
       }
     }

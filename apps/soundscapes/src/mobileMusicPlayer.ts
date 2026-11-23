@@ -19,6 +19,8 @@ import {
 } from '@thockdown/visualizer/shared/audioPlayer'
 import { setMusicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
 import { publishNowPlaying, type NowPlaying, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
+import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
+import { createNativeMusicListening } from './nativeMusicListening'
 import {
   addScanToSet,
   createSet,
@@ -44,6 +46,32 @@ let heardSongId: number | null = null
 // (the Soundstages tab), so the visualizer's level bars move only the volume.
 let levels: SoundLevels = { volume: 1, reverb: 0, room: 0 }
 let plugin: NativeMusicPlugin | null = null
+// Whether the music is heard playing (the native player's `heard` reports).
+let playing = false
+// The active soundstage as the native processing takes it (musicStageOf), sent with every start.
+let stageJson: string | null = null
+
+/** The active soundstage: kept for the next start, heard at once if music plays. */
+export function setMusicStage(stage: string): void {
+  stageJson = stage
+  void plugin?.setStage({ stage })
+}
+
+/**
+ * Starts the music if it is not playing (the native player picks from the
+ * pool), and resolves once a renderer exists, so a `choose` after it lands.
+ */
+export async function startMusic(): Promise<void> {
+  if (!plugin || playing || stageJson === null) return
+  playing = true
+  await plugin.play({ stage: stageJson })
+}
+
+/** Plays `songId`, starting the music first if nothing plays: choosing needs a renderer. */
+async function playSong(songId: number): Promise<void> {
+  await startMusic()
+  await plugin?.choose({ songId })
+}
 
 function commit(next: MusicCatalog): void {
   if (next === catalog) return
@@ -77,10 +105,10 @@ const actions = {
     if (pool.length === 0) return
     const at = pool.findIndex((song) => song.id === heardSongId)
     const target = pool[(at + direction + pool.length) % pool.length]
-    void plugin?.choose({ songId: target.id })
+    void playSong(target.id)
   },
   playFromPool(id: number) {
-    void plugin?.choose({ songId: id })
+    void playSong(id)
   },
   selectSlot(slot: PlaylistSlot, selection: Parameters<NowPlaying['selectSlot']>[1]) {
     commit({ ...catalog, activeSetIds: getNextActiveSlotsForSelection(catalog.activeSetIds, slot, selection) })
@@ -152,8 +180,12 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     getPlaylist: async (slot) => libraryOf(catalog, rotation).filter((song) => song.setIds.includes(slot)),
     getPool: async (query) => poolOf({ ...catalog, activeSetIds: query.slots, filter: query.filter }, rotation),
   })
+  // The visualizer reads the native music: its clock, its file and its spectrum (nativeMusicListening.ts).
+  setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId)))
+  playing = (await native.getState()).playing
   publish()
   const handle = await native.addListener('heard', (heard) => {
+    playing = heard.playing
     if (heard.songId === heardSongId) return
     heardSongId = heard.songId
     // A new song means the renderer picked (or was told to): its rotation moved.

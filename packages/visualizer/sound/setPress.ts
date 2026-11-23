@@ -4,18 +4,20 @@ import { armHold, hasLeftHoldGrace, HOLD_CONFIRM_MS } from '@thockdown/interacti
  * How a press on a music set's button changes what plays, wherever the set
  * buttons are (the music player, the Music Library's selector, the
  * visualizer's bucket list): a CLICK toggles that one set in or out of the
- * pool and leaves the others alone; a HOLD plays from that set alone. A press
- * that travels past the hold grace (a drag) does neither.
+ * pool and leaves the others alone; a HOLD does the caller's `hold`, which
+ * plays from that set alone, except in the phone's Songs tab, where it opens
+ * the set for editing (a phone has no right click). A press that travels past
+ * the hold grace (a drag) does neither.
  *
  * Armed from the button's left `pointerdown`; decides on the release, which
  * it watches on the window so a release off the button is still seen.
  */
-export function pressMusicSet(event: PointerEvent, actions: { toggle: () => void; solo: () => void }): void {
+export function pressMusicSet(event: PointerEvent, actions: { toggle: () => void; hold: () => void }): void {
   if (event.button !== 0) return
   const origin = { pointerType: event.pointerType, screenX: event.screenX, screenY: event.screenY, clientX: event.clientX, clientY: event.clientY }
   const pointerId = event.pointerId
   let held = false
-  const cancelHold = armHold(() => { held = true; actions.solo() }, HOLD_CONFIRM_MS)
+  const cancelHold = armHold(() => { held = true; actions.hold() }, HOLD_CONFIRM_MS)
   const end = (release: PointerEvent) => {
     if (release.pointerId !== pointerId) return
     window.removeEventListener('pointerup', end, true)

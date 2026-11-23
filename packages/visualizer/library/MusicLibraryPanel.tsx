@@ -31,7 +31,7 @@ function formatSongDuration(seconds: number): string {
  * creating a set, as the Soundscapes view's presets end in theirs. The order is
  * the sets' one order, the music player's buttons included.
  */
-function SetSelector({ slot }: { slot: PlaylistSlot | null }) {
+function SetSelector({ slot, holdOpens }: { slot: PlaylistSlot | null; holdOpens: boolean }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
   const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
@@ -52,6 +52,8 @@ function SetSelector({ slot }: { slot: PlaylistSlot | null }) {
             // it is the set this view shows and edits. A click toggles it in
             // the pool and a hold plays it alone (sound/setPress.ts), as the
             // music player's set buttons do; a right click opens it here.
+            // With `holdOpens` (the phone, which has no right click) the
+            // hold opens it here instead.
             className={`btn-icon options-color-swatch options-loadout-btn${isActive ? ' is-active' : ''}${candidate.slot === slot ? ' is-edited' : ''}`}
             data-tooltip={`${candidate.name}: ${nowPlaying.pool?.counts[candidate.slot] ?? 0} songs`}
             aria-label={`${candidate.name}, ${isActive ? 'playing in the pool' : 'not in the pool'}`}
@@ -61,7 +63,7 @@ function SetSelector({ slot }: { slot: PlaylistSlot | null }) {
               cell.onPointerDown(event)
               pressMusicSet(event.nativeEvent, {
                 toggle: () => nowPlaying.selectSlot(candidate.slot, 'toggle'),
-                solo: () => nowPlaying.selectSlot(candidate.slot, 'solo'),
+                hold: holdOpens ? () => selectMusicLibrarySet(candidate.slot) : () => nowPlaying.selectSlot(candidate.slot, 'solo'),
               })
             }}
             onContextMenu={(event) => {
@@ -146,7 +148,12 @@ export function MusicSetIconPicker({ query }: { query: string }) {
   )
 }
 
-export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetListGrouping; filter: string }) {
+export function MusicLibraryPanel({ grouping, filter, holdOpens = false }: {
+  grouping: MusicSetListGrouping
+  filter: string
+  /** A hold on a set's button opens it for editing rather than playing it alone (the phone). */
+  holdOpens?: boolean
+}) {
   const set = useOpenMusicSet()
   // With no set yet (the phone starts with none) the selector is still
   // there, holding only its plus, so the first set can be made.
@@ -154,15 +161,15 @@ export function MusicLibraryPanel({ grouping, filter }: { grouping: MusicSetList
     return (
       <div className="options-content sidebar-options-content" aria-label="Songs">
         <div className="preset-section">
-          <SetSelector slot={null} />
+          <SetSelector slot={null} holdOpens={holdOpens} />
         </div>
       </div>
     )
   }
-  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} />
+  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} holdOpens={holdOpens} />
 }
 
-function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string }) {
+function MusicLibrarySet({ set, grouping, filter, holdOpens }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; holdOpens: boolean }) {
   const { slot, name } = set
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
@@ -172,7 +179,7 @@ function MusicLibrarySet({ set, grouping, filter }: { set: MusicSet; grouping: M
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
       <div className="preset-section">
-        <SetSelector slot={slot} />
+        <SetSelector slot={slot} holdOpens={holdOpens} />
       </div>
       {/* Keyed on the set shown and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${shownSlot}:${grouping}`}>

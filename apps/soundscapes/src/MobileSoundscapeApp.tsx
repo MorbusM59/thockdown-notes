@@ -70,7 +70,7 @@ import { installTouchScroll } from '@thockdown/interaction/touchScroll'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
-import { VisualizerPrototype } from './VisualizerPrototype'
+import { VisualizerPage } from './VisualizerPage'
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { MusicLibraryDock, MusicLibraryPanel } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
@@ -80,7 +80,7 @@ import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
-import { startMobileMusicPlayer } from './mobileMusicPlayer'
+import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
 import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
 import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
@@ -151,8 +151,9 @@ export function MobileSoundscapeApp() {
   // controls (helpText.ts). The system's back gesture ends it (takeBack,
   // below).
   const [helpMode, setHelpMode] = useState(false)
-  // PROTOTYPE: the visualizer page, opened from the eye button beside Look.
+  // The visualizer page (VisualizerPage.tsx), opened from the Visualizer tab.
   const [visualizerOpen, setVisualizerOpen] = useState(false)
+  const closeVisualizer = useCallback(() => setVisualizerOpen(false), [])
   // The tab shown (MobileTabs.tsx), remembered across launches.
   const [tab, setTab] = useState<MobileTab>(loadTab)
   const selectTab = useCallback((next: MobileTab) => {
@@ -168,7 +169,7 @@ export function MobileSoundscapeApp() {
     saveSoundstages(soundstages)
   }, [soundstages])
   useEffect(() => {
-    void nativeMusic?.setStage({ stage: JSON.stringify(musicStageOf(activeStage)) })
+    setMusicStage(JSON.stringify(musicStageOf(activeStage)))
   }, [activeStage])
   // The music library and player the shared music views read (mobileMusicPlayer.ts).
   const [libraryLoaded, setLibraryLoaded] = useState(false)
@@ -191,16 +192,16 @@ export function MobileSoundscapeApp() {
     return () => { cancelled = true; stop?.() }
   }, [])
   // While help is up, the system's back gesture closes it rather than
-  // leaving the app.
+  // leaving the app (the visualizer, over it, takes the gesture itself).
   useEffect(() => {
-    if (!native || !helpMode) return undefined
+    if (!native || !helpMode || visualizerOpen) return undefined
     void nativeSoundscape!.takeBack({ taken: true })
     const handle = nativeSoundscape!.addListener('back', () => setHelpMode(false))
     return () => {
       void nativeSoundscape!.takeBack({ taken: false })
       void handle.then((h) => h.remove())
     }
-  }, [native, helpMode])
+  }, [native, helpMode, visualizerOpen])
   const help = helpMode ? helpFor : undefined
 
   useEffect(() => {
@@ -432,7 +433,7 @@ export function MobileSoundscapeApp() {
         <ThemeGlazeLayers glaze={theme.glaze} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
-            {visualizerOpen ? <VisualizerPrototype onExit={() => setVisualizerOpen(false)} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}
+            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <MobileTabSelector tab={tab} onChange={selectTab} />
@@ -445,7 +446,7 @@ export function MobileSoundscapeApp() {
                 scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
               >
               <div className="options-content sidebar-options-content mobile-tab-content">
-                {tab === 'songs' ? <MusicLibraryPanel grouping={songsGrouping} filter="" /> : null}
+                {tab === 'songs' ? <MusicLibraryPanel grouping={songsGrouping} filter="" holdOpens /> : null}
                 {tab === 'soundscapes' && iconQuery === null ? (<>
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>

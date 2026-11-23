@@ -9,7 +9,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 
 export const MIN_DISPLAY_SCALE = 1
-export const MAX_DISPLAY_SCALE = 2
 
 export interface DisplayState {
   scale: number
@@ -37,10 +36,6 @@ export async function setLandscape(landscape: boolean): Promise<void> {
   if (plugin) await plugin.setLandscape({ landscape })
 }
 
-/** The next scale after `scale`, from the largest back to 1. */
-export function nextDisplayScale(scale: number): number {
-  return scale >= MAX_DISPLAY_SCALE ? MIN_DISPLAY_SCALE : scale + 1
-}
 
 /** Reports the visualizer open or closed; its orientation applies only while open. */
 export async function setVisualizerOpen(open: boolean): Promise<void> {

@@ -277,64 +277,12 @@ body {
   text-align: left;
 }
 
-/* PROTOTYPE: the visualizer page (VisualizerPrototype.tsx), full screen over the app. */
-.visualizer-prototype {
+/* The visualizer page (VisualizerPage.tsx), full screen over the app. */
+.visualizer-page {
   position: fixed;
   inset: 0;
   z-index: 50;
   background: var(--background-color-root);
-}
-.visualizer-prototype-pick {
-  display: flex;
-  gap: var(--spacing-regular, 12px);
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-.visualizer-prototype-readout {
-  position: fixed;
-  left: 4px;
-  bottom: 4px;
-  z-index: 60;
-  font: 12px monospace;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 2px 4px;
-  border: none;
-}
-.visualizer-prototype-orientation {
-  left: auto;
-  right: 4px;
-}
-.visualizer-prototype-profile {
-  left: 50%;
-  transform: translateX(-50%);
-}
-.visualizer-prototype-report {
-  position: fixed;
-  inset: 10% 4px;
-  z-index: 61;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  background: rgba(0, 0, 0, 0.85);
-  padding: 4px;
-}
-.visualizer-prototype-report textarea {
-  flex: 1 1 100%;
-  height: calc(100% - 3em);
-  font: inherit;
-  font-family: monospace;
-  color: #fff;
-  background: transparent;
-}
-.visualizer-prototype-report button {
-  font: inherit;
-  padding: 0.4em 1em;
-}
-.visualizer-prototype-stage {
-  position: absolute;
-  inset: 0;
 }
 
 /* The view selector above the sidebar frame (MobileTabs.tsx), spaced from it as the desktop's. */

@@ -8,7 +8,8 @@
  * can be judged on a device before their content is.
  */
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { readDisplay, setLandscape } from './display'
 import { AboutPanel } from '@thockdown/interaction/AboutPanel'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { ABOUT_LINKS, APP_VERSION, CREDITS, openAboutLink } from './about'
@@ -47,12 +48,29 @@ export function TabPlaceholder({ name }: { name: string }) {
 
 /** The Visualizer tab: the way into the full-screen visualizer, then its settings (the desktop's, shared). */
 export function VisualizerTab({ onOpen, children }: { onOpen: () => void; children: ReactNode }) {
+  const [landscape, setLandscapeState] = useState(false)
+  useEffect(() => {
+    void readDisplay().then((display) => setLandscapeState(display.landscape))
+  }, [])
   return (
     <div className="utility-setting-slider-stack">
       <OptionsSubsectionLabel>Visualizer</OptionsSubsectionLabel>
       <div className="options-loadout-grid">
         <button type="button" className="btn-icon options-color-swatch options-loadout-btn" aria-label="Open the visualizer" onClick={onOpen}>
           <span className="fa-solid fa-eye" aria-hidden="true" />
+        </button>
+        {/* The visualizer's orientation, applied only while it is open (display.ts). */}
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${landscape ? ' is-active' : ''}`}
+          aria-label={landscape ? 'Show the visualizer upright' : 'Show the visualizer sideways'}
+          aria-pressed={landscape}
+          onClick={() => {
+            setLandscapeState(!landscape)
+            void setLandscape(!landscape)
+          }}
+        >
+          <span className={`fa-solid fa-mobile-screen-button${landscape ? ' fa-rotate-90' : ''}`} aria-hidden="true" />
         </button>
       </div>
       {children}
