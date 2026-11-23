@@ -165,7 +165,7 @@ export function SolidCanvas({ seed, animateTo, active, className, subscribeThump
       if (frame !== null) cancelAnimationFrame(frame)
       wakeRef.current = () => {}
     }
-  }, [active, subscribeThump])
+  }, [active, subscribeThump, maxPixelRatio])
 
   return <canvas ref={canvasRef} className={className} aria-hidden="true" />
 }
