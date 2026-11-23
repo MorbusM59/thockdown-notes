@@ -1,6 +1,6 @@
 import type { KeystrokeSoundPreferences } from './keystrokeSounds';
 import type { OptionsSectionId } from './optionsSections';
-import type { MusicSetListGrouping } from '@thockdown/visualizer/packages/visualizer/shared/musicSetList';
+import type { MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList';
 import type { SidebarSections } from './sidebarSections';
 import type { EqPoint } from '@thockdown/visualizer/shared/musicEqCurve';
 import type { SoundstagePreferences } from '@thockdown/visualizer/shared/soundstages';

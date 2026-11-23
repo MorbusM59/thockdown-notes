@@ -4,7 +4,7 @@ import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } fr
 import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
-} from '@thockdown/visualizer/packages/visualizer/shared/musicSetList'
+} from '@thockdown/visualizer/shared/musicSetList'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { pressMusicSet } from '@thockdown/visualizer/sound/setPress'
 import { HoverActions } from '@thockdown/interaction/HoverActions'
