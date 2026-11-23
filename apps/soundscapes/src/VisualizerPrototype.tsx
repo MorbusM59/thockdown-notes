@@ -96,10 +96,11 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
           <input
             ref={inputRef}
             type="file"
-            accept="audio/*"
             multiple
             hidden
             onChange={(event) => {
+              // No accept filter: with audio/* Android's picker offers only files the
+              // media index has tagged as audio, which can be none at all.
               const files = [...(event.target.files ?? [])]
               setSongs(files.map((file) => ({ url: URL.createObjectURL(file), name: file.name })))
             }}
