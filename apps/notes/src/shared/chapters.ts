@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 import type { NoteDocument, NoteSummary } from './noteLifecycle'
 
 export const CHAPTER_CHANNELS = {

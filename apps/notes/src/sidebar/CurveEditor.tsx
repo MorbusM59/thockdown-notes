@@ -16,7 +16,7 @@ import {
   type CurvePlane,
   type CurvePoint,
   type CurvePointChange,
-} from '../shared/drawnCurve'
+} from '@thockdown/visualizer/shared/drawnCurve'
 import { useHoldToAdjust, type HoldToAdjustKeyboardController } from '../shared/useHoldToAdjust'
 
 /** A grid line across the drawing: dotted, dashed or solid. */

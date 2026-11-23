@@ -1,8 +1,8 @@
 // verify: reads-temp (scripts/verify.mjs, "what a module reads from disk")
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { IndexedMusicFile } from '../src/shared/audioPlayer'
-import { AUDIO_EXTENSIONS } from '../src/shared/audioPlayer'
+import type { IndexedMusicFile } from '@thockdown/visualizer/shared/audioPlayer'
+import { AUDIO_EXTENSIONS } from '@thockdown/visualizer/shared/audioPlayer'
 import { readAudioDuration } from './audioDuration'
 import { readAudioTags } from './audioTags'
 

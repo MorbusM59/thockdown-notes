@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract'
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract'
 import { detachString } from './detachString'
 import { imagesInLine } from './imageSyntax'
 

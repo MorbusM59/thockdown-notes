@@ -1,4 +1,4 @@
-import type { EventChannels, InvokeChannels } from './ipcContract';
+import type { EventChannels, InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 
 /** What the main process tells the window unprompted: a file the OS asked the app to open. */
 export interface ExternalFileEvents {

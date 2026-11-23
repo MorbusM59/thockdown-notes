@@ -196,7 +196,7 @@ section of its own, sitting under Mouse Options and built on the same widgets.
   three things that would are named in `.thockdown-block-caret`'s comment.
 - **New module** `packages/look/caretSettings.ts`: bounds/defaults (mirroring
   `cursorSettings.ts`) and `buildCaretBlinkKeyframesCss` (the blink's shape is
-  now the global flashing curve, `apps/notes/src/shared/flashing.ts`),
+  now the global flashing curve, `packages/visualizer/shared/flashing.ts`),
   which generates `@keyframes thockdown-blink` at runtime. index.css no longer
   defines that rule at all -- App.tsx mounts the generated one, so there is
   exactly one definition and no stylesheet-order coin flip.

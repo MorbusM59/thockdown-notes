@@ -1,4 +1,4 @@
-import type { EventChannels, InvokeChannels, SendChannels } from './ipcContract';
+import type { EventChannels, InvokeChannels, SendChannels } from '@thockdown/visualizer/shared/ipcContract';
 
 /**
  * The frameless window's own controls, exposed as `window.windowControls`.

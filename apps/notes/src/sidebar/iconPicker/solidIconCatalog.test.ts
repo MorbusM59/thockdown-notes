@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 // @ts-expect-error -- a plain .mjs script, without types
 import { buildSolidIconCatalog, CATALOG_PATH, METADATA_PATH, serializeCatalog } from '../../../scripts/generateSolidIconCatalog.mjs'
-import { MUSIC_SET_ICON_PATTERN } from '../../shared/audioPlayer'
+import { MUSIC_SET_ICON_PATTERN } from '@thockdown/visualizer/shared/audioPlayer'
 import { filterSolidIcons } from '@thockdown/interaction/iconPicker/solidIcons'
 
 describe('the solid icon catalog', () => {

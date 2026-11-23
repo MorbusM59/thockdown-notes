@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 
 /**
  * The spell checker's dictionaries, as the main process serves them.

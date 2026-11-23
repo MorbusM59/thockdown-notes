@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 export const REVIEW_FLAG_CHANNELS = {
   listReviewFlags: 'reviewFlags:list',
   setReviewFlag: 'reviewFlags:set',

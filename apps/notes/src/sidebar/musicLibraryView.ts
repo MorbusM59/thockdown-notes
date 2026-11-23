@@ -1,5 +1,5 @@
-import { readNowPlaying } from '../sound/nowPlaying'
-import type { PlaylistSlot } from '../shared/audioPlayer'
+import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
+import type { PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 import { closeIconPick, readIconPick } from './iconPicker/iconPick'
 
 /**

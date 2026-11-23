@@ -1,4 +1,4 @@
-import { isSingleCellText, singleCellText } from '../shared/singleCellText';
+import { isSingleCellText, singleCellText } from '@thockdown/visualizer/shared/singleCellText';
 
 /**
  * The app's canonical internal text: LF line endings, no tab, no line or

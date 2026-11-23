@@ -100,7 +100,7 @@ import {
   sampleReleaseRampDownPlan,
   type ReleaseRampDownPlan,
 } from '@thockdown/interaction/ScrollCurvePlan'
-import { resolveWheelSpinCutoffMs, resolveWheelSpinDecay } from './wheelSpin'
+import { resolveWheelSpinCutoffMs, resolveWheelSpinDecay } from '@thockdown/visualizer/scroll/wheelSpin'
 
 export type WheelSpinProfileDirection = -1 | 1
 

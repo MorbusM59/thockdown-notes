@@ -12,7 +12,7 @@ import { GLAZE_RAY_NEAREST } from './glaze'
  * (`VisualizerColors`, Options > Colors) are part of the layout, picked like
  * any other layout colour (so a theme's invert applies to them as to the
  * rest). The caret following the music is not here: it is the app's
- * flashing curve, matched to the beat (`apps/notes/src/shared/flashing.ts`).
+ * flashing curve, matched to the beat (`packages/visualizer/shared/flashing.ts`).
  *
  * Whether the visualizer is on, the per-device visual delay and the
  * response are not here either (`apps/notes/src/shared/beatSettings.ts`).

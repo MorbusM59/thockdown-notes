@@ -5,11 +5,11 @@ import {
 import {
   DEFAULT_SOUNDSTAGE_PREFERENCES,
   sanitizeSoundstagePreferences,
-} from './soundstages'
+} from '@thockdown/visualizer/shared/soundstages'
 import {
   DEFAULT_FLASH_SHAPE_PREFERENCES,
   sanitizeFlashShapePreferences,
-} from './flashing'
+} from '@thockdown/visualizer/shared/flashing'
 import {
   DEFAULT_SOUNDSCAPE_PREFERENCES,
   sanitizeSoundscapePreferences,

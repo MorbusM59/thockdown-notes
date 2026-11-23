@@ -22,10 +22,10 @@ import { glazeRayAngle, visualizerGlazeSettings, type GlazeSettings } from '@tho
 import { arcminToPx, type VisualizerImmersive } from '@thockdown/look/visualizer'
 import { buildLinearGlazeStacks, buildRadialGlazeLayers, type GlazeStripe } from '@thockdown/look/loadoutTheme'
 import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
-import { subscribeMusicTempo } from '../sound/musicBeat'
-import { beatAlignedStart } from '../sound/musicTempo'
-import { canUseShaderGlaze } from './glazeShaderSupport'
-import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, advanceSway, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
+import { subscribeMusicTempo } from '@thockdown/visualizer/sound/musicBeat'
+import { beatAlignedStart } from '@thockdown/visualizer/sound/musicTempo'
+import { canUseShaderGlaze } from '@thockdown/visualizer/visualizer/glazeShaderSupport'
+import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, advanceSway, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from '@thockdown/visualizer/visualizer/parallaxSway'
 
 /** `index` counts from the nearest layer. */
 type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: number; stripes: GlazeStripe[]; depth: number; index: number }

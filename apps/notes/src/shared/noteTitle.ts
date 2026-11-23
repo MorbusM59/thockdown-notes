@@ -1,5 +1,5 @@
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { truncateTitle } from './textSanitization'
+import { truncateTitle } from '@thockdown/visualizer/shared/textSanitization'
 import { detachString } from './detachString'
 
 /**

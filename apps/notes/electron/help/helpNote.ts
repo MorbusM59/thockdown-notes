@@ -1,5 +1,5 @@
 import { HELP_GUIDE_NOTE_IDS } from '../../src/shared/helpGuide';
-import { sanitizeDocumentText } from '../../src/shared/textSanitization';
+import { sanitizeDocumentText } from '@thockdown/visualizer/shared/textSanitization';
 import type { DatabaseService } from '../databaseService';
 import { HELP_NOTE_CONTENT } from './helpNoteContent';
 

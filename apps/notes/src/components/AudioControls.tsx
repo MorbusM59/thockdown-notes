@@ -1,15 +1,15 @@
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { FieldActionButton } from './FieldActionButton'
-import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '../shared/audioPlayer'
-import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '../shared/audioPlayer'
+import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '@thockdown/visualizer/shared/audioPlayer'
+import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
   getNextActiveSlotsForSelection,
   type SetSelection,
   isFactoryMusicSet,
-} from '../shared/audioPlayer'
+} from '@thockdown/visualizer/shared/audioPlayer'
 import { adjacentSongInPool } from '../shared/musicPool'
 import { activeSoundscape, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
@@ -29,14 +29,14 @@ import {
 } from '../shared/useHoldToAdjust'
 import { openMusicLibrary } from '../sidebar/musicLibraryView'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { musicPlayerService, MissingFileError, resolveSeekPress } from '../sound/MusicPlayerService'
-import { publishNowPlaying, type SoundLevels } from '../sound/nowPlaying'
+import { musicPlayerService, MissingFileError, resolveSeekPress } from '@thockdown/visualizer/sound/MusicPlayerService'
+import { publishNowPlaying, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
-import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
-import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, subscribePoolFilterDraft } from '../visualizer/poolFilterDraft'
+import { readSoundstageControls, subscribeSoundstageControls } from '@thockdown/visualizer/sound/soundstageControls'
+import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, subscribePoolFilterDraft } from '@thockdown/visualizer/visualizer/poolFilterDraft'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import { beginBackgroundWork } from '../shared/backgroundWork'

@@ -1,4 +1,4 @@
-import { sanitizeDocumentText } from '../shared/textSanitization'
+import { sanitizeDocumentText } from '@thockdown/visualizer/shared/textSanitization'
 import { reconcileExternalFile } from '../shared/externalFileReconcile'
 import type { ExternalFilesApi } from '../shared/externalFiles'
 import type { NoteLifecycleApi, NoteSummaryWithContent } from '../shared/noteLifecycle'

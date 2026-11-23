@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/shared/textSanitization';
+import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '@thockdown/visualizer/shared/textSanitization';
 import { buildNextAutoAssignedId, buildNextAutoChapterId, isAutoAssignedChapterId, isAutoAssignedId, isValidUserAssignedId, normalizeAssignedIdInput } from '../src/shared/assignedIds';
 import { SEALED_ROOT_NOTE_IDS } from '../src/shared/helpGuide';
 import { DEFAULT_EDITOR_SECTION_ID, type EditorSectionEntry } from '../src/shared/sections';
@@ -76,7 +76,7 @@ import type {
   MusicSongEntry,
   PlaylistSlot,
   PlaylistCountsResult,
-} from '../src/shared/audioPlayer';
+} from '@thockdown/visualizer/shared/audioPlayer';
 import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId, imageReferencesIn, MAX_STORED_IMAGE_BYTES, type ImageImportRequest, type ImageImportResult, type ImageRenameResult, type StoredImageSummary, renameImageReferences } from '../src/shared/images';
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
@@ -92,7 +92,7 @@ import {
   MUSIC_SET_ICON_PATTERN,
   createPoolFilterMatcher,
   sanitizePoolFilter,
-} from '../src/shared/audioPlayer';
+} from '@thockdown/visualizer/shared/audioPlayer';
 
 const require = createRequire(import.meta.url);
 let BetterSqlite3: typeof import('better-sqlite3');

@@ -22,8 +22,8 @@
  */
 
 import { connectToOutput, holdOutputAlone, resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
-import { outputLatencySec } from './musicBeat'
-import { SmoothClock } from './smoothClock'
+import { outputLatencySec } from '@thockdown/visualizer/sound/musicBeat'
+import { SmoothClock } from '@thockdown/visualizer/sound/smoothClock'
 
 const LOOP_MIME = 'audio/mp4; codecs="flac"'
 /** How much of the loop is kept queued ahead of the listener, and behind them before it is let go. */

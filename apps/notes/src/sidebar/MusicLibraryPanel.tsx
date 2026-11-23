@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { TextButton } from '../components/TextButton'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '../shared/audioPlayer'
+import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
 } from '../shared/musicSetList'
-import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
-import { pressMusicSet } from '../sound/setPress'
+import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
+import { pressMusicSet } from '@thockdown/visualizer/sound/setPress'
 import { HoverActions } from '../components/HoverActions'
 import { MusicSetRow, SetMark } from './MusicSetRow'
 import { SelectorRows } from './SelectorRows'

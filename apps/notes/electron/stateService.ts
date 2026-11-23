@@ -12,9 +12,9 @@ import type {
 } from '../src/shared/appState';
 import { sanitizeGameSave } from '../src/adventure/save';
 import { VIEW_LETTER_SPACING_MAX_EM, VIEW_LETTER_SPACING_MIN_EM, roundViewLetterSpacingEm } from '../src/editor/EditorTypography';
-import { isPlaylistSlot, sanitizeMusicBarRow, sanitizePoolFilter } from '../src/shared/audioPlayer';
-import { sanitizeEqCurve } from '../src/shared/musicEqCurve';
-import { sanitizeSoundstagePreferences } from '../src/shared/soundstages';
+import { isPlaylistSlot, sanitizeMusicBarRow, sanitizePoolFilter } from '@thockdown/visualizer/shared/audioPlayer';
+import { sanitizeEqCurve } from '@thockdown/visualizer/shared/musicEqCurve';
+import { sanitizeSoundstagePreferences } from '@thockdown/visualizer/shared/soundstages';
 import { sanitizeKeystrokeSoundPreferences } from '../src/shared/keystrokeSounds';
 import { resetMenuWithPreservedPresets } from '../src/shared/appStateReset';
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
@@ -24,7 +24,7 @@ import { sanitizeVisualizerPresetPreferences } from '../src/shared/visualizerPre
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
 import { DEFAULT_TOOLTIP_SETTINGS, sanitizeTooltipSettings } from '../src/shared/tooltipSettings';
-import { FLASH_MATCHING_DEFAULT, sanitizeFlashMatching, sanitizeFlashShapePreferences } from '../src/shared/flashing';
+import { FLASH_MATCHING_DEFAULT, sanitizeFlashMatching, sanitizeFlashShapePreferences } from '@thockdown/visualizer/shared/flashing';
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles } from '../src/shared/features';
 import { sanitizeSpellCheckDictionaries } from '../src/shared/spellCheck';
 import { DEFAULT_GLAZE_SETTINGS, sanitizeGlazeSettings } from '@thockdown/look/glaze';

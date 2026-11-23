@@ -273,7 +273,7 @@ any of them is a defect.
 ### 3g. A wheel spin may outlive the hand, and one nudge takes it back
 - Three notches in the same direction, each inside the user's `auto scroll`
   threshold (10-50ms), are one gesture rather than three, and the view keeps
-  scrolling at the rate that gesture set (`apps/notes/src/scroll/wheelSpin.ts`). Both
+  scrolling at the rate that gesture set (`packages/visualizer/scroll/wheelSpin.ts`). Both
   sliders carry an OFF position as their leftmost step rather than a
   separate toggle -- one persisted number per control, and the off state
   living at the end of the axis it continues.
@@ -316,7 +316,7 @@ any of them is a defect.
   -- ends it too. A page that keeps moving under a keypress is not a feature.
 
 ### 3h. A notch is worth so much reading, and the reader sets how much
-- **A wheel notch is measured in text, in both panes** (`apps/notes/src/scroll/wheelStep.ts`).
+- **A wheel notch is measured in text, in both panes** (`packages/visualizer/scroll/wheelStep.ts`).
   The edit view scrolls `step` whole rows per notch (1-10); the render view
   scrolls `step` line heights (0.5-5, fractional). Neither is a pixel figure,
   and that is the point: turn the text size or the line spacing up and the

@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 
-import type { CurvePoint } from '../shared/drawnCurve'
+import type { CurvePoint } from '@thockdown/visualizer/shared/drawnCurve'
 import {
   EQ_DB_MAX,
   EQ_DB_STEP,
@@ -14,7 +14,7 @@ import {
   hzAtSemitones,
   semitonesOf,
   type EqPoint,
-} from '../shared/musicEqCurve'
+} from '@thockdown/visualizer/shared/musicEqCurve'
 import { CurveEditor, type CurveAxisFormat, type CurveGridLine } from './CurveEditor'
 
 /** One dotted line per octave above 20 Hz, and a dashed one at 0 dB. */

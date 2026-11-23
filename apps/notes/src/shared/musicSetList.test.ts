@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { MusicSongEntry } from './audioPlayer'
+import type { MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
 import { groupMusicSetList, sanitizeMusicSetListGrouping } from './musicSetList'
 
 let nextId = 1
@@ -48,7 +48,7 @@ describe('groupMusicSetList', () => {
 
 describe('musicSetMark', () => {
   it('takes the first two words\' initials, or a one-word name\'s first two letters', async () => {
-    const { musicSetMark } = await import('./audioPlayer')
+    const { musicSetMark } = await import('@thockdown/visualizer/shared/audioPlayer')
     expect(musicSetMark('late night drive')).toBe('LN')
     expect(musicSetMark('  Chill   out ')).toBe('CO')
     expect(musicSetMark('focus')).toBe('FO')

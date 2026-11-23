@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { DatabaseService } from './databaseService'
-import { EMPTY_POOL_FILTER, FACTORY_MUSIC_SETS } from '../src/shared/audioPlayer'
+import { EMPTY_POOL_FILTER, FACTORY_MUSIC_SETS } from '@thockdown/visualizer/shared/audioPlayer'
 
 const indexedFile = (filePath: string) => ({ filePath, title: '', artist: '', album: '', durationSec: 0 })
 

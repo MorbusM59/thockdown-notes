@@ -1,4 +1,4 @@
-import type { PlaylistSlot } from '../../shared/audioPlayer'
+import type { PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 
 /**
  * The ICON PICKER: while it is open for an entry (a music set, a soundscape, a soundstage, a keystroke sound, a flashing preset, a visualizer preset, a layout, a dictionary),

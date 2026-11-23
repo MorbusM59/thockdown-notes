@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 export const EDITOR_SECTIONS_CHANNELS = {
   listSections: 'sections:list',
   createSection: 'sections:create',
