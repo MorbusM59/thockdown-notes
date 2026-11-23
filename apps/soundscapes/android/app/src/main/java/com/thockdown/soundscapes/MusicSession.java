@@ -256,6 +256,12 @@ final class MusicSession {
         return "Music";
     }
 
+    /** What the music's output is doing, for the app's Debugging section. */
+    synchronized String diagnostics() {
+        if (output == null) return "No music output open.";
+        return "Song " + heardId + " at " + Math.round(heardSeconds) + " s, session volume " + volume + "; lane: " + output.diagnostics();
+    }
+
     synchronized boolean isPlaying() {
         return output != null && !output.isPaused();
     }
