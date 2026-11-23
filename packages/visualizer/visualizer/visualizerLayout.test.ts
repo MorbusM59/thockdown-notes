@@ -85,12 +85,12 @@ describe('cutoutGapBoxes', () => {
 
 describe('fitVisualizerBox', () => {
   it('keeps the reader\'s box and font where everything fits', () => {
-    expect(fitVisualizerBox(1080, 22, 18, 220)).toEqual({ boxPx: 22, fontSizePx: 18 })
+    expect(fitVisualizerBox(1920, 1080, 22, 18, 220)).toEqual({ boxPx: 22, fontSizePx: 18 })
   })
 
   it('shrinks the line height first, then the font, until strips, bars, padding and cutout fit', () => {
     for (let h = 300; h <= 1600; h += 7) {
-      const { boxPx, fontSizePx } = fitVisualizerBox(h, 60, 30, 220)
+      const { boxPx, fontSizePx } = fitVisualizerBox(1920, h, 60, 30, 220)
       const layout = computeVisualizerLayout(1920, h, boxPx, 220)
       expect(layout.cutout.row).toBeGreaterThanOrEqual(STRIP_ROWS + 2)
       expect(layout.rows - layout.cutout.row - layout.cutout.size).toBeGreaterThanOrEqual(STRIP_ROWS + 2)

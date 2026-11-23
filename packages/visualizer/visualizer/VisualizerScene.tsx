@@ -180,7 +180,7 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
 export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef, onExit }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
-  const { boxPx, fontSizePx } = fitVisualizerBox(height, readerBoxPx, readerFontSizePx, EMPTY_SCENE_DIAMETER_PX)
+  const { boxPx, fontSizePx } = fitVisualizerBox(width, height, readerBoxPx, readerFontSizePx, EMPTY_SCENE_DIAMETER_PX)
   const bevel = useBoxBevelImages(boxPx, boxPx)
   const bottomRowsAsked = useSyncExternalStore(subscribeSpectrumStripRows, readSpectrumStripRows)
   const layout = useMemo(() => computeVisualizerLayout(width, height, boxPx, EMPTY_SCENE_DIAMETER_PX, bottomRowsAsked), [width, height, boxPx, bottomRowsAsked])

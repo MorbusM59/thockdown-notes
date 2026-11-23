@@ -68,6 +68,13 @@ export type VisualizerLayout = {
   chromaRow: number | null
   /** The cutout, in boxes. Size zero when there is no room for it between the strips. */
   cutout: { column: number; row: number; size: number }
+  /**
+   * The scene is taller than it is wide: the song list then sits in the band
+   * above the cutout and the sets and the filter in the band below it, instead
+   * of left and right of it. Decided by the scene's shape alone, so a tall
+   * desktop window and a phone held upright take the same arrangement.
+   */
+  portrait: boolean
 }
 
 /** The scene's layout for a `widthPx` by `heightPx` slot with square boxes of `boxPx`, and a cutout of about `cutoutPx`. */
@@ -139,6 +146,7 @@ export function computeVisualizerLayout(widthPx: number, heightPx: number, boxPx
     spectrumRows,
     chromaRow,
     cutout,
+    portrait: heightPx > widthPx,
   }
 }
 
@@ -239,6 +247,9 @@ export function fitToRow(text: string, columns: number): string {
  * distance grows and shrinks with the screen.
  */
 export function cutoutGapBoxes(layout: VisualizerLayout): number {
+  // In portrait the lists sit above and below the cutout, so the distance
+  // that matches the cutout's other sides is the one to the screen's edge.
+  if (layout.portrait) return Math.max(1, layout.cutout.column - 1)
   const barRow = layout.progressRow ?? layout.stripRows - 1
   return Math.max(1, layout.cutout.row - barRow - 1)
 }
@@ -253,9 +264,10 @@ export function cutoutGapBoxes(layout: VisualizerLayout): number {
  */
 export function songListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
   const row = layout.contentTopRow
-  const lastRow = layout.contentBottomRow
+  // Portrait: the band above the cutout, full width. Landscape: left of it.
+  const lastRow = layout.portrait && layout.cutout.size > 0 ? layout.cutout.row - cutoutGapBoxes(layout) - 1 : layout.contentBottomRow
   const column = 1
-  const lastColumn = (layout.cutout.size > 0 ? layout.cutout.column : layout.columns) - cutoutGapBoxes(layout) - 1
+  const lastColumn = layout.portrait ? layout.columns - 2 : (layout.cutout.size > 0 ? layout.cutout.column : layout.columns) - cutoutGapBoxes(layout) - 1
   const rows = lastRow - row + 1
   const columns = lastColumn - column + 1
   if (layout.stripRows <= 0 || rows < 1 || columns < 5) return null
@@ -281,11 +293,12 @@ export function songListEntry(name: string, columns: number): { text: string; cl
  * empty rows before it; otherwise entries use the available middle rows.
  */
 export function bucketListArea(layout: VisualizerLayout): { column: number; row: number; columns: number; rows: number; slots: number } | null {
-  const row = layout.contentTopRow
+  // Portrait: the band below the cutout, full width. Landscape: right of it.
+  const row = layout.portrait && layout.cutout.size > 0 ? layout.cutout.row + layout.cutout.size + cutoutGapBoxes(layout) : layout.contentTopRow
   const filter = poolFilterArea(layout)
   const lastRow = filter ? filter.row - 4 : layout.contentBottomRow
   const lastColumn = layout.columns - 2
-  const column = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
+  const column = layout.portrait ? 1 : (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
   const availableRows = lastRow - row + 1
   const columns = lastColumn - column + 1
   if (layout.stripRows <= 0 || availableRows < 1 || columns < 5) return null
@@ -317,13 +330,15 @@ export type PoolFilterArea = {
  * search character.
  */
 export function poolFilterArea(layout: VisualizerLayout): PoolFilterArea | null {
-  const songs = songListArea(layout)
-  const firstRow = layout.contentTopRow
+  // Portrait: the last row of the band below the cutout, under the sets.
+  // Landscape: on the song list's lowest entry row, right of the cutout.
+  const songs = layout.portrait ? null : songListArea(layout)
+  const firstRow = layout.portrait && layout.cutout.size > 0 ? layout.cutout.row + layout.cutout.size + cutoutGapBoxes(layout) : layout.contentTopRow
   const bottomRow = songs ? songs.row + 2 * (songs.slots - 1) : layout.contentBottomRow
   const row = bottomRow
   if (layout.stripRows <= 0 || row < firstRow) return null
   const lastColumn = layout.columns - 2
-  const leftLimit = (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
+  const leftLimit = layout.portrait ? 1 : (layout.cutout.size > 0 ? layout.cutout.column + layout.cutout.size : 0) + cutoutGapBoxes(layout)
   const room = Math.min(POOL_FILTER_MAX_COLUMNS, lastColumn - leftLimit + 1)
   if (room < 3) return null
   return { column: lastColumn - room + 1, row, columns: room }
@@ -377,18 +392,25 @@ export const REQUIRED_ROWS_BESIDE_CUTOUT = 2 * (STRIP_ROWS + 2)
 export const MIN_SCENE_ROWS = 31
 
 /**
- * The box and font size the scene is drawn at in a slot `heightPx` tall: the
+ * The fewest full columns the scene may have: enough for the credits row's
+ * artist and album side by side and a spectrum worth reading. It is what
+ * shrinks the boxes on a phone held upright, where the width runs out first.
+ */
+export const MIN_SCENE_COLUMNS = 31
+
+/**
+ * The box and font size the scene is drawn at in a `widthPx` by `heightPx` slot: the
  * reader's own when both strips, both bars, a row of padding each side and the
- * cutout all fit; otherwise the largest box that fits, reached by lowering the
+ * cutout all fit, with `MIN_SCENE_COLUMNS` across; otherwise the largest box that fits, reached by lowering the
  * line height first, down to 1, and then the font size with it.
  */
-export function fitVisualizerBox(heightPx: number, boxPx: number, fontSizePx: number, cutoutPx: number): { boxPx: number; fontSizePx: number } {
+export function fitVisualizerBox(widthPx: number, heightPx: number, boxPx: number, fontSizePx: number, cutoutPx: number): { boxPx: number; fontSizePx: number } {
   // The full rows above the cutout (the grid is phased on it, so the rows
   // below are as many or one more), as computeVisualizerLayout places them.
   const fits = (box: number) => {
     const size = cutoutBoxes(cutoutPx, box)
     const above = Math.floor(Math.floor((heightPx - size * box) / 2) / box)
-    return 2 * above >= REQUIRED_ROWS_BESIDE_CUTOUT && 2 * above + size >= MIN_SCENE_ROWS
+    return 2 * above >= REQUIRED_ROWS_BESIDE_CUTOUT && 2 * above + size >= MIN_SCENE_ROWS && Math.floor(widthPx / box) - 1 >= MIN_SCENE_COLUMNS
   }
   let box = Math.max(1, boxPx)
   if (heightPx <= 0) return { boxPx: box, fontSizePx }
