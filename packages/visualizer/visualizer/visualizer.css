@@ -430,3 +430,20 @@
 .visualizer-scene > .visualizer-bucket-hit {
   touch-action: none;
 }
+
+/* The rotating Platonic solid (editor/EmptyStateScene.ts), cut out of
+   the card's faint needle-stripe texture, drawn into a canvas by
+   editor/SolidCanvas.tsx (in the empty state and in the visualizer's cutout face).
+   Negative z-index keeps it behind the quick-actions grid, a z-index:auto
+   in-flow child of the same (position:absolute, so
+   stacking-context-establishing) .editor-empty-state box. */
+.empty-state-solid {
+  position:       absolute;
+  inset:          0;
+  width:          100%;
+  height:         100%;
+  z-index:        -1;
+  pointer-events: none;
+  border-radius:  calc(var(--border-radius-regular) *6);
+}
+
