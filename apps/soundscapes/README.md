@@ -49,9 +49,11 @@ crossfade between two voices. HOW it reaches the speaker is not:
   `app/src/main/assets/soundscape-renderer.js` in the Android project, by
   `apps/soundscapes/vite.renderer.config.ts`), runs
   in a JavaScriptSandbox (`androidx.javascriptengine`, a V8 isolate the app
-  owns) driven by `SoundscapeRenderer.java`, and `SoundscapeAudioOutput.java`
-  plays it through the platform's AudioTrack from a queue in the app's
-  process. The web page only sends settings and the volume
+  owns) driven by `SoundscapeRenderer.java`, and the app's one output
+  (`AudioOutput.java`) plays it from a queue in the app's process
+  (`OutputLane.java`, one per source: the soundscape and the music), the
+  lanes summed and limited (`OutputLimiter.java`, the desktop's shared
+  limiter) before the platform's AudioTrack. The web page only sends settings and the volume
   (`nativeSoundscapePlayback.ts`).
 
 How it got here, because each step was measured on a device:

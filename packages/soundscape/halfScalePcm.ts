@@ -1,6 +1,6 @@
 /**
  * How finished soundscape audio crosses from JavaScript to Android's native
- * output (SoundscapeAudioOutput.java): 16-bit little-endian interleaved
+ * output (AudioOutput.java, OutputLane.java): 16-bit little-endian interleaved
  * stereo at HALF scale, base64. Half scale because the mix may exceed full
  * scale before the listener's volume brings it down, and the volume is
  * applied natively, after the crossing; the native side doubles it back.

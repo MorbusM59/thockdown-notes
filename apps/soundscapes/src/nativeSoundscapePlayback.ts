@@ -2,7 +2,7 @@
  * The soundscape's playback on Android (see SoundscapeEngine's
  * SoundscapePlayback): the native session renders and plays it
  * (SoundscapeSession.java, SoundscapeRenderer.java,
- * SoundscapeAudioOutput.java), so nothing on its audio path is in the
+ * AudioOutput.java), so nothing on its audio path is in the
  * WebView, whose JavaScript is paused in the background. This side only
  * forwards settings and the volume, and passes failures back.
  *

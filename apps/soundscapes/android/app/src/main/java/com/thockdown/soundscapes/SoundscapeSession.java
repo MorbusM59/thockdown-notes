@@ -151,7 +151,7 @@ final class SoundscapeSession {
 
     private final Context context;
     private Listener listener;
-    private SoundscapeAudioOutput output;
+    private OutputLane output;
     /** Volatile: the output's writer thread reads it without the session's lock, which close() holds while joining that thread. */
     private volatile SoundscapeRenderer renderer;
     private Regular regular = Regular.STOPPED;
@@ -696,7 +696,7 @@ final class SoundscapeSession {
         // The renderer reads the output's playhead and the output wakes the
         // renderer as it plays: each needs the other, so the output's
         // listener reaches the renderer through the field.
-        output = new SoundscapeAudioOutput(() -> {
+        output = AudioOutput.openLane(() -> {
             SoundscapeRenderer current = renderer;
             if (current != null) current.wake();
         });
