@@ -70,6 +70,12 @@ import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
 import { VisualizerPrototype } from './VisualizerPrototype'
+import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
+import { MusicLibraryDock, MusicLibraryPanel } from '@thockdown/visualizer/library/MusicLibraryPanel'
+import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
+import { MobileTabSelector, SettingsTab, TabPlaceholder, VisualizerTab, loadTab, saveTab, type MobileTab } from './MobileTabs'
+import { nativeMusic } from './nativeMusic'
+import { startMobileMusicPlayer } from './mobileMusicPlayer'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
 installSoundscapeFiles()
@@ -139,6 +145,25 @@ export function MobileSoundscapeApp() {
   const [helpMode, setHelpMode] = useState(false)
   // PROTOTYPE: the visualizer page, opened from the eye button beside Look.
   const [visualizerOpen, setVisualizerOpen] = useState(false)
+  // The tab shown (MobileTabs.tsx), remembered across launches.
+  const [tab, setTab] = useState<MobileTab>(loadTab)
+  const selectTab = useCallback((next: MobileTab) => {
+    setTab(next)
+    saveTab(next)
+    pageScrollerRef.current?.scrollTo({ top: 0 })
+  }, [])
+  const [songsGrouping, setSongsGrouping] = useState<MusicSetListGrouping>(DEFAULT_MUSIC_SET_LIST_GROUPING)
+  // The music library and player the shared music views read (mobileMusicPlayer.ts).
+  useEffect(() => {
+    if (!nativeMusic) return
+    let stop: (() => void) | null = null
+    let cancelled = false
+    void startMobileMusicPlayer(nativeMusic).then((stopPlayer) => {
+      if (cancelled) stopPlayer()
+      else stop = stopPlayer
+    })
+    return () => { cancelled = true; stop?.() }
+  }, [])
   // While help is up, the system's back gesture closes it rather than
   // leaving the app.
   useEffect(() => {
@@ -359,7 +384,16 @@ export function MobileSoundscapeApp() {
             {visualizerOpen ? <VisualizerPrototype onExit={() => setVisualizerOpen(false)} colors={loadout.visualizerColors} mode={look.mode} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
-              <div ref={pageScrollerRef} className={`options-content sidebar-options-content thockdown-custom-scrollbar mobile-page-scroller`}>
+              <MobileTabSelector tab={tab} onChange={selectTab} />
+              <SidebarFrame
+                panelMode
+                contentRef={pageScrollerRef}
+                dock={tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} /> : null}
+                scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
+              >
+              <div className="options-content sidebar-options-content mobile-tab-content">
+                {tab === 'songs' ? <MusicLibraryPanel grouping={songsGrouping} filter="" /> : null}
+                {tab === 'soundscapes' ? (<>
                 <div className="utility-setting-slider-stack" aria-label="Master controls">
                   <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Master')!} /> : (<>
@@ -484,15 +518,6 @@ export function MobileSoundscapeApp() {
                   </OptionsSliderRows>
                   </>)}
                 </div>
-                <div className="utility-setting-slider-stack" aria-label="Schedule">
-                  <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
-                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleRows
-                    schedule={schedule}
-                    presets={presets}
-                    currentPresetId={preferences.activePresetId}
-                    onChange={setSchedule}
-                  />}
-                </div>
                 <div className="utility-setting-slider-stack" aria-label="Timer">
                   <OptionsSubsectionLabel>Timer</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Timer')!} /> : <TimerRow timer={timer} onChange={setTimer} />}
@@ -530,9 +555,24 @@ export function MobileSoundscapeApp() {
                     />
                   )}
                 />
+                </>) : null}
+                {tab === 'schedules' ? (<>
+                <div className="utility-setting-slider-stack" aria-label="Schedule">
+                  <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
+                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleRows
+                    schedule={schedule}
+                    presets={presets}
+                    currentPresetId={preferences.activePresetId}
+                    onChange={setSchedule}
+                  />}
+                </div>
+                </>) : null}
+                {tab === 'soundstages' ? <TabPlaceholder name="Soundstages" /> : null}
+                {tab === 'visualizer' ? <VisualizerTab onOpen={() => setVisualizerOpen(true)} /> : null}
+                {tab === 'settings' ? <SettingsTab /> : null}
               </div>
+              </SidebarFrame>
             </div>
-            <PageScrollbar scrollerRef={pageScrollerRef} />
             </div>
           </div>
         </div>

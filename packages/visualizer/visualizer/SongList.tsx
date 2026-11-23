@@ -37,6 +37,7 @@ import { middleStripOf, setMiddleHoles } from './middleHoles'
 import { LIST_RETURN_GRACE_MS } from './listWindow'
 import { listRing, shortestListDistance, wrapListIndex } from './songListRing'
 import { songListEntry, type VisualizerLayout } from './visualizerLayout'
+import { musicLibraryReads } from '../shared/musicLibraryReads'
 
 export type SongListArea = { column: number; row: number; columns: number; rows: number; slots: number }
 
@@ -218,7 +219,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     const refresh = async () => {
       const ticket = ++request
       const pool = readNowPlaying().pool
-      const next = pool ? await window.thockdownAudioPlayer?.getPool({ slots: [...pool.slots], filter: readShownPoolFilter() }) ?? [] : []
+      const next = pool ? await musicLibraryReads()?.getPool({ slots: [...pool.slots], filter: readShownPoolFilter() }) ?? [] : []
       if (ticket !== request) return
       const preservePosition = hovered || travel !== null || returnHomeTimeout !== null
       const topSong = ring[wrapListIndex(offset, ring.length)]

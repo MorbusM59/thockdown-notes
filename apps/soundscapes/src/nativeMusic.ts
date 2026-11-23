@@ -13,7 +13,7 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor
 import type { MusicStage } from '@thockdown/audio/musicMix'
 import { fitEqBandGains } from '@thockdown/visualizer/shared/musicEqCurve'
 import type { SoundstageSettings } from '@thockdown/visualizer/shared/soundstages'
-import type { MusicCatalog, MusicRotation } from './musicLibrary'
+import { sanitizeCatalog, type MusicCatalog, type MusicRotation } from './musicLibrary'
 
 export interface NativeMusicPlugin {
   /** The system's folder picker: the tree chosen, its read grant kept across restarts. */
@@ -69,5 +69,5 @@ export function musicStageOf(stage: SoundstageSettings): MusicStage {
 /** The library as stored. */
 export async function loadMusicLibrary(plugin: NativeMusicPlugin): Promise<{ catalog: MusicCatalog; rotation: MusicRotation }> {
   const stored = await plugin.getLibrary()
-  return { catalog: JSON.parse(stored.catalog) as MusicCatalog, rotation: JSON.parse(stored.rotation) as MusicRotation }
+  return { catalog: sanitizeCatalog(JSON.parse(stored.catalog || '{}')), rotation: JSON.parse(stored.rotation) as MusicRotation }
 }

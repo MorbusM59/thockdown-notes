@@ -278,3 +278,18 @@ body {
   position: absolute;
   inset: 0;
 }
+
+/* The view selector above the sidebar frame (MobileTabs.tsx), spaced from it as the desktop's. */
+.mobile-tab-selector {
+  margin-bottom: var(--spacing-regular);
+}
+
+.mobile-soundscape-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-tab-placeholder {
+  opacity: 0.6;
+  margin: 0;
+}
