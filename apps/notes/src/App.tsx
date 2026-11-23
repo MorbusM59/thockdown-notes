@@ -2,6 +2,7 @@ import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { DEFAULT_VISUALIZER_PRESET_PREFERENCES, NEUTRAL_VISUALIZER_PRESET, VISUALIZER_PRESET_KEYS, VISUALIZER_PRESET_KIND, sanitizeVisualizerPresetPreferences, visualizerPresetPart, type VisualizerPresetPreferences } from './shared/visualizerPresets'
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
+import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { CanonicalScrollRail } from './components/CanonicalScrollRail'
 import { scrollerIdentity } from './shared/scrollerIdentity'
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
@@ -8439,14 +8440,225 @@ ${markdownHtml}
                 </button>
               </div>
 
-              <div className={`sidebar-scroll-frame${isSidebarPanelMode ? '' : ' is-tree-mode'}`}>
-                <div className="sidebar-content-column">
-                <div className="sidebar-wrapper">
+              <SidebarFrame
+                panelMode={isSidebarPanelMode}
+                contentRef={setSidebarContentRef}
+                textureRef={sidebarTextureRef}
+                // The rail sits beside the scroller, not inside it, so a
+                // wheel over any part of it would otherwise scroll
+                // nothing. The same wheel is handed to the scroller, so
+                // it gets the scroller's own notches and coast.
+                onScrollbarWheel={(event) => {
+                  if (!sidebarScroller || event.ctrlKey) return
+                  sidebarScroller.dispatchEvent(new WheelEvent('wheel', event.nativeEvent))
+                }}
+                scrollbar={(
+                  <CanonicalScrollRail
+                    key={sidebarScrollerKey}
+                    className="sidebar-thockdown-scroll-rail"
+                    scroller={sidebarScroller}
+                    ownsKeyboard={false}
+                    layoutKey={`${sidebarMode}|${effectiveCurrentPage}`}
+                    textureRef={sidebarTextureRef}
+                    thumbLabel={sidebarThumbPage === null ? undefined : pagerFigure(sidebarThumbPage)}
+                  />
+                )}
+                dock={<>
+                  {isMusicLibraryDocked ? (
+                    // The Music Library's controls, docked where the colour
+                    // picker docks but straight on the sidebar, with no box.
+                    <div className="sidebar-plain-dock">
+                      <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
+                    </div>
+                  ) : null}
+                  {isDictionaryShown ? (
+                    // The open dictionary's row and its field for new words, docked as a music set's is.
+                    <div className="sidebar-plain-dock">
+                      <DictionaryDock />
+                    </div>
+                  ) : null}
+                  {isColorPickerDocked ? (
+                    // The Colors subsection's picker, docked directly above the
+                    // layout's dock row so it stays in reach however far down
+                    // the subsection the reader is setting colours.
+                    <div className="sidebar-plain-dock" aria-label="Color picker">
+                      <ColorPickerRow />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'layouts' ? (
+                    // The layout in use, docked as the soundscapes' is.
+                    <div className="sidebar-plain-dock">
+                      <LayoutDock entries={layoutEntriesForCurrentMode} change={changeLoadouts} onReset={() => void resetActiveLoadout()} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'music' && openPresetSubsection === 'soundstages' ? (
+                    // The playing soundstage's row, docked as the soundscapes' is, while its subsection is open.
+                    <div className="sidebar-plain-dock">
+                      <PresetDock kind={SOUNDSTAGE_KIND} list={soundstagePreferences} onChange={changeSoundstageList} pickKind="soundstage" resetTo={NEUTRAL_SOUNDSTAGE} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'music' && openPresetSubsection === 'keystrokeSounds' ? (
+                    <div className="sidebar-plain-dock">
+                      <PresetDock kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" resetTo={NEUTRAL_KEYSTROKE_SOUND} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'glitz' && openPresetSubsection === 'visualizer' ? (
+                    <div className="sidebar-plain-dock">
+                      <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerPresetPreferences} onChange={setVisualizerPresetPreferences} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'advanced' && openPresetSubsection === 'flashing' ? (
+                    <div className="sidebar-plain-dock">
+                      <PresetDock kind={FLASH_SHAPE_KIND} list={flashShapePreferences} onChange={setFlashShapePreferences} pickKind="flashing" resetTo={NEUTRAL_FLASH_SHAPE} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'soundscapes' ? (
+                    // The playing soundscape's row, docked as the Music Library's is.
+                    <div className="sidebar-plain-dock">
+                      <SoundscapeDock preferences={soundscapePreferences} onChange={setSoundscapePreferences} />
+                    </div>
+                  ) : null}
+                  {isFindMode ? (
+                    // Find & Replace's options, straight on the sidebar as the
+                    // Music Library's dock is: stepping through the hits, letter
+                    // case and whole words, the way into replace mode, and --
+                    // there -- its two actions.
+                    <div className="sidebar-plain-dock">
+                      <div className="options-curve-rows options-music-set-list-dock">
+                        {/* One row: the mode toggle, replace mode's two actions
+                            beside it, the square toggles, then the pager
+                            filling what the row leaves. */}
+                        <div className={`options-curve-row find-dock-row${isReplaceMode ? ' is-replace-mode' : ''}`}>
+                          <button
+                            type="button"
+                            className={`options-curve-cell options-curve-button options-dock-entry-icon${isReplaceMode ? ' is-active' : ''}`}
+                            aria-pressed={isReplaceMode}
+                            aria-label="Find and replace"
+                            data-tooltip={isReplaceMode ? 'Back to find only' : encodeTooltip({ intention: 'Find and replace', shortcut: 'findReplace' })}
+                            onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
+                          >
+                            <span className="fa-solid fa-arrow-down-up-across-line find-dock-mode-icon" aria-hidden="true" />
+                          </button>
+                          {isReplaceMode ? (
+                            <>
+                              <button
+                                type="button"
+                                className="options-curve-cell options-curve-button options-dock-entry-icon"
+                                aria-label="Replace"
+                                data-tooltip="Replace the marked occurrence"
+                                onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
+                              >
+                                <span className="fa-solid fa-arrow-turn-down find-dock-replace-icon" aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                className="options-curve-cell options-curve-button options-dock-entry-icon"
+                                aria-label="Replace all"
+                                data-tooltip={encodeTooltip({ intention: 'Replace every occurrence', shortcut: 'replaceAll' })}
+                                onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
+                              >
+                                <span className="fa-solid fa-arrows-turn-right" aria-hidden="true" />
+                              </button>
+                            </>
+                          ) : null}
+                          <button
+                            type="button"
+                            className={`options-curve-cell options-curve-button options-dock-entry-icon${activeSection?.isDocumentFindWholeWord ? ' is-active' : ''}`}
+                            aria-pressed={Boolean(activeSection?.isDocumentFindWholeWord)}
+                            aria-label="Whole word"
+                            data-tooltip="Match whole words only"
+                            onClick={() => getActiveSection()?.setIsDocumentFindWholeWord((previous: boolean) => !previous)}
+                          >
+                            <span className="fa-solid fa-arrows-left-right-to-line" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className={`options-curve-cell options-curve-button options-dock-entry-icon find-dock-case${activeSection?.isDocumentFindCaseSensitive ? ' is-active' : ''}`}
+                            aria-pressed={Boolean(activeSection?.isDocumentFindCaseSensitive)}
+                            aria-label={isReplaceMode ? 'Keep case' : 'Match case'}
+                            data-tooltip={isReplaceMode ? 'Keep the case of what is replaced' : 'Match case'}
+                            onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
+                          >
+                            Aa
+                          </button>
+                          <Pager
+                            hits={{
+                              current: markedFindHitPosition,
+                              total: findHitCount,
+                              isTotalOpen: Boolean(activeSection?.isDocumentFindTruncated),
+                              onGo: (position) => getActiveSection()?.jumpToDocumentFindHitAt(position),
+                              onStep: (direction) => { getActiveSection()?.stepDocumentFindHit(direction) },
+                            }}
+                            pages={findTotalPages > 1 ? {
+                              current: effectiveFindPage - 1,
+                              total: findTotalPages,
+                              onGo: (page) => setFindPage(page + 1),
+                            } : undefined}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  {/* Paging and the date filter sit in the column beside the
+                      scrollbar, as every dock does. */}
+              {showPagination ? (
+                <div className="sidebar-plain-dock sidebar-pagination">
+                  <Pager
+                    pages={{
+                      current: effectiveCurrentPage - 1,
+                      total: totalPages,
+                      onGo: (page) => setCurrentPage(page + 1),
+                    }}
+                  />
+                </div>
+              ) : null}
+
+              {(isSidebarPanelMode || isFindMode || isImageLibraryShown) ? (
+                <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
+              ) : null}
+
+              {(isPagedNoteSection(sidebarMode) || isSidebarTreeMode) && !isImageLibraryShown ? (
+                <div className="sidebar-plain-dock date-filter-rail" aria-label="Date filters">
                   <div
-                    className={`sidebar-content${isSidebarPanelMode ? ' is-scrollbar-mode' : ' is-tree-mode'}`}
-                    ref={setSidebarContentRef}
+                    className="date-filter-line"
+                    data-secondary-press="action"
+                    onContextMenu={handleMonthRowContextMenu}
                   >
-                    <div ref={sidebarTextureRef} className="sidebar-content-texture" />
+                    {FILTER_MONTHS.map((month) => (
+                      <button
+                        key={month}
+                        type="button"
+                        className={`date-filter-chip${selectedMonths.has(month) ? ' is-active' : ''}`}
+                        onClick={(event) => handleMonthToggle(month, event)}
+                        data-secondary-press="action"
+                        onContextMenu={(event) => event.preventDefault()}
+                      >
+                        {month}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    className="date-filter-line"
+                    data-secondary-press="action"
+                    onContextMenu={handleYearRowContextMenu}
+                  >
+                    {FILTER_YEARS.map((year) => (
+                      <button
+                        key={year}
+                        type="button"
+                        className={`date-filter-chip${selectedYears.has(year) ? ' is-active' : ''}`}
+                        onClick={(event) => handleYearToggle(year, event)}
+                        data-secondary-press="action"
+                        onContextMenu={(event) => event.preventDefault()}
+                      >
+                        {year === 'older' ? 'Older' : year}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+                </>}
+              >
                     {isImageLibraryShown ? (
                       <div
                         className="notes-list tree-view image-library-view thockdown-custom-scrollbar"
@@ -8851,228 +9063,7 @@ ${markdownHtml}
                         />
                       </div>
                     )}
-                  </div>
-                </div>
-                  {isMusicLibraryDocked ? (
-                    // The Music Library's controls, docked where the colour
-                    // picker docks but straight on the sidebar, with no box.
-                    <div className="sidebar-plain-dock">
-                      <MusicLibraryDock grouping={musicSetListGrouping} onGroupingChange={setMusicSetListGrouping} />
-                    </div>
-                  ) : null}
-                  {isDictionaryShown ? (
-                    // The open dictionary's row and its field for new words, docked as a music set's is.
-                    <div className="sidebar-plain-dock">
-                      <DictionaryDock />
-                    </div>
-                  ) : null}
-                  {isColorPickerDocked ? (
-                    // The Colors subsection's picker, docked directly above the
-                    // layout's dock row so it stays in reach however far down
-                    // the subsection the reader is setting colours.
-                    <div className="sidebar-plain-dock" aria-label="Color picker">
-                      <ColorPickerRow />
-                    </div>
-                  ) : null}
-                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'layouts' ? (
-                    // The layout in use, docked as the soundscapes' is.
-                    <div className="sidebar-plain-dock">
-                      <LayoutDock entries={layoutEntriesForCurrentMode} change={changeLoadouts} onReset={() => void resetActiveLoadout()} />
-                    </div>
-                  ) : null}
-                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'music' && openPresetSubsection === 'soundstages' ? (
-                    // The playing soundstage's row, docked as the soundscapes' is, while its subsection is open.
-                    <div className="sidebar-plain-dock">
-                      <PresetDock kind={SOUNDSTAGE_KIND} list={soundstagePreferences} onChange={changeSoundstageList} pickKind="soundstage" resetTo={NEUTRAL_SOUNDSTAGE} />
-                    </div>
-                  ) : null}
-                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'music' && openPresetSubsection === 'keystrokeSounds' ? (
-                    <div className="sidebar-plain-dock">
-                      <PresetDock kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" resetTo={NEUTRAL_KEYSTROKE_SOUND} />
-                    </div>
-                  ) : null}
-                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'glitz' && openPresetSubsection === 'visualizer' ? (
-                    <div className="sidebar-plain-dock">
-                      <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerPresetPreferences} onChange={setVisualizerPresetPreferences} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} />
-                    </div>
-                  ) : null}
-                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'advanced' && openPresetSubsection === 'flashing' ? (
-                    <div className="sidebar-plain-dock">
-                      <PresetDock kind={FLASH_SHAPE_KIND} list={flashShapePreferences} onChange={setFlashShapePreferences} pickKind="flashing" resetTo={NEUTRAL_FLASH_SHAPE} />
-                    </div>
-                  ) : null}
-                  {sidebarMode === 'soundscapes' ? (
-                    // The playing soundscape's row, docked as the Music Library's is.
-                    <div className="sidebar-plain-dock">
-                      <SoundscapeDock preferences={soundscapePreferences} onChange={setSoundscapePreferences} />
-                    </div>
-                  ) : null}
-                  {isFindMode ? (
-                    // Find & Replace's options, straight on the sidebar as the
-                    // Music Library's dock is: stepping through the hits, letter
-                    // case and whole words, the way into replace mode, and --
-                    // there -- its two actions.
-                    <div className="sidebar-plain-dock">
-                      <div className="options-curve-rows options-music-set-list-dock">
-                        {/* One row: the mode toggle, replace mode's two actions
-                            beside it, the square toggles, then the pager
-                            filling what the row leaves. */}
-                        <div className={`options-curve-row find-dock-row${isReplaceMode ? ' is-replace-mode' : ''}`}>
-                          <button
-                            type="button"
-                            className={`options-curve-cell options-curve-button options-dock-entry-icon${isReplaceMode ? ' is-active' : ''}`}
-                            aria-pressed={isReplaceMode}
-                            aria-label="Find and replace"
-                            data-tooltip={isReplaceMode ? 'Back to find only' : encodeTooltip({ intention: 'Find and replace', shortcut: 'findReplace' })}
-                            onClick={() => getActiveSection()?.setIsDocumentReplaceMode(!isReplaceMode)}
-                          >
-                            <span className="fa-solid fa-arrow-down-up-across-line find-dock-mode-icon" aria-hidden="true" />
-                          </button>
-                          {isReplaceMode ? (
-                            <>
-                              <button
-                                type="button"
-                                className="options-curve-cell options-curve-button options-dock-entry-icon"
-                                aria-label="Replace"
-                                data-tooltip="Replace the marked occurrence"
-                                onClick={() => getActiveSection()?.replaceSelectedDocumentFindHit()}
-                              >
-                                <span className="fa-solid fa-arrow-turn-down find-dock-replace-icon" aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                className="options-curve-cell options-curve-button options-dock-entry-icon"
-                                aria-label="Replace all"
-                                data-tooltip={encodeTooltip({ intention: 'Replace every occurrence', shortcut: 'replaceAll' })}
-                                onClick={() => getActiveSection()?.replaceAllDocumentFindHits()}
-                              >
-                                <span className="fa-solid fa-arrows-turn-right" aria-hidden="true" />
-                              </button>
-                            </>
-                          ) : null}
-                          <button
-                            type="button"
-                            className={`options-curve-cell options-curve-button options-dock-entry-icon${activeSection?.isDocumentFindWholeWord ? ' is-active' : ''}`}
-                            aria-pressed={Boolean(activeSection?.isDocumentFindWholeWord)}
-                            aria-label="Whole word"
-                            data-tooltip="Match whole words only"
-                            onClick={() => getActiveSection()?.setIsDocumentFindWholeWord((previous: boolean) => !previous)}
-                          >
-                            <span className="fa-solid fa-arrows-left-right-to-line" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className={`options-curve-cell options-curve-button options-dock-entry-icon find-dock-case${activeSection?.isDocumentFindCaseSensitive ? ' is-active' : ''}`}
-                            aria-pressed={Boolean(activeSection?.isDocumentFindCaseSensitive)}
-                            aria-label={isReplaceMode ? 'Keep case' : 'Match case'}
-                            data-tooltip={isReplaceMode ? 'Keep the case of what is replaced' : 'Match case'}
-                            onClick={() => getActiveSection()?.setIsDocumentFindCaseSensitive((previous: boolean) => !previous)}
-                          >
-                            Aa
-                          </button>
-                          <Pager
-                            hits={{
-                              current: markedFindHitPosition,
-                              total: findHitCount,
-                              isTotalOpen: Boolean(activeSection?.isDocumentFindTruncated),
-                              onGo: (position) => getActiveSection()?.jumpToDocumentFindHitAt(position),
-                              onStep: (direction) => { getActiveSection()?.stepDocumentFindHit(direction) },
-                            }}
-                            pages={findTotalPages > 1 ? {
-                              current: effectiveFindPage - 1,
-                              total: findTotalPages,
-                              onGo: (page) => setFindPage(page + 1),
-                            } : undefined}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                  {/* Paging and the date filter sit in the column beside the
-                      scrollbar, as every dock does. */}
-              {showPagination ? (
-                <div className="sidebar-plain-dock sidebar-pagination">
-                  <Pager
-                    pages={{
-                      current: effectiveCurrentPage - 1,
-                      total: totalPages,
-                      onGo: (page) => setCurrentPage(page + 1),
-                    }}
-                  />
-                </div>
-              ) : null}
-
-              {(isSidebarPanelMode || isFindMode || isImageLibraryShown) ? (
-                <div className="date-filter-rail date-filter-rail-placeholder" aria-hidden="true" />
-              ) : null}
-
-              {(isPagedNoteSection(sidebarMode) || isSidebarTreeMode) && !isImageLibraryShown ? (
-                <div className="sidebar-plain-dock date-filter-rail" aria-label="Date filters">
-                  <div
-                    className="date-filter-line"
-                    data-secondary-press="action"
-                    onContextMenu={handleMonthRowContextMenu}
-                  >
-                    {FILTER_MONTHS.map((month) => (
-                      <button
-                        key={month}
-                        type="button"
-                        className={`date-filter-chip${selectedMonths.has(month) ? ' is-active' : ''}`}
-                        onClick={(event) => handleMonthToggle(month, event)}
-                        data-secondary-press="action"
-                        onContextMenu={(event) => event.preventDefault()}
-                      >
-                        {month}
-                      </button>
-                    ))}
-                  </div>
-                  <div
-                    className="date-filter-line"
-                    data-secondary-press="action"
-                    onContextMenu={handleYearRowContextMenu}
-                  >
-                    {FILTER_YEARS.map((year) => (
-                      <button
-                        key={year}
-                        type="button"
-                        className={`date-filter-chip${selectedYears.has(year) ? ' is-active' : ''}`}
-                        onClick={(event) => handleYearToggle(year, event)}
-                        data-secondary-press="action"
-                        onContextMenu={(event) => event.preventDefault()}
-                      >
-                        {year === 'older' ? 'Older' : year}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-                  </div>
-
-                <aside
-                    className="sidebar-scrollbar-slot"
-                    aria-hidden="true"
-                    // The rail sits beside the scroller, not inside it, so a
-                    // wheel over any part of it would otherwise scroll
-                    // nothing. The same wheel is handed to the scroller, so
-                    // it gets the scroller's own notches and coast.
-                    onWheel={(event) => {
-                      if (!sidebarScroller || event.ctrlKey) return
-                      sidebarScroller.dispatchEvent(new WheelEvent('wheel', event.nativeEvent))
-                    }}
-                  >
-                    <div className="sidebar-scrollbar-slot-inner">
-                      <CanonicalScrollRail
-                        key={sidebarScrollerKey}
-                        className="sidebar-thockdown-scroll-rail"
-                        scroller={sidebarScroller}
-                        ownsKeyboard={false}
-                        layoutKey={`${sidebarMode}|${effectiveCurrentPage}`}
-                        textureRef={sidebarTextureRef}
-                        thumbLabel={sidebarThumbPage === null ? undefined : pagerFigure(sidebarThumbPage)}
-                      />
-                    </div>
-                  </aside>
-              </div>
+              </SidebarFrame>
 
             </aside>
             ) : null}

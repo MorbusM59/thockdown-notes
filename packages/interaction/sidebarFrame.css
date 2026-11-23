@@ -1,0 +1,241 @@
+/* THE SIDEBAR FRAME (SidebarFrame.tsx): the scroll frame, the content
+   column with its panel and texture, the dock slot, the scrollbar slot, and
+   the view selector above them. Both apps draw their sidebar in it. */
+
+.sidebar-scroll-frame {
+  position:    relative;
+  flex:        1 1 auto;
+  min-height:  0;
+  height:      100%;
+  width: 100%;
+  display:     flex;
+  align-items: stretch;
+}
+
+.sidebar-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  position:         relative;
+  display:     flex;
+  /* The opaque base every other backdrop panel's
+     --backdrop-surface-background carries: the texture itself is the separate
+     scroll-synced .sidebar-content-texture layer, so only the base is set
+     here, and the Chrome texture (.app-grid::before) does not show through. */
+  background: var(--backdrop-surface-base);
+  border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
+}
+
+/* The sidebar's list and, while the options panel's Colors section is open,
+ * the docks below it (.sidebar-plain-dock): a column
+ * beside the scrollbar slot, which runs the height of both. The dock is
+ * content-sized and the list takes what is left. */
+.sidebar-content-column {
+  flex:           1 1 auto;
+  min-width:      0;
+  min-height:     0;
+  display:        flex;
+  flex-direction: column;
+  gap:            0;
+}
+
+.sidebar-content-column > .sidebar-wrapper {
+  height: auto;
+}
+
+/* The picker never squeezes the list to nothing on a short window. */
+.sidebar-content-column:has(> .sidebar-plain-dock .options-color-picker-row) > .sidebar-wrapper {
+  min-height: calc(var(--color-grid-cell) * 3);
+}
+
+/* The list's box. */
+.sidebar-content {
+  position:   relative;
+  isolation:  isolate;
+  margin:     0;
+  padding:    0;
+  border:          var(--backdrop-surface-border);
+  border-left:     none;
+  border-radius:   0 var(--border-radius-regular) var(--border-radius-regular) 0;
+}
+
+/* The backdrop surface, drawn in parts because this one scrolls: no colour
+ * of its own (the app base shows through), the texture as the scroll-synced
+ * layer below (.sidebar-content-texture,
+ * the same material every other backdrop panel takes as its background image),
+ * and the inset shadow on an overlay ABOVE that layer. An inset box-shadow
+ * paints just over the box's own background, so the full-size texture layer
+ * (z-index 1) hid it when it was drawn on the box. The list's overlay hangs
+ * off the non-scrolling .sidebar-wrapper so it does not scroll away with the
+ * list; it covers the same box, since .sidebar-content fills the wrapper. */
+.sidebar-wrapper::after {
+  content:        '';
+  position:       absolute;
+  inset:          0;
+  z-index:        3;
+  pointer-events: none;
+  border-radius:  inherit;
+  /* The panel's own border, transparent: an inset shadow is drawn inside the
+     border box, so without it the shadow ran over the panel's border line
+     instead of starting inside it. */
+  border:         var(--backdrop-surface-border);
+  border-color:   transparent;
+  border-left:    none;
+  box-shadow:     var(--backdrop-surface-shadow);
+}
+
+/* A dock straight on the sidebar, with no panel of its own: the Music
+   Library's controls, the find options and the colour picker. */
+.sidebar-plain-dock {
+  flex:    0 0 auto;
+  padding: var(--spacing-regular) 0 0 var(--spacing-regular);
+}
+
+.sidebar-content {
+  flex:       1 1 auto;
+  min-height: 0;
+  min-width:  0;
+  overflow-y: auto;
+}
+
+/* Only ever matches .sidebar-options-content (the options panel is the one
+ * sidebar view that sets is-scrollbar-mode without also being tree-mode,
+ * and its root div is always sidebar-content's 2nd child, after the texture
+ * layer). sidebar-content itself carries no padding -- the gutter comes
+ * from .sidebar-options-content's own margin -- so taking it out of flow
+ * here can just inset to 0 and let that margin produce the same gap it
+ * would in normal flow. */
+.sidebar-content.is-scrollbar-mode > div:nth-child(2) {
+  position: absolute;
+  top:   0;
+  left:  0;
+  right: 0;
+  width: auto;
+  z-index: 1;
+}
+
+.sidebar-content.is-scrollbar-mode > .sidebar-content-texture {
+  position: sticky;
+}
+
+.sidebar-content:not(.is-scrollbar-mode) > .sidebar-content-texture {
+  position:         absolute;
+}
+
+.sidebar-content-texture {
+  height: 100%;
+  inset:            0;
+  pointer-events:   none;
+  z-index:          1;
+  background-color: var(--texture-sidebar-content-tint);
+  -webkit-mask-image:    var(--texture-sidebar-content);
+  -webkit-mask-repeat:   repeat;
+  -webkit-mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  -webkit-mask-position: 0 0;
+  mask-image:    var(--texture-sidebar-content);
+  mask-repeat:   repeat;
+  mask-size:     var(--texture-tile-size) var(--texture-tile-size);
+  mask-position: 0 0;
+}
+
+.sidebar-content.is-tree-mode {
+  display:    flex;
+  overflow-y: hidden;
+}
+
+.sidebar-content.is-scrollbar-mode {
+  scrollbar-width:    none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-content.is-scrollbar-mode::-webkit-scrollbar {
+  width:  0;
+  height: 0;
+}
+.view-toggle {
+  display:         flex;
+  align-items:     start;
+  gap:             var(--spacing-small);
+  /* Keep the same total inset so the flexible buttons retain their widths. */
+  padding: 0 0 0 var(--sidebar-view-padding-left);
+  margin:  0;
+}
+
+.notes-sidebar .view-toggle .icon-btn {
+  flex:         1 1 0;
+  width:        auto;
+  min-width:    0;
+  min-height:   0;
+  aspect-ratio: 1 / 1;
+  padding:    var(--spacing-regular);
+  margin:     0;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  border-radius:       var(--border-radius-regular);
+  background-size:     auto;
+  background-repeat:   no-repeat;
+  background-position: center;
+  position: relative;
+}
+.notes-sidebar .view-toggle .icon-btn.is-active {
+  box-shadow: var(--box-shadow-inverted-harsh-active);
+}
+
+/* A view button holding a glyph (every view button: the Notes, Images,
+   Music Library and Find icons, the options gear). The button is
+   dynamically sized (flex: 1 1 0, see the .view-toggle comment above), so a
+   flat px/em font-size would not track it. container-type: inline-size turns
+   the button into a query container, and the glyph is sized in cqw (% of the
+   button's own current inline size), keeping it proportional to the button
+   at any size the row's available width produces. */
+.notes-sidebar .view-toggle .icon-btn.btn-glyph {
+  background-image: none;
+  color:  var(--color-text-80);
+  container-type: inline-size;
+}
+
+.notes-sidebar .view-toggle .icon-btn.btn-glyph .view-toggle-options-glyph,
+.notes-sidebar .view-toggle .icon-btn.btn-glyph .view-toggle-glyph {
+  display:   block;
+  font-size: calc(55cqw + 3*var(--spacing-small));
+}
+
+/* The gear (WorkIndicatorGlyph.tsx) is an SVG, which text-shadow does not
+   reach: the same two offsets as the shell's UI text shadow, as a filter on
+   the frame that does not rotate. The second drop-shadow also shadows the
+   first, but that copy lands exactly under the gear and is hidden by it. */
+.view-toggle-options-glyph-frame {
+  display: block;
+  filter:
+    drop-shadow(0 -1px 0 var(--text-shadow-emboss-ui-secondary))
+    drop-shadow(0 1px 0 var(--text-shadow-emboss-ui-main));
+}
+/* Sidebar scrollbar slot */
+.sidebar-scrollbar-slot {
+  flex:      0 0 var(--sidebar-scrollbar-slot-width);
+  width:     var(--sidebar-scrollbar-slot-width);
+  min-width: var(--sidebar-scrollbar-slot-width);
+  max-width: var(--sidebar-scrollbar-slot-width);
+  position:  relative;
+}
+
+.sidebar-scrollbar-slot-inner {
+  position: absolute;
+  inset:    0;
+}
+
+.sidebar-scrollbar-slot .sidebar-thockdown-scroll-rail {
+  z-index:         4;
+  /* Left padding is the gap to .sidebar-content, driven by --spacing-regular
+   * so it grows/shrinks with the user's spacing setting like the rest of the
+   * app. The slot itself (--sidebar-scrollbar-slot-width) grows by the same
+   * amount, so the track/thumb always keep their full --canonical-scroll-
+   * thickness width regardless of spacing. The left padding comes from the
+   * base .thockdown-scroll-rail rule; there is no bottom padding, so the track
+   * sits the sidebar's own padding off the window's edge. */
+  justify-content: flex-end;
+}
+
