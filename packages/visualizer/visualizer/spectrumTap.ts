@@ -24,25 +24,18 @@ import { heardLagSec } from '../sound/musicBeat'
 import type { SpectrumSource } from '../sound/musicListening'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
+  CROSSOVER_HZ,
+  LONG_FFT,
+  LONG_READ_SHARE,
+  SHORT_FFT,
   createBandLevelPlan,
   bandCentreHz,
   writeBandLevelsWithPlan,
   type BandLevelPlan,
 } from './spectrumBands'
 
-export const CROSSOVER_HZ = 640
-const LONG_FFT = 8192
-const SHORT_FFT = 2048
 /** Frames of history: about two seconds at 60 Hz, more than any device's lag. */
 const HISTORY = 128
-/**
- * How often the long frame is re-read, as a share of its own length. Its
- * window is 170 ms at 48 kHz, so reading it every 16 ms drawn frame re-ran an
- * 8192-point FFT (Chromium computes it on the calling thread) over audio
- * nine-tenths the same as last time. A quarter of the window is 75% overlap,
- * finer than the bass bands it feeds can change.
- */
-const LONG_READ_SHARE = 0.25
 
 type Frame = { timeSec: number; levels: Float32Array }
 

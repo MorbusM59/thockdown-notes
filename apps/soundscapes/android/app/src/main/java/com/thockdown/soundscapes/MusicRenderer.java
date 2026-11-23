@@ -32,12 +32,18 @@ import org.json.JSONObject;
  *
  * What is heard at the playhead (the song and the time in it) is reported to
  * the listener as it changes, for the page, the notification and the
- * visualizer.
+ * visualizer; and, while the visualizer asks for it (`setSpectrum`), the
+ * spectrum of what is rendered, computed by the renderer
+ * (packages/visualizer/visualizer/spectrumFrames.ts), stamped with output
+ * frames.
  */
 final class MusicRenderer {
     interface Listener {
-        /** What is heard now: a song and how far into it, in seconds; null for nothing. */
-        void onHeard(Integer songId, double seconds);
+        /** What is heard now: a song and how far into it, in seconds (null for nothing), at the output's playhead `frame`. */
+        void onHeard(Integer songId, double seconds, long frame);
+
+        /** Spectrum frames for the visualizer, while it is on (`setSpectrum`): musicSandbox.ts's batches, as a JSON array. */
+        void onSpectrum(String batchesJson);
 
         /** The rotation moved (a song played or was chosen): store it, to give back as `rotationJson` next time. */
         void onRotation(String rotationJson);
@@ -116,6 +122,14 @@ final class MusicRenderer {
         });
     }
 
+    /** The visualizer's spectrum in `bands` log bands, or none (0). */
+    void setSpectrum(int bands) {
+        post(() -> {
+            if (stage != null) settle();
+            isolate.evaluateJavaScriptAsync("musicSpectrum(" + bands + ")").get();
+        });
+    }
+
     /** Leave the song playing for the pool's next pick. */
     void skip() {
         post(() -> {
@@ -190,7 +204,8 @@ final class MusicRenderer {
 
     /** Tell the renderer where the playhead is, so a splice is measured from now. */
     private void settle() throws Exception {
-        handle(isolate.evaluateJavaScriptAsync("musicStep(" + output.playheadFrame() + ", 0)").get());
+        long played = output.playheadFrame();
+        handle(isolate.evaluateJavaScriptAsync("musicStep(" + played + ", 0)").get(), played);
     }
 
     private void configure(boolean cut) throws Exception {
@@ -252,21 +267,23 @@ final class MusicRenderer {
         if (decoder.finished()) startSong(next(decoding.id), 0);
     }
 
-    /** Write a step's chunks into the output and report what is heard; returns how much input is held ahead. */
-    private long[] handle(String result) throws Exception {
+    /** Write a step's chunks into the output and report what is heard at `played`, the playhead the step was told; returns how much input is held ahead. */
+    private long[] handle(String result, long played) throws Exception {
         JSONObject step = new JSONObject(result);
         JSONArray chunks = step.getJSONArray("chunks");
         for (int index = 0; index < chunks.length(); index += 1) {
             JSONObject chunk = chunks.getJSONObject(index);
             output.write(chunk.getLong("s"), SharedSandbox.decodeHalfScale(chunk.getString("d")));
         }
+        JSONArray spectrum = step.optJSONArray("spectrum");
+        if (spectrum != null && spectrum.length() > 0) listener.onSpectrum(spectrum.toString());
         JSONObject at = step.optJSONObject("at");
         Integer id = at == null ? null : at.getInt("songId");
         long second = at == null ? -1 : at.getLong("offsetFrames") / output.sampleRate;
         if (!java.util.Objects.equals(id, heardId) || second != heardSecond) {
             heardId = id;
             heardSecond = second;
-            listener.onHeard(id, at == null ? 0 : (double) at.getLong("offsetFrames") / output.sampleRate);
+            listener.onHeard(id, at == null ? 0 : (double) at.getLong("offsetFrames") / output.sampleRate, played);
         }
         return new long[] { chunks.length(), step.getLong("ahead") };
     }
@@ -288,8 +305,9 @@ final class MusicRenderer {
                     waitForWork();
                     continue;
                 }
+                long played = output.playheadFrame();
                 long[] step = handle(isolate.evaluateJavaScriptAsync(
-                    "musicStep(" + output.playheadFrame() + ", " + MAX_CHUNKS_PER_STEP + ")").get());
+                    "musicStep(" + played + ", " + MAX_CHUNKS_PER_STEP + ")").get(), played);
                 boolean wantsInput = step[1] < decodeAheadFrames && !ended;
                 if (wantsInput) decodeSlice();
                 if (step[0] > 0 || wantsInput) continue;

@@ -35,14 +35,24 @@
  *   render what the lead allows (at most `maxChunks`), and return
  *   `{ "chunks": [{ "s", "d" }], "ahead": frames of input held past the
  *   playhead, "at": { "songId", "offsetFrames" } | null }`, `at` being what
- *   is heard at the playhead.
+ *   is heard at the playhead, and, while the spectrum is on, `"spectrum"`:
+ *   the frames computed from those chunks, `[{ "from", "first", "hop",
+ *   "l" }]` (spectrumFrames.ts's SpectrumFrameBatch, `l` its levels in
+ *   base64);
+ * - musicSpectrum(bands): compute the visualizer's spectrum in `bands` log
+ *   bands (0 stops it). Turning it on re-renders from a splice margin past
+ *   the playhead with the soundstage unchanged, which reproduces the audio
+ *   already queued sample for sample (renderAhead.ts's rewind), so the
+ *   frames start there rather than a render lead later.
  */
 import { MusicVoice, type MusicSettings } from '@thockdown/audio/musicVoice';
 import { RenderAheadEngine, type RenderedChunk } from '@thockdown/audio/renderAhead';
 import { StreamResampler } from '@thockdown/audio/resampler';
 import { EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q } from '@thockdown/visualizer/shared/musicEqCurve';
 import { chooseSong, EMPTY_CATALOG, nextSong, type MusicCatalog, type MusicRotation } from './musicLibrary';
-import { decodeFullScaleStereo, encodeHalfScaleStereo } from '@thockdown/soundscape/halfScalePcm';
+import { decodeFullScaleStereo, encodeHalfScaleStereo, toBase64 } from '@thockdown/soundscape/halfScalePcm';
+import { SpectrumFrames } from '@thockdown/visualizer/visualizer/spectrumFrames';
+import { logBandEdges } from '@thockdown/visualizer/visualizer/spectrumBands';
 
 let engine: RenderAheadEngine<MusicSettings> | null = null;
 let voice: MusicVoice | null = null;
@@ -52,6 +62,9 @@ let catalog: MusicCatalog = EMPTY_CATALOG;
 let rotation: MusicRotation = [];
 const tasks: Array<() => void> = [];
 const rendered: RenderedChunk[] = [];
+let spectrum: SpectrumFrames | null = null;
+/** The soundstage last configured, re-sent to re-render when the spectrum is turned on. */
+let stage: MusicSettings['stage'] | null = null;
 
 const scope = globalThis as unknown as Record<string, unknown>;
 
@@ -61,6 +74,8 @@ scope.musicInit = (json: string): string => {
   outputRate = sampleRate;
   voice = new MusicVoice(sampleRate, bands);
   resampler = null;
+  spectrum = null;
+  stage = null;
   tasks.length = 0;
   rendered.length = 0;
   engine = new RenderAheadEngine<MusicSettings>(voice, sampleRate, spliceMarginSec, (chunk) => rendered.push(chunk), (work) => tasks.push(work));
@@ -71,6 +86,7 @@ scope.musicConfigure = (json: string): string => {
   const settings = JSON.parse(json) as MusicSettings;
   // A cut drops the stream from the splice on: what the old song's resampler still holds goes with it.
   if (settings.cut) resampler = null;
+  stage = settings.stage;
   engine?.configure(settings);
   return 'ok';
 };
@@ -113,8 +129,22 @@ scope.musicStep = (playedFrame: number, maxChunks: number): string => {
   // Stream frames are output frames (musicVoice.ts): nothing before the playhead is read again.
   voice.input.forget(Math.min(playedFrame, voice.position));
   while (tasks.length > 0 && rendered.length < maxChunks) tasks.shift()!();
-  const chunks = rendered.splice(0).map((chunk) => ({ s: chunk.startFrame, d: encodeHalfScaleStereo(chunk.left, chunk.right) }));
-  return JSON.stringify({ chunks, ahead: voice.input.end - playedFrame, at: voice.input.at(playedFrame) });
+  const done = rendered.splice(0);
+  const chunks = done.map((chunk) => ({ s: chunk.startFrame, d: encodeHalfScaleStereo(chunk.left, chunk.right) }));
+  const at = voice.input.at(playedFrame);
+  if (!spectrum) return JSON.stringify({ chunks, ahead: voice.input.end - playedFrame, at });
+  const frames = [];
+  for (const chunk of done) {
+    const batch = spectrum.push(chunk.startFrame, chunk.left, chunk.right);
+    if (batch) frames.push({ from: batch.from, first: batch.first, hop: batch.hop, l: toBase64(batch.levels) });
+  }
+  return JSON.stringify({ chunks, ahead: voice.input.end - playedFrame, at, spectrum: frames });
+};
+
+scope.musicSpectrum = (bands: number): string => {
+  spectrum = bands > 0 ? new SpectrumFrames(outputRate, logBandEdges(bands)) : null;
+  if (spectrum && engine && stage) engine.configure({ stage });
+  return 'ok';
 };
 
 scope.musicCatalog = (json: string): string => {

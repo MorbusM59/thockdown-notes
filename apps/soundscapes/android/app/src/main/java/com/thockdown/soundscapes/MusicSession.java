@@ -20,12 +20,17 @@ import java.nio.charset.StandardCharsets;
  * storage, written durably (a sibling, then renamed over the original), so a
  * power cut leaves the old document or the new one.
  *
- * What is heard (a song and how far into it) is passed to the listener
- * (the page, while it exists) as the renderer reports it.
+ * What is heard (a song and how far into it, at which output frame) is
+ * passed to the listener (the page, while it exists) as the renderer reports
+ * it, and the visualizer's spectrum while it asks for one (`setSpectrum`).
  */
 final class MusicSession {
     interface Listener {
-        void onHeard(Integer songId, double seconds, boolean playing);
+        /** What is heard: a song and the seconds into it (null for nothing) at the output's playhead `frame`, at `sampleRate`. */
+        void onHeard(Integer songId, double seconds, long frame, int sampleRate, boolean playing);
+
+        /** Spectrum frames for the visualizer (MusicRenderer.Listener.onSpectrum). */
+        void onSpectrum(String batchesJson);
 
         void onFailure(String message);
     }
@@ -46,6 +51,10 @@ final class MusicSession {
     private float volume = 1f;
     private Integer heardId = null;
     private double heardSeconds = 0;
+    /** The output frame `heardSeconds` was heard at. */
+    private long heardFrame = 0;
+    /** The visualizer's spectrum bands (0 for none), kept for a renderer opened later. */
+    private int spectrumBands = 0;
 
     static synchronized MusicSession get(Context context) {
         if (instance == null) instance = new MusicSession(context);
@@ -112,6 +121,12 @@ final class MusicSession {
         if (renderer != null) renderer.seek(seconds);
     }
 
+    /** The visualizer's spectrum in `bands` log bands, or none (0). */
+    synchronized void setSpectrum(int bands) {
+        spectrumBands = bands;
+        if (renderer != null) renderer.setSpectrum(bands);
+    }
+
     synchronized void setVolume(float volume) {
         this.volume = volume;
         if (output != null) output.setVolume(volume, VOLUME_TIME_CONSTANT_SEC);
@@ -139,12 +154,22 @@ final class MusicSession {
         output.setVolume(volume, VOLUME_TIME_CONSTANT_SEC);
         renderer = new MusicRenderer(context, output, catalog(), rotation(), new MusicRenderer.Listener() {
             @Override
-            public void onHeard(Integer songId, double seconds) {
+            public void onHeard(Integer songId, double seconds, long frame) {
                 synchronized (MusicSession.this) {
                     heardId = songId;
                     heardSeconds = seconds;
+                    heardFrame = frame;
                     report();
                 }
+            }
+
+            @Override
+            public void onSpectrum(String batchesJson) {
+                Listener current;
+                synchronized (MusicSession.this) {
+                    current = listener;
+                }
+                if (current != null) current.onSpectrum(batchesJson);
             }
 
             @Override
@@ -164,6 +189,7 @@ final class MusicSession {
                 if (current != null) current.onFailure(message);
             }
         });
+        if (spectrumBands > 0) renderer.setSpectrum(spectrumBands);
     }
 
     private void close() {
@@ -177,8 +203,20 @@ final class MusicSession {
         }
     }
 
+    /**
+     * Reports what is heard now: the song and seconds last reported, carried
+     * to the playhead as it stands (a pause between two reports), so the
+     * page can run the clock on from a consistent pair.
+     */
     private void report() {
-        if (listener != null) listener.onHeard(heardId, heardSeconds, isPlaying());
+        if (listener == null) return;
+        if (output == null) {
+            listener.onHeard(heardId, heardSeconds, heardFrame, 0, false);
+            return;
+        }
+        long frame = output.playheadFrame();
+        double seconds = heardId == null ? 0 : heardSeconds + (double) (frame - heardFrame) / output.sampleRate;
+        listener.onHeard(heardId, seconds, frame, output.sampleRate, isPlaying());
     }
 
     private String read(String name, String fallback) {

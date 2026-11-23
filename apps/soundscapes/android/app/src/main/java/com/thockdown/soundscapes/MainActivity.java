@@ -65,6 +65,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(LaunchPlugin.class);
         registerPlugin(DisplayPlugin.class);
         super.onCreate(savedInstanceState);
+        // The music files, served to the page for the visualizer's beat analysis.
+        getBridge().setWebViewClient(new MusicFileServer(getBridge()));
         // The page draws its own scrollbar (src/PageScrollbar.tsx), the only
         // way it scrolls; the WebView's would be a second one beside it,
         // drawn by the view itself where the page's styles cannot reach it.

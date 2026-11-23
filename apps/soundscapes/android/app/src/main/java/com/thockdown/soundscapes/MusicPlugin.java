@@ -20,7 +20,8 @@ import java.util.Set;
  * documents and the playback, all in MusicSession, which outlives this
  * plugin (it goes with the activity). It forwards the page's calls and
  * passes the session's reports back as events while it exists:
- * `heard` ({ songId, seconds, playing }) and `failure` ({ message }).
+ * `heard` ({ songId, seconds, frame, sampleRate, playing }), `spectrum`
+ * ({ batches }, JSON text) and `failure` ({ message }).
  */
 @CapacitorPlugin(name = "Music")
 public class MusicPlugin extends Plugin {
@@ -28,12 +29,21 @@ public class MusicPlugin extends Plugin {
 
     private final MusicSession.Listener listener = new MusicSession.Listener() {
         @Override
-        public void onHeard(Integer songId, double seconds, boolean playing) {
+        public void onHeard(Integer songId, double seconds, long frame, int sampleRate, boolean playing) {
             JSObject data = new JSObject();
             data.put("songId", songId);
             data.put("seconds", seconds);
+            data.put("frame", frame);
+            data.put("sampleRate", sampleRate);
             data.put("playing", playing);
             notifyListeners("heard", data);
+        }
+
+        @Override
+        public void onSpectrum(String batchesJson) {
+            JSObject data = new JSObject();
+            data.put("batches", batchesJson);
+            notifyListeners("spectrum", data);
         }
 
         @Override
@@ -162,6 +172,13 @@ public class MusicPlugin extends Plugin {
     @PluginMethod
     public void seek(PluginCall call) {
         session.seek(call.getDouble("seconds", 0.0));
+        call.resolve();
+    }
+
+    /** `{ bands }`: the visualizer's spectrum in this many log bands, sent as `spectrum` events; 0 stops it. */
+    @PluginMethod
+    public void setSpectrum(PluginCall call) {
+        session.setSpectrum(call.getInt("bands", 0));
         call.resolve();
     }
 

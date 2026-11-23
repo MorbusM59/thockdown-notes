@@ -56,6 +56,18 @@ crossfade between two voices. HOW it reaches the speaker is not:
   limiter) before the platform's AudioTrack. The web page only sends settings and the volume
   (`nativeSoundscapePlayback.ts`).
 
+The MUSIC plays the same way, in its own lane: `MusicRenderer.java` decodes
+the songs (`SongDecoder.java`) and drives the music renderer
+(`src/musicSandbox.ts` -> `assets/music-renderer.js`), the desktop's player
+graph as a block renderer, under a process-wide `MusicSession.java`. The
+VISUALIZER reads it through `packages/visualizer/sound/musicListening.ts`'s
+port, supplied by `src/nativeMusicListening.ts`: the clock from the player's
+`heard` reports, the song for the beat analysis served to the page by
+`MusicFileServer.java` (only files under a folder the reader picked), and
+the spectrum computed by the music renderer from what it renders
+(`packages/visualizer/visualizer/spectrumFrames.ts`, the desktop analysers'
+arithmetic), only while a spectrum is shown and the page is visible.
+
 How it got here, because each step was measured on a device:
 1. In the WebView, the generator on the audio thread clicked under load:
    the output buffer was raised to the browser's maximum.
