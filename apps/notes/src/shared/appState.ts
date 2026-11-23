@@ -9,6 +9,7 @@ import type { FeatureToggles } from './features';
 import type { TypingTrailSettings } from './typingTrailSettings';
 import type { VisualizerFont } from './visualizerFont';
 import type { VisualizerSettings } from '@thockdown/look/visualizer';
+import type { VisualizerPresetPreferences } from './visualizerPresets';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from './beatSettings';
 import type { FlashShapePreferences } from './flashing';
@@ -98,6 +99,8 @@ export interface PersistedMenuState {
    * writes the active layout's there; the renderer then takes the defaults.
    */
   visualizer?: VisualizerSettings;
+  /** The visualizer presets (shared/visualizerPresets.ts); `visualizer`'s edge, pane and immersive are the active one's. */
+  visualizerPresets?: VisualizerPresetPreferences;
   uiFontStyle?:
     | 'system'
     | 'ibmplexsans'

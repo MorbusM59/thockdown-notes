@@ -240,6 +240,7 @@ import {
   type GlazeSettings,
 } from '@thockdown/look/glaze'
 import { idKind, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
+import { VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '../shared/visualizerPresets'
 import { KEYSTROKE_SOUND_KIND, KEYSTROKE_SOUND_RANGES, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
 import { useOutputDevice } from '../sound/outputDevice'
@@ -575,6 +576,8 @@ export interface SidebarOptionsPanelProps {
   setBeatSettings: (updater: (previous: BeatSettings) => BeatSettings) => void
   visualizer: VisualizerSettings
   setVisualizer: (updater: (previous: VisualizerSettings) => VisualizerSettings) => void
+  visualizerPresetPreferences: VisualizerPresetPreferences
+  onVisualizerPresetPreferencesChange: (preferences: VisualizerPresetPreferences) => void
   visualizerColors: VisualizerColors
   setVisualizerColors: (updater: (previous: VisualizerColors) => VisualizerColors) => void
 
@@ -815,6 +818,8 @@ export function SidebarOptionsPanel({
   setBeatSettings,
   visualizer,
   setVisualizer,
+  visualizerPresetPreferences,
+  onVisualizerPresetPreferencesChange,
   visualizerColors,
   setVisualizerColors,
   borderRadiusRegularPx,
@@ -2490,7 +2495,17 @@ export function SidebarOptionsPanel({
         ariaLabel="Visualizer"
         heading="Visualizer"
         iconClass="fa-eye"
+        open={openPresetSubsection === 'visualizer'}
+        onRequestOpenChange={(open) => onOpenPresetSubsectionChange(open ? 'visualizer' : null)}
       >
+          <PresetGrid
+            kind={VISUALIZER_PRESET_KIND}
+            list={visualizerPresetPreferences}
+            onChange={onVisualizerPresetPreferencesChange}
+            idPrefix="visualizer-preset"
+            label="Visualizer presets"
+            plural="a visualizer preset"
+          />
           <FontControls
             pickerLabel="Visualizer typography"
             options={EDITOR_STYLE_OPTIONS}

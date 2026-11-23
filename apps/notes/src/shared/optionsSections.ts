@@ -35,4 +35,4 @@ export function sanitizeOptionsSection(value: unknown): OptionsSectionId {
  * subsections in Sound are strictly one-at-a-time, and Flashing lives in
  * another section, which shows alone.
  */
-export type PresetSubsectionId = 'soundstages' | 'keystrokeSounds' | 'flashing'
+export type PresetSubsectionId = 'soundstages' | 'keystrokeSounds' | 'flashing' | 'visualizer'

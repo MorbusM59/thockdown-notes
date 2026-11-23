@@ -378,7 +378,7 @@ ${shortcutTable()}
 - **New layout**: the plus copies the current one.
 - **The dock at the bottom**: click the icon to pick another, right-click the name to rename, the turning arrow to reset, hold the last button to trash your own or restore a built-in one.
 - **Export a layout**: hold right-click on it.
-- Soundstages, keystroke sounds and flashing work the same way.
+- Soundstages, keystroke sounds, flashing and the visualizer (Options → Glitz → Visualizer) work the same way.
 
 ### [Colors](#colors-and-textures)
 - Options → Layouts → Colors.

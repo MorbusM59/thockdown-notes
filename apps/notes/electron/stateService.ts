@@ -20,6 +20,7 @@ import { resetMenuWithPreservedPresets } from '../src/shared/appStateReset';
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
+import { sanitizeVisualizerPresetPreferences } from '../src/shared/visualizerPresets';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '../src/shared/beatSettings';
 import { DEFAULT_TOOLTIP_SETTINGS, sanitizeTooltipSettings } from '../src/shared/tooltipSettings';
@@ -612,6 +613,7 @@ function sanitizeMenu(input: Partial<PersistedMenuState> | undefined): Persisted
     visualizerFont: sanitizeVisualizerFont(input?.visualizerFont),
     // Absent stays absent: that is how the one-time migration from the active layout knows to run.
     visualizer: input?.visualizer === undefined ? undefined : sanitizeVisualizer(input.visualizer),
+    visualizerPresets: input?.visualizerPresets === undefined ? undefined : sanitizeVisualizerPresetPreferences(input.visualizerPresets),
     speedReading: sanitizeSpeedReadingSettings(input?.speedReading),
     beat: sanitizeBeatSettings(input?.beat),
     flashMatching: sanitizeFlashMatching(input?.flashMatching),

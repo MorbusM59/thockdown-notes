@@ -14,6 +14,10 @@ import {
   DEFAULT_SOUNDSCAPE_PREFERENCES,
   sanitizeSoundscapePreferences,
 } from '@thockdown/soundscape/soundscape'
+import {
+  DEFAULT_VISUALIZER_PRESET_PREFERENCES,
+  sanitizeVisualizerPresetPreferences,
+} from './visualizerPresets'
 import type { PersistedMenuState } from './appState'
 
 export function resetMenuWithPreservedPresets(
@@ -44,6 +48,8 @@ export function resetMenuWithPreservedPresets(
   )
   const currentFlashingPreferences = sanitizeFlashShapePreferences(current?.flashingPresets)
 
+  const currentVisualizerPreferences = sanitizeVisualizerPresetPreferences(current?.visualizerPresets)
+
   // The reader's own presets are kept; the active entry and every edit of a factory preset return to as shipped.
   return {
     ...defaultMenu,
@@ -58,6 +64,10 @@ export function resetMenuWithPreservedPresets(
     soundscapes: {
       ...defaultSoundscapePreferences,
       customPresets: currentSoundscapePreferences.customPresets,
+    },
+    visualizerPresets: {
+      ...sanitizeVisualizerPresetPreferences(defaultMenu.visualizerPresets ?? DEFAULT_VISUALIZER_PRESET_PREFERENCES),
+      custom: currentVisualizerPreferences.custom,
     },
     flashingPresets: {
       ...defaultFlashingPreferences,

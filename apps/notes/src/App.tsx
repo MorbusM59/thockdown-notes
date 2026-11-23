@@ -1,5 +1,6 @@
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
+import { DEFAULT_VISUALIZER_PRESET_PREFERENCES, NEUTRAL_VISUALIZER_PRESET, VISUALIZER_PRESET_KEYS, VISUALIZER_PRESET_KIND, sanitizeVisualizerPresetPreferences, visualizerPresetPart, type VisualizerPresetPreferences } from './shared/visualizerPresets'
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
 import { CanonicalScrollRail } from './components/CanonicalScrollRail'
 import { scrollerIdentity } from './shared/scrollerIdentity'
@@ -1469,7 +1470,36 @@ function App() {
   const [caretHaloBlurPx, setCaretHaloBlurPx] = useState(DEFAULT_CARET_SETTINGS.haloBlurPx)
   const [caretHaloColor, setCaretHaloColor] = useState(DEFAULT_CARET_SETTINGS.haloColor)
   // How the visualizer follows the music, global (Options > Visualizer, saved in the app state).
-  const [visualizer, setVisualizer] = useState<VisualizerSettings>(DEFAULT_VISUALIZER)
+  // The trackers and the grid beat are kept here; the edge, the pane and the
+  // rest of the visualizer mode's look are the ACTIVE VISUALIZER PRESET's
+  // (shared/visualizerPresets.ts). One state, so an edit through the merged
+  // settings lands in both halves in one update.
+  const [visualizerState, setVisualizerState] = useState<{ base: VisualizerSettings; presets: VisualizerPresetPreferences }>(
+    () => ({ base: DEFAULT_VISUALIZER, presets: DEFAULT_VISUALIZER_PRESET_PREFERENCES }),
+  )
+  const visualizerPresetPreferences = visualizerState.presets
+  const visualizer = useMemo<VisualizerSettings>(
+    () => ({ ...visualizerState.base, ...activePreset(VISUALIZER_PRESET_KIND, visualizerState.presets).settings }),
+    [visualizerState],
+  )
+  const setVisualizer = useCallback((updater: (previous: VisualizerSettings) => VisualizerSettings) => {
+    setVisualizerState((state) => {
+      const shown = activePreset(VISUALIZER_PRESET_KIND, state.presets).settings
+      const next = updater({ ...state.base, ...shown })
+      // Only a change to the preset's part is written into the preset: a
+      // tracker or grid edit, or a commit that lands on the value already
+      // there, must not mark the factory preset as edited. Compared by value
+      // (three small plain objects, once per commit).
+      const presetChanged = VISUALIZER_PRESET_KEYS.some((key) => next[key] !== shown[key] && JSON.stringify(next[key]) !== JSON.stringify(shown[key]))
+      return {
+        base: next,
+        presets: presetChanged ? editActivePreset(VISUALIZER_PRESET_KIND, state.presets, visualizerPresetPart(next)) : state.presets,
+      }
+    })
+  }, [])
+  const setVisualizerPresetPreferences = useCallback((presets: VisualizerPresetPreferences) => {
+    setVisualizerState((state) => ({ ...state, presets }))
+  }, [])
   // The layout's part of it: whether the caret follows the music, and the colours.
   const [visualizerColors, setVisualizerColors] = useState<VisualizerColors>(() => defaultVisualizerColors(false))
   const [windowIsMaximized, setWindowIsMaximized] = useState(false)
@@ -3218,6 +3248,7 @@ function App() {
       visualizerFont: { ...visualizerFontShared, sizePx: fontSizesByMode.regular.visualizerFontSize },
       doubleSizeVisualizerFontSize: fontSizesByMode.double.visualizerFontSize,
       visualizer,
+      visualizerPresets: visualizerPresetPreferences,
       uiFontStyle,
       uiFontScale: fontSizesByMode.regular.uiFontScale,
       // Double size mode's own font sizes -- see fontSizesByMode.
@@ -3382,6 +3413,7 @@ function App() {
     editorStyle,
     visualizerFontShared,
     visualizer,
+    visualizerPresetPreferences,
     exportFolder,
     getActiveSection,
     renderScrollDynamic,
@@ -5109,7 +5141,10 @@ ${markdownHtml}
               const { style, boxSize } = sanitizeVisualizerFont(appState.menu.visualizerFont) ?? DEFAULT_VISUALIZER_FONT
               setVisualizerFontShared({ style, boxSize })
             }
-            setVisualizer(appState.menu.visualizer ?? DEFAULT_VISUALIZER)
+            setVisualizerState({
+              base: appState.menu.visualizer ?? DEFAULT_VISUALIZER,
+              presets: sanitizeVisualizerPresetPreferences(appState.menu.visualizerPresets),
+            })
             setEditorGlyphPaddingPx(
               clamp(
                 roundEditorGlyphPaddingPx(appState.menu.editorGlyphPaddingPx ?? DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX),
@@ -8575,6 +8610,8 @@ ${markdownHtml}
                     ) : sidebarMode === 'options' && isIconPickMode ? (
                       iconPick?.target.kind === 'layout'
                         ? <LayoutIconPicker entries={layoutEntriesForCurrentMode} change={changeLoadouts} query={iconPickQuery} />
+                        : iconPick?.target.kind === 'visualizer'
+                        ? <PresetIconPicker kind={VISUALIZER_PRESET_KIND} list={visualizerPresetPreferences} onChange={setVisualizerPresetPreferences} pickKind="visualizer" query={iconPickQuery} />
                         : iconPick?.target.kind === 'keystrokeSound'
                           ? <PresetIconPicker kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" query={iconPickQuery} />
                           : iconPick?.target.kind === 'flashing'
@@ -8713,6 +8750,8 @@ ${markdownHtml}
                         beatSettings={beatSettings}
                         visualizer={visualizer}
                         setVisualizer={setVisualizer}
+                        visualizerPresetPreferences={visualizerPresetPreferences}
+                        onVisualizerPresetPreferencesChange={setVisualizerPresetPreferences}
                         visualizerColors={visualizerColors}
                         setVisualizerColors={setVisualizerColors}
                         setBeatSettings={setBeatSettings}
@@ -8850,6 +8889,11 @@ ${markdownHtml}
                   {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'music' && openPresetSubsection === 'keystrokeSounds' ? (
                     <div className="sidebar-plain-dock">
                       <PresetDock kind={KEYSTROKE_SOUND_KIND} list={keystrokeSoundPreferences} onChange={setKeystrokeSoundPreferences} pickKind="keystrokeSound" resetTo={NEUTRAL_KEYSTROKE_SOUND} />
+                    </div>
+                  ) : null}
+                  {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'glitz' && openPresetSubsection === 'visualizer' ? (
+                    <div className="sidebar-plain-dock">
+                      <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerPresetPreferences} onChange={setVisualizerPresetPreferences} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} />
                     </div>
                   ) : null}
                   {sidebarMode === 'options' && !isDictionaryShown && optionsSection === 'advanced' && openPresetSubsection === 'flashing' ? (
