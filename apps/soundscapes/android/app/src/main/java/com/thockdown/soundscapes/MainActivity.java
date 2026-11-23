@@ -61,6 +61,7 @@ public class MainActivity extends BridgeActivity {
         SplashScreen.installSplashScreen(this);
         // Local plugins must be registered before the bridge is created.
         registerPlugin(BackgroundAudioPlugin.class);
+        registerPlugin(MusicPlugin.class);
         registerPlugin(LaunchPlugin.class);
         registerPlugin(DisplayPlugin.class);
         super.onCreate(savedInstanceState);
