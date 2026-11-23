@@ -876,6 +876,20 @@ export class SpectrumBallistics {
   }
 }
 
+
+/** The two resolutions (`spectrumTap.ts`, `spectrumFrames.ts`): bands below this read the long frame, the rest the short. */
+export const CROSSOVER_HZ = 640
+export const LONG_FFT = 8192
+export const SHORT_FFT = 2048
+/**
+ * How often the long frame is re-read, as a share of its own length. Its
+ * window is 170 ms at 48 kHz, so reading it every 16 ms drawn frame re-ran an
+ * 8192-point FFT (Chromium computes it on the calling thread) over audio
+ * nine-tenths the same as last time. A quarter of the window is 75% overlap,
+ * finer than the bass bands it feeds can change.
+ */
+export const LONG_READ_SHARE = 0.25
+
 /** The top of the bands the sway's music response listens to. */
 const BASS_MAX_HZ = 150
 

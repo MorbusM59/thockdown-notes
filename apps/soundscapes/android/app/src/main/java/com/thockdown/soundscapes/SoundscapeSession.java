@@ -724,9 +724,9 @@ final class SoundscapeSession {
             output.close();
             output = null;
         }
-        context.stopService(new Intent(context, SoundscapePlaybackService.class));
-        // Android Auto may keep the service bound past the stop: it leaves the foreground instead.
-        SoundscapePlaybackService.sessionEnded();
+        // The service ends unless the music still plays; Android Auto may
+        // keep it bound past the stop, and it leaves the foreground instead.
+        SoundscapePlaybackService.sourceChanged(context, false);
     }
 
     /** Store the list and the soundscape last chosen, for a client that asks before the page has run. */
@@ -796,16 +796,13 @@ final class SoundscapeSession {
      */
     private void refreshService() {
         if (output == null) return;
-        if (SoundscapePlaybackService.refreshIfRunning()) return;
-        try {
-            ContextCompat.startForegroundService(context, new Intent(context, SoundscapePlaybackService.class));
-        } catch (RuntimeException refused) {
+        if (!SoundscapePlaybackService.sourceChanged(context, true)) {
             // Refused a start from the background: end rather than play with
             // no service to keep the process, or the listener, informed.
             setRegular(Regular.STOPPED);
             close();
             Listener current = listener;
-            if (current != null) current.onFailure("Soundscape could not start in the background: " + refused);
+            if (current != null) current.onFailure("Soundscape could not start in the background");
         }
     }
 

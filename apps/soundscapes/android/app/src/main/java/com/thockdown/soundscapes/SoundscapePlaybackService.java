@@ -22,7 +22,8 @@ import java.util.List;
 
 /**
  * Foreground service of type mediaPlayback, running whenever a soundscape
- * session (SoundscapeSession) exists, playing or paused. Its presence is
+ * session (SoundscapeSession) or the music (MusicSession) exists, playing
+ * or paused. Its presence is
  * what keeps Android from freezing or killing the process with the app in
  * the background or the screen off.
  *
@@ -33,6 +34,13 @@ import java.util.List;
  * schedule's -- and their play, pause, next, previous and stop go to the
  * session's control methods. Every change redraws from the session
  * (refresh). Closing the app (onTaskRemoved) is a stop.
+ *
+ * With music, the controls drive BOTH together (Joe's choice, 2026-11-23):
+ * play and pause pause and resume the music and the soundscape alike, stop
+ * ends both; next and previous step the songs while music plays (previous
+ * goes back to the start of the song, as the native player keeps no
+ * history) and the soundscapes otherwise. The notification shows the song
+ * while there is music, the soundscape otherwise.
  *
  * It stays in the foreground while paused, so the controls stay, and a
  * paused soundscape can be resumed from the lock screen: a foreground
@@ -54,7 +62,7 @@ import java.util.List;
  * that starts while bound still STARTS the service (startForegroundService,
  * through SoundscapeSession.refreshService), so it outlives the browser
  * unbinding, and a session that ends leaves the foreground while a browser
- * may keep the service alive (sessionEnded).
+ * may keep the service alive (sourceChanged).
  */
 public class SoundscapePlaybackService extends MediaBrowserService {
     private static final String ROOT_ID = "root";
@@ -73,6 +81,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private SoundscapeSession soundscape;
+    private MusicSession music;
     private MediaSession session;
     private PowerManager.WakeLock wakeLock;
     /**
@@ -92,14 +101,6 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         return true;
     }
 
-    /** The session ended: the service is no longer started (stopService), and leaves the foreground if a browser keeps it alive. */
-    static void sessionEnded() {
-        SoundscapePlaybackService service = running;
-        if (service == null) return;
-        service.started = false;
-        MAIN.post(service::refresh);
-    }
-
     /** The published soundscapes changed: browsers re-read the list. */
     static void libraryChanged() {
         SoundscapePlaybackService service = running;
@@ -111,13 +112,14 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         super.onCreate();
         running = this;
         soundscape = SoundscapeSession.get(this);
+        music = MusicSession.get(this);
         session = new MediaSession(this, "ThockdownSoundscape");
         session.setCallback(new MediaSession.Callback() {
-            @Override public void onPlay() { soundscape.controlPlay(); }
-            @Override public void onPause() { soundscape.controlPause(); }
-            @Override public void onSkipToNext() { soundscape.controlSkip(1); }
-            @Override public void onSkipToPrevious() { soundscape.controlSkip(-1); }
-            @Override public void onStop() { soundscape.controlStop(); }
+            @Override public void onPlay() { play(); }
+            @Override public void onPause() { pause(); }
+            @Override public void onSkipToNext() { skip(1); }
+            @Override public void onSkipToPrevious() { skip(-1); }
+            @Override public void onStop() { stop(); }
             @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { soundscape.controlPlayFrom(mediaId); }
         });
         session.setActive(true);
@@ -157,15 +159,15 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? null : intent.getAction();
-        if (ACTION_PLAY.equals(action)) soundscape.controlPlay();
-        else if (ACTION_PAUSE.equals(action)) soundscape.controlPause();
-        else if (ACTION_NEXT.equals(action)) soundscape.controlSkip(1);
-        else if (ACTION_PREVIOUS.equals(action)) soundscape.controlSkip(-1);
+        if (ACTION_PLAY.equals(action)) play();
+        else if (ACTION_PAUSE.equals(action)) pause();
+        else if (ACTION_NEXT.equals(action)) skip(1);
+        else if (ACTION_PREVIOUS.equals(action)) skip(-1);
         else if (ACTION_STOP.equals(action)) {
-            soundscape.controlStop();
+            stop();
             return START_NOT_STICKY;
         }
-        if (!soundscape.isActive()) {
+        if (!active()) {
             started = false;
             // Started for a session that has already ended (it was stopped
             // between startForegroundService and this call). Android 8+
@@ -190,9 +192,71 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         return START_NOT_STICKY;
     }
 
+    // --- The controls, on both together ---
+
+    private boolean active() {
+        return soundscape.isActive() || music.isActive();
+    }
+
+    /** Resume what is paused; with nothing at all, the soundscape last heard (as before there was music). */
+    private void play() {
+        boolean withMusic = music.isActive();
+        if (withMusic) music.resume();
+        if (soundscape.isActive() || !withMusic) soundscape.controlPlay();
+    }
+
+    private void pause() {
+        music.pause();
+        soundscape.controlPause();
+    }
+
+    private void skip(int direction) {
+        if (!music.isActive()) soundscape.controlSkip(direction);
+        else if (direction > 0) music.skip();
+        else music.seek(0);
+    }
+
+    private void stop() {
+        music.stop();
+        soundscape.controlStop();
+    }
+
+    /**
+     * The music or a soundscape started, changed or ended: redraw, start the
+     * service if something plays and it is not started, or end it if nothing
+     * is left. Decided on the main thread, where neither session's lock is
+     * held, so the two sessions never wait on each other. Returns false when
+     * the service had to be started and the system refused (from the
+     * background): the caller ends what it started.
+     */
+    static boolean sourceChanged(android.content.Context context, boolean starting) {
+        if (refreshIfRunning()) return true;
+        if (!starting) {
+            MAIN.post(() -> {
+                SoundscapePlaybackService service = running;
+                if (service == null || service.active()) return;
+                service.started = false;
+                context.stopService(new Intent(context, SoundscapePlaybackService.class));
+                service.refresh();
+            });
+            return true;
+        }
+        try {
+            androidx.core.content.ContextCompat.startForegroundService(context, new Intent(context, SoundscapePlaybackService.class));
+            return true;
+        } catch (RuntimeException refused) {
+            return false;
+        }
+    }
+
     private void refresh() {
         if (running != this) return;
-        if (!started || !soundscape.isActive()) {
+        if (!started || !active()) {
+            if (started) {
+                // Everything ended while started: the service ends too.
+                started = false;
+                stopSelf();
+            }
             // Bound by a browser with no session: nothing plays, and the
             // controls a browser offers are choosing a soundscape and play.
             session.setMetadata(null);
@@ -205,9 +269,12 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             holdWakeLock(false);
             return;
         }
-        boolean playing = soundscape.isAudible();
-        String title = soundscape.title();
-        String status = statusText(playing);
+        boolean withMusic = music.isActive();
+        boolean playing = (withMusic && music.isPlaying()) || soundscape.isAudible();
+        String title = withMusic ? music.title() : soundscape.title();
+        String status = withMusic
+            ? (playing ? "Playing" : "Paused") + (soundscape.isActive() ? " with " + soundscape.title() : "")
+            : statusText(playing);
         session.setMetadata(new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, status)
@@ -264,7 +331,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         // Closing the app stops what the listener chose; the schedule carries on.
-        soundscape.controlStop();
+        stop();
         super.onTaskRemoved(rootIntent);
     }
 
