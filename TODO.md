@@ -1,5 +1,6 @@
 # TODO
 
+- [ ] Grid wave, CSS fallback only (no WebGL2): the turning band layer is the scene's diagonal wide, but its kept shift can reach one wave length (up to 128 boxes), so at large shifts a corner of the scene falls outside it and shows no band where one should be. Found comparing it with `GridWaveCanvas.tsx`, which has no edge. The layer would need the diagonal plus two wave lengths.
 - [ ] Beat map: before a long break the bar tracker drifts up to 0.1s off the beat for a few beats while its look-ahead ends inside the break (plans a second apart alternate between two paths). The synthetic breakbeat test in `apps/notes/src/sound/beatMap.test.ts` is skipped until fixed. Also: ~20s warm-up on testsong.
 - [x] Align edit and render viewport (scroll-sync rewrite: single persisted `anchorBlockIndex` per note/snapshot, mode-agnostic restore, see `docs/editor-contract.md`)
 - [x] Add render-mode in-note search

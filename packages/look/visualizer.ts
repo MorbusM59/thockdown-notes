@@ -789,7 +789,7 @@ export function pulseRingStrength(gauge: number, softness: number, inner = 0.75)
  * unchanged and each corner becomes an arc whose radius grows by the
  * distance travelled, so a square face sends out a rounded square that tends
  * to a circle. For a circle (`round` 1) it equals `roundedSquareGauge`.
- * The same function `PulseRingsCanvas.tsx`'s shader evaluates.
+ * The same function `GridWaveCanvas.tsx`'s shader evaluates.
  */
 export function roundedSquareOffsetGauge(x: number, y: number, round: number): number {
   const r = Math.max(0, Math.min(1, round))

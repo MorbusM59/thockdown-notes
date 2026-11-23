@@ -12,6 +12,12 @@
  * (its full box), and re-measures when that box resizes or the window does.
  * The scene's centre cutout is a hole in the mask, so the image stays clean.
  *
+ * Where WebGL2 runs (`canUseShaderPulse`), all of what follows is ONE
+ * shader on one canvas (GridWaveCanvas.tsx), computing the same picture per
+ * pixel from the same numbers: the masked layers cost the GPU a full-screen
+ * offscreen pass each per frame, which a phone could not afford. The layers
+ * below remain only for a WebView without WebGL2.
+ *
  * A frame repaints nothing. The outer element is masked to everything but
  * the cutout; the one inside it is masked to the grid lines by the same
  * gradients that draw them, at the same tile size and position. Neither
@@ -43,12 +49,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal, flushSync } from 'react-dom'
 import { FALL_MIN_SEC, pulseRingStrength, pulseTimeToTravel, roundedSquareGauge, roundedSquareOffsetGauge, pulseTravelBoxes } from '@thockdown/look/visualizer'
 import { canUseShaderPulse } from './glazeShaderSupport'
-import { PulseRingsCanvas, type PulseRingsHandle } from './PulseRingsCanvas'
+import { GridWaveCanvas, type GridWaveCanvasHandle, type WaveFrame } from './GridWaveCanvas'
 import { subscribeMusicMix, subscribeMusicTempo, type MusicMixChannel } from '../sound/musicBeat'
 import { beatAlignedStart } from '../sound/musicTempo'
 import { emitPulseHit, pulseAmount, subscribePulseHits } from './pulseHits'
 import { setSwayReturnFall, swaySnareHit } from './parallaxSway'
-import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnTransform } from './gridWaveTurn'
+import { WAVE_ANGLES_AT_REST, advanceWaveAngles, readGridWaveSettings, subscribeGridWaveSettings, waveTurnPlacement, waveTurnTransform } from './gridWaveTurn'
 
 /** The centre pulse's ring, as a share of its layer's radius at the rim (`.visualizer-grid-wave-pulse`'s gradient). */
 const PULSE_RING_SHARE = 0.25
@@ -117,8 +123,22 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
     }
   }, [])
 
+  // With WebGL2 the wave and the pulse are one shader on one canvas
+  // (GridWaveCanvas.tsx) and none of the masked layers below exist: the
+  // three effects that move the wave write its frame to the canvas instead
+  // of to the layers' styles.
+  const shader = useMemo(() => canUseShaderPulse(), [])
+  const canvasRef = useRef<GridWaveCanvasHandle>(null)
+  const waveFrame = useRef<WaveFrame>({ angle: 0, x: 0, y: 0, share: 0, opacity: 0 })
+  const showWave = (change: Partial<WaveFrame>) => {
+    waveFrame.current = { ...waveFrame.current, ...change }
+    canvasRef.current?.wave(waveFrame.current)
+  }
+  const showWaveRef = useRef(showWave)
+  showWaveRef.current = showWave
+
   const turnRef = useRef<HTMLDivElement>(null)
-  const { waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, glazePushes, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
+  const { waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, pulseColor, waveColor, pulseSoftness, waveShape, waveFallSec, waveMix, glazeMix, glazePushes, pulseMix } = useSyncExternalStore(subscribeGridWaveSettings, readGridWaveSettings)
   const widthPx = sceneBox?.width ?? 0
   // The rotation turns at the app's one TEMPO (`subscribeMusicTempo`,
   // `musicTempo.ts`), one transform written per frame on the beat loop's own
@@ -134,8 +154,15 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   turnInputs.current = { waveTurn, widthPx, periodPx: waveBoxes * boxPx }
   useEffect(() => {
     const turn = turnRef.current
-    if (!turn) return
-    turn.style.transform = ''
+    if (!turn && !shader) return
+    const place = (angles: typeof WAVE_ANGLES_AT_REST, width: number, periodPx: number) => {
+      if (turn) turn.style.transform = angles === WAVE_ANGLES_AT_REST ? '' : waveTurnTransform(angles, width, periodPx)
+      else {
+        const { angle, x, y } = angles === WAVE_ANGLES_AT_REST ? { angle: 0, x: 0, y: 0 } : waveTurnPlacement(angles, width, periodPx)
+        showWaveRef.current({ angle, x, y })
+      }
+    }
+    place(WAVE_ANGLES_AT_REST, 0, 0)
     let angles = WAVE_ANGLES_AT_REST
     let aligned = false
     return subscribeMusicTempo((passed, _rate, count) => {
@@ -146,16 +173,16 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       if (step === 0) {
         if (angles !== WAVE_ANGLES_AT_REST) {
           angles = WAVE_ANGLES_AT_REST
-          turn.style.transform = ''
+          place(angles, width, periodPx)
         }
         return
       }
       if (beats <= 0 || width === 0 || reducedMotion.matches) return
       aligned = true
       angles = advanceWaveAngles(angles, step, beats)
-      turn.style.transform = waveTurnTransform(angles, width, periodPx)
+      place(angles, width, periodPx)
     })
-  }, [host])
+  }, [host, shader])
 
   // The bands TRAVEL one wave length every `waveBeats` beats, at the same
   // app's one tempo (`subscribeMusicTempo`, `musicTempo.ts`), so a seek's
@@ -167,8 +194,9 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   travelInputs.current = { waveBeats, periodPx: waveBoxes * boxPx }
   useEffect(() => {
     const bands = bandsRef.current
-    if (!bands) return
-    bands.style.transform = ''
+    if (!bands && !shader) return
+    if (bands) bands.style.transform = ''
+    else showWaveRef.current({ share: 0 })
     let share = 0
     let aligned = false
     return subscribeMusicTempo((passed, _rate, count) => {
@@ -177,9 +205,10 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       if (beats <= 0 || reducedMotion.matches) return
       aligned = true
       share = (share + beats / perLength) % 1
-      bands.style.transform = `translateX(${(share * periodPx).toFixed(2)}px)`
+      if (bands) bands.style.transform = `translateX(${(share * periodPx).toFixed(2)}px)`
+      else showWaveRef.current({ share })
     })
-  }, [host])
+  }, [host, shader])
 
   // The wave SHOWS ON ITS MIX's hits (the layout's `waveMix` of the
   // trackers, the snare's hits by default), as an edge or pane block does:
@@ -193,14 +222,15 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   const waveBandRef = useRef<{ update: (next: MusicMixChannel) => void } | null>(null)
   useEffect(() => {
     const bands = bandsRef.current
-    if (!bands) return
+    if (!bands && !shader) return
     let shown = -1
     const show = (response: number) => {
       // Quantized to what an 8-bit alpha resolves, and written only when it changes.
       const steps = Math.round(response * 255)
       if (steps === shown) return
       shown = steps
-      bands.style.opacity = String(steps / 255)
+      if (bands) bands.style.opacity = String(steps / 255)
+      else showWaveRef.current({ opacity: steps / 255 })
     }
     show(0)
     const band = subscribeMusicMix(waveChannelRef.current, show)
@@ -209,7 +239,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       waveBandRef.current = null
       band.unsubscribe()
     }
-  }, [host])
+  }, [host, shader])
   useEffect(() => {
     waveBandRef.current?.update(waveChannel)
     setSwayReturnFall(waveFallSec, waveShape)
@@ -268,11 +298,10 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   // Animation of `transform` sampled from that curve: the compositor runs it,
   // nothing repaints.
   const pulseRefs = useRef<Array<HTMLDivElement | null>>([])
-  // With WebGL2 the rings are a real wavefront (PulseRingsCanvas.tsx): the
+  // With WebGL2 the rings are a real wavefront (GridWaveCanvas.tsx): the
   // face's offset curves rather than its scaled copies, so the gauge the
   // exit is measured on is the offset one too.
-  const shaderPulse = useMemo(() => canUseShaderPulse(), [])
-  const pulseCanvasRef = useRef<PulseRingsHandle>(null)
+  const shaderPulse = shader
   const exitGauge = shaderPulse ? roundedSquareOffsetGauge : roundedSquareGauge
   const pulseInnerPx = cutout && cutout.size > 0 ? (cutout.size / 2) * (1 - PULSE_RING_SHARE) : 0
   // The ring is the cutout face's shape, so its inner edge clears the scene
@@ -311,7 +340,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
       // a ring the half-life stops short has faded by then all the same.
       const durationSec = Math.min(pulseTimeToTravel(exitBoxes, speed, halfLife), fadeSec)
       if (shaderPulse) {
-        pulseCanvasRef.current?.launch({
+        canvasRef.current?.launch({
           durationSec,
           sample: (t) => ({ scale: PULSE_START_SCALE + (pulseTravelBoxes(t, speed, halfLife) * box) / innerPx, opacity: amount * (1 - t / fadeSec) }),
         })
@@ -374,7 +403,24 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
   return (
     <>
       <div ref={anchorRef} className="visualizer-grid-wave-anchor" aria-hidden="true" />
-      {host && sceneBox ? createPortal(
+      {host && sceneBox && shader ? createPortal(
+        <div className="visualizer-grid-wave" aria-hidden="true" style={sceneBox}>
+          <GridWaveCanvas
+            ref={canvasRef}
+            boxPx={boxPx}
+            originXPx={originXPx}
+            originYPx={originYPx}
+            face={cutout && cutout.size > 0 ? cutout : null}
+            round={cutoutRound}
+            inner={1 - PULSE_RING_SHARE}
+            pulseColor={pulseColor}
+            softness={pulseSoftness}
+            waveColor={waveColor}
+            periodPx={waveBoxes * boxPx}
+          />
+        </div>,
+        host,
+      ) : host && sceneBox ? createPortal(
         <div
           className="visualizer-grid-wave"
           aria-hidden="true"
@@ -397,16 +443,7 @@ export function GridWave({ boxPx, originXPx, originYPx, cutout, cutoutRound }: {
             >
               <div ref={bandsRef} className="visualizer-grid-wave-bands" />
             </div>
-            {cutout && cutout.size > 0 && shaderPulse ? (
-              <PulseRingsCanvas
-                ref={pulseCanvasRef}
-                face={cutout}
-                round={cutoutRound}
-                inner={1 - PULSE_RING_SHARE}
-                color={pulseColor}
-                softness={pulseSoftness}
-              />
-            ) : cutout && cutout.size > 0 ? Array.from({ length: PULSE_LAYERS }, (_, i) => (
+            {cutout && cutout.size > 0 ? Array.from({ length: PULSE_LAYERS }, (_, i) => (
               <div
                 key={i}
                 ref={(layer) => { pulseRefs.current[i] = layer }}

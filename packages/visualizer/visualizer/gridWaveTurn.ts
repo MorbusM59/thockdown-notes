@@ -85,6 +85,12 @@ export function nestedWavePoint(point: Point, angles: WaveAngles, widthPx: numbe
  * pivots make, kept only across the stripes and only modulo one wave length.
  */
 export function waveTurnTransform(angles: WaveAngles, widthPx: number, periodPx: number): string {
+  const { angle, x, y } = waveTurnPlacement(angles, widthPx, periodPx)
+  return `translate(${x}px, ${y}px) rotate(${angle}rad)`
+}
+
+/** `waveTurnTransform` as numbers: the rotation, then the shift (px) applied after it. */
+export function waveTurnPlacement(angles: WaveAngles, widthPx: number, periodPx: number): { angle: number; x: number; y: number } {
   const angle = angles.primary + angles.secondary + angles.tertiary
   // The shift of the layer's centre (the primary pivot, the origin).
   const shift = nestedWavePoint({ x: 0, y: 0 }, angles, widthPx)
@@ -92,7 +98,7 @@ export function waveTurnTransform(angles: WaveAngles, widthPx: number, periodPx:
   const acrossY = Math.sin(angle)
   const across = shift.x * acrossX + shift.y * acrossY
   const kept = periodPx > 0 ? across - periodPx * Math.floor(across / periodPx) : 0
-  return `translate(${kept * acrossX}px, ${kept * acrossY}px) rotate(${angle}rad)`
+  return { angle, x: kept * acrossX, y: kept * acrossY }
 }
 
 /**
@@ -125,12 +131,14 @@ export interface GridWaveSettings {
   cutoutRound: number
   /** The centre pulse's ring: its colour and edge softness (`pulseRingStrength`). */
   pulseColor: string
+  /** The wave's colour (the layout's `visualizerColors.wave`). */
+  waveColor: string
   pulseSoftness: number
   /** The layout's signal boost for the centre pulse (`VisualizerImmersive.pulseBoost`). */
   pulseBoost: number
 }
 
-let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, waveBeats: 4, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, glazeMix: DEFAULT_VISUALIZER_IMMERSIVE.glazeMix, glazePushes: false, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
+let settings: GridWaveSettings = { waveTurn: 0, waveBoxes: 1, waveBeats: 4, pulseSpeed: 20, pulseHalfLifeSec: 5, pulseFadeSec: 5, waveShape: 0, waveFallSec: 0.25, waveMix: DEFAULT_VISUALIZER_IMMERSIVE.waveMix, glazeMix: DEFAULT_VISUALIZER_IMMERSIVE.glazeMix, glazePushes: false, pulseMix: DEFAULT_VISUALIZER_IMMERSIVE.pulseMix, edgeShape: 0, edgeFallSec: 0.25, cutoutRound: 0, pulseColor: 'transparent', waveColor: 'transparent', pulseSoftness: 1, pulseBoost: 1 }
 const listeners = new Set<() => void>()
 
 export function setGridWaveSettings(next: GridWaveSettings): void {
@@ -140,7 +148,7 @@ export function setGridWaveSettings(next: GridWaveSettings): void {
     && next.waveMix === settings.waveMix && next.glazeMix === settings.glazeMix && next.glazePushes === settings.glazePushes && next.pulseMix === settings.pulseMix
     && next.edgeShape === settings.edgeShape && next.edgeFallSec === settings.edgeFallSec
     && next.cutoutRound === settings.cutoutRound
-    && next.pulseColor === settings.pulseColor && next.pulseSoftness === settings.pulseSoftness && next.pulseBoost === settings.pulseBoost) return
+    && next.pulseColor === settings.pulseColor && next.waveColor === settings.waveColor && next.pulseSoftness === settings.pulseSoftness && next.pulseBoost === settings.pulseBoost) return
   settings = next
   for (const listener of listeners) listener()
 }

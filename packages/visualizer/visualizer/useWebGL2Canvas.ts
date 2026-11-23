@@ -25,19 +25,45 @@ export function useWebGL2Canvas(
 ): void {
   const [generation, setGeneration] = useState(0)
   const loseRef = useRef<WEBGL_lose_context | null>(null)
+  // A context released by this component's own unmount can be asked back
+  // only once its loss has been DISPATCHED (Chromium refuses restoreContext
+  // before the webglcontextlost event, which is queued, not synchronous),
+  // and React's development double mount remounts before that. So a mount
+  // that finds the context lost asks for it at once if the loss has been
+  // seen, and otherwise when it is.
+  const lossSeenRef = useRef(false)
+  const restorePendingRef = useRef(false)
 
   useEffect(() => {
     const canvas = ref.current
     if (!canvas) return
-    const onLost = (event: Event) => event.preventDefault()
-    const onRestored = () => setGeneration((g) => g + 1)
+    const onLost = (event: Event) => {
+      event.preventDefault()
+      lossSeenRef.current = true
+      // The browser decides whether the loss may be restored once this
+      // listener has RETURNED (by whether it cancelled the event), so the
+      // pending restore is asked for after the dispatch, not inside it (a
+      // microtask would still run inside it, at the listener's checkpoint).
+      if (restorePendingRef.current) {
+        restorePendingRef.current = false
+        setTimeout(() => loseRef.current?.restoreContext(), 0)
+      }
+    }
+    const onRestored = () => {
+      lossSeenRef.current = false
+      setGeneration((g) => g + 1)
+    }
     canvas.addEventListener('webglcontextlost', onLost)
     canvas.addEventListener('webglcontextrestored', onRestored)
     return () => {
-      canvas.removeEventListener('webglcontextlost', onLost)
-      canvas.removeEventListener('webglcontextrestored', onRestored)
+      // Released while the loss listener is still attached: loseContext
+      // dispatches webglcontextlost synchronously, and only a loss whose
+      // event was cancelled may be restored, so releasing after removing it
+      // left a remount's context dead for good.
       const gl = canvas.getContext('webgl2')
       if (gl && !gl.isContextLost()) loseRef.current?.loseContext()
+      canvas.removeEventListener('webglcontextlost', onLost)
+      canvas.removeEventListener('webglcontextrestored', onRestored)
     }
   }, [ref])
 
@@ -48,7 +74,8 @@ export function useWebGL2Canvas(
     if (gl.isContextLost()) {
       // Released by this component's own unmount: ask for it back. A loss the
       // GPU caused is restored by the browser, and restoreContext declines it.
-      loseRef.current?.restoreContext()
+      if (lossSeenRef.current) loseRef.current?.restoreContext()
+      else restorePendingRef.current = true
       return
     }
     loseRef.current = gl.getExtension('WEBGL_lose_context')

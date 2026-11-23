@@ -7,7 +7,7 @@ export function canUseShaderGlaze(): boolean {
 }
 
 
-/** false = the centre pulse is drawn as the old scaled CSS rings (for comparing against PulseRingsCanvas.tsx). */
+/** false = the grid wave and the centre pulse are drawn as the old masked CSS layers (for comparing against GridWaveCanvas.tsx). */
 export const USE_SHADER_PULSE = true
 
 export function canUseShaderPulse(): boolean {
