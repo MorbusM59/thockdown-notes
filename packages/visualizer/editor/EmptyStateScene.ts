@@ -227,30 +227,24 @@ function project(p: Vec3, scale: number, focal: number, cx: number, cy: number):
 
 /** The solid's look: alpha quantized to this many discrete steps (a posterized, LCD-like step). */
 const QUANTIZE_STEPS = 10
-const QUANTIZE_FILTER_ID = 'thockdown-solid-quantize'
 
 /**
- * The quantize as an SVG filter the canvas draws through (`context.filter`),
- * so it runs where the canvas is rasterized: a per-pixel pass in script read
- * the drawing back from the GPU every frame and was the largest script cost
- * in the visualizer at 4x throttle. Added to the document once.
- *
- * Assigned to a context ONCE (`quantizedContext`, whenever its canvas is
- * resized, which resets context state), never per frame: assigning a
- * `url(#...)` filter resolves the reference against the document, which
- * forces a style recalculation whenever anything dirtied style that frame --
- * and in the visualizer something always has (about 3.7ms a frame at 6x
- * throttle, 2026-11-22). Drawing through a filter already assigned does not.
+ * The quantize, as a pass in script over the alpha canvas: the same rule as
+ * a discrete `feFuncA` table of QUANTIZE_STEPS values. Both canvases it
+ * touches are CPU-backed (`willReadFrequently`), so reading the alpha back is
+ * a memory read rather than a GPU readback (the readback is what made the
+ * first version of this pass the visualizer's largest script cost). It
+ * replaced an SVG `url(#...)` canvas filter, which a phone's WebView ran in
+ * software at ~30ms a frame even at CSS-pixel size (2026-11-23).
  */
-function quantizeFilter(): string {
-  if (!document.getElementById(QUANTIZE_FILTER_ID)) {
-    const table = Array.from({ length: QUANTIZE_STEPS }, (_, i) => (i / (QUANTIZE_STEPS - 1)).toFixed(4)).join(' ')
-    const holder = document.createElement('div')
-    holder.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute;width:0;height:0" aria-hidden="true"><filter id="${QUANTIZE_FILTER_ID}" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncA type="discrete" tableValues="${table}" /></feComponentTransfer></filter></svg>`
-    const svg = holder.firstElementChild
-    if (svg) document.body.appendChild(svg)
-  }
-  return `url(#${QUANTIZE_FILTER_ID})`
+const QUANTIZE_TABLE = Uint8ClampedArray.from({ length: 256 }, (_, v) =>
+  Math.round((Math.min(QUANTIZE_STEPS - 1, Math.floor((v / 255) * QUANTIZE_STEPS)) / (QUANTIZE_STEPS - 1)) * 255))
+
+function quantizeAlpha(source: CanvasRenderingContext2D, target: CanvasRenderingContext2D, size: number): void {
+  const image = source.getImageData(0, 0, size, size)
+  const data = image.data
+  for (let i = 3; i < data.length; i += 4) data[i] = QUANTIZE_TABLE[data[i]]
+  target.putImageData(image, 0, 0)
 }
 
 /**
@@ -391,10 +385,8 @@ export interface SolidDrawScratch {
   alpha: HTMLCanvasElement
   alphaContext: CanvasRenderingContext2D
   /**
-   * The cutout after the quantize, at the scene canvas's own size so it is
-   * resized only with it: its context carries the filter permanently (see
-   * `quantizeFilter`), and a canvas that followed the solid's size would be
-   * resized, and the filter re-assigned, on every frame of a thump.
+   * The cutout after the quantize (`quantizeAlpha`), at CSS-pixel size,
+   * scaled onto the scene canvas.
    */
   quantized: HTMLCanvasElement
   quantizedContext: CanvasRenderingContext2D
@@ -404,9 +396,9 @@ export interface SolidDrawScratch {
 
 export function createSolidDrawScratch(): SolidDrawScratch {
   const alpha = document.createElement('canvas')
-  const alphaContext = alpha.getContext('2d') as CanvasRenderingContext2D
+  const alphaContext = alpha.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D
   const quantized = document.createElement('canvas')
-  const quantizedContext = quantized.getContext('2d') as CanvasRenderingContext2D
+  const quantizedContext = quantized.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D
   return { alpha, alphaContext, quantized, quantizedContext, stripes: null, stripesDpr: 0 }
 }
 
@@ -494,7 +486,7 @@ function cutOutSolid(
   const size = Math.ceil(side / Math.max(1, dpr))
   if (size <= 0) return
   const { alpha, alphaContext: a } = scratch
-  if (alpha.width !== size || alpha.height !== size) {
+  if (alpha.width < size || alpha.height < size) {
     alpha.width = size
     alpha.height = size
   }
@@ -531,20 +523,20 @@ function cutOutSolid(
   // Cut out through the quantize: the COMPOSITED alpha of the faces and
   // edges, stepped to QUANTIZE_STEPS values from 0 to 1. The quantize runs
   // at the alpha's own CSS-pixel size and the result is scaled onto the
-  // scene: a canvas filter is applied per pixel on the CPU on a phone, so at
+  // scene: the pass is per pixel, so at
   // a device pixel ratio of 2.6 filtering at device resolution cost ~50ms a
   // frame (measured, 4x CPU throttle, 412x915 at 2.625), while its stepped
   // edges are already softer than a device pixel can show.
   const { quantized, quantizedContext: q } = scratch
-  if (quantized.width !== size || quantized.height !== size) {
+  // Grown, never shrunk: a thump changes `size` every frame, and resizing a
+  // canvas reallocates it.
+  if (quantized.width < size || quantized.height < size) {
     quantized.width = size
     quantized.height = size
-    q.filter = quantizeFilter()
   }
-  q.clearRect(0, 0, size, size)
-  q.drawImage(alpha, 0, 0)
+  quantizeAlpha(a, q, size)
   const left = (width - side) / 2
   context.globalCompositeOperation = 'destination-out'
-  context.drawImage(quantized, left, top, side, side)
+  context.drawImage(quantized, 0, 0, size, size, left, top, side, side)
   context.globalCompositeOperation = 'source-over'
 }
