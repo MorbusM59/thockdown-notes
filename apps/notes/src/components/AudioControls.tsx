@@ -26,7 +26,7 @@ import {
 import {
   useHoldToAdjust,
   type HoldToAdjustKeyboardController,
-} from '../shared/useHoldToAdjust'
+} from '@thockdown/interaction/useHoldToAdjust'
 import { openMusicLibrary } from '@thockdown/visualizer/library/musicLibraryView'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '@thockdown/visualizer/sound/MusicPlayerService'

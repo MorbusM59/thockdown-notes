@@ -15,7 +15,7 @@ import {
   semitonesOf,
   type EqPoint,
 } from '@thockdown/visualizer/shared/musicEqCurve'
-import { CurveEditor, type CurveAxisFormat, type CurveGridLine } from './CurveEditor'
+import { CurveEditor, type CurveAxisFormat, type CurveGridLine } from '@thockdown/interaction/CurveEditor'
 
 /** One dotted line per octave above 20 Hz, and a dashed one at 0 dB. */
 const VERTICALS: readonly CurveGridLine[] = Array.from({ length: Math.floor(EQ_SPAN_SEMITONES / 12) }, (_, k) => ({ at: (k + 1) * 12, kind: 'dotted' }))

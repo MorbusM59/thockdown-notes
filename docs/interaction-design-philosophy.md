@@ -441,8 +441,8 @@ any of them is a defect.
   journey covers all of them, including the ones added later.
 
 ### 3i. A held button ramps and coasts; it never races or crawls
-- **One routine owns press-and-hold value adjustment** (`apps/notes/src/shared/holdToAdjust.ts`
-  for the motion, `apps/notes/src/shared/useHoldToAdjust.ts` for the wiring). Any control
+- **One routine owns press-and-hold value adjustment** (`packages/interaction/holdToAdjust.ts`
+  for the motion, `packages/interaction/useHoldToAdjust.ts` for the wiring). Any control
   that lets the reader hold to change a number uses it. This is a toolkit
   piece, not a music-player detail: nothing in either file knows what the
   value means.

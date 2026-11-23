@@ -59,7 +59,7 @@ import {
 } from './shared/sidebarSections'
 import { SECTION_SELECTOR_GAP, SectionSelector, type SectionSelectorEntry } from './sidebar/SectionSelector'
 import { SoundscapeDock, SoundscapeIconPicker, SoundscapesView } from './sidebar/SoundscapesView'
-import { PresetDock, PresetIconPicker } from './sidebar/PresetListControls'
+import { PresetDock, PresetIconPicker } from '@thockdown/interaction/PresetListControls'
 import { LayoutDock, LayoutIconPicker } from './sidebar/LayoutDock'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, sanitizeSoundscapePreferences, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {

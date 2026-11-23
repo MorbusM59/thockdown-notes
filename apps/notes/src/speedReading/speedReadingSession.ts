@@ -15,7 +15,7 @@
  *   page key steps once and then travels. Up goes back a chunk.
  * - **Left and Right** lower and raise the words per minute in steps of five:
  *   a tap is one step, a hold accelerates on the same press-and-hold curve the
- *   music player's volume uses (`shared/holdToAdjust.ts`).
+ *   music player's volume uses (`packages/interaction/holdToAdjust.ts`).
  *
  * ## Which keys the session takes
  * Its own keys are taken in the window's CAPTURE phase, before the editor or
@@ -36,7 +36,7 @@
  * only while something does: always in the render view, and in the edit view
  * only while Space or an arrow is held.
  */
-import { buildHoldRampPlan, holdFullTravelSec, quantizeHoldTravel, sampleHoldTravel, type HoldRampPlan } from '../shared/holdToAdjust'
+import { buildHoldRampPlan, holdFullTravelSec, quantizeHoldTravel, sampleHoldTravel, type HoldRampPlan } from '@thockdown/interaction/holdToAdjust'
 import { borrowAutoScrollBehavior } from '@thockdown/interaction/scrollBehaviorLock'
 import { cancelSmoothScroll } from '@thockdown/interaction/smoothScrollRegistry'
 import { RESTING, stepSpeedEnvelope, type SpeedCurve, type SpeedEnvelopeState } from './speedEnvelope'

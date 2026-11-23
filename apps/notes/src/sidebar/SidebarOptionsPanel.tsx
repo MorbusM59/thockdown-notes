@@ -16,11 +16,9 @@ import { OptionsSectionBar } from './OptionsSectionBar'
 import type { OptionsSectionId, PresetSubsectionId } from '../shared/optionsSections'
 import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
-import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
-import { DEFAULT_MUSIC_PLAYER_CONFIG } from '@thockdown/visualizer/sound/MusicPlayerService'
 import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import type { EqPoint } from '@thockdown/visualizer/shared/musicEqCurve'
-import { EqCurveEditor } from './EqCurveEditor'
+import { SoundstageControls } from '@thockdown/visualizer/soundstage/SoundstageControls'
 import { SOUNDSTAGE_KIND, type SoundstagePreferences } from '@thockdown/visualizer/shared/soundstages'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
@@ -128,7 +126,7 @@ import { FLASH_SHAPE_KIND, type FlashShape, type FlashShapePreferences, type Fla
 import { FlashingOptions } from './FlashingOptions'
 import { TooltipOptions } from './TooltipOptions'
 import type { TooltipSettings } from '../shared/tooltipSettings'
-import { PresetGrid } from './PresetListControls'
+import { PresetGrid } from '@thockdown/interaction/PresetListControls'
 import {
   type TextureSurfaceKey,
   type TextureMaterialsBySurface,
@@ -2277,57 +2275,16 @@ export function SidebarOptionsPanel({
             plural="a soundstage"
           />
         </div>
-        <OptionsSubsectionLabel>Equalization</OptionsSubsectionLabel>
-        <EqCurveEditor curve={musicEqCurve} onChange={setMusicEqCurve} />
-        <OptionsSubsectionLabel>Room Parameters</OptionsSubsectionLabel>
-        <div className="utility-setting-slider-stack" aria-label="Music room parameters">
-          <OptionsSliderRows rows={[2, 2]}>
-            <CompactScrollbarSlider
-              id="music-stereo-width"
-              min={STEREO_WIDTH_MIN}
-              max={STEREO_WIDTH_MAX}
-              step={0.01}
-              value={musicStereoWidth}
-              trackLabel="width"
-              ariaLabel="Music stereo width: mono at the left, as recorded at the default, wider to the right"
-              defaultValue={STEREO_WIDTH_NEUTRAL}
-              onCommit={(value) => setMusicStereoWidth(sanitizeStereoWidth(value))}
-            />
-            <CompactScrollbarSlider
-              id="music-reverb"
-              min={0}
-              max={1}
-              step={0.01}
-              value={musicReverbAmount}
-              trackLabel="reverb"
-              ariaLabel="Music reverb amount"
-              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbAmount}
-              onCommit={(value) => readNowPlaying().setLevel('reverb', value)}
-            />
-            <CompactScrollbarSlider
-              id="music-reverb-room"
-              min={0}
-              max={1}
-              step={0.01}
-              value={musicReverbRoom}
-              trackLabel="size"
-              ariaLabel="Music reverb size: a small room to a wide valley"
-              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbRoom}
-              onCommit={(value) => readNowPlaying().setLevel('room', value)}
-            />
-            <CompactScrollbarSlider
-              id="music-reverb-foliage"
-              min={0}
-              max={1}
-              step={0.01}
-              value={musicReverbFoliage}
-              trackLabel="softening"
-              ariaLabel="Music room softening: bare and bright to dense and dark"
-              defaultValue={DEFAULT_MUSIC_PLAYER_CONFIG.reverbFoliage}
-              onCommit={(value) => setMusicReverbFoliage(clamp(value, 0, 1))}
-            />
-          </OptionsSliderRows>
-        </div>
+        <SoundstageControls
+          stage={{ eq: musicEqCurve, width: musicStereoWidth, reverb: musicReverbAmount, size: musicReverbRoom, room: musicReverbFoliage }}
+          onEdit={(field, value) => {
+            if (field === 'eq') setMusicEqCurve(value as EqPoint[])
+            else if (field === 'width') setMusicStereoWidth(value as number)
+            else if (field === 'reverb') readNowPlaying().setLevel('reverb', value as number)
+            else if (field === 'size') readNowPlaying().setLevel('room', value as number)
+            else setMusicReverbFoliage(value as number)
+          }}
+        />
       </AccordionSection>
 
       <AccordionSection

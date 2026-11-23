@@ -16,7 +16,7 @@ import {
   type FlashShape,
   type FlashingSettings,
 } from '@thockdown/visualizer/shared/flashing'
-import { CurveEditor, type CurveAxisFormat, type CurveGridLine } from './CurveEditor'
+import { CurveEditor, type CurveAxisFormat, type CurveGridLine } from '@thockdown/interaction/CurveEditor'
 
 /** Twelve segments of a bar: dashed on the beats (every third), dotted between. */
 const VERTICALS: readonly CurveGridLine[] = Array.from({ length: FLASH_SEGMENTS + 1 }, (_, k) => ({

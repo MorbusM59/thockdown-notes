@@ -73,9 +73,12 @@ import { VisualizerPrototype } from './VisualizerPrototype'
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { MusicLibraryDock, MusicLibraryPanel } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
-import { MobileTabSelector, SettingsTab, TabPlaceholder, VisualizerTab } from './MobileTabs'
+import { MobileTabSelector, SettingsTab, VisualizerTab } from './MobileTabs'
+import { SoundstagesTab } from './SoundstagesTab'
+import { loadSoundstages, saveSoundstages } from './soundstageStore'
+import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
-import { nativeMusic } from './nativeMusic'
+import { musicStageOf, nativeMusic } from './nativeMusic'
 import { startMobileMusicPlayer } from './mobileMusicPlayer'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
@@ -154,6 +157,15 @@ export function MobileSoundscapeApp() {
     pageScrollerRef.current?.scrollTo({ top: 0 })
   }, [])
   const [songsGrouping, setSongsGrouping] = useState<MusicSetListGrouping>(DEFAULT_MUSIC_SET_LIST_GROUPING)
+  // The soundstages (SoundstagesTab.tsx): stored, and the active one sent to the native music whenever it changes.
+  const [soundstages, setSoundstages] = useState(loadSoundstages)
+  const activeStage = useMemo(() => activeSoundstage(soundstages).settings, [soundstages])
+  useEffect(() => {
+    saveSoundstages(soundstages)
+  }, [soundstages])
+  useEffect(() => {
+    void nativeMusic?.setStage({ stage: JSON.stringify(musicStageOf(activeStage)) })
+  }, [activeStage])
   // The music library and player the shared music views read (mobileMusicPlayer.ts).
   useEffect(() => {
     if (!nativeMusic) return
@@ -568,7 +580,7 @@ export function MobileSoundscapeApp() {
                   />}
                 </div>
                 </>) : null}
-                {tab === 'soundstages' ? <TabPlaceholder name="Soundstages" /> : null}
+                {tab === 'soundstages' ? <SoundstagesTab preferences={soundstages} onChange={setSoundstages} /> : null}
                 {tab === 'visualizer' ? <VisualizerTab onOpen={() => setVisualizerOpen(true)} /> : null}
                 {tab === 'settings' ? <SettingsTab /> : null}
               </div>
