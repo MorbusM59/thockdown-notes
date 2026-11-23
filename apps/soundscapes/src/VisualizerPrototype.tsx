@@ -111,6 +111,7 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
           boxPx={18}
           fontFamily="'Kode Mono', monospace"
           fontSizePx={14}
+          solidMaxPixelRatio={1.5}
           sceneSeed="soundscapes"
           gridOutlineRef={() => {}}
           onExit={onExit}

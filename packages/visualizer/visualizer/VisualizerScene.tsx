@@ -93,6 +93,8 @@ export type VisualizerSceneProps = {
   boxPx: number
   fontFamily: string
   fontSizePx: number
+  /** Passed to the cutout's SolidCanvas (`maxPixelRatio`). */
+  solidMaxPixelRatio?: number
   /** The empty scene's seed (EmptyStateScene.ts), whose tumble the cutout's solid takes; the solid itself names the music's EQ preset. */
   sceneSeed: string
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
@@ -177,7 +179,7 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
   })
 }
 
-export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef, onExit }: VisualizerSceneProps) {
+export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef, onExit, solidMaxPixelRatio }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
   const { boxPx, fontSizePx } = fitVisualizerBox(width, height, readerBoxPx, readerFontSizePx, EMPTY_SCENE_DIAMETER_PX)
@@ -614,7 +616,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
               data-secondary-press="action"
             >
               <div className="visualizer-cutout-face">
-                <SolidCanvas className="empty-state-solid" seed={solid} animateTo={solid} active subscribeThump={subscribeSolidThump} />
+                <SolidCanvas className="empty-state-solid" seed={solid} animateTo={solid} active subscribeThump={subscribeSolidThump} maxPixelRatio={solidMaxPixelRatio} />
               </div>
               <div className="visualizer-cutout-orb" />
             </div>

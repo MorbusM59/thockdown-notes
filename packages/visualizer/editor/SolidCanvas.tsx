@@ -48,6 +48,13 @@ export type SolidCanvasProps = {
   active: boolean
   className?: string
   subscribeThump?: (listener: (thump: SolidThump) => void) => () => void
+  /**
+   * The most device pixels per CSS pixel the canvas is drawn at. The whole
+   * canvas is repainted every frame, which at a phone's ~2.6 density cost
+   * more than the rest of the visualizer together; a phone passes 1.5 and
+   * takes slightly softer stripes. Unbounded when absent.
+   */
+  maxPixelRatio?: number
 }
 
 type Faller = { scene: SolidScene; atMs: number; from: SolidPose }
@@ -57,7 +64,7 @@ const reducedMotion = typeof window !== 'undefined' && typeof window.matchMedia 
   ? window.matchMedia('(prefers-reduced-motion: reduce)')
   : null
 
-export function SolidCanvas({ seed, animateTo, active, className, subscribeThump }: SolidCanvasProps) {
+export function SolidCanvas({ seed, animateTo, active, className, subscribeThump, maxPixelRatio = Infinity }: SolidCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // The seed is read by the draw loop rather than restarting it, so a swap
   // can hold the old solid and the new one at once.
@@ -92,7 +99,7 @@ export function SolidCanvas({ seed, animateTo, active, className, subscribeThump
     const context = canvas?.getContext('2d')
     if (!canvas || !context) return
     const scratch = createSolidDrawScratch()
-    let dpr = window.devicePixelRatio || 1
+    let dpr = Math.min(maxPixelRatio, window.devicePixelRatio || 1)
     let frame: number | null = null
     let lastDrawMs = -Infinity
     let thump: (SolidThump & { atMs: number }) | null = null
@@ -131,7 +138,7 @@ export function SolidCanvas({ seed, animateTo, active, className, subscribeThump
       if (active) frame = requestAnimationFrame(tick)
     }
     const resize = () => {
-      dpr = window.devicePixelRatio || 1
+      dpr = Math.min(maxPixelRatio, window.devicePixelRatio || 1)
       const width = Math.max(1, Math.round(canvas.clientWidth * dpr))
       const height = Math.max(1, Math.round(canvas.clientHeight * dpr))
       if (canvas.width !== width || canvas.height !== height) {
