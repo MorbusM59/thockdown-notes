@@ -97,6 +97,12 @@ final class MusicSession {
         }
         renderer.setStage(stageJson);
         report();
+        if (!SoundscapePlaybackService.sourceChanged(context, true)) {
+            // Refused a start from the background: no service would keep the process playing.
+            close();
+            report();
+            if (listener != null) listener.onFailure("Music could not start in the background");
+        }
     }
 
     /** A new soundstage, heard at once if music plays. */
@@ -109,6 +115,7 @@ final class MusicSession {
         if (output == null) return;
         output.setPaused(true);
         report();
+        SoundscapePlaybackService.sourceChanged(context, false);
     }
 
     synchronized void skip() {
@@ -139,6 +146,39 @@ final class MusicSession {
         close();
         heardId = null;
         report();
+        SoundscapePlaybackService.sourceChanged(context, false);
+    }
+
+    /** Whether there is music, playing or paused (the service and its controls follow it). */
+    synchronized boolean isActive() {
+        return output != null;
+    }
+
+    /** Resume paused music (the media controls); nothing without music. */
+    synchronized void resume() {
+        if (output == null || !output.isPaused()) return;
+        output.setPaused(false);
+        report();
+        SoundscapePlaybackService.sourceChanged(context, true);
+    }
+
+    /** The song heard, for the notification: its title, else its file's name; "Music" with none. */
+    synchronized String title() {
+        if (heardId == null) return "Music";
+        try {
+            org.json.JSONArray songs = new org.json.JSONObject(catalog()).getJSONArray("songs");
+            for (int index = 0; index < songs.length(); index += 1) {
+                org.json.JSONObject song = songs.getJSONObject(index);
+                if (song.getInt("id") != heardId) continue;
+                String title = song.optString("title", "");
+                if (!title.isEmpty()) return title;
+                String path = android.net.Uri.decode(song.optString("filePath", ""));
+                return path.substring(path.lastIndexOf('/') + 1);
+            }
+        } catch (org.json.JSONException unreadable) {
+            // An unreadable catalog names nothing.
+        }
+        return "Music";
     }
 
     synchronized boolean isPlaying() {
@@ -158,6 +198,8 @@ final class MusicSession {
             @Override
             public void onHeard(Integer songId, double seconds, long frame) {
                 synchronized (MusicSession.this) {
+                    // A new song: the notification names it.
+                    if (!java.util.Objects.equals(songId, heardId)) SoundscapePlaybackService.refreshIfRunning();
                     heardId = songId;
                     heardSeconds = seconds;
                     heardFrame = frame;
@@ -188,6 +230,7 @@ final class MusicSession {
                     close();
                     current = listener;
                 }
+                SoundscapePlaybackService.sourceChanged(context, false);
                 if (current != null) current.onFailure(message);
             }
         });
