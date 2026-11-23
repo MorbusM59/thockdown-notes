@@ -6,3 +6,5 @@
 @import '@thockdown/look/look.css';
 @import '@thockdown/interaction/interaction.css';
 @import '@thockdown/soundscape/soundscape.css';
+@import '@thockdown/interaction/sidebarFrame.css';
+@import '@thockdown/visualizer/library/library.css';

@@ -1086,3 +1086,83 @@
 [data-drag-state='target'] {
   filter: var(--filter-alert);
 }
+
+/* A text button (packages/interaction/TextButton.tsx): a micro button's height, its
+   column's width, and a few words in place of an icon, cut with an ellipsis
+   rather than wrapped when the column is too narrow. */
+.options-curve-button.text-button {
+  padding:   0 0.6em;
+  font-size: calc(9px * var(--ui-font-scale));
+}
+
+/* overflow: hidden clips at the label's own box, and the cell's line-height
+   of 1 makes that box one em tall, shorter than the glyphs: accents and
+   descenders were cut. A normal line height makes the box hold the glyphs;
+   the cell's flex centring still centres the box vertically. */
+.text-button-label {
+  line-height:   normal;
+  min-width:     0;
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+/* A row's information and, while the row is hovered, its actions in its
+   place: both in one grid cell, so the row keeps its size as they swap. */
+.hover-swap {
+  display:        inline-grid;
+  align-items:    center;
+  justify-items:  end;
+}
+
+.hover-swap.is-start {
+  justify-items: start;
+}
+
+.hover-swap > * {
+  grid-area: 1 / 1;
+}
+
+.hover-swap-actions {
+  display:     inline-flex;
+  align-items: center;
+  gap:         var(--spacing-regular);
+}
+
+[data-hover-host]:not([data-hovered]) .hover-swap-actions,
+[data-hover-host][data-hovered] .hover-swap-rest {
+  visibility: hidden;
+}
+
+/* Actions with nothing in their place take no room until shown. */
+[data-hover-host]:not([data-hovered]) .hover-swap-actions.is-alone {
+  display: none;
+}
+
+/* A growing selector's window (packages/interaction/SelectorRows.tsx): whole rows, moved
+   by a row per notch, the outer third of an edge row faded where more rows
+   lie beyond it. */
+.selector-rows {
+  /* The offset parent of its cells, so a cell's offsetTop is its row's. */
+  position:   relative;
+  overflow:   hidden;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--selector-rows-fade-top, 0px),
+    #000 calc(100% - var(--selector-rows-fade-bottom, 0px)),
+    transparent 100%
+  );
+}
+
+.selector-rows > .options-loadout-grid {
+  transform: translateY(var(--selector-rows-shift, 0px));
+}
+
+/* The Music Library's set selector: the set this view shows and edits is
+   drawn with a dashed border; pressed in (.is-active) means in the pool. */
+.options-loadout-btn.is-edited {
+  outline:        1px dashed var(--btn-border-default);
+  outline-offset: -3px;
+  }
+

@@ -378,38 +378,6 @@
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.2) 0, rgba(0, 0, 0, 0.2) 1px, transparent 2px, transparent 3px);
 }
 
-/* A row's information and, while the row is hovered, its actions in its
-   place: both in one grid cell, so the row keeps its size as they swap. */
-.hover-swap {
-  display:        inline-grid;
-  align-items:    center;
-  justify-items:  end;
-}
-
-.hover-swap.is-start {
-  justify-items: start;
-}
-
-.hover-swap > * {
-  grid-area: 1 / 1;
-}
-
-.hover-swap-actions {
-  display:     inline-flex;
-  align-items: center;
-  gap:         var(--spacing-regular);
-}
-
-[data-hover-host]:not([data-hovered]) .hover-swap-actions,
-[data-hover-host][data-hovered] .hover-swap-rest {
-  visibility: hidden;
-}
-
-/* Actions with nothing in their place take no room until shown. */
-[data-hover-host]:not([data-hovered]) .hover-swap-actions.is-alone {
-  display: none;
-}
-
 /* An action: the bare icon, held to act. */
 .hold-icon {
   cursor:      default;

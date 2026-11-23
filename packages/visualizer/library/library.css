@@ -1,0 +1,80 @@
+/* The Music Library's rows and dock (MusicLibraryPanel.tsx, MusicSetRow.tsx). */
+
+.options-music-set-row {
+  /* The count only as wide as its figures (.options-music-set-count), the
+     name taking the rest. */
+  grid-template-columns:
+    var(--entry-height) 1fr auto var(--entry-height) var(--entry-height) var(--entry-height);
+  /* The dock's narrower gaps. */
+  column-gap: var(--spacing-small);
+}
+
+
+
+.options-music-set-name {
+  overflow:      hidden;
+  white-space:   nowrap;
+  text-overflow: ellipsis;
+}
+
+.options-music-set-count {
+  font-variant-numeric: tabular-nums;
+  /* As wide as its figures (--set-count-digits, set by the dock), the name taking the rest. */
+  min-width:     max(var(--entry-height), calc(var(--set-count-digits, 1) * 1ch + 2 * var(--spacing-regular)));
+  padding-inline: 0;
+}
+
+/* The Music Library (packages/visualizer/library/MusicLibraryPanel.tsx): a song's name and its remove button. */
+.options-music-song-row {
+  grid-template-columns: 1fr;
+  /* A long set is thousands of rows; only those on screen are painted. */
+  content-visibility:    auto;
+  contain-intrinsic-size: auto var(--entry-height);
+}
+
+/* A song is one cell: its title, cut with an ellipsis, and its duration at
+   the cell's end, which its remove action replaces on hover. */
+/* One class more than the centred display cell's rule further down, which it must beat. */
+.options-curve-row.options-music-song-row > .options-curve-display.options-music-set-name {
+  display:     flex;
+  align-items: center;
+  gap:         var(--spacing-regular);
+}
+
+.options-music-song-duration {
+  font-variant-numeric: tabular-nums;
+  opacity:              0.75;
+}
+
+.options-music-song-title {
+  flex:          1 1 auto;
+  min-width:     0;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+/* A folder's or artist's name, cut to the heading's width. */
+.options-music-song-heading {
+  min-width:     0;
+  overflow:      hidden;
+  white-space:   nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The Music Library's dock: one entry row, shared by the two groupings. */
+.options-music-set-list-dock {
+  margin-top: 0;
+}
+
+.options-music-set-list-dock-row {
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--spacing-small);
+}
+
+
+
+.options-music-song-row > .options-curve-display.options-music-set-name {
+  /* As specific as the rule above, so it wins by coming later. */
+  text-align: start;
+}
+
