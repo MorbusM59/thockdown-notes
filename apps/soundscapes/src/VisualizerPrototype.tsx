@@ -32,7 +32,7 @@ function entryOf(file: Picked, index: number): MusicSongEntry {
   }
 }
 
-function FrameReadout() {
+function FrameReadout({ scale, setScale }: { scale: number; setScale: (scale: number) => void }) {
   const [text, setText] = useState('')
   useEffect(() => {
     let frame = 0
@@ -58,12 +58,11 @@ function FrameReadout() {
   }, [])
   // A tap steps the x n mode (displayScale.ts), so its cost can be read
   // off this readout as it changes.
-  const [scale, setScale] = useState(1)
-  useEffect(() => { void readDisplayScale().then(setScale) }, [])
   return (
     <button
       type="button"
       className="visualizer-prototype-readout"
+      style={{ fontSize: 12 / scale }}
       onClick={() => {
         const next = nextDisplayScale(scale)
         setScale(next)
@@ -80,6 +79,8 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
   // colours, fed exactly as the desktop feeds them.
   useBeatFeedback(true, DEFAULT_BEAT_SETTINGS, DEFAULT_VISUALIZER, colors, null, true, mode)
   const [songs, setSongs] = useState<Picked[]>([])
+  const [scale, setScale] = useState(1)
+  useEffect(() => { void readDisplayScale().then(setScale) }, [])
   const indexRef = useRef(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -129,13 +130,14 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
           fontFamily="'Kode Mono', monospace"
           fontSizePx={14}
           solidMaxPixelRatio={1.5}
+          pixelScale={scale}
           sceneSeed="soundscapes"
           gridOutlineRef={() => {}}
           onExit={onExit}
         />
       )}
       </div>
-      <FrameReadout />
+      <FrameReadout scale={scale} setScale={setScale} />
     </div>
   )
 }
