@@ -1,3 +1,4 @@
+import type { AboutLink, Credit } from '@thockdown/interaction/AboutPanel'
 import { version } from '../../package.json'
 
 /**
@@ -5,9 +6,9 @@ import { version } from '../../package.json'
  * published, where to report a problem, how to write, and what the app is
  * built from that asks to be credited.
  *
- * Desktop only for now. The credits differ per app (the Android app bundles
- * none of the fonts or dictionaries), so this moves into a package only when
- * the Android app grows its own About and the shared part is known.
+ * Drawn by the shared `@thockdown/interaction/AboutPanel`; the list is this
+ * app's own, because the Android app bundles none of the fonts or
+ * dictionaries (its list is `apps/soundscapes/src/about.ts`).
  *
  * Every link is opened by the system's browser or mail client through
  * `thockdownExport.openExternalUrl` (`electron/networkIsolation.ts`); the
@@ -16,30 +17,13 @@ import { version } from '../../package.json'
 
 export const APP_VERSION: string = version
 
-const REPOSITORY_URL = 'https://github.com/MorbusM59/thockdown-notes'
-
-export interface AboutLink {
-  /** The words on the button. */
-  label: string
-  /** What pressing it does, for the tooltip. */
-  intention: string
-  url: string
-}
+export const REPOSITORY_URL = 'https://github.com/MorbusM59/thockdown-notes'
 
 export const ABOUT_LINKS: readonly AboutLink[] = [
   { label: 'Releases', intention: 'Open the release page', url: `${REPOSITORY_URL}/releases` },
   { label: 'Issues', intention: 'Report a problem', url: `${REPOSITORY_URL}/issues` },
   { label: 'Email', intention: 'Write to thockdown@gmail.com', url: 'mailto:thockdown@gmail.com' },
 ]
-
-export interface Credit {
-  /** What is credited, and its licence, as the button shows it. */
-  label: string
-  /** What the app uses it for, for the tooltip. */
-  usedFor: string
-  /** Its source or licence page. */
-  url: string
-}
 
 /**
  * Third-party work the app redistributes and whose licence asks for credit.

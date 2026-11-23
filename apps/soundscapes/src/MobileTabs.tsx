@@ -8,6 +8,9 @@
  * can be judged on a device before their content is.
  */
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { AboutPanel } from '@thockdown/interaction/AboutPanel'
+import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { ABOUT_LINKS, APP_VERSION, CREDITS, openAboutLink } from './about'
 import { MOBILE_TABS, type MobileTab } from './mobileTabList'
 
 
@@ -55,13 +58,19 @@ export function VisualizerTab({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-/** Settings: Beat detection, Debugging and About, as the desktop's subsections. */
+/** Settings: Beat Detection, Debugging and About, the desktop's Options sections as accordions. */
 export function SettingsTab() {
   return (
-    <>
-      <TabPlaceholder name="Beat detection" />
-      <TabPlaceholder name="Debugging" />
-      <TabPlaceholder name="About" />
-    </>
+    <AccordionGroup>
+      <AccordionSection ariaLabel="Beat Detection" heading="Beat Detection" iconClass="fa-drum">
+        <p className="mobile-tab-placeholder">Coming soon.</p>
+      </AccordionSection>
+      <AccordionSection ariaLabel="Debugging" heading="Debugging" iconClass="fa-bug">
+        <p className="mobile-tab-placeholder">Coming soon.</p>
+      </AccordionSection>
+      <AccordionSection ariaLabel="About" heading="About" iconClass="fa-circle-info">
+        <AboutPanel appName="Thockdown Soundscapes" version={APP_VERSION} links={ABOUT_LINKS} credits={CREDITS} openLink={openAboutLink} />
+      </AccordionSection>
+    </AccordionGroup>
   )
 }

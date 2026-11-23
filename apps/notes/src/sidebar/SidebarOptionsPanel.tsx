@@ -6,7 +6,8 @@ import { createDictionary, readDictionaries, renameDictionary, subscribeDictiona
 import { openDictionary } from './dictionaryView'
 import { DictionaryMark } from './DictionaryPanel'
 import { TextButton } from '@thockdown/interaction/TextButton'
-import { AboutOptions } from '../about/AboutOptions'
+import { AboutPanel } from '@thockdown/interaction/AboutPanel'
+import { ABOUT_LINKS, APP_VERSION, CREDITS } from '../about/about'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
@@ -3674,7 +3675,7 @@ export function SidebarOptionsPanel({
         heading="About"
         iconClass="fa-circle-info"
       >
-        <AboutOptions />
+        <AboutPanel appName="Thockdown Notes" version={APP_VERSION} links={ABOUT_LINKS} credits={CREDITS} openLink={(url) => void window.thockdownExport?.openExternalUrl(url)} />
       </AccordionSection>
 
       </>) : null}
