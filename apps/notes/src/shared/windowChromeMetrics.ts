@@ -19,7 +19,7 @@
  * Every term mirrors a stylesheet value; each is named against the token or
  * rule it tracks so a change to either can be followed here.
  */
-import { AUDIO_GRID_COLUMNS } from './audioPlayer';
+import { AUDIO_GRID_COLUMNS } from '@thockdown/visualizer/shared/audioPlayer';
 
 /** tokens.css --spacing-regular */
 export const DEFAULT_SPACING_REGULAR_PX = 4;

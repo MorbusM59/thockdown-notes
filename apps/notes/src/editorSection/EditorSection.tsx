@@ -47,7 +47,7 @@ import type { PreviewMarkdownBlock, PreviewBlockSplitCache } from '../editor/Pre
 import type { SectionHandle } from './sectionRegistry'
 import { buildPersistedBlockMap, restorePersistedBlockMap } from '../editor/persistedBlockMap'
 import { requestFullBlockSplit } from '../editor/documentFactsClient'
-import { sanitizeDocumentText } from '../shared/textSanitization'
+import { sanitizeDocumentText } from '@thockdown/visualizer/shared/textSanitization'
 
 /** Same seed text as App.tsx's own NEW_NOTE_TEMPLATE (createNote) -- kept as its own local copy rather than a shared import to avoid a circular dependency (App.tsx is what mounts EditorSection). */
 const NEW_NOTE_TEMPLATE = '# '

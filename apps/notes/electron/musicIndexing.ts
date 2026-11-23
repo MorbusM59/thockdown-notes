@@ -1,7 +1,7 @@
 import { Worker } from 'node:worker_threads'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { IndexedMusicFile } from '../src/shared/audioPlayer'
+import type { IndexedMusicFile } from '@thockdown/visualizer/shared/audioPlayer'
 import type { MusicIndexRequest } from './musicIndexCore'
 
 /** Index files and folders alike (musicIndexCore.ts's `MusicIndexRequest`), off the main thread. */

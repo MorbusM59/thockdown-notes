@@ -17,11 +17,11 @@ import type { OptionsSectionId, PresetSubsectionId } from '../shared/optionsSect
 import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_NEUTRAL } from '@thockdown/audio/stereoWidth'
-import { DEFAULT_MUSIC_PLAYER_CONFIG } from '../sound/MusicPlayerService'
-import { readNowPlaying } from '../sound/nowPlaying'
-import type { EqPoint } from '../shared/musicEqCurve'
+import { DEFAULT_MUSIC_PLAYER_CONFIG } from '@thockdown/visualizer/sound/MusicPlayerService'
+import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
+import type { EqPoint } from '@thockdown/visualizer/shared/musicEqCurve'
 import { EqCurveEditor } from './EqCurveEditor'
-import { SOUNDSTAGE_KIND, type SoundstagePreferences } from '../shared/soundstages'
+import { SOUNDSTAGE_KIND, type SoundstagePreferences } from '@thockdown/visualizer/shared/soundstages'
 import { sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
 
 /** The box bevel's sliders, top to bottom (packages/look/boxBevel.ts). */
@@ -45,7 +45,7 @@ import {
   BEAT_RESPONSE_MIN_DB,
   DEFAULT_BEAT_SETTINGS,
   type BeatSettings,
-} from '../shared/beatSettings'
+} from '@thockdown/visualizer/shared/beatSettings'
 import {
   BEAT_CONTRAST_MAX,
   FALL_MAX_SEC,
@@ -124,7 +124,7 @@ import {
   CARET_HALO_BLUR_STEP_PX,
   CARET_HALO_BLUR_DEFAULT_PX,
 } from '@thockdown/look/caretSettings'
-import { FLASH_SHAPE_KIND, type FlashShape, type FlashShapePreferences, type FlashingSettings } from '../shared/flashing'
+import { FLASH_SHAPE_KIND, type FlashShape, type FlashShapePreferences, type FlashingSettings } from '@thockdown/visualizer/shared/flashing'
 import { FlashingOptions } from './FlashingOptions'
 import { TooltipOptions } from './TooltipOptions'
 import type { TooltipSettings } from '../shared/tooltipSettings'
@@ -243,7 +243,7 @@ import { idKind, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdow
 import { VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '../shared/visualizerPresets'
 import { KEYSTROKE_SOUND_KIND, KEYSTROKE_SOUND_RANGES, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
-import { useOutputDevice } from '../sound/outputDevice'
+import { useOutputDevice } from '@thockdown/visualizer/sound/outputDevice'
 import { BeatLoopCalibration } from './BeatLoopCalibration'
 import { resolveEditorFontFamily } from '../editor/EditorTypography'
 import {
@@ -260,7 +260,7 @@ import {
   WHEEL_SPIN_THRESHOLD_MAX_MS,
   WHEEL_SPIN_THRESHOLD_OFF,
   WHEEL_SPIN_THRESHOLD_STEP_MS,
-} from '../scroll/wheelSpin'
+} from '@thockdown/visualizer/scroll/wheelSpin'
 import {
   DEFAULT_WHEEL_STEP_LINES,
   DEFAULT_WHEEL_STEP_ROWS,
@@ -271,7 +271,7 @@ import {
   WHEEL_STEP_ROWS_MAX,
   WHEEL_STEP_ROWS_MIN,
   WHEEL_STEP_ROWS_STEP,
-} from '../scroll/wheelStep'
+} from '@thockdown/visualizer/scroll/wheelStep'
 import type { GameSettings } from '../adventure/model/gameState'
 import {
   DEFAULT_PROGRESSION, PROGRESSION_MAX, PROGRESSION_MIN, PROGRESSION_STEP,

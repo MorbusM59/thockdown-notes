@@ -5,7 +5,7 @@ import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
   WHEEL_SPIN_DAMPEN_ENDLESS,
   resolveWheelSpinDecay,
-} from './wheelSpin'
+} from '@thockdown/visualizer/scroll/wheelSpin'
 import {
   addWheelSpinProfileCarry,
   buildWheelSpinProfile,

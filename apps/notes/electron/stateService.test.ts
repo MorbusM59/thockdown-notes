@@ -12,8 +12,8 @@ import { emptySave } from '../src/adventure/model/gameState'
 import { ROOT_STAGE_ID, STAGES } from '../src/adventure/stages'
 import { DEFAULT_SOUNDSCAPE_PREFERENCES, SOUNDSCAPE_FACTORY_PRESETS, cloneSettings } from '@thockdown/soundscape/soundscape'
 import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES, FACTORY_KEYSTROKE_SOUNDS } from '../src/shared/keystrokeSounds'
-import { DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE } from '../src/shared/soundstages'
-import { DEFAULT_FLASH_SHAPE_PREFERENCES, FACTORY_FLASH_SHAPES, FLASH_MATCHING_DEFAULT } from '../src/shared/flashing'
+import { DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE } from '@thockdown/visualizer/shared/soundstages'
+import { DEFAULT_FLASH_SHAPE_PREFERENCES, FACTORY_FLASH_SHAPES, FLASH_MATCHING_DEFAULT } from '@thockdown/visualizer/shared/flashing'
 
 // Regression coverage for the exact bug class this file is prone to:
 // sanitizeMenu (private, routed through by both saveAppState and

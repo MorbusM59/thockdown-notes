@@ -1,4 +1,4 @@
-import type { EventChannels, InvokeChannels } from './ipcContract';
+import type { EventChannels, InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 import { isExternalTagName } from './tags'
 
 export const NOTE_LIFECYCLE_CHANNELS = {

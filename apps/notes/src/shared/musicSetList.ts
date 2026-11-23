@@ -1,4 +1,4 @@
-import { createPoolFilterMatcher, songAlbumText, songArtistText, songListTitleText, type MusicSongEntry } from './audioPlayer'
+import { createPoolFilterMatcher, songAlbumText, songArtistText, songListTitleText, type MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
 
 /**
  * The SET LIST: one music set's songs, as the Music Library shows them in the

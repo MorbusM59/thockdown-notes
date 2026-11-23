@@ -15,7 +15,7 @@ import {
   FLASH_Y_STEP,
   type FlashShape,
   type FlashingSettings,
-} from '../shared/flashing'
+} from '@thockdown/visualizer/shared/flashing'
 import { CurveEditor, type CurveAxisFormat, type CurveGridLine } from './CurveEditor'
 
 /** Twelve segments of a bar: dashed on the beats (every third), dotted between. */

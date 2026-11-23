@@ -5,7 +5,7 @@ import type { NoteSummary } from '../shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote } from '../shared/noteLifecycle'
 import { withSavedNote } from '../shared/noteContentStore'
 import { applyProtectedTagDestination } from '../shared/protectedTagActions'
-import { sanitizeDocumentText } from '../shared/textSanitization'
+import { sanitizeDocumentText } from '@thockdown/visualizer/shared/textSanitization'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import type { NoteDocumentStore } from './noteDocumentStore'
 

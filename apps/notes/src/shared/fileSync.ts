@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 export const FILE_SYNC_CHANNELS = {
   importNotes: 'file-sync:import-notes',
   backupDatabase: 'file-sync:backup-database',

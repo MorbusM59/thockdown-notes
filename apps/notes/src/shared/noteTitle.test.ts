@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { deriveNoteTitleFromText } from './noteTitle'
 import { normalizeInternalText } from '../editor/TextPolicy'
-import { truncateTitle } from './textSanitization'
+import { truncateTitle } from '@thockdown/visualizer/shared/textSanitization'
 
 describe('deriveNoteTitleFromText', () => {
   it('uses the first line only for a note title', () => {

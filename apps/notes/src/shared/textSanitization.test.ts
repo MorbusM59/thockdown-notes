@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeDocumentText, sanitizedFirstLine, sanitizeTextFragment } from './textSanitization';
+import { sanitizeDocumentText, sanitizedFirstLine, sanitizeTextFragment } from '@thockdown/visualizer/shared/textSanitization';
 import { normalizeInternalText } from '../editor/TextPolicy';
 
 describe('tab normalization protocol', () => {

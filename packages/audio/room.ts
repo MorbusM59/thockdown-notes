@@ -3,7 +3,7 @@
  * anywhere in the Thockdown family. The soundscape's ConvolverNodes
  * (@thockdown/soundscape/soundscapeLivePlayback.ts) and Android's partitioned
  * convolution (@thockdown/soundscape/soundscapeMix.ts) use it, and so does
- * the desktop music player's reverb (apps/notes/src/sound/MusicPlayerService.ts).
+ * the desktop music player's reverb (packages/visualizer/sound/MusicPlayerService.ts).
  * Pure; built whenever the room changes, never per sample or per frame.
  *
  * TWO NUMBERS MAKE THE PLACE (RoomShape): SIZE sets the clock and FOLIAGE

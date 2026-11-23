@@ -59,7 +59,10 @@ export const DEFAULT_MUSIC_PLAYER_CONFIG: Readonly<MusicPlayerConfig> = {
  * truncating every absolute path and making every file 404.
  */
 function toMusicUrl(filePath: string): string {
-  if (filePath.startsWith('thockdown-music://')) return filePath;
+  // A URL already (the desktop's own scheme, or a blob: URL the Android app
+  // makes for a file picked in the system picker) is played as it is. The
+  // scheme takes two letters or more so a Windows drive letter is a path.
+  if (/^[a-z][a-z0-9+.-]+:/i.test(filePath)) return filePath;
   // Normalise backslashes, then encode special characters (spaces, #, ? etc.)
   // in the path while preserving slashes and the Windows drive-letter colon.
   const posix = filePath.replace(/\\/g, '/');

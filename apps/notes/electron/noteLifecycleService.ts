@@ -22,7 +22,7 @@ import type {
   TagSummary,
 } from '../src/shared/noteLifecycle';
 import { leadLineOf } from '../src/shared/tabLabels';
-import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '../src/shared/textSanitization';
+import { sanitizeDocumentText, sanitizedFirstLine, truncateTitle } from '@thockdown/visualizer/shared/textSanitization';
 import { computeHeadingAnchors, formatHeadingAnchorFragment, formatOutlineEntryLine, formatOutlineRootTitleLine, headingsChanged, parseMarkdownHeading, stripMarkdownInlineFormatting } from '../src/shared/tableOfContentsText';
 import { assembleOpenItemsText, buildOpenItemsGroupMarkdown, checklistStateChanged, findOpenItemSourceAtLine, parseOpenItemsGroups, toggleChecklistItemByText } from '../src/shared/openItemsText';
 import { resolveIdentityLabel } from '../src/shared/tabLabels';

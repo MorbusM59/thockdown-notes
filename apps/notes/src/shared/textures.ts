@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 import type { TextureSurfaceKey } from '@thockdown/look/textureTypes';
 
 export const TEXTURE_CHANNELS = {

@@ -493,7 +493,7 @@ review.
 
 ### Playlist slot 1 has songs but no button
 
-**What.** `PLAYLIST_BUTTON_SLOTS` in `apps/notes/src/shared/audioPlayer.ts` omits slot 1
+**What.** `PLAYLIST_BUTTON_SLOTS` in `packages/visualizer/shared/audioPlayer.ts` omits slot 1
 (formerly "Vocal"), while `PLAYLIST_SLOTS`, the database CHECK constraint and
 the persisted-state sanitizer still accept it. Restoring the active slots
 filters slot 1 out (`isPlaylistButtonSlot` in `App.tsx`).

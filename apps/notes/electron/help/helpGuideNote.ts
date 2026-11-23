@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { sanitizeDocumentText } from '../../src/shared/textSanitization';
+import { sanitizeDocumentText } from '@thockdown/visualizer/shared/textSanitization';
 import type { DatabaseService } from '../databaseService';
 import type { NoteLifecycleService } from '../noteLifecycleService';
 import { isAutoAssignedId } from '../../src/shared/assignedIds';

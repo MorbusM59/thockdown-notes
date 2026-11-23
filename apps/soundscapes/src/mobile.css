@@ -218,3 +218,33 @@ body {
   line-height: 1;
   text-align: left;
 }
+
+/* PROTOTYPE: the visualizer page (VisualizerPrototype.tsx), full screen over the app. */
+.visualizer-prototype {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--background-color-root);
+}
+.visualizer-prototype-pick {
+  display: flex;
+  gap: var(--spacing-regular, 12px);
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+.visualizer-prototype-readout {
+  position: fixed;
+  left: 4px;
+  bottom: 4px;
+  z-index: 60;
+  font: 12px monospace;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 4px;
+  pointer-events: none;
+}
+.visualizer-prototype-stage {
+  position: absolute;
+  inset: 0;
+}

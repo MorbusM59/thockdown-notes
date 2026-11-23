@@ -1,4 +1,4 @@
-import type { InvokeChannels } from './ipcContract';
+import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
 
 export const NOTE_TABS_CHANNELS = {
   listTabs: 'tabs:list',

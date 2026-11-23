@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as guide from '../../electron/help/helpGuideContent'
 import * as welcome from '../../electron/help/helpNoteContent'
-import { singleCellText } from './singleCellText'
+import { singleCellText } from '@thockdown/visualizer/shared/singleCellText'
 
 /**
  * The text the app seeds as notes -- the User Guide and the welcome note --

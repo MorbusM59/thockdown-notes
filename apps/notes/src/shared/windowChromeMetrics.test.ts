@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AUDIO_GRID_COLUMNS } from './audioPlayer'
+import { AUDIO_GRID_COLUMNS } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   BTN_SQUARE_LARGE_SIZE_PX,
   computeWindowControlsCollapsedWidthPx,

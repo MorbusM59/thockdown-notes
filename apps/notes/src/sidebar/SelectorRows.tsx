@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNonPassiveWheel } from '@thockdown/interaction/useNonPassiveWheel'
-import { createWheelNotchState, resolveWheelEventUnits } from '../scroll/wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/visualizer/scroll/wheelNotch'
 
 /** How many rows a growing selector shows before it scrolls: three rows of six, eighteen sections. */
 const SELECTOR_VISIBLE_ROWS = 3

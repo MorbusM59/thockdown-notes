@@ -31,14 +31,14 @@
  * `<html>` (`--beat-edge-color`, `--beat-edge-spread`, `--beat-edge-blur`, `--beat-pane-color`).
  */
 
-import { setGridWaveSettings } from '../visualizer/gridWaveTurn'
+import { setGridWaveSettings } from '@thockdown/visualizer/visualizer/gridWaveTurn'
 import { useEffect, useRef } from 'react'
 import type { VisualizerChannel, VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import type { BeatSettings } from '../shared/beatSettings'
-import { musicPlayerService } from '../sound/MusicPlayerService'
-import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix, type FlashClock, type MusicClockSubscription } from '../sound/musicBeat'
+import { musicPlayerService } from '@thockdown/visualizer/sound/MusicPlayerService'
+import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix, type FlashClock, type MusicClockSubscription } from '@thockdown/visualizer/sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
-import { setSpectrumFall, setSpectrumStripRows } from '../visualizer/spectrumBands'
+import { setSpectrumFall, setSpectrumStripRows } from '@thockdown/visualizer/visualizer/spectrumBands'
 import { setLiveStyle } from '../shared/liveStyle'
 
 type BlockName = 'edge' | 'pane' | 'wash'

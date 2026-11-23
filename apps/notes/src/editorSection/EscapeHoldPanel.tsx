@@ -10,7 +10,7 @@ import {
 } from '@thockdown/interaction/ScrollCurvePlan'
 import { buildEscapeHoldRotationPlan, pixelsPerSlotAt } from './escapeHoldRotationCurve'
 import { computeEscapeHoldPointAtSlot, escapeHoldRingHalfExtentPx } from './escapeHoldRingLayout'
-import { createWheelNotchState, resolveWheelEventUnits } from '../scroll/wheelNotch'
+import { createWheelNotchState, resolveWheelEventUnits } from '@thockdown/visualizer/scroll/wheelNotch'
 import { typingSoundManager } from '../sound/TypingSoundManager'
 import { TYPING_SOUND_SAMPLES_PER_SET } from '../sound/typingSounds'
 import {

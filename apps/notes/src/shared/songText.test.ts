@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { songAlbumText, songArtistText, songTitleText } from './audioPlayer'
+import { songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
 
 describe('song text', () => {
   it('falls back from a missing title to the file and up to two folders', () => {

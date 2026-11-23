@@ -26,7 +26,7 @@
  */
 
 import { DEFAULT_TYPING_TRAIL_SETTINGS, type TypingTrailSettings } from '../shared/typingTrailSettings'
-import { setLiveStyle } from '../shared/liveStyle'
+import { setLiveStyle } from '@thockdown/visualizer/shared/liveStyle'
 
 /** Samples per curve: the curve is not one CSS can name, so it becomes a linear keyframe list. */
 const SAMPLES = 32

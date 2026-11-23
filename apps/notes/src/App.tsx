@@ -24,15 +24,15 @@ import {
   type MusicBarRow,
   type MusicPoolFilter,
   type MusicSet,
-} from './shared/audioPlayer'
-import { readPanelsShown, setPanelsShown } from './visualizer/panelsShown'
-import { readPoolFilterFields } from './visualizer/poolFilterDraft'
-import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from './shared/musicEqCurve'
+} from '@thockdown/visualizer/shared/audioPlayer'
+import { readPanelsShown, setPanelsShown } from '@thockdown/visualizer/visualizer/panelsShown'
+import { readPoolFilterFields } from '@thockdown/visualizer/visualizer/poolFilterDraft'
+import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from '@thockdown/visualizer/shared/musicEqCurve'
 import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES, KEYSTROKE_CHANNEL_IDS, KEYSTROKE_SOUND_KIND, NEUTRAL_KEYSTROKE_SOUND, sanitizeKeystrokeSoundPreferences, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
-import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE, FACTORY_SOUNDSTAGE_IDS, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from './shared/soundstages'
+import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE, FACTORY_SOUNDSTAGE_IDS, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from '@thockdown/visualizer/shared/soundstages'
 import { activePreset, createPreset, editActivePreset, newPresetId, presetsOf, selectPreset, type PresetList } from '@thockdown/interaction/presetList'
-import { publishSoundstageControls } from './sound/soundstageControls'
-import { readNowPlaying } from './sound/nowPlaying'
+import { publishSoundstageControls } from '@thockdown/visualizer/sound/soundstageControls'
+import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
 import {
@@ -67,7 +67,7 @@ import {
   type GlazeSettings,
 } from '@thockdown/look/glaze'
 import { DEFAULT_BOX_BEVEL, onScreenBoxBevel, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
-import { publishBoxBevel } from './shared/boxBevelStore'
+import { publishBoxBevel } from '@thockdown/visualizer/shared/boxBevelStore'
 import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
   idKind,
@@ -80,7 +80,7 @@ import type { NoteSummary } from './shared/noteLifecycle'
 import { isArchivedNote, isChapterOnlyNote, isDeletedNote, isExternalNote, isSameNoteSummary } from './shared/noteLifecycle'
 import { adoptNoteSummaries, keepIfUnchanged, withSavedNote } from './shared/noteContentStore'
 import { applyNonOverlappingChanges, createNoteDocumentStore } from './editorSection/noteDocumentStore'
-import { DEFAULT_MUSIC_PLAYER_CONFIG, musicPlayerService } from './sound/MusicPlayerService'
+import { DEFAULT_MUSIC_PLAYER_CONFIG, musicPlayerService } from '@thockdown/visualizer/sound/MusicPlayerService'
 import { sanitizeStereoWidth } from '@thockdown/audio/stereoWidth'
 import { registerQuitParticipant, settleForQuit } from './shared/quitParticipants'
 import { installExternalFileSync } from './editorSection/externalFileSync'
@@ -152,7 +152,7 @@ import {
   type FlashShape,
   type FlashShapePreferences,
   type FlashingSettings,
-} from './shared/flashing'
+} from '@thockdown/visualizer/shared/flashing'
 import {
   BORDER_RADIUS_REGULAR_MIN_PX,
   BORDER_RADIUS_REGULAR_MAX_PX,
@@ -172,8 +172,8 @@ import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings, type Typing
 import { typingTrail } from './typingTrail/typingTrail'
 import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type SpeedReadingSettings } from './speedReading/speedReadingSettings'
 import { onSpeedReadingSettingsCommit, setSpeedReadingSettings as applySpeedReadingSettings } from './speedReading/speedReadingStore'
-import { useBeatFeedback } from './beat/useBeatFeedback'
-import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from './shared/beatSettings'
+import { useBeatFeedback } from '@thockdown/visualizer/beat/useBeatFeedback'
+import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings, type BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 import { DEFAULT_FEATURE_TOGGLES, sanitizeFeatureToggles, type FeatureToggles } from './shared/features'
 import { DEFAULT_OPTIONS_SECTION, sanitizeOptionsSection, type OptionsSectionId, type PresetSubsectionId } from './shared/optionsSections'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, sanitizeMusicSetListGrouping, type MusicSetListGrouping } from './shared/musicSetList'
@@ -250,7 +250,7 @@ import { readPageZoomFactor } from './window/pageZoom'
 import { splitChapterFamily } from './shared/chapters'
 import { trimBlankLines } from './chapters/chapterExtraction'
 import type { ExportScope } from './editorSection/EscapeHoldPanel'
-import { sanitizeDocumentText, truncateTitle } from './shared/textSanitization'
+import { sanitizeDocumentText, truncateTitle } from '@thockdown/visualizer/shared/textSanitization'
 import { deriveNoteTitleFromText } from './shared/noteTitle'
 import { isNoteSearchQueryActive, matchesNoteSearchQuery } from './shared/noteSearch'
 import { useAdventureEscapeMenu } from './adventure/useAdventureEscapeMenu'
@@ -295,7 +295,7 @@ import {
   WHEEL_STEP_LINES_MIN,
   WHEEL_STEP_ROWS_MAX,
   WHEEL_STEP_ROWS_MIN,
-} from './scroll/wheelStep'
+} from '@thockdown/visualizer/scroll/wheelStep'
 import {
   getWheelSpinCutoffMs,
   getWheelSpinDampenDivisor,
@@ -309,7 +309,7 @@ import {
   WHEEL_SPIN_DAMPEN_ENDLESS,
   WHEEL_SPIN_THRESHOLD_MAX_MS,
   WHEEL_SPIN_THRESHOLD_OFF,
-} from './scroll/wheelSpin'
+} from '@thockdown/visualizer/scroll/wheelSpin'
 import {
   FILTER_MONTHS,
   FILTER_YEARS,
@@ -2258,7 +2258,7 @@ function App() {
   useEffect(() => {
     soundscapeEngine.apply(soundscapePreferences)
   }, [soundscapePreferences])
-  const [musicActiveSlots, setMusicActiveSlots] = useState<import('./shared/audioPlayer').PlaylistSlot[]>([])
+  const [musicActiveSlots, setMusicActiveSlots] = useState<import('@thockdown/visualizer/shared/audioPlayer').PlaylistSlot[]>([])
   const [musicSets, setMusicSets] = useState<MusicSet[]>(() =>
     FACTORY_MUSIC_SETS.map((set) => ({ ...set })),
   )

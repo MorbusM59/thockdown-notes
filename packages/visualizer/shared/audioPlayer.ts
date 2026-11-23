@@ -424,3 +424,11 @@ export function musicSetMark(name: string): string {
   const mark = words.length >= 2 ? [...words[0]][0] + [...words[1]][0] : [...(words[0] ?? '')].slice(0, 2).join('')
   return mark.toUpperCase()
 }
+
+// The music library port: the desktop's main process supplies it through the
+// preload; another app sets it before the visualizer reads the pool.
+declare global {
+  interface Window {
+    thockdownAudioPlayer?: AudioPlayerApi;
+  }
+}

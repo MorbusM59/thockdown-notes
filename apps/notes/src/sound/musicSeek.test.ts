@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveSeekPress, resolveSeekTarget, SEEK_TAIL_GUARD_SEC } from './MusicPlayerService'
+import { resolveSeekPress, resolveSeekTarget, SEEK_TAIL_GUARD_SEC } from '@thockdown/visualizer/sound/MusicPlayerService'
 
 const DURATION = 200
 const END = DURATION - SEEK_TAIL_GUARD_SEC

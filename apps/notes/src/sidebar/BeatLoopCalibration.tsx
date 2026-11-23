@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { pulseCurve } from '@thockdown/look/visualizer'
 import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
-import { useBoxBevelImages } from '../shared/boxBevelStore'
-import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '../shared/beatSettings'
+import { useBoxBevelImages } from '@thockdown/visualizer/shared/boxBevelStore'
+import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '@thockdown/visualizer/shared/beatSettings'
 import { useHoldToAdjust, type HoldToAdjustKeyboardController } from '../shared/useHoldToAdjust'
 import { BEAT_LOOPS, lastHit, startBeatLoop, type LoopRun } from '../sound/beatLoopCalibration'
 

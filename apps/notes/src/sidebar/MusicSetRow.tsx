@@ -1,10 +1,10 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
-import { isFactoryMusicSet, PLAYLIST_SLOT_THEMES, type MusicSet, musicSetMarkOf } from '../shared/audioPlayer'
+import { isFactoryMusicSet, PLAYLIST_SLOT_THEMES, type MusicSet, musicSetMarkOf } from '@thockdown/visualizer/shared/audioPlayer'
 import { isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from './iconPicker/iconPick'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
-import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
+import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 
 /** A set's mark (musicSetMarkOf): its icon, or its initials. */
 export function SetMark({ set }: { set: MusicSet }) {
