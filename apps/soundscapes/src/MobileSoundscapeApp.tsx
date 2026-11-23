@@ -411,6 +411,19 @@ export function MobileSoundscapeApp() {
     setSchedule((current) => ({ ...current, enabled: true }))
   }
 
+  const dockContent = tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
+                  : tab === 'soundscapes' ? (
+                    <SoundscapeDock
+                      preferences={preferences}
+                      onChange={setPreferences}
+                      picking={iconQuery !== null}
+                      onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
+                      detail={timeLeft}
+                    />
+                  )
+                  : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
+                  : null
+
   // The desktop's frame, outermost first (see shared/loadoutTheme.ts), so the
   // shared stylesheet and theme variables land where they expect to.
   return (
@@ -426,18 +439,9 @@ export function MobileSoundscapeApp() {
               <SidebarFrame
                 panelMode
                 contentRef={pageScrollerRef}
-                dock={tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
-                  : tab === 'soundscapes' ? (
-                    <SoundscapeDock
-                      preferences={preferences}
-                      onChange={setPreferences}
-                      picking={iconQuery !== null}
-                      onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
-                      detail={timeLeft}
-                    />
-                  )
-                  : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
-                  : null}
+                // Each dock in the desktop's dock wrapper (sidebarFrame.css's
+                // .sidebar-plain-dock), which sets it off the panel and the edge.
+                dock={dockContent === null ? null : <div className="sidebar-plain-dock">{dockContent}</div>}
                 scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
               >
               <div className="options-content sidebar-options-content mobile-tab-content">

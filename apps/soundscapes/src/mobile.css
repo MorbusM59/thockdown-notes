@@ -36,9 +36,13 @@ body {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  /* No side padding: the panel's frame meets the screen's left edge, and the
-     scrollbar's column is the right margin. */
-  padding: calc(env(safe-area-inset-top) + 8px) 0 calc(env(safe-area-inset-bottom) + 16px) 0;
+  /* The desktop sidebar's own padding (.notes-sidebar): one regular spacing
+     from the screen's top, right and bottom edges (inside the system's safe
+     area), none on the left, where the panel's frame meets the edge. With
+     the sidebar's gap of one regular spacing between selector, panel and
+     dock, and between panel and scrollbar, every space around the panel is
+     the button grid's own gap. */
+  padding: calc(env(safe-area-inset-top) + var(--spacing-regular)) var(--spacing-regular) calc(env(safe-area-inset-bottom) + var(--spacing-regular)) 0;
 }
 
 /* Every button grid is six equal columns spanning the row, with square
@@ -56,6 +60,15 @@ body {
   /* The panel's content is the page's whole width here, not the desktop
      sidebar's six-button column, so the shared sections fill it. */
   --sidebar-options-content-width: 100%;
+}
+
+/* The desktop centres a column one gap and a pixel wider than its six
+   buttons inside the panel's large padding (tokens.css's
+   --sidebar-options-content-width), so its grid sits a large spacing, a
+   regular one and a pixel in from the panel's edges. The phone's column is
+   the whole width, so that inset is the padding itself. */
+.mobile-app-shell .sidebar-options-content {
+  padding-inline: calc(var(--spacing-large) + var(--spacing-regular) + 1px);
 }
 
 .mobile-app-shell .options-loadout-grid > * {
@@ -220,11 +233,13 @@ body {
 }
 
 /* The page's scrollbar, in the frame's scrollbar slot at the right edge
-   where the system's would be: a column a fingertip wide, the desktop's
-   track drawn in its middle, and the whole column grabs (PageScrollbar.tsx).
-   It fills the slot, which is the frame's height. */
+   where the system's would be, laid out as the desktop's: one regular
+   spacing from the panel, then the track. The track is wider than the
+   desktop's by the ratio the phone's buttons are (a desktop track is about
+   two thirds of a 32px button; the phone's buttons are about 55px), which
+   also makes it a fingertip wide; the whole column grabs (PageScrollbar.tsx). */
 .mobile-app-shell {
-  --sidebar-scrollbar-slot-width: 44px;
+  --sidebar-scrollbar-slot-width: calc(var(--spacing-regular) + 36px);
 }
 
 .mobile-scrollbar-slot {
@@ -234,9 +249,11 @@ body {
 }
 
 .mobile-scroll-rail {
-  padding: 0;
-  justify-content: center;
   pointer-events: none;
+}
+
+.mobile-scroll-rail > .thockdown-scroll-track {
+  width: 100%;
 }
 
 /* Entry rows (the soundscape dock, the icon filter): a finger's height
@@ -321,10 +338,6 @@ body {
 }
 
 /* The view selector above the sidebar frame (MobileTabs.tsx), spaced from it as the desktop's. */
-.mobile-tab-selector {
-  margin-bottom: var(--spacing-regular);
-}
-
 .mobile-soundscape-shell {
   display: flex;
   flex-direction: column;
