@@ -8,8 +8,9 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
  * The Android side of src/display.ts: the x n mode (MainActivity's
- * applyDisplayScale) and the screen's orientation, chosen by the reader
- * rather than by the phone's sensor. Both are kept by the activity.
+ * applyDisplayScale) and the visualizer's orientation, chosen by the reader
+ * rather than by the phone's sensor and applied only while the page reports
+ * the visualizer open. Both are kept by the activity.
  */
 @CapacitorPlugin(name = "Display")
 public class DisplayPlugin extends Plugin {
@@ -42,6 +43,17 @@ public class DisplayPlugin extends Plugin {
             return;
         }
         ((MainActivity) getActivity()).setLandscape(landscape);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void setVisualizerOpen(PluginCall call) {
+        Boolean open = call.getBoolean("open");
+        if (open == null) {
+            call.reject("open must be true or false");
+            return;
+        }
+        ((MainActivity) getActivity()).setVisualizerOpen(open);
         call.resolve();
     }
 }

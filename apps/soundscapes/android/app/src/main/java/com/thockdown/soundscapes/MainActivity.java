@@ -45,11 +45,13 @@ public class MainActivity extends BridgeActivity {
     private int displayScale = MIN_DISPLAY_SCALE;
     private static final String LANDSCAPE_KEY = "landscape";
     /**
-     * The screen's orientation, a switch the reader turns rather than the
-     * phone's sensor: portrait (the manifest's default) or landscape, either
-     * way up.
+     * The visualizer's orientation, a switch the reader turns rather than the
+     * phone's sensor: portrait or landscape, either way up. It applies only
+     * while the visualizer is open (visualizerOpen); the rest of the app is
+     * always portrait, the manifest's default.
      */
     private boolean landscape = false;
+    private boolean visualizerOpen = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -71,7 +73,6 @@ public class MainActivity extends BridgeActivity {
         SharedPreferences display = getSharedPreferences(DISPLAY_PREFERENCES, MODE_PRIVATE);
         displayScale = Math.max(MIN_DISPLAY_SCALE, Math.min(MAX_DISPLAY_SCALE, display.getInt(DISPLAY_SCALE_KEY, MIN_DISPLAY_SCALE)));
         landscape = display.getBoolean(LANDSCAPE_KEY, false);
-        applyOrientation();
         View webView = getBridge().getWebView();
         ((View) webView.getParent()).addOnLayoutChangeListener((parent, l, t, r, b, ol, ot, or, ob) -> {
             if (r - l != or - ol || b - t != ob - ot) applyDisplayScale();
@@ -100,8 +101,13 @@ public class MainActivity extends BridgeActivity {
         runOnUiThread(this::applyOrientation);
     }
 
+    void setVisualizerOpen(boolean open) {
+        visualizerOpen = open;
+        runOnUiThread(this::applyOrientation);
+    }
+
     private void applyOrientation() {
-        setRequestedOrientation(landscape
+        setRequestedOrientation(visualizerOpen && landscape
             ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
     }

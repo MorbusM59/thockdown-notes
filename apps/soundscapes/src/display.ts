@@ -2,8 +2,9 @@
  * The display switches the reader turns (MainActivity, DisplayPlugin): the
  * x n mode -- the whole page drawn at 1/n of the screen's resolution and
  * scaled up n times, so everything is n times larger and costs n squared
- * less to draw -- and the screen's orientation, portrait or landscape,
- * chosen rather than detected. Native only; in a browser neither exists.
+ * less to draw -- and the visualizer's orientation, portrait or landscape,
+ * chosen rather than detected, applied only while the visualizer is open
+ * (the rest of the app is always portrait). Native only; in a browser neither exists.
  */
 import { Capacitor, registerPlugin } from '@capacitor/core'
 
@@ -19,6 +20,7 @@ interface DisplayPlugin {
   get(): Promise<DisplayState>
   setScale(options: { scale: number }): Promise<void>
   setLandscape(options: { landscape: boolean }): Promise<void>
+  setVisualizerOpen(options: { open: boolean }): Promise<void>
 }
 
 const plugin = Capacitor.isNativePlatform() ? registerPlugin<DisplayPlugin>('Display') : null
@@ -38,4 +40,9 @@ export async function setLandscape(landscape: boolean): Promise<void> {
 /** The next scale after `scale`, from the largest back to 1. */
 export function nextDisplayScale(scale: number): number {
   return scale >= MAX_DISPLAY_SCALE ? MIN_DISPLAY_SCALE : scale + 1
+}
+
+/** Reports the visualizer open or closed; its orientation applies only while open. */
+export async function setVisualizerOpen(open: boolean): Promise<void> {
+  if (plugin) await plugin.setVisualizerOpen({ open })
 }

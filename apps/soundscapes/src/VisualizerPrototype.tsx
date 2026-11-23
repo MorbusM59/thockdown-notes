@@ -12,7 +12,7 @@
  * (median and 95th percentile) and how many frames took longer than 1.5x the
  * display's own frame, the units a stutter is felt in.
  */
-import { nextDisplayScale, readDisplay, setDisplayScale, setLandscape } from './display'
+import { nextDisplayScale, readDisplay, setDisplayScale, setLandscape, setVisualizerOpen } from './display'
 import { useEffect, useRef, useState } from 'react'
 import { VisualizerScene } from '@thockdown/visualizer/visualizer/VisualizerScene'
 import { musicPlayerService } from '@thockdown/visualizer/sound/MusicPlayerService'
@@ -82,6 +82,10 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
   const [scale, setScale] = useState(1)
   const [landscape, setLandscapeState] = useState(false)
   useEffect(() => {
+    void setVisualizerOpen(true)
+    return () => { void setVisualizerOpen(false) }
+  }, [])
+  useEffect(() => {
     void readDisplay().then((display) => {
       setScale(display.scale)
       setLandscapeState(display.landscape)
@@ -144,7 +148,7 @@ export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => vo
       )}
       </div>
       <FrameReadout scale={scale} setScale={setScale} />
-      {/* The orientation switch: the screen turns only when this is pressed. */}
+      {/* The visualizer's orientation switch: it turns only when this is pressed. */}
       <button
         type="button"
         className="visualizer-prototype-readout visualizer-prototype-orientation"
