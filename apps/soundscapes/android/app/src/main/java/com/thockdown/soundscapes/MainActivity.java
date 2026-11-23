@@ -1,5 +1,6 @@
 package com.thockdown.soundscapes;
 
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -27,6 +28,21 @@ public class MainActivity extends BridgeActivity {
     /** The WebView's accessibility importance before the overlay hid it, restored when it goes. */
     private int webViewAccessibility;
 
+    static final int MIN_DISPLAY_SCALE = 1;
+    static final int MAX_DISPLAY_SCALE = 4;
+    private static final String DISPLAY_PREFERENCES = "display";
+    private static final String DISPLAY_SCALE_KEY = "scale";
+    /**
+     * The x n mode: the WebView is laid out at 1/n of its parent and drawn n
+     * times larger, into a hardware layer of its own size. The page sees a
+     * screen n times smaller, so everything on it is n times larger and
+     * there are n squared fewer pixels to draw: every filter, mask and
+     * canvas costs that much less. Making things larger inside the page
+     * (desktop's double mode) cannot do that, since a WebView always
+     * rasterizes at the screen's own resolution.
+     */
+    private int displayScale = MIN_DISPLAY_SCALE;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // Before super.onCreate, as the splash library requires. The system
@@ -36,6 +52,7 @@ public class MainActivity extends BridgeActivity {
         // Local plugins must be registered before the bridge is created.
         registerPlugin(BackgroundAudioPlugin.class);
         registerPlugin(LaunchPlugin.class);
+        registerPlugin(DisplayScalePlugin.class);
         super.onCreate(savedInstanceState);
         // The page draws its own scrollbar (src/PageScrollbar.tsx), the only
         // way it scrolls; the WebView's would be a second one beside it,
@@ -43,6 +60,49 @@ public class MainActivity extends BridgeActivity {
         getBridge().getWebView().setVerticalScrollBarEnabled(false);
         getBridge().getWebView().setHorizontalScrollBarEnabled(false);
         addLaunchOverlay();
+        displayScale = getSharedPreferences(DISPLAY_PREFERENCES, MODE_PRIVATE).getInt(DISPLAY_SCALE_KEY, MIN_DISPLAY_SCALE);
+        View webView = getBridge().getWebView();
+        ((View) webView.getParent()).addOnLayoutChangeListener((parent, l, t, r, b, ol, ot, or, ob) -> {
+            if (r - l != or - ol || b - t != ob - ot) applyDisplayScale();
+        });
+        applyDisplayScale();
+    }
+
+    int displayScale() {
+        return displayScale;
+    }
+
+    void setDisplayScale(int scale) {
+        displayScale = scale;
+        SharedPreferences.Editor editor = getSharedPreferences(DISPLAY_PREFERENCES, MODE_PRIVATE).edit();
+        editor.putInt(DISPLAY_SCALE_KEY, scale).apply();
+        runOnUiThread(this::applyDisplayScale);
+    }
+
+    /** Sizes and scales the WebView for the current x n mode against its parent's size. */
+    private void applyDisplayScale() {
+        View webView = getBridge().getWebView();
+        View parent = (View) webView.getParent();
+        int n = displayScale;
+        ViewGroup.LayoutParams params = webView.getLayoutParams();
+        int width = parent.getWidth();
+        int height = parent.getHeight();
+        if (n == 1 || width == 0 || height == 0) {
+            params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+            params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+        } else {
+            // Rounded up, so the scaled view always reaches the far edges.
+            params.width = (width + n - 1) / n;
+            params.height = (height + n - 1) / n;
+        }
+        webView.setLayoutParams(params);
+        webView.setPivotX(0);
+        webView.setPivotY(0);
+        webView.setScaleX(n);
+        webView.setScaleY(n);
+        // Without a layer of its own the WebView would rasterize through the
+        // scale at full resolution and save nothing.
+        webView.setLayerType(n == 1 ? View.LAYER_TYPE_NONE : View.LAYER_TYPE_HARDWARE, null);
     }
 
     private void addLaunchOverlay() {
