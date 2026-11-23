@@ -1,6 +1,7 @@
 import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import type { PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 import { closeIconPick, readIconPick } from '@thockdown/interaction/iconPicker/iconPick'
+import { musicLibraryReads } from '../shared/musicLibraryReads'
 
 /**
  * Which music set the MUSIC LIBRARY shows. The Music Library is the sidebar's
@@ -71,7 +72,9 @@ export const MUSIC_SET_DROP_NEW_ATTRIBUTE = 'data-music-set-new'
  */
 export async function addDroppedFilesToMusicLibrary(files: readonly File[], target: Element | null): Promise<void> {
   const nowPlaying = readNowPlaying()
-  const paths = files.map((file) => window.thockdownExternalFiles?.getPathForFile(file) ?? '').filter(Boolean)
+  const pathOfFile = musicLibraryReads()?.pathOfFile
+  if (!pathOfFile) return
+  const paths = files.map(pathOfFile).filter(Boolean)
   if (paths.length === 0) return
   const onSet = target?.closest(`[${MUSIC_SET_DROP_SLOT_ATTRIBUTE}]`)?.getAttribute(MUSIC_SET_DROP_SLOT_ATTRIBUTE)
   if (onSet) {

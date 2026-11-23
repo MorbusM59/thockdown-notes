@@ -8,6 +8,7 @@
 
 import { EMPTY_POOL_FILTER, samePoolFilter, type MusicPoolFilter } from '../shared/audioPlayer'
 import { readNowPlaying } from '../sound/nowPlaying'
+import { musicLibraryReads } from '../shared/musicLibraryReads'
 
 let draft: MusicPoolFilter | null = null
 const listeners = new Set<() => void>()
@@ -54,7 +55,7 @@ async function playFirstRemaining(filter: MusicPoolFilter): Promise<void> {
   const request = ++playRequest
   const pool = readNowPlaying().pool
   if (!pool) return
-  const songs = await window.thockdownAudioPlayer?.getPool({ slots: [...pool.slots], filter }) ?? []
+  const songs = await musicLibraryReads()?.getPool({ slots: [...pool.slots], filter }) ?? []
   if (request !== playRequest || songs.length === 0) return
   const { song, playFromPool } = readNowPlaying()
   if (song && songs.some((entry) => entry.id === song.id)) return

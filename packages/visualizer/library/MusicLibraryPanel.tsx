@@ -14,6 +14,7 @@ import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { closeIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
+import { musicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
 
 /** A song's length without leading zeros: 3:21, or 1:02:05 past an hour. */
 function formatSongDuration(seconds: number): string {
@@ -97,7 +98,7 @@ function useSetSongs(slot: PlaylistSlot, count: number | undefined): { slot: Pla
   const [songs, setSongs] = useState<{ slot: PlaylistSlot; songs: MusicSongEntry[] } | null>(null)
   useEffect(() => {
     let current = true
-    void window.thockdownAudioPlayer?.getPlaylist(slot).then((loaded) => {
+    void musicLibraryReads()?.getPlaylist(slot).then((loaded) => {
       if (current) setSongs({ slot, songs: loaded })
     })
     return () => { current = false }
