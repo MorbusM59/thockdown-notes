@@ -1,4 +1,4 @@
-import { FftPlan } from '@thockdown/soundscape/fft'
+import { FftPlan } from '@thockdown/audio/fft'
 import {
   TrackTuningEstimator,
   createSemitoneAttributionPlan,

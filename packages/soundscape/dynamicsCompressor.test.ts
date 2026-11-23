@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DynamicsCompressor } from './dynamicsCompressor';
+import { DynamicsCompressor } from '@thockdown/audio/dynamicsCompressor';
 import { BUS_COMPRESSOR } from './soundscapeMix';
 
 const SAMPLE_RATE = 8000;

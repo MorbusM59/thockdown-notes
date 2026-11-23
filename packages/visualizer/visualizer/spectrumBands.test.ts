@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { FftPlan } from '@thockdown/soundscape/fft'
+import { FftPlan } from '@thockdown/audio/fft'
 import { pulseCurve } from '@thockdown/look/visualizer'
 import {
   SPECTRUM_MAX_HZ,

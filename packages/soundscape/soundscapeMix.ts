@@ -17,8 +17,8 @@
 import type { SoundscapeSpaceSettings } from './soundscape';
 import { biquadCoefficients, brillianceCurve, BRILLIANCE_BANDS, StereoBiquad } from '@thockdown/audio/brilliance';
 import { buildRoomImpulseResponse, roomKey, roomPreDelaySec, ROOM_CROSSFADE_SEC, ROOM_MAX_LENGTH_SEC } from '@thockdown/audio/room';
-import { DynamicsCompressor, type CompressorSettings, type CompressorSnapshot } from './dynamicsCompressor';
-import { BLOCK, PartitionedConvolver, type ConvolverSnapshot, type PreparedImpulse } from './partitionedConvolver';
+import { DynamicsCompressor, type CompressorSettings, type CompressorSnapshot } from '@thockdown/audio/dynamicsCompressor';
+import { BLOCK, PartitionedConvolver, type ConvolverSnapshot, type PreparedImpulse } from '@thockdown/audio/partitionedConvolver';
 import type { StereoBiquadSnapshot } from '@thockdown/audio/brilliance';
 
 /** The block the mix processes: the convolver's. */

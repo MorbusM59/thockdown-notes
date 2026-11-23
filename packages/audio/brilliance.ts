@@ -18,7 +18,7 @@
  * read as a second volume control.
  */
 
-export type BiquadKind = 'lowshelf' | 'highshelf' | 'peaking';
+export type BiquadKind = 'lowshelf' | 'highshelf' | 'peaking' | 'lowpass' | 'highpass';
 
 /** One band of the tone curve: its filter is fixed, only its gain moves with the slider. */
 export interface BrillianceBand {
@@ -62,7 +62,18 @@ export function biquadCoefficients(kind: BiquadKind, frequencyHz: number, q: num
   const cos = Math.cos(w0);
   const sin = Math.sin(w0);
   let b0: number; let b1: number; let b2: number; let a0: number; let a1: number; let a2: number;
-  if (kind === 'peaking') {
+  if (kind === 'lowpass' || kind === 'highpass') {
+    // Chromium's (Biquad.cpp SetLowpassParams / SetHighpassParams): the Q of
+    // a low- or high-pass is a resonance in dB, not a linear Q, as the Web
+    // Audio spec defines it; `gainDb` is unused.
+    const alpha = 0.5 * sin * (10 ** (-0.05 * q));
+    if (kind === 'lowpass') {
+      b1 = 1 - cos; b0 = 0.5 * b1; b2 = b0;
+    } else {
+      b0 = 0.5 * (1 + cos); b1 = -(1 + cos); b2 = b0;
+    }
+    a0 = 1 + alpha; a1 = -2 * cos; a2 = 1 - alpha;
+  } else if (kind === 'peaking') {
     const alpha = sin / (2 * q);
     b0 = 1 + (alpha * a); b1 = -2 * cos; b2 = 1 - (alpha * a);
     a0 = 1 + (alpha / a); a1 = -2 * cos; a2 = 1 - (alpha / a);
@@ -134,7 +145,7 @@ export interface StereoBiquadSnapshot {
   readonly state: readonly [Float64Array, Float64Array];
 }
 
-/** One stereo biquad (direct form I), for the Android mix. */
+/** One stereo biquad (direct form I), for the Android mixes (the soundscape's and the music's). */
 export class StereoBiquad {
   private c: BiquadCoefficients = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
   private readonly state = [new Float64Array(4), new Float64Array(4)];
