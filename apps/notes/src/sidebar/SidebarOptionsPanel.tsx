@@ -7,6 +7,7 @@ import { openDictionary } from './dictionaryView'
 import { DictionaryMark } from './DictionaryPanel'
 import { TextButton } from '@thockdown/interaction/TextButton'
 import { AboutPanel } from '@thockdown/interaction/AboutPanel'
+import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { ABOUT_LINKS, APP_VERSION, CREDITS } from '../about/about'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
@@ -38,15 +39,9 @@ import {
   type TypingTrailSettings,
 } from '../shared/typingTrailSettings'
 import {
-  BEAT_DELAY_MAX_MS,
-  BEAT_DELAY_MIN_MS,
-  BEAT_RESPONSE_MAX_DB,
-  BEAT_RESPONSE_MIN_DB,
-  DEFAULT_BEAT_SETTINGS,
   type BeatSettings,
 } from '@thockdown/visualizer/shared/beatSettings'
 import {
-  BEAT_CONTRAST_MAX,
   FALL_MAX_SEC,
   FALL_MIN_SEC,
   IMMERSIVE_FLAIR_STRENGTH_MAX,
@@ -77,7 +72,6 @@ import {
   type VisualizerChannel,
   type VisualizerEdgeChannel,
   type VisualizerMix,
-  type VisualizerTrackerName,
   type VisualizerSettings,
   type VisualizerGridBeat,
   type VisualizerColors,
@@ -981,57 +975,6 @@ export function SidebarOptionsPanel({
 
     // The three trackers (visualizer.ts, `VisualizerTrackers`): what is
     // detected in the music, once, for every element below.
-    const renderTrackers = () => {
-      const { trackers } = visualizer
-      const tracker = (key: VisualizerTrackerName, label: string, what: string) => (
-        <>
-          <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
-            <OptionsSubsectionLabel tooltip={what}>{label}</OptionsSubsectionLabel>
-          </div>
-          <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
-            <OptionsSliderRows rows={[2]}>
-              {[
-                <CompactScrollbarSlider
-                  key="contrast"
-                  id={`beat-tracker-${key}-contrast`}
-                  min={0}
-                  max={BEAT_CONTRAST_MAX}
-                  step={0.01}
-                  value={trackers[key].contrast}
-                  trackLabel="contrast"
-                  tooltipLabel="Hit threshold"
-                  ariaLabel={`${label}: contrast`}
-                  defaultValue={visualizerDefaults.trackers[key].contrast}
-                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], contrast: value } } }))}
-                />,
-                <CompactScrollbarSlider
-                  key="pattern"
-                  id={`beat-tracker-${key}-pattern`}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={trackers[key].pattern}
-                  trackLabel="pattern"
-                  tooltipLabel="How far hits follow the bar's pattern rather than only what is heard: at 0 the signal alone, higher lifts a weak hit toward the same place in the bars around it and fills in expected hits that barely sound"
-                  ariaLabel={`${label}: pattern`}
-                  defaultValue={visualizerDefaults.trackers[key].pattern}
-                  formatValue={(value) => Math.round(value * 100).toString()}
-                  onCommit={(value) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], pattern: value } } }))}
-                />,
-              ]}
-            </OptionsSliderRows>
-          </div>
-        </>
-      )
-      return (
-        <>
-          {tracker('thump', 'Thump', 'The low end jumping: a kick, a bass stab, what you feel in the chest')}
-          {tracker('pierce', 'Pierce', 'A sharp sound cutting through the mix: a snare, a clap, a rim shot')}
-          {tracker('tick', 'Tick', 'The busy, rhythmic top: hats and shakers')}
-        </>
-      )
-    }
-
     // One coloured block: its mix, its effect and fall, plus the edge's spread and blur.
     // One block (an edge or a pane) of the grid beat or of the visualizer
     // mode: its mix, effect and fall, and for an edge its geometry. `id`
@@ -3264,38 +3207,13 @@ export function SidebarOptionsPanel({
         iconClass="fa-drum"
       >
           <BeatLoopCalibration fontFamily={resolveEditorFontFamily(visualizerFont.style)} fontPerBox={1 / visualizerFont.boxSize} falls={{ edge: visualizer.edge, pane: visualizer.pane[uiMode] }} delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
-          <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
-          <div className="utility-setting-slider-stack" aria-label="Beat timing">
-            <OptionsSliderRows rows={[2]}>
-              <CompactScrollbarSlider
-                id="beat-delay"
-                min={BEAT_DELAY_MIN_MS}
-                max={BEAT_DELAY_MAX_MS}
-                step={5}
-                value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
-                trackLabel="delay"
-                tooltipLabel={`Additional ms to draw the pulse later than its built-in timing offset, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}
-                ariaLabel="Beat pulse: additional visual delay in milliseconds for this output device"
-                defaultValue={0}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
-              />
-              <CompactScrollbarSlider
-                id="beat-response"
-                min={BEAT_RESPONSE_MIN_DB}
-                max={BEAT_RESPONSE_MAX_DB}
-                step={1}
-                value={beatSettings.responseDb}
-                trackLabel="response"
-                tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
-                ariaLabel="Beat pulse: dB below full scale that still gives a full response"
-                defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
-                formatValue={(value) => Math.round(value).toString()}
-                onCommit={(value) => setBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
-              />
-            </OptionsSliderRows>
-          </div>
-          {renderTrackers()}
+          <BeatDetectionControls
+            beatSettings={beatSettings}
+            outputDevice={outputDevice}
+            onBeatSettings={setBeatSettings}
+            trackers={visualizer.trackers}
+            onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))}
+          />
       </AccordionSection>
 
       <AccordionSection

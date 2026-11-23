@@ -26,8 +26,8 @@ import { publishNowPlaying, readNowPlaying } from '@thockdown/visualizer/sound/n
 import type { MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
 import '@thockdown/visualizer/visualizer/visualizer.css'
 import { useBeatFeedback } from '@thockdown/visualizer/beat/useBeatFeedback'
-import { DEFAULT_BEAT_SETTINGS } from '@thockdown/visualizer/shared/beatSettings'
-import { DEFAULT_VISUALIZER, type VisualizerColors } from '@thockdown/look/visualizer'
+import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
+import type { VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 
 type Picked = { url: string; name: string }
 
@@ -80,10 +80,16 @@ function FrameReadout({ scale, setScale }: { scale: number; setScale: (scale: nu
   )
 }
 
-export function VisualizerPrototype({ onExit, colors, mode }: { onExit: () => void; colors: VisualizerColors; mode: 'light' | 'dark' }) {
-  // The desktop's factory visualizer settings and the look preset's own
-  // colours, fed exactly as the desktop feeds them.
-  useBeatFeedback(true, DEFAULT_BEAT_SETTINGS, DEFAULT_VISUALIZER, colors, null, true, mode)
+export function VisualizerPrototype({ onExit, colors, mode, visualizer, beatSettings }: {
+  onExit: () => void
+  colors: VisualizerColors
+  mode: 'light' | 'dark'
+  visualizer: VisualizerSettings
+  beatSettings: BeatSettings
+}) {
+  // The phone's visualizer and beat settings (visualizerStore.ts) and the
+  // look preset's own colours, fed exactly as the desktop feeds them.
+  useBeatFeedback(true, beatSettings, visualizer, colors, null, true, mode)
   const [songs, setSongs] = useState<Picked[]>([])
   const [scale, setScale] = useState(1)
   const [landscape, setLandscapeState] = useState(false)
