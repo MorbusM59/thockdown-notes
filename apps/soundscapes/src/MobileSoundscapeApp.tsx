@@ -56,7 +56,7 @@ import {
   type MobileLook,
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
-import { sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
+import { musicScheduleEvents, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleRows } from './ScheduleRows'
 import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
@@ -224,6 +224,7 @@ export function MobileSoundscapeApp() {
       : { ...current, entries: current.entries.map((entry) => (entry.setId === null || known.has(entry.setId) ? entry : { ...entry, setId: null })) }))
   }, [libraryLoaded, musicSets])
   const events = useMemo(() => scheduleEvents(schedule), [schedule])
+  const musicEvents = useMemo(() => musicScheduleEvents(schedule), [schedule])
   useEffect(() => {
     if (!native) return
     const named = new Set(events.map((event) => event.presetId))
@@ -231,11 +232,12 @@ export function MobileSoundscapeApp() {
       enabled: schedule.enabled,
       masterVolume: volumeGain(preferences.masterVolume),
       events,
+      musicEvents,
       entries: presets
         .filter((preset) => named.has(preset.id))
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
-  }, [native, schedule.enabled, events, presets, preferences.masterVolume])
+  }, [native, schedule.enabled, events, musicEvents, presets, preferences.masterVolume])
 
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.

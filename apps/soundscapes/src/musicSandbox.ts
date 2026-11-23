@@ -25,6 +25,8 @@
  * - musicCatalog(json) / musicRotation(json): the library's two documents
  *   (musicLibrary.ts), the catalog whenever the page changes it, the
  *   rotation as stored;
+ * - musicPoolSet(setId): the song set the schedule plays, the pool while
+ *   it is set (-1 for none: the catalog's own sets);
  * - musicNext(previousId): the song to play after `previousId` (-1 at the
  *   start), counting it as played, as `{ "id", "uri" }` or null;
  * - musicChoose(songId): the same for a song chosen from the list, which
@@ -159,8 +161,21 @@ scope.musicRotation = (json: string): string => {
 
 scope.musicRotationJson = (): string => JSON.stringify(rotation);
 
+/**
+ * The song set the SCHEDULE plays (schedule.ts's music channel), or -1 for
+ * none. While one is set the pool is that set alone, unfiltered, without
+ * touching the listener's own choice of sets in the catalog.
+ */
+let poolSet = -1;
+scope.musicPoolSet = (setId: number): string => {
+  poolSet = setId;
+  return 'ok';
+};
+
+const poolCatalog = (): MusicCatalog => (poolSet < 0 ? catalog : { ...catalog, activeSetIds: [poolSet], filter: { query: '' } });
+
 scope.musicNext = (previousId: number): string => {
-  const next = nextSong(catalog, rotation, previousId < 0 ? null : previousId);
+  const next = nextSong(poolCatalog(), rotation, previousId < 0 ? null : previousId);
   rotation = next.rotation;
   return JSON.stringify(next.song ? { id: next.song.id, uri: next.song.filePath } : null);
 };

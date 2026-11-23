@@ -140,7 +140,7 @@ final class SoundscapeSession {
      */
     private static final double SWITCH_FADE_SEC = 2;
     /** How long the hand-over takes when the listener stops regular mode: they asked for the change, so it comes promptly. */
-    private static final double HANDOVER_FADE_SEC = 10;
+    static final double HANDOVER_FADE_SEC = 10;
     /** A fade back from an ending that was interrupted. */
     private static final double RESTORE_FADE_SEC = 0.5;
     /** How long a pause holds before it becomes a stop, handing back to the schedule. */
