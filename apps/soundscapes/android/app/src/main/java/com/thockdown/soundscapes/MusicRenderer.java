@@ -19,10 +19,12 @@ import org.json.JSONObject;
  * the isolate as they are needed, kept DECODE_AHEAD_SEC ahead of the
  * output's playhead, which is more than the renderer's lead, so the renderer
  * never waits on the decoder in ordinary play. When a song is decoded to its
- * end the next is asked of the QUEUE (the pool's pick rules,
- * packages/visualizer/shared/musicPool.ts, are the queue's business); when
- * the queue has nothing, the stream ends and the renderer plays out the
- * room's tail.
+ * end the next is picked IN THE ISOLATE, from the library the page keeps
+ * (apps/soundscapes/src/musicLibrary.ts: the page's catalog, given here by
+ * `setCatalog`, and the rotation, which only this renderer moves and the
+ * listener stores, `onRotation`), by the desktop's own rules
+ * (packages/visualizer/shared/musicPool.ts). When the pool has nothing, the
+ * stream ends and the renderer plays out the room's tail.
  *
  * A SKIP or a SEEK cuts the stream at a splice a margin past the playhead
  * (MusicSettings.cut): the old song is heard up to it, then the new audio,
@@ -33,14 +35,12 @@ import org.json.JSONObject;
  * visualizer.
  */
 final class MusicRenderer {
-    interface Queue {
-        /** The next song to play after `previousId` (null at the start), or null for none. */
-        Song next(Integer previousId);
-    }
-
     interface Listener {
         /** What is heard now: a song and how far into it, in seconds; null for nothing. */
         void onHeard(Integer songId, double seconds);
+
+        /** The rotation moved (a song played or was chosen): store it, to give back as `rotationJson` next time. */
+        void onRotation(String rotationJson);
 
         void onFailure(String message);
     }
@@ -62,7 +62,7 @@ final class MusicRenderer {
 
     private final Context context;
     private final OutputLane output;
-    private final Queue queue;
+    private final String rotationJson;
     private final Listener listener;
     private final Thread thread;
     private final Object signal = new Object();
@@ -76,6 +76,8 @@ final class MusicRenderer {
     private String stage = null;
     private SongDecoder decoder = null;
     private Song decoding = null;
+    /** Every song started, by id: a seek goes back into the one heard, which the decoder may already have left. */
+    private final java.util.Map<Integer, Uri> uris = new java.util.HashMap<>();
     /** The decoder has produced audio for the current song yet: its cue is placed then, at the rate it reports. */
     private boolean cued = false;
     private long cueOffsetFrames = 0;
@@ -87,16 +89,22 @@ final class MusicRenderer {
         void run() throws Exception;
     }
 
-    MusicRenderer(Context context, OutputLane output, Queue queue, Listener listener) {
+    MusicRenderer(Context context, OutputLane output, String catalogJson, String rotationJson, Listener listener) {
         this.context = context.getApplicationContext();
         this.output = output;
-        this.queue = queue;
+        this.rotationJson = rotationJson;
+        setCatalog(catalogJson);
         this.listener = listener;
         thread = new Thread(this::run, "MusicRenderer");
         thread.start();
     }
 
-    /** The soundstage (MusicStage as JSON); the first one starts playback with the queue's first song. */
+    /** The page's catalog (musicLibrary.ts's MusicCatalog as JSON), whenever it changes. */
+    void setCatalog(String catalogJson) {
+        post(() -> isolate.evaluateJavaScriptAsync("musicCatalog(" + JSONObject.quote(catalogJson) + ")").get());
+    }
+
+    /** The soundstage (MusicStage as JSON); the first one starts playback with the pool's first pick. */
     void setStage(String stageJson) {
         post(() -> {
             if (stageJson.equals(stage)) return;
@@ -104,28 +112,56 @@ final class MusicRenderer {
             stage = stageJson;
             settle();
             configure(false);
-            if (first) startSong(queue.next(null), 0);
+            if (first) startSong(next(null), 0);
         });
     }
 
-    /** Leave the song playing for the queue's next. */
+    /** Leave the song playing for the pool's next pick. */
     void skip() {
         post(() -> {
             if (stage == null) return;
             settle();
             configure(true);
-            startSong(queue.next(heardId), 0);
+            startSong(next(heardId), 0);
         });
     }
 
-    /** Play `song` from `seconds` into it, now. */
-    void play(Song song, double seconds) {
+    /** Play `songId`, chosen from the list, now: the pool is rotated to it (musicPool.ts's rotatePoolTo). */
+    void choose(int songId) {
         post(() -> {
             if (stage == null) return;
             settle();
             configure(true);
-            startSong(song, seconds);
+            startSong(songFrom(isolate.evaluateJavaScriptAsync("musicChoose(" + songId + ")").get()), 0);
+            rotated();
         });
+    }
+
+    /** Go to `seconds` into the song heard now. */
+    void seek(double seconds) {
+        post(() -> {
+            if (stage == null || heardId == null) return;
+            settle();
+            configure(true);
+            startSong(new Song(heardId, uris.get(heardId)), seconds);
+        });
+    }
+
+    /** The pool's pick after `previousId` (null at the start), counting it as played. */
+    private Song next(Integer previousId) throws Exception {
+        Song song = songFrom(isolate.evaluateJavaScriptAsync("musicNext(" + (previousId == null ? -1 : previousId) + ")").get());
+        rotated();
+        return song;
+    }
+
+    private Song songFrom(String json) throws Exception {
+        if (json == null || json.equals("null")) return null;
+        JSONObject song = new JSONObject(json);
+        return new Song(song.getInt("id"), Uri.parse(song.getString("uri")));
+    }
+
+    private void rotated() throws Exception {
+        listener.onRotation(isolate.evaluateJavaScriptAsync("musicRotationJson()").get());
     }
 
     /** Called by the output as it plays. */
@@ -165,12 +201,13 @@ final class MusicRenderer {
     /** At most this many songs in a row that cannot be decoded are passed over before the stream ends. */
     private static final int MAX_UNPLAYABLE = 8;
 
-    private void startSong(Song song, double seconds) {
+    private void startSong(Song song, double seconds) throws Exception {
         closeDecoder();
         cued = false;
         ended = false;
         for (int attempt = 0; song != null && attempt < MAX_UNPLAYABLE; attempt += 1) {
             decoding = song;
+            uris.put(song.id, song.uri);
             try {
                 decoder = new SongDecoder(context, song.uri, (long) (seconds * 1_000_000));
                 cueOffsetFrames = Math.round(seconds * output.sampleRate);
@@ -178,7 +215,7 @@ final class MusicRenderer {
             } catch (Exception error) {
                 // A song that cannot be decoded is passed over, as if it had played.
                 closeDecoder();
-                song = queue.next(song.id);
+                song = next(song.id);
                 seconds = 0;
             }
         }
@@ -190,7 +227,7 @@ final class MusicRenderer {
         decoder = null;
     }
 
-    /** Decode one slice of the current song into the renderer; at its end, move to the queue's next. */
+    /** Decode one slice of the current song into the renderer; at its end, move to the pool's next pick. */
     private void decodeSlice() throws Exception {
         if (decoder == null) {
             if (!ended) {
@@ -212,7 +249,7 @@ final class MusicRenderer {
             }
             isolate.evaluateJavaScriptAsync("musicAppend('" + Base64.encodeToString(bytes, Base64.NO_WRAP) + "')").get();
         }
-        if (decoder.finished()) startSong(queue.next(decoding.id), 0);
+        if (decoder.finished()) startSong(next(decoding.id), 0);
     }
 
     /** Write a step's chunks into the output and report what is heard; returns how much input is held ahead. */
@@ -241,6 +278,7 @@ final class MusicRenderer {
             init.put("sampleRate", output.sampleRate);
             init.put("spliceMarginSec", output.committedSec() + SPLICE_SLACK_SEC);
             isolate.evaluateJavaScriptAsync("musicInit(" + JSONObject.quote(init.toString()) + ")").get();
+            isolate.evaluateJavaScriptAsync("musicRotation(" + JSONObject.quote(rotationJson) + ")").get();
             long decodeAheadFrames = Math.round(DECODE_AHEAD_SEC * output.sampleRate);
 
             while (running) {
