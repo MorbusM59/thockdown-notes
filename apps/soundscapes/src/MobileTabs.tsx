@@ -10,6 +10,7 @@
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { useEffect, useState, type ReactNode } from 'react'
 import { readDisplay, setLandscape } from './display'
+import { MusicDiagnostics } from './MusicDiagnostics'
 import { AboutPanel } from '@thockdown/interaction/AboutPanel'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { ABOUT_LINKS, APP_VERSION, CREDITS, openAboutLink } from './about'
@@ -86,7 +87,7 @@ export function SettingsTab({ beatDetection }: { beatDetection: ReactNode }) {
         {beatDetection}
       </AccordionSection>
       <AccordionSection ariaLabel="Debugging" heading="Debugging" iconClass="fa-bug">
-        <p className="mobile-tab-placeholder">Coming soon.</p>
+        <MusicDiagnostics />
       </AccordionSection>
       <AccordionSection ariaLabel="About" heading="About" iconClass="fa-circle-info">
         <AboutPanel appName="Thockdown Soundscapes" version={APP_VERSION} links={ABOUT_LINKS} credits={CREDITS} openLink={openAboutLink} />
