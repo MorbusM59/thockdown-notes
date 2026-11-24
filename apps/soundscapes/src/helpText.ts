@@ -36,11 +36,12 @@ const HELP: Record<string, string[]> = {
     'Grouping: The dock groups the songs by folder or by artist.',
   ],
   Visualizer: [
-    'Scene settings: This tab tunes the visualizer: its font, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',
+    'Signal: How the visualizer follows the beat. Play a calibration loop and set the delay until the flashes land on the beat you hear.',
+    'Sources: What counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
+    'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',
   ],
   Settings: [
     'Soundstages: Create and edit the soundstages the Dashboard picks from. The active one shows in the dock while the section is open.',
-    'Beat Detection: How the visualizer follows the beat. Play a calibration loop and set the delay until the flashes land on the beat you hear.',
     'Debugging: Tools for tracing problems.',
     'About: The version, licenses and credits.',
   ],

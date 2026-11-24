@@ -79,14 +79,13 @@ export function VisualizerButtons({ onOpen }: { onOpen: () => void }) {
 }
 
 /**
- * Settings: Soundstages, Beat Detection, Debugging and About, the desktop's
+ * Settings: Soundstages, Debugging and About, the desktop's
  * Options sections as accordions. Soundstages' dock shows while its section
  * is open (`onSoundstagesOpenChange`), as on the desktop.
  */
-export function SettingsTab({ soundstages, onSoundstagesOpenChange, beatDetection }: {
+export function SettingsTab({ soundstages, onSoundstagesOpenChange }: {
   soundstages: ReactNode
   onSoundstagesOpenChange: (open: boolean) => void
-  beatDetection: ReactNode
 }) {
   // Leaving the tab closes every section, so its dock goes with it.
   useEffect(() => () => onSoundstagesOpenChange(false), [onSoundstagesOpenChange])
@@ -94,9 +93,6 @@ export function SettingsTab({ soundstages, onSoundstagesOpenChange, beatDetectio
     <AccordionGroup>
       <AccordionSection ariaLabel="Soundstages" heading="Soundstages" iconClass="fa-sliders" onOpenChange={onSoundstagesOpenChange}>
         {soundstages}
-      </AccordionSection>
-      <AccordionSection ariaLabel="Beat Detection" heading="Beat Detection" iconClass="fa-drum">
-        {beatDetection}
       </AccordionSection>
       <AccordionSection ariaLabel="Debugging" heading="Debugging" iconClass="fa-bug">
         <MusicDiagnostics />

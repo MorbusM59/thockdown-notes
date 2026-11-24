@@ -7,7 +7,7 @@
  */
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
-import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { OptionsSubsection } from '@thockdown/interaction/OptionsSubsection'
 import {
   CREST_FALL_REDUCTION_MAX,
   CYCLE_BEATS,
@@ -39,18 +39,18 @@ import { beatChannelControls, fallSliders, mixSliders } from './visualizerSlider
 
 const visualizerDefaults = DEFAULT_VISUALIZER
 
-export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode }: {
+export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode, folds = false }: {
   visualizer: VisualizerSettings
   setVisualizer: (update: (prev: VisualizerSettings) => VisualizerSettings) => void
   uiMode: 'light' | 'dark'
+  /** Each group an accordion section rather than a divider (OptionsSubsection): the phone's tab, whose page is the section. */
+  folds?: boolean
 }) {
   return (
     <>
-          {beatChannelControls('visualizer-edge', 'Edge', 'the edge round the visualizer mode\'s scene shows', visualizer.edge, visualizerDefaults.edge, (patch) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, ...patch } })))}
-          {beatChannelControls('visualizer-pane', 'Pane', 'the scene\'s box outlines show in the visualizer mode', visualizer.pane[uiMode], visualizerDefaults.pane[uiMode], (patch) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, [uiMode]: { ...prev.pane[uiMode], ...patch } } })))}
-          <div className="utility-setting-button-row" role="group" aria-label="Immersive glaze controls">
-            <OptionsSubsectionLabel>Glaze</OptionsSubsectionLabel>
-          </div>
+          {beatChannelControls('visualizer-edge', 'Edge', 'the edge round the visualizer mode\'s scene shows', visualizer.edge, visualizerDefaults.edge, (patch) => setVisualizer((prev) => ({ ...prev, edge: { ...prev.edge, ...patch } })), { iconClass: 'fa-expand', folds })}
+          {beatChannelControls('visualizer-pane', 'Pane', 'the scene\'s box outlines show in the visualizer mode', visualizer.pane[uiMode], visualizerDefaults.pane[uiMode], (patch) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, [uiMode]: { ...prev.pane[uiMode], ...patch } } })), { iconClass: 'fa-table-cells', folds })}
+          <OptionsSubsection label="Glaze" iconClass="fa-sun" folds={folds}>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
             <OptionsSliderRows rows={[3, 2, 2, 2, 2, 2, 2]}>
               {mixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, visualizerDefaults.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
@@ -212,9 +212,8 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode }: {
               />
             </OptionsSliderRows>
           </div>
-          <div className="utility-setting-button-row" role="group" aria-label="Immersive wave controls">
-            <OptionsSubsectionLabel>Wave</OptionsSubsectionLabel>
-          </div>
+          </OptionsSubsection>
+          <OptionsSubsection label="Wave" iconClass="fa-water" folds={folds}>
           <div className="utility-setting-slider-stack" aria-label="Immersive wave settings">
             <OptionsSliderRows rows={[3, 3, 2]}>
               {mixSliders('visualizer-wave', 'Immersive wave', visualizer.immersive.waveMix, visualizerDefaults.immersive.waveMix, (waveMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, waveMix } })))}
@@ -260,9 +259,8 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode }: {
               {fallSliders('visualizer-wave', 'Immersive wave', { shape: visualizer.immersive.waveShape, fallSec: visualizer.immersive.waveFallSec }, { shape: visualizerDefaults.immersive.waveShape, fallSec: visualizerDefaults.immersive.waveFallSec }, 'the wave after each hit', (patch) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, ...(patch.shape !== undefined ? { waveShape: patch.shape } : {}), ...(patch.fallSec !== undefined ? { waveFallSec: patch.fallSec } : {}) } })))}
             </OptionsSliderRows>
           </div>
-          <div className="utility-setting-button-row" role="group" aria-label="Immersive pulse controls">
-            <OptionsSubsectionLabel>Pulse</OptionsSubsectionLabel>
-          </div>
+          </OptionsSubsection>
+          <OptionsSubsection label="Pulse" iconClass="fa-bullseye" folds={folds}>
           <div className="utility-setting-slider-stack" aria-label="Immersive pulse settings">
             <OptionsSliderRows rows={[3, 3, 3]}>
               {mixSliders('visualizer-pulse', 'Immersive pulse', visualizer.immersive.pulseMix, visualizerDefaults.immersive.pulseMix, (pulseMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, pulseMix } })))}
@@ -346,9 +344,8 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode }: {
               />
             </OptionsSliderRows>
           </div>
-          <div className="utility-setting-button-row" role="group" aria-label="Spectrum controls">
-            <OptionsSubsectionLabel>Spectrum</OptionsSubsectionLabel>
-          </div>
+          </OptionsSubsection>
+          <OptionsSubsection label="Spectrum" iconClass="fa-chart-simple" folds={folds}>
           <div className="utility-setting-slider-stack" aria-label="Spectrum fall settings">
             <OptionsSliderRows rows={[2, 2, 1]}>
               <CompactScrollbarSlider
@@ -418,6 +415,7 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode }: {
               />
             </OptionsSliderRows>
           </div>
+          </OptionsSubsection>
     </>
   )
 }

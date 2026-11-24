@@ -38,6 +38,7 @@ import {
   LIGHT_PRESET_THEMES,
 } from '@thockdown/look/presets'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
@@ -92,7 +93,7 @@ import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
 import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, PHONE_VISUALIZER_FONT, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
-import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
+import { BeatSignalControls, BeatTrackerControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
 import { LOOP_03 } from '@thockdown/visualizer/beat/beatLoops'
 import { createNativeBeatLoopPlayer } from './nativeBeatLoop'
@@ -720,11 +721,8 @@ export function MobileSoundscapeApp() {
                   />}
                 </div>
                 </>) : null}
-                {tab === 'visualizer' && !helpMode ? <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} /> : null}
-                {tab === 'settings' && !helpMode ? <SettingsTab
-                  soundstages={<SoundstagesTab preferences={soundstages} onChange={setSoundstages} />}
-                  onSoundstagesOpenChange={setSoundstagesOpen}
-                  beatDetection={<>
+                {tab === 'visualizer' && !helpMode ? <AccordionGroup>
+                  <AccordionSection ariaLabel="Signal" heading="Signal" iconClass="fa-wave-square">
                     {beatLoopPlayer ? <BeatLoopCalibration
                       loops={BEAT_LOOPS}
                       startLoop={beatLoopPlayer}
@@ -734,14 +732,16 @@ export function MobileSoundscapeApp() {
                       delayMs={beatSettings.delayMsByDevice[PHONE_OUTPUT_DEVICE] ?? 0}
                       onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [PHONE_OUTPUT_DEVICE]: delayMs } }))}
                     /> : null}
-                    <BeatDetectionControls
-                    beatSettings={beatSettings}
-                    outputDevice={PHONE_OUTPUT_DEVICE}
-                    onBeatSettings={setBeatSettings}
-                    trackers={visualizer.trackers}
-                    onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))}
-                  />
-                  </>}
+                    <BeatSignalControls beatSettings={beatSettings} outputDevice={PHONE_OUTPUT_DEVICE} onBeatSettings={setBeatSettings} />
+                  </AccordionSection>
+                  <AccordionSection ariaLabel="Sources" heading="Sources" iconClass="fa-drum">
+                    <BeatTrackerControls trackers={visualizer.trackers} onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))} />
+                  </AccordionSection>
+                  <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} folds />
+                </AccordionGroup> : null}
+                {tab === 'settings' && !helpMode ? <SettingsTab
+                  soundstages={<SoundstagesTab preferences={soundstages} onChange={setSoundstages} />}
+                  onSoundstagesOpenChange={setSoundstagesOpen}
                 /> : null}
               </div>
               </SidebarFrame>

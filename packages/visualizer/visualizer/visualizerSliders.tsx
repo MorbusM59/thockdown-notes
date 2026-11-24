@@ -8,7 +8,7 @@
  */
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
-import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { OptionsSubsection } from '@thockdown/interaction/OptionsSubsection'
 import {
   EDGE_BLUR_MAX_PX,
   EDGE_SPREAD_MAX_PX,
@@ -92,6 +92,8 @@ export function mixSliders(id: string, label: string, mix: VisualizerMix, defaul
     // One block (an edge or a pane) of the grid beat or of the visualizer
     // mode: its mix, effect and fall, and for an edge its geometry. `id`
     // keeps every slider's id unique, the two sets being separate settings.
+    // `group` is how the block is named (OptionsSubsection): a divider unless
+    // the host promoted its groups to accordions.
 export function beatChannelControls<C extends VisualizerChannel>(
       id: string,
       label: string,
@@ -99,15 +101,13 @@ export function beatChannelControls<C extends VisualizerChannel>(
       channel: C,
       defaults: C,
       set: (patch: Partial<C>) => void,
+      group: { iconClass: string, folds: boolean } = { iconClass: 'fa-sliders', folds: false },
     ) {
       const edge = 'spreadPx' in channel ? (channel as unknown as VisualizerEdgeChannel) : null
       const edgeDefaults = defaults as unknown as VisualizerEdgeChannel
       const setEdge = set as unknown as (patch: Partial<VisualizerEdgeChannel>) => void
       return (
-        <>
-          <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>
-            <OptionsSubsectionLabel>{label}</OptionsSubsectionLabel>
-          </div>
+        <OptionsSubsection label={label} iconClass={group.iconClass} folds={group.folds}>
           <div className="utility-setting-slider-stack" aria-label={`${label} settings`}>
             <OptionsSliderRows rows={edge ? [3, 3, 2] : [3, 3]}>
               {mixSliders(id, label, channel.mix, defaults.mix, (mix) => set({ mix } as Partial<C>))}
@@ -155,6 +155,6 @@ export function beatChannelControls<C extends VisualizerChannel>(
               ]}
             </OptionsSliderRows>
           </div>
-        </>
+        </OptionsSubsection>
       )
     }
