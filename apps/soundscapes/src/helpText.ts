@@ -9,8 +9,8 @@
 const HELP: Record<string, string[]> = {
   Dashboard: [
     'Tabs: The Dashboard picks what plays. The other tabs create and edit the choices.',
-    'Music: Tap a song set to add it to the songs that play, or to take it out. Hold one to play it alone.',
-    'Soundscape: Tap one to play it.',
+    'Music: Tap a song set to add it to the songs that play, or to take it out. Hold one to make it the only set. Neither starts playback.',
+    'Soundscape: Tap one to choose it. While a soundscape plays, it fades into the one you chose; otherwise the play button starts it.',
     'Timer: Tap a length to limit playback to it. Tap it again for continuous playback. Hold a length and drag up or down to change it.',
     'Soundstage: Tap one to choose how the music sounds. Edit them in Settings.',
     'Layout: The moon switches dark mode. Tap a look to use it.',
@@ -21,14 +21,14 @@ const HELP: Record<string, string[]> = {
     'Music and soundscape buttons: The disc and the podcast switch the music and the soundscape in and out of the mix. A channel that is switched out stays silent, whether you or the schedule plays it.',
     'Play button: Plays or pauses the music and the soundscape together. Hold it to stop both.',
     'Playback modes: Soundscapes play in one of two modes, manual or scheduled. Both are controlled from the Dashboard.',
-    'Manual: Starts when you select a soundscape or tap the play button, and overrides the schedule while in effect. Tapping that button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same.',
+    'Manual: Starts when you tap the play button, or choose a soundscape while one plays, and overrides the schedule while in effect. Tapping that button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same.',
     'Scheduled: Active whenever manual playback is stopped, while the clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag soundscape icons to change the order.',
     'Help button: Explains the tab you are on. Tap it again to return.',
   ],
   Songs: [
-    'Song sets: Tap a set to add it to the songs that play, or to take it out. Hold one to show its songs below; the plus button creates a set.',
+    'Song sets: Tap a set to edit it: its songs show below. Which sets play is chosen on the Dashboard. The plus button creates a set.',
     'Open set: Shown in the dock. Tap its icon to choose another; hold the name to rename it. Its buttons add songs or a folder of songs, and a hold on the last one deletes the set, or restores a factory set.',
-    'Songs: Tap a song to play it. Hold its cross to remove it from the set; the cross on a group removes the whole group.',
+    'Songs: Tap a song to play it; the music then carries on with the sets chosen on the Dashboard. Hold its cross to remove it from the set; the cross on a group removes the whole group.',
     'Grouping: The dock groups the songs by folder or by artist.',
   ],
   Visualizer: [
@@ -44,7 +44,7 @@ const HELP: Record<string, string[]> = {
   ],
   Tools: [
     'Files button: Tap to load soundscapes from a file. Hold to save your own soundscapes to a file.',
-    'Record button: Tap to save the playing soundscape as an audio file. Hold and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
+    'Record button: Tap to save the soundscape you are editing as an audio file. Hold and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
   ],
   Schedule: [
     'Rows: Each row plays a song set, a soundscape, or both, from its start time to its stop time on its active days. A stop time earlier than the start time ends on the next day. Equal start and stop times play for 24 hours.',
@@ -63,9 +63,9 @@ const HELP: Record<string, string[]> = {
     'Time left: Shown in brackets under the name of the playing soundscape, for a timer or a schedule row.',
   ],
   Presets: [
-    'Soundscapes: Tap one to play it. Hold and drag it to move it, or onto a schedule row or the plus button of the schedule.',
-    'Plus button: Adds a copy of the playing soundscape. All changes are saved to the playing soundscape, factory ones included.',
-    'Active Soundscape: Shows the playing soundscape. Tap its icon to choose another; hold it to restore the original. Hold the name to rename it.',
+    'Soundscapes: Tap one to edit it. Which one plays is chosen on the Dashboard; changes to the playing one are heard at once. Hold and drag a soundscape to move it, or onto a schedule row or the plus button of the schedule.',
+    'Plus button: Adds a copy of the soundscape you are editing. All changes are saved to the soundscape you are editing, factory ones included.',
+    'Active Soundscape: Shows the soundscape you are editing. Tap its icon to choose another; hold it to restore the original. Hold the name to rename it.',
     'Reset button: Turns every channel off and resets the environment.',
     'Bin button: Hold to delete one of your own soundscapes. On a factory soundscape it is an undo arrow: hold it to restore the original.',
   ],

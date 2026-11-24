@@ -19,10 +19,13 @@ import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
+  fromSoundscapeEditingView,
   moveSoundscapePreset,
+  soundscapeEditingView,
   setSoundscapeIcon,
   soundscapePresets,
   type SoundscapePreferences,
+  type SoundscapePreset,
   applySoundscapePreset,
 } from '@thockdown/soundscape/soundscape'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
@@ -163,6 +166,15 @@ export function MobileSoundscapeApp() {
   // rule), so a stored `enabled` describes a session that no longer exists.
   // A session that outlived this page says otherwise when asked (getState).
   const [preferences, setPreferences] = useState<SoundscapePreferences>(() => ({ ...loadPreferences(), enabled: false }))
+  // The soundscape the Soundscapes tab edits, which need not be the one that
+  // plays (the dashboard picks that): null edits the one that plays.
+  const [editedSoundscapeId, setEditedSoundscapeId] = useState<string | null>(null)
+  const editingView = soundscapeEditingView(preferences, editedSoundscapeId)
+  const applyEditingView = (next: SoundscapePreferences) => {
+    const applied = fromSoundscapeEditingView(preferences, editedSoundscapeId, next)
+    setPreferences(applied.preferences)
+    setEditedSoundscapeId(applied.editedId)
+  }
   const [regular, setRegular] = useState<RegularMode>('stopped')
   const [source, setSource] = useState<SoundSource>('none')
   // The look is one of the desktop's factory visual presets, drawn through
@@ -215,10 +227,10 @@ export function MobileSoundscapeApp() {
     (dragged, target) => setPreferences((current) => moveSoundscapePreset(current, dragged, target)),
     { picture: 'copy' },
   )
-  // The ICON PICKER for the soundscape that plays, opened from the dock's
-  // mark as on the desktop: while it is open it sits between the active
-  // soundscape dock and the presets section. Not persisted; a pick, the mark
-  // again, or another soundscape coming to play closes it.
+  // The ICON PICKER for the edited soundscape, opened from the dock's mark as
+  // on the desktop: while it is open it replaces the tab's page. Not
+  // persisted; a pick, the mark again, or another soundscape chosen for
+  // editing closes it.
   const [iconQuery, setIconQuery] = useState<string | null>(null)
   // HELP MODE: every subsection shows an explanation in place of its
   // controls (helpText.ts). The system's back gesture ends it (takeBack,
@@ -355,8 +367,8 @@ export function MobileSoundscapeApp() {
   const timeLeftMs = countdown.endsAtMs >= 0 ? countdown.endsAtMs - clock : countdown.remainingMs
   const timeLeft = timeLeftMs >= 0 ? `(${remainingText(timeLeftMs)})` : null
 
-  const activeId = activeSoundscape(preferences).id
-  useEffect(() => setIconQuery(null), [activeId])
+  const editedId = activeSoundscape(editingView).id
+  useEffect(() => setIconQuery(null), [editedId])
 
   // What the media controls step through, published whenever it changes.
   const entries = useMemo(() => sessionEntries(presets), [presets])
@@ -407,9 +419,9 @@ export function MobileSoundscapeApp() {
     }
     setClipProgress(0)
     void nativeSoundscape!.renderClip({
-      configuration: JSON.stringify(soundscapeConfiguration(preferences.settings)),
+      configuration: JSON.stringify(soundscapeConfiguration(editingView.settings)),
       seconds: clipMinutes * 60,
-      name: clipName(preferences, clipMinutes),
+      name: clipName(editingView, clipMinutes),
     })
   }
   // A drag up or down on the clip button steps through the lengths,
@@ -455,14 +467,19 @@ export function MobileSoundscapeApp() {
     setPreferences((current) => (current.enabled === (mode === 'playing') ? current : { ...current, enabled: mode === 'playing' }))
   }, [])
 
-  // A soundscape chosen or changed in the panel is played: regular mode,
-  // overruling the schedule (which a long press on the power button hands
-  // back to).
-  const handleChange = useCallback((next: SoundscapePreferences) => {
-    setPreferences({ ...next, enabled: true })
+  // A soundscape picked on the dashboard: while a soundscape is heard it is
+  // played in regular mode, overruling the schedule (which a long press on
+  // the power button hands back to) and crossfading into it; while none is,
+  // it is only made the one the play button starts.
+  const pickSoundscape = (preset: SoundscapePreset) => {
+    if (!preferences.enabled) {
+      setPreferences(applySoundscapePreset(preferences, preset, false))
+      return
+    }
+    setPreferences(applySoundscapePreset(preferences, preset))
     setRegular('playing')
     setSource('regular')
-  }, [])
+  }
 
   // The files button: a tap imports, a long press exports (with the same
   // swallowed click after it as the power button).
@@ -505,11 +522,12 @@ export function MobileSoundscapeApp() {
                   : tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
                   : tab === 'soundscapes' ? (
                     <SoundscapeDock
-                      preferences={preferences}
-                      onChange={setPreferences}
+                      preferences={editingView}
+                      onChange={applyEditingView}
                       picking={iconQuery !== null}
                       onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
-                      detail={timeLeft}
+                      // The time left is the playing soundscape's.
+                      detail={editingView === preferences ? timeLeft : null}
                       trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
                     />
                   )
@@ -553,7 +571,7 @@ export function MobileSoundscapeApp() {
                 {helpMode && TAB_HELP[tab] ? <TabHelp heading={TAB_HELP[tab]!} /> : null}
                 {tab === 'dashboard' && !helpMode ? (<>
                   <DashboardSets />
-                  <DashboardSoundscapes preferences={preferences} onPick={(preset) => handleChange(applySoundscapePreset(preferences, preset))} />
+                  <DashboardSoundscapes preferences={preferences} onPick={pickSoundscape} />
                   <div className="utility-setting-slider-stack" aria-label="Timer">
                     <OptionsSubsectionLabel>Timer</OptionsSubsectionLabel>
                     <TimerRow timer={timer} onChange={setTimer} />
@@ -590,7 +608,7 @@ export function MobileSoundscapeApp() {
                     </div>
                   </div>
                 </>) : null}
-                {tab === 'songs' && !helpMode ? <MusicLibraryPanel grouping={songsGrouping} filter="" holdOpens /> : null}
+                {tab === 'songs' && !helpMode ? <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap /> : null}
                 {tab === 'soundscapes' && iconQuery === null ? (<>
                 <div className="utility-setting-slider-stack" aria-label="Soundscape tools">
                   <OptionsSubsectionLabel>Tools</OptionsSubsectionLabel>
@@ -658,17 +676,17 @@ export function MobileSoundscapeApp() {
                     onChange={(event) => setIconQuery(event.target.value)}
                   />
                   <IconPickerGrid
-                    label={activeSoundscape(preferences).name}
-                    current={activeSoundscape(preferences).icon}
+                    label={activeSoundscape(editingView).name}
+                    current={activeSoundscape(editingView).icon}
                     query={iconQuery}
                     onPick={(icon) => {
                       setIconQuery(null)
-                      setPreferences((current) => setSoundscapeIcon(current, activeSoundscape(current).id, icon))
+                      setPreferences((current) => setSoundscapeIcon(current, activeSoundscape(editingView).id, icon))
                     }}
                   />
                 </>) : <SoundscapeControls
-                  preferences={preferences}
-                  onChange={handleChange}
+                  preferences={editingView}
+                  onChange={applyEditingView}
                   presetReorder={presetReorder}
                   help={help}
                 />) : null}

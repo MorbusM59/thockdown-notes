@@ -31,7 +31,7 @@ function formatSongDuration(seconds: number): string {
  * creating a set, as the Soundscapes view's presets end in theirs. The order is
  * the sets' one order, the music player's buttons included.
  */
-function SetSelector({ slot, holdOpens }: { slot: PlaylistSlot | null; holdOpens: boolean }) {
+function SetSelector({ slot, editsOnTap }: { slot: PlaylistSlot | null; editsOnTap: boolean }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
   const reorder = useSelectorReorder('music-set', (dragged, target) => nowPlaying.moveMusicSet(Number(dragged), Number(target)))
@@ -41,30 +41,37 @@ function SetSelector({ slot, holdOpens }: { slot: PlaylistSlot | null; holdOpens
     <div className="options-loadout-grid options-section-selector-grid" role="radiogroup" aria-label="Music sets" {...{ [MUSIC_SET_DROP_NEW_ATTRIBUTE]: '' }}>
       {sets.map((candidate) => {
         const cell = reorder(String(candidate.slot))
-        const isActive = active.includes(candidate.slot)
+        const inPool = active.includes(candidate.slot)
+        const edited = candidate.slot === slot
+        // Pressed in: the set in the pool, or with `editsOnTap` the set this view edits.
+        const isActive = editsOnTap ? edited : inPool
         return (
           <button
             key={candidate.slot}
             {...{ [MUSIC_SET_DROP_SLOT_ATTRIBUTE]: candidate.slot }}
             type="button"
             role="radio"
-            // A set is pressed in while it plays in the pool and dashed while
-            // it is the set this view shows and edits. A click toggles it in
-            // the pool and a hold plays it alone (sound/setPress.ts), as the
-            // music player's set buttons do; a right click opens it here.
-            // With `holdOpens` (the phone, which has no right click) the
-            // hold opens it here instead.
-            className={`btn-icon options-color-swatch options-loadout-btn${isActive ? ' is-active' : ''}${candidate.slot === slot ? ' is-edited' : ''}`}
+            // On the desktop a set is pressed in while it plays in the pool and
+            // dashed while it is the set this view shows and edits. A click
+            // toggles it in the pool and a hold plays it alone
+            // (sound/setPress.ts), as the music player's set buttons do; a
+            // right click opens it here. With `editsOnTap` (the phone, whose
+            // dashboard picks what plays) this view only edits: a tap opens
+            // the set here and the open set is the one pressed in.
+            className={`btn-icon options-color-swatch options-loadout-btn${isActive ? ' is-active' : ''}${!editsOnTap && edited ? ' is-edited' : ''}`}
             data-tooltip={`${candidate.name}: ${nowPlaying.pool?.counts[candidate.slot] ?? 0} songs`}
-            aria-label={`${candidate.name}, ${isActive ? 'playing in the pool' : 'not in the pool'}`}
-            aria-checked={candidate.slot === slot}
+            aria-label={editsOnTap ? candidate.name : `${candidate.name}, ${inPool ? 'playing in the pool' : 'not in the pool'}`}
+            aria-checked={edited}
             data-secondary-press="action"
             onPointerDown={(event) => {
               cell.onPointerDown(event)
-              pressMusicSet(event.nativeEvent, {
-                toggle: () => nowPlaying.selectSlot(candidate.slot, 'toggle'),
-                hold: holdOpens ? () => selectMusicLibrarySet(candidate.slot) : () => nowPlaying.selectSlot(candidate.slot, 'solo'),
-              })
+              pressMusicSet(event.nativeEvent, editsOnTap
+                // A hold is the drag's pickup (useSelectorReorder) and nothing else.
+                ? { toggle: () => selectMusicLibrarySet(candidate.slot), hold: () => {} }
+                : {
+                    toggle: () => nowPlaying.selectSlot(candidate.slot, 'toggle'),
+                    hold: () => nowPlaying.selectSlot(candidate.slot, 'solo'),
+                  })
             }}
             onContextMenu={(event) => {
               event.preventDefault()
@@ -148,11 +155,11 @@ export function MusicSetIconPicker({ query }: { query: string }) {
   )
 }
 
-export function MusicLibraryPanel({ grouping, filter, holdOpens = false }: {
+export function MusicLibraryPanel({ grouping, filter, editsOnTap = false }: {
   grouping: MusicSetListGrouping
   filter: string
-  /** A hold on a set's button opens it for editing rather than playing it alone (the phone). */
-  holdOpens?: boolean
+  /** A tap on a set's button opens it for editing, and the pool is left to another view (the phone's dashboard). */
+  editsOnTap?: boolean
 }) {
   const set = useOpenMusicSet()
   // With no set yet (the phone starts with none) the selector is still
@@ -161,15 +168,15 @@ export function MusicLibraryPanel({ grouping, filter, holdOpens = false }: {
     return (
       <div className="options-content sidebar-options-content" aria-label="Songs">
         <div className="preset-section">
-          <SetSelector slot={null} holdOpens={holdOpens} />
+          <SetSelector slot={null} editsOnTap={editsOnTap} />
         </div>
       </div>
     )
   }
-  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} holdOpens={holdOpens} />
+  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} editsOnTap={editsOnTap} />
 }
 
-function MusicLibrarySet({ set, grouping, filter, holdOpens }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; holdOpens: boolean }) {
+function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; editsOnTap: boolean }) {
   const { slot, name } = set
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
@@ -179,7 +186,7 @@ function MusicLibrarySet({ set, grouping, filter, holdOpens }: { set: MusicSet; 
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
       <div className="preset-section">
-        <SetSelector slot={slot} holdOpens={holdOpens} />
+        <SetSelector slot={slot} editsOnTap={editsOnTap} />
       </div>
       {/* Keyed on the set shown and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${shownSlot}:${grouping}`}>

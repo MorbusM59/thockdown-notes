@@ -5,8 +5,8 @@ import { armHold, hasLeftHoldGrace, HOLD_CONFIRM_MS } from '@thockdown/interacti
  * buttons are (the music player, the Music Library's selector, the
  * visualizer's bucket list): a CLICK toggles that one set in or out of the
  * pool and leaves the others alone; a HOLD does the caller's `hold`, which
- * plays from that set alone, except in the phone's Songs tab, where it opens
- * the set for editing (a phone has no right click). A press that travels past
+ * plays from that set alone. (The phone's Songs tab does not change what
+ * plays: its dashboard picks that, and a tap there opens a set for editing.) A press that travels past
  * the hold grace (a drag) does neither.
  *
  * Armed from the button's left `pointerdown`; decides on the release, which

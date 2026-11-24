@@ -1053,6 +1053,51 @@ export function editSoundscape(preferences: SoundscapePreferences, settings: Sou
   return withPreset({ ...preferences, settings }, { ...active, settings: withoutSolo(settings) });
 }
 
+/**
+ * EDITING A SOUNDSCAPE THAT DOES NOT PLAY (the phone's Soundscapes tab, where
+ * what plays is picked on the dashboard and the tab only edits). The panel
+ * and its dock are written against the ACTIVE soundscape, so they are handed
+ * a VIEW in which the edited soundscape is the active one, and what they
+ * answer is taken back by `fromSoundscapeEditingView`. With nothing chosen
+ * for editing, or the playing one chosen, the view is the preferences
+ * themselves.
+ */
+export function soundscapeEditingView(preferences: SoundscapePreferences, editedId: string | null): SoundscapePreferences {
+  if (editedId === null || editedId === preferences.activePresetId) return preferences;
+  const edited = soundscapePresets(preferences).find((preset) => preset.id === editedId);
+  if (!edited) return preferences;
+  return { ...preferences, activePresetId: edited.id, settings: withoutSolo(cloneSettings(edited.settings)) };
+}
+
+/**
+ * A change made in an editing view (`soundscapeEditingView`) applied to the
+ * real preferences. Every soundscape's own record (settings, name, icon, a
+ * new one, a trashed one) is taken as the view left it; the view's ACTIVE
+ * soundscape is the one now edited, and never what plays. What plays changes
+ * only with its own record: edited in place it is heard at once, and trashed
+ * it hands over to the soundscape the trash chose. Whether it plays stays as
+ * it was: editing never starts or stops anything.
+ */
+export function fromSoundscapeEditingView(
+  preferences: SoundscapePreferences,
+  editedId: string | null,
+  next: SoundscapePreferences,
+): { preferences: SoundscapePreferences; editedId: string } {
+  const playingId = preferences.activePresetId;
+  const editedPlaying = soundscapeEditingView(preferences, editedId) === preferences;
+  const stillThere = soundscapePresets(next).some((preset) => preset.id === playingId);
+  const real: SoundscapePreferences = !stillThere
+    // The one that played was trashed in the view, which applied its successor.
+    ? next
+    : {
+        ...next,
+        enabled: preferences.enabled,
+        activePresetId: playingId,
+        settings: editedPlaying && next.activePresetId === playingId ? next.settings : preferences.settings,
+      };
+  return { preferences: { ...real, enabled: preferences.enabled }, editedId: next.activePresetId };
+}
+
 /** Rename a soundscape. A blank name changes nothing; names are unique, case aside. */
 export function renameSoundscape(preferences: SoundscapePreferences, id: string, name: string): SoundscapePreferences {
   const next = name.trim().slice(0, SOUNDSCAPE_NAME_MAX_LENGTH);
