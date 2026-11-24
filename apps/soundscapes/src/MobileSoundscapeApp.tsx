@@ -62,7 +62,6 @@ import { TimerRow } from './TimerRow'
 import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
 import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
-import { DEFAULT_GLAZE_SETTINGS } from '@thockdown/look/glaze'
 import { DashboardDock, DashboardSets, DashboardSoundscapes } from './Dashboard'
 import { PresetGrid } from '@thockdown/interaction/PresetListControls'
 import { SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
@@ -467,11 +466,10 @@ export function MobileSoundscapeApp() {
     <div className="app-root" style={theme.rootVariables}>
       <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
         {/* In the visualizer the linear and radial glaze sway, drawn by
-            VisualizerGlaze at full count, as on the desktop; gloom and sheen
-            stay as they are. The phone has no Glaze settings of its own, so
-            it sways at the desktop's defaults. */}
+            VisualizerGlaze at full count from the LAYOUT's glaze, as on the
+            desktop; gloom and sheen stay as they are. */}
         <ThemeGlazeLayers glaze={visualizerOpen ? { ...theme.glaze, linear: 'none', radial: 'none' } : theme.glaze} />
-        {visualizerOpen ? <VisualizerGlaze glaze={DEFAULT_GLAZE_SETTINGS} immersive={visualizer.immersive} /> : null}
+        {visualizerOpen ? <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} /> : null}
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
             {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}
