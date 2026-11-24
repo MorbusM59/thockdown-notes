@@ -13,6 +13,8 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.HashSet;
 import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * The Android side of the page's music (apps/soundscapes/src/nativeMusic.ts):
@@ -102,25 +104,37 @@ public class MusicPlugin extends Plugin {
         call.resolve();
     }
 
-    /** MusicFolders.scan on a worker thread: `{ uri, known: [paths] }` to `{ added, paths }`, sending `scanProgress` events (`{ done, total }`) as it goes. */
+    /** MusicFolders.list on a worker thread: `{ uri, known: [paths] }` to `{ paths, fresh }`. */
     @PluginMethod
-    public void scanFolder(PluginCall call) {
+    public void listFolder(PluginCall call) {
         Uri tree = Uri.parse(call.getString("uri", ""));
         Set<String> known = new HashSet<>();
         JSArray list = call.getArray("known", new JSArray());
         for (int index = 0; index < list.length(); index += 1) known.add(list.optString(index));
         new Thread(() -> {
             try {
-                call.resolve(JSObject.fromJSONObject(MusicFolders.scan(getContext(), tree, known, (done, total) -> {
-                    JSObject data = new JSObject();
-                    data.put("done", done);
-                    data.put("total", total);
-                    notifyListeners("scanProgress", data);
-                })));
+                call.resolve(JSObject.fromJSONObject(MusicFolders.list(getContext(), tree, known)));
             } catch (Exception error) {
                 call.reject("Could not read the folder: " + error);
             }
-        }, "MusicFolderScan").start();
+        }, "MusicFolderList").start();
+    }
+
+    /** MusicFolders.describe for each of `{ paths }`, on a worker thread: `{ added }`. */
+    @PluginMethod
+    public void describeSongs(PluginCall call) {
+        JSArray paths = call.getArray("paths", new JSArray());
+        new Thread(() -> {
+            try {
+                JSONArray added = new JSONArray();
+                for (int index = 0; index < paths.length(); index += 1) {
+                    added.put(MusicFolders.describe(getContext(), Uri.parse(paths.optString(index))));
+                }
+                call.resolve(JSObject.fromJSONObject(new JSONObject().put("added", added)));
+            } catch (Exception error) {
+                call.reject("Could not read the songs: " + error);
+            }
+        }, "MusicSongDescribe").start();
     }
 
     /** The library's two documents as stored: `{ catalog, rotation }`, each JSON text. */
@@ -168,6 +182,13 @@ public class MusicPlugin extends Plugin {
     @PluginMethod
     public void skip(PluginCall call) {
         session.skip();
+        call.resolve();
+    }
+
+    /** `{ direction }`: the previous (-1) or next (1) song of the pool's ring, from the song playing. */
+    @PluginMethod
+    public void jump(PluginCall call) {
+        session.jump(call.getInt("direction", 1) < 0 ? -1 : 1);
         call.resolve();
     }
 

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useGracedWheel } from './useGracedWheel'
 import { clamp } from './clamp'
 import { encodeTooltip } from './tooltipContent'
@@ -69,6 +69,12 @@ type CompactScrollbarSliderProps = {
    */
   dimmed?: boolean
   onCommit: (value: number) => void
+  /**
+   * Told when a drag starts and ends. A host whose commit is costly (a seek)
+   * shows the dragged value itself meanwhile and applies it on the end; the
+   * last `onCommit` of a drag always comes before its end.
+   */
+  onDraggingChange?: (dragging: boolean) => void
 }
 
 export function CompactScrollbarSlider({
@@ -84,6 +90,7 @@ export function CompactScrollbarSlider({
   defaultValue,
   disabled = false,
   readOnly = false,
+  onDraggingChange,
   formatValue,
   secondaryPress = 'reset',
   dimmed = false,
@@ -97,6 +104,14 @@ export function CompactScrollbarSlider({
   const railRef = useRef<HTMLDivElement | null>(null)
   const shellRef = useRef<HTMLDivElement | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const onDraggingChangeRef = useRef(onDraggingChange)
+  useEffect(() => { onDraggingChangeRef.current = onDraggingChange })
+  const draggingReportedRef = useRef(false)
+  useEffect(() => {
+    if (draggingReportedRef.current === isDragging) return
+    draggingReportedRef.current = isDragging
+    onDraggingChangeRef.current?.(isDragging)
+  }, [isDragging])
 
   const valueSpan = Math.max(max - min, Number.EPSILON)
 

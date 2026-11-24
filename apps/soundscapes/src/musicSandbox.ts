@@ -31,8 +31,10 @@
  *   start), counting it as played, as `{ "id", "uri" }` or null;
  * - musicChoose(songId): the same for a song chosen from the list, which
  *   rotates the pool to it rather than counting anything as played;
+ * - musicJump(currentId, direction): the same for the previous (-1) or next
+ *   (1) song of the playing pool's ring from `currentId`;
  * - musicRotationJson(): the rotation, for the service to store after a
- *   musicNext or musicChoose;
+ *   musicNext, musicJump or musicChoose;
  * - musicStep(playedFrame, maxChunks): report how far the output has played,
  *   render what the lead allows (at most `maxChunks`), and return
  *   `{ "chunks": [{ "s", "d" }], "ahead": frames of input held past the
@@ -51,7 +53,8 @@ import { MusicVoice, type MusicSettings } from '@thockdown/audio/musicVoice';
 import { RenderAheadEngine, type RenderedChunk } from '@thockdown/audio/renderAhead';
 import { StreamResampler } from '@thockdown/audio/resampler';
 import { EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q } from '@thockdown/visualizer/shared/musicEqCurve';
-import { chooseSong, EMPTY_CATALOG, nextSong, type MusicCatalog, type MusicRotation } from './musicLibrary';
+import { chooseSong, EMPTY_CATALOG, nextSong, poolOf, type MusicCatalog, type MusicRotation } from './musicLibrary';
+import { adjacentSongInPool } from '@thockdown/visualizer/shared/musicPool';
 import { decodeFullScaleStereo, encodeHalfScaleStereo, toBase64 } from '@thockdown/soundscape/halfScalePcm';
 import { SpectrumFrames } from '@thockdown/visualizer/visualizer/spectrumFrames';
 import { logBandEdges } from '@thockdown/visualizer/visualizer/spectrumBands';
@@ -183,6 +186,15 @@ scope.musicNext = (previousId: number): string => {
   const next = nextSong(poolCatalog(), rotation, previousId < 0 ? null : previousId);
   rotation = next.rotation;
   return JSON.stringify(next.song ? { id: next.song.id, uri: next.song.filePath } : null);
+};
+
+/** The previous (-1) or next (1) song of the pool's ring from `currentId` (-1 for none), the ring rotated to it. */
+scope.musicJump = (currentId: number, direction: number): string => {
+  const playing = poolCatalog();
+  const target = adjacentSongInPool(poolOf(playing, rotation), currentId < 0 ? undefined : currentId, direction < 0 ? -1 : 1);
+  if (!target) return 'null';
+  rotation = chooseSong(playing, rotation, target.id);
+  return JSON.stringify({ id: target.id, uri: target.filePath });
 };
 
 scope.musicChoose = (songId: number): string => {

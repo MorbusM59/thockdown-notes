@@ -280,17 +280,30 @@ export function MobileSoundscapeApp() {
     })
     return () => { cancelled = true; stop?.() }
   }, [])
-  // While help is up, the system's back gesture closes it rather than
-  // leaving the app (the visualizer, over it, takes the gesture itself).
+  // The system's back gesture steps back through what is up, and leaves the
+  // app only from the dashboard: help closes first, then an icon picker,
+  // then any other tab returns to the dashboard. The visualizer, over it
+  // all, takes the gesture itself. One effect decides it, so the gesture is
+  // taken or released once per change of what it would do.
+  const pickingIcon = iconPick !== null
+  const backStep: (() => void) | null = visualizerOpen
+    ? null
+    : helpMode ? () => setHelpMode(false)
+    : pickingIcon ? closeIconPick
+    : tab !== 'dashboard' ? () => selectTab('dashboard')
+    : null
+  const backStepRef = useRef(backStep)
+  useEffect(() => { backStepRef.current = backStep })
+  const backTaken = backStep !== null
   useEffect(() => {
-    if (!native || !helpMode || visualizerOpen) return undefined
+    if (!native || !backTaken) return undefined
     void nativeSoundscape!.takeBack({ taken: true })
-    const handle = nativeSoundscape!.addListener('back', () => setHelpMode(false))
+    const handle = nativeSoundscape!.addListener('back', () => backStepRef.current?.())
     return () => {
       void nativeSoundscape!.takeBack({ taken: false })
       void handle.then((h) => h.remove())
     }
-  }, [native, helpMode, visualizerOpen])
+  }, [native, backTaken])
   const help = helpMode ? helpFor : undefined
   const toggleHelp = () => setHelpMode((current) => !current)
 
@@ -549,11 +562,13 @@ export function MobileSoundscapeApp() {
   return (
     <div className="app-root" style={theme.rootVariables}>
       <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
-        {/* In the visualizer the linear and radial glaze sway, drawn by
-            VisualizerGlaze at full count from the LAYOUT's glaze, as on the
-            desktop; gloom and sheen stay as they are. */}
-        <ThemeGlazeLayers glaze={visualizerOpen ? { ...theme.glaze, linear: 'none', radial: 'none' } : theme.glaze} />
-        {visualizerOpen ? <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} /> : null}
+        {/* The linear and radial glaze are drawn by VisualizerGlaze from the
+            LAYOUT's glaze: in the visualizer swaying at full count, as on
+            the desktop, and everywhere else as the layout has them, the
+            linear stacks keeping their steady drift. Gloom and sheen stay
+            as they are. */}
+        <ThemeGlazeLayers glaze={{ ...theme.glaze, linear: 'none', radial: 'none' }} />
+        <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} driftOnly={!visualizerOpen} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
             {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}

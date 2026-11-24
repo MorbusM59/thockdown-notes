@@ -38,7 +38,10 @@ import {
   type MusicCatalog,
   type MusicRotation,
 } from './musicLibrary'
-import { loadMusicLibrary, type NativeMusicPlugin } from './nativeMusic'
+import { loadMusicLibrary, type NativeMusicPlugin, type ScannedSong } from './nativeMusic'
+
+/** Songs whose tags are read per call when a folder is added: about half a second's work at a few tens of milliseconds each, so the indexing bar moves steadily. */
+const DESCRIBE_BATCH = 16
 
 let catalog: MusicCatalog = EMPTY_CATALOG
 let rotation: MusicRotation = []
@@ -166,16 +169,23 @@ async function addFolderTo(slot: PlaylistSlot): Promise<boolean> {
   if (!plugin) return false
   const { uri } = await plugin.pickFolder()
   if (!uri) return false
-  // The Songs dock shows the scan's progress while it runs: reading every
-  // file's tags takes a while on a large folder.
+  // The Songs dock shows how far adding has got: the folder is listed, then
+  // its new songs' tags are read in batches, the slow part, the progress
+  // published between them.
   publishMusicIndexing({ done: 0, total: 0 })
-  const progress = await plugin.addListener('scanProgress', ({ done, total }) => publishMusicIndexing({ done, total }))
   try {
-    const scan = await plugin.scanFolder({ uri, known: catalog.songs.map((song) => song.filePath) })
-    commit(addScanToSet(catalog, slot, uri, scan.paths, scan.added))
+    const listing = await plugin.listFolder({ uri, known: catalog.songs.map((song) => song.filePath) })
+    const total = listing.fresh.length
+    const added: ScannedSong[] = []
+    publishMusicIndexing({ done: 0, total })
+    for (let start = 0; start < total; start += DESCRIBE_BATCH) {
+      const batch = await plugin.describeSongs({ paths: listing.fresh.slice(start, start + DESCRIBE_BATCH) })
+      added.push(...batch.added)
+      publishMusicIndexing({ done: added.length, total })
+    }
+    commit(addScanToSet(catalog, slot, uri, listing.paths, added))
     return true
   } finally {
-    void progress.remove()
     publishMusicIndexing(null)
   }
 }
@@ -186,12 +196,17 @@ function release(uris: readonly string[]): void {
 
 // The actions are made once: NowPlaying's readers compare them by identity.
 const actions = {
+  // Picked by the renderer, from the pool it plays and the song it last
+  // started: this page's copy of the rotation is reloaded only when a new
+  // song is heard, seconds after a step, so a step decided here could start
+  // the same song again.
   jumpSong(direction: -1 | 1) {
-    const pool = poolOf(catalog, rotation)
-    if (pool.length === 0) return
-    const at = pool.findIndex((song) => song.id === heardSongId)
-    const target = pool[(at + direction + pool.length) % pool.length]
-    void playSong(target.id)
+    if (!plugin) return
+    if (!playing) {
+      void startMusic()
+      return
+    }
+    void plugin.jump({ direction })
   },
   playFromPool(id: number) {
     void playSong(id)

@@ -94,6 +94,13 @@ final class MusicRenderer {
     private boolean ended = false;
     private Integer heardId = null;
     private long heardSecond = -1;
+    /**
+     * The song a step (skip, jump, choose) last started, until it is heard:
+     * rendering runs seconds ahead of the ear, so a second press soon after
+     * a first steps on from the song it started rather than from the one
+     * still heard, which would start the same song again.
+     */
+    private Integer steppedId = null;
 
     private interface Command {
         void run() throws Exception;
@@ -154,7 +161,21 @@ final class MusicRenderer {
             if (stage == null) return;
             settle();
             configure(true);
-            startSong(next(heardId), 0);
+            stepTo(next(current()));
+        });
+    }
+
+    /** The previous (-1) or next (1) song of the pool's ring from the song playing (musicPool.ts's adjacentSongInPool), now. */
+    void jump(int direction) {
+        post(() -> {
+            if (stage == null) return;
+            settle();
+            Integer from = current();
+            Song song = songFrom(isolate.evaluateJavaScriptAsync("musicJump(" + (from == null ? -1 : from) + ", " + direction + ")").get());
+            rotated();
+            if (song == null) return;
+            configure(true);
+            stepTo(song);
         });
     }
 
@@ -164,7 +185,7 @@ final class MusicRenderer {
             if (stage == null) return;
             settle();
             configure(true);
-            startSong(songFrom(isolate.evaluateJavaScriptAsync("musicChoose(" + songId + ")").get()), 0);
+            stepTo(songFrom(isolate.evaluateJavaScriptAsync("musicChoose(" + songId + ")").get()));
             rotated();
         });
     }
@@ -177,6 +198,17 @@ final class MusicRenderer {
             configure(true);
             startSong(new Song(heardId, uris.get(heardId)), seconds);
         });
+    }
+
+    /** The song a step starts from: the one a step last started until it is heard, else the one heard. */
+    private Integer current() {
+        return steppedId != null ? steppedId : heardId;
+    }
+
+    /** Start `song` from its beginning as a step's choice (`steppedId`). */
+    private void stepTo(Song song) throws Exception {
+        startSong(song, 0);
+        steppedId = decoding == null ? null : decoding.id;
     }
 
     /** The pool's pick after `previousId` (null at the start), counting it as played. */
@@ -335,6 +367,7 @@ final class MusicRenderer {
         if (!java.util.Objects.equals(id, heardId) || second != heardSecond) {
             heardId = id;
             heardSecond = second;
+            if (java.util.Objects.equals(id, steppedId)) steppedId = null;
             listener.onHeard(id, at == null ? 0 : (double) at.getLong("offsetFrames") / output.sampleRate, played);
         }
         return new long[] { chunks.length(), step.getLong("ahead") };
