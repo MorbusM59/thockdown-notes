@@ -19,8 +19,10 @@ export interface NativeMusicPlugin {
   /** The system's folder picker: the tree chosen, its read grant kept across restarts. */
   pickFolder(): Promise<{ uri?: string }>
   releaseFolder(options: { uri: string }): Promise<void>
-  /** The audio files under `uri` with their tags, except `known` paths; every path found as `paths`. */
-  scanFolder(options: { uri: string; known: string[] }): Promise<{ added: ScannedSong[]; paths: string[] }>
+  /** Every audio file under `uri` as `paths`, and those not in `known` as `fresh`. */
+  listFolder(options: { uri: string; known: string[] }): Promise<{ paths: string[]; fresh: string[] }>
+  /** These songs' tags (the slow part of adding a folder, so the page asks in batches and shows its progress). */
+  describeSongs(options: { paths: string[] }): Promise<{ added: ScannedSong[] }>
   getLibrary(): Promise<{ catalog: string; rotation: string }>
   setCatalog(options: { catalog: string }): Promise<void>
   play(options: { stage: string }): Promise<void>
@@ -28,6 +30,8 @@ export interface NativeMusicPlugin {
   pause(): Promise<void>
   stop(): Promise<void>
   skip(): Promise<void>
+  /** The previous (-1) or next (1) song of the pool's ring from the song playing, picked where the music plays. */
+  jump(options: { direction: -1 | 1 }): Promise<void>
   choose(options: { songId: number }): Promise<void>
   seek(options: { seconds: number }): Promise<void>
   /** A gain, 0..1: the app's volume curve is applied before it is sent. */
@@ -48,8 +52,6 @@ export interface NativeMusicPlugin {
   addListener(event: 'heard', listener: (data: { songId: number | null; seconds: number; frame: number; sampleRate: number; playing: boolean }) => void): Promise<PluginListenerHandle>
   /** Spectrum frames (spectrumFrames.ts's batches, as JSON text; nativeMusicListening.ts reads them). */
   addListener(event: 'spectrum', listener: (data: { batches: string }) => void): Promise<PluginListenerHandle>
-  /** A scan's progress (scanFolder): `done` of `total` new files read; `total` counts up while the folder is still being listed. */
-  addListener(event: 'scanProgress', listener: (data: { done: number; total: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'failure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
 }
 

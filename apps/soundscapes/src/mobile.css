@@ -395,11 +395,19 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
   margin: 0;
 }
 
-/* A curve's points (the soundstage EQ) at a fingertip's size: the desktop's
-   are sized for a mouse. The plot's inset follows the size, so a point at
-   either end still sits whole inside the graph. */
-.mobile-app-shell .options-curve-graph {
-  --curve-point-size: 28px;
+/* A curve's editor (the soundstage EQ): the graph is TWO ROWS of the grid,
+   as on the desktop, not squared like the grid's buttons (which made it six
+   rows tall): two cells and the gap between them, a cell being the grid's
+   width less its five gaps, over six. Its points are 14px; the plot's inset
+   follows the size, so a point at either end still sits whole inside it. */
+.mobile-app-shell .options-curve-editor > .options-loadout-grid {
+  container-type: inline-size;
+}
+
+.mobile-app-shell .options-loadout-grid > .options-curve-graph {
+  --curve-point-size: 14px;
+  aspect-ratio: auto;
+  height: calc(2 * (100cqw - (5 * var(--toolbar-options-gap))) / 6 + var(--toolbar-options-gap));
 }
 
 /* The beat calibration strip is ONE ROW of the grid, as on the desktop,

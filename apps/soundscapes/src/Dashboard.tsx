@@ -156,32 +156,68 @@ function SongName({ song }: { song: MusicSongEntry | null }) {
  * the previous and the next song. Read once a second while the music plays
  * (a clock in seconds changes no oftener), and on every change of song.
  */
+/**
+ * The song's position. It ticks as often as moves the thumb about a pixel
+ * (the song's length over the track's width, between 50 ms and a second),
+ * so it glides rather than jumping once a second. A drag shows where the
+ * finger is and seeks once, on release; until the music reports a time near
+ * the seek, the thumb stays where it was let go rather than snapping back.
+ * Keyed by the song, so a new song starts with nothing held.
+ */
 function SongProgress({ playing, jumpSong }: { playing: boolean; jumpSong: (direction: -1 | 1) => void }) {
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    if (!playing) return
-    const timer = window.setInterval(() => setTick((tick) => tick + 1), 1000)
-    return () => window.clearInterval(timer)
-  }, [playing])
   const listening = musicListening()
   const duration = listening.currentDurationSec
-  const position = Math.min(listening.currentTime, duration)
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  const [, setTick] = useState(0)
+  // Where the thumb is held: during a drag, and after a seek until the music catches up.
+  const [held, setHeld] = useState<number | null>(null)
+  const heldRef = useRef<number | null>(null)
+  const draggingRef = useRef(false)
+  const hold = (seconds: number | null) => {
+    heldRef.current = seconds
+    setHeld(seconds)
+  }
+  useEffect(() => {
+    if (!playing || duration <= 0) return
+    const trackPx = Math.max(1, rowRef.current?.offsetWidth ?? 1)
+    const intervalMs = Math.min(1000, Math.max(50, (duration * 1000) / trackPx))
+    const timer = window.setInterval(() => {
+      // A seek has landed once the music reports a time within a second of it.
+      const target = heldRef.current
+      if (target !== null && !draggingRef.current && Math.abs(musicListening().currentTime - target) < 1) hold(null)
+      setTick((tick) => tick + 1)
+    }, intervalMs)
+    return () => window.clearInterval(timer)
+  }, [playing, duration])
+  const heard = Math.min(listening.currentTime, duration)
+  const seek = (seconds: number) => {
+    hold(seconds)
+    if (duration > 0) listening.setCurrentTimeFraction(seconds / duration)
+  }
+  const position = held ?? heard
   return (
-    <div className="options-slider-row mobile-dock-slider-row" role="group" aria-label="Song position">
+    <div ref={rowRef} className="options-slider-row mobile-dock-slider-row" role="group" aria-label="Song position">
       <button type="button" className="btn-icon options-color-swatch options-loadout-btn mobile-dock-chip" aria-label="Previous song" onClick={() => jumpSong(-1)}>
         <span className="fa-solid fa-backward-step" aria-hidden="true" />
       </button>
       <CompactScrollbarSlider
         id="mobile-dashboard-song-position"
-        value={Math.round(position)}
+        value={position}
         min={0}
-        max={Math.max(1, Math.round(duration))}
+        max={Math.max(1, duration)}
         step={1}
         trackLabel={duration > 0 ? `${clockText(position)} / ${clockText(duration)}` : ''}
         ariaLabel="Song position"
         formatValue={clockText}
         disabled={duration <= 0}
-        onCommit={(seconds) => { if (duration > 0) listening.setCurrentTimeFraction(seconds / duration) }}
+        onDraggingChange={(dragging) => {
+          draggingRef.current = dragging
+          if (!dragging && heldRef.current !== null) seek(heldRef.current)
+        }}
+        onCommit={(seconds) => {
+          if (draggingRef.current) hold(seconds)
+          else seek(seconds)
+        }}
       />
       <button type="button" className="btn-icon options-color-swatch options-loadout-btn mobile-dock-chip" aria-label="Next song" onClick={() => jumpSong(1)}>
         <span className="fa-solid fa-forward-step" aria-hidden="true" />
@@ -347,7 +383,7 @@ export function DashboardDock({ timeLeft, soundscape, onSoundscapeTransport, onS
       {musicChannel ? (<>
         {filter.enabled ? <DashboardFilter /> : null}
         <SongName song={nowPlaying.song} />
-        <SongProgress playing={musicPlaying} jumpSong={nowPlaying.jumpSong} />
+        <SongProgress key={nowPlaying.song?.id ?? 'none'} playing={musicPlaying} jumpSong={nowPlaying.jumpSong} />
       </>) : null}
       <div className="options-loadout-grid" role="group" aria-label="Play">
         <button

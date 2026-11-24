@@ -8,7 +8,8 @@
  * set how far each layer travels (`swayDepth`). The radial sources move
  * as one, behind the stacks, or in front of them when the layout puts
  * radial above linear. Gloom and sheen stay with the ordinary glaze and do
- * not move.
+ * not move. With `driftOnly` it is the app's glaze outside the visualizer:
+ * the layout's own, the linear stacks drifting and nothing else moving.
  *
  * The radial sources' element reaches past the window by the sway's
  * overscan, so its travel never shows an edge; each linear stack is endless
@@ -87,7 +88,18 @@ function SwayLayer({ layer, overscan, angleDeg }: { layer: Layer; overscan: numb
   )
 }
 
-export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; immersive: VisualizerImmersive }) {
+/**
+ * The glaze's motion outside the visualizer (`driftOnly`): the linear stacks
+ * keep their steady drift and nothing else moves (no sway, pushes or orbit),
+ * at the layout's own strengths and counts, so the glaze looks exactly as the
+ * still one does, only drifting.
+ */
+function driftOnlyOf(immersive: VisualizerImmersive): VisualizerImmersive {
+  return { ...immersive, swayRange: 0, swayPush: 0, poleOrbit: 0, glareStrength: 1, flairStrength: 1, glareMinStacks: 0, flairMinSources: 0 }
+}
+
+export function VisualizerGlaze({ glaze, immersive: settings, driftOnly = false }: { glaze: GlazeSettings; immersive: VisualizerImmersive; driftOnly?: boolean }) {
+  const immersive = useMemo(() => (driftOnly ? driftOnlyOf(settings) : settings), [driftOnly, settings])
   // The widest the music ever carries the nearest layer, which no layer exceeds.
   // The motion is set in arc minutes and drawn as the centre's travel in px,
   // which depends on the screen's size (`arcminToPx`).

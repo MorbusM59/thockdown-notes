@@ -5,10 +5,8 @@ import android.content.Context;
 import android.database.Cursor;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
-import android.os.SystemClock;
 import android.provider.DocumentsContract;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -25,37 +23,26 @@ import org.json.JSONObject;
  * MusicSongEntry fields): the document's URI as the path, and the title,
  * artist, album and duration from the file's tags, read by the platform
  * (MediaMetadataRetriever). Reading tags costs a few tens of milliseconds a
- * file, so files the catalog already holds are passed over, and a scan
- * reports its progress as it goes (the phone's indexing bar).
+ * file, so files the catalog already holds are passed over, and the page
+ * asks for the rest in batches, showing its progress between them.
  */
 final class MusicFolders {
     private MusicFolders() {}
 
-    /** How far a scan has got: `done` of the `total` new files described. */
-    interface Progress {
-        void onProgress(int done, int total);
-    }
-
-    /** At most this often a scan reports its progress, plus once at each phase's end. */
-    private static final long PROGRESS_INTERVAL_MS = 100;
-
     /**
-     * The audio files under `treeUri`, as `{ filePath, title, artist, album,
-     * durationSec }`, except those whose path is in `known`; and every path
-     * found, `known` or not, as `paths`, so the page can tell what has gone.
-     *
-     * Two passes, so the progress has a total: the tree is LISTED first
-     * (cheap: the total of new files counts up while `done` stays 0), then
-     * each new file is DESCRIBED (its tags read, the slow part).
+     * The audio files under `treeUri`: every path found as `paths`, so the
+     * page can tell what has gone, and those not in `known` as `fresh`, for
+     * the page to have described (`describe`) in batches. Listing is cheap;
+     * reading tags is the slow part, so the page drives that loop itself and
+     * knows its progress by construction (the Songs dock's indexing bar).
      */
-    static JSONObject scan(Context context, Uri treeUri, Set<String> known, Progress progress) throws Exception {
+    static JSONObject list(Context context, Uri treeUri, Set<String> known) throws Exception {
         ContentResolver resolver = context.getContentResolver();
         JSONArray paths = new JSONArray();
-        ArrayList<String> fresh = new ArrayList<>();
+        JSONArray fresh = new JSONArray();
         ArrayDeque<String> folders = new ArrayDeque<>();
         folders.add(DocumentsContract.getTreeDocumentId(treeUri));
         String[] columns = { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_MIME_TYPE };
-        long reported = 0;
         while (!folders.isEmpty()) {
             Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, folders.poll());
             try (Cursor cursor = resolver.query(children, columns, null, null, null)) {
@@ -70,31 +57,15 @@ final class MusicFolders {
                     if (mime == null || !mime.startsWith("audio/")) continue;
                     String path = DocumentsContract.buildDocumentUriUsingTree(treeUri, id).toString();
                     paths.put(path);
-                    if (!known.contains(path)) fresh.add(path);
+                    if (!known.contains(path)) fresh.put(path);
                 }
             }
-            long now = SystemClock.uptimeMillis();
-            if (now - reported >= PROGRESS_INTERVAL_MS) {
-                reported = now;
-                progress.onProgress(0, fresh.size());
-            }
         }
-        int total = fresh.size();
-        progress.onProgress(0, total);
-        reported = SystemClock.uptimeMillis();
-        JSONArray added = new JSONArray();
-        for (int index = 0; index < total; index += 1) {
-            added.put(describe(context, Uri.parse(fresh.get(index))));
-            long now = SystemClock.uptimeMillis();
-            if (now - reported >= PROGRESS_INTERVAL_MS || index + 1 == total) {
-                reported = now;
-                progress.onProgress(index + 1, total);
-            }
-        }
-        return new JSONObject().put("added", added).put("paths", paths);
+        return new JSONObject().put("paths", paths).put("fresh", fresh);
     }
 
-    private static JSONObject describe(Context context, Uri uri) throws Exception {
+    /** A song as the catalog writes it, `{ filePath, title, artist, album, durationSec }`, from its tags. */
+    static JSONObject describe(Context context, Uri uri) throws Exception {
         JSONObject song = new JSONObject().put("filePath", uri.toString());
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {

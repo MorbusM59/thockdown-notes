@@ -148,6 +148,10 @@ final class MusicSession {
         if (renderer != null) renderer.skip();
     }
 
+    synchronized void jump(int direction) {
+        if (renderer != null) renderer.jump(direction);
+    }
+
     synchronized void choose(int songId) {
         if (renderer != null) renderer.choose(songId);
     }
