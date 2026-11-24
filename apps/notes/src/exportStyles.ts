@@ -1,3 +1,5 @@
+import { kodeMonoFontUrl } from '@thockdown/visualizer/visualizer/visualizerFonts'
+
 export type ExportViewStyle =
   | 'modern'
   | 'narrow'
@@ -268,7 +270,7 @@ async function buildExportFontFaceCss(): Promise<string> {
     fetchFontAsDataUri(new URL('./fonts/VictorMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/Bytesized-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/IosevkaCharonMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/KodeMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
+    fetchFontAsDataUri(kodeMonoFontUrl, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/XanhMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/Lekton-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/NovaMono-Regular.woff2', import.meta.url).href, 'font/woff2'),

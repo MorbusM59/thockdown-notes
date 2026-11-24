@@ -1,6 +1,16 @@
 /* The visualizer mode (F3): the scene over the active slot (VisualizerScene.tsx)
    and the swaying glaze (VisualizerGlaze.tsx). */
 
+/* The scene's default font (shared/visualizerFont.ts), carried by the
+   package that draws it, so every app showing the scene has it; the desktop
+   also offers it as an editor font (EditorTypography.ts). */
+@font-face {
+  font-family: 'Kode Mono';
+  src: url('./fonts/KodeMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
 /* Nothing of the slot's chrome stays: immersive mode keeps the render view's
    thumb (layout.css), which describes the hidden note. */
 .app-grid.is-visualizer .editor-scrollbar-slot.is-preview-mode {
