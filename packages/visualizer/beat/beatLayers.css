@@ -1,0 +1,98 @@
+/* The visualizer's EDGE and PANE (useBeatGridMirror.ts): the beat's two
+   blocks, drawn by each app where its scene or editor is, the desktop's
+   editor shell (SectionEditorArea.tsx) and the phone's visualizer page
+   alike. Each app shows them (display) under its own rule, since what
+   counts as the active surface is the app's. */
+@property --beat-edge {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+@property --beat-pane {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+.editor-beat-edge {
+  display:        none;
+  position:       absolute;
+  inset:          0;
+  border-radius:  inherit;
+  pointer-events: none;
+  z-index:        4;
+  box-shadow:
+    inset 0 0 calc(var(--beat-edge-blur, 32px) * var(--beat-edge-blur-scale, 1) / 8) calc(var(--beat-edge-spread, 0px) + var(--beat-edge-spread-extra, 0px)) var(--beat-edge-color),
+    inset 0 0 calc(var(--beat-edge-blur, 32px) * var(--beat-edge-blur-scale, 1)) calc(var(--beat-edge-spread, 0px) + var(--beat-edge-spread-extra, 0px)) color-mix(in srgb, var(--beat-edge-color) 45%, transparent);
+  opacity:        var(--beat-edge, 0);
+}
+
+/* The pane in the edit view: a copy of the grid's outline pattern, whose
+   box, tile and phase useBeatGridMirror keeps equal to the real grid's
+   (which sits in the edit pane, where a layer of its own would pull the
+   text into an overlap layer). Shown only while a grid is (.has-grid). In
+   any other view the pane is .editor-beat-wash instead. */
+.editor-beat-pane {
+  display:        none;
+  image-rendering: pixelated;
+  position:       absolute;
+  pointer-events: none;
+  z-index:        4;
+  opacity:        var(--beat-pane, 0);
+  background-color: var(--beat-pane-color);
+  /* The box bevel's shading, over the pane colour, at the grid's tile. */
+  background-image:    var(--box-shading, none);
+  background-size:     var(--beat-pane-tile-size, auto);
+  background-position: var(--beat-pane-tile-position, 0 0);
+  /* The grid's own mask, copied whole (the outline tile at the grid's
+     phase, less any hole), so the highlight covers exactly the outline. */
+  mask-image:     var(--grid-mask-image, none);
+  mask-size:      var(--grid-mask-size, auto);
+  mask-position:  var(--grid-mask-position, 0 0);
+  mask-repeat:    var(--grid-mask-repeat, repeat);
+  mask-composite: var(--grid-mask-composite, add);
+}
+
+/* A grid that closes round its hole with a ring (visualizer/cutoutRing.ts):
+   the ring lies inside the hole, so the hole is taken out of the pattern
+   alone (::before) rather than out of the pane, and the ring is ::after.
+   Only then: a pattern on a pseudo-element under the pane's opacity
+   composites a shade apart from the pane's own, so a grid without a ring
+   keeps the pattern on the pane. */
+.editor-beat-pane[data-grid-ring] {
+  background-color: transparent;
+  background-image: none;
+  mask-image:       none;
+}
+.editor-beat-pane[data-grid-ring]::before {
+  content:  '';
+  position: absolute;
+  inset:    0;
+  background-color: var(--beat-pane-color);
+  background-image:    var(--box-shading, none);
+  background-size:     var(--beat-pane-tile-size, auto);
+  background-position: var(--beat-pane-tile-position, 0 0);
+  /* The tile and mask as custom properties, not `inherit`: an explicit inherit makes
+     this pseudo-element recompute its style (and repaint its mask) whenever
+     the pane's style changes, which is once a frame. */
+  mask-image:     var(--grid-mask-image, none);
+  mask-size:      var(--grid-mask-size, auto);
+  mask-position:  var(--grid-mask-position, 0 0);
+  mask-repeat:    var(--grid-mask-repeat, repeat);
+  mask-composite: var(--grid-mask-composite, add);
+}
+
+/* The ring the grid closes round its hole with (visualizer/cutoutRing.ts),
+   in the pane's colour; absent when the grid has none. */
+.editor-beat-pane[data-grid-ring]::after {
+  content:  '';
+  position: absolute;
+  left:     var(--grid-ring-left, 0);
+  top:      var(--grid-ring-top, 0);
+  width:    var(--grid-ring-size, 0);
+  height:   var(--grid-ring-size, 0);
+  background-color: var(--beat-pane-color);
+  mask-image:  var(--grid-ring-mask, none);
+  mask-size:   100% 100%;
+  mask-repeat: no-repeat;
+}
+

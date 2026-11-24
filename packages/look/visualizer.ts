@@ -155,7 +155,7 @@ export interface VisualizerPaneModes {
 }
 
 /**
- * The glaze the visualizer mode sways (apps/notes's VisualizerGlaze.tsx):
+ * The glaze the visualizer mode sways (packages/visualizer's VisualizerGlaze.tsx):
  * the layout's glaze with at least `glareMinStacks` linear stacks and
  * `flairMinSources` radial sources, the stacks drawn at `glareStrength` and
  * the sources at `flairStrength` times the layout's own strengths,

@@ -21,6 +21,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import './beatLayers.css'
 
 /** The inline properties `sync` writes, removed again when the grid goes so the flat pane fills the shell. */
 const MIRRORED_PROPERTIES = ['left', 'top', 'width', 'height', '--beat-pane-tile-size', '--beat-pane-tile-position', '--box-shading']

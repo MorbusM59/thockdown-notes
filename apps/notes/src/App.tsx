@@ -168,7 +168,7 @@ import { applyDocumentTheme, FALLBACK_SPELL_CHECK_COLOR, themeFrame } from '@tho
 import { DEFAULT_SPELL_CHECK_DICTIONARIES } from './shared/spellCheck'
 import { spellCheckClient } from './spellCheck/spellCheckClient'
 import { ImageCorrectionFilter, ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
-import { VisualizerGlaze } from './visualizer/VisualizerGlaze'
+import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings, type TypingTrailSettings } from './shared/typingTrailSettings'
 import { typingTrail } from './typingTrail/typingTrail'
 import { DEFAULT_SPEED_READING_SETTINGS, sanitizeSpeedReadingSettings, type SpeedReadingSettings } from './speedReading/speedReadingSettings'

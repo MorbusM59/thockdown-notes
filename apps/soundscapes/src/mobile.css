@@ -295,6 +295,28 @@ body {
   background: var(--background-color-root);
 }
 
+/* The scene's stage, its own stacking context, so the beat's edge and pane
+   (beatLayers.css, z-index 4) draw over the scene as on the desktop. */
+.visualizer-page > .editor-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* The edge and pane show while the music drives them, as the desktop shows
+   them on its active slot (editor.css); the visualizer page is the phone's
+   one surface. The edge at the desktop visualizer's scale (visualizer.css). */
+html[data-beat-edge] .visualizer-page > .editor-beat-edge,
+html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
+  display:     block;
+  will-change: opacity;
+}
+
+.visualizer-page > .editor-beat-edge {
+  --beat-edge-blur-scale: 2;
+  --beat-edge-spread-extra: 10px;
+}
+
 /* The view selector above the sidebar frame (MobileTabs.tsx), spaced from it as the desktop's. */
 .mobile-soundscape-shell {
   display: flex;
@@ -325,4 +347,12 @@ body {
 .mobile-app-shell .options-loadout-grid.beat-loop-calibration > .beat-loop-calibration-strip {
   aspect-ratio: auto;
   height: calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
+}
+
+/* The dashboard's dock: the transport row, then the volumes, a regular
+   spacing apart, as an options stack spaces its rows. */
+.mobile-dashboard-dock {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-regular);
 }

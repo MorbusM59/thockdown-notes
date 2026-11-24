@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { WordCountOrPace } from './WordCountOrPace'
-import { useBeatGridMirror } from '../beat/useBeatGridMirror'
+import { useBeatGridMirror } from '@thockdown/visualizer/beat/useBeatGridMirror'
 import { liveStyleTarget } from '@thockdown/visualizer/shared/liveStyle'
 import type { ClipboardEvent, CSSProperties, DragEvent, MouseEvent, MutableRefObject, ReactNode, RefObject } from 'react'
 import { CM6Editor } from '../components/CM6Editor'

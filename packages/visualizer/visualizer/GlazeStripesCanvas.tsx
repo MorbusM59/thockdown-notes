@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { linkProgram, useWebGL2Canvas } from '@thockdown/visualizer/visualizer/useWebGL2Canvas'
 import type { GlazeStripe } from '@thockdown/look/loadoutTheme'
-import { poleOrbitAt, registerLinearSlide } from '@thockdown/visualizer/visualizer/parallaxSway'
+import { poleOrbitAt, registerLinearSlide } from './parallaxSway'
 import { glazeRayAngle, glazeRayFan, glazeRayScale, orbitGlazeRayFan, type GlazeSettings } from '@thockdown/look/glaze'
 
 /*
