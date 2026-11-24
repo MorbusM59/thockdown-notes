@@ -18,10 +18,27 @@
  * shows on the very next frame.
  */
 
-import type { BeatLoop, BeatLoopPlayer, LoopRun } from '@thockdown/visualizer/beat/beatLoops'
+import { LOOP_01, LOOP_02, LOOP_03, LOOP_04, LOOP_05, LOOP_06, LOOP_07, type BeatLoop, type BeatLoopPlayer, type LoopRun } from '@thockdown/visualizer/beat/beatLoops'
 import { connectToOutput, holdOutputAlone, resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import { outputLatencySec } from '@thockdown/visualizer/sound/desktopMusicListening'
 import { SmoothClock } from '@thockdown/visualizer/sound/smoothClock'
+
+/**
+ * The desktop's loops, in the order a right press steps through them. Each
+ * `.mp4` is its `.wav` stored losslessly as FLAC in one fragment of a
+ * fragmented MP4, the form Media Source Extensions take:
+ *   ffmpeg -i NN.wav -c:a flac -sample_fmt s16 -f mp4 \
+ *     -movflags +frag_keyframe+empty_moov+default_base_moof+omit_tfhd_offset -frag_duration 16000000 NN.mp4
+ */
+export const BEAT_LOOPS: readonly BeatLoop[] = [
+  { ...LOOP_01, url: new URL('../assets/sounds/loops/01.mp4', import.meta.url).href },
+  { ...LOOP_02, url: new URL('../assets/sounds/loops/02.mp4', import.meta.url).href },
+  { ...LOOP_03, url: new URL('../assets/sounds/loops/03.mp4', import.meta.url).href },
+  { ...LOOP_04, url: new URL('../assets/sounds/loops/04.mp4', import.meta.url).href },
+  { ...LOOP_05, url: new URL('../assets/sounds/loops/05.mp4', import.meta.url).href },
+  { ...LOOP_06, url: new URL('../assets/sounds/loops/06.mp4', import.meta.url).href },
+  { ...LOOP_07, url: new URL('../assets/sounds/loops/07.mp4', import.meta.url).href },
+]
 
 const LOOP_MIME = 'audio/mp4; codecs="flac"'
 /** How much of the loop is kept queued ahead of the listener, and behind them before it is let go. */

@@ -44,7 +44,19 @@ let rotation: MusicRotation = []
 let heardSongId: number | null = null
 // The music's own levels. Reverb and room are the soundstage's on the phone
 // (the Soundstages tab), so the visualizer's level bars move only the volume.
-let levels: SoundLevels = { volume: 1, reverb: 0, room: 0 }
+let levels: SoundLevels = { volume: loadVolume(), reverb: 0, room: 0 }
+
+const VOLUME_KEY = 'thockdown:music-volume'
+
+/** The music volume last set (the slider's fraction), or full on a first launch. */
+function loadVolume(): number {
+  try {
+    const stored = Number(localStorage.getItem(VOLUME_KEY))
+    return localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(stored) ? Math.max(0, Math.min(1, stored)) : 1
+  } catch {
+    return 1
+  }
+}
 let plugin: NativeMusicPlugin | null = null
 // Whether the music is heard playing (the native player's `heard` reports).
 let playing = false
@@ -63,8 +75,47 @@ export function setMusicStage(stage: string): void {
  */
 export async function startMusic(): Promise<void> {
   if (!plugin || playing || stageJson === null) return
-  playing = true
+  setPlaying(true)
   await plugin.play({ stage: stageJson })
+}
+
+/** Play or pause the music (the dashboard's music button). */
+export function toggleMusic(): void {
+  if (!plugin) return
+  if (!playing) {
+    void startMusic()
+    return
+  }
+  setPlaying(false)
+  void plugin.pause()
+}
+
+/** On to the pool's next pick, starting the music if it is not playing. */
+export function skipMusic(): void {
+  if (!plugin) return
+  if (!playing) {
+    void startMusic()
+    return
+  }
+  void plugin.skip()
+}
+
+const playingListeners = new Set<() => void>()
+
+function setPlaying(next: boolean): void {
+  if (next === playing) return
+  playing = next
+  for (const listener of playingListeners) listener()
+}
+
+/** Whether the music plays, for useSyncExternalStore. */
+export function readMusicPlaying(): boolean {
+  return playing
+}
+
+export function subscribeMusicPlaying(listener: () => void): () => void {
+  playingListeners.add(listener)
+  return () => playingListeners.delete(listener)
 }
 
 /** Plays `songId`, starting the music first if nothing plays: choosing needs a renderer. */
@@ -152,6 +203,11 @@ const actions = {
     if (level !== 'volume') return
     levels = { ...levels, volume: fraction }
     void plugin?.setVolume({ volume: volumeGain(fraction) })
+    try {
+      localStorage.setItem(VOLUME_KEY, String(fraction))
+    } catch {
+      // Storage refused: the volume holds until the app is closed.
+    }
     publish()
   },
 }
@@ -182,10 +238,11 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
   })
   // The visualizer reads the native music: its clock, its file and its spectrum (nativeMusicListening.ts).
   setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId)))
-  playing = (await native.getState()).playing
+  setPlaying((await native.getState()).playing)
+  void native.setVolume({ volume: volumeGain(levels.volume) })
   publish()
   const handle = await native.addListener('heard', (heard) => {
-    playing = heard.playing
+    setPlaying(heard.playing)
     if (heard.songId === heardSongId) return
     heardSongId = heard.songId
     // A new song means the renderer picked (or was told to): its rotation moved.

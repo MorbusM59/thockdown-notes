@@ -43,7 +43,9 @@ interface PresetListHostProps<S> {
   onChange: (list: PresetList<S>) => void
 }
 
-export function PresetGrid<S>({ kind, list, onChange, idPrefix, label, plural }: PresetListHostProps<S> & {
+export function PresetGrid<S>({ kind, list, onChange, idPrefix, label, plural, creates = true }: PresetListHostProps<S> & {
+  /** Whether the grid ends in the plus that creates an entry; false where the grid only picks (the phone's dashboard). */
+  creates?: boolean
   /** Prefix of a new entry's id. */
   idPrefix: string
   /** What the list is called, for its accessible name. */
@@ -67,7 +69,7 @@ export function PresetGrid<S>({ kind, list, onChange, idPrefix, label, plural }:
           <PresetMark preset={preset} />
         </button>
       ))}
-      <button
+      {creates ? <button
         type="button"
         className="btn-icon options-color-swatch options-loadout-btn options-loadout-plus"
         aria-label={`Create ${plural}`}
@@ -79,7 +81,7 @@ export function PresetGrid<S>({ kind, list, onChange, idPrefix, label, plural }:
         }}
       >
         <span className="options-loadout-plus-glyph fa-solid fa-plus" aria-hidden="true" />
-      </button>
+      </button> : null}
     </div>
   )
 }

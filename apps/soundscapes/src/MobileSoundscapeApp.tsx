@@ -14,7 +14,6 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
-import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
@@ -24,6 +23,7 @@ import {
   setSoundscapeIcon,
   soundscapePresets,
   type SoundscapePreferences,
+  applySoundscapePreset,
 } from '@thockdown/soundscape/soundscape'
 import { exportSoundscapes, importSoundscapes } from '@thockdown/soundscape/soundscapeFileActions'
 import {
@@ -34,7 +34,6 @@ import {
   LIGHT_PRESET_ICONS,
   LIGHT_PRESET_THEMES,
 } from '@thockdown/look/presets'
-import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
@@ -60,7 +59,9 @@ import { musicScheduleEvents, sanitizeSchedule, scheduleEvents, type Schedule } 
 import { ScheduleRows } from './ScheduleRows'
 import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
-import { LookButton } from './LookButton'
+import { DashboardDock, DashboardSets, DashboardSoundscapes } from './Dashboard'
+import { PresetGrid } from '@thockdown/interaction/PresetListControls'
+import { SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
 import { SoundscapeDock } from '@thockdown/soundscape/SoundscapeDock'
@@ -85,6 +86,7 @@ import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, PHONE_VI
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
 import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
+import { LOOP_03 } from '@thockdown/visualizer/beat/beatLoops'
 import { createNativeBeatLoopPlayer } from './nativeBeatLoop'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
@@ -92,6 +94,15 @@ installSoundscapeFiles()
 
 // The beat delay calibration plays its loop natively, where the music plays (nativeBeatLoop.ts); there is none in a browser.
 const beatLoopPlayer = nativeMusic ? createNativeBeatLoopPlayer(nativeMusic) : null
+/**
+ * The phone ships ONE loop, AAC at 128 kbps (ffmpeg -i 03.wav -c:a aac -b:a
+ * 128k -movflags +faststart 03.m4a; it decodes to the WAV's exact length and
+ * alignment): the desktop steps through seven with a right press, which a
+ * finger has no counterpart for, and seven would be most of the app's size.
+ * Loop 03 is the plainest to judge by: sparse, straight hits on a slow bar,
+ * so no hit can be mistaken for its neighbour.
+ */
+const BEAT_LOOPS = [{ ...LOOP_03, url: new URL('./assets/loops/03.m4a', import.meta.url).href }]
 
 const PRESETS = { light: LIGHT_FACTORY_PRESETS, dark: DARK_FACTORY_PRESETS }
 const PRESET_ICONS = { light: LIGHT_PRESET_ICONS, dark: DARK_PRESET_ICONS }
@@ -161,6 +172,8 @@ export function MobileSoundscapeApp() {
   const closeVisualizer = useCallback(() => setVisualizerOpen(false), [])
   // The tab shown (MobileTabs.tsx), remembered across launches.
   const [tab, setTab] = useState<MobileTab>(loadTab)
+  // Settings' Soundstages section is open: its dock shows while it is, as on the desktop.
+  const [soundstagesOpen, setSoundstagesOpen] = useState(false)
   const selectTab = useCallback((next: MobileTab) => {
     setTab(next)
     saveTab(next)
@@ -382,24 +395,11 @@ export function MobileSoundscapeApp() {
     setSource('regular')
   }, [])
 
-  // The power button: a tap plays or pauses regular mode; a long press stops
-  // it, handing back to the schedule. The click after a long press is
-  // swallowed.
   // The files button: a tap imports, a long press exports (with the same
   // swallowed click after it as the power button).
   const filesHoldRef = useRef<(() => void) | null>(null)
   const swallowFilesClickRef = useRef(false)
   useEffect(() => () => filesHoldRef.current?.(), [])
-  const powerHoldRef = useRef<(() => void) | null>(null)
-  const swallowPowerClickRef = useRef(false)
-  useEffect(() => () => powerHoldRef.current?.(), [])
-  const tapPower = () => {
-    if (swallowPowerClickRef.current) {
-      swallowPowerClickRef.current = false
-      return
-    }
-    setRegularMode(regular === 'playing' ? 'paused' : 'playing')
-  }
   const stopRegular = () => {
     if (regular === 'stopped') return
     setRegularMode('stopped')
@@ -417,7 +417,19 @@ export function MobileSoundscapeApp() {
     setSchedule((current) => ({ ...current, enabled: true }))
   }
 
-  const dockContent = tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
+  const dockContent = tab === 'dashboard' ? (
+                    <DashboardDock
+                      soundscape={regular}
+                      onSoundscapeTap={() => setRegularMode(regular === 'playing' ? 'paused' : 'playing')}
+                      onSoundscapeHold={stopRegular}
+                      soundscapeVolume={preferences.masterVolume}
+                      onSoundscapeVolume={(volume) => setPreferences((current) => ({ ...current, masterVolume: volume }))}
+                      schedule={schedule.enabled}
+                      scheduleHeard={source === 'schedule'}
+                      onScheduleToggle={() => { void toggleSchedule() }}
+                    />
+                  )
+                  : tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
                   : tab === 'soundscapes' ? (
                     <SoundscapeDock
                       preferences={preferences}
@@ -427,7 +439,7 @@ export function MobileSoundscapeApp() {
                       detail={timeLeft}
                     />
                   )
-                  : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
+                  : tab === 'settings' && soundstagesOpen ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
                   : null
 
   // The desktop's frame, outermost first (see shared/loadoutTheme.ts), so the
@@ -451,45 +463,51 @@ export function MobileSoundscapeApp() {
                 scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
               >
               <div className="options-content sidebar-options-content mobile-tab-content">
+                {tab === 'dashboard' ? (<>
+                  <DashboardSets />
+                  <DashboardSoundscapes preferences={preferences} onPick={(preset) => handleChange(applySoundscapePreset(preferences, preset))} />
+                  <div className="utility-setting-slider-stack" aria-label="Timer">
+                    <OptionsSubsectionLabel>Timer</OptionsSubsectionLabel>
+                    <TimerRow timer={timer} onChange={setTimer} />
+                  </div>
+                  <div className="utility-setting-slider-stack" aria-label="Soundstage">
+                    <OptionsSubsectionLabel>Soundstage</OptionsSubsectionLabel>
+                    <PresetGrid kind={SOUNDSTAGE_KIND} list={soundstages} onChange={(list) => setSoundstages(withActiveSoundstage(soundstages, list))} idPrefix="stage" label="Soundstages" plural="a soundstage" creates={false} />
+                  </div>
+                  <div className="utility-setting-slider-stack" aria-label="Layout">
+                    <OptionsSubsectionLabel>Layout</OptionsSubsectionLabel>
+                    {/* Dark mode, then the mode's presets: a tap picks one. */}
+                    <div className="options-loadout-grid" role="group" aria-label="Layout">
+                      <button
+                        type="button"
+                        className={`btn-icon options-color-swatch options-loadout-btn${look.mode === 'dark' ? ' is-active' : ''}`}
+                        aria-label="Dark mode"
+                        aria-pressed={look.mode === 'dark'}
+                        onClick={() => setLook({ ...look, mode: look.mode === 'dark' ? 'light' : 'dark' })}
+                      >
+                        <span className="fa-solid fa-moon" aria-hidden="true" />
+                      </button>
+                      {PRESET_ICONS[look.mode].map((icon, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          className={`btn-icon options-color-swatch options-loadout-btn${look.preset[look.mode] === index ? ' is-active' : ''}`}
+                          aria-label={PRESET_NAMES[look.mode][index]}
+                          aria-pressed={look.preset[look.mode] === index}
+                          onClick={() => setLook({ ...look, preset: { ...look.preset, [look.mode]: index } })}
+                        >
+                          <span className={icon} aria-hidden="true" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>) : null}
                 {tab === 'songs' ? <MusicLibraryPanel grouping={songsGrouping} filter="" holdOpens /> : null}
                 {tab === 'soundscapes' && iconQuery === null ? (<>
-                <div className="utility-setting-slider-stack" aria-label="Master controls">
-                  <OptionsSubsectionLabel>Master</OptionsSubsectionLabel>
-                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Master')!} /> : (<>
-                  <div className="options-loadout-grid" role="group" aria-label="Soundscape and display mode">
-                    <button
-                      type="button"
-                      className={`btn-icon options-color-swatch options-loadout-btn${regular !== 'stopped' ? ' is-active' : ''}`}
-                      aria-pressed={regular !== 'stopped'}
-                      data-secondary-press="none"
-                      aria-label={`Soundscape ${regular}: tap to ${regular === 'playing' ? 'pause' : 'play'}${regular === 'stopped' ? '' : ', hold to stop'}`}
-                      onClick={tapPower}
-                      onPointerDown={() => {
-                        swallowPowerClickRef.current = false
-                        powerHoldRef.current?.()
-                        powerHoldRef.current = armHold(() => {
-                          powerHoldRef.current = null
-                          swallowPowerClickRef.current = true
-                          stopRegular()
-                        }, HOLD_CONFIRM_MS)
-                      }}
-                      onPointerUp={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
-                      onPointerCancel={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
-                      onPointerLeave={() => { powerHoldRef.current?.(); powerHoldRef.current = null }}
-                      onContextMenu={(event) => event.preventDefault()}
-                    >
-                      {/* The state it is in, not the one a press goes to. */}
-                      <span className={`fa-solid ${regular === 'playing' ? 'fa-play' : regular === 'paused' ? 'fa-pause' : 'fa-stop'}`} aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn-icon options-color-swatch options-loadout-btn${schedule.enabled ? ' is-active' : ''}${source === 'schedule' ? ' is-heard' : ''}`}
-                      aria-pressed={schedule.enabled}
-                      aria-label={`Schedule ${schedule.enabled ? 'on' : 'off'}${source === 'schedule' ? ', playing now' : ''}`}
-                      onClick={() => { void toggleSchedule() }}
-                    >
-                      <span className="fa-solid fa-clock" aria-hidden="true" />
-                    </button>
+                <div className="utility-setting-slider-stack" aria-label="Soundscape tools">
+                  <OptionsSubsectionLabel>Tools</OptionsSubsectionLabel>
+                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Tools')!} /> : (<>
+                  <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
                     <button
                       type="button"
                       className={`btn-icon options-color-swatch options-loadout-btn${helpMode ? ' is-active' : ''}`}
@@ -545,32 +563,8 @@ export function MobileSoundscapeApp() {
                           ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
                           : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
                     </button>
-                    <LookButton
-                      look={look}
-                      presetCount={PRESETS[look.mode].length}
-                      icon={PRESET_ICONS[look.mode][look.preset[look.mode]]}
-                      presetName={PRESET_NAMES[look.mode][look.preset[look.mode]]}
-                      onChange={setLook}
-                    />
                   </div>
-                  <OptionsSliderRows>
-                    <CompactScrollbarSlider
-                      id="mobile-soundscape-master-volume"
-                      value={Math.round(preferences.masterVolume * 100)}
-                      min={0}
-                      max={100}
-                      step={1}
-                      trackLabel="volume"
-                      ariaLabel="Soundscape volume"
-                      formatValue={(value) => `${value}%`}
-                      onCommit={(value) => setPreferences((current) => ({ ...current, masterVolume: value / 100 }))}
-                    />
-                  </OptionsSliderRows>
                   </>)}
-                </div>
-                <div className="utility-setting-slider-stack" aria-label="Timer">
-                  <OptionsSubsectionLabel>Timer</OptionsSubsectionLabel>
-                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Timer')!} /> : <TimerRow timer={timer} onChange={setTimer} />}
                 </div>
                 </>) : null}
                 {/* Picking the active soundscape's icon (its dock's icon
@@ -611,13 +605,15 @@ export function MobileSoundscapeApp() {
                   />}
                 </div>
                 </>) : null}
-                {tab === 'soundstages' ? <SoundstagesTab preferences={soundstages} onChange={setSoundstages} /> : null}
                 {tab === 'visualizer' ? <VisualizerTab onOpen={() => setVisualizerOpen(true)}>
                   <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} />
                 </VisualizerTab> : null}
                 {tab === 'settings' ? <SettingsTab
+                  soundstages={<SoundstagesTab preferences={soundstages} onChange={setSoundstages} />}
+                  onSoundstagesOpenChange={setSoundstagesOpen}
                   beatDetection={<>
                     {beatLoopPlayer ? <BeatLoopCalibration
+                      loops={BEAT_LOOPS}
                       startLoop={beatLoopPlayer}
                       fontFamily={PHONE_VISUALIZER_FONT.family}
                       fontPerBox={PHONE_VISUALIZER_FONT.sizePx / PHONE_VISUALIZER_FONT.boxPx}
