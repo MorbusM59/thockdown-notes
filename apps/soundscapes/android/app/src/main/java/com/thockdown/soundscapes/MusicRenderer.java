@@ -65,6 +65,10 @@ final class MusicRenderer {
     private static final double SPLICE_SLACK_SEC = 0.05;
     /** More than the renderer's lead (renderAhead.ts's RENDER_LEAD_SEC, 10 s). */
     private static final double DECODE_AHEAD_SEC = 14;
+    /** How much decoded audio is handed to the sandbox at once (decodeBatch). */
+    private static final double DECODE_BATCH_SEC = 0.5;
+    /** Empty dequeues in a row (each waits up to SongDecoder's TIMEOUT_US) before a batch goes with what it has. */
+    private static final int MAX_IDLE_DEQUEUES = 5;
 
     private final Context context;
     private final OutputLane output;
@@ -256,7 +260,41 @@ final class MusicRenderer {
         decoder = null;
     }
 
-    /** Decode one slice of the current song into the renderer; at its end, move to the pool's next pick. */
+    /**
+     * Decoded audio gathered to at least DECODE_BATCH_SEC, unless the song
+     * ends or the decoder keeps having nothing ready. A decoder hands over
+     * one codec buffer at a time (an MP3 frame is 26 ms), and every hand-over
+     * to the sandbox is a round trip between processes: one per buffer cost
+     * more than the audio lasted, so the decoding fell behind the playhead
+     * after the first chunks and the music played nothing, its playhead
+     * running on through the silence.
+     */
+    private short[] decodeBatch() {
+        long target = Math.round(DECODE_BATCH_SEC * decoder.sampleRate()) * 2;
+        java.util.List<short[]> parts = new java.util.ArrayList<>();
+        int total = 0;
+        int idle = 0;
+        while (total < target && !decoder.finished() && idle < MAX_IDLE_DEQUEUES) {
+            short[] part = decoder.next();
+            if (part.length == 0) {
+                idle += 1;
+                continue;
+            }
+            idle = 0;
+            parts.add(part);
+            total += part.length;
+        }
+        if (parts.size() == 1) return parts.get(0);
+        short[] batch = new short[total];
+        int at = 0;
+        for (short[] part : parts) {
+            System.arraycopy(part, 0, batch, at, part.length);
+            at += part.length;
+        }
+        return batch;
+    }
+
+    /** Decode one batch of the current song into the renderer; at its end, move to the pool's next pick. */
     private void decodeSlice() throws Exception {
         if (decoder == null) {
             if (!ended) {
@@ -265,7 +303,7 @@ final class MusicRenderer {
             }
             return;
         }
-        short[] samples = decoder.next();
+        short[] samples = decodeBatch();
         if (samples.length > 0) {
             if (!cued) {
                 cued = true;
