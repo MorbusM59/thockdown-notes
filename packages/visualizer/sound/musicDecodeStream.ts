@@ -10,7 +10,12 @@
  * Only what is asked for is decoded (`run` from a moment, paced by `want`),
  * so memory stays at a few chunks whatever the track's length. Demuxing and
  * decoding are Mediabunny's (WebCodecs' `AudioDecoder` underneath), reading
- * the file through the music protocol's range requests.
+ * the file through BOUNDED range requests (`bytes=a-b`, each read whole):
+ * Mediabunny's own `UrlSource` asks for the rest of the file (`bytes=a-`)
+ * and abandons the response once it has what it needs, which a real HTTP
+ * server shrugs off and the Android WebView's request interception does not
+ * (MusicFileServer.java): there it made ten times the requests and, a
+ * couple of minutes into a song, refused one, ending the decode.
  *
  * Its timeline is Chromium's, and the two differ in one place: an mp3's
  * encoder padding, which Chromium drops and Mediabunny keeps
@@ -21,7 +26,7 @@
  * decode at under 7ms, under half a frame at 60Hz, and left as it is.
  */
 
-import { ALL_FORMATS, AudioSampleSink, Input, UrlSource } from 'mediabunny'
+import { ALL_FORMATS, AudioSampleSink, CustomSource, Input } from 'mediabunny'
 import { mp3EncoderDelaySec, mp3TagOffset } from './mp3EncoderDelay'
 
 /** Bytes the reader may cache: a few seconds of any format, not the file. */
@@ -73,15 +78,14 @@ export class MusicDecodeStream {
 
   constructor(url: string) {
     this.url = url
-    const counted: typeof fetch = (input, init) => {
-      this.fetches++
-      this.pending++
-      return fetch(input, init).finally(() => { this.pending-- })
-    }
     this.input = new Input({
       formats: ALL_FORMATS,
-      // A local file: a failed read is a missing or unreadable file, never one worth retrying.
-      source: new UrlSource(url, { maxCacheSize: MAX_CACHE_BYTES, getRetryDelay: () => null, fetchFn: counted }),
+      source: new CustomSource({
+        getSize: () => this.size(),
+        read: (start, end) => this.readRange(start, end),
+        maxCacheSize: MAX_CACHE_BYTES,
+        prefetchProfile: 'network',
+      }),
     })
     this.opened = open(url, this.input).catch(() => null)
   }
@@ -109,6 +113,36 @@ export class MusicDecodeStream {
     if (untilSec <= this.wanted) return
     this.wanted = untilSec
     if (this.frontier < untilSec) this.release()
+  }
+
+  /**
+   * The file's length: the Content-Length of the whole file, its body let go unread. Not a one-byte range's
+   * Content-Range total, which a cross-origin answer (the desktop's music scheme) does not let a page read.
+   */
+  private async size(): Promise<number> {
+    this.fetches++
+    const response = await fetch(this.url)
+    void response.body?.cancel()
+    const length = Number(response.headers.get('Content-Length'))
+    if (!response.ok || !(length > 0)) throw new Error(`no length (status ${response.status})`)
+    return length
+  }
+
+  /** Bytes `start` up to (not including) `end`. A local file: a failed read is a missing or unreadable file, never one worth retrying. */
+  private async readRange(start: number, end: number): Promise<Uint8Array> {
+    const response = await this.fetchRange(start, end)
+    if (response.status !== 206) throw new Error(`range ${start}-${end - 1} answered ${response.status}`)
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
+  private async fetchRange(start: number, end: number): Promise<Response> {
+    this.fetches++
+    this.pending++
+    try {
+      return await fetch(this.url, { headers: { Range: `bytes=${start}-${end - 1}` } })
+    } finally {
+      this.pending--
+    }
   }
 
   /** Where decoding has got to and what the file has been asked, for the beat trace. */
