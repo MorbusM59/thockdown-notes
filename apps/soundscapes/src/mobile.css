@@ -112,8 +112,10 @@ body {
 }
 
 /* Two cells are narrow for a name, so it breaks onto as many lines as it
-   needs, centred both ways, with the time left under it. */
-.mobile-app-shell .preset-dock-row > .options-curve-display.options-dock-entry-name {
+   needs, centred both ways, with the time left under it. The dashboard's
+   names (what plays) are drawn the same way. */
+.mobile-app-shell .preset-dock-row > .options-curve-display.options-dock-entry-name,
+.mobile-app-shell .mobile-dock-names > .mobile-dock-name {
   display:         flex;
   flex-direction:  column;
   align-items:     center;
@@ -124,7 +126,8 @@ body {
   overflow-wrap:   anywhere;
 }
 
-.mobile-app-shell .preset-dock-row .options-dock-entry-title {
+.mobile-app-shell .preset-dock-row .options-dock-entry-title,
+.mobile-app-shell .mobile-dock-name .options-dock-entry-title {
   white-space: normal;
 }
 
@@ -380,13 +383,56 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
   height: calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
 }
 
-/* The dashboard's dock: the volumes, the pool filter while it is on, then the
-   button row, a regular spacing apart, as an options stack spaces its rows. */
+/* The dashboard's dock: what plays, the volumes, the pool filter while it is
+   on, then the button row, a regular spacing apart, as an options stack
+   spaces its rows. */
 .mobile-dashboard-dock,
 .mobile-dock-stack {
   display:        flex;
   flex-direction: column;
   gap:            var(--spacing-regular);
+}
+
+.mobile-dashboard-dock {
+  container-type: inline-size;
+}
+
+/* The song and the soundscape: three cells wide and one cell tall (the
+   grid's width less its five gaps, over six), as the dock's name cell is
+   two wide. A song's title and its artist and album keep to two lines and one. */
+.mobile-app-shell .mobile-dock-names > .mobile-dock-name {
+  grid-column:  span 3;
+  aspect-ratio: auto;
+  height:       calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
+  font-size:    15px;
+  overflow:     hidden;
+}
+
+.mobile-app-shell .mobile-dock-name .options-dock-entry-title {
+  display:            -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow:           hidden;
+}
+
+.mobile-app-shell .mobile-dock-name .options-dock-entry-detail {
+  white-space: nowrap;
+}
+
+/* The transport three cells wide, the timer's time left under its icon in
+   the dock name's detail style. */
+.mobile-app-shell .options-loadout-grid > .mobile-dock-transport {
+  grid-column:    span 3;
+  aspect-ratio:   auto;
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  justify-content: center;
+  gap:            var(--spacing-small);
+}
+
+.mobile-dock-transport > .options-dock-entry-detail {
+  font-size: 13px;
 }
 
 /* Help sits at the bottom right of every dock: the last column of its row. */

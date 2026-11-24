@@ -7,7 +7,7 @@
  * The phone has no right press, so the desktop music bar's right-click skip
  * is a button of its own here.
  */
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
@@ -18,6 +18,7 @@ import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import { orderedSoundscapePresets, type SoundscapePreferences, type SoundscapePreset } from '@thockdown/soundscape/soundscape'
 import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
 import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
+import { songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
 import { pauseMusic, readMusicChannel, readMusicPlaying, setMusicChannel, skipMusic, startMusic, subscribeMusicPlaying } from './mobileMusicPlayer'
 
 /** The music sets: a tap puts a set in the pool or takes it out, a hold makes it the only one (setPress.ts, as everywhere); neither starts playback. */
@@ -81,7 +82,7 @@ export function DashboardSoundscapes({ preferences, onPick }: { preferences: Sou
 }
 
 /** A button whose tap does one thing and whose hold another; the click after a hold is swallowed. */
-function TapHoldButton({ label, active, icon, onTap, onHold }: { label: string; active: boolean; icon: string; onTap: () => void; onHold: () => void }) {
+function TapHoldButton({ label, active, className = '', onTap, onHold, children }: { label: string; active: boolean; className?: string; onTap: () => void; onHold: () => void; children: ReactNode }) {
   const holdRef = useRef<(() => void) | null>(null)
   const swallowRef = useRef(false)
   useEffect(() => () => holdRef.current?.(), [])
@@ -92,7 +93,7 @@ function TapHoldButton({ label, active, icon, onTap, onHold }: { label: string; 
   return (
     <button
       type="button"
-      className={`btn-icon options-color-swatch options-loadout-btn${active ? ' is-active' : ''}`}
+      className={`btn-icon options-color-swatch options-loadout-btn${className ? ` ${className}` : ''}${active ? ' is-active' : ''}`}
       aria-label={label}
       aria-pressed={active}
       data-secondary-press="none"
@@ -117,7 +118,29 @@ function TapHoldButton({ label, active, icon, onTap, onHold }: { label: string; 
       onPointerLeave={end}
       onContextMenu={(event) => event.preventDefault()}
     >
-      <span className={`fa-solid ${icon}`} aria-hidden="true" />
+      {children}
+    </button>
+  )
+}
+
+/**
+ * What a channel is playing, drawn as the soundscape dock's name cell three
+ * cells wide: a title and, for a song, its artist and album under it. A tap
+ * switches the channel in or out of the mix; pressed in, it is heard.
+ */
+function ChannelName({ label, title, detail, on, onToggle }: { label: string; title: string; detail?: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`options-curve-cell options-curve-display options-dock-entry-name mobile-dock-name${detail ? ' has-detail' : ''}${on ? ' is-active' : ''}`}
+      aria-pressed={on}
+      aria-label={`${label}: ${title}${detail ? `, ${detail}` : ''}. ${on ? 'Heard: tap to switch it out of the mix' : 'Switched out: tap to switch it into the mix'}`}
+      onClick={onToggle}
+    >
+      {detail ? (<>
+        <span className="options-dock-entry-title">{title}</span>
+        <span className="options-dock-entry-detail">{detail}</span>
+      </>) : title}
     </button>
   )
 }
@@ -200,18 +223,23 @@ function DashboardFilter() {
 }
 
 /**
- * The dashboard's dock. On top the two volumes with the filter's switch
- * between them, a square chip; the pool filter's row below them while it is
- * on; then the button row: skip, the music channel, the mix's transport, the
- * soundscape channel, the schedule's switch, and help.
+ * The dashboard's dock. On top what plays: the song and the soundscape, each
+ * a name three cells wide and the switch of its CHANNEL (switched out, a
+ * channel is silent whoever plays it, and carries on unheard). Then the two
+ * volumes with the filter's switch between them, a square chip; the pool
+ * filter's row below them while it is on; then the button row: skip, the
+ * mix's transport three cells wide with the timer's time left under it, the
+ * schedule's switch, and help.
  *
  * The TRANSPORT is the whole mix's: a tap plays or pauses the music and the
  * soundscape together, a hold stops them (the soundscape hands back to the
- * schedule). The CHANNEL buttons switch the music and the soundscape in and
- * out of the mix: switched out, a channel is silent whoever plays it, and
- * carries on unheard.
+ * schedule).
  */
-export function DashboardDock({ soundscape, onSoundscapeTransport, onStop, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
+export function DashboardDock({ soundscapeName, timeLeft, soundscape, onSoundscapeTransport, onStop, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
+  /** The soundscape that plays, or would. */
+  soundscapeName: string
+  /** The timer's time left (h:mm:ss), or null without one. */
+  timeLeft: string | null
   /** The schedule is on; it plays now (it is what is heard). */
   schedule: boolean
   scheduleHeard: boolean
@@ -236,6 +264,16 @@ export function DashboardDock({ soundscape, onSoundscapeTransport, onStop, sound
   const mix = musicPlaying || soundscape === 'playing' ? 'playing' : soundscape === 'stopped' ? 'stopped' : 'paused'
   return (
     <div className="mobile-dashboard-dock">
+      <div className="options-loadout-grid mobile-dock-names" role="group" aria-label="Playing">
+        <ChannelName
+          label="Song"
+          title={nowPlaying.song ? songTitleText(nowPlaying.song) : 'no song'}
+          detail={nowPlaying.song ? `${songArtistText(nowPlaying.song)} (${songAlbumText(nowPlaying.song)})` : undefined}
+          on={musicChannel}
+          onToggle={() => setMusicChannel(!musicChannel)}
+        />
+        <ChannelName label="Soundscape" title={soundscapeName} on={soundscapeChannel} onToggle={() => onSoundscapeChannel(!soundscapeChannel)} />
+      </div>
       <div className="options-slider-row mobile-dock-volumes">
         <CompactScrollbarSlider
           id="mobile-dashboard-music-volume"
@@ -274,19 +312,10 @@ export function DashboardDock({ soundscape, onSoundscapeTransport, onStop, sound
         <button type="button" className="btn-icon options-color-swatch options-loadout-btn" aria-label="Next song" onClick={skipMusic}>
           <span className="fa-solid fa-forward-step" aria-hidden="true" />
         </button>
-        <button
-          type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn${musicChannel ? ' is-active' : ''}`}
-          aria-pressed={musicChannel}
-          aria-label={`Music channel ${musicChannel ? 'on' : 'off'}`}
-          onClick={() => setMusicChannel(!musicChannel)}
-        >
-          <span className="fa-solid fa-compact-disc" aria-hidden="true" />
-        </button>
         <TapHoldButton
-          label={`Playback ${mix}: tap to ${mix === 'playing' ? 'pause' : 'play'}${mix === 'stopped' ? '' : ', hold to stop'}`}
+          label={`Playback ${mix}${timeLeft ? `, ${timeLeft} left` : ''}: tap to ${mix === 'playing' ? 'pause' : 'play'}${mix === 'stopped' ? '' : ', hold to stop'}`}
           active={mix === 'playing'}
-          icon={mix === 'playing' ? 'fa-play' : mix === 'paused' ? 'fa-pause' : 'fa-stop'}
+          className="mobile-dock-transport"
           onTap={() => {
             if (mix === 'playing') {
               pauseMusic()
@@ -300,16 +329,10 @@ export function DashboardDock({ soundscape, onSoundscapeTransport, onStop, sound
             pauseMusic()
             onStop()
           }}
-        />
-        <button
-          type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn${soundscapeChannel ? ' is-active' : ''}`}
-          aria-pressed={soundscapeChannel}
-          aria-label={`Soundscape channel ${soundscapeChannel ? 'on' : 'off'}`}
-          onClick={() => onSoundscapeChannel(!soundscapeChannel)}
         >
-          <span className="fa-solid fa-podcast" aria-hidden="true" />
-        </button>
+          <span className={`fa-solid ${mix === 'playing' ? 'fa-play' : mix === 'paused' ? 'fa-pause' : 'fa-stop'}`} aria-hidden="true" />
+          {timeLeft ? <span className="options-dock-entry-detail">{timeLeft}</span> : null}
+        </TapHoldButton>
         <button
           type="button"
           className={`btn-icon options-color-swatch options-loadout-btn${schedule ? ' is-active' : ''}${scheduleHeard ? ' is-heard' : ''}`}

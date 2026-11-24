@@ -505,6 +505,8 @@ export function MobileSoundscapeApp() {
 
   const dockContent = tab === 'dashboard' ? (
                     <DashboardDock
+                      soundscapeName={currentName}
+                      timeLeft={timeLeftMs >= 0 ? remainingText(timeLeftMs) : null}
                       soundscape={regular}
                       onSoundscapeTransport={setRegularMode}
                       onStop={stopRegular}
