@@ -80,7 +80,7 @@ export function DashboardSoundscapes({ preferences, onPick }: { preferences: Sou
 }
 
 /** A button whose tap does one thing and whose hold another; the click after a hold is swallowed. */
-function TapHoldButton({ label, active, icon, onTap, onHold }: { label: string; active: boolean; icon: string; onTap: () => void; onHold: () => void }) {
+function TapHoldButton({ label, active, icon, onTap, onHold, className = '' }: { label: string; active: boolean; icon: string; onTap: () => void; onHold: () => void; className?: string }) {
   const holdRef = useRef<(() => void) | null>(null)
   const swallowRef = useRef(false)
   useEffect(() => () => holdRef.current?.(), [])
@@ -91,7 +91,7 @@ function TapHoldButton({ label, active, icon, onTap, onHold }: { label: string; 
   return (
     <button
       type="button"
-      className={`btn-icon options-color-swatch options-loadout-btn${active ? ' is-active' : ''}`}
+      className={`btn-icon options-color-swatch options-loadout-btn${active ? ' is-active' : ''}${className}`}
       aria-label={label}
       aria-pressed={active}
       data-secondary-press="none"
@@ -154,12 +154,13 @@ export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, s
           label={`Soundscape ${soundscape}: tap to ${soundscape === 'playing' ? 'pause' : 'play'}${soundscape === 'stopped' ? '' : ', hold to stop'}`}
           active={soundscape === 'playing'}
           icon={soundscape === 'playing' ? 'fa-podcast' : soundscape === 'paused' ? 'fa-pause' : 'fa-stop'}
+          className=" mobile-dock-soundscape"
           onTap={onSoundscapeTap}
           onHold={onSoundscapeHold}
         />
         <button
           type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn${schedule ? ' is-active' : ''}${scheduleHeard ? ' is-heard' : ''}`}
+          className={`btn-icon options-color-swatch options-loadout-btn mobile-dock-schedule${schedule ? ' is-active' : ''}${scheduleHeard ? ' is-heard' : ''}`}
           aria-pressed={schedule}
           aria-label={`Schedule ${schedule ? 'on' : 'off'}${scheduleHeard ? ', playing now' : ''}`}
           onClick={onScheduleToggle}

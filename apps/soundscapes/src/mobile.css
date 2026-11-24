@@ -368,3 +368,10 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
   flex-direction: column;
   gap:            var(--spacing-regular);
 }
+
+/* Each transport button stands over the start of its own volume: the music
+   at the first column, over the music slider's half; the soundscape at the
+   fourth, where its slider's half begins; the schedule, which hands either
+   of them its turn, at the far end. */
+.mobile-dashboard-dock .mobile-dock-soundscape { grid-column: 4; }
+.mobile-dashboard-dock .mobile-dock-schedule { grid-column: 6; }
