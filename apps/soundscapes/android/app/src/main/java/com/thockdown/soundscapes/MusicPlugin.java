@@ -21,7 +21,8 @@ import java.util.Set;
  * plugin (it goes with the activity). It forwards the page's calls and
  * passes the session's reports back as events while it exists:
  * `heard` ({ songId, seconds, frame, sampleRate, playing }), `spectrum`
- * ({ batches }, JSON text) and `failure` ({ message }).
+ * ({ batches }, JSON text) and `failure` ({ message }); and plays the beat
+ * delay calibration's loop (CalibrationLoop), reporting `loopHeard`.
  */
 @CapacitorPlugin(name = "Music")
 public class MusicPlugin extends Plugin {
@@ -54,6 +55,9 @@ public class MusicPlugin extends Plugin {
         }
     };
 
+    /** The delay calibration's loop while it plays (CalibrationLoop), or null. */
+    private CalibrationLoop loop = null;
+
     @Override
     public void load() {
         session = MusicSession.get(getContext());
@@ -63,6 +67,7 @@ public class MusicPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         session.setListener(null);
+        stopLoopNow();
     }
 
     /** The system's folder picker; resolves `{ uri }`, or `{}` when the reader backs out. */
@@ -187,6 +192,43 @@ public class MusicPlugin extends Plugin {
     public void setVolume(PluginCall call) {
         session.setVolume(call.getFloat("volume", 1f));
         call.resolve();
+    }
+
+    /** The output's sample rate: the delay calibration's loop is decoded at it. */
+    @PluginMethod
+    public void getOutputRate(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("sampleRate", android.media.AudioTrack.getNativeOutputSampleRate(android.media.AudioManager.STREAM_MUSIC));
+        call.resolve(out);
+    }
+
+    /**
+     * `{ pcm }`: play the delay calibration's loop, base64 of interleaved
+     * 16-bit stereo at half scale (OutputLane.HEADROOM), at the output's rate, over and over and heard alone,
+     * reporting `loopHeard` ({ frame, sampleRate }) as it plays.
+     */
+    @PluginMethod
+    public void playLoop(PluginCall call) {
+        stopLoopNow();
+        short[] pcm = SharedSandbox.decodeHalfScale(call.getString("pcm", ""));
+        loop = new CalibrationLoop(pcm, (frame, sampleRate) -> {
+            JSObject data = new JSObject();
+            data.put("frame", frame);
+            data.put("sampleRate", sampleRate);
+            notifyListeners("loopHeard", data);
+        });
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopLoop(PluginCall call) {
+        stopLoopNow();
+        call.resolve();
+    }
+
+    private void stopLoopNow() {
+        if (loop != null) loop.close();
+        loop = null;
     }
 
     @PluginMethod

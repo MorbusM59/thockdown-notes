@@ -1,0 +1,56 @@
+/* Options > Beat Detection's delay calibration (BeatLoopCalibration.tsx), on the desktop and the phone alike:
+   one strip, six boxes of the visualizer's grid (its outline and line
+   layers, index.css, at the strip's height as the box), and over them the
+   visualizer's two effects in the layout's own colours: the edge and the
+   box outlines (the beat pane: the outline pattern in the pane colour), at
+   the strength the strip writes as --loop-edge / --loop-outline. */
+.beat-loop-calibration > .beat-loop-calibration-strip {
+  position:    relative;
+  grid-column: span 6;
+  padding:     0;
+  overflow:    hidden;
+}
+
+.beat-loop-calibration-grid {
+  position:         absolute;
+  inset:            0;
+  background-color: var(--color-bg-regular);
+  pointer-events:   none;
+}
+
+.beat-loop-calibration-layer,
+.beat-loop-calibration-edge {
+  position: absolute;
+  inset:    0;
+}
+
+.thockdown-grid-lines.beat-loop-calibration-layer {
+  background-position: var(--loop-grid-x) var(--loop-grid-y);
+  mask-position:       var(--loop-grid-x) var(--loop-grid-y);
+}
+
+.beat-loop-calibration-layer.is-outline {
+  background-position: calc(var(--loop-grid-x) + 1px) calc(var(--loop-grid-y) + 1px);
+  mask-position:       calc(var(--loop-grid-x) + 1px) calc(var(--loop-grid-y) + 1px);
+}
+
+/* The delay, a letter to a box as the visualizer writes its text, on the
+   ordinary boxes, in the text colour. */
+.beat-loop-calibration-letter {
+  position:         absolute;
+  color:            var(--color-text-base);
+  text-align:       center;
+  white-space:      pre;
+}
+
+.beat-loop-calibration-layer.is-outline-hit {
+  background-color: var(--beat-pane-color, var(--color-caret));
+  opacity:          var(--loop-outline, 0);
+}
+
+.beat-loop-calibration-edge {
+  box-shadow:
+    inset 0 0 4px 1px var(--beat-edge-color, var(--color-caret)),
+    inset 0 0 14px 2px color-mix(in srgb, var(--beat-edge-color, var(--color-caret)) 45%, transparent);
+  opacity:    var(--loop-edge, 0);
+}

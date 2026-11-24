@@ -15,11 +15,9 @@
  * before going back to its usual face.
  */
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
-import { armTouchDragHold } from '@thockdown/interaction/holdTiming'
+import { armTouchDragHold, DRAG_STEP_PX as STEP_PX } from '@thockdown/interaction/holdTiming'
 
 const SHOW_AFTER_DRAG_MS = 2000
-/** How far a drag travels per step, past the first (leaving the button). */
-const STEP_PX = 15
 
 interface StepPress<T> {
   pointerId: number

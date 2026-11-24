@@ -13,6 +13,9 @@ const BEAT_KEY = 'thockdown:beat'
 /** The output device the phone keeps its beat delay under. */
 export const PHONE_OUTPUT_DEVICE = ''
 
+/** The visualizer's font on the phone (VisualizerPage.tsx), and the calibration strip's letters with it. */
+export const PHONE_VISUALIZER_FONT = { family: "'Kode Mono', monospace", sizePx: 14, boxPx: 18 } as const
+
 function load<T>(key: string, sanitize: (input: unknown) => T): T {
   try {
     const raw = localStorage.getItem(key)

@@ -81,12 +81,17 @@ import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
-import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
+import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, PHONE_VISUALIZER_FONT, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
 import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
+import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
+import { createNativeBeatLoopPlayer } from './nativeBeatLoop'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
 installSoundscapeFiles()
+
+// The beat delay calibration plays its loop natively, where the music plays (nativeBeatLoop.ts); there is none in a browser.
+const beatLoopPlayer = nativeMusic ? createNativeBeatLoopPlayer(nativeMusic) : null
 
 const PRESETS = { light: LIGHT_FACTORY_PRESETS, dark: DARK_FACTORY_PRESETS }
 const PRESET_ICONS = { light: LIGHT_PRESET_ICONS, dark: DARK_PRESET_ICONS }
@@ -611,13 +616,23 @@ export function MobileSoundscapeApp() {
                   <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} />
                 </VisualizerTab> : null}
                 {tab === 'settings' ? <SettingsTab
-                  beatDetection={<BeatDetectionControls
+                  beatDetection={<>
+                    {beatLoopPlayer ? <BeatLoopCalibration
+                      startLoop={beatLoopPlayer}
+                      fontFamily={PHONE_VISUALIZER_FONT.family}
+                      fontPerBox={PHONE_VISUALIZER_FONT.sizePx / PHONE_VISUALIZER_FONT.boxPx}
+                      falls={{ edge: visualizer.edge, pane: visualizer.pane[look.mode] }}
+                      delayMs={beatSettings.delayMsByDevice[PHONE_OUTPUT_DEVICE] ?? 0}
+                      onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [PHONE_OUTPUT_DEVICE]: delayMs } }))}
+                    /> : null}
+                    <BeatDetectionControls
                     beatSettings={beatSettings}
                     outputDevice={PHONE_OUTPUT_DEVICE}
                     onBeatSettings={setBeatSettings}
                     trackers={visualizer.trackers}
                     onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))}
-                  />}
+                  />
+                  </>}
                 /> : null}
               </div>
               </SidebarFrame>

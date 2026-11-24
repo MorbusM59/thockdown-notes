@@ -1253,3 +1253,15 @@
 }
 
 
+
+/* The About page (AboutPanel.tsx), the desktop's Options > Advanced > About
+   and the phone's Settings > About: the version across the row, the links
+   side by side, one credit per row. */
+.options-about-version-row,
+.options-about-credit-row {
+  grid-template-columns: 1fr;
+}
+
+.options-about-links-row {
+  grid-template-columns: repeat(3, 1fr);
+}

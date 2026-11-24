@@ -48,6 +48,8 @@ final class AudioOutput {
     private final OutputLimiter limiter;
     private final List<OutputLane> lanes = new ArrayList<>();
     private boolean running = true;
+    /** A lane heard alone (the delay calibration's loop), or null: while it is set the others are not mixed and their playheads stand still. */
+    private OutputLane solo = null;
 
     /** A new lane in the process's output, opening the output if it is the first. */
     static OutputLane openLane(OutputLane.Listener listener) {
@@ -96,12 +98,19 @@ final class AudioOutput {
         return ((double) bufferBytes / 4 + BLOCK_FRAMES) / sampleRate;
     }
 
+    /** Hear `lane` alone, or (null) every lane again, each from where it stood. */
+    synchronized void setSolo(OutputLane lane) {
+        solo = lane;
+        notifyAll();
+    }
+
     /** A lane leaves; the last one out closes the output. */
     void removeLane(OutputLane lane) {
         boolean last;
         synchronized (AudioOutput.class) {
             synchronized (this) {
                 lanes.remove(lane);
+                if (solo == lane) solo = null;
                 last = lanes.isEmpty();
                 if (last) {
                     running = false;
@@ -146,7 +155,10 @@ final class AudioOutput {
                     track.play();
                 }
                 java.util.Arrays.fill(mix, 0f);
-                for (OutputLane lane : lanes) if (lane.mixInto(mix, BLOCK_FRAMES)) due.add(lane);
+                for (OutputLane lane : lanes) {
+                    if (solo != null && lane != solo) continue;
+                    if (lane.mixInto(mix, BLOCK_FRAMES)) due.add(lane);
+                }
             }
             limiter.process(mix, BLOCK_FRAMES);
             for (int index = 0; index < block.length; index += 1) {
