@@ -79,6 +79,8 @@ export class MusicDecodeStream {
   /** Range requests made, and those not yet answered, for the trace (`describe`). */
   private fetches = 0
   private pending = 0
+  /** Why the file could not be opened, for the trace; null while it opens or once it has. */
+  private openFailed: string | null = null
 
   constructor(url: string) {
     this.url = url
@@ -91,7 +93,10 @@ export class MusicDecodeStream {
         prefetchProfile: 'network',
       }),
     })
-    this.opened = open(url, this.input).catch(() => null)
+    this.opened = open(url, this.input).catch((error: unknown) => {
+      this.openFailed = error instanceof Error ? error.message : String(error)
+      return null
+    })
   }
 
   /** The decoded sample rate, once the file is open (null if it cannot be decoded). */
@@ -120,16 +125,17 @@ export class MusicDecodeStream {
   }
 
   /**
-   * The file's length: the Content-Length of the whole file, its body let go unread. Not a one-byte range's
-   * Content-Range total, which a cross-origin answer (the desktop's music scheme) does not let a page read.
+   * The file's length: the total of a one-byte range's Content-Range. Never the Content-Length of a whole-file
+   * answer: the Android WebView did not give the page a usable one for its request interception's response
+   * (MusicFileServer.java), the file never opened, and the phone's visualizer had no beat map at all. The desktop's music scheme, cross-origin, exposes Content-Range for this
+   * (main.ts's CORS_HEADERS).
    */
   private async size(): Promise<number> {
-    this.fetches++
-    const response = await fetch(this.url)
+    const response = await this.fetchRange(0, 1)
     void response.body?.cancel()
-    const length = Number(response.headers.get('Content-Length'))
-    if (!response.ok || !(length > 0)) throw new Error(`no length (status ${response.status})`)
-    return length
+    const total = Number(/\/(\d+)$/.exec(response.headers.get('Content-Range') ?? '')?.[1])
+    if (response.status !== 206 || !(total > 0)) throw new Error(`no length (status ${response.status}, Content-Range ${response.headers.get('Content-Range')})`)
+    return total
   }
 
   /** Bytes `start` up to (not including) `end`. A local file: a failed read is a missing or unreadable file, never one worth retrying. */
@@ -151,7 +157,7 @@ export class MusicDecodeStream {
 
   /** Where decoding has got to and what the file has been asked, for the beat trace. */
   describe(): string {
-    return `decoded=${this.frontier.toFixed(1)} wanted=${this.wanted.toFixed(1)} waiting=${this.wake !== null} fetches=${this.fetches} unanswered=${this.pending}`
+    return `decoded=${this.frontier.toFixed(1)} wanted=${this.wanted.toFixed(1)} waiting=${this.wake !== null} fetches=${this.fetches} unanswered=${this.pending}${this.openFailed === null ? '' : ` open failed: ${this.openFailed}`}`
   }
 
   /** Stops the current run. */

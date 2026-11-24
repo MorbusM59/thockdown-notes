@@ -2027,7 +2027,9 @@ app.whenReady().then(async () => {
     opus: 'audio/opus', webm: 'audio/webm', weba: 'audio/webm',
   };
   // The renderer's origin is not this scheme's; see registerSchemesAsPrivileged above.
-  const CORS_HEADERS = { 'Access-Control-Allow-Origin': '*' };
+  // Content-Range exposed: the visualizer's decode reads a file's length from a
+  // one-byte range's total (packages/visualizer/sound/musicDecodeStream.ts).
+  const CORS_HEADERS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range' };
   protocol.handle('thockdown-music', async (request) => {
     try {
       const url = new URL(request.url);

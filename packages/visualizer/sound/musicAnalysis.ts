@@ -415,7 +415,9 @@ export class MusicAnalysis {
       this.held = this.held.filter((x) => x.time > passed)
       this.ranges.clear()
     }
-    if (this.traceOn && this.map && !(Math.abs(heardTime - this.tracedAt) < 1)) {
+    // Every second whether or not a map exists yet: a song that never yields one is exactly when where the
+    // decode got to (or why the file would not open) is the line that matters.
+    if (this.traceOn && !(Math.abs(heardTime - this.tracedAt) < 1)) {
       this.tracedAt = heardTime
       const count = (channel: DrumChannel) => this.held.filter((x) => !Number.isNaN(x[channel])).length
       const last = this.held.length > 0 ? this.held[this.held.length - 1].time : heardTime
