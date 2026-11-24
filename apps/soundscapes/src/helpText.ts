@@ -14,6 +14,8 @@ const HELP: Record<string, string[]> = {
     'Timer: Tap a length to limit playback to it. Tap it again for continuous playback. Hold a length and drag up or down to change it.',
     'Soundstage: Tap one to choose how the music sounds. Edit them in Settings.',
     'Layout: The moon switches dark mode. Tap a look to use it.',
+    'Visualizer: The eye opens the visualizer; the back gesture closes it. The phone button shows it upright or sideways.',
+    'Tools: The files button loads soundscapes from a file; hold it to save your own soundscapes to a file. The record button saves the soundscape you picked as an audio file; hold it and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
     'Sliders: The music volume, then the soundscape volume.',
     'Music button: Switches the music in or out of the mix. While it is in, the dock also shows the filter chip, the song and its position.',
     'Soundscape button: Switches the soundscape in or out of the mix. A channel that is switched out stays silent, whether you or the schedule plays it.',
@@ -34,19 +36,13 @@ const HELP: Record<string, string[]> = {
     'Grouping: The dock groups the songs by folder or by artist.',
   ],
   Visualizer: [
-    'Eye button: Opens the visualizer. The back gesture closes it.',
-    'Phone button: Shows the visualizer upright or sideways.',
-    'Scene settings: The rest of this tab tunes the scene: its font, glaze, wave, pulse and spectrum.',
+    'Scene settings: This tab tunes the visualizer: its font, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',
   ],
   Settings: [
     'Soundstages: Create and edit the soundstages the Dashboard picks from. The active one shows in the dock while the section is open.',
     'Beat Detection: How the visualizer follows the beat. Play a calibration loop and set the delay until the flashes land on the beat you hear.',
     'Debugging: Tools for tracing problems.',
     'About: The version, licenses and credits.',
-  ],
-  Tools: [
-    'Files button: Tap to load soundscapes from a file. Hold to save your own soundscapes to a file.',
-    'Record button: Tap to save the soundscape you are editing as an audio file. Hold and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
   ],
   Schedule: [
     'Rows: Each row plays a song set, a soundscape, or both, from its start time to its stop time on its active days. A stop time earlier than the start time ends on the next day. Equal start and stop times play for 24 hours.',

@@ -82,7 +82,7 @@ import { VisualizerPage } from './VisualizerPage'
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { MusicLibraryDock, MusicLibraryPanel } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
-import { MobileTabSelector, SettingsTab, VisualizerTab } from './MobileTabs'
+import { MobileTabSelector, SettingsTab, VisualizerButtons } from './MobileTabs'
 import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
 import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
@@ -419,9 +419,9 @@ export function MobileSoundscapeApp() {
     }
     setClipProgress(0)
     void nativeSoundscape!.renderClip({
-      configuration: JSON.stringify(soundscapeConfiguration(editingView.settings)),
+      configuration: JSON.stringify(soundscapeConfiguration(preferences.settings)),
       seconds: clipMinutes * 60,
-      name: clipName(editingView, clipMinutes),
+      name: clipName(preferences, clipMinutes),
     })
   }
   // A drag up or down on the clip button steps through the lengths,
@@ -608,63 +608,60 @@ export function MobileSoundscapeApp() {
                       ))}
                     </div>
                   </div>
+                  <VisualizerButtons onOpen={() => setVisualizerOpen(true)} />
+                  <div className="utility-setting-slider-stack" aria-label="Soundscape tools">
+                    <OptionsSubsectionLabel>Tools</OptionsSubsectionLabel>
+                    <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
+                      <button
+                        type="button"
+                        className="btn-icon options-color-swatch options-loadout-btn"
+                        aria-label="Import soundscapes; hold to export yours"
+                        aria-disabled={!native}
+                        data-secondary-press="none"
+                        onClick={() => {
+                          if (swallowFilesClickRef.current) {
+                            swallowFilesClickRef.current = false
+                            return
+                          }
+                          if (!native) return
+                          void importSoundscapes(preferences).then((next) => { if (next) setPreferences(next) })
+                        }}
+                        onPointerDown={() => {
+                          swallowFilesClickRef.current = false
+                          filesHoldRef.current?.()
+                          filesHoldRef.current = armHold(() => {
+                            filesHoldRef.current = null
+                            swallowFilesClickRef.current = true
+                            if (native && preferences.customPresets.length > 0) void exportSoundscapes(preferences.customPresets, 'my-soundscapes')
+                          }, HOLD_CONFIRM_MS)
+                        }}
+                        onPointerUp={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+                        onPointerCancel={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+                        onPointerLeave={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+                        onContextMenu={(event) => event.preventDefault()}
+                      >
+                        <span className="fa-solid fa-rotate" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn-icon options-color-swatch options-loadout-btn${clipProgress !== null ? ' is-active' : ''}`}
+                        aria-label={clipProgress !== null
+                          ? `Rendering a ${clipMinutes} minute clip, ${Math.round(clipProgress * 100)}%: press to cancel`
+                          : `Save a ${clipMinutes} minute clip of this soundscape; drag up or down to change its length`}
+                        aria-disabled={!native}
+                        data-secondary-press="none"
+                        {...clipDrag.handlers}
+                      >
+                        {clipProgress !== null
+                          ? <span className="mobile-clip-progress" aria-hidden="true">{Math.round(clipProgress * 100)}%</span>
+                          : clipDrag.adjusting
+                            ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
+                            : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
+                      </button>
+                    </div>
+                  </div>
                 </>) : null}
                 {tab === 'songs' && !helpMode ? <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap /> : null}
-                {tab === 'soundscapes' && iconQuery === null ? (<>
-                <div className="utility-setting-slider-stack" aria-label="Soundscape tools">
-                  <OptionsSubsectionLabel>Tools</OptionsSubsectionLabel>
-                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Tools')!} /> : (<>
-                  <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
-                    <button
-                      type="button"
-                      className="btn-icon options-color-swatch options-loadout-btn"
-                      aria-label="Import soundscapes; hold to export yours"
-                      aria-disabled={!native}
-                      data-secondary-press="none"
-                      onClick={() => {
-                        if (swallowFilesClickRef.current) {
-                          swallowFilesClickRef.current = false
-                          return
-                        }
-                        if (!native) return
-                        void importSoundscapes(preferences).then((next) => { if (next) setPreferences(next) })
-                      }}
-                      onPointerDown={() => {
-                        swallowFilesClickRef.current = false
-                        filesHoldRef.current?.()
-                        filesHoldRef.current = armHold(() => {
-                          filesHoldRef.current = null
-                          swallowFilesClickRef.current = true
-                          if (native && preferences.customPresets.length > 0) void exportSoundscapes(preferences.customPresets, 'my-soundscapes')
-                        }, HOLD_CONFIRM_MS)
-                      }}
-                      onPointerUp={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
-                      onPointerCancel={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
-                      onPointerLeave={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
-                      onContextMenu={(event) => event.preventDefault()}
-                    >
-                      <span className="fa-solid fa-rotate" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn-icon options-color-swatch options-loadout-btn${clipProgress !== null ? ' is-active' : ''}`}
-                      aria-label={clipProgress !== null
-                        ? `Rendering a ${clipMinutes} minute clip, ${Math.round(clipProgress * 100)}%: press to cancel`
-                        : `Save a ${clipMinutes} minute clip of this soundscape; drag up or down to change its length`}
-                      aria-disabled={!native}
-                      data-secondary-press="none"
-                      {...clipDrag.handlers}
-                    >
-                      {clipProgress !== null
-                        ? <span className="mobile-clip-progress" aria-hidden="true">{Math.round(clipProgress * 100)}%</span>
-                        : clipDrag.adjusting
-                          ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
-                          : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
-                    </button>
-                  </div>
-                  </>)}
-                </div>
-                </>) : null}
                 {/* Picking the active soundscape's icon (its dock's icon
                     button) replaces the page with the picker, as on the
                     desktop. */}
@@ -703,9 +700,7 @@ export function MobileSoundscapeApp() {
                   />}
                 </div>
                 </>) : null}
-                {tab === 'visualizer' && !helpMode ? <VisualizerTab onOpen={() => setVisualizerOpen(true)}>
-                  <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} />
-                </VisualizerTab> : null}
+                {tab === 'visualizer' && !helpMode ? <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} /> : null}
                 {tab === 'settings' && !helpMode ? <SettingsTab
                   soundstages={<SoundstagesTab preferences={soundstages} onChange={setSoundstages} />}
                   onSoundstagesOpenChange={setSoundstagesOpen}
