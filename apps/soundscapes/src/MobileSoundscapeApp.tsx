@@ -574,12 +574,11 @@ export function MobileSoundscapeApp() {
     <div className="app-root" style={theme.rootVariables}>
       <div className="app-saturate-wrapper" style={{ ...theme.wrapperStyle, position: 'fixed', inset: 0 }}>
         {/* The linear and radial glaze are drawn by VisualizerGlaze from the
-            LAYOUT's glaze: in the visualizer swaying at full count, as on
-            the desktop, and everywhere else as the layout has them, the
-            linear stacks keeping their steady drift. Gloom and sheen stay
-            as they are. */}
+            LAYOUT's glaze at the visualizer's glaze settings, on every tab
+            as in the visualizer; only the visualizer scene feeds it the
+            music's breath and pushes. Gloom and sheen stay as they are. */}
         <ThemeGlazeLayers glaze={{ ...theme.glaze, linear: 'none', radial: 'none' }} />
-        <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} driftOnly={!visualizerOpen} />
+        <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
             {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}

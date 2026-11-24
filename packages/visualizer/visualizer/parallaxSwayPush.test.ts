@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { applySway, registerSwayLayer, setSwayMotion, setSwayRange, setSwayReturnFall, swaySnareHit } from './parallaxSway'
+import { applySway, registerSwayLayer, setSwayBreath, setSwayMotion, setSwayRange, setSwayReturnFall, swaySnareHit } from './parallaxSway'
 
 function offsetAt(nowMs: number): number {
   const element = { style: { transform: '' } } as unknown as HTMLElement
   const unregister = registerSwayLayer(element, 0, 1, { periodPx: 1e6, angleDeg: 90 })
-  applySway(0, nowMs)
+  // No breath: the sway's own excursion is zero, leaving the pushes.
+  setSwayBreath(0)
+  applySway(nowMs)
+  setSwayBreath(1)
   const px = Number(/translate3d\((-?[\d.]+)px/.exec(element.style.transform)?.[1])
   unregister()
   return px

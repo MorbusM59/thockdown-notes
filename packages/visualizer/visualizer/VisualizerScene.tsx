@@ -65,7 +65,7 @@ import { SolidCanvas, type SolidThump } from '../editor/SolidCanvas'
 import { readGridWaveSettings, subscribeGridWaveSettings } from './gridWaveTurn'
 import { useBoxBevelImages } from '../shared/boxBevelStore'
 import { cutoutClosure, gridOutlineMask, type CutoutRing } from './cutoutRing'
-import { MusicBreath, applySway, breathScales } from './parallaxSway'
+import { MusicBreath, breathScales, setSwayBreath } from './parallaxSway'
 import {
   computeVisualizerLayout,
   fitVisualizerBox,
@@ -425,8 +425,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
       draw()
       moveGap()
       const still = reducedMotion.matches
-      const { amplitude } = breathScales(breath.step(tap ? bassPower(levels, bassBands) : 0, dt))
-      if (!still) applySway(amplitude)
+      setSwayBreath(breathScales(breath.step(tap ? bassPower(levels, bassBands) : 0, dt)).amplitude)
       // Nothing left to move: the music is stopped, the bars have fallen and
       // the glaze holds still. Woken again by the music or the motion setting.
       if (still && !musicListening().isPlaying && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
@@ -446,6 +445,8 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
 
     return () => {
       if (frame !== null) cancelAnimationFrame(frame)
+      // Outside the scene the glaze sways at its set width (`setSwayBreath`).
+      setSwayBreath(1)
       tap?.stop()
       restyle.disconnect()
       unsubscribePlaying()

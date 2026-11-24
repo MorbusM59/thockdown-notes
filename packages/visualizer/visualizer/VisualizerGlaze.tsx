@@ -8,14 +8,17 @@
  * set how far each layer travels (`swayDepth`). The radial sources move
  * as one, behind the stacks, or in front of them when the layout puts
  * radial above linear. Gloom and sheen stay with the ordinary glaze and do
- * not move. With `driftOnly` it is the app's glaze outside the visualizer:
- * the layout's own, the linear stacks drifting and nothing else moving.
+ * not move. Outside the visualizer it is the app's glaze too, at the same
+ * settings: it moves itself (below), and only what the music's detection
+ * drives is missing there (the bass breath and the pushes, fed by the
+ * scene).
  *
  * The radial sources' element reaches past the window by the sway's
  * overscan, so its travel never shows an edge; each linear stack is endless
  * (see `SwayLayer` and `parallaxSway.ts`). Each and carries the blend mode its kind has in
  * the ordinary glaze (`.glaze-overlay-layer-*`, look.css). The elements are
- * moved by `parallaxSway.ts`'s `applySway`, which the scene's loop calls.
+ * moved by `parallaxSway.ts`'s `applySway`, on every frame of the app's
+ * tempo while anything is set to move.
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
@@ -26,7 +29,7 @@ import { CANVAS_BLEND_MODE, GlazeStripesCanvas } from './GlazeStripesCanvas'
 import { subscribeMusicTempo } from '@thockdown/visualizer/sound/musicBeat'
 import { beatAlignedStart } from '@thockdown/visualizer/sound/musicTempo'
 import { canUseShaderGlaze } from './glazeShaderSupport'
-import { BREATH_AMPLITUDE_MAX, registerSwayLayer, advancePoleOrbit, advanceSway, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
+import { BREATH_AMPLITUDE_MAX, applySway, registerSwayLayer, advancePoleOrbit, advanceSway, restartPoleOrbit, setPoleOrbit, setSwayMotion, setSwayRange, swayDepth, swayOverscanPx } from './parallaxSway'
 
 /** `index` counts from the nearest layer. */
 type Layer = { key: string; kind: 'linear' | 'radial'; image: string; periodPx: number; stripes: GlazeStripe[]; depth: number; index: number }
@@ -88,18 +91,7 @@ function SwayLayer({ layer, overscan, angleDeg }: { layer: Layer; overscan: numb
   )
 }
 
-/**
- * The glaze's motion outside the visualizer (`driftOnly`): the linear stacks
- * keep their steady drift and nothing else moves (no sway, pushes or orbit),
- * at the layout's own strengths and counts, so the glaze looks exactly as the
- * still one does, only drifting.
- */
-function driftOnlyOf(immersive: VisualizerImmersive): VisualizerImmersive {
-  return { ...immersive, swayRange: 0, swayPush: 0, poleOrbit: 0, glareStrength: 1, flairStrength: 1, glareMinStacks: 0, flairMinSources: 0 }
-}
-
-export function VisualizerGlaze({ glaze, immersive: settings, driftOnly = false }: { glaze: GlazeSettings; immersive: VisualizerImmersive; driftOnly?: boolean }) {
-  const immersive = useMemo(() => (driftOnly ? driftOnlyOf(settings) : settings), [driftOnly, settings])
+export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; immersive: VisualizerImmersive }) {
   // The widest the music ever carries the nearest layer, which no layer exceeds.
   // The motion is set in arc minutes and drawn as the centre's travel in px,
   // which depends on the screen's size (`arcminToPx`).
@@ -129,8 +121,19 @@ export function VisualizerGlaze({ glaze, immersive: settings, driftOnly = false 
   const pushPx = toPx(immersive.swayPush)
   const driftPx = toPx(immersive.swayDrift)
   useEffect(() => setSwayMotion(pushPx, immersive.swayReturn, driftPx, 1 / immersive.swayCycle), [pushPx, immersive.swayReturn, driftPx, immersive.swayCycle])
-  // The sway and the drift run on the app's one tempo too (`advanceSway`).
-  useEffect(() => subscribeMusicTempo((beats) => advanceSway(beats)), [])
+  // The sway and the drift run on the app's one tempo too (`advanceSway`),
+  // and each tempo frame draws them (`applySway`), unless the OS asks for
+  // reduced motion. Subscribed only while something is set to move: the
+  // tempo's frame loop runs while anyone listens, music or not.
+  const moving = immersive.swayRange > 0 || immersive.swayDrift !== 0 || immersive.swayPush !== 0 || immersive.poleOrbit > 0
+  useEffect(() => {
+    if (!moving) return
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    return subscribeMusicTempo((beats) => {
+      advanceSway(beats)
+      if (!reducedMotion.matches) applySway()
+    })
+  }, [moving])
   const { glareStrength, flairStrength, glareMinStacks, flairMinSources } = immersive
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides

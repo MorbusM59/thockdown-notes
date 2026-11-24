@@ -271,8 +271,20 @@ export function wrapToPeriod(value: number, period: number): number {
   return value - period * Math.floor(value / period + 0.5)
 }
 
-/** Moves every registered layer to where the sway has got to (`advanceSway`), with the music's breath widening it by `breathAmplitude`. */
-export function applySway(breathAmplitude: number, nowMs: number = performance.now()): void {
+/**
+ * How wide the music's breath makes the sway (`breathScales`): set each frame
+ * by the visualizer scene, which reads the bass, and 1 (the music's usual
+ * level) wherever no scene is up, so the glaze outside the visualizer sways
+ * at its set width and follows no detection.
+ */
+let breathAmplitude = 1
+
+export function setSwayBreath(amplitude: number): void {
+  breathAmplitude = amplitude
+}
+
+/** Moves every registered layer to where the sway has got to (`advanceSway`), widened by the breath (`setSwayBreath`). Called by `VisualizerGlaze` on each tempo frame. */
+export function applySway(nowMs: number = performance.now()): void {
   const phaseSec = swayPhase
   const amplitudePx = rangePx * breathAmplitude
   const pushedPx = keptPx + slidingNowPx(nowMs)
