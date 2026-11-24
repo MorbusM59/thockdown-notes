@@ -29,8 +29,12 @@
 import { ALL_FORMATS, AudioSampleSink, CustomSource, Input } from 'mediabunny'
 import { mp3EncoderDelaySec, mp3TagOffset } from './mp3EncoderDelay'
 
-/** Bytes the reader may cache: a few seconds of any format, not the file. */
-const MAX_CACHE_BYTES = 4 * 1024 * 1024
+/**
+ * Bytes the reader may cache. More than Mediabunny's largest sequential prefetch (8 MiB): with less, a prefetched
+ * block was evicted before it was read and fetched again, two and a half times the file in all; with this, every
+ * byte is read once, an 8 MiB request every minute or so of FLAC, whatever the file's length.
+ */
+const MAX_CACHE_BYTES = 16 * 1024 * 1024
 /** Bytes read after the ID3 tag for the mp3 frame holding the LAME tag. */
 const MP3_TAG_READ = 2048
 
