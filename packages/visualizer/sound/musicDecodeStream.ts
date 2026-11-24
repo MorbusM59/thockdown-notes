@@ -32,6 +32,9 @@ const MP3_TAG_READ = 2048
 /** Takes `samples`, mono, whose first one plays at media time `startTime`; the array is reused for the next chunk, so it is read during the call and not kept. */
 export type DecodedChunk = (samples: Float32Array, startTime: number) => void
 
+/** Told how a run ended on its own: at the end of the file (`error` null) or part-way, by what broke it. Not told of a run replaced or halted. */
+export type DecodeEnded = (atSec: number, error: string | null) => void
+
 interface Opened {
   sink: AudioSampleSink
   sampleRate: number
@@ -85,12 +88,12 @@ export class MusicDecodeStream {
    * until the chunks reach what `want` last asked for; a later `want` takes
    * it on from there. Replaces any run in progress.
    */
-  run(fromSec: number, untilSec: number, onChunk: DecodedChunk): void {
+  run(fromSec: number, untilSec: number, onChunk: DecodedChunk, onEnded?: DecodeEnded): void {
     const generation = ++this.generation
     this.wanted = untilSec
     this.frontier = fromSec
     this.release()
-    void this.decode(generation, fromSec, onChunk)
+    void this.decode(generation, fromSec, onChunk, onEnded)
   }
 
   /** Lets the current run decode on to media time `untilSec`. */
@@ -117,7 +120,7 @@ export class MusicDecodeStream {
     wake?.()
   }
 
-  private async decode(generation: number, fromSec: number, onChunk: DecodedChunk): Promise<void> {
+  private async decode(generation: number, fromSec: number, onChunk: DecodedChunk, onEnded?: DecodeEnded): Promise<void> {
     const opened = await this.opened
     if (!opened || generation !== this.generation) return
     const { sink, sampleRate, shiftSec } = opened
@@ -150,8 +153,10 @@ export class MusicDecodeStream {
         }
         if (generation !== this.generation) break
       }
-    } catch {
-      // A file that stops decoding part-way (truncated, corrupt) ends the run where it broke.
+      if (generation === this.generation) onEnded?.(this.frontier, null)
+    } catch (error) {
+      // A file that stops decoding part-way (truncated, corrupt, a read the transport refused) ends the run where it broke.
+      if (generation === this.generation) onEnded?.(this.frontier, error instanceof Error ? `${error.name}: ${error.message}` : String(error))
     }
   }
 }

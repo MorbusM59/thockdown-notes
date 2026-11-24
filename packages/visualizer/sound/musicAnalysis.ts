@@ -293,6 +293,9 @@ export class MusicAnalysis {
         this.map?.feed(samples, startTime)
         this.delay.write(samples, startTime)
         this.releaseUpTo(at + LEAD_SEC + DECODE_MARGIN_SEC)
+      }, (atSec, error) => {
+        // A decode that stops short of the file's end leaves the score to run dry; the trace is where that shows.
+        if (id === this.run && this.traceOn) this.traceLines.push(`decode ended at=${atSec.toFixed(1)}${error ? ` error=${error}` : ' (end of file)'}`)
       })
     })
     this.listenerTime = NaN
