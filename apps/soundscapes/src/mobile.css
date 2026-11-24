@@ -292,11 +292,17 @@ body {
   position: fixed;
   inset: 0;
   z-index: 50;
+  /* The base the desktop's scene lies on (editor.css's .editor-background:
+     the root colour, the parchment over it), which the scene's translucent
+     zone colours are mixed for. Without it the middle showed the root colour
+     alone, black in most looks. The glaze grades all of it from above
+     (.glaze-overlay-stack, z-index 6000), as on the desktop. */
+  background:
+    linear-gradient(var(--palette-parchment-lightest), var(--palette-parchment-lightest)),
+    var(--background-color-root);
 }
 
-/* While the visualizer is up the tabs are not drawn, so the page is
-   transparent over the app's glaze, which sways beneath it
-   (VisualizerGlaze), as the desktop's scene lies over its glaze. */
+/* The tabs are covered while the visualizer is up; not drawn at all. */
 .mobile-app-shell:has(> .visualizer-page) > .mobile-page {
   visibility: hidden;
 }
