@@ -67,8 +67,8 @@ import {
   sanitizeGlazeSettings,
   type GlazeSettings,
 } from '@thockdown/look/glaze'
-import { DEFAULT_BOX_BEVEL, onScreenBoxBevel, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
-import { publishBoxBevel } from '@thockdown/visualizer/shared/boxBevelStore'
+import { DEFAULT_BOX_BEVEL, sanitizeBoxBevel, type BoxBevelSettings } from '@thockdown/look/boxBevel'
+import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayoutScene'
 import type { UiLayoutLoadout, UiLoadoutEntry, UiLoadoutListResult, UiLoadoutMode } from '@thockdown/look/loadouts'
 import {
   idKind,
@@ -2206,16 +2206,8 @@ function App() {
   const [isGlazeRadialSeedEditing, setIsGlazeRadialSeedEditing] = useState(false)
   const [darkMode, setDarkMode] = useState<DarkModeKey>('none')
   const [filterInvert, setFilterInvert] = useState(0)
-  // The bevel reaches the grids through boxBevelStore, which build its images
-  // from it and their own cell size; it is published as DRAWN, its shading
-  // turned in an inverted (dark) layout so the slider reads the same way.
-  const onScreenBevel = useMemo(() => onScreenBoxBevel(boxBevel, filterInvert), [boxBevel, filterInvert])
-  useEffect(() => { publishBoxBevel(onScreenBevel) }, [onScreenBevel])
-  // The scene's invert, for a layer that must keep its own polarity under it
-  // (the visualizer's glass cover, which counter-inverts itself by it).
-  useEffect(() => {
-    document.documentElement.style.setProperty('--scene-invert', String(filterInvert))
-  }, [filterInvert])
+  // The bevel and the scene's invert, published as the phone publishes them.
+  usePublishLayoutScene(boxBevel, filterInvert)
   const [filterSepia, setFilterSepia] = useState(0)
   const [filterHueRotate, setFilterHueRotate] = useState(0)
   const [filterBrightness, setFilterBrightness] = useState(1)

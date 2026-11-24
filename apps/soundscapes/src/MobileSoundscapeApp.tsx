@@ -61,6 +61,7 @@ import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
 import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
 import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
+import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayoutScene'
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
 import { DashboardDock, DashboardSets, DashboardSoundscapes } from './Dashboard'
 import { PresetGrid } from '@thockdown/interaction/PresetListControls'
@@ -137,6 +138,9 @@ export function MobileSoundscapeApp() {
   // The layout's textures, generated from its materials as on the desktop
   // (@thockdown/look/textures), on the shell beside the theme's variables.
   const textureVariables = useLookTextures(loadout.textureMaterials, true)
+  // The layout's box bevel and invert, which the grids and the visualizer
+  // read beyond its CSS variables, as the desktop publishes them.
+  usePublishLayoutScene(loadout.boxBevel, loadout.filterInvert)
   const shellStyle = useMemo<CSSProperties & Record<string, string>>(() => ({ ...theme.shellVariables, ...textureVariables }), [theme.shellVariables, textureVariables])
   // A layout switch is one change, as on the desktop (App.tsx's
   // applyEntryToLiveState): the new layout's textures are brought into the
