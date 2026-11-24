@@ -66,6 +66,8 @@ final class MusicSession {
     private final Runnable endScheduledRun = this::endScheduledRun;
     private float volume = 1f;
     private Integer heardId = null;
+    /** The last failure that stopped the music, for the Debugging section; null for none. */
+    private String lastFailure = null;
     private double heardSeconds = 0;
     /** The output frame `heardSeconds` was heard at. */
     private long heardFrame = 0;
@@ -124,7 +126,8 @@ final class MusicSession {
             // Refused a start from the background: no service would keep the process playing.
             close();
             report();
-            if (listener != null) listener.onFailure("Music could not start in the background");
+            lastFailure = "Music could not start in the background";
+            if (listener != null) listener.onFailure(lastFailure);
         }
     }
 
@@ -258,8 +261,9 @@ final class MusicSession {
 
     /** What the music's output is doing, for the app's Debugging section. */
     synchronized String diagnostics() {
-        if (output == null) return "No music output open.";
-        return "Song " + heardId + " at " + Math.round(heardSeconds) + " s, session volume " + volume + "; lane: " + output.diagnostics();
+        String failure = lastFailure == null ? "" : " Last failure: " + lastFailure;
+        if (output == null) return "No music output open." + failure;
+        return failure.trim() + (failure.isEmpty() ? "" : " | ") + "Song " + heardId + " at " + Math.round(heardSeconds) + " s, session volume " + volume + "; lane: " + output.diagnostics();
     }
 
     synchronized boolean isPlaying() {
@@ -308,6 +312,7 @@ final class MusicSession {
             public void onFailure(String message) {
                 Listener current;
                 synchronized (MusicSession.this) {
+                    lastFailure = message;
                     close();
                     current = listener;
                 }

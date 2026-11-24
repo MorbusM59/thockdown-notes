@@ -330,7 +330,9 @@ final class MusicRenderer {
         } catch (InterruptedException ignored) {
             Thread.currentThread().interrupt();
         } catch (Exception error) {
-            if (running) listener.onFailure("Music renderer stopped: " + error);
+            // Where it was thrown, so a failure read off the Debugging section names its line.
+            StackTraceElement[] trace = error.getStackTrace();
+            if (running) listener.onFailure("Music renderer stopped: " + error + (trace.length > 0 ? " at " + trace[0] : ""));
         } finally {
             closeDecoder();
             if (isolate != null) SharedSandbox.close(isolate);

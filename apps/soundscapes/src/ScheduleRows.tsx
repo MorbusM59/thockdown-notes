@@ -227,7 +227,7 @@ export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, on
       <div className={`mobile-schedule-row${entry.active ? '' : ' is-off'}`}>
         <button
           type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-soundscape is-assigned${picking ? ' is-active' : ''}${drop.over === entry.id ? ' is-drop-target' : ''}`}
+          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-soundscape${set && preset ? ' is-split' : ''}${picking ? ' is-active' : ''}${drop.over === entry.id ? ' is-drop-target' : ''}`}
           aria-expanded={picking}
           aria-label={`${assigned}: choose what plays`}
           data-secondary-press="none"
@@ -239,8 +239,9 @@ export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, on
           onClick={() => setPickingId((current) => (current === entry.id ? null : entry.id))}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <span className="mobile-schedule-assigned is-set">{set ? <SetMark set={set} /> : null}</span>
-          <span className="mobile-schedule-assigned is-soundscape">{preset ? <SoundscapeMark preset={preset} /> : null}</span>
+          {/* Both assigned: two halves glued on the diagonal; one: its mark whole; none: empty. */}
+          {set ? <span className="mobile-schedule-assigned is-set"><SetMark set={set} /></span> : null}
+          {preset ? <span className="mobile-schedule-assigned is-soundscape"><SoundscapeMark preset={preset} /></span> : null}
         </button>
         <button
           type="button"
