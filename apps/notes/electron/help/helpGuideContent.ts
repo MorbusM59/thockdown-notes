@@ -441,7 +441,7 @@ In the middle of the window's top bar.
 - **Play or pause**: **Music**.
 - **Skip forward**: right-click **Music**. **Next song**: hold right-click on **Music**.
 - **Volume**: the **Music** and **Ambient** sliders.
-- **Filter what plays**: **Filter**, then type; it applies when you leave the field. \`Esc\` empties it.
+- **Filter what plays**: **Filter** switches the filter on and off, keeping what you typed. Type in its field; it applies when you leave the field. \`Esc\` empties it.
 - **Soundstage**: **Headphones**, then pick one.
 - **Visualizer**: the eye, or \`F5\`. See [Visualizer](${guideLink('NOTES-EDITING', 'visualizer')}).
 - **Soundscape**: see [Soundscapes](${guideLink('APPEARANCE-SETTINGS', 'soundscapes')}).

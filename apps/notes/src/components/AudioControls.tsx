@@ -2,7 +2,7 @@ import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
 import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '@thockdown/visualizer/shared/audioPlayer'
-import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
+import { samePoolFilter, songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -36,7 +36,7 @@ import { publishNowPlaying, type SoundLevels } from '@thockdown/visualizer/sound
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { readSoundstageControls, subscribeSoundstageControls } from '@thockdown/visualizer/sound/soundstageControls'
-import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
+import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import { beginBackgroundWork } from '../shared/backgroundWork'
@@ -1230,7 +1230,7 @@ function MusicBarFilter() {
             event.currentTarget.blur()
           } else if (event.key === 'Escape') {
             event.preventDefault()
-            setPoolFilterDraft(EMPTY_POOL_FILTER)
+            setPoolFilterQuery('')
             event.currentTarget.blur()
           }
         }}
@@ -1246,7 +1246,7 @@ function MusicBarFilter() {
         hasValue={filter.query !== ''}
         onSubmit={() => inputRef.current?.blur()}
         onClear={() => {
-          setPoolFilterDraft(EMPTY_POOL_FILTER)
+          setPoolFilterQuery('')
           commitPoolFilterDraft()
         }}
       />

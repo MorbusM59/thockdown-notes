@@ -57,7 +57,7 @@ describe('music sets', () => {
       expect(matches('mich beyonce')).toBe(false)
       expect(matches('')).toBe(true)
       expect(matches('   ')).toBe(true)
-      expect(EMPTY_POOL_FILTER).toEqual({ query: '', enabled: true })
+      expect(EMPTY_POOL_FILTER).toEqual({ query: '', enabled: false })
     })
 
     it('matches quoted phrases contiguously, but not as separated words', () => {

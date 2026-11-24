@@ -57,6 +57,27 @@ function loadVolume(): number {
     return 1
   }
 }
+const CHANNEL_KEY = 'thockdown:music-channel'
+
+/**
+ * The music CHANNEL's switch (the dashboard's CD button): switched out, the
+ * music is silent whoever plays it, the volume slider kept for its return.
+ */
+let channelOn = loadChannel()
+
+function loadChannel(): boolean {
+  try {
+    return localStorage.getItem(CHANNEL_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+/** The gain the native player is given: the slider's, or silence while the channel is switched out. */
+function heardGain(): number {
+  return channelOn ? volumeGain(levels.volume) : 0
+}
+
 let plugin: NativeMusicPlugin | null = null
 // Whether the music is heard playing (the native player's `heard` reports).
 let playing = false
@@ -79,15 +100,28 @@ export async function startMusic(): Promise<void> {
   await plugin.play({ stage: stageJson })
 }
 
-/** Play or pause the music (the dashboard's music button). */
-export function toggleMusic(): void {
-  if (!plugin) return
-  if (!playing) {
-    void startMusic()
-    return
-  }
+/** Pauses the music if it plays. */
+export function pauseMusic(): void {
+  if (!plugin || !playing) return
   setPlaying(false)
   void plugin.pause()
+}
+
+/** Switch the music channel in or out of the mix. */
+export function setMusicChannel(on: boolean): void {
+  if (on === channelOn) return
+  channelOn = on
+  void plugin?.setVolume({ volume: heardGain() })
+  try {
+    localStorage.setItem(CHANNEL_KEY, on ? 'on' : 'off')
+  } catch {
+    // Storage refused: the switch holds until the app is closed.
+  }
+  for (const listener of playingListeners) listener()
+}
+
+export function readMusicChannel(): boolean {
+  return channelOn
 }
 
 /** On to the pool's next pick, starting the music if it is not playing. */
@@ -113,6 +147,7 @@ export function readMusicPlaying(): boolean {
   return playing
 }
 
+/** Told when the music starts or stops playing, or its channel is switched (readMusicChannel). */
 export function subscribeMusicPlaying(listener: () => void): () => void {
   playingListeners.add(listener)
   return () => playingListeners.delete(listener)
@@ -202,7 +237,7 @@ const actions = {
   setLevel(level: keyof SoundLevels, fraction: number) {
     if (level !== 'volume') return
     levels = { ...levels, volume: fraction }
-    void plugin?.setVolume({ volume: volumeGain(fraction) })
+    void plugin?.setVolume({ volume: heardGain() })
     try {
       localStorage.setItem(VOLUME_KEY, String(fraction))
     } catch {
@@ -239,7 +274,7 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
   // The visualizer reads the native music: its clock, its file and its spectrum (nativeMusicListening.ts).
   setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId)))
   setPlaying((await native.getState()).playing)
-  void native.setVolume({ volume: volumeGain(levels.volume) })
+  void native.setVolume({ volume: heardGain() })
   publish()
   const handle = await native.addListener('heard', (heard) => {
     setPlaying(heard.playing)

@@ -352,7 +352,7 @@ export function sanitizeMusicBarRow(input: unknown): MusicBarRow | undefined {
  */
 export type MusicPoolFilter = { query: string; enabled: boolean };
 
-export const EMPTY_POOL_FILTER: MusicPoolFilter = { query: '', enabled: true };
+export const EMPTY_POOL_FILTER: MusicPoolFilter = { query: '', enabled: false };
 
 /** Which songs are in the pool: those belonging to any active set in `slots` that pass `filter`. */
 export type MusicPoolQuery = { slots: PlaylistSlot[]; filter: MusicPoolFilter };
@@ -366,17 +366,20 @@ export function samePoolFilter(a: MusicPoolFilter, b: MusicPoolFilter): boolean 
   return a.query === b.query && a.enabled === b.enabled;
 }
 
-/** A filter read from storage or IPC; old field values become quoted search terms, and one saved before the switch is on. */
+/**
+ * A filter read from storage or IPC; old field values become quoted search terms. One saved before the switch
+ * existed is on exactly when it holds a query, which is when it filtered anything.
+ */
 export function sanitizePoolFilter(input: unknown): MusicPoolFilter {
   const record = input && typeof input === 'object' ? input as Record<string, unknown> : {};
-  const enabled = record.enabled !== false;
-  if (typeof record.query === 'string') return { query: record.query, enabled };
+  const switched = typeof record.enabled === 'boolean' ? record.enabled : null;
+  if (typeof record.query === 'string') return { query: record.query, enabled: switched ?? record.query.trim() !== '' };
   const legacyTerms = [record.artist, record.album, record.title]
     .filter((value): value is string => typeof value === 'string')
     .map((value) => value.trim())
     .filter(Boolean)
     .map((value) => `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`);
-  return { query: legacyTerms.join(' '), enabled };
+  return { query: legacyTerms.join(' '), enabled: switched ?? legacyTerms.length > 0 };
 }
 
 type PoolSearchField = 'artist' | 'album' | 'title' | 'path'
