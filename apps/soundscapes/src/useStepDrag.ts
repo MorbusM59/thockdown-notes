@@ -1,6 +1,6 @@
 /**
  * A button that is tapped, or dragged up and down through a list of values
- * (LookButton.tsx's looks, the clip button's lengths, the schedule's times).
+ * (the clip button's lengths, the schedule's times).
  *
  * On touch, a drag needs a HOLD first (HOLD_CONFIRM_MS): a finger that moves
  * on without one is a swipe of the page (touchScroll.ts).

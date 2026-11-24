@@ -1,19 +1,16 @@
 /**
  * What help mode says under each subsection heading (the help button in the
- * Master row): a concise account of the controls the text stands in for,
+ * Tools row): a concise account of the controls the text stands in for,
  * for a finger. Keyed by the heading as it is shown. The soundscape panel's
  * own subsections are reached through its `help` option (SoundscapeControls).
  */
 const HELP: Record<string, string[]> = {
-  Master: [
-    'Playback modes: Soundscapes play in one of two modes, manual or scheduled.',
-    'Manual: Starts when you select a soundscape or tap the play button, and overrides the schedule while in effect. Tapping the play button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same. The icon shows playing, paused or stopped.',
-    'Scheduled: Active whenever manual playback is stopped. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag soundscape icons to change the order.',
-    'Clock button: Turns the schedule on or off. A dashed frame means a scheduled soundscape is playing.',
+  Tools: [
+    'Playback modes: Soundscapes play in one of two modes, manual or scheduled. Both are controlled from the Dashboard.',
+    'Manual: Starts when you select a soundscape or tap the soundscape button in the Dashboard\'s dock, and overrides the schedule while in effect. Tapping that button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same.',
+    'Scheduled: Active whenever manual playback is stopped, while the Dashboard\'s clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag soundscape icons to change the order.',
     'Files button: Tap to load soundscapes from a file. Hold to save your own soundscapes to a file.',
     'Record button: Tap to save the playing soundscape as an audio file. Hold and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
-    'Look button: Tap to switch between light and dark mode. Hold and drag up or down to change the color theme.',
-    'Volume: Sets the volume of the app.',
   ],
   Schedule: [
     'Rows: Each row plays a song set, a soundscape, or both, from its start time to its stop time on its active days. A stop time earlier than the start time ends on the next day. Equal start and stop times play for 24 hours.',
