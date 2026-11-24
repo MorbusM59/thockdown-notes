@@ -400,7 +400,11 @@ export function DashboardDock({ timeLeft, soundscape, onSoundscapeTransport, onS
           className={`btn-icon options-color-swatch options-loadout-btn${musicChannel ? ' is-active' : ''}`}
           aria-pressed={musicChannel}
           aria-label={`Music channel ${musicChannel ? 'on' : 'off'}`}
-          onClick={() => setMusicChannel(!musicChannel)}
+          onClick={() => {
+            // Switched in while the mix plays, the music joins it at once.
+            if (!musicChannel && mix === 'playing') void startMusic()
+            setMusicChannel(!musicChannel)
+          }}
         >
           <span className="fa-solid fa-compact-disc" aria-hidden="true" />
         </button>
@@ -431,7 +435,12 @@ export function DashboardDock({ timeLeft, soundscape, onSoundscapeTransport, onS
           className={`btn-icon options-color-swatch options-loadout-btn${soundscapeChannel ? ' is-active' : ''}`}
           aria-pressed={soundscapeChannel}
           aria-label={`Soundscape channel ${soundscapeChannel ? 'on' : 'off'}`}
-          onClick={() => onSoundscapeChannel(!soundscapeChannel)}
+          onClick={() => {
+            // Switched in while the mix plays, the soundscape joins it at once
+            // rather than waiting for the next press of play.
+            if (!soundscapeChannel && mix === 'playing' && soundscape !== 'playing') onSoundscapeTransport('playing')
+            onSoundscapeChannel(!soundscapeChannel)
+          }}
         >
           <span className="fa-solid fa-podcast" aria-hidden="true" />
         </button>
