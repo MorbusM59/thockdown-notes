@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
+import { songPathParts, type MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
 import { groupMusicSetList, sanitizeMusicSetListGrouping } from './musicSetList'
 
 let nextId = 1
@@ -17,8 +17,9 @@ const songs = [
 describe('groupMusicSetList', () => {
   it('groups by folder, names the last level, divides by file type, sorts titles', () => {
     const groups = groupMusicSetList(songs, 'folder', '')
-    expect(groups.map((g) => [g.label, g.key])).toEqual([['rock', '/music/rock'], ['Rock', 'C:\\other\\Rock']])
-    expect(groups[0].dividers.map((d) => [d.label, d.songs.map((s) => s.filePath)])).toEqual([
+    // The key is the whole folder, its levels joined by `/` whatever the platform's separator.
+    expect(groups.map((g) => [g.label, g.key])).toEqual([['Rock', 'C:/other/Rock'], ['rock', 'music/rock']])
+    expect(groups[1].dividers.map((d) => [d.label, d.songs.map((s) => s.filePath)])).toEqual([
       ['.flac', ['/music/rock/a.flac']],
       ['.mp3', ['/music/rock/c.mp3', '/music/rock/b.mp3']],
     ])
@@ -53,5 +54,17 @@ describe('musicSetMark', () => {
     expect(musicSetMark('  Chill   out ')).toBe('CO')
     expect(musicSetMark('focus')).toBe('FO')
     expect(musicSetMark('x')).toBe('X')
+  })
+})
+
+describe('a phone song (a content URI)', () => {
+  const uri = 'content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2FHouse%2FDeep%2Ftrack.MP3'
+  it('names its folders and file from the document id', () => {
+    expect(songPathParts(uri)).toEqual(['Music', 'House', 'Deep', 'track.MP3'])
+  })
+  it('groups by the folder the song is in', () => {
+    const song = { id: 1, filePath: uri, setIds: [], priority: 1, favorability: 5, title: '', artist: '', album: '', durationSec: 0 }
+    const groups = groupMusicSetList([song], 'folder', '')
+    expect(groups.map((group) => group.label)).toEqual(['Deep'])
   })
 })

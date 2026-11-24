@@ -1,4 +1,4 @@
-import { createPoolFilterMatcher, songAlbumText, songArtistText, songListTitleText, type MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
+import { createPoolFilterMatcher, songAlbumText, songArtistText, songListTitleText, songPathParts, type MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
 
 /**
  * The SET LIST: one music set's songs, as the Music Library shows them in the
@@ -28,17 +28,17 @@ export type MusicSetListGroup = { key: string; label: string; dividers: MusicSet
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
+/** The song's folder, every level of it, as one key; empty for a bare file name. */
 function folderOf(filePath: string): string {
-  const cut = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
-  return cut < 0 ? '' : filePath.slice(0, cut)
+  return songPathParts(filePath).slice(0, -1).join('/')
 }
 
 function lastFolderLevel(folder: string): string {
-  return folder.split(/[\\/]/).filter((part) => part.length > 0).at(-1) ?? folder
+  return folder.split('/').at(-1) ?? folder
 }
 
 function extensionOf(filePath: string): string {
-  const file = filePath.slice(Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\')) + 1)
+  const file = songPathParts(filePath).at(-1) ?? ''
   const dot = file.lastIndexOf('.')
   return dot <= 0 ? '' : file.slice(dot).toLowerCase()
 }

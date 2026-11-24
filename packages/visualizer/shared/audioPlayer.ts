@@ -286,10 +286,37 @@ function songTagText(tag: string): string {
   return sanitizeDocumentText(tag).replace(/\n+/g, ' ').trim();
 }
 
+/**
+ * The folders and file name a song's path names, outermost first. A file
+ * path splits on its separators. A content URI (the phone's songs, from a
+ * folder the reader picked: `content://<provider>/tree/<tree id>/document/
+ * <document id>`) names its file by the DOCUMENT ID, percent-encoded, which
+ * for the device's storage is `<volume>:<path>`; split on its raw slashes it
+ * would read as the folders `tree` and `document`. Every reader of a song's
+ * folders and file name goes through this.
+ */
+export function songPathParts(filePath: string): string[] {
+  const documentAt = filePath.startsWith('content://') ? filePath.lastIndexOf('/document/') : -1;
+  const path = documentAt < 0 ? filePath : documentIdPath(filePath.slice(documentAt + '/document/'.length));
+  return path.split(/[\\/]/).filter((part) => part.length > 0);
+}
+
+function documentIdPath(encoded: string): string {
+  let id = encoded;
+  try {
+    id = decodeURIComponent(encoded);
+  } catch {
+    // A malformed escape: the id as it stands.
+  }
+  // `primary:Music/Album/song.mp3`: the volume before the first colon is not a folder.
+  const colon = id.indexOf(':');
+  return colon < 0 ? id : id.slice(colon + 1);
+}
+
 export function songTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath'>): string {
   const title = songTagText(song.title);
   if (title) return title;
-  const parts = song.filePath.split(/[\\/]/).filter((part) => part.length > 0);
+  const parts = songPathParts(song.filePath);
   const shown = parts.slice(-3);
   return songTagText((parts.length > shown.length ? ['...', ...shown] : shown).join(SONG_PATH_SEPARATOR));
 }
@@ -303,7 +330,7 @@ export function songTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath'>):
 export function songListTitleText(song: Pick<MusicSongEntry, 'title' | 'filePath'>): string {
   const title = songTagText(song.title);
   if (title) return title;
-  const file = song.filePath.split(/[\\/]/).filter((part) => part.length > 0).at(-1) ?? '';
+  const file = songPathParts(song.filePath).at(-1) ?? '';
   return songTagText(file.replace(/\.[^.]+$/, ''));
 }
 
