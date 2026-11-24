@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { BEAT_LOOPS, lastHit } from './beatLoops'
+import { LOOP_01, LOOP_02, LOOP_03, LOOP_04, LOOP_05, LOOP_06, LOOP_07, lastHit } from './beatLoops'
+
+const BEAT_LOOPS = [LOOP_01, LOOP_02, LOOP_03, LOOP_04, LOOP_05, LOOP_06, LOOP_07]
 
 describe('the calibration loops', () => {
   it('fit a whole number of bars into each track, every hit inside its bar', () => {

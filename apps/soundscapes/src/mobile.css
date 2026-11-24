@@ -312,3 +312,17 @@ body {
 .mobile-app-shell .options-curve-graph {
   --curve-point-size: 28px;
 }
+
+/* The beat calibration strip is ONE ROW of the grid, as on the desktop,
+   where it is one button tall: here a row is a squared cell, so the strip
+   is a cell's height (the grid's width less its five gaps, over six) rather
+   than squared itself, which made it as tall as it is wide and its boxes,
+   half its height each, enormous. */
+.mobile-app-shell .options-loadout-grid.beat-loop-calibration {
+  container-type: inline-size;
+}
+
+.mobile-app-shell .options-loadout-grid.beat-loop-calibration > .beat-loop-calibration-strip {
+  aspect-ratio: auto;
+  height: calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
+}

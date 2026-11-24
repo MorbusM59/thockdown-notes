@@ -85,6 +85,7 @@ import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, PHONE_VI
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
 import { BeatDetectionControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
+import { LOOP_03 } from '@thockdown/visualizer/beat/beatLoops'
 import { createNativeBeatLoopPlayer } from './nativeBeatLoop'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 
@@ -92,6 +93,15 @@ installSoundscapeFiles()
 
 // The beat delay calibration plays its loop natively, where the music plays (nativeBeatLoop.ts); there is none in a browser.
 const beatLoopPlayer = nativeMusic ? createNativeBeatLoopPlayer(nativeMusic) : null
+/**
+ * The phone ships ONE loop, AAC at 128 kbps (ffmpeg -i 03.wav -c:a aac -b:a
+ * 128k -movflags +faststart 03.m4a; it decodes to the WAV's exact length and
+ * alignment): the desktop steps through seven with a right press, which a
+ * finger has no counterpart for, and seven would be most of the app's size.
+ * Loop 03 is the plainest to judge by: sparse, straight hits on a slow bar,
+ * so no hit can be mistaken for its neighbour.
+ */
+const BEAT_LOOPS = [{ ...LOOP_03, url: new URL('./assets/loops/03.m4a', import.meta.url).href }]
 
 const PRESETS = { light: LIGHT_FACTORY_PRESETS, dark: DARK_FACTORY_PRESETS }
 const PRESET_ICONS = { light: LIGHT_PRESET_ICONS, dark: DARK_PRESET_ICONS }
@@ -618,6 +628,7 @@ export function MobileSoundscapeApp() {
                 {tab === 'settings' ? <SettingsTab
                   beatDetection={<>
                     {beatLoopPlayer ? <BeatLoopCalibration
+                      loops={BEAT_LOOPS}
                       startLoop={beatLoopPlayer}
                       fontFamily={PHONE_VISUALIZER_FONT.family}
                       fontPerBox={PHONE_VISUALIZER_FONT.sizePx / PHONE_VISUALIZER_FONT.boxPx}

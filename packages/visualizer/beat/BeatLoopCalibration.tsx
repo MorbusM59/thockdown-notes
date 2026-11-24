@@ -5,7 +5,7 @@ import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
 import { useBoxBevelImages } from '@thockdown/visualizer/shared/boxBevelStore'
 import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '@thockdown/visualizer/shared/beatSettings'
 import { useHoldToAdjust, type HoldToAdjustKeyboardController } from '@thockdown/interaction/useHoldToAdjust'
-import { BEAT_LOOPS, lastHit, type BeatLoopPlayer, type LoopRun } from './beatLoops'
+import { lastHit, type BeatLoop, type BeatLoopPlayer, type LoopRun } from './beatLoops'
 import { DRAG_STEP_PX, HOLD_GRACE_PX, HOLD_GRACE_TOUCH_PX } from '@thockdown/interaction/holdTiming'
 import './beat.css'
 
@@ -58,7 +58,13 @@ const EFFECTS = [
  * The loop is played by the app (`startLoop`), on the music's own path to the
  * speaker, so the delay set here is the music's.
  */
-export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, fontPerBox, startLoop }: {
+export function BeatLoopCalibration({ loops, delayMs, onChange, falls, fontFamily, fontPerBox, startLoop }: {
+  /**
+   * The loops the app ships, in the order a right press steps through them.
+   * With one there is nothing to step through, and the strip declares no
+   * right press: the phone, which has none, ships one.
+   */
+  loops: readonly BeatLoop[]
   /** Plays a loop where the music plays (beatLoops.ts's BeatLoopPlayer). */
   startLoop: BeatLoopPlayer
   delayMs: number
@@ -70,7 +76,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   /** The visualizer's font size over its box size, so the letters sit in their boxes as there. */
   fontPerBox: number
 }) {
-  // The loop playing, by its place in BEAT_LOOPS; null while stopped.
+  // The loop playing, by its place in `loops`; null while stopped.
   const [playing, setPlaying] = useState<number | null>(null)
   const running = playing !== null
   // The loop a press starts: the one last played, so stopping and starting again keeps it.
@@ -132,6 +138,8 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   onChangeRef.current = onChange
   const keyboardRef = useRef<HoldToAdjustKeyboardController | null>(null)
   const startLoopRef = useRef(startLoop)
+  const loopsRef = useRef(loops)
+  loopsRef.current = loops
   startLoopRef.current = startLoop
   // The swipe: where it began and the delay then, and whether it has moved past the grace (then it is no press).
   const swipeRef = useRef<{ pointerId: number; x: number; base: number; grace: number; swiped: boolean } | null>(null)
@@ -152,7 +160,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   useEffect(() => {
     const strip = stripRef.current
     if (playing === null || !strip) return
-    const loop = BEAT_LOOPS[playing]
+    const loop = loopsRef.current[playing]
     const run: LoopRun = startLoopRef.current(loop, () => {
       setFailed(true)
       setPlaying(null)
@@ -215,6 +223,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   }, [running])
 
   const intention = running ? 'Stop' : 'Line the beat up with the drums'
+  const steps = loops.length > 1
   return (
     <div className="options-loadout-grid beat-loop-calibration" role="group" aria-label="Line the visuals up with the sound">
       <button
@@ -261,11 +270,12 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
         }}
         onContextMenu={(event) => {
           event.preventDefault()
+          if (!steps) return
           setFailed(false)
-          setPlaying((index) => ((index ?? lastLoopRef.current) + (index === null ? 0 : 1)) % BEAT_LOOPS.length)
+          setPlaying((index) => ((index ?? lastLoopRef.current) + (index === null ? 0 : 1)) % loops.length)
         }}
-        data-secondary-press="action"
-        data-live-tooltip={encodeTooltip({ intention, value: `${delayMs} ms`, gestures: [{ press: 'right', intention: 'Next loop' }] })}
+        data-secondary-press={steps ? 'action' : 'none'}
+        data-live-tooltip={encodeTooltip({ intention, value: `${delayMs} ms`, gestures: steps ? [{ press: 'right', intention: 'Next loop' }] : [] })}
         aria-label={intention}
       >
         {boxPx > 1 && (

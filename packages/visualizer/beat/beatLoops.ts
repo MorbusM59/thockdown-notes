@@ -1,6 +1,6 @@
 /**
  * The delay calibration's LOOPS (`BeatLoopCalibration.tsx`): drum tracks
- * built for it, in `./loops/`, whose hits are written down here (each loop's
+ * built for it (each app ships the files of the loops it offers), whose hits are written down here (each loop's
  * `score`) rather than detected, so what the reader judges is the timing
  * alone. How a loop is PLAYED is each app's (`BeatLoopPlayer`): it must take
  * the music's own path to the speaker, or the delay set against it would not
@@ -17,14 +17,8 @@ export interface LoopHit {
 /** What a loop's score holds: every channel's hits in one bar. */
 export type LoopScore = Readonly<Record<LoopChannel, readonly LoopHit[]>>
 
-/**
- * A calibration loop. Each `.mp4` is its `.wav` stored losslessly as FLAC in
- * one fragment of a fragmented MP4, the form Media Source Extensions take:
- *   ffmpeg -i NN.wav -c:a flac -sample_fmt s16 -f mp4 \
- *     -movflags +frag_keyframe+empty_moov+default_base_moof+omit_tfhd_offset -frag_duration 16000000 NN.mp4
- */
-export interface BeatLoop {
-  url: string
+/** A calibration loop's timing: what is heard when, whatever file carries it. */
+export interface LoopTiming {
   /** The track's length, exactly: its frame count over its rate. */
   trackSec: number
   /** Seconds after which the rhythm repeats; the track is a whole number of them. */
@@ -108,85 +102,85 @@ const LOOP_07_THUMP = { 0: 100, 10: 100, 16: 100, 26: 100 }
 const LOOP_07_PIERCE = { 4: 100, 12: 100, 20: 100, 28: 100 }
 const LOOP_07_TICK = { 2: 100, 6: 100, 7: 100, 10: 100, 14: 100, 18: 100, 22: 100, 25: 100, 26: 100, 30: 100 }
 
-/** The loops, in the order a press steps through them. */
-export const BEAT_LOOPS: readonly BeatLoop[] = [
-  {
-    url: new URL('./loops/01.mp4', import.meta.url).href,
-    trackSec: 529656 / 48000,
-    barSec: LOOP_01_BAR_SEC,
-    score: {
-      thump: atSixteenths(LOOP_01_BAR_SEC, { 0: 1, 2: 1, 9: 0.3, 10: 1, 13: 1 }, LOOP_01_SWING),
-      pierce: atSixteenths(LOOP_01_BAR_SEC, { 4: 1, 7: 0.5, 12: 1 }, LOOP_01_SWING),
-      tick: atSixteenths(LOOP_01_BAR_SEC, { 0: 1, 2: 1, 4: 1, 6: 0.5, 8: 0.5, 10: 1, 12: 1, 14: 0.5 }, LOOP_01_SWING),
-    },
+/**
+ * The loops' timing, each by its number: the audio is the app's to ship
+ * (`BeatLoop.url`), so an app carries only the loops it offers.
+ */
+export const LOOP_01: LoopTiming = {
+  trackSec: 529656 / 48000,
+  barSec: LOOP_01_BAR_SEC,
+  score: {
+    thump: atSixteenths(LOOP_01_BAR_SEC, { 0: 1, 2: 1, 9: 0.3, 10: 1, 13: 1 }, LOOP_01_SWING),
+    pierce: atSixteenths(LOOP_01_BAR_SEC, { 4: 1, 7: 0.5, 12: 1 }, LOOP_01_SWING),
+    tick: atSixteenths(LOOP_01_BAR_SEC, { 0: 1, 2: 1, 4: 1, 6: 0.5, 8: 0.5, 10: 1, 12: 1, 14: 0.5 }, LOOP_01_SWING),
   },
-  {
-    url: new URL('./loops/02.mp4', import.meta.url).href,
-    trackSec: 16,
-    barSec: LOOP_02_BAR_SEC,
-    score: {
-      thump: [0, 0.8335, 2.3315, 2.8335].map((sec) => ({ sec, strength: 1 })),
-      pierce: [1, 3].map((sec) => ({ sec, strength: 1 })),
-      tick: Array.from({ length: 24 }, (_, i) => ({ sec: (i * LOOP_02_BAR_SEC) / 24, strength: LOOP_02_RIM_SHOTS.has(i) ? 1 : 0.5 })),
-    },
+}
+
+export const LOOP_02: LoopTiming = {
+  trackSec: 16,
+  barSec: LOOP_02_BAR_SEC,
+  score: {
+    thump: [0, 0.8335, 2.3315, 2.8335].map((sec) => ({ sec, strength: 1 })),
+    pierce: [1, 3].map((sec) => ({ sec, strength: 1 })),
+    tick: Array.from({ length: 24 }, (_, i) => ({ sec: (i * LOOP_02_BAR_SEC) / 24, strength: LOOP_02_RIM_SHOTS.has(i) ? 1 : 0.5 })),
   },
-  {
-    url: new URL('./loops/03.mp4', import.meta.url).href,
-    trackSec: 16,
-    barSec: LOOP_03_BAR_SEC,
-    score: {
-      thump: atSixteenths(LOOP_03_BAR_SEC, { 0: 1, 10: 1, 13: 1 }),
-      pierce: atSixteenths(LOOP_03_BAR_SEC, { 6: 1 }),
-      tick: atSixteenths(LOOP_03_BAR_SEC, { 4: 1, 12: 1 }),
-    },
+}
+
+export const LOOP_03: LoopTiming = {
+  trackSec: 16,
+  barSec: LOOP_03_BAR_SEC,
+  score: {
+    thump: atSixteenths(LOOP_03_BAR_SEC, { 0: 1, 10: 1, 13: 1 }),
+    pierce: atSixteenths(LOOP_03_BAR_SEC, { 6: 1 }),
+    tick: atSixteenths(LOOP_03_BAR_SEC, { 4: 1, 12: 1 }),
   },
-  {
-    url: new URL('./loops/04.mp4', import.meta.url).href,
-    trackSec: LOOP_04_SEC,
-    barSec: LOOP_04_SEC,
-    score: {
-      thump: LOOP_04_KICK_BEATS.map((beat) => ({ sec: beat * LOOP_04_BEAT_SEC, strength: 1 })),
-      pierce: [0, 1, 2, 3].flatMap((bar) => atSixteenths(2, LOOP_04_SNARES).map((hit) => ({ ...hit, sec: hit.sec + bar * 2 }))),
-      tick: [],
-    },
+}
+
+export const LOOP_04: LoopTiming = {
+  trackSec: LOOP_04_SEC,
+  barSec: LOOP_04_SEC,
+  score: {
+    thump: LOOP_04_KICK_BEATS.map((beat) => ({ sec: beat * LOOP_04_BEAT_SEC, strength: 1 })),
+    pierce: [0, 1, 2, 3].flatMap((bar) => atSixteenths(2, LOOP_04_SNARES).map((hit) => ({ ...hit, sec: hit.sec + bar * 2 }))),
+    tick: [],
   },
-  {
-    url: new URL('./loops/05.mp4', import.meta.url).href,
-    trackSec: 9.6,
-    barSec: LOOP_05_BAR_SEC,
-    // Sixteenths counted on through both bars: given one bar (2.4 s), sixteenths 16 to 31 fall in the second.
-    score: {
-      thump: atSixteenths(LOOP_05_BAR_SEC / 2, { 0: 1, 9: 0.7, 11: 0.4, 16: 0.7, 25: 0.7, 27: 0.4, 29: 0.7, 30: 0.4, 31: 0.4 }, LOOP_05_SWING),
-      pierce: atSixteenths(LOOP_05_BAR_SEC / 2, { 4: 0.7, 12: 1, 20: 0.7, 28: 1 }, LOOP_05_SWING),
-      tick: atSixteenths(LOOP_05_BAR_SEC / 2, { 2: 1, 6: 0.7, 10: 0.7, 14: 1, 18: 0.7, 22: 0.7, 26: 1, 30: 0.7 }, LOOP_05_SWING),
-    },
+}
+
+export const LOOP_05: LoopTiming = {
+  trackSec: 9.6,
+  barSec: LOOP_05_BAR_SEC,
+  // Sixteenths counted on through both bars: given one bar (2.4 s), sixteenths 16 to 31 fall in the second.
+  score: {
+    thump: atSixteenths(LOOP_05_BAR_SEC / 2, { 0: 1, 9: 0.7, 11: 0.4, 16: 0.7, 25: 0.7, 27: 0.4, 29: 0.7, 30: 0.4, 31: 0.4 }, LOOP_05_SWING),
+    pierce: atSixteenths(LOOP_05_BAR_SEC / 2, { 4: 0.7, 12: 1, 20: 0.7, 28: 1 }, LOOP_05_SWING),
+    tick: atSixteenths(LOOP_05_BAR_SEC / 2, { 2: 1, 6: 0.7, 10: 0.7, 14: 1, 18: 0.7, 22: 0.7, 26: 1, 30: 0.7 }, LOOP_05_SWING),
   },
-  {
-    url: new URL('./loops/06.mp4', import.meta.url).href,
-    trackSec: LOOP_06_SEC,
-    barSec: LOOP_06_SEC,
-    // Sixteenths counted on through all four bars: given one bar (2 s), sixteenths 16 to 63 fall in the later ones.
-    score: {
-      thump: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_THUMP)),
-      pierce: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_PIERCE)),
-      tick: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_TICK)),
-    },
+}
+
+export const LOOP_06: LoopTiming = {
+  trackSec: LOOP_06_SEC,
+  barSec: LOOP_06_SEC,
+  // Sixteenths counted on through all four bars: given one bar (2 s), sixteenths 16 to 63 fall in the later ones.
+  score: {
+    thump: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_THUMP)),
+    pierce: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_PIERCE)),
+    tick: atSixteenths(LOOP_06_SEC / 4, byVelocity(LOOP_06_TICK)),
   },
-  {
-    url: new URL('./loops/07.mp4', import.meta.url).href,
-    trackSec: LOOP_07_SEC,
-    barSec: LOOP_07_SEC,
-    // Sixteenths counted on through both bars: given one bar, sixteenths 16 to 31 fall in the second.
-    score: {
-      thump: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_THUMP)),
-      pierce: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_PIERCE)),
-      tick: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_TICK)),
-    },
+}
+
+export const LOOP_07: LoopTiming = {
+  trackSec: LOOP_07_SEC,
+  barSec: LOOP_07_SEC,
+  // Sixteenths counted on through both bars: given one bar, sixteenths 16 to 31 fall in the second.
+  score: {
+    thump: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_THUMP)),
+    pierce: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_PIERCE)),
+    tick: atSixteenths(LOOP_07_SEC / 2, byVelocity(LOOP_07_TICK)),
   },
-]
+}
 
 /** The latest hit of `channel` at bar time `barSec` (0..the loop's bar), and how long ago it was; a hit late in the bar is still falling at the start of the next. */
-export function lastHit(loop: BeatLoop, channel: LoopChannel, barSec: number): { strength: number; agoSec: number } {
+export function lastHit(loop: LoopTiming, channel: LoopChannel, barSec: number): { strength: number; agoSec: number } {
   let latest = { strength: 0, agoSec: Infinity }
   for (const hit of loop.score[channel]) {
     const ago = barSec - hit.sec
@@ -194,6 +188,11 @@ export function lastHit(loop: BeatLoop, channel: LoopChannel, barSec: number): {
     if (agoSec < latest.agoSec) latest = { strength: hit.strength, agoSec }
   }
   return latest
+}
+
+/** A calibration loop as an app offers it: its timing and the file it ships it in. */
+export interface BeatLoop extends LoopTiming {
+  url: string
 }
 
 export interface LoopRun {
