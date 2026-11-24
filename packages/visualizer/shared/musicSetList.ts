@@ -56,7 +56,7 @@ function bucket<T>(items: readonly T[], keyOf: (item: T) => string): Map<string,
 
 /** The songs matching `query` (the visualizer's pool-filter syntax), grouped for the set list. */
 export function groupMusicSetList(songs: readonly MusicSongEntry[], grouping: MusicSetListGrouping, query: string): MusicSetListGroup[] {
-  const matches = createPoolFilterMatcher({ query })
+  const matches = createPoolFilterMatcher({ query, enabled: true })
   const titles = new Map<MusicSongEntry, string>()
   const shown = songs.filter(matches)
   for (const song of shown) titles.set(song, songListTitleText(song))

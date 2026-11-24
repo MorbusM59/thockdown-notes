@@ -25,7 +25,9 @@ import {
 import {
   createPoolFilterMatcher,
   defaultMusicSetName,
-  isPoolFilterEmpty,
+  EMPTY_POOL_FILTER,
+  sanitizePoolFilter,
+  poolFilterPassesAll,
   MAX_FACTORY_PLAYLIST_SLOT,
   type MusicPoolFilter,
   type MusicSet,
@@ -57,7 +59,7 @@ export interface MusicCatalog {
 
 export type MusicRotation = LibrarySong[];
 
-export const EMPTY_CATALOG: MusicCatalog = { songs: [], sets: [], folders: [], activeSetIds: [], filter: { query: '' } };
+export const EMPTY_CATALOG: MusicCatalog = { songs: [], sets: [], folders: [], activeSetIds: [], filter: EMPTY_POOL_FILTER };
 
 /** A stored catalog, any field a catalog written before it existed lacks taken as empty. */
 export function sanitizeCatalog(input: unknown): MusicCatalog {
@@ -67,7 +69,7 @@ export function sanitizeCatalog(input: unknown): MusicCatalog {
     sets: Array.isArray(stored.sets) ? stored.sets : [],
     folders: Array.isArray(stored.folders) ? stored.folders : [],
     activeSetIds: Array.isArray(stored.activeSetIds) ? stored.activeSetIds : [],
-    filter: stored.filter && typeof stored.filter.query === 'string' ? stored.filter : { query: '' },
+    filter: sanitizePoolFilter(stored.filter),
   };
 }
 
@@ -180,7 +182,7 @@ export function libraryOf(catalog: MusicCatalog, rotation: MusicRotation): Music
 /** The pool in pick order: the active sets' songs that pass the filter. */
 export function poolOf(catalog: MusicCatalog, rotation: MusicRotation): MusicSongEntry[] {
   const active = new Set(catalog.activeSetIds);
-  const matches = isPoolFilterEmpty(catalog.filter) ? () => true : createPoolFilterMatcher(catalog.filter);
+  const matches = poolFilterPassesAll(catalog.filter) ? () => true : createPoolFilterMatcher(catalog.filter);
   return libraryOf(catalog, rotation)
     .filter((song) => song.setIds.some((id) => active.has(id)) && matches(song))
     .sort(comparePoolOrder);

@@ -50,14 +50,14 @@ describe('music sets', () => {
       album: 'Jackson',
       filePath: 'music\\moonlight.mp3',
     }
-    const matches = (query: string, value = song) => matchesPoolFilter(value, { query })
+    const matches = (query: string, value = song) => matchesPoolFilter(value, { query, enabled: true })
 
     it('requires every unquoted word, allowing words to match different fields without case sensitivity', () => {
       expect(matches('mich jack')).toBe(true)
       expect(matches('mich beyonce')).toBe(false)
       expect(matches('')).toBe(true)
       expect(matches('   ')).toBe(true)
-      expect(EMPTY_POOL_FILTER).toEqual({ query: '' })
+      expect(EMPTY_POOL_FILTER).toEqual({ query: '', enabled: true })
     })
 
     it('matches quoted phrases contiguously, but not as separated words', () => {
@@ -82,8 +82,9 @@ describe('music sets', () => {
         artist: ' Michael Jackson ',
         album: 'Bad',
         title: 'Thriller',
-      })).toEqual({ query: '"Michael Jackson" "Bad" "Thriller"' })
-      expect(sanitizePoolFilter({ query: 'mich jack' })).toEqual({ query: 'mich jack' })
+      })).toEqual({ query: '"Michael Jackson" "Bad" "Thriller"', enabled: true })
+      expect(sanitizePoolFilter({ query: 'mich jack' })).toEqual({ query: 'mich jack', enabled: true })
+      expect(sanitizePoolFilter({ query: 'mich jack', enabled: false })).toEqual({ query: 'mich jack', enabled: false })
     })
   })
 })

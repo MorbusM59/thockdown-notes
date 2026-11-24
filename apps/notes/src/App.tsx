@@ -182,7 +182,7 @@ import { readDictionaries, subscribeDictionaries } from './spellCheck/dictionary
 import { readSongListCurtain } from './sidebar/songListCurtain'
 import { registerScrollCurtain } from './scroll/scrollBridge'
 import { closeIconPick, ICON_PICK_VIEW, readIconPick, setIconPickQuery, subscribeIconPick } from '@thockdown/interaction/iconPicker/iconPick'
-import { FieldActionButton } from './components/FieldActionButton'
+import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
 import { Pager } from './components/Pager'
 import { pagerFigure } from './shared/pagerFigure'
 import { useFieldDraft } from './shared/useFieldDraft'

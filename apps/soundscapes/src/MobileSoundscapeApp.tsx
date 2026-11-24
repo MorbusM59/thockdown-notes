@@ -63,7 +63,7 @@ import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaz
 import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
 import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayoutScene'
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
-import { DashboardDock, DashboardSets, DashboardSoundscapes } from './Dashboard'
+import { DashboardDock, DashboardSets, DashboardSoundscapes, DockHelpRow } from './Dashboard'
 import { PresetGrid } from '@thockdown/interaction/PresetListControls'
 import { SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { helpFor } from './helpText'
@@ -114,6 +114,22 @@ const PRESET_NAMES = { light: LIGHT_PRESET_THEMES, dark: DARK_PRESET_THEMES }
 
 
 /** A clip length as the button shows it: 5m, 1h. */
+/**
+ * The help section a tab shows in help mode in place of its controls, by its
+ * heading in helpText.ts. Soundscapes and Schedules explain each subsection
+ * in place instead (`help`), so they have none here.
+ */
+const TAB_HELP: Partial<Record<MobileTab, string>> = { dashboard: 'Dashboard', songs: 'Songs', visualizer: 'Visualizer', settings: 'Settings' }
+
+function TabHelp({ heading }: { heading: string }) {
+  return (
+    <div className="utility-setting-slider-stack" aria-label={`${heading} help`}>
+      <OptionsSubsectionLabel>{heading}</OptionsSubsectionLabel>
+      <SubsectionHelp paragraphs={helpFor(heading)!} />
+    </div>
+  )
+}
+
 function clipLengthLabel(minutes: number): string {
   return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`
 }
@@ -243,6 +259,7 @@ export function MobileSoundscapeApp() {
     }
   }, [native, helpMode, visualizerOpen])
   const help = helpMode ? helpFor : undefined
+  const toggleHelp = () => setHelpMode((current) => !current)
 
   useEffect(() => {
     void nativePlayback.then((supported) => {
@@ -449,6 +466,8 @@ export function MobileSoundscapeApp() {
                       schedule={schedule.enabled}
                       scheduleHeard={source === 'schedule'}
                       onScheduleToggle={() => { void toggleSchedule() }}
+                      help={helpMode}
+                      onHelpToggle={toggleHelp}
                     />
                   )
                   : tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
@@ -485,11 +504,20 @@ export function MobileSoundscapeApp() {
                 contentRef={pageScrollerRef}
                 // Each dock in the desktop's dock wrapper (sidebarFrame.css's
                 // .sidebar-plain-dock), which sets it off the panel and the edge.
-                dock={dockContent === null ? null : <div className="sidebar-plain-dock">{dockContent}</div>}
+                // Every dock ends with the help button at its bottom right: the
+                // dashboard's in its button row, any other in a row of its own,
+                // and a tab with no dock gets that row alone.
+                dock={<div className="sidebar-plain-dock">
+                  {tab === 'dashboard' ? dockContent : (<div className="mobile-dock-stack">
+                    {dockContent}
+                    <DockHelpRow active={helpMode} onToggle={toggleHelp} />
+                  </div>)}
+                </div>}
                 scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
               >
               <div className="options-content sidebar-options-content mobile-tab-content">
-                {tab === 'dashboard' ? (<>
+                {helpMode && TAB_HELP[tab] ? <TabHelp heading={TAB_HELP[tab]!} /> : null}
+                {tab === 'dashboard' && !helpMode ? (<>
                   <DashboardSets />
                   <DashboardSoundscapes preferences={preferences} onPick={(preset) => handleChange(applySoundscapePreset(preferences, preset))} />
                   <div className="utility-setting-slider-stack" aria-label="Timer">
@@ -528,21 +556,12 @@ export function MobileSoundscapeApp() {
                     </div>
                   </div>
                 </>) : null}
-                {tab === 'songs' ? <MusicLibraryPanel grouping={songsGrouping} filter="" holdOpens /> : null}
+                {tab === 'songs' && !helpMode ? <MusicLibraryPanel grouping={songsGrouping} filter="" holdOpens /> : null}
                 {tab === 'soundscapes' && iconQuery === null ? (<>
                 <div className="utility-setting-slider-stack" aria-label="Soundscape tools">
                   <OptionsSubsectionLabel>Tools</OptionsSubsectionLabel>
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Tools')!} /> : (<>
                   <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
-                    <button
-                      type="button"
-                      className={`btn-icon options-color-swatch options-loadout-btn${helpMode ? ' is-active' : ''}`}
-                      aria-pressed={helpMode}
-                      aria-label="Help: explain the controls"
-                      onClick={() => setHelpMode(true)}
-                    >
-                      <span className="fa-solid fa-circle-question" aria-hidden="true" />
-                    </button>
                     <button
                       type="button"
                       className="btn-icon options-color-swatch options-loadout-btn"
@@ -631,10 +650,10 @@ export function MobileSoundscapeApp() {
                   />}
                 </div>
                 </>) : null}
-                {tab === 'visualizer' ? <VisualizerTab onOpen={() => setVisualizerOpen(true)}>
+                {tab === 'visualizer' && !helpMode ? <VisualizerTab onOpen={() => setVisualizerOpen(true)}>
                   <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} />
                 </VisualizerTab> : null}
-                {tab === 'settings' ? <SettingsTab
+                {tab === 'settings' && !helpMode ? <SettingsTab
                   soundstages={<SoundstagesTab preferences={soundstages} onChange={setSoundstages} />}
                   onSoundstagesOpenChange={setSoundstagesOpen}
                   beatDetection={<>

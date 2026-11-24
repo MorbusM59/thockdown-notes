@@ -96,7 +96,7 @@ import {
   FACTORY_MUSIC_SETS,
   isFactoryMusicSet,
   isPlaylistSlot,
-  isPoolFilterEmpty,
+  poolFilterPassesAll,
   MUSIC_SET_ICON_PATTERN,
   createPoolFilterMatcher,
   sanitizePoolFilter,
@@ -3754,7 +3754,7 @@ export class DatabaseService {
        ORDER BY priority ASC, id ASC`
     ).all(...slots) as Record<string, unknown>[];
     const pool = rows.map((row) => ({ row, song: this.rowToSongEntry(row) }));
-    if (isPoolFilterEmpty(filter)) return pool;
+    if (poolFilterPassesAll(filter)) return pool;
     const matches = createPoolFilterMatcher(filter);
     return pool.filter(({ song }) => matches(song));
   }
