@@ -361,20 +361,27 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
   height: calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
 }
 
-/* The dashboard's dock: the transport row, then the volumes, a regular
-   spacing apart, as an options stack spaces its rows. */
-.mobile-dashboard-dock {
+/* The dashboard's dock: the volumes, the pool filter while it is on, then the
+   button row, a regular spacing apart, as an options stack spaces its rows. */
+.mobile-dashboard-dock,
+.mobile-dock-stack {
   display:        flex;
   flex-direction: column;
   gap:            var(--spacing-regular);
 }
 
-/* Each transport button stands over the start of its own volume: the music
-   at the first column, over the music slider's half; the soundscape at the
-   fourth, where its slider's half begins; the schedule, which hands either
-   of them its turn, at the far end. */
-.mobile-dashboard-dock .mobile-dock-soundscape { grid-column: 4; }
-.mobile-dashboard-dock .mobile-dock-schedule { grid-column: 6; }
+/* Help sits at the bottom right of every dock: the last column of its row. */
+.mobile-app-shell .mobile-dock-help { grid-column: 6; }
+
+/* The pool filter's field across the first five columns, as tall as the
+   square action button beside it. */
+.mobile-app-shell .mobile-dashboard-filter-field {
+  grid-column: 1 / 6;
+  height:      100%;
+  min-width:   0;
+  padding:     0 var(--spacing-large);
+  text-align:  left;
+}
 
 /* Settings > Debugging's beat trace (MusicDiagnostics.tsx): its newest lines, small and unwrapped, scrolled sideways. */
 .mobile-beat-trace {

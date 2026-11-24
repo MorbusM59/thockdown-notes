@@ -1,7 +1,7 @@
 /** The phone's tabs (MobileTabs.tsx draws them) and the one shown, remembered across launches. */
 
 export const MOBILE_TABS = [
-  { tab: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-gauge-high' },
+  { tab: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-play' },
   { tab: 'songs', label: 'Songs', icon: 'fa-solid fa-compact-disc' },
   { tab: 'soundscapes', label: 'Soundscapes', icon: 'fa-solid fa-podcast' },
   { tab: 'schedules', label: 'Schedules', icon: 'fa-solid fa-clock' },

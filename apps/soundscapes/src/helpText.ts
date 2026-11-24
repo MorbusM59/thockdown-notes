@@ -1,14 +1,47 @@
 /**
- * What help mode says under each subsection heading (the help button in the
- * Tools row): a concise account of the controls the text stands in for,
- * for a finger. Keyed by the heading as it is shown. The soundscape panel's
+ * What help mode says (the help button at the bottom right of every dock): a
+ * tab's help section (Dashboard, Songs, Visualizer, Settings) or, on
+ * Soundscapes and Schedules, the text under each subsection heading; a
+ * concise account of the controls it stands in for, for a finger. Keyed by
+ * the heading as it is shown. The soundscape panel's
  * own subsections are reached through its `help` option (SoundscapeControls).
  */
 const HELP: Record<string, string[]> = {
-  Tools: [
+  Dashboard: [
+    'Tabs: The Dashboard picks what plays. The other tabs create and edit the choices.',
+    'Music: Tap a song set to add it to the songs that play, or to take it out. Hold one to play it alone.',
+    'Soundscape: Tap one to play it.',
+    'Timer: Tap a length to limit playback to it. Tap it again for continuous playback. Hold a length and drag up or down to change it.',
+    'Soundstage: Tap one to choose how the music sounds. Edit them in Settings.',
+    'Layout: The moon switches dark mode. Tap a look to use it.',
+    'Sliders: The music volume, then the soundscape volume.',
+    'Filter button: Switches the song filter on and off. While it is on, its field shows above the buttons, and only songs whose title, artist, album or folder contain every word you type are picked. Start with $ for artists, § for albums, # for titles. Switching the filter on or off changes the next song, never the one playing.',
+    'Filter field: Leaving the field applies what you typed and plays the first song that matches, unless the playing song does. The button at its end applies it while you type, and clears the filter otherwise.',
+    'Skip button: Plays the next song.',
+    'Music button: Tap to play or pause the music.',
     'Playback modes: Soundscapes play in one of two modes, manual or scheduled. Both are controlled from the Dashboard.',
-    'Manual: Starts when you select a soundscape or tap the soundscape button in the Dashboard\'s dock, and overrides the schedule while in effect. Tapping that button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same.',
-    'Scheduled: Active whenever manual playback is stopped, while the Dashboard\'s clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag soundscape icons to change the order.',
+    'Manual: Starts when you select a soundscape or tap the soundscape button, and overrides the schedule while in effect. Tapping that button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same.',
+    'Scheduled: Active whenever manual playback is stopped, while the clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag soundscape icons to change the order.',
+    'Help button: Explains the tab you are on. Tap it again to return.',
+  ],
+  Songs: [
+    'Song sets: Tap a set to add it to the songs that play, or to take it out. Hold one to show its songs below; the plus button creates a set.',
+    'Open set: Shown in the dock. Tap its icon to choose another; hold the name to rename it. Its buttons add songs or a folder of songs, and a hold on the last one deletes the set, or restores a factory set.',
+    'Songs: Tap a song to play it. Hold its cross to remove it from the set; the cross on a group removes the whole group.',
+    'Grouping: The dock groups the songs by folder or by artist.',
+  ],
+  Visualizer: [
+    'Eye button: Opens the visualizer. The back gesture closes it.',
+    'Phone button: Shows the visualizer upright or sideways.',
+    'Scene settings: The rest of this tab tunes the scene: its font, glaze, wave, pulse and spectrum.',
+  ],
+  Settings: [
+    'Soundstages: Create and edit the soundstages the Dashboard picks from. The active one shows in the dock while the section is open.',
+    'Beat Detection: How the visualizer follows the beat. Play a calibration loop and set the delay until the flashes land on the beat you hear.',
+    'Debugging: Tools for tracing problems.',
+    'About: The version, licenses and credits.',
+  ],
+  Tools: [
     'Files button: Tap to load soundscapes from a file. Hold to save your own soundscapes to a file.',
     'Record button: Tap to save the playing soundscape as an audio file. Hold and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
   ],

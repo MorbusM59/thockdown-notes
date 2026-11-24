@@ -1,6 +1,6 @@
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { FieldActionButton } from './FieldActionButton'
+import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
 import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '@thockdown/visualizer/shared/audioPlayer'
 import { EMPTY_POOL_FILTER, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
 import {
@@ -36,7 +36,7 @@ import { publishNowPlaying, type SoundLevels } from '@thockdown/visualizer/sound
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { readSoundstageControls, subscribeSoundstageControls } from '@thockdown/visualizer/sound/soundstageControls'
-import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, subscribePoolFilterDraft } from '@thockdown/visualizer/visualizer/poolFilterDraft'
+import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import { beginBackgroundWork } from '../shared/backgroundWork'
@@ -1048,7 +1048,9 @@ export const AudioControls = memo(function AudioControls({
   // and a half). The second row shows the two volume
   // sliders, or in their place the stages or the pool filter: the two toggles
   // both claim it, so pressing one replaces the other, and pressing the one
-  // that is showing gives the row back to the sliders.
+  // that is showing gives the row back to the sliders. Filter is also the
+  // filter's switch, lit while it is on: switching it off closes its row and
+  // keeps the query.
 
   const soundstage = useSyncExternalStore(subscribeSoundstageControls, readSoundstageControls)
   const toggleRow = (row: MusicBarRow) => onBarRowChange(barRow === row ? 'levels' : row)
@@ -1086,11 +1088,16 @@ export const AudioControls = memo(function AudioControls({
 
           <button
             type="button"
-            className={`audio-ctrl-btn${barRow === 'filter' ? ' is-active' : ''}`}
-            data-tooltip={encodeTooltip({ intention: 'Filter', value: filterQuery || undefined })}
+            className={`audio-ctrl-btn${poolFilter.enabled ? ' is-active' : ''}`}
+            data-tooltip={encodeTooltip({ intention: 'Filter', value: (poolFilter.enabled && filterQuery) || undefined })}
             aria-label="Filter songs"
-            aria-pressed={barRow === 'filter'}
-            onClick={() => toggleRow('filter')}
+            aria-pressed={poolFilter.enabled}
+            onClick={() => {
+              // The button is the filter's switch: on opens its row, off closes it, the query kept either way.
+              const on = !poolFilter.enabled
+              togglePoolFilter()
+              onBarRowChange(on ? 'filter' : barRow === 'filter' ? 'levels' : barRow)
+            }}
           >
             <span className="fa-solid fa-filter" aria-hidden="true" />
           </button>
@@ -1211,7 +1218,7 @@ function MusicBarFilter() {
         spellCheck={false}
         autoComplete="off"
         autoFocus
-        onChange={(event) => setPoolFilterDraft({ query: event.currentTarget.value })}
+        onChange={(event) => setPoolFilterQuery(event.currentTarget.value)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => {
           setIsFocused(false)

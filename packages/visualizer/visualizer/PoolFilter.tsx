@@ -21,7 +21,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { EMPTY_POOL_FILTER, type MusicPoolFilter } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
-import { commitPoolFilterDraft, readShownPoolFilter, registerPoolFilterFields, setPoolFilterDraft, subscribePoolFilterDraft } from './poolFilterDraft'
+import { commitPoolFilterDraft, readShownPoolFilter, registerPoolFilterFields, setPoolFilterDraft, setPoolFilterQuery, subscribePoolFilterDraft } from './poolFilterDraft'
 import { subscribeNowPlaying } from '../sound/nowPlaying'
 import { fieldWindow, type PoolFilterArea, type VisualizerLayout } from './visualizerLayout'
 
@@ -90,7 +90,7 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
     type: (key, text, fresh) => {
       const base = fresh ? EMPTY_POOL_FILTER : readShownPoolFilter()
       const next = base.query + text
-      setPoolFilterDraft({ query: next })
+      setPoolFilterQuery(next)
       // Focused before React writes the new value, which puts the caret at
       // the end of it.
       inputs.current[key]?.focus()
@@ -116,7 +116,7 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
       {shown.chars.map((char, index) => (char === ' ' ? null : (
         <div
           key={`l${index}`}
-          className={value === '' ? 'visualizer-letter is-panel is-placeholder' : 'visualizer-letter is-panel'}
+          className={value === '' || !filter.enabled ? 'visualizer-letter is-panel is-placeholder' : 'visualizer-letter is-panel'}
           style={{ ...cell(field.column + index, field.row), lineHeight: `${boxPx}px` }}
         >
           {char}
@@ -134,7 +134,7 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
         onFocus={(event) => { setFocused(FIELD); readCaret(event.currentTarget) }}
         onBlur={() => { setFocused((current) => (current === FIELD ? null : current)); commitPoolFilterDraft() }}
         onChange={(event) => {
-          setPoolFilterDraft({ query: event.currentTarget.value })
+          setPoolFilterQuery(event.currentTarget.value)
           readCaret(event.currentTarget)
         }}
         onSelect={(event) => readCaret(event.currentTarget)}

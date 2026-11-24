@@ -10,13 +10,15 @@ const catalog: MusicCatalog = {
   sets: [{ slot: 1, name: 'One', icon: null }, { slot: 2, name: 'Two', icon: null }],
   folders: [],
   activeSetIds: [1],
-  filter: { query: '' },
+  filter: { query: '', enabled: true },
 };
 
 describe('the Android music library', () => {
   it('pools the active sets, filtered, new songs first', () => {
     expect(poolOf(catalog, []).map((entry) => entry.id)).toEqual([1, 2, 4]);
-    expect(poolOf({ ...catalog, filter: { query: 'blue' } }, []).map((entry) => entry.id)).toEqual([4]);
+    expect(poolOf({ ...catalog, filter: { query: 'blue', enabled: true } }, []).map((entry) => entry.id)).toEqual([4]);
+    // Switched off, the query is kept and filters nothing.
+    expect(poolOf({ ...catalog, filter: { query: 'blue', enabled: false } }, []).map((entry) => entry.id)).toEqual([1, 2, 4]);
     expect(poolOf(catalog, [{ id: 1, priority: 5, favorability: 1 }]).map((entry) => entry.id)).toEqual([2, 4, 1]);
   });
 

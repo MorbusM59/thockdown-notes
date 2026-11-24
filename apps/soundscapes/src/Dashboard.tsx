@@ -5,9 +5,9 @@
  * active one. Its dock (DashboardDock) holds the transport and the volumes.
  *
  * The phone has no right press, so the desktop music bar's right-click skip
- * is a HOLD on the music button here, as a hold stops the soundscape.
+ * is a button of its own here.
  */
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
@@ -17,6 +17,9 @@ import { pressMusicSet } from '@thockdown/visualizer/sound/setPress'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import { orderedSoundscapePresets, type SoundscapePreferences, type SoundscapePreset } from '@thockdown/soundscape/soundscape'
+import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
+import { EMPTY_POOL_FILTER } from '@thockdown/visualizer/shared/audioPlayer'
+import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
 import { readMusicPlaying, skipMusic, subscribeMusicPlaying, toggleMusic } from './mobileMusicPlayer'
 
 /** The music sets: a tap puts a set in the pool or takes it out, a hold plays it alone (setPress.ts, as everywhere). */
@@ -121,13 +124,90 @@ function TapHoldButton({ label, active, icon, onTap, onHold, className = '' }: {
   )
 }
 
+/** The help button every dock ends with, bottom right: help mode shows each tab's help section in place of its controls. */
+export function DockHelpButton({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`btn-icon options-color-swatch options-loadout-btn mobile-dock-help${active ? ' is-active' : ''}`}
+      aria-pressed={active}
+      aria-label={active ? 'Close the help' : 'Help: explain this tab'}
+      onClick={onToggle}
+    >
+      <span className="fa-solid fa-circle-question" aria-hidden="true" />
+    </button>
+  )
+}
+
+/** A dock row holding only the help button, for a dock with no button row of its own (or a tab with no dock). */
+export function DockHelpRow(props: { active: boolean; onToggle: () => void }) {
+  return (
+    <div className="options-loadout-grid" role="group" aria-label="Help">
+      <DockHelpButton {...props} />
+    </div>
+  )
+}
+
 /**
- * The dashboard's dock: the music and the soundscape, each a button showing
- * its state (a tap plays or pauses; a hold skips the song, or stops the
- * soundscape and hands back to the schedule), and the schedule's switch;
- * then their two volumes.
+ * The pool filter's row, shown while the filter is on: the field across five
+ * columns and the field's action button in the sixth, which applies what is
+ * typed and leaves the field while it is being typed in, and otherwise clears
+ * the filter. Typing reaches the song list at once and playback when the
+ * field is left (poolFilterDraft.ts), as on the desktop's music bar.
  */
-export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle }: {
+function DashboardFilter() {
+  const filter = useSyncExternalStore(subscribePoolFilterDraft, readShownPoolFilter)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [isFocused, setIsFocused] = useState(false)
+  return (
+    <div className="options-loadout-grid mobile-dashboard-filter" role="group" aria-label="Filter songs">
+      <input
+        ref={inputRef}
+        className="options-curve-cell options-curve-field mobile-dashboard-filter-field"
+        type="text"
+        value={filter.query}
+        placeholder="Filter songs..."
+        aria-label="Filter songs"
+        spellCheck={false}
+        autoComplete="off"
+        // Switching an empty filter on is asking to type; one with a query is taken as it stands.
+        autoFocus={filter.query === ''}
+        onChange={(event) => setPoolFilterQuery(event.currentTarget.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => {
+          setIsFocused(false)
+          commitPoolFilterDraft()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            event.currentTarget.blur()
+          }
+        }}
+      />
+      <FieldActionButton
+        className="btn-icon options-color-swatch options-loadout-btn"
+        icon="fa-filter"
+        submitLabel="Filter"
+        isFieldFocused={isFocused}
+        hasValue={filter.query !== ''}
+        onSubmit={() => inputRef.current?.blur()}
+        onClear={() => {
+          setPoolFilterDraft(EMPTY_POOL_FILTER)
+          commitPoolFilterDraft()
+        }}
+      />
+    </div>
+  )
+}
+
+/**
+ * The dashboard's dock: the two volumes, the pool filter while it is on, and
+ * the button row: the filter's switch, skip, the music, the soundscape (a
+ * tap plays or pauses, a hold stops it and hands back to the schedule), the
+ * schedule's switch, and help.
+ */
+export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
   /** The schedule is on; it plays now (it is what is heard). */
   schedule: boolean
   scheduleHeard: boolean
@@ -137,37 +217,14 @@ export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, s
   onSoundscapeHold: () => void
   soundscapeVolume: number
   onSoundscapeVolume: (volume: number) => void
+  help: boolean
+  onHelpToggle: () => void
 }) {
   const musicPlaying = useSyncExternalStore(subscribeMusicPlaying, readMusicPlaying)
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  const filter = useSyncExternalStore(subscribePoolFilterDraft, readShownPoolFilter)
   return (
     <div className="mobile-dashboard-dock">
-      <div className="options-loadout-grid" role="group" aria-label="Play">
-        <TapHoldButton
-          label={`Music ${musicPlaying ? 'playing' : 'paused'}: tap to ${musicPlaying ? 'pause' : 'play'}, hold for the next song`}
-          active={musicPlaying}
-          icon={musicPlaying ? 'fa-music' : 'fa-pause'}
-          onTap={toggleMusic}
-          onHold={skipMusic}
-        />
-        <TapHoldButton
-          label={`Soundscape ${soundscape}: tap to ${soundscape === 'playing' ? 'pause' : 'play'}${soundscape === 'stopped' ? '' : ', hold to stop'}`}
-          active={soundscape === 'playing'}
-          icon={soundscape === 'playing' ? 'fa-podcast' : soundscape === 'paused' ? 'fa-pause' : 'fa-stop'}
-          className=" mobile-dock-soundscape"
-          onTap={onSoundscapeTap}
-          onHold={onSoundscapeHold}
-        />
-        <button
-          type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn mobile-dock-schedule${schedule ? ' is-active' : ''}${scheduleHeard ? ' is-heard' : ''}`}
-          aria-pressed={schedule}
-          aria-label={`Schedule ${schedule ? 'on' : 'off'}${scheduleHeard ? ', playing now' : ''}`}
-          onClick={onScheduleToggle}
-        >
-          <span className="fa-solid fa-clock" aria-hidden="true" />
-        </button>
-      </div>
       <OptionsSliderRows>
         <CompactScrollbarSlider
           id="mobile-dashboard-music-volume"
@@ -192,6 +249,47 @@ export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, s
           onCommit={(value) => onSoundscapeVolume(value / 100)}
         />
       </OptionsSliderRows>
+      {filter.enabled ? <DashboardFilter /> : null}
+      <div className="options-loadout-grid" role="group" aria-label="Play">
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${filter.enabled ? ' is-active' : ''}`}
+          aria-pressed={filter.enabled}
+          aria-label={filter.enabled ? 'Filter on: tap to switch it off' : 'Filter off: tap to switch it on'}
+          onClick={togglePoolFilter}
+        >
+          <span className="fa-solid fa-filter" aria-hidden="true" />
+        </button>
+        <button type="button" className="btn-icon options-color-swatch options-loadout-btn" aria-label="Next song" onClick={skipMusic}>
+          <span className="fa-solid fa-forward-step" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${musicPlaying ? ' is-active' : ''}`}
+          aria-pressed={musicPlaying}
+          aria-label={`Music ${musicPlaying ? 'playing: tap to pause' : 'paused: tap to play'}`}
+          onClick={toggleMusic}
+        >
+          <span className="fa-solid fa-compact-disc" aria-hidden="true" />
+        </button>
+        <TapHoldButton
+          label={`Soundscape ${soundscape}: tap to ${soundscape === 'playing' ? 'pause' : 'play'}${soundscape === 'stopped' ? '' : ', hold to stop'}`}
+          active={soundscape === 'playing'}
+          icon="fa-podcast"
+          onTap={onSoundscapeTap}
+          onHold={onSoundscapeHold}
+        />
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${schedule ? ' is-active' : ''}${scheduleHeard ? ' is-heard' : ''}`}
+          aria-pressed={schedule}
+          aria-label={`Schedule ${schedule ? 'on' : 'off'}${scheduleHeard ? ', playing now' : ''}`}
+          onClick={onScheduleToggle}
+        >
+          <span className="fa-solid fa-clock" aria-hidden="true" />
+        </button>
+        <DockHelpButton active={help} onToggle={onHelpToggle} />
+      </div>
     </div>
   )
 }

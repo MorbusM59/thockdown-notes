@@ -18,6 +18,23 @@ export function readShownPoolFilter(): MusicPoolFilter {
   return draft ?? readNowPlaying().pool?.filter ?? EMPTY_POOL_FILTER
 }
 
+/** The field's text as typed: editing the query switches the filter on. */
+export function setPoolFilterQuery(query: string): void {
+  setPoolFilterDraft({ query, enabled: true })
+}
+
+/**
+ * Switch the filter on or off, its query kept. It reaches the next pick at once
+ * but leaves the song playing alone, even one it would leave out: only
+ * committing an edited query (`commitPoolFilterDraft`) moves playback.
+ */
+export function togglePoolFilter(): void {
+  const shown = readShownPoolFilter()
+  const next = { ...shown, enabled: !shown.enabled }
+  setPoolFilterDraft(next)
+  readNowPlaying().setPoolFilter(next)
+}
+
 export function setPoolFilterDraft(next: MusicPoolFilter): void {
   if (draft && samePoolFilter(draft, next)) return
   draft = next

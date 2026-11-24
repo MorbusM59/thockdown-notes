@@ -177,7 +177,7 @@ scope.musicPoolSet = (setId: number): string => {
   return 'ok';
 };
 
-const poolCatalog = (): MusicCatalog => (poolSet < 0 ? catalog : { ...catalog, activeSetIds: [poolSet], filter: { query: '' } });
+const poolCatalog = (): MusicCatalog => (poolSet < 0 ? catalog : { ...catalog, activeSetIds: [poolSet], filter: EMPTY_CATALOG.filter });
 
 scope.musicNext = (previousId: number): string => {
   const next = nextSong(poolCatalog(), rotation, previousId < 0 ? null : previousId);
