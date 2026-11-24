@@ -6,7 +6,7 @@ export const MOBILE_TABS = [
   { tab: 'soundscapes', label: 'Soundscapes', icon: 'fa-solid fa-podcast' },
   { tab: 'schedules', label: 'Schedules', icon: 'fa-solid fa-clock' },
   { tab: 'visualizer', label: 'Visualizer', icon: 'fa-solid fa-eye' },
-  { tab: 'settings', label: 'Settings', icon: 'fa-solid fa-gear' },
+  { tab: 'soundstages', label: 'Soundstages', icon: 'fa-solid fa-sliders' },
 ] as const
 
 export type MobileTab = typeof MOBILE_TABS[number]['tab']

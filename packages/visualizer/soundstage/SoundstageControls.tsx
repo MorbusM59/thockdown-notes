@@ -4,7 +4,7 @@
  * Soundstages tab both show them. The stage shown is the active one; an edit
  * goes back through `onEdit`, which each app routes to its player.
  */
-import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { OptionsSubsection } from '@thockdown/interaction/OptionsSubsection'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { clamp } from '@thockdown/interaction/clamp'
@@ -12,15 +12,18 @@ import { sanitizeStereoWidth, STEREO_WIDTH_MAX, STEREO_WIDTH_MIN, STEREO_WIDTH_N
 import { NEUTRAL_SOUNDSTAGE, type SoundstageSettings } from '../shared/soundstages'
 import { EqCurveEditor } from './EqCurveEditor'
 
-export function SoundstageControls({ stage, onEdit }: {
+export function SoundstageControls({ stage, onEdit, folds = false }: {
   stage: SoundstageSettings
   onEdit: <K extends keyof SoundstageSettings>(field: K, value: SoundstageSettings[K]) => void
+  /** Each group an accordion section rather than a divider (OptionsSubsection): the phone's tab, whose page is the section. */
+  folds?: boolean
 }) {
   return (
     <>
-      <OptionsSubsectionLabel>Equalization</OptionsSubsectionLabel>
-      <EqCurveEditor curve={stage.eq} onChange={(eq) => onEdit('eq', eq)} />
-      <OptionsSubsectionLabel>Room Parameters</OptionsSubsectionLabel>
+      <OptionsSubsection label="Equalization" iconClass="fa-chart-line" folds={folds}>
+        <EqCurveEditor curve={stage.eq} onChange={(eq) => onEdit('eq', eq)} />
+      </OptionsSubsection>
+      <OptionsSubsection label="Room Parameters" iconClass="fa-cube" folds={folds}>
       <div className="utility-setting-slider-stack" aria-label="Music room parameters">
         <OptionsSliderRows rows={[2, 2]}>
           <CompactScrollbarSlider
@@ -69,6 +72,7 @@ export function SoundstageControls({ stage, onEdit }: {
           />
         </OptionsSliderRows>
       </div>
+      </OptionsSubsection>
     </>
   )
 }

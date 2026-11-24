@@ -1,10 +1,12 @@
 /**
- * Settings' Soundstages section (its accordion's heading names it): the desktop's Options > Sound > Soundstages, the
- * preset grid and the active stage's controls (SoundstageControls), over the
+ * The Soundstages tab: the desktop's Options > Sound > Soundstages, promoted,
+ * the preset grid and the active stage's controls (SoundstageControls, its
+ * groups as accordions), over the
  * phone's own soundstage list; the active stage's dock (SoundstagesDock) sits
  * below the page, in the frame's dock. The active stage is what the native
  * music plays (MobileSoundscapeApp sends it on every change).
  */
+import { AccordionGroup } from '@thockdown/interaction/AccordionSection'
 import { PresetDock, PresetGrid, PresetIconPicker } from '@thockdown/interaction/PresetListControls'
 import { editActivePreset } from '@thockdown/interaction/presetList'
 import {
@@ -25,10 +27,13 @@ export function SoundstagesTab({ preferences, onChange }: { preferences: Soundst
         <PresetGrid kind={SOUNDSTAGE_KIND} list={preferences} onChange={changeList} idPrefix="stage" label="Soundstages" plural="a soundstage" />
         <PresetIconPicker kind={SOUNDSTAGE_KIND} list={preferences} onChange={changeList} pickKind="soundstage" query="" />
       </div>
+      <AccordionGroup>
       <SoundstageControls
+        folds
         stage={stage}
         onEdit={(field, value) => changeList(editActivePreset(SOUNDSTAGE_KIND, preferences, { ...stage, [field]: value }))}
       />
+      </AccordionGroup>
     </>
   )
 }

@@ -1,5 +1,5 @@
 /**
- * Settings > Debugging: what the native music's output is doing (MusicSession
+ * The Dashboard's Debugging section: what the native music's output is doing (MusicSession
  * and OutputLane's `diagnostics`), read twice a second while the section is
  * open, so a fault in the output can be read on a phone without adb; and
  * the visualizer's frame rate on its last visit (visualizerFrameRate.ts);

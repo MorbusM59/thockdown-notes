@@ -8,7 +8,7 @@
  * can be judged on a device before their content is.
  */
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { readDisplay, setLandscape } from './display'
 import { MusicDiagnostics } from './MusicDiagnostics'
 import { AboutPanel } from '@thockdown/interaction/AboutPanel'
@@ -78,22 +78,10 @@ export function VisualizerButtons({ onOpen }: { onOpen: () => void }) {
   )
 }
 
-/**
- * Settings: Soundstages, Debugging and About, the desktop's
- * Options sections as accordions. Soundstages' dock shows while its section
- * is open (`onSoundstagesOpenChange`), as on the desktop.
- */
-export function SettingsTab({ soundstages, onSoundstagesOpenChange }: {
-  soundstages: ReactNode
-  onSoundstagesOpenChange: (open: boolean) => void
-}) {
-  // Leaving the tab closes every section, so its dock goes with it.
-  useEffect(() => () => onSoundstagesOpenChange(false), [onSoundstagesOpenChange])
+/** The Dashboard's foot: Debugging and About, the desktop's Options > Advanced sections, folded. */
+export function DashboardAppSections() {
   return (
     <AccordionGroup>
-      <AccordionSection ariaLabel="Soundstages" heading="Soundstages" iconClass="fa-sliders" onOpenChange={onSoundstagesOpenChange}>
-        {soundstages}
-      </AccordionSection>
       <AccordionSection ariaLabel="Debugging" heading="Debugging" iconClass="fa-bug">
         <MusicDiagnostics />
       </AccordionSection>

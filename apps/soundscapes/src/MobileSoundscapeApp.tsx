@@ -84,7 +84,7 @@ import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { closeIconPick, isPickingIconFor, readIconPick, setIconPickQuery, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
-import { MobileTabSelector, SettingsTab, VisualizerButtons } from './MobileTabs'
+import { DashboardAppSections, MobileTabSelector, VisualizerButtons } from './MobileTabs'
 import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
 import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
@@ -124,7 +124,7 @@ const PRESET_NAMES = { light: LIGHT_PRESET_THEMES, dark: DARK_PRESET_THEMES }
  * heading in helpText.ts. Soundscapes and Schedules explain each subsection
  * in place instead (`help`), so they have none here.
  */
-const TAB_HELP: Partial<Record<MobileTab, string>> = { dashboard: 'Dashboard', songs: 'Songs', visualizer: 'Visualizer', settings: 'Settings' }
+const TAB_HELP: Partial<Record<MobileTab, string>> = { dashboard: 'Dashboard', songs: 'Songs', visualizer: 'Visualizer', soundstages: 'Soundstages' }
 
 function TabHelp({ heading }: { heading: string }) {
   return (
@@ -244,8 +244,6 @@ export function MobileSoundscapeApp() {
   const closeVisualizer = useCallback(() => setVisualizerOpen(false), [])
   // The tab shown (MobileTabs.tsx), remembered across launches.
   const [tab, setTab] = useState<MobileTab>(loadTab)
-  // Settings' Soundstages section is open: its dock shows while it is, as on the desktop.
-  const [soundstagesOpen, setSoundstagesOpen] = useState(false)
   const selectTab = useCallback((next: MobileTab) => {
     setTab(next)
     saveTab(next)
@@ -555,7 +553,7 @@ export function MobileSoundscapeApp() {
                       trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
                     />
                   )
-                  : tab === 'settings' && soundstagesOpen ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
+                  : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
                   : null
 
   // The desktop's frame, outermost first (see shared/loadoutTheme.ts), so the
@@ -685,6 +683,7 @@ export function MobileSoundscapeApp() {
                       </button>
                     </div>
                   </div>
+                  <DashboardAppSections />
                 </>) : null}
                 {/* Picking an icon (a dock's mark) replaces the page with
                     the picker and its filter, as on the desktop. */}
@@ -739,10 +738,7 @@ export function MobileSoundscapeApp() {
                   </AccordionSection>
                   <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} folds />
                 </AccordionGroup> : null}
-                {tab === 'settings' && !helpMode ? <SettingsTab
-                  soundstages={<SoundstagesTab preferences={soundstages} onChange={setSoundstages} />}
-                  onSoundstagesOpenChange={setSoundstagesOpen}
-                /> : null}
+                {tab === 'soundstages' && !helpMode ? <SoundstagesTab preferences={soundstages} onChange={setSoundstages} /> : null}
               </div>
               </SidebarFrame>
             </div>

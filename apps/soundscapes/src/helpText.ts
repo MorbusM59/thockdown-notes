@@ -1,6 +1,6 @@
 /**
  * What help mode says (the help button at the bottom right of every dock): a
- * tab's help section (Dashboard, Songs, Visualizer, Settings) or, on
+ * tab's help section (Dashboard, Songs, Visualizer, Soundstages) or, on
  * Soundscapes and Schedules, the text under each subsection heading; a
  * concise account of the controls it stands in for, for a finger. Keyed by
  * the heading as it is shown. The soundscape panel's
@@ -12,10 +12,12 @@ const HELP: Record<string, string[]> = {
     'Music: Tap a song set to add it to the songs that play, or to take it out. Hold one to make it the only set. Neither starts playback.',
     'Soundscape: Tap one to choose it. While a soundscape plays, it fades into the one you chose; otherwise the play button starts it.',
     'Timer: Tap a length to limit playback to it. Tap it again for continuous playback. Hold a length and drag up or down to change it.',
-    'Soundstage: Tap one to choose how the music sounds. Edit them in Settings.',
+    'Soundstage: Tap one to choose how the music sounds. Edit them on the Soundstages tab.',
     'Layout: The moon switches dark mode. Tap a look to use it.',
     'Visualizer: The eye opens the visualizer; the back gesture closes it. The phone button shows it upright or sideways.',
     'Tools: The files button loads soundscapes from a file; hold it to save your own soundscapes to a file. The record button saves the soundscape you picked as an audio file; hold it and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes.',
+    'Debugging: Tools for tracing problems.',
+    'About: The version, licenses and credits.',
     'Sliders: The music volume, then the soundscape volume.',
     'Music button: Switches the music in or out of the mix. While it is in, the dock also shows the filter chip, the song and its position.',
     'Soundscape button: Switches the soundscape in or out of the mix. A channel that is switched out stays silent, whether you or the schedule plays it.',
@@ -40,10 +42,10 @@ const HELP: Record<string, string[]> = {
     'Sources: What counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
     'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',
   ],
-  Settings: [
-    'Soundstages: Create and edit the soundstages the Dashboard picks from. The active one shows in the dock while the section is open.',
-    'Debugging: Tools for tracing problems.',
-    'About: The version, licenses and credits.',
+  Soundstages: [
+    'Soundstages: Create and edit the soundstages the Dashboard picks from. The active one shows in the dock.',
+    'Equalization: Drag a point to shape how the music sounds.',
+    'Room Parameters: The width of the music and the room it plays in.',
   ],
   Schedule: [
     'Rows: Each row plays a song set, a soundscape, or both, from its start time to its stop time on its active days. A stop time earlier than the start time ends on the next day. Equal start and stop times play for 24 hours.',
