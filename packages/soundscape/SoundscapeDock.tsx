@@ -23,6 +23,8 @@ export interface SoundscapeDockProps {
   onTogglePicker: () => void
   /** A line under the name (the phone's time left), or nothing. */
   detail?: ReactNode
+  /** A cell after the dock's own actions (the phone's help button), or nothing. */
+  trailing?: ReactNode
 }
 
 /**
@@ -38,7 +40,7 @@ export interface SoundscapeDockProps {
  * of its own: `armHold` abandons a hold that leaves the grace radius, and a
  * pan the browser takes cancels the pointer.
  */
-export function SoundscapeDock({ preferences, onChange, picking, onTogglePicker, detail }: SoundscapeDockProps) {
+export function SoundscapeDock({ preferences, onChange, picking, onTogglePicker, detail, trailing }: SoundscapeDockProps) {
   const preset = activeSoundscape(preferences)
   const factory = isFactorySoundscape(preset.id)
   // A factory soundscape as shipped has nothing to restore.
@@ -98,6 +100,7 @@ export function SoundscapeDock({ preferences, onChange, picking, onTogglePicker,
         >
           <span className={`fa-solid ${factory ? 'fa-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
         </button>
+        {trailing}
       </DockEntryRow>
     </div>
   )

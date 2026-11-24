@@ -84,7 +84,8 @@ body {
 }
 
 /* The active soundscape docks into the same six-cell grid as its presets:
-   one cell for the mark, three for the name and one for each action. */
+   one cell for the mark, two for the name and one for each action, the last
+   being help. */
 .mobile-app-shell .preset-dock-row {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   column-gap: var(--toolbar-options-gap);
@@ -100,13 +101,31 @@ body {
   font-size: var(--mobile-button-icon-size);
 }
 
-.mobile-app-shell .preset-dock-row .options-curve-cell > .fa-solid {
+.mobile-app-shell .preset-dock-row .options-curve-cell > .fa-solid,
+.mobile-app-shell .preset-dock-row > .mobile-dock-help {
   font-size: var(--mobile-button-icon-size);
 }
 
 .mobile-app-shell .preset-dock-row > .options-dock-entry-name {
-  grid-column: span 3;
+  grid-column: span 2;
   aspect-ratio: auto;
+}
+
+/* Two cells are narrow for a name, so it breaks onto as many lines as it
+   needs, centred both ways, with the time left under it. */
+.mobile-app-shell .preset-dock-row > .options-curve-display.options-dock-entry-name {
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  justify-content: center;
+  gap:             var(--spacing-small);
+  line-height:     1.1;
+  white-space:     normal;
+  overflow-wrap:   anywhere;
+}
+
+.mobile-app-shell .preset-dock-row .options-dock-entry-title {
+  white-space: normal;
 }
 
 /* A long press is a gesture here (SoundscapeControls' touch path), so it
@@ -382,8 +401,13 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
 
 /* The volumes at the field's height, the filter's switch a square chip
    between them. */
+/* The handle thickness is redeclared with the track's: the root's is a value
+   written in pixels (scrollTrackGeometry.ts), so it would not follow. */
 .mobile-app-shell .mobile-dock-volumes {
   --canonical-scroll-thickness: var(--mobile-field-height);
+  --canonical-scroll-handle-thickness: calc(
+    var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
+  );
 }
 
 .mobile-app-shell .mobile-dock-volumes > .mobile-dock-chip,

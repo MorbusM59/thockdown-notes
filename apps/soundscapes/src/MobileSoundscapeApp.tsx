@@ -63,7 +63,7 @@ import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaz
 import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
 import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayoutScene'
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
-import { DashboardDock, DashboardSets, DashboardSoundscapes, DockHelpRow } from './Dashboard'
+import { DashboardDock, DashboardSets, DashboardSoundscapes, DockHelpButton, DockHelpRow } from './Dashboard'
 import { PresetGrid } from '@thockdown/interaction/PresetListControls'
 import { SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { helpFor } from './helpText'
@@ -510,6 +510,7 @@ export function MobileSoundscapeApp() {
                       picking={iconQuery !== null}
                       onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
                       detail={timeLeft}
+                      trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
                     />
                   )
                   : tab === 'settings' && soundstagesOpen ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
@@ -537,10 +538,11 @@ export function MobileSoundscapeApp() {
                 // Each dock in the desktop's dock wrapper (sidebarFrame.css's
                 // .sidebar-plain-dock), which sets it off the panel and the edge.
                 // Every dock ends with the help button at its bottom right: the
-                // dashboard's in its button row, any other in a row of its own,
-                // and a tab with no dock gets that row alone.
+                // dashboard's and the soundscape's in their own last row, any
+                // other in a row of its own, and a tab with no dock gets that
+                // row alone.
                 dock={<div className="sidebar-plain-dock">
-                  {tab === 'dashboard' ? dockContent : (<div className="mobile-dock-stack">
+                  {tab === 'dashboard' || tab === 'soundscapes' ? dockContent : (<div className="mobile-dock-stack">
                     {dockContent}
                     <DockHelpRow active={helpMode} onToggle={toggleHelp} />
                   </div>)}
