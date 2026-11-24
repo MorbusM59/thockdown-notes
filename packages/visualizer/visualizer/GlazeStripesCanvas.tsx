@@ -46,6 +46,12 @@ export type ShaderStack = { stripes: GlazeStripe[]; periodPx: number }
 export type StackSway = { index: number; depth: number } | null
 
 const MAX_STACKS = 8
+/**
+ * The least movement, in device pixels, worth redrawing the canvas for: a
+ * quarter pixel, below which the soft stripes' change cannot be seen, so a
+ * slow sway on a 120 Hz screen redraws only as often as it visibly moves.
+ */
+const MIN_VISIBLE_MOVE_DEVICE_PX = 0.25
 
 const VERTEX = `#version 300 es
 in vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`
@@ -155,8 +161,17 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
 
     let sizeCss = { w: 0, h: 0 }
     let frame = 0
-    const draw = () => {
+    // What the canvas last showed, so a frame that would move nothing a
+    // reader can see is not drawn (`MIN_VISIBLE_MOVE_DEVICE_PX`): the sway is
+    // slow, and on a high refresh screen most frames would redraw the whole
+    // screen to move the stripes by a fraction of a pixel.
+    const drawnOffsets = new Float32Array(MAX_STACKS).fill(Number.NaN)
+    const drawnDir = { x: Number.NaN, y: Number.NaN }
+    const draw = (force = false) => {
       frame = 0
+      const dpr = window.devicePixelRatio || 1
+      let dir: { x: number; y: number } | null = null
+      let fanUniforms: (() => void) | null = null
       if (sizeCss.w > 0) {
         // A few multiplications a frame: the resting fan (its point pushed out
         // by the orbit, glazeRayFan) and the point's place on the orbit now.
@@ -166,16 +181,32 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
         const share = sway ? orbit.share : 0
         const fan = glazeRayFan(glaze, sizeCss.w, sizeCss.h, share)
         const moved = orbitGlazeRayFan(fan, share, orbit.offset)
-        if (fan.k > 0) gl.uniform1f(u('turnScale'), glazeRayScale(fan))
-        gl.uniform2f(u('dir'), moved.across.x, moved.across.y)
-        gl.uniform2f(u('normal'), moved.normal.x, moved.normal.y)
-        gl.uniform1f(u('k'), moved.k)
-        gl.uniform1f(u('linearScale'), moved.linearScale)
+        dir = moved.across
+        fanUniforms = () => {
+          if (fan.k > 0) gl.uniform1f(u('turnScale'), glazeRayScale(fan))
+          gl.uniform2f(u('dir'), moved.across.x, moved.across.y)
+          gl.uniform2f(u('normal'), moved.normal.x, moved.normal.y)
+          gl.uniform1f(u('k'), moved.k)
+          gl.uniform1f(u('linearScale'), moved.linearScale)
+        }
       }
+      if (!force) {
+        // The largest movement on screen, in device px: an offset is pattern
+        // px (screen px times the ray density); a turn of the heading moves
+        // the screen's far corner by at most the angle times its diagonal.
+        let movePx = 0
+        for (let i = 0; i < used.length; i += 1) movePx = Math.max(movePx, Math.abs(offsets[i] - drawnOffsets[i]) / glaze.rayDensity * dpr)
+        if (dir) movePx = Math.max(movePx, Math.hypot(dir.x - drawnDir.x, dir.y - drawnDir.y) * Math.hypot(sizeCss.w, sizeCss.h) * dpr)
+        // NaN (nothing drawn yet) compares false, so the first frame draws.
+        if (movePx < MIN_VISIBLE_MOVE_DEVICE_PX) return
+      }
+      fanUniforms?.()
       gl.uniform1fv(u('offset'), offsets)
       gl.drawArrays(gl.TRIANGLES, 0, 3)
+      drawnOffsets.set(offsets)
+      if (dir) { drawnDir.x = dir.x; drawnDir.y = dir.y }
     }
-    const request = () => { if (!frame) frame = requestAnimationFrame(draw) }
+    const request = () => { if (!frame) frame = requestAnimationFrame(() => draw()) }
     const resize = () => {
       const dpr = window.devicePixelRatio || 1
       const cssW = canvas.clientWidth
@@ -198,7 +229,7 @@ export function GlazeStripesCanvas({ stacks, sway, glaze, className }: {
       // the frame paints, so the stripes at the new size land in the same
       // frame as the layout that resized them.
       if (frame) cancelAnimationFrame(frame)
-      draw()
+      draw(true)
     }
     const observer = new ResizeObserver(resize)
     observer.observe(canvas)
