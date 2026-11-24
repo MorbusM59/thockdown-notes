@@ -1,3 +1,13 @@
+/* The interface's default font (tokens.css's --ui-font-family), carried by
+   the package that sets it, so every app has it; the desktop also offers
+   others (UiTypography.ts). */
+@font-face {
+  font-family: 'Geo';
+  src: url('./fonts/Geo-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
 /* The base look every app shares: the page reset, the app shell that
    carries the theme's variables and glaze layers, and the plain button.
    Apps import this file; a rule that only one app needs stays in that app. */

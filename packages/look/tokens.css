@@ -383,7 +383,7 @@
      px value in calc(Npx * var(--ui-font-scale)) rather than switching to
      rem, so the existing hand-tuned ratios between e.g. a 10px label and a
      14px button stay intact as the whole scale grows or shrinks together. */
-  --ui-font-family: system-ui, -apple-system, sans-serif;
+  --ui-font-family: 'Geo', system-ui, sans-serif;
   --ui-font-scale:  1;
   /* The scale inside a slider pair, capped (scrollTrackGeometry.ts's
      MICRO_UI_FONT_SCALE_MAX); a pair sets --ui-font-scale to it. */
