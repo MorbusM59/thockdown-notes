@@ -124,16 +124,6 @@ export function readMusicChannel(): boolean {
   return channelOn
 }
 
-/** On to the pool's next pick, starting the music if it is not playing. */
-export function skipMusic(): void {
-  if (!plugin) return
-  if (!playing) {
-    void startMusic()
-    return
-  }
-  void plugin.skip()
-}
-
 const playingListeners = new Set<() => void>()
 
 function setPlaying(next: boolean): void {
