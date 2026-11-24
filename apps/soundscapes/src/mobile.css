@@ -195,11 +195,16 @@ body {
   gap: 6px;
 }
 
-/* The assigned button, split on the diagonal from its top right to its
-   bottom left: two half buttons glued together, the song set's mark in the
+/* The assigned button. With a song set AND a soundscape it is split on the
+   diagonal from its top right to its bottom left: two half buttons glued together, the song set's mark in the
    top-left half and the soundscape's in the bottom-right one, each at full
-   size, centered on the button and cut along the line. */
-.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape.is-assigned {
+   size, centered on the button and cut along the line. With one of them,
+   its mark shows whole; with neither, the button is empty. */
+.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape {
+  position: relative;
+}
+
+.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape.is-split {
   position: relative;
   background-image: linear-gradient(to bottom right, transparent calc(50% - 0.5px), var(--color-text-40) 50%, transparent calc(50% + 0.5px));
 }
@@ -212,11 +217,11 @@ body {
   justify-content: center;
 }
 
-.mobile-schedule-assigned.is-set {
+.is-split > .mobile-schedule-assigned.is-set {
   clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
-.mobile-schedule-assigned.is-soundscape {
+.is-split > .mobile-schedule-assigned.is-soundscape {
   clip-path: polygon(100% 0, 100% 100%, 0 100%);
 }
 

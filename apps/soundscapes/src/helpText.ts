@@ -19,7 +19,7 @@ const HELP: Record<string, string[]> = {
     'Rows: Each row plays a song set, a soundscape, or both, from its start time to its stop time on its active days. A stop time earlier than the start time ends on the next day. Equal start and stop times play for 24 hours.',
     'Overlaps: Music and soundscapes are scheduled separately. Where two rows with a song set overlap, the top one plays; the same goes for soundscapes. A row with only a song set plays alongside a lower row\'s soundscape. Music you start yourself takes priority over the schedule.',
     'Plus button: Tap to add a row for the playing soundscape. Drag a soundscape from Presets onto it to add a row for that soundscape.',
-    'Large button: Shows the song set at the top left and the soundscape at the bottom right. Tap it to choose both below the row; the first button of each clears it. Hold and drag it onto another row to move the row there. Drag a soundscape from Presets onto it to change what the row plays.',
+    'Large button: Shows what the row plays: its song set, its soundscape, or both split diagonally, the set at the top left. Tap it to choose both below the row; the first button of each clears it. Hold and drag it onto another row to move the row there. Drag a soundscape from Presets onto it to change what the row plays.',
     'Start button: Shows a note for a song set, the soundscape icon for a soundscape, or play for both. Tap to turn the row on or off.',
     'Times: Tap an hour or minute to advance it one step. Hold and drag up or down to change it faster.',
     'Days: Tap a day to turn it on or off. The calendar button sets all days for the moment: tap for every day, hold for none, tap again to return to your days. Changing a day meanwhile keeps the days as shown.',
