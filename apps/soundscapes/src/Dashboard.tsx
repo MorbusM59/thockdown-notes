@@ -20,7 +20,7 @@ import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
 import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
 import { pauseMusic, readMusicChannel, readMusicPlaying, setMusicChannel, skipMusic, startMusic, subscribeMusicPlaying } from './mobileMusicPlayer'
 
-/** The music sets: a tap puts a set in the pool or takes it out, a hold plays it alone (setPress.ts, as everywhere). */
+/** The music sets: a tap puts a set in the pool or takes it out, a hold makes it the only one (setPress.ts, as everywhere); neither starts playback. */
 export function DashboardSets() {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const active = nowPlaying.pool?.active ?? []
@@ -36,7 +36,7 @@ export function DashboardSets() {
               key={set.slot}
               type="button"
               className={`btn-icon options-color-swatch options-loadout-btn${isActive ? ' is-active' : ''}`}
-              aria-label={`${set.name}, ${isActive ? 'in the pool' : 'not in the pool'}: tap to toggle, hold to play it alone`}
+              aria-label={`${set.name}, ${isActive ? 'in the pool' : 'not in the pool'}: tap to toggle, hold to make it the only set`}
               aria-pressed={isActive}
               data-secondary-press="none"
               onPointerDown={(event) => pressMusicSet(event.nativeEvent, {
@@ -54,7 +54,7 @@ export function DashboardSets() {
   )
 }
 
-/** The soundscapes: a tap plays one. */
+/** The soundscapes: a tap picks the one the play button starts, and crossfades into it while a soundscape is heard. */
 export function DashboardSoundscapes({ preferences, onPick }: { preferences: SoundscapePreferences; onPick: (preset: SoundscapePreset) => void }) {
   return (
     <div className="utility-setting-slider-stack" aria-label="Soundscapes">

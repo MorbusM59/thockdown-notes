@@ -13,6 +13,8 @@ import {
   createSoundscape,
   deleteSoundscape,
   editSoundscape,
+  fromSoundscapeEditingView,
+  soundscapeEditingView,
   FACTORY_SOUNDSCAPE_ICONS,
   renameSoundscape,
   restoreFactorySoundscape,
@@ -393,5 +395,45 @@ describe('editing soundscapes in place', () => {
     expect(activeSoundscape(loaded)).toMatchObject({ name: 'Soundscape A' });
     expect(activeSoundscape(loaded).settings.volume).toBe(0.3);
     expect(sanitizeSoundscapePreferences({ settings: factory.settings, activePresetId: null }).activePresetId).toBe(factory.id);
+  });
+});
+
+describe('editing a soundscape that does not play', () => {
+  const [playing, other] = SOUNDSCAPE_FACTORY_PRESETS;
+  const base = applySoundscapePreset(sanitizeSoundscapePreferences({}), playing);
+  /** One edit made through the view, the way the phone's Soundscapes tab makes it. */
+  const through = (preferences: SoundscapePreferences, editedId: string | null, change: (view: SoundscapePreferences) => SoundscapePreferences) =>
+    fromSoundscapeEditingView(preferences, editedId, change(soundscapeEditingView(preferences, editedId)));
+
+  it('writes the edit into the edited soundscape and leaves what plays as it was', () => {
+    const { preferences, editedId } = through(base, other.id, (view) => editSoundscape(view, { ...view.settings, volume: 0.25 }));
+    expect(editedId).toBe(other.id);
+    expect(preferences.activePresetId).toBe(playing.id);
+    expect(preferences.settings).toEqual(base.settings);
+    expect(preferences.factoryEdits.find((preset) => preset.id === other.id)?.settings.volume).toBe(0.25);
+  });
+
+  it('hears an edit at once when the edited soundscape is the one that plays', () => {
+    const { preferences } = through(base, null, (view) => editSoundscape(view, { ...view.settings, volume: 0.25 }));
+    expect(preferences.settings.volume).toBe(0.25);
+  });
+
+  it('chooses another soundscape for editing without playing it, and never starts anything', () => {
+    const stopped = { ...base, enabled: false };
+    const { preferences, editedId } = through(stopped, null, (view) => applySoundscapePreset(view, other));
+    expect(editedId).toBe(other.id);
+    expect(preferences.activePresetId).toBe(playing.id);
+    expect(preferences.settings).toEqual(stopped.settings);
+    expect(preferences.enabled).toBe(false);
+  });
+
+  it('edits a new copy without playing it, and hands over when the one that plays is trashed', () => {
+    const created = through(base, null, (view) => createSoundscape(view, 'one')!);
+    expect(created.editedId).toBe('one');
+    expect(created.preferences.activePresetId).toBe(playing.id);
+    const playingCopy = applySoundscapePreset(created.preferences, activeSoundscape({ ...created.preferences, activePresetId: 'one' }));
+    const trashed = through(playingCopy, null, (view) => deleteSoundscape(view, 'one'));
+    expect(trashed.preferences.activePresetId).toBe(trashed.editedId);
+    expect(trashed.preferences.customPresets).toEqual([]);
   });
 });
