@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { TextButton } from '@thockdown/interaction/TextButton'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
@@ -12,6 +12,8 @@ import { MusicSetRow, SetMark } from './MusicSetRow'
 import { SelectorRows } from '@thockdown/interaction/SelectorRows'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { closeIconPick } from '@thockdown/interaction/iconPicker/iconPick'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
+import { readMusicIndexing, subscribeMusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 import { musicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
@@ -259,17 +261,34 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet;
 
 /**
  * The Music Library's dock, below the sidebar where the colour picker docks:
- * the open set's row (MusicSetRow), then the two groupings of its songs.
+ * while songs are being read in, a bar of how many (MusicIndexing); the two
+ * groupings of the open set's songs; and last, as every dock ends, the open
+ * set's row (MusicSetRow). `trailing` ends that row (the phone's help).
  */
-export function MusicLibraryDock({ grouping, onGroupingChange }: { grouping: MusicSetListGrouping; onGroupingChange: (grouping: MusicSetListGrouping) => void }) {
+export function MusicLibraryDock({ grouping, onGroupingChange, trailing }: {
+  grouping: MusicSetListGrouping
+  onGroupingChange: (grouping: MusicSetListGrouping) => void
+  trailing?: ReactNode
+}) {
   const set = useOpenMusicSet()
-  const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
+  const indexing = useSyncExternalStore(subscribeMusicIndexing, readMusicIndexing)
   return (
-    <div
-      className="options-curve-rows options-music-set-list-dock"
-      style={{ '--set-count-digits': String(set ? nowPlaying.pool?.counts[set.slot] ?? 0 : 0).length } as CSSProperties}
-    >
-      {set ? <MusicSetRow set={set} /> : null}
+    <div className="options-curve-rows options-music-set-list-dock">
+      {indexing ? (
+        <div className="options-slider-row options-music-indexing" role="group" aria-label="Reading songs">
+          <CompactScrollbarSlider
+            id="music-library-indexing"
+            value={indexing.done}
+            min={0}
+            max={Math.max(1, indexing.total)}
+            step={1}
+            trackLabel={`${indexing.done} / ${indexing.total}`}
+            ariaLabel="Songs read"
+            readOnly
+            onCommit={() => {}}
+          />
+        </div>
+      ) : null}
       <div className="options-curve-row options-music-set-list-dock-row" role="radiogroup" aria-label="Song grouping">
         {(['folder', 'artist'] as const).map((option) => (
           <TextButton
@@ -284,6 +303,7 @@ export function MusicLibraryDock({ grouping, onGroupingChange }: { grouping: Mus
           </TextButton>
         ))}
       </div>
+      {set ? <MusicSetRow set={set} trailing={trailing} /> : null}
     </div>
   )
 }

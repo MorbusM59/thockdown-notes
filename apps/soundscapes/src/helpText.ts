@@ -31,7 +31,7 @@ const HELP: Record<string, string[]> = {
   ],
   Songs: [
     'Song sets: Tap a set to edit it: its songs show below. Which sets play is chosen on the Dashboard. The plus button creates a set.',
-    'Open set: Shown in the dock. Tap its icon to choose another; hold the name to rename it. Its buttons add songs or a folder of songs, and a hold on the last one deletes the set, or restores a factory set.',
+    'Open set: Shown in the dock with its song count. Tap its icon to choose another; hold the name to rename it. The folder button adds a folder and everything under it, with a bar above the dock while its songs are read; a hold on the trash deletes the set, or restores a factory set.',
     'Songs: Tap a song to play it; the music then carries on with the sets chosen on the Dashboard. Hold its cross to remove it from the set; the cross on a group removes the whole group.',
     'Grouping: The dock groups the songs by folder or by artist.',
   ],

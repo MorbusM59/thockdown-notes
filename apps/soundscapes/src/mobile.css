@@ -111,6 +111,39 @@ body {
   aspect-ratio: auto;
 }
 
+/* The open song set docks the same way: its mark, its name with its count
+   over two cells, an add button, delete and help. */
+.mobile-app-shell .preset-dock-row.options-music-set-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-flow:        row;
+}
+
+/* A count after a name ("Chill (42)") wraps with it rather than keeping its
+   own line: the name breaks where it must, the count never inside itself. */
+.mobile-app-shell .preset-dock-row .options-dock-entry-name.has-suffix > .options-dock-entry-title {
+  display: block;
+}
+
+.mobile-app-shell .preset-dock-row .options-dock-entry-suffix {
+  white-space: normal;
+}
+
+/* The Songs dock: the indexing bar while songs are read, the groupings, then
+   the set's row, a regular spacing apart as the dashboard's dock rows are.
+   The groupings are text at the field's height and size. */
+.mobile-app-shell .options-music-set-list-dock {
+  gap: var(--spacing-regular);
+}
+
+.mobile-app-shell .options-music-set-list-dock-row {
+  height:     var(--mobile-field-height);
+  column-gap: var(--toolbar-options-gap);
+}
+
+.mobile-app-shell .options-music-set-list-dock-row > .text-button {
+  font-size: 15px;
+}
+
 /* Two cells are narrow for a name, so it breaks onto as many lines as it
    needs, centred both ways, with the time left under it. The dashboard's
    song is drawn the same way. */
@@ -443,7 +476,8 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
    height, with square chips beside them: the filter's switch between the
    volumes, previous and next at the ends of the position. The handle thickness is redeclared with the track's: the root's is a value
    written in pixels (scrollTrackGeometry.ts), so it would not follow. */
-.mobile-app-shell .mobile-dock-slider-row {
+.mobile-app-shell .mobile-dock-slider-row,
+.mobile-app-shell .options-music-indexing {
   --canonical-scroll-thickness: var(--mobile-field-height);
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)

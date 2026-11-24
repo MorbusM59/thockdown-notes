@@ -1,27 +1,17 @@
 /* The Music Library's rows and dock (MusicLibraryPanel.tsx, MusicSetRow.tsx). */
 
-.options-music-set-row {
-  /* The count only as wide as its figures (.options-music-set-count), the
-     name taking the rest. */
-  grid-template-columns:
-    var(--entry-height) 1fr auto var(--entry-height) var(--entry-height) var(--entry-height);
-  /* The dock's narrower gaps. */
-  column-gap: var(--spacing-small);
+.preset-dock-row.options-music-set-row {
+  /* The mark, the name with its count taking the rest, then one square per
+     action, as many as the platform has (an add button per source). */
+  grid-template-columns: var(--entry-height) 1fr;
+  grid-auto-flow:        column;
+  grid-auto-columns:     var(--entry-height);
 }
-
-
 
 .options-music-set-name {
   overflow:      hidden;
   white-space:   nowrap;
   text-overflow: ellipsis;
-}
-
-.options-music-set-count {
-  font-variant-numeric: tabular-nums;
-  /* As wide as its figures (--set-count-digits, set by the dock), the name taking the rest. */
-  min-width:     max(var(--entry-height), calc(var(--set-count-digits, 1) * 1ch + 2 * var(--spacing-regular)));
-  padding-inline: 0;
 }
 
 /* The Music Library (packages/visualizer/library/MusicLibraryPanel.tsx): a song's name and its remove button. */

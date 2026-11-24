@@ -25,16 +25,18 @@ export interface DockEntryRowProps {
   onTogglePicker: () => void
   /** A held click on the mark: back to the entry's default mark. */
   onResetMark: () => void
+  /** Text kept whole after the name, never cut by its ellipsis (a set's song count, "(42)"); not part of what is renamed. */
+  nameSuffix?: string
   /** A line under the name, in the name's field (the phone's time left). */
   detail?: ReactNode
   children?: ReactNode
 }
 
-export function DockEntryRow({ className, name, takenNames, onRename, mark, picking, onTogglePicker, onResetMark, detail, children }: DockEntryRowProps) {
+export function DockEntryRow({ className, name, nameSuffix, takenNames, onRename, mark, picking, onTogglePicker, onResetMark, detail, children }: DockEntryRowProps) {
   return (
     <div className={`options-curve-row ${className}`}>
       <MarkButton name={name} mark={mark} picking={picking} onToggle={onTogglePicker} onReset={onResetMark} />
-      <EntryName name={name} takenNames={takenNames} onRename={onRename} detail={detail} />
+      <EntryName name={name} nameSuffix={nameSuffix} takenNames={takenNames} onRename={onRename} detail={detail} />
       {children}
     </div>
   )
@@ -89,7 +91,7 @@ function MarkButton({ name, mark, picking, onToggle, onReset }: { name: string; 
   )
 }
 
-function EntryName({ name, takenNames, onRename, detail }: { name: string; takenNames: readonly string[]; onRename: (name: string) => Promise<void> | void; detail?: ReactNode }) {
+function EntryName({ name, nameSuffix, takenNames, onRename, detail }: { name: string; nameSuffix?: string; takenNames: readonly string[]; onRename: (name: string) => Promise<void> | void; detail?: ReactNode }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name)
   const [error, setError] = useState<string | null>(null)
@@ -169,9 +171,9 @@ function EntryName({ name, takenNames, onRename, detail }: { name: string; taken
   return (
     <button
       type="button"
-      className={`options-curve-cell options-curve-display options-dock-entry-name${detail ? ' has-detail' : ''}`}
+      className={`options-curve-cell options-curve-display options-dock-entry-name${detail ? ' has-detail' : ''}${nameSuffix ? ' has-suffix' : ''}`}
       data-tooltip="Rename"
-      aria-label={`${name}; right-click to rename`}
+      aria-label={`${nameSuffix ? `${name} ${nameSuffix}` : name}; right-click to rename`}
       data-secondary-press="action"
       onPointerDown={(event) => {
         event.stopPropagation()
@@ -192,9 +194,15 @@ function EntryName({ name, takenNames, onRename, detail }: { name: string; taken
         startEditing()
       }}
     >
-      {detail ? (<>
-        <span className="options-dock-entry-title">{name}</span>
-        <span className="options-dock-entry-detail">{detail}</span>
+      {detail || nameSuffix ? (<>
+        <span className="options-dock-entry-title">
+          {nameSuffix ? (<>
+            <span className="options-dock-entry-label">{name}</span>
+            {/* The space is the suffix's own, so it stays with it when the name wraps. */}
+            <span className="options-dock-entry-suffix">{` ${nameSuffix}`}</span>
+          </>) : name}
+        </span>
+        {detail ? <span className="options-dock-entry-detail">{detail}</span> : null}
       </>) : name}
     </button>
   )

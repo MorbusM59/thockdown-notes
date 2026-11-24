@@ -1,10 +1,13 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
 import { isFactoryMusicSet, PLAYLIST_SLOT_THEMES, type MusicSet, musicSetMarkOf } from '@thockdown/visualizer/shared/audioPlayer'
 import { isPickingIconFor, readIconPick, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
-import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
+import { readNowPlaying, subscribeNowPlaying, type MusicAddSource } from '@thockdown/visualizer/sound/nowPlaying'
+
+const ADD_SOURCE_LABELS: Record<MusicAddSource, string> = { files: 'Add songs', folder: 'Add a folder' }
+const ADD_SOURCE_ICONS: Record<MusicAddSource, string> = { files: 'fa-file-audio', folder: 'fa-folder-open' }
 
 /** A set's mark (musicSetMarkOf): its icon, or its initials. */
 export function SetMark({ set }: { set: MusicSet }) {
@@ -15,12 +18,13 @@ export function SetMark({ set }: { set: MusicSet }) {
 }
 
 /**
- * The open set's row in the Music Library's dock, over its groupings: its
- * mark, its name (renamed by right-click), its song count as a plain figure
- * (the groupings below already list the songs), adding files or a folder, and
- * deleting it. Sets are reordered in the selector above it, not here.
+ * The open set's row in the Music Library's dock, under its groupings: its
+ * mark, its name with its song count, "Chill (42)" (renamed by right-click),
+ * one add button for each source the platform's pickers offer
+ * (NowPlaying.addSources), and deleting it. Sets are reordered in the
+ * selector above, not here. `trailing` ends the row (the phone's help).
  */
-export function MusicSetRow({ set }: { set: MusicSet }) {
+export function MusicSetRow({ set, trailing }: { set: MusicSet; trailing?: ReactNode }) {
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const sets = nowPlaying.musicSets
   const cancelHoldRef = useRef<(() => void) | null>(null)
@@ -42,8 +46,9 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
   }
   return (
     <DockEntryRow
-      className="options-music-set-row"
+      className="preset-dock-row options-music-set-row"
       name={set.name}
+      nameSuffix={`(${nowPlaying.pool?.counts[set.slot] ?? 0})`}
       takenNames={sets.filter((other) => other.slot !== set.slot).map((other) => other.name)}
       onRename={(name) => nowPlaying.renameMusicSet(set.slot, name)}
       mark={<SetMark set={set} />}
@@ -51,33 +56,19 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
       onTogglePicker={() => toggleIconPick({ kind: 'musicSet', slot: set.slot })}
       onResetMark={() => { void nowPlaying.setMusicSetIcon(set.slot, null) }}
     >
-      <div
-        className="options-curve-cell options-curve-display options-music-set-count"
-        data-tooltip={`${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
-        aria-label={`${set.name}: ${nowPlaying.pool?.counts[set.slot] ?? 0} songs`}
-      >
-        {nowPlaying.pool?.counts[set.slot] ?? 0}
-      </div>
-      <button
-        type="button"
-        className="options-curve-cell options-curve-button"
-        data-tooltip={`Add songs`}
-        aria-label={`Add songs`}
-        onClick={() => { void nowPlaying.addToMusicSet(set.slot, 'files') }}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <span className="fa-solid fa-file-audio" aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        className="options-curve-cell options-curve-button"
-        data-tooltip={`Add a folder`}
-        aria-label={`Add a folder`}
-        onClick={() => { void nowPlaying.addToMusicSet(set.slot, 'folder') }}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <span className="fa-solid fa-folder-open" aria-hidden="true" />
-      </button>
+      {nowPlaying.addSources.map((source) => (
+        <button
+          key={source}
+          type="button"
+          className="options-curve-cell options-curve-button"
+          data-tooltip={ADD_SOURCE_LABELS[source]}
+          aria-label={ADD_SOURCE_LABELS[source]}
+          onClick={() => { void nowPlaying.addToMusicSet(set.slot, source) }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <span className={`fa-solid ${ADD_SOURCE_ICONS[source]}`} aria-hidden="true" />
+        </button>
+      ))}
       {/* A factory set cannot be deleted, so the same hold restores it. */}
       <button
         type="button"
@@ -104,6 +95,7 @@ export function MusicSetRow({ set }: { set: MusicSet }) {
       >
         <span className={`fa-solid ${factory ? 'fa-arrow-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
       </button>
+      {trailing}
     </DockEntryRow>
   )
 }

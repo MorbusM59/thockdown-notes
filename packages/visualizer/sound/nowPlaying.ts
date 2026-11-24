@@ -38,7 +38,13 @@ export type NowPlaying = {
   purgeMusicSet: (slot: PlaylistSlot) => Promise<void>
   /** Take one song out of one set (the set list's remove button). */
   removeFromMusicSet: (slot: PlaylistSlot, songIds: number[]) => Promise<void>
-  addToMusicSet: (slot: PlaylistSlot, source: 'files' | 'folder') => Promise<boolean>
+  addToMusicSet: (slot: PlaylistSlot, source: MusicAddSource) => Promise<boolean>
+  /**
+   * What this platform's pickers can add, one add button each in the Songs
+   * dock. The desktop has both: its native dialogs pick files or a folder,
+   * never both in one dialog. The phone adds folders only.
+   */
+  addSources: readonly MusicAddSource[]
   /** Add files and folders dropped from the file manager, as the two add buttons would. */
   addPathsToMusicSet: (slot: PlaylistSlot, paths: string[]) => Promise<boolean>
   /** The music's volume, reverb amount and reverb room, each a fraction 0..1 (what is resumed while muted or bypassed). */
@@ -48,6 +54,9 @@ export type NowPlaying = {
   /** Commit a filter: the next pick, and a song chosen from the pool, read it. The song playing plays on. */
   setPoolFilter: (filter: MusicPoolFilter) => void
 }
+
+/** What an add button picks: songs one by one, or a folder and everything under it. */
+export type MusicAddSource = 'files' | 'folder'
 
 export type SoundLevels = { volume: number; reverb: number; room: number }
 
@@ -66,6 +75,7 @@ let current: NowPlaying = {
   purgeMusicSet: async () => {},
   removeFromMusicSet: async () => {},
   addToMusicSet: async () => false,
+  addSources: [],
   addPathsToMusicSet: async () => false,
   setPoolFilter: () => {},
   levels: { volume: 0, reverb: 0, room: 0 },
@@ -90,6 +100,7 @@ export function publishNowPlaying(next: NowPlaying): void {
     && next.purgeMusicSet === current.purgeMusicSet
     && next.removeFromMusicSet === current.removeFromMusicSet
     && next.addToMusicSet === current.addToMusicSet
+    && next.addSources === current.addSources
     && next.addPathsToMusicSet === current.addPathsToMusicSet
     && next.setPoolFilter === current.setPoolFilter
     && next.levels === current.levels
