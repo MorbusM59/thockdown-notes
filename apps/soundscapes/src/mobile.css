@@ -292,7 +292,13 @@ body {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: var(--background-color-root);
+}
+
+/* While the visualizer is up the tabs are not drawn, so the page is
+   transparent over the app's glaze, which sways beneath it
+   (VisualizerGlaze), as the desktop's scene lies over its glaze. */
+.mobile-app-shell:has(> .visualizer-page) > .mobile-page {
+  visibility: hidden;
 }
 
 /* The scene's stage, its own stacking context, so the beat's edge and pane
