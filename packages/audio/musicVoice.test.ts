@@ -40,6 +40,30 @@ describe('MusicVoice', () => {
     expect(out.size).toBeGreaterThan(5);
   });
 
+  it('starts at the playhead of an output already running, and resumes there after running dry, the stream carrying on', () => {
+    const { voice, engine, out, settle } = rig();
+    voice.input.cue(1);
+    voice.input.append(tone(440, 4 * RENDER_CHUNK_FRAMES), tone(440, 4 * RENDER_CHUNK_FRAMES));
+    const running = 1_000_000;
+    engine.played(running);
+    engine.configure({ stage: STAGE });
+    settle();
+    // Nothing rendered for frames already gone by: the first chunk is just past the playhead.
+    const first = Math.min(...out.keys());
+    expect(first).toBeGreaterThanOrEqual(running);
+    expect(first - running).toBeLessThan(0.1 * RATE + SPLICE_GRID_FRAMES);
+    expect(voice.position).toBe(4 * RENDER_CHUNK_FRAMES);
+    // The output runs past everything sent: rendering resumes ahead of it, from where the stream had got.
+    out.clear();
+    const later = engine.written + 50_000;
+    engine.played(later);
+    voice.input.append(tone(440, 2 * RENDER_CHUNK_FRAMES), tone(440, 2 * RENDER_CHUNK_FRAMES));
+    engine.poke();
+    settle();
+    expect(Math.min(...out.keys())).toBeGreaterThanOrEqual(later);
+    expect(voice.position).toBe(6 * RENDER_CHUNK_FRAMES);
+  });
+
   it('follows one song with the next with nothing at the join, and tells where it is', () => {
     const { voice } = rig();
     voice.input.cue(7);

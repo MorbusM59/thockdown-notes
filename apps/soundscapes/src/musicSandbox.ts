@@ -128,19 +128,24 @@ scope.musicEnd = (): string => {
 scope.musicStep = (playedFrame: number, maxChunks: number): string => {
   if (!engine || !voice) return '{"chunks":[],"ahead":0,"at":null}';
   engine.played(playedFrame);
-  // Stream frames are output frames (musicVoice.ts): nothing before the playhead is read again.
-  voice.input.forget(Math.min(playedFrame, voice.position));
+  // The stream frame heard at the playhead: the voice reads the stream in
+  // order, one chunk per chunk rendered, so the two differ by a constant
+  // (musicVoice.ts), which changes only where the engine resumed after the
+  // output ran dry (renderAhead.ts's `played`).
+  const heard = voice.position - (engine.written - playedFrame);
+  // Nothing before the playhead is read again.
+  voice.input.forget(Math.min(heard, voice.position));
   while (tasks.length > 0 && rendered.length < maxChunks) tasks.shift()!();
   const done = rendered.splice(0);
   const chunks = done.map((chunk) => ({ s: chunk.startFrame, d: encodeHalfScaleStereo(chunk.left, chunk.right) }));
-  const at = voice.input.at(playedFrame);
-  if (!spectrum) return JSON.stringify({ chunks, ahead: voice.input.end - playedFrame, at });
+  const at = voice.input.at(heard);
+  if (!spectrum) return JSON.stringify({ chunks, ahead: voice.input.end - heard, at });
   const frames = [];
   for (const chunk of done) {
     const batch = spectrum.push(chunk.startFrame, chunk.left, chunk.right);
     if (batch) frames.push({ from: batch.from, first: batch.first, hop: batch.hop, l: toBase64(batch.levels) });
   }
-  return JSON.stringify({ chunks, ahead: voice.input.end - playedFrame, at, spectrum: frames });
+  return JSON.stringify({ chunks, ahead: voice.input.end - heard, at, spectrum: frames });
 };
 
 scope.musicSpectrum = (bands: number): string => {

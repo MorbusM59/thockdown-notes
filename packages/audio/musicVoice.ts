@@ -13,7 +13,8 @@
  * another, with no gap and nothing computed at the join.
  *
  * Rendering reads the stream in order, one chunk per call, so a stream frame
- * and an output frame differ by a constant: a voice's checkpoint is its
+ * and an output frame differ by a constant (until the engine resumes after
+ * the output ran dry, renderAhead.ts's `played`): a voice's checkpoint is its
  * READ POSITION plus the mix's state, and a rewind is exact.
  *
  * A SKIP or a SEEK is a settings change like any other (`cut: true`): the
