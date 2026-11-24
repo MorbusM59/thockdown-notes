@@ -35,7 +35,7 @@ export function togglePoolFilter(): void {
   readNowPlaying().setPoolFilter(next)
 }
 
-export function setPoolFilterDraft(next: MusicPoolFilter): void {
+function setPoolFilterDraft(next: MusicPoolFilter): void {
   if (draft && samePoolFilter(draft, next)) return
   draft = next
   for (const listener of listeners) listener()

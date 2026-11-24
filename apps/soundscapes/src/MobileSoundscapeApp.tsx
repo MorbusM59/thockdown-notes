@@ -130,6 +130,25 @@ function TabHelp({ heading }: { heading: string }) {
   )
 }
 
+const SOUNDSCAPE_CHANNEL_KEY = 'thockdown:soundscape-channel'
+
+/** Whether the soundscape's channel is switched into the mix: on unless switched out before. */
+function loadSoundscapeChannel(): boolean {
+  try {
+    return localStorage.getItem(SOUNDSCAPE_CHANNEL_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
+function saveSoundscapeChannel(on: boolean): void {
+  try {
+    localStorage.setItem(SOUNDSCAPE_CHANNEL_KEY, on ? 'on' : 'off')
+  } catch {
+    // Storage refused: the switch holds until the app is closed.
+  }
+}
+
 function clipLengthLabel(minutes: number): string {
   return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`
 }
@@ -268,6 +287,17 @@ export function MobileSoundscapeApp() {
     })
   }, [])
 
+  // The soundscape's CHANNEL in the mix (the dashboard's podcast button):
+  // switched out, it plays on silent, by the engine's channel switch and,
+  // for what the session plays without this page (the schedule), the volume
+  // the session is given.
+  const [soundscapeChannel, setSoundscapeChannel] = useState(loadSoundscapeChannel)
+  useEffect(() => {
+    saveSoundscapeChannel(soundscapeChannel)
+    soundscapeEngine.setChannel(soundscapeChannel)
+  }, [soundscapeChannel])
+  const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
+
   useEffect(() => {
     savePreferences(preferences)
     if (native !== null) soundscapeEngine.apply(preferences)
@@ -296,14 +326,14 @@ export function MobileSoundscapeApp() {
     const named = new Set(events.map((event) => event.presetId))
     void nativeSoundscape!.setSchedule({
       enabled: schedule.enabled,
-      masterVolume: volumeGain(preferences.masterVolume),
+      masterVolume: sessionVolume,
       events,
       musicEvents,
       entries: presets
         .filter((preset) => named.has(preset.id))
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
-  }, [native, schedule.enabled, events, musicEvents, presets, preferences.masterVolume])
+  }, [native, schedule.enabled, events, musicEvents, presets, sessionVolume])
 
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.
@@ -334,8 +364,8 @@ export function MobileSoundscapeApp() {
   const currentName = currentSoundscapeName(preferences)
   useEffect(() => {
     if (!native) return
-    void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: volumeGain(preferences.masterVolume) })
-  }, [native, entries, currentId, currentName, preferences.masterVolume])
+    void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: sessionVolume })
+  }, [native, entries, currentId, currentName, sessionVolume])
 
   // Follow the session: when a media control, the schedule or the system
   // changes it, on a stop's outcome, at startup, and on coming back to the
@@ -459,8 +489,10 @@ export function MobileSoundscapeApp() {
   const dockContent = tab === 'dashboard' ? (
                     <DashboardDock
                       soundscape={regular}
-                      onSoundscapeTap={() => setRegularMode(regular === 'playing' ? 'paused' : 'playing')}
-                      onSoundscapeHold={stopRegular}
+                      onSoundscapeTransport={setRegularMode}
+                      onStop={stopRegular}
+                      soundscapeChannel={soundscapeChannel}
+                      onSoundscapeChannel={setSoundscapeChannel}
                       soundscapeVolume={preferences.masterVolume}
                       onSoundscapeVolume={(volume) => setPreferences((current) => ({ ...current, masterVolume: volume }))}
                       schedule={schedule.enabled}

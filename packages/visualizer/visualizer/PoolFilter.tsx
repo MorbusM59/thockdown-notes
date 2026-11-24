@@ -21,7 +21,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { EMPTY_POOL_FILTER, type MusicPoolFilter } from '../shared/audioPlayer'
 import { dropWideGlyphs } from './cellGlyphs'
 import { middleStripOf, setMiddleHoles } from './middleHoles'
-import { commitPoolFilterDraft, readShownPoolFilter, registerPoolFilterFields, setPoolFilterDraft, setPoolFilterQuery, subscribePoolFilterDraft } from './poolFilterDraft'
+import { commitPoolFilterDraft, readShownPoolFilter, registerPoolFilterFields, setPoolFilterQuery, subscribePoolFilterDraft } from './poolFilterDraft'
 import { subscribeNowPlaying } from '../sound/nowPlaying'
 import { fieldWindow, type PoolFilterArea, type VisualizerLayout } from './visualizerLayout'
 
@@ -145,7 +145,7 @@ export function PoolFilter({ layout, area, glyphFont }: { layout: VisualizerLayo
           } else if (event.key === 'Escape') {
             // Leaves the field emptied; the blur commits it.
             event.preventDefault()
-            setPoolFilterDraft(EMPTY_POOL_FILTER)
+            setPoolFilterQuery('')
             event.currentTarget.blur()
           }
         }}

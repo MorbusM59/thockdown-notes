@@ -276,13 +276,13 @@ body {
   font-size: 15px;
 }
 
-/* The icon picker's filter: the whole width, half a row high. */
-/* The look is the shared field's (.options-curve-field); only the size is its own: the text's height plus a regular spacing above and below and a large one at the sides. */
+/* The icon picker's filter: the whole width, at the field height (--mobile-field-height). */
+/* The look is the shared field's (.options-curve-field); only the size is its own, with a large spacing at the sides. */
 .mobile-icon-filter {
   display: block;
   width: 100%;
-  height: auto;
-  padding: var(--spacing-regular) var(--spacing-large);
+  height: var(--mobile-field-height);
+  padding: 0 var(--spacing-large);
   line-height: 1;
   text-align: left;
 }
@@ -373,14 +373,38 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
 /* Help sits at the bottom right of every dock: the last column of its row. */
 .mobile-app-shell .mobile-dock-help { grid-column: 6; }
 
-/* The pool filter's field across the first five columns, as tall as the
-   square action button beside it. */
-.mobile-app-shell .mobile-dashboard-filter-field {
-  grid-column: 1 / 6;
-  height:      100%;
-  min-width:   0;
-  padding:     0 var(--spacing-large);
-  text-align:  left;
+/* ONE FIELD HEIGHT for the dock's text rows: the icon picker's filter, the
+   pool filter and the dashboard's two volumes. The text's height plus a
+   regular spacing above and below, and the field's border. */
+.mobile-app-shell {
+  --mobile-field-height: calc(15px + 2 * var(--spacing-regular) + 2px);
+}
+
+/* The volumes at the field's height, the filter's switch a square chip
+   between them. */
+.mobile-app-shell .mobile-dock-volumes {
+  --canonical-scroll-thickness: var(--mobile-field-height);
+}
+
+.mobile-app-shell .mobile-dock-volumes > .mobile-dock-chip,
+.mobile-app-shell .mobile-dock-field-row > .mobile-dock-chip {
+  flex:   0 0 var(--mobile-field-height);
+  width:  var(--mobile-field-height);
+  height: var(--mobile-field-height);
+}
+
+/* The pool filter's row: the field across the row, the action chip at its end. */
+.mobile-dock-field-row {
+  display: flex;
+  gap:     var(--toolbar-options-gap);
+}
+
+.mobile-app-shell .mobile-dock-field {
+  flex:       1 1 0;
+  min-width:  0;
+  height:     var(--mobile-field-height);
+  padding:    0 var(--spacing-large);
+  text-align: left;
 }
 
 /* Settings > Debugging's beat trace (MusicDiagnostics.tsx): its newest lines, small and unwrapped, scrolled sideways. */

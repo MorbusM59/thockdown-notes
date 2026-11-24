@@ -9,7 +9,6 @@
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
-import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { SetMark } from '@thockdown/visualizer/library/MusicSetRow'
@@ -18,9 +17,8 @@ import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound
 import { SoundscapeMark } from '@thockdown/soundscape/SoundscapeOptions'
 import { orderedSoundscapePresets, type SoundscapePreferences, type SoundscapePreset } from '@thockdown/soundscape/soundscape'
 import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
-import { EMPTY_POOL_FILTER } from '@thockdown/visualizer/shared/audioPlayer'
-import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterDraft, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
-import { readMusicPlaying, skipMusic, subscribeMusicPlaying, toggleMusic } from './mobileMusicPlayer'
+import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
+import { pauseMusic, readMusicChannel, readMusicPlaying, setMusicChannel, skipMusic, startMusic, subscribeMusicPlaying } from './mobileMusicPlayer'
 
 /** The music sets: a tap puts a set in the pool or takes it out, a hold plays it alone (setPress.ts, as everywhere). */
 export function DashboardSets() {
@@ -83,7 +81,7 @@ export function DashboardSoundscapes({ preferences, onPick }: { preferences: Sou
 }
 
 /** A button whose tap does one thing and whose hold another; the click after a hold is swallowed. */
-function TapHoldButton({ label, active, icon, onTap, onHold, className = '' }: { label: string; active: boolean; icon: string; onTap: () => void; onHold: () => void; className?: string }) {
+function TapHoldButton({ label, active, icon, onTap, onHold }: { label: string; active: boolean; icon: string; onTap: () => void; onHold: () => void }) {
   const holdRef = useRef<(() => void) | null>(null)
   const swallowRef = useRef(false)
   useEffect(() => () => holdRef.current?.(), [])
@@ -94,7 +92,7 @@ function TapHoldButton({ label, active, icon, onTap, onHold, className = '' }: {
   return (
     <button
       type="button"
-      className={`btn-icon options-color-swatch options-loadout-btn${active ? ' is-active' : ''}${className}`}
+      className={`btn-icon options-color-swatch options-loadout-btn${active ? ' is-active' : ''}`}
       aria-label={label}
       aria-pressed={active}
       data-secondary-press="none"
@@ -160,10 +158,10 @@ function DashboardFilter() {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [isFocused, setIsFocused] = useState(false)
   return (
-    <div className="options-loadout-grid mobile-dashboard-filter" role="group" aria-label="Filter songs">
+    <div className="mobile-dock-field-row" role="group" aria-label="Filter songs">
       <input
         ref={inputRef}
-        className="options-curve-cell options-curve-field mobile-dashboard-filter-field"
+        className="options-curve-cell options-curve-field mobile-dock-field"
         type="text"
         value={filter.query}
         placeholder="Filter songs..."
@@ -186,14 +184,14 @@ function DashboardFilter() {
         }}
       />
       <FieldActionButton
-        className="btn-icon options-color-swatch options-loadout-btn"
+        className="btn-icon options-color-swatch options-loadout-btn mobile-dock-chip"
         icon="fa-filter"
         submitLabel="Filter"
         isFieldFocused={isFocused}
         hasValue={filter.query !== ''}
         onSubmit={() => inputRef.current?.blur()}
         onClear={() => {
-          setPoolFilterDraft(EMPTY_POOL_FILTER)
+          setPoolFilterQuery('')
           commitPoolFilterDraft()
         }}
       />
@@ -202,30 +200,43 @@ function DashboardFilter() {
 }
 
 /**
- * The dashboard's dock: the two volumes, the pool filter while it is on, and
- * the button row: the filter's switch, skip, the music, the soundscape (a
- * tap plays or pauses, a hold stops it and hands back to the schedule), the
- * schedule's switch, and help.
+ * The dashboard's dock. On top the two volumes with the filter's switch
+ * between them, a square chip; the pool filter's row below them while it is
+ * on; then the button row: skip, the music channel, the mix's transport, the
+ * soundscape channel, the schedule's switch, and help.
+ *
+ * The TRANSPORT is the whole mix's: a tap plays or pauses the music and the
+ * soundscape together, a hold stops them (the soundscape hands back to the
+ * schedule). The CHANNEL buttons switch the music and the soundscape in and
+ * out of the mix: switched out, a channel is silent whoever plays it, and
+ * carries on unheard.
  */
-export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
+export function DashboardDock({ soundscape, onSoundscapeTransport, onStop, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
   /** The schedule is on; it plays now (it is what is heard). */
   schedule: boolean
   scheduleHeard: boolean
   onScheduleToggle: () => void
+  /** Regular mode: the soundscape as the transport plays, pauses and stops it. */
   soundscape: 'playing' | 'paused' | 'stopped'
-  onSoundscapeTap: () => void
-  onSoundscapeHold: () => void
+  onSoundscapeTransport: (mode: 'playing' | 'paused') => void
+  /** Stops the soundscape (regular mode STOPPED); the transport pauses the music with it. */
+  onStop: () => void
+  soundscapeChannel: boolean
+  onSoundscapeChannel: (on: boolean) => void
   soundscapeVolume: number
   onSoundscapeVolume: (volume: number) => void
   help: boolean
   onHelpToggle: () => void
 }) {
   const musicPlaying = useSyncExternalStore(subscribeMusicPlaying, readMusicPlaying)
+  const musicChannel = useSyncExternalStore(subscribeMusicPlaying, readMusicChannel)
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const filter = useSyncExternalStore(subscribePoolFilterDraft, readShownPoolFilter)
+  // The mix plays while either does; it is stopped only with the soundscape stopped and the music not playing.
+  const mix = musicPlaying || soundscape === 'playing' ? 'playing' : soundscape === 'stopped' ? 'stopped' : 'paused'
   return (
     <div className="mobile-dashboard-dock">
-      <OptionsSliderRows>
+      <div className="options-slider-row mobile-dock-volumes">
         <CompactScrollbarSlider
           id="mobile-dashboard-music-volume"
           value={Math.round((nowPlaying.levels?.volume ?? 1) * 100)}
@@ -237,6 +248,15 @@ export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, s
           formatValue={(value) => `${value}%`}
           onCommit={(value) => nowPlaying.setLevel('volume', value / 100)}
         />
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn mobile-dock-chip${filter.enabled ? ' is-active' : ''}`}
+          aria-pressed={filter.enabled}
+          aria-label={filter.enabled ? 'Filter on: tap to switch it off' : 'Filter off: tap to switch it on'}
+          onClick={togglePoolFilter}
+        >
+          <span className="fa-solid fa-filter" aria-hidden="true" />
+        </button>
         <CompactScrollbarSlider
           id="mobile-dashboard-soundscape-volume"
           value={Math.round(soundscapeVolume * 100)}
@@ -248,37 +268,48 @@ export function DashboardDock({ soundscape, onSoundscapeTap, onSoundscapeHold, s
           formatValue={(value) => `${value}%`}
           onCommit={(value) => onSoundscapeVolume(value / 100)}
         />
-      </OptionsSliderRows>
+      </div>
       {filter.enabled ? <DashboardFilter /> : null}
       <div className="options-loadout-grid" role="group" aria-label="Play">
-        <button
-          type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn${filter.enabled ? ' is-active' : ''}`}
-          aria-pressed={filter.enabled}
-          aria-label={filter.enabled ? 'Filter on: tap to switch it off' : 'Filter off: tap to switch it on'}
-          onClick={togglePoolFilter}
-        >
-          <span className="fa-solid fa-filter" aria-hidden="true" />
-        </button>
         <button type="button" className="btn-icon options-color-swatch options-loadout-btn" aria-label="Next song" onClick={skipMusic}>
           <span className="fa-solid fa-forward-step" aria-hidden="true" />
         </button>
         <button
           type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn${musicPlaying ? ' is-active' : ''}`}
-          aria-pressed={musicPlaying}
-          aria-label={`Music ${musicPlaying ? 'playing: tap to pause' : 'paused: tap to play'}`}
-          onClick={toggleMusic}
+          className={`btn-icon options-color-swatch options-loadout-btn${musicChannel ? ' is-active' : ''}`}
+          aria-pressed={musicChannel}
+          aria-label={`Music channel ${musicChannel ? 'on' : 'off'}`}
+          onClick={() => setMusicChannel(!musicChannel)}
         >
           <span className="fa-solid fa-compact-disc" aria-hidden="true" />
         </button>
         <TapHoldButton
-          label={`Soundscape ${soundscape}: tap to ${soundscape === 'playing' ? 'pause' : 'play'}${soundscape === 'stopped' ? '' : ', hold to stop'}`}
-          active={soundscape === 'playing'}
-          icon="fa-podcast"
-          onTap={onSoundscapeTap}
-          onHold={onSoundscapeHold}
+          label={`Playback ${mix}: tap to ${mix === 'playing' ? 'pause' : 'play'}${mix === 'stopped' ? '' : ', hold to stop'}`}
+          active={mix === 'playing'}
+          icon={mix === 'playing' ? 'fa-play' : mix === 'paused' ? 'fa-pause' : 'fa-stop'}
+          onTap={() => {
+            if (mix === 'playing') {
+              pauseMusic()
+              if (soundscape === 'playing') onSoundscapeTransport('paused')
+            } else {
+              void startMusic()
+              onSoundscapeTransport('playing')
+            }
+          }}
+          onHold={() => {
+            pauseMusic()
+            onStop()
+          }}
         />
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${soundscapeChannel ? ' is-active' : ''}`}
+          aria-pressed={soundscapeChannel}
+          aria-label={`Soundscape channel ${soundscapeChannel ? 'on' : 'off'}`}
+          onClick={() => onSoundscapeChannel(!soundscapeChannel)}
+        >
+          <span className="fa-solid fa-podcast" aria-hidden="true" />
+        </button>
         <button
           type="button"
           className={`btn-icon options-color-swatch options-loadout-btn${schedule ? ' is-active' : ''}${scheduleHeard ? ' is-heard' : ''}`}
