@@ -35,6 +35,13 @@ export interface NativeMusicPlugin {
   /** The visualizer's spectrum in `bands` log bands, sent as `spectrum` events while it is on; 0 stops it. */
   setSpectrum(options: { bands: number }): Promise<void>
   getState(): Promise<{ playing: boolean }>
+  /** The output's sample rate: the beat delay calibration's loop is decoded at it. */
+  getOutputRate(): Promise<{ sampleRate: number }>
+  /** Play the calibration loop (base64 of interleaved 16-bit stereo at half scale, at the output's rate) over and over, heard alone; `loopHeard` reports it. */
+  playLoop(options: { pcm: string }): Promise<void>
+  stopLoop(): Promise<void>
+  /** The calibration loop's frame heard now (its first frame is 0). */
+  addListener(event: 'loopHeard', listener: (data: { frame: number; sampleRate: number }) => void): Promise<PluginListenerHandle>
   /** What the music's output is doing, as text, for the Debugging section. */
   getDiagnostics(): Promise<{ text: string }>
   /** What is heard changed (a new song, another second, play or pause): the song and the seconds into it at the output's playhead `frame`. */

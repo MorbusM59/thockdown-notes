@@ -47,6 +47,13 @@ export const HOLD_GRACE_PX = 5
  */
 export const HOLD_GRACE_TOUCH_PX = 10
 
+/**
+ * How far a drag that changes a value in steps travels per step (the phone's
+ * step-drag buttons, the beat delay strip's swipe): one distance, so every
+ * such control feels alike.
+ */
+export const DRAG_STEP_PX = 15
+
 /** Where a press landed: what `hasLeftHoldGrace` measures from. */
 export interface PressOrigin {
   readonly pointerType: string

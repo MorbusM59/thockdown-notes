@@ -15,6 +15,7 @@ import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 import type { VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import { setDisplayScale, setVisualizerOpen } from './display'
 import { startMusic } from './mobileMusicPlayer'
+import { PHONE_VISUALIZER_FONT } from './visualizerStore'
 import { nativeSoundscape } from './backgroundAudioHost'
 
 export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings }: {
@@ -47,9 +48,9 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings 
   return (
     <div className="visualizer-page editor-stage is-visualizer">
       <VisualizerScene
-        boxPx={18}
-        fontFamily="'Kode Mono', monospace"
-        fontSizePx={14}
+        boxPx={PHONE_VISUALIZER_FONT.boxPx}
+        fontFamily={PHONE_VISUALIZER_FONT.family}
+        fontSizePx={PHONE_VISUALIZER_FONT.sizePx}
         solidMaxPixelRatio={1.5}
         pixelScale={1}
         sceneSeed="soundscapes"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BEAT_LOOPS, lastHit } from './beatLoopCalibration'
+import { BEAT_LOOPS, lastHit } from './beatLoops'
 
 describe('the calibration loops', () => {
   it('fit a whole number of bars into each track, every hit inside its bar', () => {

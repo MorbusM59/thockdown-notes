@@ -209,7 +209,8 @@ import { VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '../sha
 import { KEYSTROKE_SOUND_KIND, KEYSTROKE_SOUND_RANGES, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
 import { useOutputDevice } from '@thockdown/visualizer/sound/outputDevice'
-import { BeatLoopCalibration } from './BeatLoopCalibration'
+import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
+import { startBeatLoop } from '../sound/beatLoopCalibration'
 import { resolveEditorFontFamily } from '../editor/EditorTypography'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
@@ -2671,7 +2672,7 @@ export function SidebarOptionsPanel({
         heading="Beat Detection"
         iconClass="fa-drum"
       >
-          <BeatLoopCalibration fontFamily={resolveEditorFontFamily(visualizerFont.style)} fontPerBox={1 / visualizerFont.boxSize} falls={{ edge: visualizer.edge, pane: visualizer.pane[uiMode] }} delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
+          <BeatLoopCalibration startLoop={startBeatLoop} fontFamily={resolveEditorFontFamily(visualizerFont.style)} fontPerBox={1 / visualizerFont.boxSize} falls={{ edge: visualizer.edge, pane: visualizer.pane[uiMode] }} delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
           <BeatDetectionControls
             beatSettings={beatSettings}
             outputDevice={outputDevice}

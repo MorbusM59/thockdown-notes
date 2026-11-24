@@ -169,6 +169,11 @@ final class OutputLane {
         }
     }
 
+    /** Be heard alone (true), every other lane holding where it is, or with the others again (false). */
+    void setSolo(boolean alone) {
+        output.setSolo(alone ? this : null);
+    }
+
     /** Leave the output; the output closes once no lane is left. */
     void close() {
         synchronized (output) {

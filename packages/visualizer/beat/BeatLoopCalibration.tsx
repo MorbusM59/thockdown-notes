@@ -5,10 +5,14 @@ import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
 import { useBoxBevelImages } from '@thockdown/visualizer/shared/boxBevelStore'
 import { BEAT_DELAY_MAX_MS, BEAT_DELAY_MIN_MS } from '@thockdown/visualizer/shared/beatSettings'
 import { useHoldToAdjust, type HoldToAdjustKeyboardController } from '@thockdown/interaction/useHoldToAdjust'
-import { BEAT_LOOPS, lastHit, startBeatLoop, type LoopRun } from '../sound/beatLoopCalibration'
+import { BEAT_LOOPS, lastHit, type BeatLoopPlayer, type LoopRun } from './beatLoops'
+import { DRAG_STEP_PX, HOLD_GRACE_PX, HOLD_GRACE_TOUCH_PX } from '@thockdown/interaction/holdTiming'
+import './beat.css'
 
 /** The step Up and Down take, in ms; Left and Right take 1 and speed up while held. */
 const COARSE_STEP_MS = 10
+/** The step a horizontal swipe over the strip takes, in ms, every DRAG_STEP_PX. */
+const SWIPE_STEP_MS = 5
 /**
  * Seconds a held arrow takes to cross the whole delay range: about 100 ms of
  * delay a second at full speed, so a hold covers ground and a release still
@@ -47,8 +51,16 @@ const EFFECTS = [
  * Down by 10 (the wheel over it as over a slider: a notch 1, with Shift 10),
  * until the effects land on the hits; Right draws later.
  * Pressing it again or Escape stops it, and so does the strip leaving the screen by any route.
+ * A horizontal SWIPE over it (a finger, or a mouse drag) moves the delay by
+ * SWIPE_STEP_MS every DRAG_STEP_PX, right later; a swipe neither starts nor
+ * stops the loop. A vertical one is left to the page (`data-touch-slider`).
+ *
+ * The loop is played by the app (`startLoop`), on the music's own path to the
+ * speaker, so the delay set here is the music's.
  */
-export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, fontPerBox }: {
+export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, fontPerBox, startLoop }: {
+  /** Plays a loop where the music plays (beatLoops.ts's BeatLoopPlayer). */
+  startLoop: BeatLoopPlayer
   delayMs: number
   onChange: (delayMs: number) => void
   /** The visualizer's own falls for its edge and pane. */
@@ -119,6 +131,10 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const keyboardRef = useRef<HoldToAdjustKeyboardController | null>(null)
+  const startLoopRef = useRef(startLoop)
+  startLoopRef.current = startLoop
+  // The swipe: where it began and the delay then, and whether it has moved past the grace (then it is no press).
+  const swipeRef = useRef<{ pointerId: number; x: number; base: number; grace: number; swiped: boolean } | null>(null)
 
   useHoldToAdjust({
     getValue: () => delayRef.current,
@@ -137,7 +153,7 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
     const strip = stripRef.current
     if (playing === null || !strip) return
     const loop = BEAT_LOOPS[playing]
-    const run: LoopRun = startBeatLoop(loop, () => {
+    const run: LoopRun = startLoopRef.current(loop, () => {
       setFailed(true)
       setPlaying(null)
     })
@@ -205,7 +221,41 @@ export function BeatLoopCalibration({ delayMs, onChange, falls, fontFamily, font
         ref={stripRef}
         type="button"
         className={`options-loadout-btn beat-loop-calibration-strip${running ? ' active' : ''}${failed ? ' failed' : ''}`}
+        data-touch-slider=""
+        onPointerDown={(event) => {
+          if (event.button !== 0) return
+          swipeRef.current = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            base: delayRef.current,
+            grace: event.pointerType === 'touch' ? HOLD_GRACE_TOUCH_PX : HOLD_GRACE_PX,
+            swiped: false,
+          }
+        }}
+        onPointerMove={(event) => {
+          const swipe = swipeRef.current
+          if (!swipe || swipe.pointerId !== event.pointerId) return
+          const dx = event.clientX - swipe.x
+          if (!swipe.swiped) {
+            if (Math.abs(dx) < swipe.grace) return
+            swipe.swiped = true
+            event.currentTarget.setPointerCapture(event.pointerId)
+          }
+          const next = Math.max(BEAT_DELAY_MIN_MS, Math.min(BEAT_DELAY_MAX_MS, swipe.base + Math.trunc(dx / DRAG_STEP_PX) * SWIPE_STEP_MS))
+          if (next === delayRef.current) return
+          delayRef.current = next
+          onChangeRef.current(next)
+        }}
+        onPointerUp={(event) => {
+          // A swipe's release is not a press: the click after it is dropped.
+          if (swipeRef.current?.pointerId === event.pointerId && !swipeRef.current.swiped) swipeRef.current = null
+        }}
+        onPointerCancel={() => { swipeRef.current = null }}
         onClick={() => {
+          if (swipeRef.current?.swiped) {
+            swipeRef.current = null
+            return
+          }
           setFailed(false)
           setPlaying((index) => (index === null ? lastLoopRef.current : null))
         }}
