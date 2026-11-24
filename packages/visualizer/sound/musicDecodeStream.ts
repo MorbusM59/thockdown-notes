@@ -67,13 +67,21 @@ export class MusicDecodeStream {
   private wanted = 0
   private frontier = 0
   private wake: (() => void) | null = null
+  /** Range requests made, and those not yet answered, for the trace (`describe`). */
+  private fetches = 0
+  private pending = 0
 
   constructor(url: string) {
     this.url = url
+    const counted: typeof fetch = (input, init) => {
+      this.fetches++
+      this.pending++
+      return fetch(input, init).finally(() => { this.pending-- })
+    }
     this.input = new Input({
       formats: ALL_FORMATS,
       // A local file: a failed read is a missing or unreadable file, never one worth retrying.
-      source: new UrlSource(url, { maxCacheSize: MAX_CACHE_BYTES, getRetryDelay: () => null }),
+      source: new UrlSource(url, { maxCacheSize: MAX_CACHE_BYTES, getRetryDelay: () => null, fetchFn: counted }),
     })
     this.opened = open(url, this.input).catch(() => null)
   }
@@ -101,6 +109,11 @@ export class MusicDecodeStream {
     if (untilSec <= this.wanted) return
     this.wanted = untilSec
     if (this.frontier < untilSec) this.release()
+  }
+
+  /** Where decoding has got to and what the file has been asked, for the beat trace. */
+  describe(): string {
+    return `decoded=${this.frontier.toFixed(1)} wanted=${this.wanted.toFixed(1)} waiting=${this.wake !== null} fetches=${this.fetches} unanswered=${this.pending}`
   }
 
   /** Stops the current run. */

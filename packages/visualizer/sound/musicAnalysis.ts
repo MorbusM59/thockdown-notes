@@ -229,6 +229,8 @@ export class MusicAnalysis {
   private startedAt = NaN
   /** The listener's position at the last ask of this run (NaN before one). */
   private listenerTime = NaN
+  /** How this run's decoding ended, if it did: kept for the trace's once-a-second line, which a single line would scroll past. */
+  private decodeEnded: string | null = null
 
   constructor(private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url)) {}
 
@@ -283,6 +285,7 @@ export class MusicAnalysis {
       this.map = request.drums ? new BeatMap(sampleRate) : null
       this.delay = this.map ? new DelayRing(sampleRate) : null
       this.started = id
+      this.decodeEnded = null
       // The file may have taken a moment to open: start from where the listener is now.
       const at = Number.isNaN(this.listenerTime) ? request.listenerTime : this.listenerTime
       this.startedAt = at
@@ -295,7 +298,7 @@ export class MusicAnalysis {
         this.releaseUpTo(at + LEAD_SEC + DECODE_MARGIN_SEC)
       }, (atSec, error) => {
         // A decode that stops short of the file's end leaves the score to run dry; the trace is where that shows.
-        if (id === this.run && this.traceOn) this.traceLines.push(`decode ended at=${atSec.toFixed(1)}${error ? ` error=${error}` : ' (end of file)'}`)
+        if (id === this.run) this.decodeEnded = `ended@${atSec.toFixed(1)} ${error ?? 'end of file'}`
       })
     })
     this.listenerTime = NaN
@@ -416,7 +419,7 @@ export class MusicAnalysis {
       this.tracedAt = heardTime
       const count = (channel: DrumChannel) => this.held.filter((x) => !Number.isNaN(x[channel])).length
       const last = this.held.length > 0 ? this.held[this.held.length - 1].time : heardTime
-      this.traceLines.push(`score sec heard=${heardTime.toFixed(3)} ahead=${(last - heardTime).toFixed(1)}s thump=${count('thump')} pierce=${count('pierce')} tick=${count('tick')}`)
+      this.traceLines.push(`score sec heard=${heardTime.toFixed(3)} ahead=${(last - heardTime).toFixed(1)}s thump=${count('thump')} pierce=${count('pierce')} tick=${count('tick')} ${this.stream?.describe() ?? 'no stream'}${this.decodeEnded ? ` ${this.decodeEnded}` : ''}`)
     }
     const traceLines = this.traceLines
     this.traceLines = []
