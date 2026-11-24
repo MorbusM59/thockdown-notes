@@ -1,4 +1,4 @@
-import { TEXTURE_STRENGTH_STEP, type TextureColorHsva, type TextureMaterialSettings } from '@thockdown/look/textureTypes';
+import { TEXTURE_STRENGTH_STEP, type TextureColorHsva, type TextureMaterialSettings } from '../textureTypes';
 
 type MaterialPersonality = {
   persistence: number;

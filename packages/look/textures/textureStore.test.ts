@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetBackgroundWorkForTests, subscribeToBackgroundWork, type BackgroundWorkState } from '../shared/backgroundWork';
-import { startTextureJob } from './textureStore';
+import { installTexturePorts, startTextureJob } from './textureStore';
 
 // A terminated Worker fires neither `message` nor `error`, which is what
 // leaked a background-work entry per cancelled generation. The fake does the
@@ -19,15 +18,16 @@ class FakeWorker {
 const request = { width: 1, height: 1, seed: 1, textureStrength: 1, granularity: 1, vSteps: 1 };
 
 describe('startTextureJob', () => {
-  let state: BackgroundWorkState = { pending: 0, progress: null };
-  let unsubscribe = () => {};
+  // The observer port counts like the desktop's background-work register:
+  // one begin, one done.
+  const state = { pending: 0 };
   beforeEach(() => {
-    resetBackgroundWorkForTests();
+    state.pending = 0;
     vi.stubGlobal('Worker', FakeWorker);
-    unsubscribe = subscribeToBackgroundWork((next) => { state = next; });
+    installTexturePorts({ beginWork: () => { state.pending += 1; return { done: () => { state.pending -= 1; } }; } });
   });
   afterEach(() => {
-    unsubscribe();
+    installTexturePorts({});
     vi.unstubAllGlobals();
   });
 

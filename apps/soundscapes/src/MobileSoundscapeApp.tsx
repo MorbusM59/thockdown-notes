@@ -12,7 +12,7 @@
  * same preferences state on its return (followSession), so those controls
  * are more controls, not a second path to the engine.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
@@ -60,6 +60,8 @@ import { ScheduleRows } from './ScheduleRows'
 import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
 import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
+import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
+import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
 import { DEFAULT_GLAZE_SETTINGS } from '@thockdown/look/glaze'
 import { DashboardDock, DashboardSets, DashboardSoundscapes } from './Dashboard'
 import { PresetGrid } from '@thockdown/interaction/PresetListControls'
@@ -133,6 +135,21 @@ export function MobileSoundscapeApp() {
   const [look, setLook] = useState<MobileLook>(loadLook)
   const loadout = PRESETS[look.mode][look.preset[look.mode]]
   const theme = useMemo(() => themeFrame(loadout, { isPreviewMode: false }), [loadout])
+  // The layout's textures, generated from its materials as on the desktop
+  // (@thockdown/look/textures), on the shell beside the theme's variables.
+  const textureVariables = useLookTextures(loadout.textureMaterials, true)
+  const shellStyle = useMemo<CSSProperties & Record<string, string>>(() => ({ ...theme.shellVariables, ...textureVariables }), [theme.shellVariables, textureVariables])
+  // A layout switch is one change, as on the desktop (App.tsx's
+  // applyEntryToLiveState): the new layout's textures are brought into the
+  // store first, so its colours and textures arrive in the same frame. Only
+  // the latest press is applied.
+  const lookSwitchTicketRef = useRef(0)
+  const switchLook = useCallback((next: MobileLook) => {
+    const ticket = ++lookSwitchTicketRef.current
+    void prepareLookTextures(lookTextureRequests(PRESETS[next.mode][next.preset[next.mode]].textureMaterials), true).then(() => {
+      if (ticket === lookSwitchTicketRef.current) setLook(next)
+    })
+  }, [])
 
   // Every soundscape, factory (as the listener left it) and their own.
   const { customPresets, factoryEdits } = preferences
@@ -456,7 +473,7 @@ export function MobileSoundscapeApp() {
         <ThemeGlazeLayers glaze={visualizerOpen ? { ...theme.glaze, linear: 'none', radial: 'none' } : theme.glaze} />
         {visualizerOpen ? <VisualizerGlaze glaze={DEFAULT_GLAZE_SETTINGS} immersive={visualizer.immersive} /> : null}
         <div className="app-sheen">
-          <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={theme.shellVariables}>
+          <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
             {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
@@ -490,7 +507,7 @@ export function MobileSoundscapeApp() {
                         className={`btn-icon options-color-swatch options-loadout-btn${look.mode === 'dark' ? ' is-active' : ''}`}
                         aria-label="Dark mode"
                         aria-pressed={look.mode === 'dark'}
-                        onClick={() => setLook({ ...look, mode: look.mode === 'dark' ? 'light' : 'dark' })}
+                        onClick={() => switchLook({ ...look, mode: look.mode === 'dark' ? 'light' : 'dark' })}
                       >
                         <span className="fa-solid fa-moon" aria-hidden="true" />
                       </button>
@@ -501,7 +518,7 @@ export function MobileSoundscapeApp() {
                           className={`btn-icon options-color-swatch options-loadout-btn${look.preset[look.mode] === index ? ' is-active' : ''}`}
                           aria-label={PRESET_NAMES[look.mode][index]}
                           aria-pressed={look.preset[look.mode] === index}
-                          onClick={() => setLook({ ...look, preset: { ...look.preset, [look.mode]: index } })}
+                          onClick={() => switchLook({ ...look, preset: { ...look.preset, [look.mode]: index } })}
                         >
                           <span className={icon} aria-hidden="true" />
                         </button>

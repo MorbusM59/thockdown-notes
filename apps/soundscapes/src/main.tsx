@@ -5,6 +5,8 @@ import { keepFocusOnPress } from '@thockdown/interaction/focusOwnership'
 import { installHoverTracking } from '@thockdown/interaction/hoverTracking'
 import { installPressTracking } from '@thockdown/interaction/pressTracking'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
+import { installTexturePorts } from '@thockdown/look/textures/textureStore'
+import { phoneTextureCache } from './textureCache'
 // The shared packages' styles: the soundscape panel is the desktop panel
 // unchanged, and each package carries the rules for what it renders.
 import './app.css'
@@ -18,6 +20,9 @@ import './mobile.css'
 installPressTracking()
 installHoverTracking()
 installScrollTrackTokens(1)
+// The layouts' textures, generated on the device like the desktop's and kept
+// in Cache Storage (textureCache.ts).
+installTexturePorts({ cache: phoneTextureCache })
 // mouse-default: focus suppression, which only the mousedown default controls
 window.addEventListener('mousedown', keepFocusOnPress, { capture: true })
 

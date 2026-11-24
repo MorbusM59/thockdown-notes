@@ -1,5 +1,7 @@
 import type { InvokeChannels } from '@thockdown/visualizer/shared/ipcContract';
-import type { TextureSurfaceKey } from '@thockdown/look/textureTypes';
+import type { TextureCacheHit, TextureCacheRequest } from '@thockdown/look/textureTypes';
+
+export type { TextureCacheHit, TextureCacheRequest };
 
 export const TEXTURE_CHANNELS = {
   getCachedTexture: 'texture:cache:get',
@@ -7,21 +9,6 @@ export const TEXTURE_CHANNELS = {
   purgeCachedTextures: 'texture:cache:purge',
 } as const satisfies InvokeChannels<TextureCacheApi>;
 
-export type TextureCacheRequest = {
-  surface: TextureSurfaceKey;
-  width: number;
-  height: number;
-  seed: number;
-  textureStrength: number;
-  granularity: number;
-  vSteps: number;
-  algorithmVersion: number;
-};
-
-export type TextureCacheHit = {
-  data: Uint8Array;
-  mimeType: string;
-};
 
 export type TextureCachePurgeRequest = {
   keep?: TextureCacheRequest[];

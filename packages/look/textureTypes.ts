@@ -72,3 +72,20 @@ export type TextureWorkerResponse = {
   buffer: ArrayBuffer;
   mimeType: string;
 };
+
+/** What identifies a generated mask in a persistent cache (textures/textureStore.ts's port). */
+export type TextureCacheRequest = {
+  surface: TextureSurfaceKey;
+  width: number;
+  height: number;
+  seed: number;
+  textureStrength: number;
+  granularity: number;
+  vSteps: number;
+  algorithmVersion: number;
+};
+
+export type TextureCacheHit = {
+  data: Uint8Array;
+  mimeType: string;
+};

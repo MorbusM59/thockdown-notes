@@ -31,7 +31,7 @@ import {
   type TextureMaterialsBySurface,
   type TextureSurfaceKey,
 } from '@thockdown/look/textureTypes'
-import { useTextureSurface } from '../textures/useTextureSurface'
+import { useTextureSurface } from '@thockdown/look/textures/useTextureSurface'
 import { ColorTargetButton } from './ColorTargetButton'
 import { useLinkedColor, useLinkedId } from './colorStaging'
 

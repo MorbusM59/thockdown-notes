@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 import { clampMaterialSettings, generateTextureRgba } from './generateTexture';
-import type { TextureMaterialSettings, TextureWorkerRequest, TextureWorkerResponse } from '@thockdown/look/textureTypes';
+import type { TextureMaterialSettings, TextureWorkerRequest, TextureWorkerResponse } from '../textureTypes';
 
 const workerScope = self as DedicatedWorkerGlobalScope;
 

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { TextureMaterialSettings, TextureSurfaceKey } from '@thockdown/look/textureTypes';
+import type { TextureMaterialSettings, TextureSurfaceKey } from '../textureTypes';
 import { loadMask, loadTinted, maskKeyOf, tintedKeyOf } from './textureStore';
 import { useStoredImage } from './useTextureSurface';
 

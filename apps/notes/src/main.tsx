@@ -8,6 +8,8 @@ import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
 import { setMusicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
 import { desktopMusicListening } from '@thockdown/visualizer/sound/desktopMusicListening'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
+import { installTexturePorts } from '@thockdown/look/textures/textureStore'
+import { beginBackgroundWork } from './shared/backgroundWork'
 import { installEntryFieldOutsidePress } from './sidebar/entryFieldOutsidePress'
 import { installFieldRightClickSelection } from './shared/fieldRightClickSelection'
 import './fonts.css'
@@ -25,6 +27,18 @@ if (window.thockdownAudioPlayer) {
     getPool: (query) => library.getPool(query),     pathOfFile: (file) => window.thockdownExternalFiles?.getPathForFile(file) ?? '',
   })
 }
+// Generated texture masks are kept on disk between runs (IPC), and their
+// generation turns the background-work indicator. Installed after the mock
+// bridges, which supply the cache in a browser build.
+installTexturePorts({
+  cache: window.thockdownTextures
+    ? {
+        get: (request) => window.thockdownTextures!.getCachedTexture(request),
+        save: (request, payload) => window.thockdownTextures!.saveCachedTexture(request, payload),
+      }
+    : undefined,
+  beginWork: () => beginBackgroundWork('texture'),
+})
 installPressTracking()
 installHoverTracking()
 installScrollTrackTokens(1)

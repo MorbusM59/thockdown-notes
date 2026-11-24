@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react';
-import type { TextureMaterialSettings, TextureSurfaceKey } from '@thockdown/look/textureTypes';
+import type { TextureMaterialSettings, TextureSurfaceKey } from '../textureTypes';
 import { loadMask, maskKeyOf, pinTexture, readyTexture, type TextureJob } from './textureStore';
 
 export { startTextureJob, TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE } from './textureStore';

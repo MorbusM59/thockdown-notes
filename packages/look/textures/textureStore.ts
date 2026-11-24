@@ -1,7 +1,27 @@
-import type { TextureCacheRequest } from '../shared/textures';
-import type { TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, TextureWorkerResponse } from '@thockdown/look/textureTypes';
-import { beginBackgroundWork } from '../shared/backgroundWork';
+import type { TextureCacheRequest, TextureCacheHit, TextureMaterialSettings, TextureSurfaceKey, TextureWorkerRequest, TextureWorkerResponse } from '../textureTypes';
 import { clampMaterialSettings } from './generateTexture';
+
+/**
+ * What the store asks of the app it runs in, supplied once at start-up
+ * (`installTexturePorts`): a PERSISTENT CACHE of generated masks (the desktop
+ * keeps them on disk through IPC, the phone in the WebView's Cache Storage),
+ * and an observer told when a generation starts and ends (the desktop's
+ * background-work indicator). Both are optional: without a cache every mask is
+ * generated once per run, without an observer nothing is told.
+ */
+export interface TexturePorts {
+  cache?: {
+    get(request: TextureCacheRequest): Promise<TextureCacheHit | null>;
+    save(request: TextureCacheRequest, payload: TextureCacheHit): Promise<void>;
+  };
+  beginWork?: () => { done(): void };
+}
+
+let ports: TexturePorts = {};
+
+export function installTexturePorts(next: TexturePorts): void {
+  ports = next;
+}
 
 /**
  * Every texture image the app shows, held READY TO PAINT and looked up by
@@ -141,7 +161,7 @@ export interface TextureJob {
 
 export function startTextureJob(request: TextureWorkerRequest): TextureJob {
   const worker = new Worker(new URL('./textureWorker.ts', import.meta.url), { type: 'module' });
-  const work = beginBackgroundWork('texture');
+  const work = ports.beginWork?.() ?? { done: () => {} };
   let settle: ((error?: unknown) => void) | null = null;
   const answer = new Promise<TextureWorkerResponse>((resolve, reject) => {
     worker.onmessage = (event: MessageEvent<TextureWorkerResponse>) => {
@@ -203,9 +223,9 @@ export function loadMask(
       vSteps,
       algorithmVersion: TEXTURE_ALGORITHM_VERSION,
     };
-    const textureApi = window.thockdownTextures;
-    if (textureApi && options.usePersistentCache) {
-      const cached = await textureApi.getCachedTexture(cacheKey);
+    const cache = options.usePersistentCache ? ports.cache : undefined;
+    if (cache) {
+      const cached = await cache.get(cacheKey);
       if (cached) return createBlobUrl(cached.data, cached.mimeType);
     }
     if (!options.isWanted()) return null;
@@ -213,8 +233,8 @@ export function loadMask(
     options.onJob?.(job);
     const response = await job.answer;
     const data = new Uint8Array(response.buffer);
-    if (textureApi && options.usePersistentCache) {
-      void textureApi.saveCachedTexture(cacheKey, { data, mimeType: response.mimeType }).catch(() => {});
+    if (cache) {
+      void cache.save(cacheKey, { data, mimeType: response.mimeType }).catch(() => {});
     }
     return createBlobUrl(data, response.mimeType);
   });

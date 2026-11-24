@@ -90,10 +90,6 @@ import { DEFAULT_CONTINUOUS_DOCUMENT_MAX_BLOCKS } from './editor/documentPositio
 import { resolveIdentityLabel } from './shared/tabLabels'
 import { formatIdWithSigil } from './shared/assignedIds'
 import { NOTE_DRAG_MIME_TYPE, serializeNoteDragPayload } from './shared/noteDrag'
-import {
-  rgbaToCssColor,
-  hsvaToRgba,
-} from '@thockdown/look/colorMath'
 import type { HighlightColorKey, HighlightColors } from './shared/highlightColors'
 import {
   type CustomCursorSettings,
@@ -326,9 +322,8 @@ import {
   TEXTURE_VSTEPS_MIN,
   TEXTURE_VSTEPS_MAX,
 } from '@thockdown/look/textureTypes'
-import { useTextureSurface } from './textures/useTextureSurface'
-import { prepareLookTextures, TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE } from './textures/textureStore'
-import { useTintedTexture } from './textures/useTintedTexture'
+import { prepareLookTextures, TEXTURE_ALGORITHM_VERSION, TEXTURE_REPEAT_TILE_SIZE } from '@thockdown/look/textures/textureStore'
+import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
 import { armHold, HOLD_COMMIT_MS } from '@thockdown/interaction/holdTiming'
 import { HoverActions, type HoverAction } from '@thockdown/interaction/HoverActions'
 import { WorkIndicatorGlyph } from './components/WorkIndicatorGlyph'
@@ -2343,38 +2338,8 @@ function App() {
   )
 
   const editorFontFamily = useMemo(() => resolveEditorFontFamily(editorStyle), [editorStyle])
-  const appGridTextureCss = useTextureSurface({
-    enabled: textureEnabled,
-    surface: 'appGrid',
-    material: textureMaterials.appGrid,
-  })
-  const sidebarTextureCss = useTextureSurface({
-    enabled: textureEnabled,
-    surface: 'sidebarContent',
-    material: textureMaterials.sidebarContent,
-  })
-  const editorEditTextTextureCss = useTextureSurface({
-    enabled: textureEnabled,
-    surface: 'editorEditText',
-    material: textureMaterials.editorEditText,
-  })
-  const editorRenderTextTextureCss = useTextureSurface({
-    enabled: textureEnabled,
-    surface: 'editorRenderText',
-    material: textureMaterials.editorRenderText,
-  })
-  const appGridTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.appGrid.color)), [textureMaterials.appGrid.color])
-  const sidebarTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.sidebarContent.color)), [textureMaterials.sidebarContent.color])
-  // The sidebar's material, composed into one image for every backdrop panel
-  // that does not scroll (useTintedTexture.ts).
-  const backdropTextureCss = useTintedTexture({
-    enabled: textureEnabled,
-    surface: 'sidebarContent',
-    material: textureMaterials.sidebarContent,
-    tintCss: sidebarTextureTintCss,
-  })
-  const editorEditTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorEditText.color)), [textureMaterials.editorEditText.color])
-  const editorRenderTextureTintCss = useMemo(() => rgbaToCssColor(hsvaToRgba(textureMaterials.editorRenderText.color)), [textureMaterials.editorRenderText.color])
+  // Every textured surface's image and tint (packages/look/textures/useLookTextures.ts).
+  const textureVariables = useLookTextures(textureMaterials, textureEnabled)
   // Everything the visual loadout decides about the look, in one place
   // (shared/loadoutTheme.ts), which the mobile app uses as well.
   const theme = useMemo(() => themeFrame({
@@ -2904,7 +2869,7 @@ function App() {
    * shows the new colours, geometry and textures together. Applying first
    * and letting each texture follow on its own showed the new colours over
    * the old textures, then each surface changing in its own frame, and the
-   * backdrop panels empty for up to a second (textures/textureStore.ts).
+   * backdrop panels empty for up to a second (packages/look/textures/textureStore.ts).
    * `alongside` is any other state that must change in that same render (the
    * light/dark mode, the layout rows, whose active entry must not change
    * before the live state does or the edit debounce writes the old look into
@@ -2918,13 +2883,7 @@ function App() {
     const ticket = ++lookSwitchTicketRef.current
     if (alongside) lookSwitchAlongsideRef.current.push(alongside)
     const materials = normalizeUiLoadoutForSignature(entry.payload).textureMaterials
-    const tintOf = (material: TextureMaterialSettings) => rgbaToCssColor(hsvaToRgba(material.color))
-    void prepareLookTextures([
-      { surface: 'appGrid', material: materials.appGrid },
-      { surface: 'sidebarContent', material: materials.sidebarContent, tintCss: tintOf(materials.sidebarContent) },
-      { surface: 'editorEditText', material: materials.editorEditText },
-      { surface: 'editorRenderText', material: materials.editorRenderText },
-    ], textureEnabled).then(() => {
+    void prepareLookTextures(lookTextureRequests(materials), textureEnabled).then(() => {
       if (ticket !== lookSwitchTicketRef.current) return
       // The controls ease their colours, borders and shadows for hover and
       // press. A layout switch is not one of those: left on, ~80 controls
@@ -3920,25 +3879,12 @@ function App() {
       '--caret-halo-blur': `${caretHaloBlurPx}px`,
       '--caret-halo-color': caretHaloColor,
       '--flash-cycle': `${flashing.cycleMs}ms`,
-      '--texture-app-grid': appGridTextureCss,
-      '--texture-sidebar-content': sidebarTextureCss,
-      '--texture-editor-edit': editorEditTextTextureCss,
-      '--texture-editor-render': editorRenderTextTextureCss,
-      '--texture-app-grid-tint': appGridTextureTintCss,
-      '--texture-sidebar-content-tint': sidebarTextureTintCss,
-      '--backdrop-texture': backdropTextureCss,
-      '--texture-editor-edit-tint': editorEditTextureTintCss,
-      '--texture-editor-render-tint': editorRenderTextureTintCss,
+      ...textureVariables,
     }
     return style
   }, [
     theme.shellVariables,
-    appGridTextureCss,
-    appGridTextureTintCss,
-    editorEditTextTextureCss,
-    editorEditTextureTintCss,
-    editorRenderTextTextureCss,
-    editorRenderTextureTintCss,
+    textureVariables,
     caretOutlineWidthPx,
     caretOutlineColor,
     caretHaloSpreadPx,
@@ -3946,9 +3892,6 @@ function App() {
     caretHaloColor,
     flashing.cycleMs,
     layout.gridTemplateColumns,
-    sidebarTextureCss,
-    backdropTextureCss,
-    sidebarTextureTintCss,
   ])
 
   // The caret's blink keyframes are generated rather than shipped statically:
@@ -9369,9 +9312,9 @@ ${markdownHtml}
           <ShortcutReference
             surfaceVariables={{
               ...theme.shellVariables,
-              '--texture-sidebar-content': sidebarTextureCss,
-              '--texture-sidebar-content-tint': sidebarTextureTintCss,
-              '--backdrop-texture': backdropTextureCss,
+              '--texture-sidebar-content': textureVariables['--texture-sidebar-content'],
+              '--texture-sidebar-content-tint': textureVariables['--texture-sidebar-content-tint'],
+              '--backdrop-texture': textureVariables['--backdrop-texture'],
             }}
           />
         ) : null}
