@@ -113,9 +113,9 @@ body {
 
 /* Two cells are narrow for a name, so it breaks onto as many lines as it
    needs, centred both ways, with the time left under it. The dashboard's
-   names (what plays) are drawn the same way. */
+   song is drawn the same way. */
 .mobile-app-shell .preset-dock-row > .options-curve-display.options-dock-entry-name,
-.mobile-app-shell .mobile-dock-names > .mobile-dock-name {
+.mobile-app-shell .mobile-dock-song {
   display:         flex;
   flex-direction:  column;
   align-items:     center;
@@ -127,7 +127,7 @@ body {
 }
 
 .mobile-app-shell .preset-dock-row .options-dock-entry-title,
-.mobile-app-shell .mobile-dock-name .options-dock-entry-title {
+.mobile-app-shell .mobile-dock-song .options-dock-entry-title {
   white-space: normal;
 }
 
@@ -397,66 +397,60 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
   container-type: inline-size;
 }
 
-/* The song and the soundscape: three cells wide and one cell tall (the
-   grid's width less its five gaps, over six), as the dock's name cell is
-   two wide. A song's title and its artist and album keep to two lines and one. */
-.mobile-app-shell .mobile-dock-names > .mobile-dock-name {
-  grid-column:  span 3;
-  aspect-ratio: auto;
-  height:       calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
-  font-size:    15px;
-  overflow:     hidden;
+/* The song: the whole row wide and one cell tall (the grid's width less its
+   five gaps, over six), as the dock's name cell is two wide. Its title and
+   its artist and album keep to two lines and one. */
+.mobile-app-shell .mobile-dock-song {
+  height:    calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
+  font-size: 15px;
+  overflow:  hidden;
 }
 
-.mobile-app-shell .mobile-dock-name .options-dock-entry-title {
+.mobile-app-shell .mobile-dock-song .options-dock-entry-title {
   display:            -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow:           hidden;
 }
 
-.mobile-app-shell .mobile-dock-name .options-dock-entry-detail {
+.mobile-app-shell .mobile-dock-song .options-dock-entry-detail {
   white-space: nowrap;
 }
 
-/* The transport three cells wide, the timer's time left under its icon in
-   the dock name's detail style. */
+/* The transport two cells wide; while a timer runs it shows the time left
+   in place of its icon, at the dock name's size. */
 .mobile-app-shell .options-loadout-grid > .mobile-dock-transport {
-  grid-column:    span 3;
-  aspect-ratio:   auto;
-  display:        flex;
-  flex-direction: column;
-  align-items:    center;
-  justify-content: center;
-  gap:            var(--spacing-small);
+  grid-column:  span 2;
+  aspect-ratio: auto;
 }
 
-.mobile-dock-transport > .options-dock-entry-detail {
-  font-size: 13px;
+.mobile-dock-transport-time {
+  font-size:            15px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Help sits at the bottom right of every dock: the last column of its row. */
 .mobile-app-shell .mobile-dock-help { grid-column: 6; }
 
 /* ONE FIELD HEIGHT for the dock's text rows: the icon picker's filter, the
-   pool filter and the dashboard's two volumes. The text's height plus a
+   pool filter and the dashboard's sliders. The text's height plus a
    regular spacing above and below, and the field's border. */
 .mobile-app-shell {
   --mobile-field-height: calc(15px + 2 * var(--spacing-regular) + 2px);
 }
 
-/* The volumes at the field's height, the filter's switch a square chip
-   between them. */
-/* The handle thickness is redeclared with the track's: the root's is a value
+/* The dashboard's sliders (the volumes, the song's position) at the field's
+   height, with square chips beside them: the filter's switch between the
+   volumes, previous and next at the ends of the position. The handle thickness is redeclared with the track's: the root's is a value
    written in pixels (scrollTrackGeometry.ts), so it would not follow. */
-.mobile-app-shell .mobile-dock-volumes {
+.mobile-app-shell .mobile-dock-slider-row {
   --canonical-scroll-thickness: var(--mobile-field-height);
   --canonical-scroll-handle-thickness: calc(
     var(--canonical-scroll-thickness) - (var(--canonical-scroll-handle-gap) * 2)
   );
 }
 
-.mobile-app-shell .mobile-dock-volumes > .mobile-dock-chip,
+.mobile-app-shell .mobile-dock-slider-row > .mobile-dock-chip,
 .mobile-app-shell .mobile-dock-field-row > .mobile-dock-chip {
   flex:   0 0 var(--mobile-field-height);
   width:  var(--mobile-field-height);
