@@ -47,8 +47,8 @@ export function TabPlaceholder({ name }: { name: string }) {
   )
 }
 
-/** The Visualizer tab: the way into the full-screen visualizer, then its settings (the desktop's, shared). */
-export function VisualizerTab({ onOpen, children }: { onOpen: () => void; children: ReactNode }) {
+/** The way into the full-screen visualizer and its orientation, on the dashboard. */
+export function VisualizerButtons({ onOpen }: { onOpen: () => void }) {
   const [landscape, setLandscapeState] = useState(false)
   useEffect(() => {
     void readDisplay().then((display) => setLandscapeState(display.landscape))
@@ -74,7 +74,6 @@ export function VisualizerTab({ onOpen, children }: { onOpen: () => void; childr
           <span className={`fa-solid fa-mobile-screen-button${landscape ? ' fa-rotate-90' : ''}`} aria-hidden="true" />
         </button>
       </div>
-      {children}
     </div>
   )
 }
