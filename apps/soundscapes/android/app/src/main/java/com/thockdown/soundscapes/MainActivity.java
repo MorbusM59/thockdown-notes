@@ -10,6 +10,9 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import androidx.core.content.ContextCompat;
 import androidx.core.splashscreen.SplashScreen;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -108,8 +111,26 @@ public class MainActivity extends BridgeActivity {
         visualizerOpen = open;
         runOnUiThread(() -> {
             applyOrientation();
+            applySystemBars();
             applyDisplayScale();
         });
+    }
+
+    /**
+     * The visualizer is the whole screen: the status bar and the navigation
+     * bar are hidden while it is open. A swipe in from the screen's edge
+     * brings them back over the scene for a moment, and the system hides
+     * them again on its own (Android's immersive mode; how long they stay is
+     * the system's, not the app's to set).
+     */
+    private void applySystemBars() {
+        WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        if (visualizerOpen) {
+            bars.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            bars.hide(WindowInsetsCompat.Type.systemBars());
+        } else {
+            bars.show(WindowInsetsCompat.Type.systemBars());
+        }
     }
 
     private void applyOrientation() {
