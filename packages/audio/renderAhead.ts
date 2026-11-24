@@ -265,6 +265,12 @@ export class RenderAheadEngine<C> {
   private readonly historyLeft: Float32Array;
   private readonly historyRight: Float32Array;
   private writeFrame = 0;
+  /**
+   * The end of the furthest chunk sent. A rewind moves `writeFrame` back
+   * while the output still holds what was sent past it, so only this says
+   * whether the output has played everything it was given.
+   */
+  private sentEnd = 0;
   private playedFrame = 0;
   private configured = false;
   private scheduled = false;
@@ -435,7 +441,7 @@ export class RenderAheadEngine<C> {
   played(frame: number): void {
     this.playedFrame = Math.max(this.playedFrame, frame);
     this.awaitingPlayhead = false;
-    if (this.writeFrame < this.playedFrame) this.resume();
+    if (this.sentEnd < this.playedFrame) this.resume();
     const reachable = this.spliceFrame();
     // A blend no rewind can reach back into any more is its new voice alone.
     while (this.source instanceof BlendSource && this.source.done(reachable)) this.source = this.source.to;
@@ -449,6 +455,7 @@ export class RenderAheadEngine<C> {
     if (this.source instanceof BlendSource) this.source = this.source.to;
     this.source.resumeAt(at);
     this.writeFrame = at;
+    this.sentEnd = at;
     this.historyLeft.fill(0);
     this.historyRight.fill(0);
     this.fade = { from: at, frames: this.crossfadeFrames };
@@ -506,6 +513,7 @@ export class RenderAheadEngine<C> {
     }
     if (this.fade && start + RENDER_CHUNK_FRAMES >= this.fade.from + this.fade.frames) this.fade = null;
     this.writeFrame += RENDER_CHUNK_FRAMES;
+    this.sentEnd = Math.max(this.sentEnd, this.writeFrame);
     this.send({ type: 'chunk', startFrame: start, left, right }, [left.buffer, right.buffer]);
   }
 }
