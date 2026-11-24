@@ -17,6 +17,7 @@ import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 import type { VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import { setDisplayScale, setVisualizerOpen } from './display'
 import { startMusic } from './mobileMusicPlayer'
+import { measureVisualizerFrameRate } from './visualizerFrameRate'
 import { PHONE_VISUALIZER_FONT } from './visualizerStore'
 import { nativeSoundscape } from './backgroundAudioHost'
 
@@ -45,7 +46,11 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings 
     void setDisplayScale(1)
     void setVisualizerOpen(true)
     void startMusic()
-    return () => { void setVisualizerOpen(false) }
+    const stopMeasuring = measureVisualizerFrameRate()
+    return () => {
+      stopMeasuring()
+      void setVisualizerOpen(false)
+    }
   }, [])
   // The back gesture leaves the visualizer rather than the app.
   useEffect(() => {
