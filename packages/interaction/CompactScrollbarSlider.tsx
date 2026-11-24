@@ -41,6 +41,11 @@ type CompactScrollbarSliderProps = {
    */
   disabled?: boolean
   /**
+   * A gauge rather than a control (the phone's indexing progress): drawn at
+   * full strength, out of the tab order, and every input ignored.
+   */
+  readOnly?: boolean
+  /**
    * What the tooltip shows, when that is not the stored number itself.
    *
    * A control's steps and the quantity a user is actually tuning are not
@@ -78,11 +83,14 @@ export function CompactScrollbarSlider({
   reverseScale = false,
   defaultValue,
   disabled = false,
+  readOnly = false,
   formatValue,
   secondaryPress = 'reset',
   dimmed = false,
   onCommit,
 }: CompactScrollbarSliderProps) {
+  /** Input is ignored both when the setting is out of play and when it is a gauge. */
+  const inert = disabled || readOnly
   const [entry, setEntry] = useState<string | null>(null)
   /** The kind of pointer that last pressed the slider: a `contextmenu` cannot say whether it came from a mouse. */
   const pressPointerTypeRef = useRef('mouse')
@@ -136,7 +144,7 @@ export function CompactScrollbarSlider({
   }, [onCommit, snapValue, value])
 
   const handleWheel = useCallback((event: WheelEvent) => {
-    if (disabled) return
+    if (inert) return
     const dominantDelta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX
     if (dominantDelta === 0) return
 
@@ -145,7 +153,7 @@ export function CompactScrollbarSlider({
     // Shift moves ten steps at a time, as PageUp/PageDown do.
     const stepSize = event.shiftKey ? step * 10 : step
     nudgeBy(dominantDelta > 0 ? -stepSize : stepSize)
-  }, [disabled, nudgeBy, step])
+  }, [inert, nudgeBy, step])
 
   const commitEntry = (text: string) => {
     setEntry(null)
@@ -162,7 +170,7 @@ export function CompactScrollbarSlider({
     <div
       id={id}
       role="slider"
-      tabIndex={disabled ? -1 : 0}
+      tabIndex={inert ? -1 : 0}
       aria-label={ariaLabel}
       aria-orientation="horizontal"
       aria-valuemin={min}
@@ -170,11 +178,12 @@ export function CompactScrollbarSlider({
       aria-valuenow={Number(formatCompactSettingNumber(value, step))}
       aria-valuetext={formatValue ? formatValue(value) : undefined}
       aria-disabled={disabled || undefined}
+      aria-readonly={readOnly || undefined}
       className={`utility-setting-scrollbar-shell${isDragging ? ' is-dragging' : ''}${disabled ? ' is-disabled' : ''}${dimmed ? ' is-dimmed' : ''}`}
       data-live-tooltip={encodeTooltip({
         intention: tooltipLabel ?? trackLabel,
         value: formatValue ? formatValue(value) : formatCompactSettingNumber(value, step),
-        gestures: disabled
+        gestures: inert
           ? undefined
           : secondaryPress === 'type'
             ? [{ press: 'right', intention: 'Type a value' }]
@@ -182,7 +191,7 @@ export function CompactScrollbarSlider({
       })}
       ref={shellRef}
       onKeyDown={(event) => {
-        if (disabled) return
+        if (inert) return
         if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
           event.preventDefault()
           nudgeBy(-step)
@@ -215,7 +224,7 @@ export function CompactScrollbarSlider({
       }}
       onPointerDown={(event) => {
         pressPointerTypeRef.current = event.pointerType
-        if (disabled) return
+        if (inert) return
         if (event.button !== 0) return
         event.preventDefault()
         event.currentTarget.setPointerCapture(event.pointerId)
@@ -258,7 +267,7 @@ export function CompactScrollbarSlider({
         // `contextmenu` for a long press too, which reset a slider the reader
         // was holding to adjust.
         if (pressPointerTypeRef.current !== 'mouse') return
-        if (disabled) return
+        if (inert) return
         if (secondaryPress === 'type') {
           setEntry(formatCompactSettingNumber(value, step))
           return

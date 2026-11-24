@@ -48,6 +48,8 @@ export interface NativeMusicPlugin {
   addListener(event: 'heard', listener: (data: { songId: number | null; seconds: number; frame: number; sampleRate: number; playing: boolean }) => void): Promise<PluginListenerHandle>
   /** Spectrum frames (spectrumFrames.ts's batches, as JSON text; nativeMusicListening.ts reads them). */
   addListener(event: 'spectrum', listener: (data: { batches: string }) => void): Promise<PluginListenerHandle>
+  /** A scan's progress (scanFolder): `done` of `total` new files read; `total` counts up while the folder is still being listed. */
+  addListener(event: 'scanProgress', listener: (data: { done: number; total: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'failure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
 }
 

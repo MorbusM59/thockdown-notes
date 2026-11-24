@@ -1056,6 +1056,24 @@
   text-overflow: ellipsis;
 }
 
+/* A name with a suffix kept whole (a set's song count): the name alone is
+   cut with an ellipsis, the suffix after it never. */
+.options-dock-entry-name.has-suffix > .options-dock-entry-title {
+  display:         flex;
+  justify-content: center;
+}
+
+.options-dock-entry-label {
+  min-width:     0;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+.options-dock-entry-suffix {
+  flex:        none;
+  white-space: pre;
+}
+
 .options-dock-entry-detail {
   font-size:   calc(1em - 2px);
   font-weight: 400;

@@ -20,6 +20,7 @@ import {
 import { setMusicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
 import { publishNowPlaying, type NowPlaying, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
 import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
+import { publishMusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
 import { createNativeMusicListening } from './nativeMusicListening'
 import {
   addScanToSet,
@@ -165,9 +166,18 @@ async function addFolderTo(slot: PlaylistSlot): Promise<boolean> {
   if (!plugin) return false
   const { uri } = await plugin.pickFolder()
   if (!uri) return false
-  const scan = await plugin.scanFolder({ uri, known: catalog.songs.map((song) => song.filePath) })
-  commit(addScanToSet(catalog, slot, uri, scan.paths, scan.added))
-  return true
+  // The Songs dock shows the scan's progress while it runs: reading every
+  // file's tags takes a while on a large folder.
+  publishMusicIndexing({ done: 0, total: 0 })
+  const progress = await plugin.addListener('scanProgress', ({ done, total }) => publishMusicIndexing({ done, total }))
+  try {
+    const scan = await plugin.scanFolder({ uri, known: catalog.songs.map((song) => song.filePath) })
+    commit(addScanToSet(catalog, slot, uri, scan.paths, scan.added))
+    return true
+  } finally {
+    void progress.remove()
+    publishMusicIndexing(null)
+  }
 }
 
 function release(uris: readonly string[]): void {
@@ -217,8 +227,10 @@ const actions = {
     commit(removeFromSet(catalog, slot, songIds))
   },
   // The phone adds FOLDERS only: the folder picker grants a tree, which is
-  // what keeps the app free of storage permissions; "files" asks for one too.
+  // what keeps the app free of storage permissions, and one grant per folder
+  // rather than one per song.
   addToMusicSet: (slot: PlaylistSlot) => addFolderTo(slot),
+  addSources: ['folder'] as const,
   // Nothing is dropped from a file manager on a phone.
   addPathsToMusicSet: async () => false,
   setPoolFilter(filter: MusicPoolFilter) {

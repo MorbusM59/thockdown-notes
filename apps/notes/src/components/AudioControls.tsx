@@ -30,7 +30,7 @@ import {
 import { openMusicLibrary } from '@thockdown/visualizer/library/musicLibraryView'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '@thockdown/visualizer/sound/MusicPlayerService'
-import { publishNowPlaying, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
+import { publishNowPlaying, type MusicAddSource, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
 // below) starts at silence and full reverb and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
@@ -42,6 +42,8 @@ import { isTextEntryElement } from '@thockdown/interaction/focusOwnership'
 import { beginBackgroundWork } from '../shared/backgroundWork'
 
 const VISUALIZER_DOUBLE_PRESS_MS = 300
+/** The desktop's native dialogs pick files or a folder, never both in one dialog: one add button each. */
+const DESKTOP_ADD_SOURCES: readonly MusicAddSource[] = ['files', 'folder']
 const SEEK_HOLD_DELAY_MS = 200
 const SEEK_INTERVAL_MS = 100
 const SEEK_HOLD_STEP = 0.05
@@ -680,7 +682,7 @@ export const AudioControls = memo(function AudioControls({
     return true
   }, [])
 
-  const addToMusicSet = useCallback(async (slot: PlaylistSlot, source: 'files' | 'folder'): Promise<boolean> => {
+  const addToMusicSet = useCallback(async (slot: PlaylistSlot, source: MusicAddSource): Promise<boolean> => {
     if (source === 'files') {
       const files = await window.thockdownAudioPlayer?.pickFiles()
       if (!files || files.length === 0) return false
@@ -868,6 +870,7 @@ export const AudioControls = memo(function AudioControls({
       purgeMusicSet,
       removeFromMusicSet,
       addToMusicSet,
+      addSources: DESKTOP_ADD_SOURCES,
       addPathsToMusicSet,
       setPoolFilter,
       levels: publishedLevels,

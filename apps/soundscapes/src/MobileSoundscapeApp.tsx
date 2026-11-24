@@ -80,7 +80,8 @@ import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
 import { VisualizerPage } from './VisualizerPage'
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
-import { MusicLibraryDock, MusicLibraryPanel } from '@thockdown/visualizer/library/MusicLibraryPanel'
+import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from '@thockdown/visualizer/library/MusicLibraryPanel'
+import { closeIconPick, isPickingIconFor, readIconPick, setIconPickQuery, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
 import { MobileTabSelector, SettingsTab, VisualizerButtons } from './MobileTabs'
 import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
@@ -227,11 +228,12 @@ export function MobileSoundscapeApp() {
     (dragged, target) => setPreferences((current) => moveSoundscapePreset(current, dragged, target)),
     { picture: 'copy' },
   )
-  // The ICON PICKER for the edited soundscape, opened from the dock's mark as
-  // on the desktop: while it is open it replaces the tab's page. Not
-  // persisted; a pick, the mark again, or another soundscape chosen for
-  // editing closes it.
-  const [iconQuery, setIconQuery] = useState<string | null>(null)
+  // The ICON PICKER (iconPick.ts, the desktop's store): opened from a dock's
+  // mark (the edited soundscape's, the open song set's, the active
+  // soundstage's), it replaces the tab's page while it is open. Not
+  // persisted; a pick, the mark again, another tab, or another soundscape
+  // chosen for editing closes it.
+  const iconPick = useSyncExternalStore(subscribeIconPick, readIconPick)
   // HELP MODE: every subsection shows an explanation in place of its
   // controls (helpText.ts). The system's back gesture ends it (takeBack,
   // below).
@@ -368,7 +370,8 @@ export function MobileSoundscapeApp() {
   const timeLeft = timeLeftMs >= 0 ? `(${remainingText(timeLeftMs)})` : null
 
   const editedId = activeSoundscape(editingView).id
-  useEffect(() => setIconQuery(null), [editedId])
+  const pickingSoundscapeIcon = isPickingIconFor(iconPick, { kind: 'soundscape', id: editedId })
+  useEffect(() => closeIconPick(), [editedId, tab])
 
   // What the media controls step through, published whenever it changes.
   const entries = useMemo(() => sessionEntries(presets), [presets])
@@ -520,13 +523,19 @@ export function MobileSoundscapeApp() {
                       onHelpToggle={toggleHelp}
                     />
                   )
-                  : tab === 'songs' ? <MusicLibraryDock grouping={songsGrouping} onGroupingChange={setSongsGrouping} />
+                  : tab === 'songs' ? (
+                    <MusicLibraryDock
+                      grouping={songsGrouping}
+                      onGroupingChange={setSongsGrouping}
+                      trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
+                    />
+                  )
                   : tab === 'soundscapes' ? (
                     <SoundscapeDock
                       preferences={editingView}
                       onChange={applyEditingView}
-                      picking={iconQuery !== null}
-                      onTogglePicker={() => setIconQuery((current) => (current === null ? '' : null))}
+                      picking={pickingSoundscapeIcon}
+                      onTogglePicker={() => toggleIconPick({ kind: 'soundscape', id: editedId })}
                       // The time left is the playing soundscape's.
                       detail={editingView === preferences ? timeLeft : null}
                       trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
@@ -561,7 +570,7 @@ export function MobileSoundscapeApp() {
                 // other in a row of its own, and a tab with no dock gets that
                 // row alone.
                 dock={<div className="sidebar-plain-dock">
-                  {tab === 'dashboard' || tab === 'soundscapes' ? dockContent : (<div className="mobile-dock-stack">
+                  {tab === 'dashboard' || tab === 'soundscapes' || tab === 'songs' ? dockContent : (<div className="mobile-dock-stack">
                     {dockContent}
                     <DockHelpRow active={helpMode} onToggle={toggleHelp} />
                   </div>)}
@@ -661,24 +670,20 @@ export function MobileSoundscapeApp() {
                     </div>
                   </div>
                 </>) : null}
-                {tab === 'songs' && !helpMode ? <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap /> : null}
-                {/* Picking the active soundscape's icon (its dock's icon
-                    button) replaces the page with the picker, as on the
-                    desktop. */}
-                {tab === 'soundscapes' ? (iconQuery !== null ? (<>
-                  <input
-                    className="options-curve-cell options-curve-field mobile-icon-filter"
-                    aria-label="Filter the icons"
-                    placeholder="Filter icons..."
-                    value={iconQuery}
-                    onChange={(event) => setIconQuery(event.target.value)}
-                  />
+                {/* Picking an icon (a dock's mark) replaces the page with
+                    the picker and its filter, as on the desktop. */}
+                {tab === 'songs' && !helpMode ? (iconPick?.target.kind === 'musicSet' ? (<>
+                  <IconFilter query={iconPick.query} />
+                  <MusicSetIconPicker query={iconPick.query} />
+                </>) : <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap />) : null}
+                {tab === 'soundscapes' ? (pickingSoundscapeIcon ? (<>
+                  <IconFilter query={iconPick!.query} />
                   <IconPickerGrid
                     label={activeSoundscape(editingView).name}
                     current={activeSoundscape(editingView).icon}
-                    query={iconQuery}
+                    query={iconPick!.query}
                     onPick={(icon) => {
-                      setIconQuery(null)
+                      closeIconPick()
                       setPreferences((current) => setSoundscapeIcon(current, activeSoundscape(editingView).id, icon))
                     }}
                   />
@@ -732,5 +737,18 @@ export function MobileSoundscapeApp() {
         <ThemeBlendOverlays theme={theme} />
       </div>
     </div>
+  )
+}
+
+/** The icon picker's filter, over the picker in the tab's page (iconPick.ts's query). */
+function IconFilter({ query }: { query: string }) {
+  return (
+    <input
+      className="options-curve-cell options-curve-field mobile-icon-filter"
+      aria-label="Filter the icons"
+      placeholder="Filter icons..."
+      value={query}
+      onChange={(event) => setIconPickQuery(event.target.value)}
+    />
   )
 }

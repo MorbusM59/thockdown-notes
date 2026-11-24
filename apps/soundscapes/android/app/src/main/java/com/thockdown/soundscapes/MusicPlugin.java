@@ -102,7 +102,7 @@ public class MusicPlugin extends Plugin {
         call.resolve();
     }
 
-    /** MusicFolders.scan on a worker thread: `{ uri, known: [paths] }` to `{ added, paths }`. */
+    /** MusicFolders.scan on a worker thread: `{ uri, known: [paths] }` to `{ added, paths }`, sending `scanProgress` events (`{ done, total }`) as it goes. */
     @PluginMethod
     public void scanFolder(PluginCall call) {
         Uri tree = Uri.parse(call.getString("uri", ""));
@@ -111,7 +111,12 @@ public class MusicPlugin extends Plugin {
         for (int index = 0; index < list.length(); index += 1) known.add(list.optString(index));
         new Thread(() -> {
             try {
-                call.resolve(JSObject.fromJSONObject(MusicFolders.scan(getContext(), tree, known)));
+                call.resolve(JSObject.fromJSONObject(MusicFolders.scan(getContext(), tree, known, (done, total) -> {
+                    JSObject data = new JSObject();
+                    data.put("done", done);
+                    data.put("total", total);
+                    notifyListeners("scanProgress", data);
+                })));
             } catch (Exception error) {
                 call.reject("Could not read the folder: " + error);
             }

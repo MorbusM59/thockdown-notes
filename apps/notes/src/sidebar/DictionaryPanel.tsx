@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
@@ -148,10 +148,11 @@ export function DictionaryDock() {
     setDraft('')
   }
   return (
-    <div className="options-curve-rows options-music-set-list-dock" style={{ '--set-count-digits': String(count).length } as CSSProperties}>
+    <div className="options-curve-rows options-music-set-list-dock">
       <DockEntryRow
         className="options-dictionary-dock-row"
         name={dictionary.label}
+        nameSuffix={`(${count})`}
         takenNames={dictionaries.filter((other) => other.id !== dictionary.id).map((other) => other.label)}
         onRename={(label) => renameDictionary(dictionary.id, label)}
         mark={<DictionaryMark dictionary={dictionary} />}
@@ -159,13 +160,6 @@ export function DictionaryDock() {
         onTogglePicker={() => toggleIconPick({ kind: 'dictionary', id: dictionary.id })}
         onResetMark={() => { void setDictionaryIcon(dictionary.id, null) }}
       >
-        <div
-          className="options-curve-cell options-curve-display options-music-set-count"
-          data-tooltip={`${count} words`}
-          aria-label={`${dictionary.label}: ${count} words`}
-        >
-          {count}
-        </div>
         <button
           type="button"
           className="options-curve-cell options-curve-button"
