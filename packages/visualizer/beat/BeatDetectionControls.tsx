@@ -25,14 +25,11 @@ const TRACKERS: ReadonlyArray<[VisualizerTrackerName, string, string]> = [
 
 /**
  * Beat detection's settings, shared by the desktop (Options > Beat
- * Detection, after its calibration loop) and the phone (the Visualizer tab's
- * Signal and Sources sections): the SIGNAL (the pulse's delay for this output
- * device, and the level that still gives a full response) and the three
- * TRACKERS' tuning. The trackers belong to the visualizer settings
- * (`VisualizerSettings.trackers`), the signal to the beat settings, so each
- * comes with its own setter. The desktop draws both under one section, the
- * signal under its divider; the phone gives each a section of its own and
- * uses the two halves directly.
+ * Detection) and the phone (the Visualizer tab's Delay and Signal sections):
+ * the DELAY, the pulse's offset for this output device, set against the
+ * calibration loop above it; and the SIGNAL, the level that still gives a
+ * full response and the three TRACKERS' tuning. The desktop draws both in one
+ * section, the signal under its divider; the phone gives each a section.
  */
 export function BeatDetectionControls({ beatSettings, outputDevice, onBeatSettings, trackers, onTrackers }: {
   beatSettings: BeatSettings
@@ -44,23 +41,23 @@ export function BeatDetectionControls({ beatSettings, outputDevice, onBeatSettin
 }) {
   return (
     <>
+      <BeatDelayControl beatSettings={beatSettings} outputDevice={outputDevice} onBeatSettings={onBeatSettings} />
       <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
-      <BeatSignalControls beatSettings={beatSettings} outputDevice={outputDevice} onBeatSettings={onBeatSettings} />
-      <BeatTrackerControls trackers={trackers} onTrackers={onTrackers} />
+      <BeatSignalControls beatSettings={beatSettings} onBeatSettings={onBeatSettings} trackers={trackers} onTrackers={onTrackers} />
     </>
   )
 }
 
-/** The signal's two sliders: the delay for `outputDevice` and the full-response level. */
-export function BeatSignalControls({ beatSettings, outputDevice, onBeatSettings }: {
+/** The delay for `outputDevice`, kept per device and global rather than in a preset. */
+export function BeatDelayControl({ beatSettings, outputDevice, onBeatSettings }: {
   beatSettings: BeatSettings
   /** The output device the delay is kept for ('' when the platform has one). */
   outputDevice: string
   onBeatSettings: (update: (prev: BeatSettings) => BeatSettings) => void
 }) {
   return (
-    <div className="utility-setting-slider-stack" aria-label="Beat timing">
-      <OptionsSliderRows rows={[2]}>
+    <div className="utility-setting-slider-stack" aria-label="Beat delay">
+      <OptionsSliderRows rows={[1]}>
         <CompactScrollbarSlider
           id="beat-delay"
           min={BEAT_DELAY_MIN_MS}
@@ -74,32 +71,38 @@ export function BeatSignalControls({ beatSettings, outputDevice, onBeatSettings 
           formatValue={(value) => Math.round(value).toString()}
           onCommit={(value) => onBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: Math.round(value) } }))}
         />
-        <CompactScrollbarSlider
-          id="beat-response"
-          min={BEAT_RESPONSE_MIN_DB}
-          max={BEAT_RESPONSE_MAX_DB}
-          step={1}
-          value={beatSettings.responseDb}
-          trackLabel="response"
-          tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
-          ariaLabel="Beat pulse: dB below full scale that still gives a full response"
-          defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
-          formatValue={(value) => Math.round(value).toString()}
-          onCommit={(value) => onBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
-        />
       </OptionsSliderRows>
     </div>
   )
 }
 
-/** The three trackers' tuning, each under its own divider. */
-export function BeatTrackerControls({ trackers, onTrackers }: {
+/** The signal: the full-response level, then the three trackers' tuning, each under its own divider. */
+export function BeatSignalControls({ beatSettings, onBeatSettings, trackers, onTrackers }: {
+  beatSettings: BeatSettings
+  onBeatSettings: (update: (prev: BeatSettings) => BeatSettings) => void
   trackers: VisualizerTrackers
   onTrackers: (update: (prev: VisualizerTrackers) => VisualizerTrackers) => void
 }) {
   const setTracker = (key: VisualizerTrackerName, field: 'contrast' | 'pattern', value: number) => onTrackers((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }))
   return (
     <>
+      <div className="utility-setting-slider-stack" aria-label="Beat response">
+        <OptionsSliderRows rows={[1]}>
+          <CompactScrollbarSlider
+            id="beat-response"
+            min={BEAT_RESPONSE_MIN_DB}
+            max={BEAT_RESPONSE_MAX_DB}
+            step={1}
+            value={beatSettings.responseDb}
+            trackLabel="response"
+            tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
+            ariaLabel="Beat pulse: dB below full scale that still gives a full response"
+            defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
+            formatValue={(value) => Math.round(value).toString()}
+            onCommit={(value) => onBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
+          />
+        </OptionsSliderRows>
+      </div>
       {TRACKERS.map(([key, label, what]) => (
         <Fragment key={key}>
           <div className="utility-setting-button-row" role="group" aria-label={`${label} controls`}>

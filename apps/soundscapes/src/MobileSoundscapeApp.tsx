@@ -93,7 +93,7 @@ import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
 import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, PHONE_VISUALIZER_FONT, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
-import { BeatSignalControls, BeatTrackerControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
+import { BeatDelayControl, BeatSignalControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
 import { LOOP_03 } from '@thockdown/visualizer/beat/beatLoops'
 import { createNativeBeatLoopPlayer } from './nativeBeatLoop'
@@ -721,7 +721,7 @@ export function MobileSoundscapeApp() {
                 </div>
                 </>) : null}
                 {tab === 'visualizer' && !helpMode ? <AccordionGroup>
-                  <AccordionSection ariaLabel="Signal" heading="Signal" iconClass="fa-wave-square">
+                  <AccordionSection ariaLabel="Delay" heading="Delay" iconClass="fa-stopwatch">
                     {beatLoopPlayer ? <BeatLoopCalibration
                       loops={BEAT_LOOPS}
                       startLoop={beatLoopPlayer}
@@ -731,10 +731,10 @@ export function MobileSoundscapeApp() {
                       delayMs={beatSettings.delayMsByDevice[PHONE_OUTPUT_DEVICE] ?? 0}
                       onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [PHONE_OUTPUT_DEVICE]: delayMs } }))}
                     /> : null}
-                    <BeatSignalControls beatSettings={beatSettings} outputDevice={PHONE_OUTPUT_DEVICE} onBeatSettings={setBeatSettings} />
+                    <BeatDelayControl beatSettings={beatSettings} outputDevice={PHONE_OUTPUT_DEVICE} onBeatSettings={setBeatSettings} />
                   </AccordionSection>
-                  <AccordionSection ariaLabel="Sources" heading="Sources" iconClass="fa-drum">
-                    <BeatTrackerControls trackers={visualizer.trackers} onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))} />
+                  <AccordionSection ariaLabel="Signal" heading="Signal" iconClass="fa-wave-square">
+                    <BeatSignalControls beatSettings={beatSettings} onBeatSettings={setBeatSettings} trackers={visualizer.trackers} onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))} />
                   </AccordionSection>
                   <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} folds />
                 </AccordionGroup> : null}

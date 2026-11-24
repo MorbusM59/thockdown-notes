@@ -38,8 +38,8 @@ const HELP: Record<string, string[]> = {
     'Grouping: The dock groups the songs by folder or by artist.',
   ],
   Visualizer: [
-    'Signal: How the visualizer follows the beat. Play a calibration loop and set the delay until the flashes land on the beat you hear.',
-    'Sources: What counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
+    'Delay: Play a calibration loop and set the delay until the flashes land on the beat you hear.',
+    'Signal: How loud the music must be for a full response, and what counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
     'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',
   ],
   Soundstages: [
