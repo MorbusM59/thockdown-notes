@@ -1,13 +1,16 @@
 /**
- * The phone's visualizer settings (`VisualizerSettings`, the desktop's
- * shape, sanitized by the same rule) and its beat settings, kept in the
+ * The phone's visualizer state (`VisualizerState`, the desktop's shape: the
+ * settings outside a preset and the visualizer presets, sanitized by the same
+ * rules) and its beat settings, kept in the
  * WebView's localStorage like its other preferences. The phone has one
  * output as far as the page can tell, so the beat delay is kept under ''.
  */
-import { sanitizeVisualizer, type VisualizerSettings } from '@thockdown/look/visualizer'
+import { sanitizeVisualizer } from '@thockdown/look/visualizer'
+import { sanitizeVisualizerPresetPreferences, type VisualizerState } from '@thockdown/visualizer/shared/visualizerPresets'
 import { sanitizeBeatSettings, type BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 
 const VISUALIZER_KEY = 'thockdown:visualizer'
+const VISUALIZER_PRESETS_KEY = 'thockdown:visualizer-presets'
 const BEAT_KEY = 'thockdown:beat'
 
 /** The output device the phone keeps its beat delay under. */
@@ -33,7 +36,13 @@ function save(key: string, value: unknown): void {
   }
 }
 
-export const loadVisualizerSettings = (): VisualizerSettings => load(VISUALIZER_KEY, sanitizeVisualizer)
-export const saveVisualizerSettings = (settings: VisualizerSettings): void => save(VISUALIZER_KEY, settings)
+export const loadVisualizerState = (): VisualizerState => ({
+  base: load(VISUALIZER_KEY, sanitizeVisualizer),
+  presets: load(VISUALIZER_PRESETS_KEY, sanitizeVisualizerPresetPreferences),
+})
+export function saveVisualizerState(state: VisualizerState): void {
+  save(VISUALIZER_KEY, state.base)
+  save(VISUALIZER_PRESETS_KEY, state.presets)
+}
 export const loadBeatSettings = (): BeatSettings => load(BEAT_KEY, sanitizeBeatSettings)
 export const saveBeatSettings = (settings: BeatSettings): void => save(BEAT_KEY, settings)

@@ -4,16 +4,16 @@ import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
 import {
   BEAT_CONTRAST_MAX,
+  BEAT_RESPONSE_MAX_DB,
+  BEAT_RESPONSE_MIN_DB,
+  DEFAULT_VISUALIZER,
   DEFAULT_VISUALIZER_TRACKERS,
+  type VisualizerSettings,
   type VisualizerTrackerName,
-  type VisualizerTrackers,
 } from '@thockdown/look/visualizer'
 import {
   BEAT_DELAY_MAX_MS,
   BEAT_DELAY_MIN_MS,
-  BEAT_RESPONSE_MAX_DB,
-  BEAT_RESPONSE_MIN_DB,
-  DEFAULT_BEAT_SETTINGS,
   type BeatSettings,
 } from '../shared/beatSettings'
 
@@ -31,19 +31,19 @@ const TRACKERS: ReadonlyArray<[VisualizerTrackerName, string, string]> = [
  * full response and the three TRACKERS' tuning. The desktop draws both in one
  * section, the signal under its divider; the phone gives each a section.
  */
-export function BeatDetectionControls({ beatSettings, outputDevice, onBeatSettings, trackers, onTrackers }: {
+export function BeatDetectionControls({ beatSettings, outputDevice, onBeatSettings, visualizer, setVisualizer }: {
   beatSettings: BeatSettings
   /** The output device the delay is kept for ('' when the platform has one). */
   outputDevice: string
   onBeatSettings: (update: (prev: BeatSettings) => BeatSettings) => void
-  trackers: VisualizerTrackers
-  onTrackers: (update: (prev: VisualizerTrackers) => VisualizerTrackers) => void
+  visualizer: VisualizerSettings
+  setVisualizer: (update: (prev: VisualizerSettings) => VisualizerSettings) => void
 }) {
   return (
     <>
       <BeatDelayControl beatSettings={beatSettings} outputDevice={outputDevice} onBeatSettings={onBeatSettings} />
       <OptionsSubsectionLabel>Signal</OptionsSubsectionLabel>
-      <BeatSignalControls beatSettings={beatSettings} onBeatSettings={onBeatSettings} trackers={trackers} onTrackers={onTrackers} />
+      <BeatSignalControls visualizer={visualizer} setVisualizer={setVisualizer} />
     </>
   )
 }
@@ -77,13 +77,12 @@ export function BeatDelayControl({ beatSettings, outputDevice, onBeatSettings }:
 }
 
 /** The signal: the full-response level, then the three trackers' tuning, each under its own divider. */
-export function BeatSignalControls({ beatSettings, onBeatSettings, trackers, onTrackers }: {
-  beatSettings: BeatSettings
-  onBeatSettings: (update: (prev: BeatSettings) => BeatSettings) => void
-  trackers: VisualizerTrackers
-  onTrackers: (update: (prev: VisualizerTrackers) => VisualizerTrackers) => void
+export function BeatSignalControls({ visualizer, setVisualizer }: {
+  visualizer: VisualizerSettings
+  setVisualizer: (update: (prev: VisualizerSettings) => VisualizerSettings) => void
 }) {
-  const setTracker = (key: VisualizerTrackerName, field: 'contrast' | 'pattern', value: number) => onTrackers((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }))
+  const { trackers } = visualizer
+  const setTracker = (key: VisualizerTrackerName, field: 'contrast' | 'pattern', value: number) => setVisualizer((prev) => ({ ...prev, trackers: { ...prev.trackers, [key]: { ...prev.trackers[key], [field]: value } } }))
   return (
     <>
       <div className="utility-setting-slider-stack" aria-label="Beat response">
@@ -93,13 +92,13 @@ export function BeatSignalControls({ beatSettings, onBeatSettings, trackers, onT
             min={BEAT_RESPONSE_MIN_DB}
             max={BEAT_RESPONSE_MAX_DB}
             step={1}
-            value={beatSettings.responseDb}
+            value={visualizer.responseDb}
             trackLabel="response"
             tooltipLabel="dB below full scale the music's peak may be and still pulse at full strength. A track mixed quieter than this, or a quiet passage between loud ones, pulses less in proportion: 6 dB further down is half"
             ariaLabel="Beat pulse: dB below full scale that still gives a full response"
-            defaultValue={DEFAULT_BEAT_SETTINGS.responseDb}
+            defaultValue={DEFAULT_VISUALIZER.responseDb}
             formatValue={(value) => Math.round(value).toString()}
-            onCommit={(value) => onBeatSettings((prev) => ({ ...prev, responseDb: Math.round(value) }))}
+            onCommit={(value) => setVisualizer((prev) => ({ ...prev, responseDb: Math.round(value) }))}
           />
         </OptionsSliderRows>
       </div>

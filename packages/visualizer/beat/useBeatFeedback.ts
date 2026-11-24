@@ -172,5 +172,5 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   const device = useOutputDevice(blocksOn)
   const delayMs = settings.delayMsByDevice[device] ?? 0
   useEffect(() => setBeatVisualDelaySec(delayMs / 1000), [delayMs])
-  useEffect(() => setBeatResponseHeadroomDb(settings.responseDb), [settings.responseDb])
+  useEffect(() => setBeatResponseHeadroomDb(visualizer.responseDb), [visualizer.responseDb])
 }

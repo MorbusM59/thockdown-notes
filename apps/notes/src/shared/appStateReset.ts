@@ -17,7 +17,7 @@ import {
 import {
   DEFAULT_VISUALIZER_PRESET_PREFERENCES,
   sanitizeVisualizerPresetPreferences,
-} from './visualizerPresets'
+} from '@thockdown/visualizer/shared/visualizerPresets'
 import type { PersistedMenuState } from './appState'
 
 export function resetMenuWithPreservedPresets(

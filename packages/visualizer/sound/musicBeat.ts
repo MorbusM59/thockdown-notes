@@ -477,7 +477,7 @@ function publish(subscriber: Band | Clock, response: number): void {
 
 let visualDelaySec = 0
 
-/** Sets how far below full scale a track's peak may be and still give a full response (`BeatSettings.responseDb`). */
+/** Sets how far below full scale a track's peak may be and still give a full response (`VisualizerSettings.responseDb`). */
 export function setBeatResponseHeadroomDb(db: number): void {
   headroomDb = db
 }

@@ -1,6 +1,6 @@
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
-import { DEFAULT_VISUALIZER_PRESET_PREFERENCES, NEUTRAL_VISUALIZER_PRESET, VISUALIZER_PRESET_KEYS, VISUALIZER_PRESET_KIND, sanitizeVisualizerPresetPreferences, visualizerPresetPart, type VisualizerPresetPreferences } from './shared/visualizerPresets'
+import { DEFAULT_VISUALIZER_STATE, NEUTRAL_VISUALIZER_PRESET, VISUALIZER_PRESET_KIND, editVisualizerState, sanitizeVisualizerPresetPreferences, shownVisualizer, type VisualizerPresetPreferences, type VisualizerState } from '@thockdown/visualizer/shared/visualizerPresets'
 import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { CanonicalScrollRail } from './components/CanonicalScrollRail'
@@ -1466,32 +1466,14 @@ function App() {
   const [caretHaloBlurPx, setCaretHaloBlurPx] = useState(DEFAULT_CARET_SETTINGS.haloBlurPx)
   const [caretHaloColor, setCaretHaloColor] = useState(DEFAULT_CARET_SETTINGS.haloColor)
   // How the visualizer follows the music, global (Options > Visualizer, saved in the app state).
-  // The trackers and the grid beat are kept here; the edge, the pane and the
-  // rest of the visualizer mode's look are the ACTIVE VISUALIZER PRESET's
-  // (shared/visualizerPresets.ts). One state, so an edit through the merged
-  // settings lands in both halves in one update.
-  const [visualizerState, setVisualizerState] = useState<{ base: VisualizerSettings; presets: VisualizerPresetPreferences }>(
-    () => ({ base: DEFAULT_VISUALIZER, presets: DEFAULT_VISUALIZER_PRESET_PREFERENCES }),
-  )
+  // The grid beat is kept here; the edge, the pane, the rest of the
+  // visualizer mode's look and the signal it reads are the ACTIVE VISUALIZER
+  // PRESET's (@thockdown/visualizer/shared/visualizerPresets.ts, VisualizerState).
+  const [visualizerState, setVisualizerState] = useState<VisualizerState>(DEFAULT_VISUALIZER_STATE)
   const visualizerPresetPreferences = visualizerState.presets
-  const visualizer = useMemo<VisualizerSettings>(
-    () => ({ ...visualizerState.base, ...activePreset(VISUALIZER_PRESET_KIND, visualizerState.presets).settings }),
-    [visualizerState],
-  )
+  const visualizer = useMemo(() => shownVisualizer(visualizerState), [visualizerState])
   const setVisualizer = useCallback((updater: (previous: VisualizerSettings) => VisualizerSettings) => {
-    setVisualizerState((state) => {
-      const shown = activePreset(VISUALIZER_PRESET_KIND, state.presets).settings
-      const next = updater({ ...state.base, ...shown })
-      // Only a change to the preset's part is written into the preset: a
-      // tracker or grid edit, or a commit that lands on the value already
-      // there, must not mark the factory preset as edited. Compared by value
-      // (three small plain objects, once per commit).
-      const presetChanged = VISUALIZER_PRESET_KEYS.some((key) => next[key] !== shown[key] && JSON.stringify(next[key]) !== JSON.stringify(shown[key]))
-      return {
-        base: next,
-        presets: presetChanged ? editActivePreset(VISUALIZER_PRESET_KIND, state.presets, visualizerPresetPart(next)) : state.presets,
-      }
-    })
+    setVisualizerState((state) => editVisualizerState(state, updater))
   }, [])
   const setVisualizerPresetPreferences = useCallback((presets: VisualizerPresetPreferences) => {
     setVisualizerState((state) => ({ ...state, presets }))

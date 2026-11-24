@@ -9,7 +9,7 @@ import type { FeatureToggles } from './features';
 import type { TypingTrailSettings } from './typingTrailSettings';
 import type { VisualizerFont } from './visualizerFont';
 import type { VisualizerSettings } from '@thockdown/look/visualizer';
-import type { VisualizerPresetPreferences } from './visualizerPresets';
+import type { VisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';
 import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings';
 import type { FlashShapePreferences } from '@thockdown/visualizer/shared/flashing';

@@ -38,6 +38,7 @@ const HELP: Record<string, string[]> = {
     'Grouping: The dock groups the songs by folder or by artist.',
   ],
   Visualizer: [
+    'Presets: Tap one to use it; the plus copies the one in use. Every setting on this tab belongs to the preset in use, except the delay. The dock renames it, changes its icon, resets it, and a hold on the trash deletes it.',
     'Delay: Play a calibration loop and set the delay until the flashes land on the beat you hear.',
     'Signal: How loud the music must be for a full response, and what counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
     'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',

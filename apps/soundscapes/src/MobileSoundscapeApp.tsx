@@ -68,7 +68,7 @@ import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
 import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayoutScene'
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
 import { DashboardDock, DashboardSets, DashboardSoundscapes, DockHelpButton, DockHelpRow } from './Dashboard'
-import { PresetGrid } from '@thockdown/interaction/PresetListControls'
+import { PresetDock, PresetGrid, PresetIconPicker } from '@thockdown/interaction/PresetListControls'
 import { SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
@@ -91,7 +91,9 @@ import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
-import { loadBeatSettings, loadVisualizerSettings, PHONE_OUTPUT_DEVICE, PHONE_VISUALIZER_FONT, saveBeatSettings, saveVisualizerSettings } from './visualizerStore'
+import { loadBeatSettings, loadVisualizerState, PHONE_OUTPUT_DEVICE, PHONE_VISUALIZER_FONT, saveBeatSettings, saveVisualizerState } from './visualizerStore'
+import { editVisualizerState, NEUTRAL_VISUALIZER_PRESET, shownVisualizer, VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets'
+import type { VisualizerSettings } from '@thockdown/look/visualizer'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
 import { BeatDelayControl, BeatSignalControls } from '@thockdown/visualizer/beat/BeatDetectionControls'
 import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
@@ -261,9 +263,18 @@ export function MobileSoundscapeApp() {
   }, [activeStage])
   // The music library and player the shared music views read (mobileMusicPlayer.ts).
   const [libraryLoaded, setLibraryLoaded] = useState(false)
-  // The visualizer's and beat detection's settings (visualizerStore.ts).
-  const [visualizer, setVisualizer] = useState(loadVisualizerSettings)
-  useEffect(() => saveVisualizerSettings(visualizer), [visualizer])
+  // The visualizer's settings and presets, and beat detection's delay
+  // (visualizerStore.ts): the settings in force are the active preset's
+  // over the rest, as on the desktop (VisualizerState).
+  const [visualizerState, setVisualizerState] = useState(loadVisualizerState)
+  useEffect(() => saveVisualizerState(visualizerState), [visualizerState])
+  const visualizer = useMemo(() => shownVisualizer(visualizerState), [visualizerState])
+  const setVisualizer = useCallback((updater: (previous: VisualizerSettings) => VisualizerSettings) => {
+    setVisualizerState((state) => editVisualizerState(state, updater))
+  }, [])
+  const setVisualizerPresets = useCallback((presets: VisualizerPresetPreferences) => {
+    setVisualizerState((state) => ({ ...state, presets }))
+  }, [])
   const [beatSettings, setBeatSettings] = useState(loadBeatSettings)
   useEffect(() => saveBeatSettings(beatSettings), [beatSettings])
   useEffect(() => {
@@ -554,6 +565,7 @@ export function MobileSoundscapeApp() {
                     />
                   )
                   : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
+                  : tab === 'visualizer' ? <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} />
                   : null
 
   // The desktop's frame, outermost first (see shared/loadoutTheme.ts), so the
@@ -720,7 +732,12 @@ export function MobileSoundscapeApp() {
                   />}
                 </div>
                 </>) : null}
-                {tab === 'visualizer' && !helpMode ? <AccordionGroup>
+                {tab === 'visualizer' && !helpMode ? <>
+                <div className="utility-setting-slider-stack" aria-label="Visualizer presets">
+                  <PresetGrid kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} idPrefix="visualizer-preset" label="Visualizer presets" plural="a visualizer preset" />
+                  <PresetIconPicker kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" query="" />
+                </div>
+                <AccordionGroup>
                   <AccordionSection ariaLabel="Delay" heading="Delay" iconClass="fa-stopwatch">
                     {beatLoopPlayer ? <BeatLoopCalibration
                       loops={BEAT_LOOPS}
@@ -734,10 +751,11 @@ export function MobileSoundscapeApp() {
                     <BeatDelayControl beatSettings={beatSettings} outputDevice={PHONE_OUTPUT_DEVICE} onBeatSettings={setBeatSettings} />
                   </AccordionSection>
                   <AccordionSection ariaLabel="Signal" heading="Signal" iconClass="fa-wave-square">
-                    <BeatSignalControls beatSettings={beatSettings} onBeatSettings={setBeatSettings} trackers={visualizer.trackers} onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))} />
+                    <BeatSignalControls visualizer={visualizer} setVisualizer={setVisualizer} />
                   </AccordionSection>
                   <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={look.mode} folds />
-                </AccordionGroup> : null}
+                </AccordionGroup>
+                </> : null}
                 {tab === 'soundstages' && !helpMode ? <SoundstagesTab preferences={soundstages} onChange={setSoundstages} /> : null}
               </div>
               </SidebarFrame>

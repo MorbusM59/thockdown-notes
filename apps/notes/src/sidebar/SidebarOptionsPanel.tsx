@@ -205,7 +205,7 @@ import {
   type GlazeSettings,
 } from '@thockdown/look/glaze'
 import { idKind, LOADOUT_MAX_CUSTOM_SLOTS, type UiLoadoutEntry } from '@thockdown/look/loadouts'
-import { VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '../shared/visualizerPresets'
+import { VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets'
 import { KEYSTROKE_SOUND_KIND, KEYSTROKE_SOUND_RANGES, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from '../shared/keystrokeSounds'
 import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
 import { useOutputDevice } from '@thockdown/visualizer/sound/outputDevice'
@@ -2677,8 +2677,8 @@ export function SidebarOptionsPanel({
             beatSettings={beatSettings}
             outputDevice={outputDevice}
             onBeatSettings={setBeatSettings}
-            trackers={visualizer.trackers}
-            onTrackers={(update) => setVisualizer((prev) => ({ ...prev, trackers: update(prev.trackers) }))}
+            visualizer={visualizer}
+            setVisualizer={setVisualizer}
           />
       </AccordionSection>
 

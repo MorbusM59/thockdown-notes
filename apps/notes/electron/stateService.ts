@@ -20,7 +20,7 @@ import { resetMenuWithPreservedPresets } from '../src/shared/appStateReset';
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
 import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
-import { sanitizeVisualizerPresetPreferences } from '../src/shared/visualizerPresets';
+import { sanitizeVisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';
 import { DEFAULT_BEAT_SETTINGS, sanitizeBeatSettings } from '@thockdown/visualizer/shared/beatSettings';
 import { DEFAULT_TOOLTIP_SETTINGS, sanitizeTooltipSettings } from '../src/shared/tooltipSettings';

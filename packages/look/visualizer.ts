@@ -113,9 +113,20 @@ export const EDGE_BLUR_MAX_PX = 200
 export const DEFAULT_EDGE_SPREAD_PX = 0
 export const DEFAULT_EDGE_BLUR_PX = 100
 
+/** The range of `VisualizerSettings.responseDb`. */
+export const BEAT_RESPONSE_MIN_DB = 0
+export const BEAT_RESPONSE_MAX_DB = 30
+
 export interface VisualizerSettings {
   /** What is detected in the music, read by every block below through its own mix. */
   trackers: VisualizerTrackers
+  /**
+   * How far below full scale, in dB, the track's peak around the listener may
+   * be and still give every response its full strength (`sound/peakWindow.ts`'s
+   * `loudnessGain`): a track mixed quieter, or a quiet passage between loud
+   * ones, responds in proportion to its peak's amplitude below that.
+   */
+  responseDb: number
   /**
    * GRID BEAT: the blocks on the editor while the visualizer mode is NOT up
    * (Options > Grid Beat), one set per light/dark mode: the same response
@@ -384,6 +395,7 @@ const DEFAULT_SAVED_PANE: VisualizerChannel = { ...DEFAULT_VISUALIZER_PANE, effe
 
 export const DEFAULT_VISUALIZER: VisualizerSettings = {
   trackers: DEFAULT_VISUALIZER_TRACKERS,
+  responseDb: 5,
   grid: {
     dark: {
       edge: { ...DEFAULT_SAVED_EDGE, effect: 0.12, spreadPx: 0, blurPx: 30 },
@@ -661,6 +673,7 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
     : soleMix(edge.mix.pierce > 0 ? 'pierce' : 'thump')
   return {
     trackers: isLegacy ? legacyTrackers([edgeInput, paneInput], DEFAULT_VISUALIZER_TRACKERS) : sanitizeTrackers(source.trackers, d.trackers),
+    responseDb: Math.round(bounded(source.responseDb, BEAT_RESPONSE_MIN_DB, BEAT_RESPONSE_MAX_DB, d.responseDb)),
     // A save from before the grid beat was separated from the visualizer
     // mode's (2026-11-07) had one edge and one pane for both. The pane was
     // shared across light and dark modes too, so both legacy copies match.
