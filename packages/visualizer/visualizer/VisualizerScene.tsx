@@ -52,6 +52,7 @@ import { GridWave } from './GridWave'
 import { SongList } from './SongList'
 import { readPanelsShown, setPanelsShown, subscribePanelsShown } from './panelsShown'
 import { hitFrame } from './hitFrame'
+import { useGlyphOffset } from './glyphCentering'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { FACTORY_SOUNDSTAGE_IDS } from '../shared/soundstages'
 import { CUSTOM_SOLID_INDEX, RHOMBIC_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
@@ -506,11 +507,14 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
   const track = trackSpan(progressColumns)
   const progressLeftPx = originXPx + (progressArea?.column ?? 0) * box
   const rowTop = (row: number) => originYPx + row * box
+  const glyphOffset = useGlyphOffset(fontFamily, fontSizePx, box)
   const style = {
     '--editor-cell-width': `${box}px`,
     '--editor-line-height': `${box}px`,
     '--visualizer-font': fontFamily,
     '--visualizer-font-size': `${fontSizePx}px`,
+    '--visualizer-glyph-dx': `${glyphOffset.dx}px`,
+    '--visualizer-glyph-dy': `${glyphOffset.dy}px`,
   } as CSSProperties
 
   const panelsShown = useSyncExternalStore(subscribePanelsShown, readPanelsShown)

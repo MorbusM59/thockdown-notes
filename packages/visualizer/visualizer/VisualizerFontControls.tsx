@@ -44,7 +44,7 @@ export function VisualizerFontControls({ font, onChange, defaultSizePx }: {
           max: VISUALIZER_BOX_SIZE.max,
           step: VISUALIZER_BOX_SIZE.step,
           value: font.boxSize,
-          trackLabel: 'box size',
+          trackLabel: 'line height',
           ariaLabel: 'Visualizer box size',
           defaultValue: DEFAULT_VISUALIZER_BOX_SIZE,
           onCommit: (value) => onChange({ ...font, boxSize: clampVisualizerBoxSize(value) }),

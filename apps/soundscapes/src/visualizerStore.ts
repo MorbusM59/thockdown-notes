@@ -14,6 +14,7 @@ const VISUALIZER_KEY = 'thockdown:visualizer'
 const VISUALIZER_PRESETS_KEY = 'thockdown:visualizer-presets'
 const BEAT_KEY = 'thockdown:beat'
 const VISUALIZER_FONT_KEY = 'thockdown:visualizer-font'
+const VISUALIZER_DOUBLE_KEY = 'thockdown:visualizer-double'
 
 /** The output device the phone keeps its beat delay under. */
 export const PHONE_OUTPUT_DEVICE = ''
@@ -52,3 +53,10 @@ export const loadBeatSettings = (): BeatSettings => load(BEAT_KEY, sanitizeBeatS
 export const saveBeatSettings = (settings: BeatSettings): void => save(BEAT_KEY, settings)
 export const loadVisualizerFont = (): VisualizerFont => load(VISUALIZER_FONT_KEY, sanitizePhoneVisualizerFont)
 export const saveVisualizerFont = (font: VisualizerFont): void => save(VISUALIZER_FONT_KEY, font)
+/**
+ * The visualizer's double size (the dashboard's button beside the
+ * orientation): the scene's boxes and letters twice the font setting's, the
+ * cutout unchanged, as the desktop's double size mode doubles its scene.
+ */
+export const loadVisualizerDouble = (): boolean => load(VISUALIZER_DOUBLE_KEY, (input) => input === true)
+export const saveVisualizerDouble = (double: boolean): void => save(VISUALIZER_DOUBLE_KEY, double)
