@@ -68,6 +68,13 @@ final class MusicSession {
     private final Runnable endScheduledRun = this::endScheduledRun;
     private float volume = 1f;
     private Integer heardId = null;
+    /**
+     * A song chosen as a start of playback (from paused or stopped): the lane
+     * is held silent until this song is heard, then fades in from silence, so
+     * nothing queued before the choice (the paused song, the pool's opening
+     * pick) is heard first. Null when no such start is under way.
+     */
+    private Integer startingSong = null;
     /** The last failure that stopped the music, for the Debugging section; null for none. */
     private String lastFailure = null;
     private double heardSeconds = 0;
@@ -110,6 +117,10 @@ final class MusicSession {
     /** Play with `stageJson` (MusicStage), starting the music if it is not playing; the soundstage otherwise. */
     synchronized void play(String stageJson) {
         setStoredStage(stageJson);
+        if (startingSong != null) {
+            startingSong = null;
+            if (output != null) output.setFade(1f, TIMER_RESTORE_FADE_SEC);
+        }
         handler.removeCallbacks(endScheduledRun);
         if (renderer == null) {
             open();
@@ -164,14 +175,21 @@ final class MusicSession {
      * paused, it resumes.
      */
     synchronized void choose(int songId) {
+        boolean starting = renderer == null || output.isPaused();
         if (renderer == null) {
             if (stage == null) stage = read(STAGE_FILE, null);
             if (stage == null) return;
             play(stage);
-        } else if (output.isPaused()) {
+            if (renderer == null) return;
+        }
+        if (starting) {
+            // Silent before the lane runs again; the chosen song fades in once heard (onHeard).
+            output.discardQueued();
+            output.setFade(0f, 0);
+            startingSong = songId;
             resume();
         }
-        if (renderer != null) renderer.choose(songId);
+        renderer.choose(songId);
     }
 
     synchronized void seek(double seconds) {
@@ -339,6 +357,11 @@ final class MusicSession {
                     if (renderer != self[0]) return;
                     // A new song: the notification names it.
                     if (!java.util.Objects.equals(songId, heardId)) SoundscapePlaybackService.refreshIfRunning();
+                    // Its opening second: the chosen song from its start, never the paused one heard on.
+                    if (startingSong != null && startingSong.equals(songId) && seconds < 1) {
+                        startingSong = null;
+                        output.fadeFrom(0f, 1f, SoundscapeSession.SWITCH_FADE_SEC);
+                    }
                     heardId = songId;
                     heardSeconds = seconds;
                     heardFrame = frame;
@@ -383,6 +406,7 @@ final class MusicSession {
     }
 
     private void close() {
+        startingSong = null;
         if (renderer != null) {
             renderer.close();
             renderer = null;
