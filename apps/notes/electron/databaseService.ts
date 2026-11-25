@@ -667,7 +667,7 @@ function buildNeutralBaseDiff(payload: Record<string, unknown>): string[] {
 
 /**
  * What a song row's `tagsRead` counts: which facts read from the file it
- * holds. 1 is its tags; 2 its tags and its duration (electron/audioDuration.ts).
+ * holds. 1 is its tags; 2 its tags and its duration (@thockdown/visualizer/shared/audioDuration.ts).
  * A row below this is read again at start-up (`songsWithUnreadTags`).
  */
 const MUSIC_FILE_FACTS_VERSION = 2

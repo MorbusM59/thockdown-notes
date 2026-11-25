@@ -3,12 +3,16 @@ package com.thockdown.soundscapes;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
-import android.media.MediaMetadataRetriever;
 import android.net.Uri;
+import android.os.ParcelFileDescriptor;
+import android.system.Os;
+import android.util.Base64;
 import android.provider.DocumentsContract;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -26,21 +30,20 @@ import org.json.JSONObject;
  * A SCAN walks a tree, a few folders a call (`listFolders`), and lists its
  * audio files as the catalog's songs are written (apps/soundscapes/src/musicLibrary.ts, the desktop's
  * MusicSongEntry fields): the document's URI as the path, and the title,
- * artist, album and duration from the file's tags, read by the platform
- * (MediaMetadataRetriever). Reading tags costs a few tens of milliseconds a
- * file, so files the catalog already holds are passed over, and the page
- * asks for the rest in batches, showing its progress between them.
+ * artist, album and duration from the file's tags. The tags are read by the
+ * PAGE, with the desktop's own readers, from byte ranges served here
+ * (`readSongs`): a handful of small reads a song, where the platform's media
+ * extractor probed every file whole and took minutes for a large library.
  */
 final class MusicFolders {
     private MusicFolders() {}
 
     /**
-     * How many folders are listed, or songs described, at once. Both are
-     * round trips to the documents provider (and, for a song, the platform's
-     * media extractor probing the file) that spend most of their time
-     * waiting rather than computing, so a few at a time on separate threads
-     * divide the wall time by about this much: one at a time, 3,500 songs
-     * took minutes on a device.
+     * How many folders are listed, or song ranges read, at once. Both are
+     * round trips to the documents provider (listing a folder, opening a
+     * song) that spend most of their time waiting rather than computing, so
+     * a few at a time on separate threads divide the wall time by about this
+     * much.
      */
     private static final int PARALLEL = 4;
     private static final ExecutorService WORKERS = Executors.newFixedThreadPool(PARALLEL, (task) -> {
@@ -118,34 +121,86 @@ final class MusicFolders {
         return new JSONObject().put("folders", folders).put("paths", paths);
     }
 
-    /** `describe` for each of `uris`, PARALLEL at a time, in their order. */
-    static JSONArray describeAll(Context context, List<Uri> uris) throws Exception {
-        JSONArray added = new JSONArray();
-        for (JSONObject song : eachInParallel(uris, (uri) -> describe(context, uri))) added.put(song);
-        return added;
-    }
+    /**
+     * SONG READS, for the page's tag and duration readers
+     * (packages/visualizer/shared/audioTags.ts, audioDuration.ts, the same
+     * code the desktop reads its files with): the page asks for byte ranges
+     * of many songs in one call (apps/soundscapes/src/songFacts.ts), and each
+     * is one positional read of the song's file, opened once through the
+     * documents provider and held until the page closes it.
+     */
+    private static final Map<String, ParcelFileDescriptor> OPEN_SONGS = new ConcurrentHashMap<>();
 
-    /** A song as the catalog writes it, `{ filePath, title, artist, album, durationSec }`, from its tags. */
-    static JSONObject describe(Context context, Uri uri) throws Exception {
-        JSONObject song = new JSONObject().put("filePath", uri.toString());
-        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
-        try {
-            retriever.setDataSource(context, uri);
-            song.put("title", text(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)));
-            song.put("artist", text(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)));
-            song.put("album", text(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)));
-            String duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-            song.put("durationSec", duration == null ? 0 : Long.parseLong(duration) / 1000.0);
-        } catch (RuntimeException unreadable) {
-            // Tags that cannot be read are empty, as the desktop has them for a file with none.
-            song.put("title", "").put("artist", "").put("album", "").put("durationSec", 0);
-        } finally {
-            retriever.release();
+    /** One range asked for: `{ path, offset, length }`. */
+    static final class SongRead {
+        final String path;
+        final long offset;
+        final int length;
+
+        SongRead(String path, long offset, int length) {
+            this.path = path;
+            this.offset = offset;
+            this.length = length;
         }
-        return song;
     }
 
-    private static String text(String value) {
-        return value == null ? "" : value.trim();
+    /** The largest range one read answers; the readers ask for far less. */
+    private static final int MAX_READ_BYTES = 1 << 20;
+
+    /**
+     * Each of `reads`, PARALLEL at a time, in their order: `{ size, data }`
+     * (the file's length and the bytes, base64, fewer at the end of the
+     * file), or `{ size: -1 }` for a file that cannot be opened or read.
+     */
+    static JSONArray readSongs(Context context, List<SongRead> reads) throws Exception {
+        JSONArray results = new JSONArray();
+        for (JSONObject result : eachInParallel(reads, (read) -> readSong(context, read))) results.put(result);
+        return results;
+    }
+
+    private static JSONObject readSong(Context context, SongRead read) throws Exception {
+        try {
+            ParcelFileDescriptor file = openSong(context, read.path);
+            long size = file.getStatSize();
+            int wanted = (int) Math.max(0, Math.min(Math.min(read.length, MAX_READ_BYTES), size - read.offset));
+            byte[] bytes = new byte[wanted];
+            int got = 0;
+            while (got < wanted) {
+                int step = Os.pread(file.getFileDescriptor(), bytes, got, wanted - got, read.offset + got);
+                if (step <= 0) break;
+                got += step;
+            }
+            return new JSONObject().put("size", size).put("data", Base64.encodeToString(bytes, 0, got, Base64.NO_WRAP));
+        } catch (Exception unreadable) {
+            return new JSONObject().put("size", -1);
+        }
+    }
+
+    /** The song at `path`, opened on its first read. Two reads racing to open it open it once. */
+    private static ParcelFileDescriptor openSong(Context context, String path) throws Exception {
+        ParcelFileDescriptor held = OPEN_SONGS.get(path);
+        if (held != null) return held;
+        synchronized (OPEN_SONGS) {
+            held = OPEN_SONGS.get(path);
+            if (held != null) return held;
+            ParcelFileDescriptor opened = context.getContentResolver().openFileDescriptor(Uri.parse(path), "r");
+            if (opened == null) throw new IllegalStateException("No file for " + path);
+            OPEN_SONGS.put(path, opened);
+            return opened;
+        }
+    }
+
+    /** Close the songs at `paths`, or every song held when `paths` is null. */
+    static void closeSongs(List<String> paths) {
+        List<String> closing = paths == null ? new ArrayList<>(OPEN_SONGS.keySet()) : paths;
+        for (String path : closing) {
+            ParcelFileDescriptor file = OPEN_SONGS.remove(path);
+            if (file == null) continue;
+            try {
+                file.close();
+            } catch (Exception ignored) {
+                // Closing a descriptor the provider already dropped: nothing is held either way.
+            }
+        }
     }
 }

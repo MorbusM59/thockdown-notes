@@ -17,16 +17,45 @@ function fakeTree(breadth: number, depth: number, songs: number) {
       }
       return out
     },
-    async describeSongs({ paths }: { paths: string[] }) {
-      return { added: paths.map((filePath) => ({ filePath, title: '', artist: '', album: '', durationSec: 0 })) }
+    // Every song an MP3 whose ID3v2 title is its own path, served in ranges as MusicFolders.readSongs serves them.
+    async readSongRanges({ reads, close }: { reads: Array<{ path: string; offset: number; length: number }>; close: string[] }) {
+      rounds.push(reads.length)
+      const results = reads.map(({ path, offset, length }) => {
+        open.add(path)
+        maxOpen = Math.max(maxOpen, open.size)
+        const bytes = songFile(path)
+        return { size: bytes.length, data: bytes.subarray(offset, offset + length).toString('base64') }
+      })
+      for (const path of close) { open.delete(path); closed.add(path) }
+      return { results }
+    },
+    async closeSongs({ paths }: { paths?: string[] }) {
+      for (const path of paths ?? [...open]) { open.delete(path); closed.add(path) }
     },
   }
-  return { plugin, calls }
+  const rounds: number[] = []
+  const open = new Set<string>()
+  const closed = new Set<string>()
+  let maxOpen = 0
+  return { plugin, calls, rounds, open, closed, maxOpen: () => maxOpen }
+}
+
+/** An MP3 of one ID3v2.3 TIT2 frame holding `title`, then one 128 kbps frame header. */
+function songFile(title: string): Buffer {
+  const text = Buffer.concat([Buffer.from([3]), Buffer.from(title, 'utf8')])
+  const frame = Buffer.alloc(10)
+  frame.write('TIT2', 0, 'latin1')
+  frame.writeUInt32BE(text.length, 4)
+  const body = Buffer.concat([frame, text])
+  const header = Buffer.from([0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, body.length])
+  const audio = Buffer.alloc(16000)
+  audio.set([0xff, 0xfb, 0x90, 0x00], 0)
+  return Buffer.concat([header, body, audio])
 }
 
 describe('scanFolder', () => {
   it('walks a large tree in small steps, the scanning bar moving the whole time, then the indexing bar', async () => {
-    const { plugin, calls } = fakeTree(8, 3, 7) // 585 folders, 3584 songs, about the size of a real library
+    const { plugin, calls, rounds, open, closed, maxOpen } = fakeTree(8, 3, 7) // 585 folders, 3584 songs, about the size of a real library
     const progress: MusicIndexing[] = []
     const scan = await scanFolder(plugin, 'tree', new Set(), (step) => progress.push(step))
     expect(scan.paths).toHaveLength(3584)
@@ -45,6 +74,13 @@ describe('scanFolder', () => {
       if (before.indexing && after.indexing) expect(after.indexing.done).toBeGreaterThanOrEqual(before.indexing.done)
     }
     expect(progress.at(-1)!.indexing).toEqual({ done: 3584, total: 3584 })
+    // Read by the shared readers, many songs to a round trip, every file closed.
+    expect(scan.added[100].title).toBe(scan.added[100].filePath)
+    expect(scan.added[100].durationSec).toBeCloseTo(1, 0)
+    expect(rounds.length).toBeLessThan(3584 / 4)
+    expect(open.size).toBe(0)
+    expect(closed.size).toBe(3584)
+    expect(maxOpen()).toBeLessThanOrEqual(64)
   })
 
   it('counts songs already in the library as indexed, and reads only the rest', async () => {
