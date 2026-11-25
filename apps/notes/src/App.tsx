@@ -1,7 +1,7 @@
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { DEFAULT_VISUALIZER_STATE, NEUTRAL_VISUALIZER_PRESET, VISUALIZER_PRESET_KIND, editVisualizerState, sanitizeVisualizerPresetPreferences, shownVisualizer, type VisualizerPresetPreferences, type VisualizerState } from '@thockdown/visualizer/shared/visualizerPresets'
-import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from './shared/visualizerFont'
+import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { CanonicalScrollRail } from './components/CanonicalScrollRail'
 import { scrollerIdentity } from './shared/scrollerIdentity'
@@ -215,8 +215,8 @@ import {
   roundViewLetterSpacingEm,
   resolveEditorFontFamily,
   resolveEditorRuntimeMetrics,
-  type EditorStyleKey,
 } from './editor/EditorTypography'
+import type { MonoFontKey } from '@thockdown/visualizer/visualizer/visualizerFonts'
 import {
   DEFAULT_UI_FONT_KEY,
   DEFAULT_UI_FONT_SCALE,
@@ -1486,7 +1486,7 @@ function App() {
   const [viewStyle, setViewStyle] = useState<ViewStyleKey>('calibrilight')
   const [viewSpacing, setViewSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
   const [viewLetterSpacingEm, setViewLetterSpacingEm] = useState<number>(DEFAULT_VIEW_LETTER_SPACING_EM)
-  const [editorStyle, setEditorStyle] = useState<EditorStyleKey>(DEFAULT_EDITOR_STYLE)
+  const [editorStyle, setEditorStyle] = useState<MonoFontKey>(DEFAULT_EDITOR_STYLE)
   const [editorSpacing, setEditorSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
   // The visualizer's font and box size; its size is per size mode, in fontSizesByMode.
   const [visualizerFontShared, setVisualizerFontShared] = useState<Omit<VisualizerFont, 'sizePx'>>(() => ({

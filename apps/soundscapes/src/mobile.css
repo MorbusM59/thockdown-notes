@@ -48,10 +48,17 @@ body {
 /* Every button grid is six equal columns spanning the row, with square
    cells, instead of the desktop's fixed 32px cells: a phone's row is wider
    than six of those, and a finger needs the larger target. */
-.mobile-app-shell .options-loadout-grid {
+.mobile-app-shell .options-loadout-grid,
+.mobile-app-shell .typography-grid {
   width: 100%;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-auto-rows: auto;
+}
+
+/* A font picker's cells are square too; its "Aa" stays the desktop's size, as
+   it previews the font rather than being an icon. */
+.mobile-app-shell .typography-grid > * {
+  aspect-ratio: 1;
 }
 
 .mobile-app-shell {

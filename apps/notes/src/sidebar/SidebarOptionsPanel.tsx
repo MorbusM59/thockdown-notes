@@ -15,10 +15,11 @@ import { AccordionGroup, AccordionSection } from '@thockdown/interaction/Accordi
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { PresetMark } from '@thockdown/interaction/PresetMark'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { FontControls, FontSection } from './FontSection'
+import { FontSection } from './FontSection'
+import { VisualizerFontControls } from '@thockdown/visualizer/visualizer/VisualizerFontControls'
 import { OptionsSectionBar } from './OptionsSectionBar'
 import type { OptionsSectionId, PresetSubsectionId } from '../shared/optionsSections'
-import { DEFAULT_VISUALIZER_BOX_SIZE, type VisualizerFont } from '../shared/visualizerFont'
+import type { VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import type { EqPoint } from '@thockdown/visualizer/shared/musicEqCurve'
@@ -119,9 +120,8 @@ import {
   VIEW_LETTER_SPACING_STEP_EM,
   DEFAULT_VIEW_LETTER_SPACING_EM,
   roundViewLetterSpacingEm,
-  EDITOR_STYLE_OPTIONS,
-  type EditorStyleKey,
 } from '../editor/EditorTypography'
+import { MONO_FONTS, monoFontFamily, type MonoFontKey } from '@thockdown/visualizer/visualizer/visualizerFonts'
 import {
   UI_FONT_OPTIONS,
   UI_FONT_SCALE_MIN,
@@ -211,7 +211,6 @@ import { KeystrokeChannelOptions } from './KeystrokeChannelOptions'
 import { useOutputDevice } from '@thockdown/visualizer/sound/outputDevice'
 import { BeatLoopCalibration } from '@thockdown/visualizer/beat/BeatLoopCalibration'
 import { BEAT_LOOPS, startBeatLoop } from '../sound/beatLoopCalibration'
-import { resolveEditorFontFamily } from '../editor/EditorTypography'
 import {
   DEFAULT_WHEEL_SPIN_DAMPEN_DIVISOR,
   DEFAULT_WHEEL_SPIN_THRESHOLD_MS,
@@ -286,7 +285,7 @@ type ViewStyleKey =
 type EditorTextColorTargetKey = 'editorEditText' | 'editorRenderText'
 // ── Panel-local option/lookup data ─────────────────────────────────────────
 // Only ever read by this panel, so these live here rather than in a shared
-// module (unlike the analogous EDITOR_STYLE_OPTIONS etc., which App.tsx
+// module (unlike the analogous MONO_FONTS etc., which App.tsx
 // also needs for the editor itself).
 
 const VIEW_STYLE_OPTIONS: Array<{ key: ViewStyleKey; label: string; family: string }> = [
@@ -423,8 +422,8 @@ export interface SidebarOptionsPanelProps {
   setViewSpacing: (multiplier: number) => void
   viewLetterSpacingEm: number
   setViewLetterSpacingEm: (em: number) => void
-  editorStyle: EditorStyleKey
-  setEditorStyle: (key: EditorStyleKey) => void
+  editorStyle: MonoFontKey
+  setEditorStyle: (key: MonoFontKey) => void
   editorFontSize: number
   setEditorFontSize: (px: number) => void
   editorSpacing: number
@@ -970,7 +969,7 @@ export function SidebarOptionsPanel({
         heading="Editor Font"
         icon="fa-keyboard"
         pickerLabel="Editor typography"
-        options={EDITOR_STYLE_OPTIONS}
+        options={MONO_FONTS}
         activeKey={editorStyle}
         onSelect={(key) => {
           setEditorStyle(key)
@@ -2244,42 +2243,7 @@ export function SidebarOptionsPanel({
             label="Visualizer presets"
             plural="a visualizer preset"
           />
-          <FontControls
-            pickerLabel="Visualizer typography"
-            options={EDITOR_STYLE_OPTIONS}
-            activeKey={visualizerFont.style}
-            onSelect={(style) => setVisualizerFont({ ...visualizerFont, style })}
-            sliders={[
-              {
-                id: 'visualizer-font-size',
-                min: EDITOR_FONT_SIZE_MIN_PX,
-                max: EDITOR_FONT_SIZE_MAX_PX,
-                step: EDITOR_FONT_SIZE_STEP_PX,
-                value: visualizerFont.sizePx,
-                trackLabel: 'size',
-                ariaLabel: 'Visualizer font size',
-                defaultValue: fontSizeDefaults.visualizerFontSize,
-                onCommit: (value) => setVisualizerFont({
-                  ...visualizerFont,
-                  sizePx: clamp(roundEditorFontSizePx(value), EDITOR_FONT_SIZE_MIN_PX, EDITOR_FONT_SIZE_MAX_PX),
-                }),
-              },
-              {
-                id: 'visualizer-box-size',
-                min: EDITOR_LINE_HEIGHT_MULTIPLIER_MIN,
-                max: EDITOR_LINE_HEIGHT_MULTIPLIER_MAX,
-                step: EDITOR_LINE_HEIGHT_MULTIPLIER_STEP,
-                value: visualizerFont.boxSize,
-                trackLabel: 'box size',
-                ariaLabel: 'Visualizer box size',
-                defaultValue: DEFAULT_VISUALIZER_BOX_SIZE,
-                onCommit: (value) => setVisualizerFont({
-                  ...visualizerFont,
-                  boxSize: clamp(roundLineHeightMultiplier(value), EDITOR_LINE_HEIGHT_MULTIPLIER_MIN, EDITOR_LINE_HEIGHT_MULTIPLIER_MAX),
-                }),
-              },
-            ]}
-          />
+          <VisualizerFontControls font={visualizerFont} onChange={setVisualizerFont} defaultSizePx={fontSizeDefaults.visualizerFontSize} />
           <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={uiMode} />
       </AccordionSection>
       </>) : null}
@@ -2672,7 +2636,7 @@ export function SidebarOptionsPanel({
         heading="Beat Detection"
         iconClass="fa-drum"
       >
-          <BeatLoopCalibration loops={BEAT_LOOPS} startLoop={startBeatLoop} fontFamily={resolveEditorFontFamily(visualizerFont.style)} fontPerBox={1 / visualizerFont.boxSize} falls={{ edge: visualizer.edge, pane: visualizer.pane[uiMode] }} delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
+          <BeatLoopCalibration loops={BEAT_LOOPS} startLoop={startBeatLoop} fontFamily={monoFontFamily(visualizerFont.style)} fontPerBox={1 / visualizerFont.boxSize} falls={{ edge: visualizer.edge, pane: visualizer.pane[uiMode] }} delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0} onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))} />
           <BeatDetectionControls
             beatSettings={beatSettings}
             outputDevice={outputDevice}

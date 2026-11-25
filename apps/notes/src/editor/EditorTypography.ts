@@ -1,16 +1,4 @@
-export type EditorStyleKey =
-  | 'syne'
-  | 'redhat'
-  | 'vt323'
-  | 'victormono'
-  | 'bytesized'
-  | 'iosevkacharon'
-  | 'kodemono'
-  | 'xanhmono'
-  | 'lekton'
-  | 'novamono'
-  | 'sharetech'
-  | 'courierprime';
+import { monoFontFamily, type MonoFontKey } from '@thockdown/visualizer/visualizer/visualizerFonts';
 
 export type EditorRuntimeMetrics = {
   fontSizePx: number;
@@ -19,22 +7,7 @@ export type EditorRuntimeMetrics = {
   cellWidthPx: number;
 };
 
-export const DEFAULT_EDITOR_STYLE: EditorStyleKey = 'novamono';
-
-export const EDITOR_STYLE_OPTIONS: Array<{ key: EditorStyleKey; label: string; family: string }> = [
-  { key: 'syne', label: 'Syne', family: "'Syne Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'redhat', label: 'Red Hat', family: "'Red Hat Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'vt323', label: 'VT323', family: "'VT323', 'Menlo', 'Monaco', monospace" },
-  { key: 'victormono', label: 'Victor Mono', family: "'Victor Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'bytesized', label: 'Bytesized', family: "'Bytesized', 'Menlo', 'Monaco', monospace" },
-  { key: 'iosevkacharon', label: 'Iosevka Charon', family: "'Iosevka Charon Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'kodemono', label: 'Kode Mono', family: "'Kode Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'xanhmono', label: 'Xanh Mono', family: "'Xanh Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'lekton', label: 'Lekton', family: "'Lekton', 'Menlo', 'Monaco', monospace" },
-  { key: 'novamono', label: 'Nova Mono', family: "'Nova Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'sharetech', label: 'Share Tech', family: "'Share Tech Mono', 'Menlo', 'Monaco', monospace" },
-  { key: 'courierprime', label: 'Courier Prime', family: "'Courier Prime', 'Menlo', 'Monaco', monospace" },
-];
+export const DEFAULT_EDITOR_STYLE: MonoFontKey = 'novamono';
 
 export const EDITOR_FONT_SIZE_MIN_PX = 6;
 export const EDITOR_FONT_SIZE_MAX_PX = 24;
@@ -93,23 +66,9 @@ export function roundViewLetterSpacingEm(value: number): number {
 // that a single ratio (rather than a per-size table) is fine here.
 const FALLBACK_GLYPH_WIDTH_RATIO = 0.625;
 
-const FONT_FAMILY_BY_STYLE: Record<EditorStyleKey, string> = {
-  syne: "'Syne Mono', 'Menlo', 'Monaco', monospace",
-  redhat: "'Red Hat Mono', 'Menlo', 'Monaco', monospace",
-  vt323: "'VT323', 'Menlo', 'Monaco', monospace",
-  victormono: "'Victor Mono', 'Menlo', 'Monaco', monospace",
-  bytesized: "'Bytesized', 'Menlo', 'Monaco', monospace",
-  iosevkacharon: "'Iosevka Charon Mono', 'Menlo', 'Monaco', monospace",
-  kodemono: "'Kode Mono', 'Menlo', 'Monaco', monospace",
-  xanhmono: "'Xanh Mono', 'Menlo', 'Monaco', monospace",
-  lekton: "'Lekton', 'Menlo', 'Monaco', monospace",
-  novamono: "'Nova Mono', 'Menlo', 'Monaco', monospace",
-  sharetech: "'Share Tech Mono', 'Menlo', 'Monaco', monospace",
-  courierprime: "'Courier Prime', 'Menlo', 'Monaco', monospace",
-};
-
-export function resolveEditorFontFamily(style: EditorStyleKey): string {
-  return FONT_FAMILY_BY_STYLE[style] ?? FONT_FAMILY_BY_STYLE[DEFAULT_EDITOR_STYLE];
+/** The editor's font family for `style`, its default's for a key it does not know. */
+export function resolveEditorFontFamily(style: MonoFontKey): string {
+  return monoFontFamily(style, DEFAULT_EDITOR_STYLE);
 }
 
 let glyphMeasureContext: CanvasRenderingContext2D | null | undefined;
@@ -148,7 +107,7 @@ export function cellWidthForGlyph(glyphWidthPx: number, glyphSideGapPx: number):
 }
 
 export function resolveEditorRuntimeMetrics(
-  style: EditorStyleKey,
+  style: MonoFontKey,
   fontSizePxInput: number = DEFAULT_EDITOR_FONT_SIZE_PX,
   lineHeightMultiplierInput: number = DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER,
   glyphSideGapPx: number = DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX,

@@ -1,24 +1,12 @@
 /*
- * Every bundled font family, declared once. Imported by the DESKTOP entry
+ * Every bundled font family, declared once, except the monospace fonts the
+ * visualizer offers (and the editor with it), which its package carries
+ * (packages/visualizer/visualizer/visualizer.css). Imported by the DESKTOP entry
  * (src/main.tsx) only: the mobile app (apps/soundscapes/src/main.tsx) imports
  * index.css for the shared panel's look but renders in the system font, so
  * declaring these there made Vite copy every font file into the APK for
  * nothing. Licences: ./fonts/LICENSES.md.
  */
-
-@font-face {
-  font-family: 'Syne Mono';
-  src: url('./fonts/SyneMono-Regular.woff2') format('woff2');
-  font-weight: normal;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Red Hat Mono';
-  src: url('./fonts/RedHatMono-Regular.woff2') format('woff2');
-  font-weight: normal;
-  font-style: normal;
-}
 
 @font-face {
   font-family: 'Roboto Condensed';
@@ -100,69 +88,6 @@
 @font-face {
   font-family: 'Boogaloo';
   src: url('./fonts/Boogaloo-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Share Tech Mono';
-  src: url('./fonts/ShareTechMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'VT323';
-  src: url('./fonts/VT323-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Victor Mono';
-  src: url('./fonts/VictorMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Bytesized';
-  src: url('./fonts/Bytesized-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Iosevka Charon Mono';
-  src: url('./fonts/IosevkaCharonMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Xanh Mono';
-  src: url('./fonts/XanhMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Lekton';
-  src: url('./fonts/Lekton-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Nova Mono';
-  src: url('./fonts/NovaMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Courier Prime';
-  src: url('./fonts/CourierPrime-Regular.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
 }

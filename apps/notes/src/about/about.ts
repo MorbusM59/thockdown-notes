@@ -7,8 +7,8 @@ import { version } from '../../package.json'
  * built from that asks to be credited.
  *
  * Drawn by the shared `@thockdown/interaction/AboutPanel`; the list is this
- * app's own, because the Android app bundles none of the fonts or
- * dictionaries (its list is `apps/soundscapes/src/about.ts`).
+ * app's own, because the Android app bundles only some of the fonts and none
+ * of the dictionaries (its list is `apps/soundscapes/src/about.ts`).
  *
  * Every link is opened by the system's browser or mail client through
  * `thockdownExport.openExternalUrl` (`electron/networkIsolation.ts`); the

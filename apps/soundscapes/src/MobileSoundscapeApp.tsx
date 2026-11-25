@@ -38,8 +38,6 @@ import {
   LIGHT_PRESET_THEMES,
 } from '@thockdown/look/presets'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
-import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
-import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
@@ -93,7 +91,10 @@ import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
-import { loadBeatSettings, loadVisualizerFontSize, loadVisualizerState, PHONE_OUTPUT_DEVICE, phoneVisualizerFont, saveBeatSettings, saveVisualizerFontSize, saveVisualizerState, sanitizeVisualizerFontSize, VISUALIZER_FONT_SIZE } from './visualizerStore'
+import { loadBeatSettings, loadVisualizerFont, loadVisualizerState, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
+import { DEFAULT_VISUALIZER_FONT } from '@thockdown/visualizer/shared/visualizerFont'
+import { VisualizerFontControls } from '@thockdown/visualizer/visualizer/VisualizerFontControls'
+import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
 import { editVisualizerState, NEUTRAL_VISUALIZER_PRESET, shownVisualizer, VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets'
 import type { VisualizerSettings } from '@thockdown/look/visualizer'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
@@ -278,9 +279,8 @@ export function MobileSoundscapeApp() {
   }, [])
   const [beatSettings, setBeatSettings] = useState(loadBeatSettings)
   // The visualizer's text size, outside its presets as the desktop's font is (visualizerStore.ts).
-  const [visualizerFontSize, setVisualizerFontSize] = useState(loadVisualizerFontSize)
-  useEffect(() => saveVisualizerFontSize(visualizerFontSize), [visualizerFontSize])
-  const visualizerFont = useMemo(() => phoneVisualizerFont(visualizerFontSize), [visualizerFontSize])
+  const [visualizerFont, setVisualizerFont] = useState(loadVisualizerFont)
+  useEffect(() => saveVisualizerFont(visualizerFont), [visualizerFont])
   useEffect(() => saveBeatSettings(beatSettings), [beatSettings])
   useEffect(() => {
     if (!nativeMusic) return
@@ -733,27 +733,14 @@ export function MobileSoundscapeApp() {
                 </OptionsFixedSection>
                 <AccordionGroup>
                   <AccordionSection ariaLabel="Font" heading="Font" iconClass="fa-font">
-                    <OptionsSliderRows rows={[1]}>
-                      <CompactScrollbarSlider
-                        id="visualizer-font-size"
-                        min={VISUALIZER_FONT_SIZE.min}
-                        max={VISUALIZER_FONT_SIZE.max}
-                        step={VISUALIZER_FONT_SIZE.step}
-                        value={visualizerFontSize}
-                        trackLabel="size"
-                        ariaLabel="Visualizer text size"
-                        defaultValue={VISUALIZER_FONT_SIZE.default}
-                        formatValue={(value) => `${value}`}
-                        onCommit={(value) => setVisualizerFontSize(sanitizeVisualizerFontSize(value))}
-                      />
-                    </OptionsSliderRows>
+                    <VisualizerFontControls font={visualizerFont} onChange={setVisualizerFont} defaultSizePx={DEFAULT_VISUALIZER_FONT.sizePx} />
                   </AccordionSection>
                   <AccordionSection ariaLabel="Delay" heading="Delay" iconClass="fa-stopwatch">
                     {beatLoopPlayer ? <BeatLoopCalibration
                       loops={BEAT_LOOPS}
                       startLoop={beatLoopPlayer}
-                      fontFamily={visualizerFont.family}
-                      fontPerBox={visualizerFont.sizePx / visualizerFont.boxPx}
+                      fontFamily={monoFontFamily(visualizerFont.style)}
+                      fontPerBox={1 / visualizerFont.boxSize}
                       falls={{ edge: visualizer.edge, pane: visualizer.pane[look.mode] }}
                       delayMs={beatSettings.delayMsByDevice[PHONE_OUTPUT_DEVICE] ?? 0}
                       onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [PHONE_OUTPUT_DEVICE]: delayMs } }))}

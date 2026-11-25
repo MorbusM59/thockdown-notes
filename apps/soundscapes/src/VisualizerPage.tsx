@@ -18,7 +18,8 @@ import type { VisualizerColors, VisualizerSettings } from '@thockdown/look/visua
 import { setDisplayScale, setVisualizerOpen } from './display'
 import { startMusic } from './mobileMusicPlayer'
 import { measureVisualizerFrameRate } from './visualizerFrameRate'
-import type { PhoneVisualizerFont } from './visualizerStore'
+import { visualizerBoxPx, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
+import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
 import { nativeSoundscape } from './backgroundAudioHost'
 import { holdFrameWhileTyping } from './keyboardSteadyFrame'
 
@@ -28,7 +29,7 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
   mode: 'light' | 'dark'
   visualizer: VisualizerSettings
   beatSettings: BeatSettings
-  font: PhoneVisualizerFont
+  font: VisualizerFont
 }) {
   // The phone's visualizer and beat settings (visualizerStore.ts) and the
   // look preset's own colors, fed exactly as the desktop feeds them.
@@ -71,8 +72,8 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
     <div ref={pageRef} className="visualizer-page">
       <div className="editor-stage is-visualizer">
       <VisualizerScene
-        boxPx={font.boxPx}
-        fontFamily={font.family}
+        boxPx={visualizerBoxPx(font)}
+        fontFamily={monoFontFamily(font.style)}
         fontSizePx={font.sizePx}
         solidMaxPixelRatio={1.5}
         pixelScale={1}
