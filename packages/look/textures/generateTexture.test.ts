@@ -59,3 +59,29 @@ describe('quantizeValue', () => {
     expect(quantizeValue(128 / 255, 1)).toBe(1);
   });
 });
+
+describe('tiling', () => {
+  // The tile is repeated edge to edge, so the step from its last column to
+  // its first (and last row to first) must look like any step inside it.
+  it('has no seam at the tile edges for any granularity', () => {
+    const size = 128;
+    for (const granularity of [1, 2, 3, 7, 8, 9, 10, 13, 15, 17, 20]) {
+      for (const seed of [1, 513013, 648612]) {
+        const material = clampMaterialSettings({ seed, textureStrength: 1, granularity, vSteps: 20, color: { h: 0, s: 0, v: 1, a: 1 } });
+        const rgba = generateTextureRgba({ width: size, height: size, material });
+        const a = (x: number, y: number) => rgba[(((y % size) * size) + (x % size)) * 4 + 3];
+        let interior = 0;
+        let seamX = 0;
+        let seamY = 0;
+        for (let i = 0; i < size; i += 1) {
+          seamX += Math.abs(a(size - 1, i) - a(0, i));
+          seamY += Math.abs(a(i, size - 1) - a(i, 0));
+          for (let j = 0; j < size - 1; j += 1) interior += Math.abs(a(j, i) - a(j + 1, i)) + Math.abs(a(i, j) - a(i, j + 1));
+        }
+        const perStep = interior / (2 * size * (size - 1));
+        expect(seamX / size, `granularity ${granularity} seed ${seed} x`).toBeLessThanOrEqual((perStep * 2) + 2);
+        expect(seamY / size, `granularity ${granularity} seed ${seed} y`).toBeLessThanOrEqual((perStep * 2) + 2);
+      }
+    }
+  });
+});
