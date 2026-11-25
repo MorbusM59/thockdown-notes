@@ -79,6 +79,11 @@ export class MusicDecodeStream {
   /** Range requests made, and those not yet answered, for the trace (`describe`). */
   private fetches = 0
   private pending = 0
+  /** Bytes the ranges answered, for the trace: what reaching a moment cost (an mp3 is walked frame by frame from its start). */
+  private bytesRead = 0
+  /** When the current run began, and how long it took to its first chunk (NaN until then), for the trace. */
+  private runStartedMs = NaN
+  private firstChunkSec = NaN
   /** Why the file could not be opened, for the trace; null while it opens or once it has. */
   private openFailed: string | null = null
 
@@ -113,6 +118,8 @@ export class MusicDecodeStream {
     const generation = ++this.generation
     this.wanted = untilSec
     this.frontier = fromSec
+    this.runStartedMs = performance.now()
+    this.firstChunkSec = NaN
     this.release()
     void this.decode(generation, fromSec, onChunk, onEnded)
   }
@@ -142,7 +149,9 @@ export class MusicDecodeStream {
   private async readRange(start: number, end: number): Promise<Uint8Array> {
     const response = await this.fetchRange(start, end)
     if (response.status !== 206) throw new Error(`range ${start}-${end - 1} answered ${response.status}`)
-    return new Uint8Array(await response.arrayBuffer())
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    this.bytesRead += bytes.length
+    return bytes
   }
 
   private async fetchRange(start: number, end: number): Promise<Response> {
@@ -157,7 +166,7 @@ export class MusicDecodeStream {
 
   /** Where decoding has got to and what the file has been asked, for the beat trace. */
   describe(): string {
-    return `decoded=${this.frontier.toFixed(1)} wanted=${this.wanted.toFixed(1)} waiting=${this.wake !== null} fetches=${this.fetches} unanswered=${this.pending}${this.openFailed === null ? '' : ` open failed: ${this.openFailed}`}`
+    return `decoded=${this.frontier.toFixed(1)} wanted=${this.wanted.toFixed(1)} waiting=${this.wake !== null} fetches=${this.fetches} readMB=${(this.bytesRead / 1e6).toFixed(1)} firstChunk=${Number.isNaN(this.firstChunkSec) ? `waiting ${((performance.now() - this.runStartedMs) / 1000).toFixed(1)}s` : `${this.firstChunkSec.toFixed(2)}s`} unanswered=${this.pending}${this.openFailed === null ? '' : ` open failed: ${this.openFailed}`}`
   }
 
   /** Stops the current run. */
@@ -203,6 +212,7 @@ export class MusicDecodeStream {
         if (channels > 1) for (let i = 0; i < frames; i++) mono[i] /= channels
         const startTime = sample.timestamp - shiftSec
         sample.close()
+        if (Number.isNaN(this.firstChunkSec)) this.firstChunkSec = (performance.now() - this.runStartedMs) / 1000
         onChunk(mono, startTime)
         this.frontier = startTime + frames / sampleRate
         while (generation === this.generation && this.frontier >= this.wanted) {
