@@ -7,8 +7,6 @@
  * The tabs not built yet are placeholders that say so, so the shell's shape
  * can be judged on a device before their content is.
  */
-import { useEffect, useState } from 'react'
-import { readDisplay, setLandscape } from './display'
 import { MusicDiagnostics } from './MusicDiagnostics'
 import { AboutPanel } from '@thockdown/interaction/AboutPanel'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
@@ -34,18 +32,6 @@ export function MobileTabSelector({ tab, onChange }: { tab: MobileTab; onChange:
       ))}
     </div>
   )
-}
-
-/** The visualizer's orientation (display.ts), applied only while it is open: read once, and set through here. */
-export function useVisualizerLandscape(): [boolean, (landscape: boolean) => void] {
-  const [landscape, setLandscapeState] = useState(false)
-  useEffect(() => {
-    void readDisplay().then((display) => setLandscapeState(display.landscape))
-  }, [])
-  return [landscape, (next) => {
-    setLandscapeState(next)
-    void setLandscape(next)
-  }]
 }
 
 /** The Dashboard's foot: Debugging and About, the desktop's Options > Advanced sections, folded. */
