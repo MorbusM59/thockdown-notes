@@ -28,8 +28,8 @@ export function DashboardSets() {
   const active = nowPlaying.pool?.active ?? []
   if (nowPlaying.musicSets.length === 0) return null
   return (
-    <OptionsFixedSection heading="Music" iconClass="fa-compact-disc">
-      <div className="options-loadout-grid" role="group" aria-label="Music sets">
+    <OptionsFixedSection heading="Song Sets" iconClass="fa-compact-disc">
+      <div className="options-loadout-grid" role="group" aria-label="Song Sets">
         {nowPlaying.musicSets.map((set) => {
           const isActive = active.includes(set.slot)
           return (
@@ -270,8 +270,6 @@ function DashboardFilter() {
         aria-label="Filter songs"
         spellCheck={false}
         autoComplete="off"
-        // Switching an empty filter on is asking to type; one with a query is taken as it stands.
-        autoFocus={filter.query === ''}
         onChange={(event) => setPoolFilterQuery(event.currentTarget.value)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => {

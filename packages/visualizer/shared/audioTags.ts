@@ -52,7 +52,11 @@ class TagFile {
 async function readAny(file: TagFile): Promise<AudioTags> {
   const head = await file.read(0, 12)
   const magic4 = head.latin1(0, 4)
-  if (head.latin1(0, 3) === 'ID3') return merge(await readId3v2(file, 0), await readId3v1(file))
+  if (head.latin1(0, 3) === 'ID3') {
+    // The ID3v1 tag at the file's end only fills what the v2 tag lacks: read only then, a read saved for nearly every song.
+    const v2 = await readId3v2(file, 0)
+    return v2.title && v2.artist && v2.album ? v2 : merge(v2, await readId3v1(file))
+  }
   if (magic4 === 'fLaC') return readFlac(file)
   if (magic4 === 'OggS') return readOgg(file)
   if (magic4 === 'RIFF' && head.latin1(8, 12) === 'WAVE') return readRiff(file)
@@ -108,6 +112,8 @@ async function readId3v2(file: TagFile, start: number): Promise<AudioTags> {
     // v2.4 frames may be compressed, encrypted or unsynchronised per frame; such text is skipped.
     const unreadable = version === 4 && (frame.at(9) & 0x0f) !== 0
     if (field && !tags[field] && !unreadable && size > 1) tags[field] = decodeId3Text(await file.read(at + headerLength, size))
+    // All three found: the frames after them (cover art above all) are not read, nor jumped past.
+    if (tags.title && tags.artist && tags.album) break
     at += headerLength + size
   }
   return tags

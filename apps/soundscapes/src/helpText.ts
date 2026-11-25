@@ -9,7 +9,7 @@
 const HELP: Record<string, string[]> = {
   Dashboard: [
     'Tabs: The Dashboard picks what plays. The other tabs create and edit the choices.',
-    'Music: Tap a song set to add it to the songs that play, or to take it out. Hold one to make it the only set. Neither starts playback.',
+    'Song Sets: Tap a song set to add it to the songs that play, or to take it out. Hold one to make it the only set. Neither starts playback.',
     'Soundscape: Tap one to choose it. While a soundscape plays, it fades into the one you chose; otherwise the play button starts it.',
     'Timer: Tap a length to limit playback to it. Tap it again for continuous playback. Hold a length and drag up or down to change it.',
     'Soundstage: Tap one to choose how the music sounds. Edit them on the Soundstages tab.',
