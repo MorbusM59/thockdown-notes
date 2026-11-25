@@ -722,7 +722,6 @@ export function MobileSoundscapeApp() {
                     schedule={schedule}
                     presets={presets}
                     musicSets={musicSets}
-                    currentPresetId={preferences.activePresetId}
                     onChange={setSchedule}
                   />}
                 </OptionsFixedSection>

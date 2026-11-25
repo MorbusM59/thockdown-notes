@@ -14,8 +14,7 @@
  * - The SONG SET and SOUNDSCAPE buttons each open their own picker below
  *   the entry. A soundscape held and slid onto the soundscape button from
  *   the presets becomes the entry's.
- * - The PLAY chip only shows what starts: the music icon, the soundscape
- *   icon, or play for both (or nothing yet).
+ * - The PLAY and STOP chips label the start and the stop time.
  * - A TIME field: a tap puts its picker in place of the top row, 24 hour
  *   chips or 12 minute chips (every MINUTE_STEP); a tap on one sets it.
  * - An open picker, of either kind, closes on a tap on its value or
@@ -26,8 +25,8 @@
  *   brings the saved days back; a day changed meanwhile saves what is shown
  *   with that change (schedule.ts).
  * - The BIN: hold to delete the entry.
- * - The "+": a tap adds an entry for the soundscape that plays; a soundscape
- *   slid onto it from the presets adds one for that soundscape.
+ * - The "+": a tap adds an empty entry; a soundscape slid onto it from the
+ *   presets adds one for that soundscape.
  */
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
@@ -57,8 +56,6 @@ interface ScheduleRowsProps {
   presets: readonly SoundscapePreset[]
   /** The song sets an entry may play. */
   musicSets: readonly MusicSet[]
-  /** The soundscape that plays: what the "+" adds. */
-  currentPresetId: string
   onChange: (update: (schedule: Schedule) => Schedule) => void
 }
 
@@ -124,13 +121,6 @@ function useCloseOnPressOutside(isOpen: boolean, inside: () => Array<HTMLElement
 function SetMark({ set }: { set: MusicSet }) {
   const mark = musicSetMarkOf(set)
   return 'iconClass' in mark ? <span className={mark.iconClass} aria-hidden="true" /> : <span aria-hidden="true">{mark.letters}</span>
-}
-
-/** What the start chip shows: the music icon, the soundscape icon, or play for both (or nothing yet). */
-function startIcon(entry: ScheduleEntry): string {
-  if (entry.setId !== null && entry.presetId === null) return 'fa-music'
-  if (entry.presetId !== null && entry.setId === null) return 'fa-podcast'
-  return 'fa-play'
 }
 
 /** A picker grid: fa-ban (none) first, then each choice; the assigned one lit. */
@@ -201,7 +191,7 @@ function HoldChip({ className, label, icon, tap, held }: { className: string; la
   )
 }
 
-export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, onChange }: ScheduleRowsProps) {
+export function ScheduleRows({ schedule, presets, musicSets, onChange }: ScheduleRowsProps) {
   const [open, setOpen] = useState<Open | null>(null)
   const pickerRef = useRef<HTMLDivElement | null>(null)
   const openerRef = useRef<HTMLButtonElement | null>(null)
@@ -317,7 +307,7 @@ export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, on
                 onDragLeave: accepts.onDragLeave,
                 onDrop: accepts.onDrop,
               })}
-              <button type="button" tabIndex={-1} className={`${chip} mobile-schedule-label`} aria-hidden="true"><span className={`fa-solid ${startIcon(entry)}`} /></button>
+              <button type="button" tabIndex={-1} className={`${chip} mobile-schedule-label`} aria-hidden="true"><span className="fa-solid fa-play" /></button>
               {time('start', 'hour')}
               {time('start', 'minute')}
               <button
@@ -398,7 +388,7 @@ export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, on
           onDragOver={plus.onDragOver}
           onDragLeave={plus.onDragLeave}
           onDrop={plus.onDrop}
-          onClick={() => onChange((current) => ({ ...current, entries: [...current.entries, newEntry(currentPresetId)] }))}
+          onClick={() => onChange((current) => ({ ...current, entries: [...current.entries, newEntry(null)] }))}
         >
           <span className="fa-solid fa-plus" aria-hidden="true" />
         </button>
