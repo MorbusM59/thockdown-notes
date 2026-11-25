@@ -45,7 +45,7 @@
  *   base64);
  * - musicSpectrum(bands): compute the visualizer's spectrum in `bands` log
  *   bands (0 stops it). Turning it on re-renders from a splice margin past
- *   the playhead with the soundstage unchanged, which reproduces the audio
+ *   the playhead with nothing changed (renderAhead.ts's `rerender`), which reproduces the audio
  *   already queued sample for sample (renderAhead.ts's rewind), so the
  *   frames start there rather than a render lead later.
  */
@@ -68,8 +68,6 @@ let rotation: MusicRotation = [];
 const tasks: Array<() => void> = [];
 const rendered: RenderedChunk[] = [];
 let spectrum: SpectrumFrames | null = null;
-/** The soundstage last configured, re-sent to re-render when the spectrum is turned on. */
-let stage: MusicSettings['stage'] | null = null;
 
 const scope = globalThis as unknown as Record<string, unknown>;
 
@@ -80,7 +78,6 @@ scope.musicInit = (json: string): string => {
   voice = new MusicVoice(sampleRate, bands);
   resampler = null;
   spectrum = null;
-  stage = null;
   tasks.length = 0;
   rendered.length = 0;
   engine = new RenderAheadEngine<MusicSettings>(voice, sampleRate, spliceMarginSec, (chunk) => rendered.push(chunk), (work) => tasks.push(work));
@@ -91,7 +88,6 @@ scope.musicConfigure = (json: string): string => {
   const settings = JSON.parse(json) as MusicSettings;
   // A cut drops the stream from the splice on: what the old song's resampler still holds goes with it.
   if (settings.cut) resampler = null;
-  stage = settings.stage;
   engine?.configure(settings);
   return 'ok';
 };
@@ -153,7 +149,7 @@ scope.musicStep = (playedFrame: number, maxChunks: number): string => {
 
 scope.musicSpectrum = (bands: number): string => {
   spectrum = bands > 0 ? new SpectrumFrames(outputRate, logBandEdges(bands)) : null;
-  if (spectrum && engine && stage) engine.configure({ stage });
+  if (spectrum) engine?.rerender();
   return 'ok';
 };
 

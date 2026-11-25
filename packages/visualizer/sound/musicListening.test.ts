@@ -15,7 +15,7 @@ function fakeListening(): MusicListening & { set(playing: boolean): void } {
     currentDurationSec: 0,
     setCurrentTimeFraction: () => {},
     outputLatencySec: () => 0,
-    createSpectrum: () => ({ start: () => {}, stop: () => {}, sample: () => {} }),
+    createSpectrum: () => ({ start: () => {}, stop: () => {}, hearing: false, sample: () => {} }),
     set(next) {
       playing = next
       for (const listener of listeners) listener(next)

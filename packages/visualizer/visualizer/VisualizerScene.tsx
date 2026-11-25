@@ -431,9 +431,10 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
       moveGap()
       const still = reducedMotion.matches
       setSwayBreath(breathScales(breath.step(tap ? bassPower(levels, bassBands) : 0, dt)).amplitude)
-      // Nothing left to move: the music is stopped, the bars have fallen and
-      // the glaze holds still. Woken again by the music or the motion setting.
-      if (still && !musicListening().isPlaying && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
+      // Nothing left to move: nothing is heard, the bars have fallen and the
+      // glaze holds still. Woken again by the music, the song or the motion
+      // setting; a soundscape starting meanwhile is drawn from the next wake.
+      if (still && !musicListening().isPlaying && !tap?.hearing && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
         lastMs = NaN
         return
       }

@@ -14,11 +14,13 @@
  * a song started after that never ran.
  */
 
-/** The spectrum of the music as it is heard, in log bands (`spectrumBands.ts`). */
+/** The spectrum of what is heard, in log bands (`spectrumBands.ts`): the music, and the soundscape with it while `visualizer/spectrumMix.ts` says so. */
 export interface SpectrumSource {
-  /** Starts listening to the music. Idempotent. */
+  /** Starts listening. Idempotent. */
   start(): void
   stop(): void
+  /** Whether anything it reads is heard now: the music, or the soundscape it takes too. */
+  readonly hearing: boolean
   /** Writes into `out` the band levels (dB) the listener hears at `nowSec` (the frame's clock, seconds); silence (-Infinity) while nothing plays. */
   sample(nowSec: number, out: Float32Array): void
 }
@@ -53,7 +55,7 @@ const silence: MusicListening = {
   currentDurationSec: 0,
   setCurrentTimeFraction: () => {},
   outputLatencySec: () => 0,
-  createSpectrum: () => ({ start: () => {}, stop: () => {}, sample: (_now, out) => { out.fill(-Infinity) } }),
+  createSpectrum: () => ({ start: () => {}, stop: () => {}, hearing: false, sample: (_now, out) => { out.fill(-Infinity) } }),
 }
 
 let installed: MusicListening = silence

@@ -87,6 +87,8 @@ final class SoundscapeSession {
          */
         void onCountdown(long endsAtMs, long remainingMs);
         void onFailure(String message);
+        /** The visualizer's spectrum of the soundscape (SoundscapeRenderer.SpectrumSink), while it asks for one (`setSpectrum`). */
+        void onSpectrum(String batchesJson, long playheadFrame);
     }
 
     static final class State {
@@ -227,6 +229,25 @@ final class SoundscapeSession {
 
     synchronized void clearListener(Listener listener) {
         if (this.listener == listener) this.listener = null;
+        // With no page there is nothing to draw a spectrum: the renderer stops computing one.
+        if (this.listener == null) setSpectrum(0);
+    }
+
+    /** The visualizer's spectrum bands (0 for none), kept for a renderer opened later. */
+    private int spectrumBands = 0;
+
+    /** The visualizer's spectrum of the soundscape in `bands` log bands, or none (0). */
+    synchronized void setSpectrum(int bands) {
+        spectrumBands = bands;
+        if (renderer != null) renderer.setSpectrum(bands, this::spectrum);
+    }
+
+    private void spectrum(String batchesJson, long playheadFrame) {
+        Listener current;
+        synchronized (this) {
+            current = listener;
+        }
+        if (current != null) current.onSpectrum(batchesJson, playheadFrame);
     }
 
     // --- State, read by the service and the plugin ---
@@ -755,6 +776,7 @@ final class SoundscapeSession {
         // being closed can fail on its way out and must not end its successor.
         final SoundscapeRenderer[] self = new SoundscapeRenderer[1];
         renderer = self[0] = new SoundscapeRenderer(context, output, message -> failed(self[0], message));
+        if (spectrumBands > 0) renderer.setSpectrum(spectrumBands, this::spectrum);
         if (entry != null) renderer.configure(entry.configuration);
     }
 

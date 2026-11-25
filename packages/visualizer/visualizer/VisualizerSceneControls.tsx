@@ -414,6 +414,18 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode, fol
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, spectrumStripRows: Math.round(value) } }))}
               />
             </OptionsSliderRows>
+          <div className="typography-grid" role="group" aria-label="Spectrum source">
+            <button
+              type="button"
+              className={`btn-icon typography-font-btn${visualizer.spectrumSoundscape ? ' is-active' : ''}`}
+              data-tooltip="Show the soundscape too"
+              aria-label="Spectrum: show the soundscape too"
+              aria-pressed={visualizer.spectrumSoundscape}
+              onClick={() => setVisualizer((prev) => ({ ...prev, spectrumSoundscape: !prev.spectrumSoundscape }))}
+            >
+              <i className="fa-solid fa-podcast" aria-hidden="true" />
+            </button>
+          </div>
           </div>
           </OptionsSubsection>
     </>

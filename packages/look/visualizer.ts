@@ -140,6 +140,13 @@ export interface VisualizerSettings {
   pane: VisualizerPaneModes
   /** The rest of the visualizer mode's own look (F5). */
   immersive: VisualizerImmersive
+  /**
+   * Whether the live spectrum and band level read the soundscape too, at
+   * its real volume beside the music's (`visualizer/spectrumMix.ts`), or the
+   * music alone. App-wide and outside the visualizer presets. The beat
+   * analysis reads the music either way.
+   */
+  spectrumSoundscape: boolean
 }
 
 /**
@@ -394,6 +401,7 @@ const DEFAULT_SAVED_EDGE: VisualizerEdgeChannel = { ...DEFAULT_VISUALIZER_EDGE, 
 const DEFAULT_SAVED_PANE: VisualizerChannel = { ...DEFAULT_VISUALIZER_PANE, effect: 0.7, shape: -0.2, fallSec: 0.3 }
 
 export const DEFAULT_VISUALIZER: VisualizerSettings = {
+  spectrumSoundscape: true,
   trackers: DEFAULT_VISUALIZER_TRACKERS,
   responseDb: 5,
   grid: {
@@ -685,6 +693,7 @@ export function sanitizeVisualizer(input: unknown): VisualizerSettings {
     pane,
     // ...and its wave followed the snare, whatever the default wave mix is now.
     immersive: sanitizeImmersive(source.immersive, d.immersive, legacyPulseMix, isLegacy ? soleMix('pierce') : null),
+    spectrumSoundscape: typeof source.spectrumSoundscape === 'boolean' ? source.spectrumSoundscape : d.spectrumSoundscape,
   }
 }
 
