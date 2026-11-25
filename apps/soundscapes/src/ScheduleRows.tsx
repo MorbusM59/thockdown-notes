@@ -1,6 +1,7 @@
 /**
- * The weekly schedule (schedule.ts) as entries, one per entry, highest
- * priority first, each under a divider with its name, and a "+" below them.
+ * The weekly schedule (schedule.ts) as entries, highest priority first, each
+ * a subsection of the tab headed by its name, and a "New schedule"
+ * subsection holding the "+" below them.
  *
  * An entry is two rows, the width of six of the panel's buttons, on one
  * grid of 72 columns (a button 12, a chip 6, a time field 9, a day 9), so
@@ -22,15 +23,15 @@
  * - The CALENDAR chip: a tap plays every day, a hold no day, and a tap
  *   brings the saved days back; a day changed meanwhile saves what is shown
  *   with that change (schedule.ts).
- * - The DIVIDER folds the entry, and moves it: held and slid onto another
- *   entry, the whole entry is dragged there (useSelectorReorder; the entry
- *   is the source and each entry a target, but only the divider arms it).
+ * - The HEADING moves the entry: held and slid onto another entry, the whole
+ *   entry is dragged there (useSelectorReorder; the entry is the source and
+ *   each entry a target, but only the heading arms it).
  * - The "+": a tap adds an empty entry; a soundscape slid onto it from the
  *   presets adds one for that soundscape.
  */
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
-import { AccordionDivider } from '@thockdown/interaction/AccordionSection'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { selectorDragType, useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { type SoundscapePreset } from '@thockdown/soundscape/soundscape'
@@ -318,10 +319,10 @@ export function ScheduleRows({ schedule, presets, musicSets, onChange, editingId
         className="mobile-schedule-slot"
         {...move.props}
         onPointerDown={(event) => {
-          if ((event.target as Element).closest('.options-divider-label')) move.onPointerDown(event)
+          if ((event.target as Element).closest('.sidebar-options-section-heading')) move.onPointerDown(event)
         }}
       >
-      <AccordionDivider label={entry.name} marker={null} defaultOpen ariaLabel={entry.name}>
+      <OptionsFixedSection heading={entry.name} iconClass="fa-clock">
         <div className="mobile-schedule-entry">
           <div className={`mobile-schedule-grid${entry.active ? '' : ' is-off'}`}>
             <button
@@ -368,7 +369,7 @@ export function ScheduleRows({ schedule, presets, musicSets, onChange, editingId
           </div>
           {picker ? <div ref={pickerRef} className="mobile-schedule-picker">{picker}</div> : null}
         </div>
-      </AccordionDivider>
+      </OptionsFixedSection>
       </div>
     )
   }
@@ -377,7 +378,8 @@ export function ScheduleRows({ schedule, presets, musicSets, onChange, editingId
   return (
     <div className="mobile-schedule" role="group" aria-label="Weekly schedule">
       {schedule.entries.map(row)}
-      <div className="mobile-schedule-grid">
+      <OptionsFixedSection heading="New schedule" iconClass="fa-plus">
+      <div className="mobile-schedule-entry"><div className="mobile-schedule-grid">
         <button
           type="button"
           className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-button${drop.over === '+' ? ' is-drop-target' : ''}`}
@@ -390,7 +392,8 @@ export function ScheduleRows({ schedule, presets, musicSets, onChange, editingId
         >
           <span className="fa-solid fa-plus" aria-hidden="true" />
         </button>
-      </div>
+      </div></div>
+      </OptionsFixedSection>
     </div>
   )
 }

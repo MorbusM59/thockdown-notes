@@ -69,13 +69,12 @@ body {
   --sidebar-options-content-width: 100%;
 }
 
-/* The desktop centres a column one gap and a pixel wider than its six
-   buttons inside the panel's large padding (tokens.css's
-   --sidebar-options-content-width), so its grid sits a large spacing, a
-   regular one and a pixel in from the panel's edges. The phone's column is
-   the whole width, so that inset is the padding itself. */
+/* As on the desktop, the panel's content sits a large spacing in from the
+   panel on every side, and its subsections stand a regular spacing apart
+   (the shared rule's gap). The phone's column is the whole width rather than
+   the desktop's six-button column, so the subsections take what is left. */
 .mobile-app-shell .sidebar-options-content {
-  padding-inline: calc(var(--spacing-large) + var(--spacing-regular) + 1px);
+  padding: var(--spacing-large);
 }
 
 /* A shared panel that brings its own content element (the Songs tab's
@@ -200,22 +199,23 @@ body {
 /* The schedule (ScheduleRows.tsx): its entries, one under another, each six
    buttons wide; placement is each grid's own, row by row, so only the spans
    are written. */
+/* The entries are subsections of the tab like any other, spaced by the
+   tab's own rule: the wrapper only groups them for assistive technology. */
 .mobile-schedule {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  container-type: inline-size;
+  display: contents;
 }
 
 /* An entry's two rows on one grid of 72 columns (ScheduleRows.tsx): a
    button spans 12, a chip 6, a time field 9 and a day 9, so both rows share
    the gaps. Every row is one chip tall, a chip being a twelfth of the width
    less its eleven gaps. */
+/* Twelve chip columns whose gaps are the panel's button gap, so two chips
+   and the gap between them are exactly one of the six-wide grid's buttons. */
 .mobile-schedule-grid {
   display: grid;
   grid-template-columns: repeat(72, minmax(0, 1fr));
-  grid-auto-rows: calc((100cqw - 11 * 3px) / 12);
-  gap: 3px;
+  grid-auto-rows: calc((100cqw - 11 * var(--toolbar-options-gap)) / 12);
+  gap: var(--toolbar-options-gap);
 }
 
 .mobile-app-shell .mobile-schedule-grid > * {
@@ -260,6 +260,7 @@ body {
 /* The entry's picker, below its two rows: the panel's six-wide button grid
    for every kind; a time's choices are its digits, at a time field's size. */
 .mobile-app-shell .mobile-schedule-pick {
+  aspect-ratio: 2;
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
@@ -267,7 +268,19 @@ body {
 .mobile-schedule-entry {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--spacing-regular);
+  container-type: inline-size;
+}
+
+/* The open picker: a box drawn as a song's cell in a song set, its choices
+   one regular spacing in from its border all round. */
+.mobile-schedule-picker {
+  box-sizing: border-box;
+  padding: var(--spacing-regular);
+  border: 1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-small);
+  background: var(--btn-bg-default);
+  container-type: inline-size;
 }
 
 .mobile-schedule-grid.is-off > :not(.mobile-schedule-on, .mobile-schedule-edit) {

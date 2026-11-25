@@ -722,16 +722,18 @@ export function MobileSoundscapeApp() {
                   help={help}
                 />) : null}
                 {tab === 'schedules' ? (<>
-                <OptionsFixedSection heading="Schedule" iconClass="fa-clock">
-                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleRows
-                    schedule={schedule}
-                    presets={presets}
-                    musicSets={musicSets}
-                    onChange={setSchedule}
-                    editingId={editingEntryId}
-                    onEdit={setEditingEntryId}
-                  />}
-                </OptionsFixedSection>
+                {helpMode ? (
+                  <OptionsFixedSection heading="Schedule" iconClass="fa-clock">
+                    <SubsectionHelp paragraphs={helpFor('Schedule')!} />
+                  </OptionsFixedSection>
+                ) : <ScheduleRows
+                  schedule={schedule}
+                  presets={presets}
+                  musicSets={musicSets}
+                  onChange={setSchedule}
+                  editingId={editingEntryId}
+                  onEdit={setEditingEntryId}
+                />}
                 </>) : null}
                 {tab === 'visualizer' && !helpMode ? <>
                 <OptionsFixedSection heading="Presets" iconClass="fa-star">
