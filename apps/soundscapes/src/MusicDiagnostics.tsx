@@ -10,7 +10,7 @@
 import { useEffect, useState } from 'react'
 import { useAccordionSectionOpen } from '@thockdown/interaction/accordionSectionOpen'
 import { nativeMusic } from './nativeMusic'
-import { lastVisualizerFrameRate } from './visualizerFrameRate'
+import { lastVisualizerFrameRate, readVisualizerFrameRate } from './visualizerFrameRate'
 
 const BEAT_TRACE_FLAG = 'thockdown:debug-beat'
 /** The trace lines shown: the newest, enough to cover a few seconds. */
@@ -32,6 +32,7 @@ export function MusicDiagnostics() {
   const [text, setText] = useState('')
   const [tracing, setTracing] = useState(beatTraceOn)
   const [trace, setTrace] = useState('')
+  useEffect(() => (open ? readVisualizerFrameRate() : undefined), [open])
   useEffect(() => {
     if (!open) return undefined
     const readTrace = () => setTrace(beatTraceTail())
