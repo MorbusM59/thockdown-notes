@@ -13,7 +13,6 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.ArrayList;
 import java.util.List;
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
@@ -104,7 +103,7 @@ public class MusicPlugin extends Plugin {
         call.resolve();
     }
 
-    /** MusicFolders.listFolders on a worker thread: `{ uri, folders: [ids] }` to `{ folders, paths }`. */
+    /** MusicFolders.listFolders, off the plugin's thread: `{ uri, folders: [ids] }` to `{ folders, paths }`. */
     @PluginMethod
     public void listFolders(PluginCall call) {
         Uri tree = Uri.parse(call.getString("uri", ""));
@@ -120,17 +119,15 @@ public class MusicPlugin extends Plugin {
         }, "MusicFolderList").start();
     }
 
-    /** MusicFolders.describe for each of `{ paths }`, on a worker thread: `{ added }`. */
+    /** MusicFolders.describeAll for `{ paths }`, off the plugin's thread: `{ added }`. */
     @PluginMethod
     public void describeSongs(PluginCall call) {
-        JSArray paths = call.getArray("paths", new JSArray());
+        JSArray list = call.getArray("paths", new JSArray());
+        List<Uri> uris = new ArrayList<>();
+        for (int index = 0; index < list.length(); index += 1) uris.add(Uri.parse(list.optString(index)));
         new Thread(() -> {
             try {
-                JSONArray added = new JSONArray();
-                for (int index = 0; index < paths.length(); index += 1) {
-                    added.put(MusicFolders.describe(getContext(), Uri.parse(paths.optString(index))));
-                }
-                call.resolve(JSObject.fromJSONObject(new JSONObject().put("added", added)));
+                call.resolve(JSObject.fromJSONObject(new JSONObject().put("added", MusicFolders.describeAll(getContext(), uris))));
             } catch (Exception error) {
                 call.reject("Could not read the songs: " + error);
             }

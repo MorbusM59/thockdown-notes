@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { MusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
-import { scanFolder } from './folderScan'
+import { LIST_BATCH, scanFolder } from './folderScan'
 
 /** A tree of `breadth`^`depth` leaf folders, each holding `songs` songs, served as the native side would. */
 function fakeTree(breadth: number, depth: number, songs: number) {
@@ -25,38 +25,43 @@ function fakeTree(breadth: number, depth: number, songs: number) {
 }
 
 describe('scanFolder', () => {
-  it('finds every song of a large tree, and the bar moves while the tree is still being walked', async () => {
-    const { plugin, calls } = fakeTree(6, 3, 10) // 216 album folders, 2160 songs
+  it('walks a large tree in small steps, the scanning bar moving the whole time, then the indexing bar', async () => {
+    const { plugin, calls } = fakeTree(8, 3, 7) // 585 folders, 3584 songs, about the size of a real library
     const progress: MusicIndexing[] = []
     const scan = await scanFolder(plugin, 'tree', new Set(), (step) => progress.push(step))
-    expect(scan.paths).toHaveLength(2160)
-    expect(scan.added).toHaveLength(2160)
-    expect(calls.every((folders) => folders.length <= 8)).toBe(true)
-    // Before the first tag is read, the total has already been published many times, rising.
-    const listing = progress.filter((step) => step.done === 0)
-    expect(new Set(listing.map((step) => step.total)).size).toBeGreaterThan(20)
+    expect(scan.paths).toHaveLength(3584)
+    expect(scan.added).toHaveLength(3584)
+    expect(calls.every((folders) => folders.length <= LIST_BATCH)).toBe(true)
+    const scanning = progress.filter((step) => step.indexing === null)
+    expect(scanning.length).toBeGreaterThan(50)
+    expect(scanning.at(-1)!.scanning).toEqual({ done: 585, total: 585 })
+    // Scanning ends before indexing starts, and neither bar ever goes back.
+    const firstIndexing = progress.findIndex((step) => step.indexing !== null)
+    expect(progress.slice(firstIndexing).every((step) => step.indexing !== null)).toBe(true)
     for (let i = 1; i < progress.length; i += 1) {
-      expect(progress[i].total).toBeGreaterThanOrEqual(progress[i - 1].total)
-      expect(progress[i].done).toBeGreaterThanOrEqual(progress[i - 1].done)
-      expect(progress[i].done).toBeLessThanOrEqual(progress[i].total)
+      const [before, after] = [progress[i - 1], progress[i]]
+      expect(after.scanning.done).toBeGreaterThanOrEqual(before.scanning.done)
+      expect(after.scanning.done).toBeLessThanOrEqual(after.scanning.total)
+      if (before.indexing && after.indexing) expect(after.indexing.done).toBeGreaterThanOrEqual(before.indexing.done)
     }
-    expect(progress.at(-1)).toEqual({ done: 2160, total: 2160 })
+    expect(progress.at(-1)!.indexing).toEqual({ done: 3584, total: 3584 })
   })
 
-  it('counts songs already in the library as done, and reads only the rest', async () => {
+  it('counts songs already in the library as indexed, and reads only the rest', async () => {
     const { plugin } = fakeTree(2, 1, 5)
     const known = new Set(['0/song0.mp3', '0/song1.mp3', '1/song4.mp3'])
     const progress: MusicIndexing[] = []
     const scan = await scanFolder(plugin, 'tree', known, (step) => progress.push(step))
     expect(scan.paths).toHaveLength(10)
     expect(scan.added.map((song) => song.filePath).sort()).toEqual(scan.paths.filter((path) => !known.has(path)).sort())
-    expect(progress.at(-1)).toEqual({ done: 10, total: 10 })
+    expect(progress.find((step) => step.indexing !== null)!.indexing).toEqual({ done: 3, total: 10 })
+    expect(progress.at(-1)!.indexing).toEqual({ done: 10, total: 10 })
   })
 
-  it('a folder whose songs are all known ends full rather than at 0 / 0', async () => {
+  it('a folder whose songs are all known ends with both bars full', async () => {
     const { plugin } = fakeTree(1, 1, 3)
     const progress: MusicIndexing[] = []
     await scanFolder(plugin, 'tree', new Set(['0/song0.mp3', '0/song1.mp3', '0/song2.mp3']), (step) => progress.push(step))
-    expect(progress.at(-1)).toEqual({ done: 3, total: 3 })
+    expect(progress.at(-1)).toEqual({ scanning: { done: 2, total: 2 }, indexing: { done: 3, total: 3 } })
   })
 })

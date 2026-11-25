@@ -13,7 +13,7 @@ import { SelectorRows } from '@thockdown/interaction/SelectorRows'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { closeIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { readMusicIndexing, subscribeMusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
+import { readMusicIndexing, subscribeMusicIndexing, type MusicProgress } from '@thockdown/visualizer/sound/musicIndexing'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 import { musicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
@@ -261,10 +261,32 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet;
 
 /**
  * The Music Library's dock, below the sidebar where the colour picker docks:
- * while songs are being read in, a bar of how many (MusicIndexing); the two
+ * while a folder is added, a bar for each of its two phases, one under the
+ * other, scanning and then indexing (MusicIndexing); the two
  * groupings of the open set's songs; and last, as every dock ends, the open
  * set's row (MusicSetRow). `trailing` ends that row (the phone's help).
  */
+/** One phase of adding a folder; a phase not yet begun is an empty bar, so the second bar is there from the start and the layout does not jump. */
+function IndexingBar({ id, name, unit, progress }: { id: string; name: string; unit: string; progress: MusicProgress | null }) {
+  const done = progress?.done ?? 0
+  const total = progress?.total ?? 0
+  return (
+    <div className="options-slider-row options-music-indexing" role="group" aria-label={name}>
+      <CompactScrollbarSlider
+        id={id}
+        value={done}
+        min={0}
+        max={Math.max(1, total)}
+        step={1}
+        trackLabel={progress ? `${name} ${done} / ${total}` : name}
+        ariaLabel={unit}
+        readOnly
+        onCommit={() => {}}
+      />
+    </div>
+  )
+}
+
 export function MusicLibraryDock({ grouping, onGroupingChange, trailing }: {
   grouping: MusicSetListGrouping
   onGroupingChange: (grouping: MusicSetListGrouping) => void
@@ -274,21 +296,10 @@ export function MusicLibraryDock({ grouping, onGroupingChange, trailing }: {
   const indexing = useSyncExternalStore(subscribeMusicIndexing, readMusicIndexing)
   return (
     <div className="options-curve-rows options-music-set-list-dock">
-      {indexing ? (
-        <div className="options-slider-row options-music-indexing" role="group" aria-label="Reading songs">
-          <CompactScrollbarSlider
-            id="music-library-indexing"
-            value={indexing.done}
-            min={0}
-            max={Math.max(1, indexing.total)}
-            step={1}
-            trackLabel={`${indexing.done} / ${indexing.total}`}
-            ariaLabel="Songs read"
-            readOnly
-            onCommit={() => {}}
-          />
-        </div>
-      ) : null}
+      {indexing ? (<>
+        <IndexingBar id="music-library-scanning" name="Scanning" unit="Folders listed" progress={indexing.scanning} />
+        <IndexingBar id="music-library-indexing" name="Indexing" unit="Songs read" progress={indexing.indexing} />
+      </>) : null}
       <div className="options-curve-row options-music-set-list-dock-row" role="radiogroup" aria-label="Song grouping">
         {(['folder', 'artist'] as const).map((option) => (
           <TextButton
