@@ -153,7 +153,20 @@ final class MusicSession {
         if (renderer != null) renderer.jump(direction);
     }
 
+    /**
+     * Play `songId` now. A song chosen is a start of playback whatever the
+     * music was doing: stopped, it opens with the last soundstage (the page
+     * sends play first, but the native side must not depend on that order);
+     * paused, it resumes.
+     */
     synchronized void choose(int songId) {
+        if (renderer == null) {
+            if (stage == null) stage = read(STAGE_FILE, null);
+            if (stage == null) return;
+            play(stage);
+        } else if (output.isPaused()) {
+            resume();
+        }
         if (renderer != null) renderer.choose(songId);
     }
 
@@ -241,6 +254,8 @@ final class MusicSession {
     synchronized void resume() {
         if (output == null || !output.isPaused()) return;
         output.setPaused(false);
+        // A stream that ran out while paused starts the pool's next pick, as play does.
+        renderer.resume();
         report();
         SoundscapePlaybackService.sourceChanged(context, true);
     }
