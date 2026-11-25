@@ -34,3 +34,26 @@ export function clearSoundscapeHeardGain(read: () => number): void {
 export function soundscapeHeardGain(): number {
   return heardGain()
 }
+
+/**
+ * The generator's SIGNALS (soundscape-generator.js: its hits and its gust),
+ * as the desktop's worklet posts them, each at its frame of `context`'s
+ * clock. Handed to whoever listens (the visualizer's
+ * `sound/soundscapeSignals.ts`, through `desktopMusicListening.ts`); dropped
+ * while nobody does.
+ */
+export interface GeneratorSignal {
+  frame: number
+  kind: string
+  [key: string]: unknown
+}
+
+let signalSink: ((signals: GeneratorSignal[], context: BaseAudioContext) => void) | null = null
+
+export function setSoundscapeSignalSink(sink: ((signals: GeneratorSignal[], context: BaseAudioContext) => void) | null): void {
+  signalSink = sink
+}
+
+export function publishSoundscapeSignals(signals: GeneratorSignal[], context: BaseAudioContext): void {
+  signalSink?.(signals, context)
+}
