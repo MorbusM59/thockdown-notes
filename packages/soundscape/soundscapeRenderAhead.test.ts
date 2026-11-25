@@ -425,20 +425,21 @@ describe('render ahead', () => {
     let built: number | null = null;
     let pending: number | null = null;
     let prepared: number | null = null;
-    const roomAt = new Map<number, number | null>();
     const roomMix: MixStage = {
       setSpace: (space) => { pending = space.size === built ? null : space.size; },
       get roomPending() { return pending !== null; },
       get roomPrepared() { return pending === null || prepared === pending; },
       prepareRoom: () => { prepared = pending; },
       buildRoom: () => { if (pending !== null) { built = pending; pending = null; } },
-      process: (direct, send, out) => { roomAt.set(direct[0][0], built); identityMix.process(direct, send, out); },
+      process: (direct, send, out) => identityMix.process(direct, send, out),
       snapshot: () => ({ built, pending }),
       restore: (snapshot) => ({ built, pending } = snapshot as { built: number | null; pending: number | null }),
     };
     const sent: RenderedChunk[] = [];
     const tasks: Array<() => void> = [];
-    const renderer = new RenderAhead(countingGenerator(), roomMix, SAMPLE_RATE, MARGIN_SEC, (chunk) => sent.push(chunk), (work) => tasks.push(work));
+    // The room each chunk was rendered in: a chunk is sent as soon as it is rendered.
+    const roomSent = new Map<RenderedChunk, number | null>();
+    const renderer = new RenderAhead(countingGenerator(), roomMix, SAMPLE_RATE, MARGIN_SEC, (chunk) => { sent.push(chunk); roomSent.set(chunk, built); }, (work) => tasks.push(work));
     const drain = () => { while (tasks.length > 0) tasks.shift()!(); };
     renderer.configure(CONFIGURE);
     drain();
@@ -452,12 +453,20 @@ describe('render ahead', () => {
     expect(built).toBe(CONFIGURE.space.size);
     // The output has moved on meanwhile; the install splices from where it is now.
     const playedAt = 9 * RENDER_CHUNK_FRAMES;
+    const before = sent.length;
     renderer.played(playedAt);
     drain();
     expect(built).toBe(newRoom);
-    const end = Math.max(...sent.map((chunk) => chunk.startFrame));
-    for (let frame = playedAt; frame <= end; frame += RENDER_CHUNK_FRAMES) {
-      expect(roomAt.get(frame), `frame ${frame}`).toBe(frame < spliceAt(playedAt) ? CONFIGURE.space.size : newRoom);
+    // Everything sent from here on is at or past the splice a margin past the
+    // real playhead (nothing for audio already heard) and in the new room.
+    // A chunk sent again replaces the earlier one in the output, so the last one sent for a frame is what is heard.
+    const after = sent.slice(before);
+    expect(after.length).toBeGreaterThan(0);
+    const heard = new Map<number, RenderedChunk>();
+    for (const chunk of after) {
+      expect(chunk.startFrame, `chunk ${chunk.startFrame}`).toBeGreaterThanOrEqual(spliceAt(playedAt));
+      heard.set(chunk.startFrame, chunk);
     }
+    for (const chunk of heard.values()) expect(roomSent.get(chunk), `chunk ${chunk.startFrame}`).toBe(newRoom);
   });
 });
