@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { durationLabel, fadeSecFor, remainingText, sanitizeTimer, stepDuration } from './timer'
+import { durationLabel, fadeSecFor, remainingText, activeTimerSeconds, sanitizeTimer, stepDuration } from './timer'
 
 describe('timer', () => {
   it('steps through the durations, stopping at either end', () => {
@@ -22,6 +22,8 @@ describe('timer', () => {
     expect(remainingText(3_909_000)).toBe('1:05:09')
     expect(remainingText(309_000)).toBe('5:09')
     expect(remainingText(8_400)).toBe('0:09')
-    expect(sanitizeTimer({ durations: [7, 'x'], active: 9 })).toEqual({ durations: [60, 15 * 60, 3600, 7200, 8 * 3600], active: null })
+    expect(sanitizeTimer({ durations: [7, 'x'], selected: 9, enabled: 'yes' })).toEqual({ durations: [60, 15 * 60, 3600, 7200, 8 * 3600], selected: 1, enabled: false })
+    expect(activeTimerSeconds(sanitizeTimer({ selected: 2, enabled: true }))).toBe(3600)
+    expect(activeTimerSeconds(sanitizeTimer({ selected: 2, enabled: false }))).toBe(0)
   })
 })

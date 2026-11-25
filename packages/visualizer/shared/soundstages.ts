@@ -100,24 +100,33 @@ export interface SoundstagePreferences extends PresetList<SoundstageSettings> {
   factory: FactorySoundstageId
   /** The last of the reader's own stages chosen: what the custom button plays. */
   lastCustom: string | null
+  /** The last stage chosen other than the flat one (`FLAT_SOUNDSTAGE`): what the phone's EQ toggle returns to. */
+  lastShaped: string
 }
+
+/** The stage with the flat EQ (the open box): the EQ switched off. */
+export const FLAT_SOUNDSTAGE: FactorySoundstageId = 'neutral'
+const DEFAULT_SHAPED_SOUNDSTAGE: FactorySoundstageId = 'muted'
 
 export const DEFAULT_SOUNDSTAGE_PREFERENCES: SoundstagePreferences = {
   ...emptyPresetList(SOUNDSTAGE_KIND),
   factory: DEFAULT_FACTORY_SOUNDSTAGE,
   lastCustom: null,
+  lastShaped: DEFAULT_SHAPED_SOUNDSTAGE,
 }
 
 export function activeSoundstage(preferences: SoundstagePreferences): Preset<SoundstageSettings> {
   return activePreset(SOUNDSTAGE_KIND, preferences)
 }
 
-/** The preferences with `activeId` changed, `factory` and `lastCustom` following it. */
+/** The preferences with `activeId` changed, `factory`, `lastCustom` and `lastShaped` following it. */
 export function withActiveSoundstage(preferences: SoundstagePreferences, list: PresetList<SoundstageSettings>): SoundstagePreferences {
   const next = { ...preferences, ...list }
   if (isFactorySoundstageId(next.activeId)) next.factory = next.activeId
   else next.lastCustom = next.activeId
+  if (next.activeId !== FLAT_SOUNDSTAGE) next.lastShaped = next.activeId
   if (next.lastCustom !== null && !next.custom.some((stage) => stage.id === next.lastCustom)) next.lastCustom = null
+  if (!isFactorySoundstageId(next.lastShaped) && !next.custom.some((stage) => stage.id === next.lastShaped)) next.lastShaped = DEFAULT_SHAPED_SOUNDSTAGE
   return next
 }
 
@@ -151,5 +160,6 @@ export function sanitizeSoundstagePreferences(value: unknown): SoundstagePrefere
   const list = sanitizePresetList(SOUNDSTAGE_KIND, input)
   const factory = isFactorySoundstageId(String(input.factory)) ? input.factory as FactorySoundstageId : DEFAULT_FACTORY_SOUNDSTAGE
   const lastCustom = typeof input.lastCustom === 'string' && list.custom.some((stage) => stage.id === input.lastCustom) ? input.lastCustom : null
-  return withActiveSoundstage({ ...list, factory, lastCustom }, list)
+  const lastShaped = typeof input.lastShaped === 'string' ? input.lastShaped : DEFAULT_SHAPED_SOUNDSTAGE
+  return withActiveSoundstage({ ...list, factory, lastCustom, lastShaped }, list)
 }

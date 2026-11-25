@@ -40,7 +40,6 @@ import {
 } from '@thockdown/look/presets'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
-import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
 import { roundUiFontScale, uiScaleFactor, UI_FONT_SCALE_MAX, UI_FONT_SCALE_MIN, UI_FONT_SCALE_STEP } from '@thockdown/look/uiFontScale'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
@@ -68,8 +67,11 @@ import {
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 import { musicScheduleEvents, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
 import { ScheduleDock, ScheduleRows } from './ScheduleRows'
-import { fadeSecFor, remainingText, type TimerSettings } from './timer'
-import { TimerRow } from './TimerRow'
+import { activeTimerSeconds, durationLabel, fadeSecFor, remainingText, type TimerSettings } from './timer'
+import { TimerPicker } from './TimerPicker'
+import { DashboardToggleRow, type DashboardToggle } from './DashboardToggleRow'
+import { PresetMark } from '@thockdown/interaction/PresetMark'
+import { presetsOf, selectPreset } from '@thockdown/interaction/presetList'
 import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
 import { DragLayer } from '@thockdown/interaction/DragLayer'
 import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
@@ -77,7 +79,7 @@ import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayou
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
 import { DashboardDock, DashboardSets, DashboardSoundscapes, DockHelpButton, DockHelpRow } from './Dashboard'
 import { PresetDock, PresetGrid, PresetIconPicker } from '@thockdown/interaction/PresetListControls'
-import { SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
+import { FLAT_SOUNDSTAGE, isFactorySoundstageId, SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
 import { SoundscapeDock } from '@thockdown/soundscape/SoundscapeDock'
@@ -92,7 +94,7 @@ import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { closeIconPick, isPickingIconFor, readIconPick, setIconPickQuery, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { DEFAULT_MUSIC_SET_LIST_GROUPING, type MusicSetListGrouping } from '@thockdown/visualizer/shared/musicSetList'
-import { DashboardAppSections, MobileTabSelector, VisualizerButtons } from './MobileTabs'
+import { DashboardAppSections, MobileTabSelector, useVisualizerLandscape } from './MobileTabs'
 import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
 import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
@@ -408,7 +410,7 @@ export function MobileSoundscapeApp() {
     saveUiFontScale(uiFontScale)
   }, [uiFontScale])
   useEffect(() => saveTimer(timer), [timer])
-  const timerSeconds = timer.active === null ? 0 : timer.durations[timer.active]
+  const timerSeconds = activeTimerSeconds(timer)
   useEffect(() => {
     if (!native) return
     void nativeSoundscape!.setTimer({ seconds: timerSeconds, fadeSec: fadeSecFor(timerSeconds) })
@@ -495,6 +497,13 @@ export function MobileSoundscapeApp() {
     },
     tap: toggleClip,
   })
+  // A drag up or down on the text size tool steps the UI Font scale; a tap returns to the phone's default.
+  const textSizeDrag = useStepDrag({
+    begin: () => uiFontScale,
+    step: (base, steps) => setUiFontScale(Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, roundUiFontScale(base + steps * UI_FONT_SCALE_STEP)))),
+    tap: () => setUiFontScale(DEFAULT_PHONE_UI_FONT_SCALE),
+  })
+  const [visualizerLandscape, setVisualizerLandscape] = useVisualizerLandscape()
 
   // A browser (not the native shell, which allows playback without a
   // gesture) keeps the audio context suspended until the first touch.
@@ -561,8 +570,176 @@ export function MobileSoundscapeApp() {
     setSchedule((current) => ({ ...current, enabled: true }))
   }
 
+  // The dashboard's toggle row (DashboardToggleRow.tsx): a tap does the
+  // toggle's own thing, a hold brings up its picker in the row's place.
+  const stagePresets = presetsOf(SOUNDSTAGE_KIND, soundstages)
+  const activeStagePreset = activeSoundstage(soundstages)
+  const pickStage = (id: string) => setSoundstages((current) => withActiveSoundstage(current, selectPreset(SOUNDSTAGE_KIND, current, id)))
+  const eqOn = soundstages.activeId !== FLAT_SOUNDSTAGE
+  const dashboardToggles: DashboardToggle[] = [
+    {
+      id: 'timer',
+      label: `Timer ${durationLabel(timer.durations[timer.selected])} ${timer.enabled ? 'on' : 'off'}: tap to switch, hold to choose`,
+      active: timer.enabled,
+      className: 'mobile-timer-btn',
+      face: durationLabel(timer.durations[timer.selected]),
+      onTap: () => setTimer((current) => ({ ...current, enabled: !current.enabled })),
+      picker: (close) => <TimerPicker timer={timer} onChange={setTimer} onPicked={close} />,
+    },
+    {
+      id: 'layout',
+      label: `Dark mode ${look.mode === 'dark' ? 'on' : 'off'}: tap to switch, hold for layouts`,
+      active: look.mode === 'dark',
+      face: <span className="fa-solid fa-moon" aria-hidden="true" />,
+      onTap: () => switchLook({ ...look, mode: look.mode === 'dark' ? 'light' : 'dark' }),
+      picker: (close) => PRESET_ICONS[look.mode].map((icon, index) => (
+        <button
+          key={index}
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${look.preset[look.mode] === index ? ' is-active' : ''}`}
+          aria-label={PRESET_NAMES[look.mode][index]}
+          aria-pressed={look.preset[look.mode] === index}
+          onClick={() => {
+            switchLook({ ...look, preset: { ...look.preset, [look.mode]: index } })
+            close()
+          }}
+        >
+          <span className={icon} aria-hidden="true" />
+        </button>
+      )),
+    },
+    {
+      id: 'soundstage',
+      // The EQ off is the flat stage (the open box); on, the button shows the stage playing.
+      label: eqOn ? `${activeStagePreset.name}: tap for a flat EQ, hold to choose` : 'Flat EQ: tap for your last soundstage, hold to choose',
+      active: eqOn,
+      face: <PresetMark preset={eqOn ? activeStagePreset : stagePresets.find((stage) => stage.id === FLAT_SOUNDSTAGE)!} />,
+      onTap: () => pickStage(eqOn ? FLAT_SOUNDSTAGE : soundstages.lastShaped),
+      picker: (close) => stagePresets
+        .filter((stage) => isFactorySoundstageId(stage.id) && stage.id !== FLAT_SOUNDSTAGE)
+        .map((stage) => (
+          <button
+            key={stage.id}
+            type="button"
+            className={`btn-icon options-color-swatch options-loadout-btn${soundstages.activeId === stage.id ? ' is-active' : ''}`}
+            aria-label={stage.name}
+            aria-pressed={soundstages.activeId === stage.id}
+            onClick={() => {
+              pickStage(stage.id)
+              close()
+            }}
+          >
+            <PresetMark preset={stage} />
+          </button>
+        )),
+    },
+    {
+      id: 'visualizer',
+      label: 'Open the visualizer; hold for its orientation and size',
+      active: false,
+      face: <span className="fa-solid fa-eye" aria-hidden="true" />,
+      onTap: () => setVisualizerOpen(true),
+      picker: (close) => (<>
+        {/* The visualizer's orientation, applied only while it is open (display.ts). */}
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${visualizerLandscape ? ' is-active' : ''}`}
+          aria-label={visualizerLandscape ? 'Show the visualizer upright' : 'Show the visualizer sideways'}
+          aria-pressed={visualizerLandscape}
+          onClick={() => {
+            setVisualizerLandscape(!visualizerLandscape)
+            close()
+          }}
+        >
+          <span className={`fa-solid fa-mobile-screen-button${visualizerLandscape ? ' fa-rotate-90' : ''}`} aria-hidden="true" />
+        </button>
+        {/* Double size: the desktop's button and glyph (EditorToolbar.tsx). */}
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${visualizerDouble ? ' is-active' : ''}`}
+          aria-label={visualizerDouble ? 'Exit double size mode' : 'Enable double size mode'}
+          aria-pressed={visualizerDouble}
+          onClick={() => {
+            setVisualizerDouble(!visualizerDouble)
+            close()
+          }}
+        >
+          <span className="fa-solid fa-voicemail fa-rotate-180" aria-hidden="true" />
+        </button>
+      </>),
+    },
+    {
+      id: 'tools',
+      // Tools are actions rather than options: the picker stays up after one, so a clip's progress stays in view.
+      label: clipProgress !== null ? 'Tools: a clip is rendering; hold to see it' : 'Tools: hold to open',
+      active: clipProgress !== null,
+      face: <span className="fa-solid fa-toolbox" aria-hidden="true" />,
+      picker: () => (<>
+        <button
+          type="button"
+          className="btn-icon options-color-swatch options-loadout-btn"
+          aria-label="Import soundscapes; hold to export yours"
+          aria-disabled={!native}
+          data-secondary-press="none"
+          onClick={() => {
+            if (swallowFilesClickRef.current) {
+              swallowFilesClickRef.current = false
+              return
+            }
+            if (!native) return
+            void importSoundscapes(preferences).then((next) => { if (next) setPreferences(next) })
+          }}
+          onPointerDown={() => {
+            swallowFilesClickRef.current = false
+            filesHoldRef.current?.()
+            filesHoldRef.current = armHold(() => {
+              filesHoldRef.current = null
+              swallowFilesClickRef.current = true
+              if (native && preferences.customPresets.length > 0) void exportSoundscapes(preferences.customPresets, 'my-soundscapes')
+            }, HOLD_CONFIRM_MS)
+          }}
+          onPointerUp={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+          onPointerCancel={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+          onPointerLeave={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <span className="fa-solid fa-rotate" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${clipProgress !== null ? ' is-active' : ''}`}
+          aria-label={clipProgress !== null
+            ? `Rendering a ${clipMinutes} minute clip, ${Math.round(clipProgress * 100)}%: press to cancel`
+            : `Save a ${clipMinutes} minute clip of this soundscape; drag up or down to change its length`}
+          aria-disabled={!native}
+          data-secondary-press="none"
+          {...clipDrag.handlers}
+        >
+          {clipProgress !== null
+            ? <span className="mobile-clip-progress" aria-hidden="true">{Math.round(clipProgress * 100)}%</span>
+            : clipDrag.adjusting
+              ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
+              : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
+        </button>
+        {/* Text size: the desktop's UI Font scale. Drag up or down to step it; a tap returns to the phone's default. */}
+        <button
+          type="button"
+          className="btn-icon options-color-swatch options-loadout-btn"
+          aria-label={`Text size ${uiFontScale.toFixed(2)}: drag up or down to change it, tap for the default`}
+          data-secondary-press="none"
+          {...textSizeDrag.handlers}
+        >
+          {textSizeDrag.adjusting
+            ? <span className="mobile-clip-progress" aria-hidden="true">{uiFontScale.toFixed(2)}</span>
+            : <span className="fa-solid fa-text-height" aria-hidden="true" />}
+        </button>
+      </>),
+    },
+  ]
+
   const dockContent = tab === 'dashboard' ? (
                     <DashboardDock
+                      toggles={<DashboardToggleRow toggles={dashboardToggles} />}
                       timeLeft={timeLeftMs >= 0 ? remainingText(timeLeftMs) : null}
                       soundscape={regular}
                       onSoundscapeTransport={setRegularMode}
@@ -637,102 +814,6 @@ export function MobileSoundscapeApp() {
                 {tab === 'dashboard' && !helpMode ? (<>
                   <DashboardSets />
                   <DashboardSoundscapes preferences={preferences} onPick={pickSoundscape} />
-                  <OptionsFixedSection heading="Timer" iconClass="fa-hourglass-half">
-                    <TimerRow timer={timer} onChange={setTimer} />
-                  </OptionsFixedSection>
-                  <OptionsFixedSection heading="Soundstage" iconClass="fa-sliders">
-                    <PresetGrid kind={SOUNDSTAGE_KIND} list={soundstages} onChange={(list) => setSoundstages(withActiveSoundstage(soundstages, list))} idPrefix="stage" label="Soundstages" plural="a soundstage" creates={false} />
-                  </OptionsFixedSection>
-                  <OptionsFixedSection heading="Layout" iconClass="fa-paint-roller">
-                    {/* Dark mode, then the mode's presets: a tap picks one. */}
-                    <div className="options-loadout-grid" role="group" aria-label="Layout">
-                      <button
-                        type="button"
-                        className={`btn-icon options-color-swatch options-loadout-btn${look.mode === 'dark' ? ' is-active' : ''}`}
-                        aria-label="Dark mode"
-                        aria-pressed={look.mode === 'dark'}
-                        onClick={() => switchLook({ ...look, mode: look.mode === 'dark' ? 'light' : 'dark' })}
-                      >
-                        <span className="fa-solid fa-moon" aria-hidden="true" />
-                      </button>
-                      {PRESET_ICONS[look.mode].map((icon, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          className={`btn-icon options-color-swatch options-loadout-btn${look.preset[look.mode] === index ? ' is-active' : ''}`}
-                          aria-label={PRESET_NAMES[look.mode][index]}
-                          aria-pressed={look.preset[look.mode] === index}
-                          onClick={() => switchLook({ ...look, preset: { ...look.preset, [look.mode]: index } })}
-                        >
-                          <span className={icon} aria-hidden="true" />
-                        </button>
-                      ))}
-                    </div>
-                    <div className="options-slider-row">
-                      <CompactScrollbarSlider
-                        id="mobile-ui-font-scale"
-                        value={uiFontScale}
-                        min={UI_FONT_SCALE_MIN}
-                        max={UI_FONT_SCALE_MAX}
-                        step={UI_FONT_SCALE_STEP}
-                        trackLabel="size"
-                        ariaLabel="Text size"
-                        defaultValue={DEFAULT_PHONE_UI_FONT_SCALE}
-                        onCommit={(value) => setUiFontScale(Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, roundUiFontScale(value))))}
-                      />
-                    </div>
-                  </OptionsFixedSection>
-                  <VisualizerButtons onOpen={() => setVisualizerOpen(true)} double={visualizerDouble} onDouble={setVisualizerDouble} />
-                  <OptionsFixedSection heading="Tools" iconClass="fa-toolbox">
-                    <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
-                      <button
-                        type="button"
-                        className="btn-icon options-color-swatch options-loadout-btn"
-                        aria-label="Import soundscapes; hold to export yours"
-                        aria-disabled={!native}
-                        data-secondary-press="none"
-                        onClick={() => {
-                          if (swallowFilesClickRef.current) {
-                            swallowFilesClickRef.current = false
-                            return
-                          }
-                          if (!native) return
-                          void importSoundscapes(preferences).then((next) => { if (next) setPreferences(next) })
-                        }}
-                        onPointerDown={() => {
-                          swallowFilesClickRef.current = false
-                          filesHoldRef.current?.()
-                          filesHoldRef.current = armHold(() => {
-                            filesHoldRef.current = null
-                            swallowFilesClickRef.current = true
-                            if (native && preferences.customPresets.length > 0) void exportSoundscapes(preferences.customPresets, 'my-soundscapes')
-                          }, HOLD_CONFIRM_MS)
-                        }}
-                        onPointerUp={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
-                        onPointerCancel={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
-                        onPointerLeave={() => { filesHoldRef.current?.(); filesHoldRef.current = null }}
-                        onContextMenu={(event) => event.preventDefault()}
-                      >
-                        <span className="fa-solid fa-rotate" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-icon options-color-swatch options-loadout-btn${clipProgress !== null ? ' is-active' : ''}`}
-                        aria-label={clipProgress !== null
-                          ? `Rendering a ${clipMinutes} minute clip, ${Math.round(clipProgress * 100)}%: press to cancel`
-                          : `Save a ${clipMinutes} minute clip of this soundscape; drag up or down to change its length`}
-                        aria-disabled={!native}
-                        data-secondary-press="none"
-                        {...clipDrag.handlers}
-                      >
-                        {clipProgress !== null
-                          ? <span className="mobile-clip-progress" aria-hidden="true">{Math.round(clipProgress * 100)}%</span>
-                          : clipDrag.adjusting
-                            ? <span className="mobile-clip-progress" aria-hidden="true">{clipLengthLabel(clipMinutes)}</span>
-                            : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
-                      </button>
-                    </div>
-                  </OptionsFixedSection>
                   <DashboardAppSections />
                 </>) : null}
                 {/* Picking an icon (a dock's mark) replaces the page with

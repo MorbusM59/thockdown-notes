@@ -196,6 +196,12 @@ body {
   white-space: nowrap;
 }
 
+/* The dashboard's toggle row (DashboardToggleRow.tsx): a picker's return
+   button keeps to the sixth cell however few options precede it. */
+.mobile-dashboard-toggles > .mobile-dashboard-return {
+  grid-column: 6;
+}
+
 /* The schedule (ScheduleRows.tsx): its entries, one under another, each six
    buttons wide; placement is each grid's own, row by row, so only the spans
    are written. */
