@@ -73,6 +73,14 @@ public class BackgroundAudioPlugin extends Plugin {
             data.put("message", message);
             notifyListeners("rendererFailure", data);
         }
+
+        @Override
+        public void onSpectrum(String batchesJson, long playheadFrame) {
+            JSObject data = new JSObject();
+            data.put("batches", batchesJson);
+            data.put("playhead", playheadFrame);
+            notifyListeners("spectrum", data);
+        }
     };
 
     @Override
@@ -226,6 +234,13 @@ public class BackgroundAudioPlugin extends Plugin {
     public void configure(PluginCall call) {
         String configuration = call.getString("configuration");
         if (configuration != null) session.configure(configuration, call.getDouble("transitionSec", 0.0));
+        call.resolve();
+    }
+
+    /** `{ bands }`: the visualizer's spectrum of the soundscape in this many log bands, sent as `spectrum` events; 0 stops it. */
+    @PluginMethod
+    public void setSpectrum(PluginCall call) {
+        session.setSpectrum(call.getInt("bands", 0));
         call.resolve();
     }
 

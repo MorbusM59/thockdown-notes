@@ -37,6 +37,12 @@ final class SoundscapeRenderer {
         void onFailure(String message);
     }
 
+    /** Where the visualizer's spectrum of the soundscape goes (`setSpectrum`). */
+    interface SpectrumSink {
+        /** Frames computed from chunks just rendered (soundscapeRenderer.ts's batches, as a JSON array), and the output's playhead as they arrive. */
+        void onSpectrum(String batchesJson, long playheadFrame);
+    }
+
     /** Chunks per call: about half a second at 48 kHz, well inside the isolate's return limit. */
     private static final int MAX_CHUNKS_PER_STEP = 12;
     /** Beyond what the device holds: a writer block of scheduling slack. */
@@ -50,6 +56,10 @@ final class SoundscapeRenderer {
     /** Settings changes not yet applied, in order: a configuration and, for a transition, its length (0 for a plain configure). */
     private final ConcurrentLinkedQueue<Object[]> pending = new ConcurrentLinkedQueue<>();
     private volatile boolean running = true;
+    /** The visualizer's spectrum: its bands (0 for none), where it goes, and whether that changed since the renderer last looked. */
+    private volatile int spectrumBands = 0;
+    private volatile SpectrumSink spectrumSink = null;
+    private volatile boolean spectrumChanged = false;
     private boolean woken = false;
     /** The configuration in force; only the renderer's thread reads or writes it. */
     private String applied = null;
@@ -79,6 +89,14 @@ final class SoundscapeRenderer {
     /** Start `configurationJson` afresh, nothing of what played before carried over (RenderAhead's restart). */
     void restart(String configurationJson) {
         pending.add(new Object[] { configurationJson, RESTART });
+        wake();
+    }
+
+    /** Compute the spectrum of what is rendered in `bands` log bands and hand it to `sink`, or stop (0). */
+    void setSpectrum(int bands, SpectrumSink sink) {
+        spectrumSink = sink;
+        spectrumBands = bands;
+        spectrumChanged = true;
         wake();
     }
 
@@ -128,12 +146,23 @@ final class SoundscapeRenderer {
                         ? "soundscapeTransition(" + JSONObject.quote(configuration) + ", " + seconds + ")"
                         : "soundscapeConfigure(" + JSONObject.quote(configuration) + ")").get();
                 }
+                if (spectrumChanged) {
+                    spectrumChanged = false;
+                    // The playhead first, so what is handed out again starts from now.
+                    isolate.evaluateJavaScriptAsync("soundscapeStep(" + output.playheadFrame() + ", 0)").get();
+                    isolate.evaluateJavaScriptAsync("soundscapeSpectrum(" + spectrumBands + ", " + output.sampleRate + ")").get();
+                }
                 String result = isolate.evaluateJavaScriptAsync(
                     "soundscapeStep(" + output.playheadFrame() + ", " + MAX_CHUNKS_PER_STEP + ")").get();
                 JSONArray chunks = new JSONArray(result);
                 for (int index = 0; index < chunks.length(); index += 1) {
                     JSONObject chunk = chunks.getJSONObject(index);
                     output.write(chunk.getLong("s"), SharedSandbox.decodeHalfScale(chunk.getString("d")));
+                }
+                if (chunks.length() > 0 && spectrumBands > 0) {
+                    String batches = isolate.evaluateJavaScriptAsync("soundscapeSpectrumTake()").get();
+                    SpectrumSink sink = spectrumSink;
+                    if (sink != null && !"[]".equals(batches)) sink.onSpectrum(batches, output.playheadFrame());
                 }
                 if (chunks.length() > 0) continue;
                 synchronized (signal) {

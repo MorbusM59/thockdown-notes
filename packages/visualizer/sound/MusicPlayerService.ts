@@ -412,6 +412,11 @@ export class MusicPlayerService {
     };
   }
 
+  /** The linear gain the music is heard at now: its volume while it plays, 0 otherwise (`visualizer/spectrumMix.ts`). */
+  heardGain(): number {
+    return this.isPlaying ? this.volumeGain() : 0
+  }
+
   /** The gain that undoes the volume: none at all at silence, where there is nothing to undo. */
   private volumeCompensation(): number {
     const gain = this.volumeGain();

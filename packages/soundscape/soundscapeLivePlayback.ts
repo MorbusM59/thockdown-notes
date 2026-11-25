@@ -35,6 +35,7 @@ import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from './soundscapeNo
 import { LiveRoom } from '@thockdown/audio/liveRoom';
 import type { SoundscapePlayback, SoundscapePlaybackHandlers } from './SoundscapeEngine';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
+import { clearSoundscapeHeardGain, setSoundscapeHeardGain, soundscapeTapNode } from './soundscapeTap';
 import { BRILLIANCE_GLIDE_SEC, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
 import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, soundscapeSpaceGains } from './soundscapeMix';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
@@ -175,6 +176,11 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
   compressor.connect(brilliance.input);
   brilliance.output.connect(volume);
   connectToOutput(volume);
+  // The visualizer's tap (soundscapeTap.ts): the mix at full scale, and the volume it is heard at.
+  const tap = soundscapeTapNode(context);
+  brilliance.output.connect(tap);
+  const readHeardGain = () => volume.gain.value;
+  setSoundscapeHeardGain(readHeardGain);
 
   let closed = false;
   const fail = (message: string) => {
@@ -215,6 +221,8 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
       leaving.clear();
       voice.close();
       mixGain.disconnect();
+      brilliance.output.disconnect(tap);
+      clearSoundscapeHeardGain(readHeardGain);
       brilliance.dispose();
       compressor.disconnect();
       volume.disconnect();
