@@ -507,8 +507,11 @@ final class SoundscapeSession {
                 long left = timerDeadline - android.os.SystemClock.elapsedRealtime();
                 if (output == null || renderer == null || left <= 0) return;
                 Entry next = SoundscapeSchedule.load(context).playingAt(System.currentTimeMillis() + left);
+                // The music the listener plays ends with the timer, over the same fade.
+                double fadeSec = left / 1000.0;
+                main.post(() -> MusicSession.get(context).timerFade(fadeSec));
                 if (next != null) {
-                    renderer.transition(next.configuration, left / 1000.0);
+                    renderer.transition(next.configuration, fadeSec);
                     timerHandover = next;
                 } else {
                     output.setFade(0f, left / 1000.0);
@@ -545,6 +548,12 @@ final class SoundscapeSession {
     private void clearCountdownCallbacks() {
         // A fade-out under way is undone: the play goes on after all (or
         // is paused, and a resume fades in from silence regardless).
+        if (timerFade == null && timerEnd != null) {
+            // The fade had begun: the music's is undone with it (posted, as
+            // every call into the music from here is, so the two sessions'
+            // locks are never held together).
+            main.post(() -> MusicSession.get(context).timerFadeUndone());
+        }
         if (timerFading) {
             timerFading = false;
             if (output != null) output.setFade(1f, RESTORE_FADE_SEC);
@@ -569,6 +578,7 @@ final class SoundscapeSession {
      */
     private void timerExpired() {
         if (regular != Regular.PLAYING) return;
+        main.post(() -> MusicSession.get(context).timerExpired());
         Entry handedTo = timerHandover;
         timerHandover = null;
         if (handedTo != null) {

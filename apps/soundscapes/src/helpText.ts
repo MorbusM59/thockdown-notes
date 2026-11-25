@@ -62,7 +62,7 @@ const HELP: Record<string, string[]> = {
   ],
   Timer: [
     'Timer buttons: Tap a length to limit playback to it. Tap the active length again to turn the timer off; playback is then continuous, shown by the active infinity button. Hold a length and drag up or down to change it, from 1 minute to 24 hours.',
-    'Countdown: The timer restarts whenever you start or switch a soundscape and holds while paused. Playback fades out at the end, over a tenth of the length, at most five minutes, then stops; a schedule row due then crossfades in instead.',
+    'Countdown: The timer restarts whenever you start or switch a soundscape and holds while paused. Playback fades out at the end, music included, over a tenth of the length, at most five minutes, then stops; a schedule row due then crossfades in instead.',
     'Time left: Shown in brackets under the name of the playing soundscape, for a timer or a schedule row.',
   ],
   Presets: [

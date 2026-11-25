@@ -49,6 +49,8 @@ final class MusicSession {
     /** musicLibrary.ts's EMPTY_CATALOG. */
     private static final String EMPTY_CATALOG = "{\"songs\":[],\"activeSetIds\":[],\"filter\":{\"query\":\"\"}}";
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.05;
+    /** How quickly an undone timer fade returns to full. */
+    private static final double TIMER_RESTORE_FADE_SEC = 0.5;
 
     private static MusicSession instance;
 
@@ -113,6 +115,8 @@ final class MusicSession {
             open();
         } else {
             if (output.isPaused()) output.setPaused(false);
+            // A timer fade under way is undone by playing again.
+            output.setFade(1f, TIMER_RESTORE_FADE_SEC);
             // A scheduled run the listener plays on becomes theirs: their sets, at full level.
             if (scheduledRun) {
                 renderer.setPoolSet(null, false);
@@ -232,6 +236,29 @@ final class MusicSession {
             close();
             report();
         }
+    }
+
+    /**
+     * THE TIMER (SoundscapeSession's) ends the listener's music with the
+     * soundscape: it fades out over the timer's fade, and stops when the
+     * timer runs out, handing over to the schedule's music if a run is due.
+     * A scheduled run is the schedule's and is left alone.
+     */
+    synchronized void timerFade(double fadeSec) {
+        if (output == null || scheduledRun) return;
+        output.setFade(0f, fadeSec);
+    }
+
+    /** The timer's fade was undone (a pause, a new timer, a change of soundscape): back to full. */
+    synchronized void timerFadeUndone() {
+        if (output == null || scheduledRun) return;
+        output.setFade(1f, TIMER_RESTORE_FADE_SEC);
+    }
+
+    synchronized void timerExpired() {
+        if (output == null || scheduledRun) return;
+        stop();
+        applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
     }
 
     private synchronized void endScheduledRun() {
