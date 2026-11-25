@@ -751,13 +751,17 @@ final class SoundscapeSession {
             SoundscapeRenderer current = renderer;
             if (current != null) current.wake();
         });
-        renderer = new SoundscapeRenderer(context, output, this::failed);
+        // A renderer's failure counts only while it is the current one: one
+        // being closed can fail on its way out and must not end its successor.
+        final SoundscapeRenderer[] self = new SoundscapeRenderer[1];
+        renderer = self[0] = new SoundscapeRenderer(context, output, message -> failed(self[0], message));
         if (entry != null) renderer.configure(entry.configuration);
     }
 
-    private void failed(String message) {
+    private void failed(SoundscapeRenderer from, String message) {
         Listener current;
         synchronized (this) {
+            if (renderer != from) return;
             setRegular(Regular.STOPPED);
             close();
             current = listener;
