@@ -114,6 +114,11 @@ describe('fitVisualizerBox', () => {
       expect(sideBoxes(boxPx)).toBeGreaterThanOrEqual(1)
       // Far coarser than the 31 columns a landscape scene keeps.
       expect(boxPx).toBeGreaterThan(Math.floor(width / 32))
+      // The largest that does: one more box either breaks a side or the rows the strips, bars and cutout need.
+      const bigger = boxPx + 1
+      const size = cutoutBoxes(220, bigger)
+      const above = Math.floor(Math.floor((915 - size * bigger) / 2) / bigger)
+      expect(sideBoxes(bigger) < 1 || 2 * above < 2 * (STRIP_ROWS + 2)).toBe(true)
     }
   })
 })
