@@ -134,11 +134,11 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
       if (!reducedMotion.matches) applySway()
     })
   }, [moving])
-  const { glareStrength, flairStrength, glareMinStacks, flairMinSources } = immersive
+  const { glareStrength, flairStrength, glazeStrengthOffset, glareMinStacks, flairMinSources } = immersive
   const layers = useMemo<Layer[]>(() => {
     // The shader draws the fan (glaze.ray*) itself; the CSS fallback slides
     // straight stacks along the heading and stays parallel.
-    const settings = visualizerGlazeSettings(glaze, { glareStrength, flairStrength, glareMinStacks, flairMinSources })
+    const settings = visualizerGlazeSettings(glaze, { glareStrength, flairStrength, glazeStrengthOffset, glareMinStacks, flairMinSources })
     // Nearest first: the top linear stack (each list is in stacking order,
     // the first drawn on top); the glare is always above the flair.
     const linear = buildLinearGlazeStacks(settings, 90).map(({ image, periodPx, stripes }) => ({ kind: 'linear' as const, image, periodPx, stripes }))
@@ -146,7 +146,7 @@ export function VisualizerGlaze({ glaze, immersive }: { glaze: GlazeSettings; im
     const radial = radialImages.length > 0 ? [{ kind: 'radial' as const, image: radialImages.join(', '), periodPx: 0, stripes: [] }] : []
     const nearestFirst = [...linear, ...radial]
     return nearestFirst.map((layer, index) => ({ ...layer, key: `${layer.kind}-${index}`, index, depth: swayDepth(index, immersive.swaySpread) }))
-  }, [glaze, glareStrength, flairStrength, glareMinStacks, flairMinSources, immersive.swaySpread])
+  }, [glaze, glareStrength, flairStrength, glazeStrengthOffset, glareMinStacks, flairMinSources, immersive.swaySpread])
 
   // The linear stacks on the shader (GlazeStripesCanvas.tsx) where it can
   // run: one canvas instead of a promoted layer per stack, and composited
