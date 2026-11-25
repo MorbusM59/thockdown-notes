@@ -311,15 +311,13 @@ body {
 }
 
 /* The page's scrollbar, in the frame's scrollbar slot at the right edge
-   where the system's would be, laid out as the desktop's: one regular
-   spacing from the panel, then the track. The track is wider than the
-   desktop's by the ratio the phone's buttons are (a desktop track is about
-   two thirds of a 32px button; the phone's buttons are about 55px), which
-   also makes it a fingertip wide; the whole column grabs (PageScrollbar.tsx). */
-.mobile-app-shell {
-  --sidebar-scrollbar-slot-width: calc(var(--spacing-regular) + 36px);
-}
-
+   where the system's would be, sized and laid out exactly as the desktop's
+   (tokens.css's --sidebar-scrollbar-slot-width): one regular spacing from
+   the panel, then a track as thick as the UI font makes it, so the bar
+   keeps the same proportion to the text beside it on both. It is not scaled
+   with the phone's larger buttons, which made it three times the height of
+   a heading's text where the desktop's is a third more. The whole column
+   grabs (PageScrollbar.tsx). */
 .mobile-scrollbar-slot {
   position: absolute;
   inset: 0;
