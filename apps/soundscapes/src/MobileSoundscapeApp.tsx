@@ -64,6 +64,7 @@ import { ScheduleDock, ScheduleRows } from './ScheduleRows'
 import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
 import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
+import { DragLayer } from '@thockdown/interaction/DragLayer'
 import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
 import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayoutScene'
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
@@ -587,6 +588,7 @@ export function MobileSoundscapeApp() {
             music's breath and pushes. Gloom and sheen stay as they are. */}
         <ThemeGlazeLayers glaze={{ ...theme.glaze, linear: 'none', radial: 'none' }} />
         <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} />
+        <DragLayer />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
             {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} /> : null}

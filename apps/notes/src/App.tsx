@@ -45,6 +45,7 @@ import {
 import MouseCursorOverlay from './components/MouseCursorOverlay'
 import { installFocusDiagnostics } from './dev/focusDiagnostics'
 import { TooltipLayer } from './components/TooltipLayer'
+import { DragLayer } from '@thockdown/interaction/DragLayer'
 import { DEFAULT_TOOLTIP_SETTINGS, sanitizeTooltipSettings, type TooltipSettings } from './shared/tooltipSettings'
 import { useWindowDragRegion } from './window/useWindowDragRegion'
 import './App.css'
@@ -8188,6 +8189,7 @@ ${markdownHtml}
             wrapper's filter like the rest of the UI, but are stacked above
             the glaze (controls.css) so it does not wash them out. */}
         <TooltipLayer settings={tooltipSettings} />
+        <DragLayer />
         {windowModeTransitionOverlayNonce > 0 ? (
           <div key={windowModeTransitionOverlayNonce} className="window-mode-transition-overlay" aria-hidden="true" />
         ) : null}

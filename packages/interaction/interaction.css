@@ -1140,6 +1140,59 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The drag layer (dragLayer.ts): the copy of a dragged element is drawn
+   here, above every panel and outside every clipping box, and under the
+   glaze (.glaze-overlay-stack, 6000) so the glaze grades it like the rest of
+   the app. Inside .app-saturate-wrapper, so the wrapper's filter applies. */
+.drag-layer {
+  position:       fixed;
+  inset:          0;
+  pointer-events: none;
+  z-index:        5999;
+}
+
+/* Nothing in the layer may be hit: a drop target is found by hit-testing
+   under the pointer, and a control's own pointer-events would bring the copy
+   back into it. */
+.drag-layer * {
+  pointer-events: none !important;
+}
+
+/* A shell (dragLayer.ts) is a copy of one of the dragged element's
+   ancestors, there only so selectors and inherited values reach the copy as
+   they reach the original. It generates no box, and its pseudo-elements (a
+   chrome's sheen, a section's frame) are not drawn. */
+.drag-layer-shell:not([data-drag-shell-box]) {
+  display: contents !important;
+}
+
+.drag-layer-shell::before,
+.drag-layer-shell::after {
+  content: none !important;
+}
+
+/* A shell copied from a size container keeps a box of the container's
+   content size, so container units inside the copy measure what they did;
+   it paints nothing and moves nothing of its own. */
+.drag-layer-shell[data-drag-shell-box] {
+  display:         block !important;
+  position:        absolute !important;
+  inset:           0 auto auto 0 !important;
+  margin:          0 !important;
+  padding:         0 !important;
+  border:          0 !important;
+  background:      none !important;
+  box-shadow:      none !important;
+  outline:         none !important;
+  filter:          none !important;
+  backdrop-filter: none !important;
+  transform:       none !important;
+  opacity:         1 !important;
+  overflow:        visible !important;
+  clip-path:       none !important;
+  mask:            none !important;
+}
+
 /* An element being dragged to a new place (useSelectorReorder.ts). Where a
    copy follows the pointer the element itself is hidden, its place kept, so
    the copy IS the element, lifted off. Carried on the cursor instead (the

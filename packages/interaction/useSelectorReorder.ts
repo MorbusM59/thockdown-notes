@@ -17,6 +17,7 @@ export interface SelectorReorderCell {
     'data-drag-state'?: 'source' | 'target'
     onDragStart: (event: DragEvent<HTMLElement>) => void
     onDragOver: (event: DragEvent<HTMLElement>) => void
+    onDragLeave: () => void
     onDrop: (event: DragEvent<HTMLElement>) => void
     onDragEnd: () => void
   }
@@ -67,6 +68,8 @@ export function useSelectorReorder(
         event.dataTransfer.dropEffect = 'move'
         setDrag((current) => (current && current.target !== id ? { ...current, target: id } : current))
       },
+      // Over nothing of this selector's, nothing is marked as where it would land.
+      onDragLeave: () => setDrag((current) => (current && current.target === id ? { ...current, target: null } : current)),
       onDrop: (event) => {
         const dragged = event.dataTransfer?.getData(type)
         if (!dragged) return
