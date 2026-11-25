@@ -12,7 +12,7 @@
  * same preferences state on its return (followSession), so those controls
  * are more controls, not a second path to the engine.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement } from 'react'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
@@ -89,7 +89,15 @@ import { installTouchScroll } from '@thockdown/interaction/touchScroll'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { installSoundscapeFiles } from './soundscapeFiles'
 import { useStepDrag } from './useStepDrag'
-import { VisualizerPage } from './VisualizerPage'
+// Its stylesheets stay in the launch bundle, in the order the scene imported them: the glaze on every tab reads them.
+import '@thockdown/visualizer/beat/beatLayers.css'
+import '@thockdown/visualizer/visualizer/visualizer.css'
+// The visualizer's scene is not parsed at launch: it is fetched once the app
+// has drawn and gone idle, so opening it later finds it already loaded.
+const loadVisualizerPage = () => import('./VisualizerPage')
+const VisualizerPage = lazy(() => loadVisualizerPage().then((module) => ({ default: module.VisualizerPage })))
+const idle = window.requestIdleCallback ?? ((run: () => void) => window.setTimeout(run, 1000))
+idle(() => { void loadVisualizerPage() })
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { MusicLibraryDock, MusicLibraryPanel, MusicSetIconPicker } from '@thockdown/visualizer/library/MusicLibraryPanel'
 import { closeIconPick, isPickingIconFor, readIconPick, setIconPickQuery, subscribeIconPick, toggleIconPick } from '@thockdown/interaction/iconPicker/iconPick'
@@ -788,7 +796,7 @@ export function MobileSoundscapeApp() {
         <DragLayer />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
-            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} double={visualizerDouble} /> : null}
+            {visualizerOpen ? <Suspense fallback={null}><VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} double={visualizerDouble} /></Suspense> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <MobileTabSelector tab={tab} onChange={selectTab} />
