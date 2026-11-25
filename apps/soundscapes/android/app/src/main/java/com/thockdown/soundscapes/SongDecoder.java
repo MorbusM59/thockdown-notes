@@ -19,12 +19,19 @@ import java.nio.ShortBuffer;
  * Mono is played on both sides; of more than two channels the first two are
  * taken (front left and right in every standard layout).
  *
- * A SEEK goes to the sync point at or before the time asked for, and the
+ * A SEEK goes to the sync point at or before the time asked for, steps over
+ * the packets up to a preroll before it without decoding them, and the
  * decoder then drops what precedes the time itself, so a seek lands where it
- * was asked whatever the format's sync spacing.
+ * was asked whatever the format's sync spacing or seek index.
  */
 final class SongDecoder implements AutoCloseable {
     private static final long TIMEOUT_US = 10_000;
+    /**
+     * Decoded, and dropped, before a seek's time: enough for every codec's
+     * state to settle (an MP3's bit reservoir, AAC's and Vorbis's overlapped
+     * blocks, Opus's 80 ms preroll).
+     */
+    private static final long SEEK_PREROLL_US = 500_000;
 
     private final MediaExtractor extractor = new MediaExtractor();
     private final MediaCodec codec;
@@ -64,6 +71,15 @@ final class SongDecoder implements AutoCloseable {
             opened.start();
             if (startUs > 0) {
                 extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                // A file with no seek index (a VBR MP3 without a Xing table,
+                // a WebM without cues) can land far before the time, even at
+                // its start. The packets up to a preroll before the time are
+                // stepped over unread rather than decoded and dropped, which
+                // on a long mix took minutes of silence.
+                long prerollFrom = startUs - SEEK_PREROLL_US;
+                while (extractor.getSampleTime() >= 0 && extractor.getSampleTime() < prerollFrom) {
+                    if (!extractor.advance()) break;
+                }
                 dropBeforeUs = startUs;
             }
         } catch (Exception error) {
