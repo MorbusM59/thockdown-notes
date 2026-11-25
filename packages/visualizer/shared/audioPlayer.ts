@@ -106,7 +106,7 @@ export type MusicSongEntry = {
   priority: number;
   /** 1–10; affects how quickly the song regains priority. */
   favorability: number;
-  /** From the file's tags (electron/audioTags.ts); empty when the file has none. Shown through `songTitleText`. */
+  /** From the file's tags (shared/audioTags.ts); empty when the file has none. Shown through `songTitleText`. */
   title: string;
   /** From the file's tags; empty when the file has none. Shown through `songArtistText`. */
   artist: string;

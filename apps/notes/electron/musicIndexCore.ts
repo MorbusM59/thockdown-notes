@@ -3,8 +3,9 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { IndexedMusicFile } from '@thockdown/visualizer/shared/audioPlayer'
 import { AUDIO_EXTENSIONS } from '@thockdown/visualizer/shared/audioPlayer'
-import { readAudioDuration } from './audioDuration'
-import { readAudioTags } from './audioTags'
+import { readAudioDuration } from '@thockdown/visualizer/shared/audioDuration'
+import { readAudioTags } from '@thockdown/visualizer/shared/audioTags'
+import { withFileAudioSource } from './fileAudioSource'
 
 /**
  * Paths to add to the library, files and folders alike, whichever way they
@@ -27,12 +28,19 @@ export async function indexMusicRequest(request: MusicIndexRequest): Promise<Ind
     else if (stats.isFile() && isAudioFile(entry)) filePaths.push(entry)
   }
 
-  return filePaths.map((filePath) => ({
-    filePath,
-    ...readAudioTags(filePath),
+  const indexed: IndexedMusicFile[] = []
+  for (const filePath of filePaths) indexed.push(await indexFile(filePath))
+  return indexed
+}
+
+/** A file's tags and length (shared/audioTags.ts, shared/audioDuration.ts); a file that cannot be opened has neither. */
+async function indexFile(filePath: string): Promise<IndexedMusicFile> {
+  const facts = await withFileAudioSource(filePath, async (source) => ({
+    ...await readAudioTags(source),
     // 0 when the file does not say (`MusicSongEntry.durationSec`).
-    durationSec: readAudioDuration(filePath) ?? 0,
+    durationSec: await readAudioDuration(source) ?? 0,
   }))
+  return { filePath, ...(facts ?? { title: '', artist: '', album: '', durationSec: 0 }) }
 }
 
 async function audioFilesIn(folderPath: string): Promise<string[]> {

@@ -21,8 +21,10 @@ export interface NativeMusicPlugin {
   releaseFolder(options: { uri: string }): Promise<void>
   /** The subfolders and audio files in `folders` (document ids in the tree `uri`; none is its root), one step of walking it (folderScan.ts). */
   listFolders(options: { uri: string; folders: string[] }): Promise<{ folders: string[]; paths: string[] }>
-  /** These songs' tags (the slow part of adding a folder, so the page asks in batches and shows its progress). */
-  describeSongs(options: { paths: string[] }): Promise<{ added: ScannedSong[] }>
+  /** Byte ranges of songs, for the tag and duration readers (songFacts.ts): each `{ size, data }` (base64), `size` -1 for a file that cannot be read; `close` names songs finished with, closed after the reads. */
+  readSongRanges(options: { reads: Array<{ path: string; offset: number; length: number }>; close: string[] }): Promise<{ results: Array<{ size: number; data?: string }> }>
+  /** Close the songs at `paths`, or every song held when there are none. */
+  closeSongs(options: { paths?: string[] }): Promise<void>
   getLibrary(): Promise<{ catalog: string; rotation: string }>
   setCatalog(options: { catalog: string }): Promise<void>
   play(options: { stage: string }): Promise<void>

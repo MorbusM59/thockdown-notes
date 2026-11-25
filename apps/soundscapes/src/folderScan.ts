@@ -1,7 +1,7 @@
 /**
  * ADDING A FOLDER, in the two phases the Songs dock shows as two bars
  * (musicIndexing.ts): SCANNING walks the tree a few folders a call, then
- * INDEXING reads the tags of the songs new to the library a few at a call,
+ * INDEXING reads the tags of the songs new to the library (songFacts.ts),
  * the dock told after every call.
  *
  * Scanning counts FOLDERS: listed, of those found so far (the total rises as
@@ -13,11 +13,10 @@
  */
 import type { MusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
 import type { NativeMusicPlugin, ScannedSong } from './nativeMusic'
+import { describeSongs } from './songFacts'
 
 /** Folders listed per call: enough that the bridge's round trip is not the cost, few enough that the bar moves. */
 export const LIST_BATCH = 8
-/** Songs described per call: the native side reads four at once (MusicFolders.PARALLEL), so a call is about two songs' time and the bar moves several times a second. */
-export const DESCRIBE_BATCH = 8
 
 export interface FolderScan {
   /** Every audio file in the tree. */
@@ -27,7 +26,7 @@ export interface FolderScan {
 }
 
 export async function scanFolder(
-  plugin: Pick<NativeMusicPlugin, 'listFolders' | 'describeSongs'>,
+  plugin: Pick<NativeMusicPlugin, 'listFolders' | 'readSongRanges' | 'closeSongs'>,
   uri: string,
   known: ReadonlySet<string>,
   publish: (progress: MusicIndexing) => void,
@@ -54,11 +53,8 @@ export async function scanFolder(
   const scanning = { done: listed, total: found }
   const alreadyKnown = paths.length - fresh.length
   publish({ scanning, indexing: { done: alreadyKnown, total: paths.length } })
-  const added: ScannedSong[] = []
-  for (let start = 0; start < fresh.length; start += DESCRIBE_BATCH) {
-    const batch = await plugin.describeSongs({ paths: fresh.slice(start, start + DESCRIBE_BATCH) })
-    added.push(...batch.added)
-    publish({ scanning, indexing: { done: alreadyKnown + Math.min(fresh.length, start + DESCRIBE_BATCH), total: paths.length } })
-  }
+  const added = await describeSongs(plugin, fresh, (done) => {
+    publish({ scanning, indexing: { done: alreadyKnown + done, total: paths.length } })
+  })
   return { paths, added }
 }

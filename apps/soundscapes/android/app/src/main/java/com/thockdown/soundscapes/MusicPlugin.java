@@ -119,19 +119,45 @@ public class MusicPlugin extends Plugin {
         }, "MusicFolderList").start();
     }
 
-    /** MusicFolders.describeAll for `{ paths }`, off the plugin's thread: `{ added }`. */
+    /**
+     * MusicFolders.readSongs, off the plugin's thread: `{ reads: [{ path,
+     * offset, length }], close: [paths] }` to `{ results: [{ size, data }] }`,
+     * the songs in `close` closed after the reads.
+     */
     @PluginMethod
-    public void describeSongs(PluginCall call) {
-        JSArray list = call.getArray("paths", new JSArray());
-        List<Uri> uris = new ArrayList<>();
-        for (int index = 0; index < list.length(); index += 1) uris.add(Uri.parse(list.optString(index)));
+    public void readSongRanges(PluginCall call) {
+        JSArray list = call.getArray("reads", new JSArray());
+        List<MusicFolders.SongRead> reads = new ArrayList<>();
+        for (int index = 0; index < list.length(); index += 1) {
+            JSONObject read = list.optJSONObject(index);
+            if (read == null) continue;
+            reads.add(new MusicFolders.SongRead(read.optString("path"), read.optLong("offset"), read.optInt("length")));
+        }
+        JSArray closeList = call.getArray("close", new JSArray());
+        List<String> close = new ArrayList<>();
+        for (int index = 0; index < closeList.length(); index += 1) close.add(closeList.optString(index));
         new Thread(() -> {
             try {
-                call.resolve(JSObject.fromJSONObject(new JSONObject().put("added", MusicFolders.describeAll(getContext(), uris))));
+                JSONObject results = new JSONObject().put("results", MusicFolders.readSongs(getContext(), reads));
+                MusicFolders.closeSongs(close);
+                call.resolve(JSObject.fromJSONObject(results));
             } catch (Exception error) {
                 call.reject("Could not read the songs: " + error);
             }
-        }, "MusicSongDescribe").start();
+        }, "MusicSongRead").start();
+    }
+
+    /** `{ paths }`: the songs the page has finished reading, closed; no `paths` closes every song held. */
+    @PluginMethod
+    public void closeSongs(PluginCall call) {
+        JSArray list = call.getArray("paths");
+        List<String> paths = null;
+        if (list != null) {
+            paths = new ArrayList<>();
+            for (int index = 0; index < list.length(); index += 1) paths.add(list.optString(index));
+        }
+        MusicFolders.closeSongs(paths);
+        call.resolve();
     }
 
     /** The library's two documents as stored: `{ catalog, rotation }`, each JSON text. */
