@@ -79,6 +79,8 @@ export interface NativeSoundscapePlugin {
   /** `configuration` is a ConfigureMessage as JSON; `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */
   configure(options: { configuration: string; transitionSec: number }): Promise<void>
   setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>
+  /** The visualizer's spectrum of the soundscape in this many log bands, sent as `spectrum` events; 0 stops it (nativeMusicListening.ts). */
+  setSpectrum(options: { bands: number }): Promise<void>
   /** Ask where to save `<name>.m4a` (the system's "Save as" dialog), then render `seconds` of `configuration` into it. */
   renderClip(options: { configuration: string; seconds: number; name: string }): Promise<void>
   cancelClip(): Promise<void>
@@ -91,6 +93,8 @@ export interface NativeSoundscapePlugin {
   /** The timer's countdown started, held or ended, for any reason (the page's own changes included). */
   addListener(event: 'countdown', listener: (data: { endsAtMs: number; remainingMs: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'back', listener: () => void): Promise<PluginListenerHandle>
+  /** Spectrum frames (soundscapeRenderer.ts's batches, as JSON) and the soundscape output's playhead as they were sent. */
+  addListener(event: 'spectrum', listener: (data: { batches: string; playhead: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'rendererFailure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'clipProgress', listener: (data: { fraction: number }) => void): Promise<PluginListenerHandle>
   /** The clip is done: `saved` is false when it failed or was cancelled (the dialog included). */

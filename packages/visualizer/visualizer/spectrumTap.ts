@@ -1,6 +1,7 @@
 /**
  * The desktop's spectrum (`musicListening.ts`'s `SpectrumSource`): the
- * processed music read by two analysers and delayed until the listener hears it. The arithmetic is `spectrumBands.ts`;
+ * processed music, and the soundscape with it (`spectrumMix.ts`: each at its
+ * weight, their audio summed before the analysers), read by two analysers and delayed until the listener hears it. The arithmetic is `spectrumBands.ts`;
  * this is the Web Audio half and the timing. The semitone score is prepared
  * from decoded track audio in `musicSemitoneScore.ts`.
  *
@@ -23,6 +24,8 @@ import type { MusicPlayerService } from '../sound/MusicPlayerService'
 import { heardLagSec } from '../sound/musicBeat'
 import type { SpectrumSource } from '../sound/musicListening'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
+import { soundscapeHeardGain, soundscapeTapNode } from '@thockdown/soundscape/soundscapeTap'
+import { spectrumMixWeights } from './spectrumMix'
 import {
   CROSSOVER_HZ,
   LONG_FFT,
@@ -50,6 +53,9 @@ export class SpectrumTap implements SpectrumSource {
   private longPlan: BandLevelPlan | null = null
   private shortPlan: BandLevelPlan | null = null
   private disconnect: (() => void) | null = null
+  /** Each source's weight (`spectrumMix.ts`), set each frame. */
+  private musicWeight: GainNode | null = null
+  private soundscapeWeight: GainNode | null = null
   private readonly history: Frame[]
   /** The long bands as last read, carried into frames that do not re-read it. */
   private longLevels: Float32Array
@@ -70,7 +76,12 @@ export class SpectrumTap implements SpectrumSource {
     }))
   }
 
-  /** Starts listening to the music. Idempotent. */
+  get hearing(): boolean {
+    const weights = spectrumMixWeights(this.player.heardGain(), soundscapeHeardGain())
+    return weights.music > 0 || weights.soundscape > 0
+  }
+
+  /** Starts listening. Idempotent. */
   start(): void {
     if (this.disconnect) return
     const context = outputContext()
@@ -83,7 +94,15 @@ export class SpectrumTap implements SpectrumSource {
     const input = context.createGain()
     input.connect(long)
     input.connect(short)
-    const untap = this.player.tapProcessed(input)
+    const musicWeight = context.createGain()
+    const soundscapeWeight = context.createGain()
+    musicWeight.connect(input)
+    soundscapeWeight.connect(input)
+    const untap = this.player.tapProcessed(musicWeight)
+    const soundscape = soundscapeTapNode(context)
+    soundscape.connect(soundscapeWeight)
+    this.musicWeight = musicWeight
+    this.soundscapeWeight = soundscapeWeight
     this.long = long
     this.short = short
     this.longBins = new Float32Array(long.frequencyBinCount)
@@ -104,6 +123,9 @@ export class SpectrumTap implements SpectrumSource {
     )
     this.disconnect = () => {
       untap()
+      soundscape.disconnect(soundscapeWeight)
+      musicWeight.disconnect()
+      soundscapeWeight.disconnect()
       input.disconnect()
     }
   }
@@ -113,6 +135,8 @@ export class SpectrumTap implements SpectrumSource {
     this.disconnect = null
     this.long = null
     this.short = null
+    this.musicWeight = null
+    this.soundscapeWeight = null
     this.longPlan = null
     this.shortPlan = null
     this.count = 0
@@ -122,10 +146,15 @@ export class SpectrumTap implements SpectrumSource {
   /**
    * Reads the analysers as of `nowSec` (the frame's clock) into the history,
    * then writes into `out` the levels the listener is hearing at `nowSec`.
-   * With the music stopped nothing is read and `out` is silence.
+   * With nothing heard nothing is read and `out` is silence.
    */
   sample(nowSec: number, out: Float32Array): void {
-    if (!this.long || !this.short || !this.longBins || !this.shortBins || !this.longPlan || !this.shortPlan || !this.player.isPlaying) {
+    const weights = spectrumMixWeights(this.player.heardGain(), soundscapeHeardGain())
+    if (this.musicWeight && this.soundscapeWeight) {
+      if (this.musicWeight.gain.value !== Math.fround(weights.music)) this.musicWeight.gain.value = weights.music
+      if (this.soundscapeWeight.gain.value !== Math.fround(weights.soundscape)) this.soundscapeWeight.gain.value = weights.soundscape
+    }
+    if (!this.long || !this.short || !this.longBins || !this.shortBins || !this.longPlan || !this.shortPlan || (weights.music === 0 && weights.soundscape === 0)) {
       out.fill(-Infinity)
       this.count = 0
       this.longReadSec = -Infinity

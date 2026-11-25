@@ -39,6 +39,7 @@ import { musicListening } from '@thockdown/visualizer/sound/musicListening'
 import { setBeatVisualDelaySec, setBeatResponseHeadroomDb, setVisualizerTrackers, subscribeMusicClock, subscribeMusicMix, type FlashClock, type MusicClockSubscription } from '@thockdown/visualizer/sound/musicBeat'
 import { useOutputDevice } from '../sound/outputDevice'
 import { setSpectrumFall, setSpectrumStripRows } from '@thockdown/visualizer/visualizer/spectrumBands'
+import { setSpectrumIncludesSoundscape } from '@thockdown/visualizer/visualizer/spectrumMix'
 import { setLiveStyle } from '../shared/liveStyle'
 
 type BlockName = 'edge' | 'pane' | 'wash'
@@ -152,6 +153,8 @@ export function useBeatFeedback(enabled: boolean, settings: BeatSettings, visual
   useEffect(() => setGridWaveSettings({ waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, glazePushes: swayPush !== 0, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, waveColor, pulseSoftness, pulseBoost }), [waveTurn, waveBoxes, waveBeats, pulseSpeed, pulseHalfLifeSec, pulseFadeSec, waveShape, waveFallSec, waveMix, glazeMix, swayPush, pulseMix, edgeShape, edgeFallSec, cutoutRound, pulseColor, waveColor, pulseSoftness, pulseBoost])
   const { spectrumDelaySec, spectrumGravity, crestDelaySec, crestFallReduction, spectrumStripRows } = visualizer.immersive
   useEffect(() => setSpectrumStripRows(spectrumStripRows), [spectrumStripRows])
+  const { spectrumSoundscape } = visualizer
+  useEffect(() => setSpectrumIncludesSoundscape(spectrumSoundscape), [spectrumSoundscape])
   useEffect(() => setSpectrumFall({ delaySec: spectrumDelaySec, gravity: spectrumGravity, crestDelaySec, crestFallReduction }), [spectrumDelaySec, spectrumGravity, crestDelaySec, crestFallReduction])
   useEffect(() => {
     const root = document.documentElement.style

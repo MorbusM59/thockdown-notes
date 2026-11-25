@@ -327,6 +327,19 @@ export class RenderAheadEngine<C> {
     this.pump();
   }
 
+  /**
+   * Render again from as near the playhead as the output allows, with
+   * nothing changed: the rewind reproduces the audio already sent sample for
+   * sample, so this only hands it out again, for a listener that has started
+   * reading the chunks (the visualizer's spectrum) and would otherwise wait a
+   * whole lead for its first one.
+   */
+  rerender(): void {
+    if (!this.configured) return
+    if (this.pendingBlend === null) this.splice()
+    this.pump()
+  }
+
   /** The first point of the splice grid a margin past the playhead: where a change can be heard from. */
   private spliceFrame(): number {
     return Math.ceil((this.playedFrame + this.marginFrames) / SPLICE_GRID_FRAMES) * SPLICE_GRID_FRAMES;

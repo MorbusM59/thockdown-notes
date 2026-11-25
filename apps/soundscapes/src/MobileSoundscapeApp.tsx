@@ -16,6 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
+import { setSoundscapeSpectrumVolume } from './nativeMusicListening'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
@@ -39,6 +40,9 @@ import {
 } from '@thockdown/look/presets'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
+import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
+import { roundUiFontScale, uiScaleFactor, UI_FONT_SCALE_MAX, UI_FONT_SCALE_MIN, UI_FONT_SCALE_STEP } from '@thockdown/look/uiFontScale'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
@@ -57,6 +61,9 @@ import {
   saveTimer,
   savePreferences,
   type MobileLook,
+  loadUiFontScale,
+  saveUiFontScale,
+  DEFAULT_PHONE_UI_FONT_SCALE,
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 import { musicScheduleEvents, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
@@ -347,6 +354,7 @@ export function MobileSoundscapeApp() {
     soundscapeEngine.setChannel(soundscapeChannel)
   }, [soundscapeChannel])
   const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
+  useEffect(() => setSoundscapeSpectrumVolume(sessionVolume), [sessionVolume])
 
   useEffect(() => {
     savePreferences(preferences)
@@ -390,6 +398,15 @@ export function MobileSoundscapeApp() {
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.
   const [timer, setTimer] = useState<TimerSettings>(loadTimer)
+  // Text size: the desktop's UI Font scale, drawn the same way (--ui-font-scale on the root).
+  const [uiFontScale, setUiFontScale] = useState(loadUiFontScale)
+  // Before paint, so the first frame is already at the reader's size.
+  useLayoutEffect(() => {
+    const factor = uiScaleFactor(uiFontScale)
+    document.documentElement.style.setProperty('--ui-font-scale', String(factor))
+    installScrollTrackTokens(factor)
+    saveUiFontScale(uiFontScale)
+  }, [uiFontScale])
   useEffect(() => saveTimer(timer), [timer])
   const timerSeconds = timer.active === null ? 0 : timer.durations[timer.active]
   useEffect(() => {
@@ -650,6 +667,19 @@ export function MobileSoundscapeApp() {
                           <span className={icon} aria-hidden="true" />
                         </button>
                       ))}
+                    </div>
+                    <div className="options-slider-row">
+                      <CompactScrollbarSlider
+                        id="mobile-ui-font-scale"
+                        value={uiFontScale}
+                        min={UI_FONT_SCALE_MIN}
+                        max={UI_FONT_SCALE_MAX}
+                        step={UI_FONT_SCALE_STEP}
+                        trackLabel="size"
+                        ariaLabel="Text size"
+                        defaultValue={DEFAULT_PHONE_UI_FONT_SCALE}
+                        onCommit={(value) => setUiFontScale(Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, roundUiFontScale(value))))}
+                      />
                     </div>
                   </OptionsFixedSection>
                   <VisualizerButtons onOpen={() => setVisualizerOpen(true)} double={visualizerDouble} onDouble={setVisualizerDouble} />
