@@ -38,7 +38,7 @@ import {
   type MusicCatalog,
   type MusicRotation,
 } from './musicLibrary'
-import { loadMusicLibrary, type NativeMusicPlugin } from './nativeMusic'
+import { loadMusicLibrary, type NativeMusicPlugin, type ScannedSong } from './nativeMusic'
 import { scanFolder } from './folderScan'
 
 let catalog: MusicCatalog = EMPTY_CATALOG
@@ -154,9 +154,24 @@ async function playSong(songId: number): Promise<void> {
 function commit(next: MusicCatalog): void {
   if (next === catalog) return
   catalog = next
-  void plugin?.setCatalog({ catalog: JSON.stringify(catalog) })
+  writeCatalog()
   publish()
 }
+
+/** The catalog to the native side, which plays from it and stores it. */
+function writeCatalog(): void {
+  void plugin?.setCatalog({ catalog: JSON.stringify(catalog) })
+}
+
+/**
+ * While a folder is read, its songs join the library as they are found,
+ * shown at most every SCAN_SHOW_MS (each showing redraws every reader of
+ * the library, the song lists included) and written to the native side at
+ * most every SCAN_WRITE_MS (each write sends and stores the whole catalog);
+ * the end of the read shows and writes it whole.
+ */
+const SCAN_SHOW_MS = 250
+const SCAN_WRITE_MS = 1000
 
 function entryOf(songId: number | null): MusicSongEntry | null {
   if (songId === null) return null
@@ -167,11 +182,35 @@ async function addFolderTo(slot: PlaylistSlot): Promise<boolean> {
   if (!plugin) return false
   const { uri } = await plugin.pickFolder()
   if (!uri) return false
+  let shown = -Infinity
+  let written = -Infinity
+  // Songs read since the library last took them: joined a showing at a time, since each join walks the whole catalog.
+  let waiting: ScannedSong[] = []
+  const join = () => {
+    catalog = addScanToSet(catalog, slot, uri, [], waiting)
+    waiting = []
+  }
   try {
-    const scan = await scanFolder(plugin, uri, new Set(catalog.songs.map((song) => song.filePath)), publishMusicIndexing)
-    commit(addScanToSet(catalog, slot, uri, scan.paths, scan.added))
+    await scanFolder(plugin, uri, new Set(catalog.songs.map((song) => song.filePath)), publishMusicIndexing, (paths, added) => {
+      if (paths.length > 0) catalog = addScanToSet(catalog, slot, uri, paths, [])
+      waiting.push(...added)
+      const now = performance.now()
+      if (now - shown >= SCAN_SHOW_MS) {
+        shown = now
+        join()
+        publish()
+      }
+      if (now - written >= SCAN_WRITE_MS) {
+        written = now
+        writeCatalog()
+      }
+    })
     return true
   } finally {
+    // Whatever was read, the read ending early included, is shown and kept.
+    join()
+    writeCatalog()
+    publish()
     publishMusicIndexing(null)
   }
 }

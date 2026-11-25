@@ -42,10 +42,10 @@ final class MusicFolders {
      * How many folders are listed, or song ranges read, at once. Both are
      * round trips to the documents provider (listing a folder, opening a
      * song) that spend most of their time waiting rather than computing, so
-     * a few at a time on separate threads divide the wall time by about this
+     * several at a time on separate threads divide the wall time by up to this
      * much.
      */
-    private static final int PARALLEL = 4;
+    private static final int PARALLEL = 8;
     private static final ExecutorService WORKERS = Executors.newFixedThreadPool(PARALLEL, (task) -> {
         Thread thread = new Thread(task, "MusicFolderWork");
         thread.setDaemon(true);
@@ -176,18 +176,28 @@ final class MusicFolders {
         }
     }
 
-    /** The song at `path`, opened on its first read. Two reads racing to open it open it once. */
+    /**
+     * The song at `path`, opened on its first read. Opening is the slow part
+     * of a read (a round trip to the documents provider), so songs open in
+     * parallel, each on its own worker; a lock around the open made them
+     * open one at a time, every worker waiting on it, and indexing ran at
+     * one song per open. The page asks one range of a song at a time, so two
+     * reads of one song do not race; if they ever do, the second open is
+     * closed and the first kept.
+     */
     private static ParcelFileDescriptor openSong(Context context, String path) throws Exception {
         ParcelFileDescriptor held = OPEN_SONGS.get(path);
         if (held != null) return held;
-        synchronized (OPEN_SONGS) {
-            held = OPEN_SONGS.get(path);
-            if (held != null) return held;
-            ParcelFileDescriptor opened = context.getContentResolver().openFileDescriptor(Uri.parse(path), "r");
-            if (opened == null) throw new IllegalStateException("No file for " + path);
-            OPEN_SONGS.put(path, opened);
-            return opened;
+        ParcelFileDescriptor opened = context.getContentResolver().openFileDescriptor(Uri.parse(path), "r");
+        if (opened == null) throw new IllegalStateException("No file for " + path);
+        ParcelFileDescriptor raced = OPEN_SONGS.putIfAbsent(path, opened);
+        if (raced == null) return opened;
+        try {
+            opened.close();
+        } catch (Exception ignored) {
+            // A second descriptor of the same file: nothing is lost if it does not close cleanly.
         }
+        return raced;
     }
 
     /** Close the songs at `paths`, or every song held when `paths` is null. */

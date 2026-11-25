@@ -272,15 +272,14 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap, selectorHeading }:
 
 /**
  * The Music Library's dock, below the sidebar where the colour picker docks:
- * while a folder is added, a bar for each of its two phases, one under the
- * other, scanning and then indexing (MusicIndexing); the two
+ * while a folder is added, one bar for its two phases, scanning and then
+ * indexing (MusicIndexing); the two
  * groupings of the open set's songs; and last, as every dock ends, the open
  * set's row (MusicSetRow). `trailing` ends that row (the phone's help).
  */
-/** One phase of adding a folder; a phase not yet begun is an empty bar, so the second bar is there from the start and the layout does not jump. */
-function IndexingBar({ id, name, unit, progress }: { id: string; name: string; unit: string; progress: MusicProgress | null }) {
-  const done = progress?.done ?? 0
-  const total = progress?.total ?? 0
+/** Adding a folder: its scanning, then its indexing, on one bar. */
+function IndexingBar({ id, name, unit, progress }: { id: string; name: string; unit: string; progress: MusicProgress }) {
+  const { done, total } = progress
   return (
     <div className="options-slider-row options-music-indexing" role="group" aria-label={name}>
       <CompactScrollbarSlider
@@ -289,7 +288,7 @@ function IndexingBar({ id, name, unit, progress }: { id: string; name: string; u
         min={0}
         max={Math.max(1, total)}
         step={1}
-        trackLabel={progress ? `${name} ${done} / ${total}` : name}
+        trackLabel={`${name} ${done} / ${total}`}
         ariaLabel={unit}
         readOnly
         onCommit={() => {}}
@@ -308,8 +307,9 @@ export function MusicLibraryDock({ grouping, onGroupingChange, trailing }: {
   return (
     <div className="options-curve-rows options-music-set-list-dock">
       {indexing ? (<>
-        <IndexingBar id="music-library-scanning" name="Scanning" unit="Folders listed" progress={indexing.scanning} />
-        <IndexingBar id="music-library-indexing" name="Indexing" unit="Songs read" progress={indexing.indexing} />
+        {indexing.indexing
+          ? <IndexingBar id="music-library-indexing" name="Indexing" unit="Songs read" progress={indexing.indexing} />
+          : <IndexingBar id="music-library-scanning" name="Scanning" unit="Folders listed" progress={indexing.scanning} />}
       </>) : null}
       <div className="options-curve-row options-music-set-list-dock-row" role="radiogroup" aria-label="Song grouping">
         {(['folder', 'artist'] as const).map((option) => (

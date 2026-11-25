@@ -1,8 +1,10 @@
 /**
- * ADDING A FOLDER, in the two phases the Songs dock shows as two bars
- * (musicIndexing.ts): SCANNING walks the tree a few folders a call, then
- * INDEXING reads the tags of the songs new to the library (songFacts.ts),
- * the dock told after every call.
+ * ADDING A FOLDER, in the two phases the Songs dock's bar shows one after
+ * the other (musicIndexing.ts): SCANNING walks the tree a few folders a
+ * call, then INDEXING reads the tags of the songs new to the library
+ * (songFacts.ts), the dock told after every call and every song. The songs
+ * reach the library as they are found (`onSongs`): those already in it once
+ * the tree is listed, each new one as soon as it is read.
  *
  * Scanning counts FOLDERS: listed, of those found so far (the total rises as
  * subfolders turn up). Each folder is a round trip to the documents
@@ -30,6 +32,7 @@ export async function scanFolder(
   uri: string,
   known: ReadonlySet<string>,
   publish: (progress: MusicIndexing) => void,
+  onSongs: (paths: readonly string[], added: readonly ScannedSong[]) => void,
 ): Promise<FolderScan> {
   const paths: string[] = []
   const fresh: string[] = []
@@ -53,7 +56,9 @@ export async function scanFolder(
   const scanning = { done: listed, total: found }
   const alreadyKnown = paths.length - fresh.length
   publish({ scanning, indexing: { done: alreadyKnown, total: paths.length } })
-  const added = await describeSongs(plugin, fresh, (done) => {
+  onSongs(paths, [])
+  const added = await describeSongs(plugin, fresh, (song, done) => {
+    onSongs([], [song])
     publish({ scanning, indexing: { done: alreadyKnown + done, total: paths.length } })
   })
   return { paths, added }

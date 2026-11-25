@@ -39,7 +39,7 @@ class GatheredReads {
   private closing: string[] = []
   private scheduled = false
 
-  constructor(private readonly plugin: SongReadsPlugin, private readonly afterRound: () => void) {}
+  constructor(private readonly plugin: SongReadsPlugin) {}
 
   read(path: string, offset: number, length: number): Promise<{ size: number; bytes: Uint8Array }> {
     return new Promise((resolve, reject) => {
@@ -79,7 +79,6 @@ class GatheredReads {
     } catch (error) {
       for (const entry of round) entry.reject(error instanceof Error ? error : new Error(String(error)))
     }
-    this.afterRound()
   }
 }
 
@@ -91,23 +90,18 @@ function fromBase64(text: string): Uint8Array {
 }
 
 /**
- * The songs at `paths`, described, in their order. `progress` is told how
- * many are done after every round trip, so a bar moves several times a
- * second however long the whole takes.
+ * The songs at `paths`, described, in their order. `onSong` is told of each
+ * song as it is described, with how many are done, so the list and the bar
+ * can follow song by song (their listeners draw at most once a frame).
  */
 export async function describeSongs(
   plugin: SongReadsPlugin,
   paths: readonly string[],
-  progress: (done: number) => void,
+  onSong: (song: ScannedSong, done: number) => void,
 ): Promise<ScannedSong[]> {
   const described: ScannedSong[] = new Array(paths.length)
   let done = 0
-  let reported = 0
-  const reads = new GatheredReads(plugin, () => {
-    if (done === reported) return
-    reported = done
-    progress(done)
-  })
+  const reads = new GatheredReads(plugin)
   // Whatever a page reloaded mid-scan left open is let go.
   await plugin.closeSongs({})
   let next = 0
@@ -116,11 +110,11 @@ export async function describeSongs(
       const index = next++
       described[index] = await describe(reads, paths[index])
       done += 1
+      onSong(described[index], done)
     }
   }
   await Promise.all(Array.from({ length: Math.min(SONGS_IN_FLIGHT, paths.length) }, worker))
   await reads.closeRest()
-  if (done !== reported) progress(done)
   return described
 }
 
