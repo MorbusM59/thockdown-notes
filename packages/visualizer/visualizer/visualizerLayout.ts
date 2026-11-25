@@ -386,8 +386,10 @@ export function levelAtColumn(columns: number, column: number): number {
 export const REQUIRED_ROWS_BESIDE_CUTOUT = 2 * (STRIP_ROWS + 2)
 
 /**
- * The fewest full rows the scene may have: both strips and bars, plus enough
- * middle rows for five set entries with three empty rows before the filter.
+ * The fewest full rows a LANDSCAPE scene may have: both strips and bars, plus
+ * enough middle rows for five set entries with three empty rows before the
+ * filter. A portrait scene has no minimum beyond its strips, bars and cutout
+ * (`fitVisualizerBox`).
  */
 export const MIN_SCENE_ROWS = 31
 
@@ -402,10 +404,10 @@ export const MIN_SCENE_COLUMNS = 31
 /**
  * The box and font size the scene is drawn at in a `widthPx` by `heightPx` slot: the
  * reader's own when both strips, both bars, a row of padding each side and the
- * cutout all fit, and the width holds `MIN_SCENE_COLUMNS` (in landscape, where
- * the lists sit beside the cutout) or one full box either side of the cutout
- * (in portrait, where the lists sit above and below it and only the cutout
- * needs the width); otherwise the largest box that fits, with the font scaled
+ * cutout all fit, and, in LANDSCAPE (the lists beside the cutout), the scene
+ * holds `MIN_SCENE_ROWS` rows and `MIN_SCENE_COLUMNS` columns; in PORTRAIT
+ * (the lists above and below the cutout) only one full box either side of the
+ * cutout is asked for, and the lists show what entries fit; otherwise the largest box that fits, with the font scaled
  * by the same ratio, so the reader's line height (the box over the font size,
  * never below 1) is kept and a letter is never cut.
  */
@@ -416,10 +418,9 @@ export function fitVisualizerBox(widthPx: number, heightPx: number, boxPx: numbe
   const fits = (box: number) => {
     const size = cutoutBoxes(cutoutPx, box)
     const above = Math.floor(Math.floor((heightPx - size * box) / 2) / box)
-    const wide = portrait
-      ? Math.floor(Math.floor((widthPx - size * box) / 2) / box) >= 1
-      : Math.floor(widthPx / box) - 1 >= MIN_SCENE_COLUMNS
-    return 2 * above >= REQUIRED_ROWS_BESIDE_CUTOUT && 2 * above + size >= MIN_SCENE_ROWS && wide
+    if (2 * above < REQUIRED_ROWS_BESIDE_CUTOUT) return false
+    if (portrait) return Math.floor(Math.floor((widthPx - size * box) / 2) / box) >= 1
+    return 2 * above + size >= MIN_SCENE_ROWS && Math.floor(widthPx / box) - 1 >= MIN_SCENE_COLUMNS
   }
   const asked = Math.max(1, boxPx)
   let box = asked
