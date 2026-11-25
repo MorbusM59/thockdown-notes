@@ -199,6 +199,14 @@ body {
 /* The schedule (ScheduleRows.tsx): its entries, one under another, each six
    buttons wide; placement is each grid's own, row by row, so only the spans
    are written. */
+/* An entry's wrapper is what a drag moves and marks as its target (the
+   reorder's source and target attributes land on it), and it is exactly the
+   size of the subsection box inside it, so it takes that box's corners: an
+   outline follows its own element's radius, and this one had none. */
+.mobile-schedule-slot {
+  border-radius: var(--border-radius-small);
+}
+
 /* The entries are subsections of the tab like any other, spaced by the
    tab's own rule: the wrapper only groups them for assistive technology. */
 .mobile-schedule {
