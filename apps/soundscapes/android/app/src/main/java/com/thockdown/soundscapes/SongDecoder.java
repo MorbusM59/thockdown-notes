@@ -37,32 +37,41 @@ final class SongDecoder implements AutoCloseable {
     private long dropBeforeUs = 0;
 
     SongDecoder(Context context, Uri uri, long startUs) throws Exception {
-        extractor.setDataSource(context, uri, null);
-        int track = -1;
-        MediaFormat format = null;
-        for (int index = 0; index < extractor.getTrackCount(); index += 1) {
-            MediaFormat candidate = extractor.getTrackFormat(index);
-            String mime = candidate.getString(MediaFormat.KEY_MIME);
-            if (mime != null && mime.startsWith("audio/")) {
-                track = index;
-                format = candidate;
-                break;
+        // Whatever is opened before a failure is released with it: a song that
+        // cannot be decoded is passed over (MusicRenderer.startSong), and a
+        // codec left open by each one would use up the device's decoders, so
+        // every song after would fail too.
+        MediaCodec opened = null;
+        try {
+            extractor.setDataSource(context, uri, null);
+            int track = -1;
+            MediaFormat format = null;
+            for (int index = 0; index < extractor.getTrackCount(); index += 1) {
+                MediaFormat candidate = extractor.getTrackFormat(index);
+                String mime = candidate.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("audio/")) {
+                    track = index;
+                    format = candidate;
+                    break;
+                }
             }
-        }
-        if (format == null) {
+            if (format == null) throw new IllegalArgumentException("No audio in " + uri);
+            extractor.selectTrack(track);
+            sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+            channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+            opened = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));
+            opened.configure(format, null, null, 0);
+            opened.start();
+            if (startUs > 0) {
+                extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                dropBeforeUs = startUs;
+            }
+        } catch (Exception error) {
+            if (opened != null) opened.release();
             extractor.release();
-            throw new IllegalArgumentException("No audio in " + uri);
+            throw error;
         }
-        extractor.selectTrack(track);
-        sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-        channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
-        codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));
-        codec.configure(format, null, null, 0);
-        codec.start();
-        if (startUs > 0) {
-            extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
-            dropBeforeUs = startUs;
-        }
+        codec = opened;
     }
 
     /** The file's sample rate; the decoder's output format may correct it once decoding starts. */
