@@ -223,19 +223,22 @@ export function sanitizeGlazeSettings(input: unknown, fallback: GlazeSettings = 
  * and shapes, at least `glareMinStacks` linear stacks and `flairMinSources`
  * radial sources, and the layout's linear and radial strengths scaled by
  * `glareStrength` and `flairStrength` (the visualizer's own settings,
- * `VisualizerImmersive`), so up to four times the layout's own limits. Gloom and sheen are not
+ * `VisualizerImmersive`), so up to four times the layout's own limits.
+ * The layout's strength counts as at least `glazeStrengthOffset`,
+ * so a layout with little or no glare still shows the effect (50% on a layout
+ * at 0.02 with an offset of 0.1 draws 0.05), while a slider at 0 still draws nothing. Gloom and sheen are not
  * swayed and are left exactly as the layout has them.
  */
 export function visualizerGlazeSettings(
   settings: GlazeSettings,
-  tuning: { glareStrength: number; flairStrength: number; glareMinStacks: number; flairMinSources: number },
+  tuning: { glareStrength: number; flairStrength: number; glazeStrengthOffset: number; glareMinStacks: number; flairMinSources: number },
 ): GlazeSettings {
   return {
     ...settings,
     linearStackCount: Math.min(GLAZE_LINEAR_STACK_MAX, Math.max(settings.linearStackCount, tuning.glareMinStacks)),
     radialCount: Math.min(GLAZE_RADIAL_COUNT_MAX, Math.max(settings.radialCount, tuning.flairMinSources)),
-    linearOpacity: Math.min(1, settings.linearOpacity * tuning.glareStrength),
-    radialOpacity: Math.min(1, settings.radialOpacity * tuning.flairStrength),
+    linearOpacity: Math.min(1, Math.max(tuning.glazeStrengthOffset, settings.linearOpacity) * tuning.glareStrength),
+    radialOpacity: Math.min(1, Math.max(tuning.glazeStrengthOffset, settings.radialOpacity) * tuning.flairStrength),
   };
 }
 

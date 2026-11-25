@@ -81,7 +81,9 @@ export interface GeneratorSnapshot {
  * after construction and so can be shared rather than copied -- the noise
  * loops, their gains, and the set of recordings that copies share.
  */
-const UNCOPIED_PROPERTIES = new Set(['port', 'noiseLoops', 'noiseGains', 'recordedBuffers']);
+// `signals` is drained after every chunk and switched by the host, so a
+// rewind neither brings back what was taken nor undoes the switch.
+const UNCOPIED_PROPERTIES = new Set(['port', 'noiseLoops', 'noiseGains', 'recordedBuffers', 'signals']);
 
 /** Whether a typed array's buffer is never written again, and so is shared by every copy rather than copied. */
 type SharedBuffers = (buffer: ArrayBufferLike) => boolean;

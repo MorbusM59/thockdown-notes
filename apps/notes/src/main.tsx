@@ -6,7 +6,7 @@ import { installPressTracking } from '@thockdown/interaction/pressTracking'
 import { installTouchInput } from '@thockdown/interaction/touchInput'
 import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
 import { setMusicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
-import { desktopMusicListening } from '@thockdown/visualizer/sound/desktopMusicListening'
+import { desktopMusicListening, installDesktopSoundscapeSignals } from '@thockdown/visualizer/sound/desktopMusicListening'
 import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
 import { installTexturePorts } from '@thockdown/look/textures/textureStore'
 import { beginBackgroundWork } from './shared/backgroundWork'
@@ -20,6 +20,7 @@ installBrowserMockBridges()
 // First: it must see every touch pointer event before any other window listener.
 installTouchInput()
 setMusicListening(desktopMusicListening)
+installDesktopSoundscapeSignals()
 if (window.thockdownAudioPlayer) {
   const library = window.thockdownAudioPlayer
   setMusicLibraryReads({

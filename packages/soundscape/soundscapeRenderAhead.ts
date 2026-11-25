@@ -69,8 +69,20 @@ export class SoundscapeVoice implements RenderVoice<ConfigureMessage> {
   prepareRoom(): void { this.mix.prepareRoom(); }
   buildRoom(): void { this.mix.buildRoom(); }
 
+  /** The generator's frame where the last `render` began: its signals are counted from there. */
+  private renderedFrom = 0;
+
+  takeSignals(): Array<{ offset: number; [key: string]: unknown }> {
+    const collected = this.generator.processor.signals as Array<{ frame: number; [key: string]: unknown }> | null;
+    if (!collected || collected.length === 0) return [];
+    const taken = collected.map(({ frame, ...signal }) => ({ ...signal, offset: frame - this.renderedFrom }));
+    collected.length = 0;
+    return taken;
+  }
+
   render(left: Float32Array, right: Float32Array): void {
     const { direct, send } = this;
+    this.renderedFrom = this.generator.frame;
     // In the generator's own block size (see BLOCK_FRAMES), through views.
     for (let offset = 0; offset < RENDER_CHUNK_FRAMES; offset += BLOCK_FRAMES) {
       const view = (channel: Float32Array) => channel.subarray(offset, offset + BLOCK_FRAMES);

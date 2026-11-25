@@ -1,45 +1,65 @@
 /**
  * The Android soundscape renderer's script (vite.renderer.config.ts): the
  * shared renderer (packages/soundscape/soundscapeSandbox.ts) plus what only
- * this app asks of it, the visualizer's spectrum of the soundscape
+ * this app asks of it, the VISUALS: the soundscape's spectrum
  * (packages/visualizer/visualizer/spectrumMix.ts), computed from the chunks
- * it renders exactly as musicSandbox.ts computes the music's.
+ * it renders exactly as musicSandbox.ts computes the music's, and its
+ * signals (soundscape-generator.js's SIGNALS: hits and gusts, for
+ * packages/visualizer/sound/soundscapeSignals.ts).
  *
  * The functions it adds on globalThis:
- * - soundscapeSpectrum(bands): compute the spectrum in `bands` log bands (0
- *   stops it). Turning it on hands out again what is queued from near the
- *   playhead (`rerenderSoundscape`), so the frames start there rather than
- *   a render lead later;
- * - soundscapeSpectrumTake(): the frames computed since the last call, as
- *   JSON `[{ "from", "first", "hop", "l" }]` (spectrumFrames.ts's
- *   SpectrumFrameBatch, `l` its levels in base64), stamped with the
- *   soundscape output's frame positions.
+ * - soundscapeVisuals(bands, signals, sampleRate): compute the spectrum in
+ *   `bands` log bands (0 for none) and pass the signals on (`signals`
+ *   1) or not (0). Turning either on hands out again what is queued from
+ *   near the playhead (`rerenderSoundscape`), so both start there rather
+ *   than a render lead later;
+ * - soundscapeVisualsTake(): what was computed since the last call, as JSON
+ *   `{ "spectrum": [{ "from", "first", "hop", "l" }], "signals": [{ "from",
+ *   "list" }] }` (spectrumFrames.ts's SpectrumFrameBatch, `l` its levels in
+ *   base64; a run of consecutive chunks' signals, each at its frame), in the
+ *   soundscape output's frames. Each batch replaces everything held from its
+ *   `from` on, since a chunk re-sent after a rewind supersedes the old one.
  */
 import { observeRenderedChunks, rerenderSoundscape } from '@thockdown/soundscape/soundscapeSandbox';
 import { toBase64 } from '@thockdown/soundscape/halfScalePcm';
+import type { RenderSignal } from '@thockdown/audio/renderAhead';
 import { SpectrumFrames } from '@thockdown/visualizer/visualizer/spectrumFrames';
 import { logBandEdges } from '@thockdown/visualizer/visualizer/spectrumBands';
 
 const scope = globalThis as unknown as Record<string, unknown>;
-let pending: Array<{ from: number; first: number; hop: number; l: string }> = [];
+let spectrumBatches: Array<{ from: number; first: number; hop: number; l: string }> = [];
+let signalBatches: Array<{ from: number; list: RenderSignal[] }> = [];
+/** Where the last signal batch's next chunk would start: a chunk elsewhere (a rewind) begins a new batch. */
+let signalsNext = -1;
 
-scope.soundscapeSpectrum = (bands: number, sampleRate: number): string => {
-  pending = [];
-  if (bands <= 0) {
+scope.soundscapeVisuals = (bands: number, signals: number, sampleRate: number): string => {
+  spectrumBatches = [];
+  signalBatches = [];
+  signalsNext = -1;
+  if (bands <= 0 && !signals) {
     observeRenderedChunks(null);
     return 'ok';
   }
-  const spectrum = new SpectrumFrames(sampleRate, logBandEdges(bands));
+  const spectrum = bands > 0 ? new SpectrumFrames(sampleRate, logBandEdges(bands)) : null;
   observeRenderedChunks((chunk) => {
-    const batch = spectrum.push(chunk.startFrame, chunk.left, chunk.right);
-    if (batch) pending.push({ from: batch.from, first: batch.first, hop: batch.hop, l: toBase64(batch.levels) });
+    if (spectrum) {
+      const batch = spectrum.push(chunk.startFrame, chunk.left, chunk.right);
+      if (batch) spectrumBatches.push({ from: batch.from, first: batch.first, hop: batch.hop, l: toBase64(batch.levels) });
+    }
+    if (signals) {
+      // Every chunk counts, an empty one too: it replaces what was held for its frames.
+      if (chunk.startFrame !== signalsNext) signalBatches.push({ from: chunk.startFrame, list: [] });
+      if (chunk.signals) signalBatches[signalBatches.length - 1].list.push(...chunk.signals);
+      signalsNext = chunk.startFrame + chunk.left.length;
+    }
   });
   rerenderSoundscape();
   return 'ok';
 };
 
-scope.soundscapeSpectrumTake = (): string => {
-  const out = JSON.stringify(pending);
-  pending = [];
+scope.soundscapeVisualsTake = (): string => {
+  const out = JSON.stringify({ spectrum: spectrumBatches, signals: signalBatches });
+  spectrumBatches = [];
+  signalBatches = [];
   return out;
 };

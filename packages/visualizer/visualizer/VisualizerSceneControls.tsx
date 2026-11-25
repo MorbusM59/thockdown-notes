@@ -13,7 +13,7 @@ import {
   CYCLE_BEATS,
   cycleBeatsIndex,
   DEFAULT_VISUALIZER,
-  IMMERSIVE_FLAIR_STRENGTH_MAX,
+  IMMERSIVE_FLAIR_STRENGTH_MAX, IMMERSIVE_GLAZE_OFFSET_MAX,
   IMMERSIVE_GLARE_STRENGTH_MAX,
   IMMERSIVE_SWAY_RANGE_MAX,
   POLE_ORBIT_MAX,
@@ -52,7 +52,7 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode, fol
           {beatChannelControls('visualizer-pane', 'Pane', 'the scene\'s box outlines show in the visualizer mode', visualizer.pane[uiMode], visualizerDefaults.pane[uiMode], (patch) => setVisualizer((prev) => ({ ...prev, pane: { ...prev.pane, [uiMode]: { ...prev.pane[uiMode], ...patch } } })), { iconClass: 'fa-table-cells', folds })}
           <OptionsSubsection label="Glaze" iconClass="fa-sun" folds={folds}>
           <div className="utility-setting-slider-stack" aria-label="Immersive glaze settings">
-            <OptionsSliderRows rows={[3, 2, 2, 2, 2, 2, 2]}>
+            <OptionsSliderRows rows={[3, 3, 2, 2, 2, 2, 2]}>
               {mixSliders('visualizer-glaze', 'Immersive glaze push', visualizer.immersive.glazeMix, visualizerDefaults.immersive.glazeMix, (glazeMix) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeMix } })))}
               <CompactScrollbarSlider
                 id="visualizer-flair-strength"
@@ -68,17 +68,17 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode, fol
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, flairStrength: value } }))}
               />
               <CompactScrollbarSlider
-                id="visualizer-flair-sources"
+                id="visualizer-glaze-offset"
                 min={0}
-                max={4}
-                step={1}
-                value={visualizer.immersive.flairMinSources}
-                trackLabel="sources"
-                tooltipLabel="Fewest flair sources"
-                ariaLabel="Immersive: fewest flair sources drawn"
-                defaultValue={visualizerDefaults.immersive.flairMinSources}
-                formatValue={(value) => String(Math.round(value))}
-                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, flairMinSources: Math.round(value) } }))}
+                max={IMMERSIVE_GLAZE_OFFSET_MAX}
+                step={0.01}
+                value={visualizer.immersive.glazeStrengthOffset}
+                trackLabel="offset"
+                tooltipLabel="Least layout strength the glare and flair scale"
+                ariaLabel="Immersive: the least a layout's glare and flair strength counts as"
+                defaultValue={visualizerDefaults.immersive.glazeStrengthOffset}
+                formatValue={(value) => value.toFixed(2)}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glazeStrengthOffset: value } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-glare-strength"
@@ -92,6 +92,19 @@ export function VisualizerSceneControls({ visualizer, setVisualizer, uiMode, fol
                 defaultValue={visualizerDefaults.immersive.glareStrength}
                 formatValue={(value) => String(Math.round(value * 100))}
                 onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, glareStrength: value } }))}
+              />
+              <CompactScrollbarSlider
+                id="visualizer-flair-sources"
+                min={0}
+                max={4}
+                step={1}
+                value={visualizer.immersive.flairMinSources}
+                trackLabel="sources"
+                tooltipLabel="Fewest flair sources"
+                ariaLabel="Immersive: fewest flair sources drawn"
+                defaultValue={visualizerDefaults.immersive.flairMinSources}
+                formatValue={(value) => String(Math.round(value))}
+                onCommit={(value) => setVisualizer((prev) => ({ ...prev, immersive: { ...prev.immersive, flairMinSources: Math.round(value) } }))}
               />
               <CompactScrollbarSlider
                 id="visualizer-glare-stacks"

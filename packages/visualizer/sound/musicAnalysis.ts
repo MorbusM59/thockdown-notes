@@ -32,6 +32,7 @@ import {
   MusicSemitoneScore,
 } from './musicSemitoneScore'
 import { PeakWindow } from './peakWindow'
+import { instanceResponse } from './instanceResponse'
 
 /** How far either side of the listener the window reaches, in seconds. */
 export const LEAD_SEC = 5
@@ -43,13 +44,6 @@ const AHEAD_GROWTH = 2
 const DECODE_MARGIN_SEC = 1
 /** How long the semitone score keeps a frame: samples reach it up to LEAD_SEC + DECODE_MARGIN_SEC before they are heard. */
 const SEMITONE_HISTORY_SEC = LEAD_SEC + DECODE_MARGIN_SEC + 2
-/** The share of a channel's instances that give a full response. */
-const TOP_SHARE = 0.02
-/**
- * The narrowest span a reader's stretch may use, in the score's strengths (natural logs of a flux): a channel whose
- * instances are all alike (a programmed kick) shows each in full rather than blowing their tiny differences up.
- */
-const MIN_SPAN = Math.log(1.5)
 
 /** What a reader follows: one channel of the drum score. */
 export interface ReaderSource {
@@ -173,23 +167,6 @@ class DelayRing {
   }
 }
 
-/**
- * A reader's response to one instance of its channel: `strength` stretched
- * over `strengths` (that channel's in the score around the listener,
- * ascending), so `contrast` means one thing for every channel and every
- * track: the `contrast` share of the channel's instances shows nothing and
- * its top `TOP_SHARE` shows in full, whether the track is mastered loud or
- * quiet. Raising it is what keeps a channel to what is MOSTLY that channel:
- * a snare's slight thump is among the thumps' weakest.
- */
-export function instanceResponse(strength: number, strengths: readonly number[], contrast: number): number {
-  if (strengths.length === 0) return 0
-  const at = (share: number) => strengths[Math.min(strengths.length - 1, Math.floor(share * strengths.length))]
-  const top = at(1 - TOP_SHARE)
-  // At least MIN_SPAN below the top, measured DOWN from it: instances of one loudness are all full.
-  const floor = Math.min(at(contrast), top - MIN_SPAN)
-  return Math.max(0, Math.min(1, (strength - floor) / (top - floor)))
-}
 
 /** The worker's whole state; `handle` takes each request in arrival order. */
 export class MusicAnalysis {
