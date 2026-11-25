@@ -60,7 +60,7 @@ import type { VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
 import { SmoothClock } from './smoothClock'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
-import { musicListening } from './musicListening'
+import { musicListening, subscribeMusicPlaying } from './musicListening'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
 import { loudnessGain } from './peakWindow'
 import { flashLevelAt, flashPhaseAt, FLASH_BEATS_REPEAT } from '../shared/flashing'
@@ -643,7 +643,7 @@ function added(): void {
   if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
   if (analysisReaderCount() > 0) ensureWorker()
   if (subscriberCount() === 1) {
-    unsubscribePlaying = musicListening().subscribePlaying((playing) => (playing ? start() : stop()))
+    unsubscribePlaying = subscribeMusicPlaying((playing) => (playing ? start() : stop()))
     document.addEventListener('visibilitychange', onVisibility)
   }
   start()

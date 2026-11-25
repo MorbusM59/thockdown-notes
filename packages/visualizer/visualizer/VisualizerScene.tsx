@@ -30,7 +30,7 @@
 
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
-import { musicListening } from '../sound/musicListening'
+import { musicListening, subscribeMusicPlaying } from '../sound/musicListening'
 import { subscribeMusicMix, subscribeMusicSemitoneScore } from '../sound/musicBeat'
 import { MUSIC_SEMITONE_CONFIRM_SEC } from '../sound/musicSemitoneScore'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
@@ -444,7 +444,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
     }
     draw()
     wake()
-    const unsubscribePlaying = musicListening().subscribePlaying(wake)
+    const unsubscribePlaying = subscribeMusicPlaying(wake)
     const unsubscribeSong = subscribeNowPlaying(wake)
     reducedMotion.addEventListener('change', wake)
 

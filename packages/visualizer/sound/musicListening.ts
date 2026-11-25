@@ -5,8 +5,13 @@
  * player (`MusicPlayerService`, `desktopMusicListening`); the Android app
  * supplies its native player, whose audio never passes through the page.
  *
- * Each app installs its own with `setMusicListening` before the visualizer
- * mounts. Until one is installed, nothing is playing.
+ * Each app installs its own with `setMusicListening`; until one is
+ * installed, nothing is playing. An app may install it late (the phone does,
+ * after reading its library), so whoever follows the play state goes through
+ * `subscribeMusicPlaying`, which follows the listening INSTALLED rather than
+ * the one there when it subscribed: subscribing to `musicListening()` directly
+ * kept the silent stand-in's subscription for good, and the beat analysis of
+ * a song started after that never ran.
  */
 
 /** The spectrum of the music as it is heard, in log bands (`spectrumBands.ts`). */
@@ -53,8 +58,33 @@ const silence: MusicListening = {
 
 let installed: MusicListening = silence
 
+/** Every play-state follower, each bound to the installed listening (`subscribeMusicPlaying`). */
+const playingFollowers = new Map<(playing: boolean) => void, () => void>()
+
 export function setMusicListening(listening: MusicListening): void {
+  if (listening === installed) return
+  const wasPlaying = installed.isPlaying
   installed = listening
+  for (const [listener, unsubscribe] of playingFollowers) {
+    unsubscribe()
+    playingFollowers.set(listener, listening.subscribePlaying(listener))
+    if (listening.isPlaying !== wasPlaying) listener(listening.isPlaying)
+  }
+}
+
+/**
+ * Calls `listener` whenever the music heard starts or stops, through whichever
+ * listening is installed now or later (a new one that plays when the old did
+ * not, or the reverse, counts as a change); returns the unsubscribe.
+ */
+export function subscribeMusicPlaying(listener: (playing: boolean) => void): () => void {
+  // Wrapped, so one function subscribed twice is two followers.
+  const follower = (playing: boolean) => listener(playing)
+  playingFollowers.set(follower, installed.subscribePlaying(follower))
+  return () => {
+    playingFollowers.get(follower)?.()
+    playingFollowers.delete(follower)
+  }
 }
 
 export function musicListening(): MusicListening {
