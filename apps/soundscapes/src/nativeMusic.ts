@@ -19,8 +19,8 @@ export interface NativeMusicPlugin {
   /** The system's folder picker: the tree chosen, its read grant kept across restarts. */
   pickFolder(): Promise<{ uri?: string }>
   releaseFolder(options: { uri: string }): Promise<void>
-  /** Every audio file under `uri` as `paths`, and those not in `known` as `fresh`. */
-  listFolder(options: { uri: string; known: string[] }): Promise<{ paths: string[]; fresh: string[] }>
+  /** The subfolders and audio files in `folders` (document ids in the tree `uri`; none is its root), one step of walking it (folderScan.ts). */
+  listFolders(options: { uri: string; folders: string[] }): Promise<{ folders: string[]; paths: string[] }>
   /** These songs' tags (the slow part of adding a folder, so the page asks in batches and shows its progress). */
   describeSongs(options: { paths: string[] }): Promise<{ added: ScannedSong[] }>
   getLibrary(): Promise<{ catalog: string; rotation: string }>

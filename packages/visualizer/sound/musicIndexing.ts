@@ -1,15 +1,15 @@
 /**
- * MUSIC INDEXING: how far the music player has got reading the songs it is
- * adding (a large folder takes a while: every file's tags are read). The
+ * MUSIC INDEXING: how far the music player has got adding a folder (a large
+ * one takes a while: the tree is walked, then every new file's tags are read). The
  * Songs dock shows it as a bar while it runs (MusicLibraryDock). A store of
  * its own rather than a field of NowPlaying, which every song reader follows:
  * this changes several times a second while a scan runs and nothing else
  * needs it. The phone's player publishes it; the desktop's does not yet.
  */
 export interface MusicIndexing {
-  /** New files read so far. */
+  /** Files accounted for: already in the library, or read. */
   done: number
-  /** New files to read; counts up while the folder is still being listed. */
+  /** Audio files found; counts up while the folder is still being listed. */
   total: number
 }
 

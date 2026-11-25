@@ -38,10 +38,8 @@ import {
   type MusicCatalog,
   type MusicRotation,
 } from './musicLibrary'
-import { loadMusicLibrary, type NativeMusicPlugin, type ScannedSong } from './nativeMusic'
-
-/** Songs whose tags are read per call when a folder is added: about half a second's work at a few tens of milliseconds each, so the indexing bar moves steadily. */
-const DESCRIBE_BATCH = 16
+import { loadMusicLibrary, type NativeMusicPlugin } from './nativeMusic'
+import { scanFolder } from './folderScan'
 
 let catalog: MusicCatalog = EMPTY_CATALOG
 let rotation: MusicRotation = []
@@ -169,21 +167,9 @@ async function addFolderTo(slot: PlaylistSlot): Promise<boolean> {
   if (!plugin) return false
   const { uri } = await plugin.pickFolder()
   if (!uri) return false
-  // The Songs dock shows how far adding has got: the folder is listed, then
-  // its new songs' tags are read in batches, the slow part, the progress
-  // published between them.
-  publishMusicIndexing({ done: 0, total: 0 })
   try {
-    const listing = await plugin.listFolder({ uri, known: catalog.songs.map((song) => song.filePath) })
-    const total = listing.fresh.length
-    const added: ScannedSong[] = []
-    publishMusicIndexing({ done: 0, total })
-    for (let start = 0; start < total; start += DESCRIBE_BATCH) {
-      const batch = await plugin.describeSongs({ paths: listing.fresh.slice(start, start + DESCRIBE_BATCH) })
-      added.push(...batch.added)
-      publishMusicIndexing({ done: added.length, total })
-    }
-    commit(addScanToSet(catalog, slot, uri, listing.paths, added))
+    const scan = await scanFolder(plugin, uri, new Set(catalog.songs.map((song) => song.filePath)), publishMusicIndexing)
+    commit(addScanToSet(catalog, slot, uri, scan.paths, scan.added))
     return true
   } finally {
     publishMusicIndexing(null)

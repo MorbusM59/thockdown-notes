@@ -11,8 +11,8 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -104,16 +104,16 @@ public class MusicPlugin extends Plugin {
         call.resolve();
     }
 
-    /** MusicFolders.list on a worker thread: `{ uri, known: [paths] }` to `{ paths, fresh }`. */
+    /** MusicFolders.listFolders on a worker thread: `{ uri, folders: [ids] }` to `{ folders, paths }`. */
     @PluginMethod
-    public void listFolder(PluginCall call) {
+    public void listFolders(PluginCall call) {
         Uri tree = Uri.parse(call.getString("uri", ""));
-        Set<String> known = new HashSet<>();
-        JSArray list = call.getArray("known", new JSArray());
-        for (int index = 0; index < list.length(); index += 1) known.add(list.optString(index));
+        List<String> folders = new ArrayList<>();
+        JSArray list = call.getArray("folders", new JSArray());
+        for (int index = 0; index < list.length(); index += 1) folders.add(list.optString(index));
         new Thread(() -> {
             try {
-                call.resolve(JSObject.fromJSONObject(MusicFolders.list(getContext(), tree, known)));
+                call.resolve(JSObject.fromJSONObject(MusicFolders.listFolders(getContext(), tree, folders)));
             } catch (Exception error) {
                 call.reject("Could not read the folder: " + error);
             }

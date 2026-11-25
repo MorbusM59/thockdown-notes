@@ -6,8 +6,8 @@ import android.database.Cursor;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.provider.DocumentsContract;
-import java.util.ArrayDeque;
-import java.util.Set;
+import java.util.Collections;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -18,8 +18,8 @@ import org.json.JSONObject;
  * made persistent when the folder is picked (BackgroundAudioPlugin), so the
  * songs stay playable after a restart.
  *
- * A SCAN walks a tree and lists its audio files as the catalog's songs are
- * written (apps/soundscapes/src/musicLibrary.ts, the desktop's
+ * A SCAN walks a tree, a few folders a call (`listFolders`), and lists its
+ * audio files as the catalog's songs are written (apps/soundscapes/src/musicLibrary.ts, the desktop's
  * MusicSongEntry fields): the document's URI as the path, and the title,
  * artist, album and duration from the file's tags, read by the platform
  * (MediaMetadataRetriever). Reading tags costs a few tens of milliseconds a
@@ -30,38 +30,40 @@ final class MusicFolders {
     private MusicFolders() {}
 
     /**
-     * The audio files under `treeUri`: every path found as `paths`, so the
-     * page can tell what has gone, and those not in `known` as `fresh`, for
-     * the page to have described (`describe`) in batches. Listing is cheap;
-     * reading tags is the slow part, so the page drives that loop itself and
-     * knows its progress by construction (the Songs dock's indexing bar).
+     * One step of walking a tree: the children of the folders `folderIds`
+     * (document ids within `treeUri`; none means the tree's own root), as the
+     * subfolders found, `folders`, for a later step, and the audio files
+     * found, `paths`. The PAGE walks the tree a few folders a call, so it can
+     * show the count growing while a large tree is listed: every child query
+     * is a round trip to the folder's documents provider, and a whole library
+     * listed in one call held the Songs dock's indexing bar at nothing for as
+     * long as that took.
      */
-    static JSONObject list(Context context, Uri treeUri, Set<String> known) throws Exception {
+    static JSONObject listFolders(Context context, Uri treeUri, List<String> folderIds) throws Exception {
         ContentResolver resolver = context.getContentResolver();
+        JSONArray folders = new JSONArray();
         JSONArray paths = new JSONArray();
-        JSONArray fresh = new JSONArray();
-        ArrayDeque<String> folders = new ArrayDeque<>();
-        folders.add(DocumentsContract.getTreeDocumentId(treeUri));
+        List<String> parents = folderIds.isEmpty()
+            ? Collections.singletonList(DocumentsContract.getTreeDocumentId(treeUri))
+            : folderIds;
         String[] columns = { DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_MIME_TYPE };
-        while (!folders.isEmpty()) {
-            Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, folders.poll());
+        for (String parent : parents) {
+            Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parent);
             try (Cursor cursor = resolver.query(children, columns, null, null, null)) {
                 if (cursor == null) continue;
                 while (cursor.moveToNext()) {
                     String id = cursor.getString(0);
                     String mime = cursor.getString(1);
                     if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
-                        folders.add(id);
+                        folders.put(id);
                         continue;
                     }
                     if (mime == null || !mime.startsWith("audio/")) continue;
-                    String path = DocumentsContract.buildDocumentUriUsingTree(treeUri, id).toString();
-                    paths.put(path);
-                    if (!known.contains(path)) fresh.put(path);
+                    paths.put(DocumentsContract.buildDocumentUriUsingTree(treeUri, id).toString());
                 }
             }
         }
-        return new JSONObject().put("paths", paths).put("fresh", fresh);
+        return new JSONObject().put("folders", folders).put("paths", paths);
     }
 
     /** A song as the catalog writes it, `{ filePath, title, artist, album, durationSec }`, from its tags. */
