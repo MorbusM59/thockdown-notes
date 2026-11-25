@@ -18,13 +18,8 @@ export interface DockEntryRowProps {
   takenNames: readonly string[]
   /** Rename; a rejection is shown on the field and keeps it open. */
   onRename: (name: string) => Promise<void> | void
-  /** The entry's mark, drawn in its icon button. */
-  mark: ReactNode
-  /** Whether the icon picker is open for this entry. */
-  picking: boolean
-  onTogglePicker: () => void
-  /** A held click on the mark: back to the entry's default mark. */
-  onResetMark: () => void
+  /** The entry's mark, drawn in its icon button; an entry without one (a schedule entry) has no icon button. */
+  mark?: { node: ReactNode; picking: boolean; onTogglePicker: () => void; onResetMark: () => void }
   /** Text kept whole after the name, never cut by its ellipsis (a set's song count, "(42)"); not part of what is renamed. */
   nameSuffix?: string
   /** A line under the name, in the name's field (the phone's time left). */
@@ -32,10 +27,10 @@ export interface DockEntryRowProps {
   children?: ReactNode
 }
 
-export function DockEntryRow({ className, name, nameSuffix, takenNames, onRename, mark, picking, onTogglePicker, onResetMark, detail, children }: DockEntryRowProps) {
+export function DockEntryRow({ className, name, nameSuffix, takenNames, onRename, mark, detail, children }: DockEntryRowProps) {
   return (
     <div className={`options-curve-row ${className}`}>
-      <MarkButton name={name} mark={mark} picking={picking} onToggle={onTogglePicker} onReset={onResetMark} />
+      {mark ? <MarkButton name={name} mark={mark.node} picking={mark.picking} onToggle={mark.onTogglePicker} onReset={mark.onResetMark} /> : null}
       <EntryName name={name} nameSuffix={nameSuffix} takenNames={takenNames} onRename={onRename} detail={detail} />
       {children}
     </div>

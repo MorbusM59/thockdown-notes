@@ -62,10 +62,12 @@ export function LayoutDock({ entries, change, onReset }: LayoutHostProps & { onR
         name={entry.name}
         takenNames={entries.filter((other) => other.id !== entry.id).map((other) => other.name)}
         onRename={(name) => change((api) => api.rename(entry.id, name))}
-        mark={<PresetMark preset={entry} />}
-        picking={isPickingIconFor(pick, target)}
-        onTogglePicker={() => toggleIconPick(target)}
-        onResetMark={() => void change((api) => api.setIcon(entry.id, factory ? factoryLayoutIcon(entry.id) : null))}
+        mark={{
+          node: <PresetMark preset={entry} />,
+          picking: isPickingIconFor(pick, target),
+          onTogglePicker: () => toggleIconPick(target),
+          onResetMark: () => void change((api) => api.setIcon(entry.id, factory ? factoryLayoutIcon(entry.id) : null)),
+        }}
       >
         <button
           type="button"

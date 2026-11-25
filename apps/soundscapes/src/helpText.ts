@@ -28,7 +28,7 @@ const HELP: Record<string, string[]> = {
     'Play button: Plays or pauses the music and the soundscape together. Hold it to stop both. While playback runs with a timer, it shows the time left.',
     'Playback modes: Soundscapes play in one of two modes, manual or scheduled. Both are controlled from the Dashboard.',
     'Manual: Starts when you tap the play button, or choose a soundscape while one plays, and overrides the schedule while in effect. Tapping that button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same.',
-    'Scheduled: Active whenever manual playback is stopped, while the clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; drag the grip of a row to change the order.',
+    'Scheduled: Active whenever manual playback is stopped, while the clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; hold the name bar of a row and drag it to change the order.',
     'Help button: Explains the tab you are on. Tap it again to return.',
   ],
   Songs: [
@@ -54,10 +54,10 @@ const HELP: Record<string, string[]> = {
     'Plus button: Tap to add an empty row. Drag a soundscape from Presets onto it to add a row for that soundscape.',
     'Check button: Tap to turn the row on or off. A row that is off is dimmed.',
     'Song set and soundscape: Each button shows what the row plays. Tap one to choose below the row; the first choice clears it. Drag a soundscape from Presets onto the soundscape button to change it.',
-    'Times: Tap an hour or a minute to pick it from the chips that take the row\'s place. Tap outside to keep it.',
-    'Grip: Hold it and drag onto another row to move the row there.',
+    'Times: Tap an hour or a minute to choose it below the row. Tap outside to keep it.',
+    'Name bar: Tap to fold the row. Hold it and drag onto another row to move the row there.',
+    'Edit button: Shows the row\'s name in the dock, to rename it there, with the bin beside it. Hold the bin to delete the row. Tap the edit button again to put it back.',
     'Days: Tap a day to turn it on or off. The calendar button sets all days for the moment: tap for every day, hold for none, tap again to return to your days. Changing a day meanwhile keeps the days as shown.',
-    'Bin: Hold to delete the row.',
     'Fades: A row fades in at its start time and is silent at its stop time. Each fade lasts a tenth of the length of the row, at most five minutes.',
   ],
   Timer: [

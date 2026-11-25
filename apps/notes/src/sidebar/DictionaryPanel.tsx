@@ -155,10 +155,12 @@ export function DictionaryDock() {
         nameSuffix={`(${count})`}
         takenNames={dictionaries.filter((other) => other.id !== dictionary.id).map((other) => other.label)}
         onRename={(label) => renameDictionary(dictionary.id, label)}
-        mark={<DictionaryMark dictionary={dictionary} />}
-        picking={isPickingIconFor(pick, { kind: 'dictionary', id: dictionary.id })}
-        onTogglePicker={() => toggleIconPick({ kind: 'dictionary', id: dictionary.id })}
-        onResetMark={() => { void setDictionaryIcon(dictionary.id, null) }}
+        mark={{
+          node: <DictionaryMark dictionary={dictionary} />,
+          picking: isPickingIconFor(pick, { kind: 'dictionary', id: dictionary.id }),
+          onTogglePicker: () => toggleIconPick({ kind: 'dictionary', id: dictionary.id }),
+          onResetMark: () => { void setDictionaryIcon(dictionary.id, null) },
+        }}
       >
         <button
           type="button"

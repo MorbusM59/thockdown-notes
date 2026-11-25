@@ -7,6 +7,8 @@ import {
   moveEntry,
   musicScheduleEvents,
   newEntry,
+  nextEntryName,
+  sanitizeSchedule,
   scheduleEvents,
   setTimePart,
   toggleDay,
@@ -106,6 +108,14 @@ describe('schedule', () => {
     const ids = (next: Schedule) => next.entries.map((e) => e.presetId)
     expect(ids(moveEntry(s, s.entries[0].id, s.entries[2].id))).toEqual(['b', 'c', 'a'])
     expect(ids(moveEntry(s, s.entries[2].id, s.entries[0].id))).toEqual(['c', 'a', 'b'])
+  })
+
+  it('names a new entry "Schedule N" for the lowest free N, and names unnamed saved entries without taking a saved name', () => {
+    expect(nextEntryName([])).toBe('Schedule 1')
+    expect(nextEntryName(['Schedule 1', 'Schedule 3'])).toBe('Schedule 2')
+    expect(newEntry(null, ['Schedule 1']).name).toBe('Schedule 2')
+    const saved = { enabled: true, entries: [{ ...newEntry('a'), name: undefined }, { ...newEntry('b'), name: 'Schedule 1' }] }
+    expect(sanitizeSchedule(saved, []).entries.map((e) => e.name)).toEqual(['Schedule 2', 'Schedule 1'])
   })
 
   it('decides each channel on its own: a song set over a soundscape plays with it', () => {

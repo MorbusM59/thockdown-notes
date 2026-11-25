@@ -60,7 +60,7 @@ import {
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 import { musicScheduleEvents, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
-import { ScheduleRows } from './ScheduleRows'
+import { ScheduleDock, ScheduleRows } from './ScheduleRows'
 import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
 import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
@@ -348,6 +348,8 @@ export function MobileSoundscapeApp() {
   // The daily schedule (schedule.ts). Its events are worked out here and
   // handed to the native session, which runs them with or without this page.
   const [schedule, setSchedule] = useState<Schedule>(() => loadSchedule(soundscapePresets(preferences)))
+  // The schedule entry docked for editing (its name and delete), if any.
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   useEffect(() => saveSchedule(schedule), [schedule])
   // A deleted soundscape leaves the schedule rows that held it empty.
   useEffect(() => setSchedule((current) => sanitizeSchedule(current, presets)), [presets])
@@ -569,6 +571,7 @@ export function MobileSoundscapeApp() {
                       trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
                     />
                   )
+                  : tab === 'schedules' && editingEntryId !== null ? <ScheduleDock schedule={schedule} editingId={editingEntryId} onChange={setSchedule} onEdit={setEditingEntryId} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : tab === 'visualizer' ? <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : null
@@ -723,6 +726,8 @@ export function MobileSoundscapeApp() {
                     presets={presets}
                     musicSets={musicSets}
                     onChange={setSchedule}
+                    editingId={editingEntryId}
+                    onEdit={setEditingEntryId}
                   />}
                 </OptionsFixedSection>
                 </>) : null}

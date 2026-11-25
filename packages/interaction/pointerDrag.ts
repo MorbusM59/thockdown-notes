@@ -79,8 +79,10 @@ export const DRAG_SOURCE_ATTRIBUTE = 'data-drag-source'
 export const DRAG_SOURCE_SELECTOR = `[${DRAG_SOURCE_ATTRIBUTE}]`
 
 /**
- * How a drag shows that it is under way. Absent, a translucent copy of the
- * source follows the pointer. `"cursor"`: nothing follows the pointer, and
+ * How a drag shows that it is under way. Absent, an identical copy of the
+ * source follows the pointer (a source that MOVES hides itself meanwhile,
+ * `useSelectorReorder`'s `data-drag-state`, so the element reads as lifted
+ * off the page rather than duplicated). `"cursor"`: nothing follows the pointer, and
  * the custom cursor shows the left-hold confirmation instead -- its halo
  * swells as for a hold of `HOLD_CONFIRM_MS` and stays up for the whole drag,
  * and a drop a target took ends it with the hold's completion twitch. For a
@@ -187,7 +189,6 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
       height: `${rect.height}px`,
       margin: '0',
       pointerEvents: 'none',
-      opacity: '0.7',
       zIndex: '2147483646',
       boxSizing: 'border-box',
     })
@@ -255,7 +256,13 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     window.removeEventListener('keydown', onKeyDown, true)
     if (activeDragCancel === cancel) activeDragCancel = null
     cancelTouchHold?.()
-    if (!dataTransfer) return
+    if (!dataTransfer) {
+      // A finger that picked the source up and put it down where it was did
+      // not tap it: the click its lift produces would otherwise act on the
+      // source (fold a divider held to move its entry, open a held row).
+      if (drop && isPickedUp()) swallowNextClick()
+      return
+    }
 
     ghost?.remove()
     ghost = null

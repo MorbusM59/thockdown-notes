@@ -1140,15 +1140,24 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A selector cell being dragged to a new place (useSelectorReorder.ts):
-   the one picked up is dimmed, the one it would land on is framed. */
-[data-drag-state='source'] {
-  opacity: 0.25;
-  filter: var(--filter-alert);
+/* An element being dragged to a new place (useSelectorReorder.ts). Where a
+   copy follows the pointer the element itself is hidden, its place kept, so
+   the copy IS the element, lifted off. Carried on the cursor instead (the
+   desktop's selectors, whose window clips a copy) the element stays where it
+   is, since nothing else would show what is being moved. The one it would
+   land on is faded to a fifth and framed. The fade is on its CONTENT and the
+   frame on the element: an element's opacity fades its own outline too,
+   which left the frame at a fifth of its colour, too faint to find. */
+[data-drag-state='source']:not([data-drag-picture='cursor']) {
+  visibility: hidden;
 }
 
 [data-drag-state='target'] {
-  filter: var(--filter-alert);
+  outline: 2px solid var(--color-text-80);
+}
+
+[data-drag-state='target'] > * {
+  opacity: 0.2;
 }
 
 /* A text button (packages/interaction/TextButton.tsx): a micro button's height, its
