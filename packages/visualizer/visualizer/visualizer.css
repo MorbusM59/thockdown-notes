@@ -195,6 +195,8 @@
 .visualizer-letter {
   z-index: 5;
   text-align: center;
+  /* Onto the middle of the box by the font's own metrics (glyphCentering.ts). */
+  translate: var(--visualizer-glyph-dx, 0) var(--visualizer-glyph-dy, 0);
   font-family: var(--visualizer-font);
   font-size: var(--visualizer-font-size);
   color: var(--color-text-base);

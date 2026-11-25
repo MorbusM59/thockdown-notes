@@ -100,7 +100,7 @@ import { publishSoundstageControls, soundstageControlsFor } from '@thockdown/vis
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
-import { loadBeatSettings, loadVisualizerFont, loadVisualizerState, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
+import { loadBeatSettings, loadVisualizerDouble, loadVisualizerFont, loadVisualizerState, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerDouble, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
 import { DEFAULT_VISUALIZER_FONT } from '@thockdown/visualizer/shared/visualizerFont'
 import { VisualizerFontControls } from '@thockdown/visualizer/visualizer/VisualizerFontControls'
 import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
@@ -294,6 +294,8 @@ export function MobileSoundscapeApp() {
   // The visualizer's text size, outside its presets as the desktop's font is (visualizerStore.ts).
   const [visualizerFont, setVisualizerFont] = useState(loadVisualizerFont)
   useEffect(() => saveVisualizerFont(visualizerFont), [visualizerFont])
+  const [visualizerDouble, setVisualizerDouble] = useState(loadVisualizerDouble)
+  useEffect(() => saveVisualizerDouble(visualizerDouble), [visualizerDouble])
   useEffect(() => saveBeatSettings(beatSettings), [beatSettings])
   useEffect(() => {
     if (!nativeMusic) return
@@ -613,7 +615,7 @@ export function MobileSoundscapeApp() {
         <DragLayer />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
-            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} /> : null}
+            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} double={visualizerDouble} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <MobileTabSelector tab={tab} onChange={selectTab} />
@@ -680,7 +682,7 @@ export function MobileSoundscapeApp() {
                       />
                     </div>
                   </OptionsFixedSection>
-                  <VisualizerButtons onOpen={() => setVisualizerOpen(true)} />
+                  <VisualizerButtons onOpen={() => setVisualizerOpen(true)} double={visualizerDouble} onDouble={setVisualizerDouble} />
                   <OptionsFixedSection heading="Tools" iconClass="fa-toolbox">
                     <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
                       <button

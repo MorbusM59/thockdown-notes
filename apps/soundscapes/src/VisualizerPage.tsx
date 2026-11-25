@@ -23,13 +23,15 @@ import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts
 import { nativeSoundscape } from './backgroundAudioHost'
 import { holdFrameWhileTyping } from './keyboardSteadyFrame'
 
-export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings, font }: {
+export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings, font, double }: {
   onExit: () => void
   colors: VisualizerColors
   mode: 'light' | 'dark'
   visualizer: VisualizerSettings
   beatSettings: BeatSettings
   font: VisualizerFont
+  /** Double size: boxes and letters at twice the font setting's (visualizerStore.ts). */
+  double: boolean
 }) {
   // The phone's visualizer and beat settings (visualizerStore.ts) and the
   // look preset's own colors, fed exactly as the desktop feeds them.
@@ -71,9 +73,9 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
     <div ref={pageRef} className="visualizer-page">
       <div className="editor-stage is-visualizer">
       <VisualizerScene
-        boxPx={visualizerBoxPx(font)}
+        boxPx={visualizerBoxPx(font) * (double ? 2 : 1)}
         fontFamily={monoFontFamily(font.style)}
-        fontSizePx={font.sizePx}
+        fontSizePx={font.sizePx * (double ? 2 : 1)}
         solidMaxPixelRatio={1.5}
         pixelScale={1}
         sceneSeed="soundscapes"

@@ -37,8 +37,8 @@ export function MobileTabSelector({ tab, onChange }: { tab: MobileTab; onChange:
   )
 }
 
-/** The way into the full-screen visualizer and its orientation, on the dashboard. */
-export function VisualizerButtons({ onOpen }: { onOpen: () => void }) {
+/** The way into the full-screen visualizer, its orientation and its double size, on the dashboard. */
+export function VisualizerButtons({ onOpen, double, onDouble }: { onOpen: () => void; double: boolean; onDouble: (double: boolean) => void }) {
   const [landscape, setLandscapeState] = useState(false)
   useEffect(() => {
     void readDisplay().then((display) => setLandscapeState(display.landscape))
@@ -61,6 +61,16 @@ export function VisualizerButtons({ onOpen }: { onOpen: () => void }) {
           }}
         >
           <span className={`fa-solid fa-mobile-screen-button${landscape ? ' fa-rotate-90' : ''}`} aria-hidden="true" />
+        </button>
+        {/* Double size: the desktop's button and glyph (EditorToolbar.tsx). */}
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${double ? ' is-active' : ''}`}
+          aria-label={double ? 'Exit double size mode' : 'Enable double size mode'}
+          aria-pressed={double}
+          onClick={() => onDouble(!double)}
+        >
+          <span className="fa-solid fa-voicemail fa-rotate-180" aria-hidden="true" />
         </button>
       </div>
     </OptionsFixedSection>
