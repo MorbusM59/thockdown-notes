@@ -47,8 +47,9 @@
  * milliseconds, far more over Bluetooth), so every tracker is answered for the
  * heard moment rather than the reported one.
  *
- * Runs only while there is a subscriber, the music is playing and the window
- * is visible: the frame loop is started by the play-state and visibility
+ * Runs only while there is a subscriber that needs it (a mix, a clock or the
+ * semitone row; a tempo reader alone does not, `analysisReaderCount`), the
+ * music is playing and the window is visible: the frame loop is started by the play-state and visibility
  * events and stops itself otherwise. A subscriber is told of every change
  * of at least `MIN_STEP` (finer than a subscriber's own output resolution,
  * which decides what is worth writing), and of 0 when the loop stops.
@@ -186,9 +187,20 @@ function semitoneBandCount(): number {
   return bands
 }
 
-/** Everything the frame loop answers. */
+/** Every subscriber: while there is one, play state and visibility are followed. */
 function subscriberCount(): number {
   return bands.size + clocks.size + counters.size + semitoneSubscribers.size
+}
+
+/**
+ * The subscribers that need the ANALYSIS (the decoded music, the worker, the
+ * beat map): a mix, a clock or the semitone row. A TEMPO reader alone does
+ * not: it rides the analysis while something else has it running and the
+ * 60 BPM fallback otherwise (`idleTick`), so a glaze drifting on every tab
+ * of the phone does not keep the whole music decoded and analysed for it.
+ */
+function analysisReaderCount(): number {
+  return bands.size + clocks.size + semitoneSubscribers.size
 }
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
@@ -368,9 +380,9 @@ function readsOf(): number {
   return mask
 }
 
-/** Whether anything reads the beat map: a tracker some mix reads (the score is written from it), or a clock for its beat. */
+/** Whether anything reads the beat map: a tracker some mix reads (the score is written from it), a clock for its beat, or a tempo reader while the analysis runs anyway. */
 function needsDrums(): boolean {
-  return clocks.size > 0 || counters.size > 0 || readsOf() !== 0
+  return clocks.size > 0 || readsOf() !== 0 || (counters.size > 0 && analysisReaderCount() > 0)
 }
 
 /** The asks' reader settings, rebuilt only when the trackers or what reads them change (`readersAsked`). */
@@ -504,7 +516,7 @@ const listenerClock = new SmoothClock()
 
 function tick(frameTimeMs: number): void {
   frame = null
-  if (!musicListening().isPlaying || document.hidden || subscriberCount() === 0) {
+  if (!musicListening().isPlaying || document.hidden || analysisReaderCount() === 0) {
     stop()
     return
   }
@@ -549,25 +561,26 @@ function tick(frameTimeMs: number): void {
 }
 
 /**
- * THE tempo while no music plays: its own frame loop, run only while a tempo
- * reader is subscribed, the page is visible and the music is not playing,
+ * THE tempo while the analysis is not running (no music playing, or nothing
+ * but tempo readers subscribed, `analysisReaderCount`): its own frame loop,
+ * run only while a tempo reader is subscribed and the page is visible,
  * feeding the follower the wall clock and no beat, so every reader carries
  * on at the 60 BPM fallback (one glide down from the music's tempo, and one
- * glide back onto it when the music resumes, the change of clock being a
- * jump the follower glides across).
+ * glide back onto it when the analysis runs again, the change of clock being
+ * a jump the follower glides across).
  */
 let idleFrame: number | null = null
 
 function idleTick(frameTimeMs: number): void {
   idleFrame = null
-  if (counters.size === 0 || document.hidden || musicListening().isPlaying) return
+  if (counters.size === 0 || document.hidden || frame !== null) return
   const { beats, beatsPerSec, count } = tempo(frameTimeMs / 1000, NaN, NaN)
   for (const counter of counters) counter.listener(beats, beatsPerSec, count)
   idleFrame = requestAnimationFrame(idleTick)
 }
 
 function startIdleTempo(): void {
-  if (idleFrame !== null || counters.size === 0 || document.hidden || musicListening().isPlaying) return
+  if (idleFrame !== null || counters.size === 0 || document.hidden || frame !== null) return
   idleFrame = requestAnimationFrame(idleTick)
 }
 
@@ -577,9 +590,12 @@ function stopIdleTempo(): void {
 }
 
 function start(): void {
+  if (frame === null && analysisReaderCount() > 0 && musicListening().isPlaying && !document.hidden) {
+    stopIdleTempo()
+    frame = requestAnimationFrame(tick)
+    return
+  }
   startIdleTempo()
-  if (frame !== null || subscriberCount() === 0 || !musicListening().isPlaying || document.hidden) return
-  frame = requestAnimationFrame(tick)
 }
 
 function stop(): void {
@@ -625,7 +641,7 @@ function added(): void {
   // and the score planned ahead every time an element mounts (entering the visualizer mounts
   // three). One reading a tracker, or the beat map, the analysis was not started with starts it over.
   if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
-  ensureWorker()
+  if (analysisReaderCount() > 0) ensureWorker()
   if (subscriberCount() === 1) {
     unsubscribePlaying = musicListening().subscribePlaying((playing) => (playing ? start() : stop()))
     document.addEventListener('visibilitychange', onVisibility)
@@ -633,9 +649,9 @@ function added(): void {
   start()
 }
 
-/** After a subscriber left: drops the drum analysis if nothing reads it, and everything once nothing is left. */
+/** After a subscriber left: drops the drum analysis if nothing reads it, the analysis once only tempo readers are left, and everything once nothing is. */
 function removed(): void {
-  if (subscriberCount() > 0) {
+  if (analysisReaderCount() > 0) {
     if (!needsDrums() && analysedDrums) {
       analysedDrums = false
       send({ type: 'dropDrums' })
@@ -643,14 +659,17 @@ function removed(): void {
     return
   }
   stop()
+  if (worker) {
+    run++
+    send({ type: 'dispose' })
+    worker.terminate()
+    worker = null
+    analysedUrl = undefined
+    stale = true
+    lastListener = NaN
+  }
+  if (subscriberCount() > 0) return
   stopIdleTempo()
-  run++
-  send({ type: 'dispose' })
-  worker?.terminate()
-  worker = null
-  analysedUrl = undefined
-  stale = true
-  lastListener = NaN
   unsubscribePlaying?.()
   unsubscribePlaying = null
   document.removeEventListener('visibilitychange', onVisibility)
@@ -722,7 +741,7 @@ export function subscribeMusicClock(flash: FlashClock, listener: BeatListener, l
  * 60 BPM while the beat map holds no beat, every change one glide of
  * `TEMPO_GLIDE_SEC` that lands on the new grid as it is heard. The count is
  * continuous, unlike the beat clock, which re-seats after a seek or a change
- * of section; a frame across a seek passes no beats. While no music plays it runs on at the 60 BPM fallback (`idleTick`).
+ * of section; a frame across a seek passes no beats. While the analysis does not run (no music, or nothing but tempo readers subscribed) it runs on at the 60 BPM fallback (`idleTick`).
  */
 export function subscribeMusicTempo(listener: (beats: number, beatsPerSec: number, count: number) => void): () => void {
   const counter: Counter = { listener }
