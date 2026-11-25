@@ -145,10 +145,20 @@ export function subscribeMusicPlaying(listener: () => void): () => void {
   return () => playingListeners.delete(listener)
 }
 
-/** Plays `songId`, starting the music first if nothing plays: choosing needs a renderer. */
+/**
+ * Plays `songId` (a song tapped in a list): a real start of playback, so the
+ * music channel is switched in and the music plays, as the dashboard's
+ * toggles then show. `play` is sent whatever this page last heard, since the
+ * native side may have paused or stopped meanwhile (the notification, the
+ * schedule) and it is a no-op on music already playing; it resolves once a
+ * renderer exists, so the `choose` after it lands.
+ */
 async function playSong(songId: number): Promise<void> {
-  await startMusic()
-  await plugin?.choose({ songId })
+  if (!plugin || stageJson === null) return
+  setMusicChannel(true)
+  setPlaying(true)
+  await plugin.play({ stage: stageJson })
+  await plugin.choose({ songId })
 }
 
 function commit(next: MusicCatalog): void {

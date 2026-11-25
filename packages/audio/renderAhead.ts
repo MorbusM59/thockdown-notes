@@ -430,18 +430,27 @@ export class RenderAheadEngine<C> {
   }
 
   /**
-   * The output has played up to `frame`. If it has played past everything
-   * sent (an output that ran dry, or one whose playhead was already running
-   * when this engine started), rendering RESUMES a margin past the playhead:
-   * audio rendered for frames already gone by would only be dropped, and
-   * catching up through them at a few times real time kept the output
-   * silent for as long as it had been behind. The voice carries on from
-   * where it was, so a song resumes where it stopped, fading in from silence.
+   * The output has played up to `frame`. If it has played past the frame
+   * the next chunk would be rendered at, rendering RESUMES a margin past the
+   * playhead: audio rendered for frames already gone by would only be
+   * dropped, and catching up through them at a little over real time kept
+   * the output silent for as long as it had been behind, divided by the
+   * margin by which rendering beats real time (a song chosen while its file
+   * was still opening started ten minutes later). The voice carries on from
+   * where it was, so a song resumes where it stopped.
+   *
+   * The test is against `writeFrame`, not `sentEnd`. They differ after a
+   * rewind whose new audio was not ready (a cut to a song still being
+   * opened): the output then plays what it still holds past the rewind, and
+   * once it has passed the rewind point every chunk rendered from there is
+   * for a frame already gone. Testing `sentEnd` waited for the output to
+   * run out of that old audio first and then, if the voice became ready in
+   * between, never resumed at all.
    */
   played(frame: number): void {
     this.playedFrame = Math.max(this.playedFrame, frame);
     this.awaitingPlayhead = false;
-    if (this.sentEnd < this.playedFrame) this.resume();
+    if (this.writeFrame < this.playedFrame) this.resume();
     const reachable = this.spliceFrame();
     // A blend no rewind can reach back into any more is its new voice alone.
     while (this.source instanceof BlendSource && this.source.done(reachable)) this.source = this.source.to;
@@ -454,10 +463,15 @@ export class RenderAheadEngine<C> {
     // A transition cut off by the gap ends there: its new voice goes on alone.
     if (this.source instanceof BlendSource) this.source = this.source.to;
     this.source.resumeAt(at);
+    // Where the output still holds audio past `at` (a rewind's old side),
+    // the history is that audio and the resumed stream crossfades from it;
+    // past everything sent, it fades in from silence.
+    if (this.sentEnd <= at) {
+      this.historyLeft.fill(0);
+      this.historyRight.fill(0);
+    }
     this.writeFrame = at;
-    this.sentEnd = at;
-    this.historyLeft.fill(0);
-    this.historyRight.fill(0);
+    this.sentEnd = Math.max(this.sentEnd, at);
     this.fade = { from: at, frames: this.crossfadeFrames };
   }
 

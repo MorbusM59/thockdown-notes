@@ -64,6 +64,33 @@ describe('MusicVoice', () => {
     expect(voice.position).toBe(6 * RENDER_CHUNK_FRAMES);
   });
 
+  it('after a cut to a song still opening, resumes at the playhead once it has passed the rewind, not after the old audio runs out', () => {
+    const lead = 40 * RENDER_CHUNK_FRAMES;
+    const { voice, engine, out, settle } = rig();
+    voice.input.cue(1);
+    voice.input.append(tone(300, lead), tone(300, lead));
+    engine.configure({ stage: STAGE });
+    settle();
+    const sent = engine.written;
+    // A song chosen: the stream is cut at the splice and the new song has not arrived.
+    engine.configure({ stage: STAGE, cut: true });
+    voice.input.cue(2);
+    settle();
+    const rewound = engine.written;
+    expect(rewound).toBeLessThan(sent);
+    // The output plays on through what it still holds, past the rewind but not past the old audio's end.
+    const playhead = rewound + (8 * RENDER_CHUNK_FRAMES);
+    expect(playhead).toBeLessThan(sent);
+    out.clear();
+    engine.played(playhead);
+    voice.input.append(tone(1200, lead), tone(1200, lead));
+    engine.poke();
+    settle();
+    // Nothing is rendered for frames already played: the new song starts just past the playhead.
+    expect(Math.min(...out.keys())).toBeGreaterThanOrEqual(playhead);
+    expect(Math.min(...out.keys()) - playhead).toBeLessThan(0.1 * RATE + SPLICE_GRID_FRAMES);
+  });
+
   it('follows one song with the next with nothing at the join, and tells where it is', () => {
     const { voice } = rig();
     voice.input.cue(7);
