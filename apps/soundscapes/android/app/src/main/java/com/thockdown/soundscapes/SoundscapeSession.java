@@ -234,7 +234,7 @@ final class SoundscapeSession {
     synchronized State state() {
         SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
         long endsAt = -1;
-        if (regular == Regular.PLAYING && timerLeftMs >= 0) {
+        if (manualPlaying() && timerLeftMs >= 0) {
             endsAt = System.currentTimeMillis() + (timerDeadline - android.os.SystemClock.elapsedRealtime());
         } else if (source() == Source.SCHEDULE) {
             endsAt = schedule.nextChangeMillis();
@@ -484,6 +484,39 @@ final class SoundscapeSession {
         }
     }
 
+    /**
+     * Whether the listener's music plays (MusicSession, not a scheduled run).
+     * THE TIMER limits manual playback, which is regular mode playing or the
+     * listener's music playing: either keeps it counting, music alone
+     * included.
+     */
+    private boolean musicPlaying = false;
+
+    private boolean manualPlaying() {
+        return regular == Regular.PLAYING || musicPlaying;
+    }
+
+    /**
+     * The listener's music started (true) or paused or stopped (false). With
+     * regular mode not playing, the countdown follows it: a start begins the
+     * whole duration, as a soundscape's start does; a pause holds it; a stop
+     * ends it.
+     */
+    synchronized void musicChanged(boolean playing, boolean stopped) {
+        if (playing == musicPlaying && !stopped) return;
+        musicPlaying = playing;
+        if (regular == Regular.PLAYING) return;
+        if (playing) {
+            startCountdown();
+        } else if (stopped) {
+            clearCountdownCallbacks();
+            timerLeftMs = -1;
+            reportCountdown();
+        } else {
+            holdCountdown();
+        }
+    }
+
     /** A play begins (a start, or a change of soundscape): the whole duration again, or none. */
     private void startCountdown() {
         clearCountdownCallbacks();
@@ -494,7 +527,7 @@ final class SoundscapeSession {
     /** Count the time left down while PLAYING: fade out over the timer's fade (or what is left of it), then stop. */
     private void runCountdown() {
         clearCountdownCallbacks();
-        if (timerLeftMs < 0 || regular != Regular.PLAYING) {
+        if (timerLeftMs < 0 || !manualPlaying()) {
             reportCountdown();
             return;
         }
@@ -505,11 +538,12 @@ final class SoundscapeSession {
             synchronized (SoundscapeSession.this) {
                 timerFade = null;
                 long left = timerDeadline - android.os.SystemClock.elapsedRealtime();
-                if (output == null || renderer == null || left <= 0) return;
-                Entry next = SoundscapeSchedule.load(context).playingAt(System.currentTimeMillis() + left);
+                if (left <= 0) return;
                 // The music the listener plays ends with the timer, over the same fade.
                 double fadeSec = left / 1000.0;
                 main.post(() -> MusicSession.get(context).timerFade(fadeSec));
+                if (regular != Regular.PLAYING || output == null || renderer == null) return;
+                Entry next = SoundscapeSchedule.load(context).playingAt(System.currentTimeMillis() + left);
                 if (next != null) {
                     renderer.transition(next.configuration, fadeSec);
                     timerHandover = next;
@@ -577,8 +611,15 @@ final class SoundscapeSession {
      * fades in from silence.
      */
     private void timerExpired() {
-        if (regular != Regular.PLAYING) return;
+        if (!manualPlaying()) return;
         main.post(() -> MusicSession.get(context).timerExpired());
+        if (regular != Regular.PLAYING) {
+            // Music alone: it stops (above), and the countdown with it.
+            timerLeftMs = -1;
+            musicPlaying = false;
+            reportCountdown();
+            return;
+        }
         Entry handedTo = timerHandover;
         timerHandover = null;
         if (handedTo != null) {

@@ -390,6 +390,7 @@ final class MusicSession {
      * page can run the clock on from a consistent pair.
      */
     private void report() {
+        followTimer();
         if (listener == null) return;
         if (output == null) {
             listener.onHeard(heardId, heardSeconds, heardFrame, 0, false);
@@ -398,6 +399,17 @@ final class MusicSession {
         long frame = output.playheadFrame();
         double seconds = heardId == null ? 0 : heardSeconds + (double) (frame - heardFrame) / output.sampleRate;
         listener.onHeard(heardId, seconds, frame, output.sampleRate, isPlaying());
+    }
+
+    /** What SoundscapeSession was last told about the listener's music: 0 stopped, 1 paused, 2 playing. */
+    private int toldTimer = 0;
+
+    /** The timer counts the listener's music too (SoundscapeSession.musicChanged); told on a change only, posted so the two sessions' locks are never held together. */
+    private void followTimer() {
+        int now = output == null || scheduledRun ? 0 : output.isPaused() ? 1 : 2;
+        if (now == toldTimer) return;
+        toldTimer = now;
+        handler.post(() -> SoundscapeSession.get(context).musicChanged(now == 2, now == 0));
     }
 
     private String read(String name, String fallback) {
