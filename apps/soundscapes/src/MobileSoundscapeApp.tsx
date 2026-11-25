@@ -12,7 +12,7 @@
  * same preferences state on its return (followSession), so those controls
  * are more controls, not a second path to the engine.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement } from 'react'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
@@ -414,16 +414,6 @@ export function MobileSoundscapeApp() {
     void nativeSoundscape!.setTimer({ seconds: timerSeconds, fadeSec: fadeSecFor(timerSeconds) })
   }, [native, timerSeconds])
   const [countdown, setCountdown] = useState<{ endsAtMs: number; remainingMs: number }>({ endsAtMs: -1, remainingMs: -1 })
-  const [clock, setClock] = useState(() => Date.now())
-  useEffect(() => {
-    if (countdown.endsAtMs < 0) return undefined
-    const tick = window.setInterval(() => setClock(Date.now()), 1000)
-    setClock(Date.now())
-    return () => window.clearInterval(tick)
-  }, [countdown.endsAtMs])
-  const timeLeftMs = countdown.endsAtMs >= 0 ? countdown.endsAtMs - clock : countdown.remainingMs
-  const timeLeft = timeLeftMs >= 0 ? `(${remainingText(timeLeftMs)})` : null
-
   const editedId = activeSoundscape(editingView).id
   const pickingSoundscapeIcon = isPickingIconFor(iconPick, { kind: 'soundscape', id: editedId })
   useEffect(() => closeIconPick(), [editedId, tab])
@@ -561,7 +551,11 @@ export function MobileSoundscapeApp() {
     setSchedule((current) => ({ ...current, enabled: true }))
   }
 
-  const dockContent = tab === 'dashboard' ? (
+  // Built per tick of the countdown by `CountdownDock`, so the one-second
+  // clock re-renders the dock alone rather than this whole app.
+  const renderDock = (timeLeftMs: number) => {
+    const timeLeft = timeLeftMs >= 0 ? `(${remainingText(timeLeftMs)})` : null
+    return tab === 'dashboard' ? (
                     <DashboardDock
                       timeLeft={timeLeftMs >= 0 ? remainingText(timeLeftMs) : null}
                       soundscape={regular}
@@ -600,6 +594,7 @@ export function MobileSoundscapeApp() {
                   : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : tab === 'visualizer' ? <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : null
+  }
 
   // The desktop's frame, outermost first (see shared/loadoutTheme.ts), so the
   // shared stylesheet and theme variables land where they expect to.
@@ -628,7 +623,7 @@ export function MobileSoundscapeApp() {
                 // in the dock's own last row, and a tab with no dock gets a
                 // row holding it alone.
                 dock={<div className="sidebar-plain-dock">
-                  {dockContent ?? <DockHelpRow active={helpMode} onToggle={toggleHelp} />}
+                  <CountdownDock countdown={countdown} render={(timeLeftMs) => renderDock(timeLeftMs) ?? <DockHelpRow active={helpMode} onToggle={toggleHelp} />} />
                 </div>}
                 scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
               >
@@ -823,4 +818,20 @@ function IconFilter({ query }: { query: string }) {
       onChange={(event) => setIconPickQuery(event.target.value)}
     />
   )
+}
+
+/**
+ * Owns the countdown's one-second clock, so only what shows the time left
+ * re-renders each second: held in the app, it re-rendered every tab and the
+ * glaze once a second for as long as a timer ran.
+ */
+function CountdownDock({ countdown, render }: { countdown: { endsAtMs: number; remainingMs: number }; render: (timeLeftMs: number) => ReactElement }) {
+  const [clock, setClock] = useState(() => Date.now())
+  useEffect(() => {
+    if (countdown.endsAtMs < 0) return undefined
+    const tick = window.setInterval(() => setClock(Date.now()), 1000)
+    setClock(Date.now())
+    return () => window.clearInterval(tick)
+  }, [countdown.endsAtMs])
+  return render(countdown.endsAtMs >= 0 ? countdown.endsAtMs - clock : countdown.remainingMs)
 }
