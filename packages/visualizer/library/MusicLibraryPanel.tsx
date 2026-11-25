@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { TextButton } from '@thockdown/interaction/TextButton'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
@@ -157,11 +158,21 @@ export function MusicSetIconPicker({ query }: { query: string }) {
   )
 }
 
-export function MusicLibraryPanel({ grouping, filter, editsOnTap = false }: {
+/** Where the set selector stands: bare, as the desktop view's section selector, or under an always-open heading (the phone's tab). */
+type SelectorHeading = { heading: string; iconClass: string } | null
+
+function SelectorSection({ heading, children }: { heading: SelectorHeading; children: ReactNode }) {
+  return heading
+    ? <OptionsFixedSection heading={heading.heading} iconClass={heading.iconClass}>{children}</OptionsFixedSection>
+    : <div className="preset-section">{children}</div>
+}
+
+export function MusicLibraryPanel({ grouping, filter, editsOnTap = false, selectorHeading = null }: {
   grouping: MusicSetListGrouping
   filter: string
   /** A tap on a set's button opens it for editing, and the pool is left to another view (the phone's dashboard). */
   editsOnTap?: boolean
+  selectorHeading?: SelectorHeading
 }) {
   const set = useOpenMusicSet()
   // With no set yet (the phone starts with none) the selector is still
@@ -169,16 +180,16 @@ export function MusicLibraryPanel({ grouping, filter, editsOnTap = false }: {
   if (!set) {
     return (
       <div className="options-content sidebar-options-content" aria-label="Songs">
-        <div className="preset-section">
+        <SelectorSection heading={selectorHeading}>
           <SetSelector slot={null} editsOnTap={editsOnTap} />
-        </div>
+        </SelectorSection>
       </div>
     )
   }
-  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} editsOnTap={editsOnTap} />
+  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} editsOnTap={editsOnTap} selectorHeading={selectorHeading} />
 }
 
-function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; editsOnTap: boolean }) {
+function MusicLibrarySet({ set, grouping, filter, editsOnTap, selectorHeading }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; editsOnTap: boolean; selectorHeading: SelectorHeading }) {
   const { slot, name } = set
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
@@ -187,9 +198,9 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet;
 
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
-      <div className="preset-section">
+      <SelectorSection heading={selectorHeading}>
         <SetSelector slot={slot} editsOnTap={editsOnTap} />
-      </div>
+      </SelectorSection>
       {/* Keyed on the set shown and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${shownSlot}:${grouping}`}>
         {groups.map((group) => (

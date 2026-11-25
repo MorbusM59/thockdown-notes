@@ -4,20 +4,21 @@ import type { ReactNode } from 'react'
  * An options subsection that is always open: the same heading and body as an
  * `AccordionSection`, with no fold arrow and nothing to click. For the bars a
  * section leads with (the factory presets, the quick toggles), which are
- * reached for too often to sit behind a fold. Not part of the options search,
- * so it steps aside while one is in force (`hiddenWhileSearching`).
+ * reached for too often to sit behind a fold, and every section of the phone's
+ * tabs that has nothing to fold against. Not part of the options search, so
+ * it steps aside while one is in force (`hiddenWhileSearching`).
  */
 export function OptionsFixedSection({
   heading,
   iconClass,
   className,
-  hiddenWhileSearching,
+  hiddenWhileSearching = false,
   children,
 }: {
   heading: string
   iconClass: string
   className?: string
-  hiddenWhileSearching: boolean
+  hiddenWhileSearching?: boolean
   children: ReactNode
 }) {
   return (
