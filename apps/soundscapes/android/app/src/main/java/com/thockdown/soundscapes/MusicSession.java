@@ -118,6 +118,7 @@ final class MusicSession {
                 renderer.setPoolSet(null, false);
                 output.setFade(1f, 0);
             }
+            renderer.resume();
         }
         scheduledRun = false;
         renderer.setStage(stageJson);
@@ -318,6 +319,9 @@ final class MusicSession {
                 synchronized (MusicSession.this) {
                     lastFailure = message;
                     close();
+                    // The page hears that nothing plays: its play button
+                    // follows the reports, and was left showing pause.
+                    report();
                     current = listener;
                 }
                 SoundscapePlaybackService.sourceChanged(context, false);
