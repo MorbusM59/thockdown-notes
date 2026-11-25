@@ -27,7 +27,7 @@ const CONFIGURE: ConfigureMessage = { type: 'configure', generator: {}, space: D
 function countingGenerator(): HostedGenerator {
   let frame = 0;
   return {
-    processor: null,
+    processor: { signals: null },
     exports: undefined,
     configure: () => {},
     renderBlock: (block) => {
@@ -258,7 +258,7 @@ describe('render ahead', () => {
   it('transitions to a new voice by an equal-power crossfade spliced a margin past the playhead, then plays the new voice alone', () => {
     /** A generator whose every sample is `value`. */
     const constant = (value: number): HostedGenerator => ({
-      processor: null,
+      processor: { signals: null },
       exports: undefined,
       configure: () => {},
       renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },
@@ -297,7 +297,7 @@ describe('render ahead', () => {
 
   it('a restart plays the new voice alone from the splice, with nothing of the old one faded under it', () => {
     const constant = (value: number): HostedGenerator => ({
-      processor: null,
+      processor: { signals: null },
       exports: undefined,
       configure: () => {},
       renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },
@@ -327,7 +327,7 @@ describe('render ahead', () => {
 
   it('a transition during a transition fades from the blend being heard, without a jump, wherever the output is', () => {
     const constant = (value: number): HostedGenerator => ({
-      processor: null,
+      processor: { signals: null },
       exports: undefined,
       configure: () => {},
       renderBlock: (block) => { for (const channel of [...block.direct, ...block.send]) channel.fill(value); },

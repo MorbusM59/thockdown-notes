@@ -39,8 +39,8 @@ final class SoundscapeRenderer {
 
     /** Where the visualizer's view of the soundscape goes (`setVisuals`). */
     interface VisualsSink {
-        /** What was computed from chunks just rendered (soundscapeRenderer.ts's soundscapeVisualsTake, as JSON), and the output's playhead as it arrives. */
-        void onVisuals(String visualsJson, long playheadFrame);
+        /** What was computed from chunks just rendered (soundscapeRenderer.ts's soundscapeVisualsTake, as JSON), the output's playhead as it arrives, and its sample rate. */
+        void onVisuals(String visualsJson, long playheadFrame, int sampleRate);
     }
 
     /** Chunks per call: about half a second at 48 kHz, well inside the isolate's return limit. */
@@ -164,7 +164,7 @@ final class SoundscapeRenderer {
                 if (chunks.length() > 0 && (spectrumBands > 0 || signals)) {
                     String visuals = isolate.evaluateJavaScriptAsync("soundscapeVisualsTake()").get();
                     VisualsSink sink = visualsSink;
-                    if (sink != null) sink.onVisuals(visuals, output.playheadFrame());
+                    if (sink != null) sink.onVisuals(visuals, output.playheadFrame(), output.sampleRate);
                 }
                 if (chunks.length() > 0) continue;
                 synchronized (signal) {

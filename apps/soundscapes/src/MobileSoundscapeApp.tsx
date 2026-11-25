@@ -16,7 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
-import { setSoundscapeSpectrumVolume } from './nativeMusicListening'
+import { setSoundscapeVisualsVolume } from './nativeSoundscapeVisuals'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
@@ -352,7 +352,7 @@ export function MobileSoundscapeApp() {
     soundscapeEngine.setChannel(soundscapeChannel)
   }, [soundscapeChannel])
   const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
-  useEffect(() => setSoundscapeSpectrumVolume(sessionVolume), [sessionVolume])
+  useEffect(() => setSoundscapeVisualsVolume(sessionVolume), [sessionVolume])
 
   useEffect(() => {
     savePreferences(preferences)

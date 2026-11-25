@@ -88,7 +88,7 @@ final class SoundscapeSession {
         void onCountdown(long endsAtMs, long remainingMs);
         void onFailure(String message);
         /** The visualizer's view of the soundscape (SoundscapeRenderer.VisualsSink), while it asks for one (`setVisuals`). */
-        void onVisuals(String visualsJson, long playheadFrame);
+        void onVisuals(String visualsJson, long playheadFrame, int sampleRate);
     }
 
     static final class State {
@@ -244,12 +244,12 @@ final class SoundscapeSession {
         if (renderer != null) renderer.setVisuals(bands, withSignals, this::visuals);
     }
 
-    private void visuals(String visualsJson, long playheadFrame) {
+    private void visuals(String visualsJson, long playheadFrame, int sampleRate) {
         Listener current;
         synchronized (this) {
             current = listener;
         }
-        if (current != null) current.onVisuals(visualsJson, playheadFrame);
+        if (current != null) current.onVisuals(visualsJson, playheadFrame, sampleRate);
     }
 
     // --- State, read by the service and the plugin ---

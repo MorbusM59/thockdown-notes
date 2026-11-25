@@ -21,7 +21,8 @@ import { setMusicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryR
 import { publishNowPlaying, type NowPlaying, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
 import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
 import { publishMusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
-import { createNativeMusicListening, soundscapeSpectrumVolume } from './nativeMusicListening'
+import { createNativeMusicListening } from './nativeMusicListening'
+import { installNativeSoundscapeVisuals } from './nativeSoundscapeVisuals'
 import { nativeSoundscape } from './backgroundAudioHost'
 import {
   addScanToSet,
@@ -324,11 +325,14 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     getPlaylist: async (slot) => libraryOf(catalog, rotation).filter((song) => song.setIds.includes(slot)),
     getPool: async (query) => poolOf({ ...catalog, activeSetIds: query.slots, filter: query.filter }, rotation),
   })
-  // The visualizer reads the native music: its clock, its file and its spectrum (nativeMusicListening.ts).
-  setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId), nativeSoundscape && {
-    soundscape: nativeSoundscape,
+  // The visualizer reads the native music (its clock, its file and its
+  // spectrum, nativeMusicListening.ts) and the native soundscape (its
+  // spectrum and signals, nativeSoundscapeVisuals.ts), each at the gain it is heard at.
+  const musicHeardGain = () => (playing ? heardGain() : 0)
+  const soundscapeVisuals = nativeSoundscape && installNativeSoundscapeVisuals(nativeSoundscape, musicHeardGain)
+  setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId), soundscapeVisuals && {
+    soundscape: soundscapeVisuals,
     musicGain: heardGain,
-    soundscapeGain: soundscapeSpectrumVolume,
   }))
   setPlaying((await native.getState()).playing)
   void native.setVolume({ volume: heardGain() })
