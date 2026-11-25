@@ -50,7 +50,8 @@ import {
 } from './spectrumBands'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
-import { readPanelsShown, subscribePanelsShown } from './panelsShown'
+import { readPanelsShown, setPanelsShown, subscribePanelsShown } from './panelsShown'
+import { hitFrame } from './hitFrame'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { FACTORY_SOUNDSTAGE_IDS } from '../shared/soundstages'
 import { CUSTOM_SOLID_INDEX, RHOMBIC_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
@@ -109,8 +110,12 @@ export type VisualizerSceneProps = {
   sceneSeed: string
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
   gridOutlineRef: (element: HTMLDivElement | null) => void
-  /** Leaves the visualizer: the same toggle as F5 (App.tsx's `toggleVisualizerMode`), pressed on the exit box. */
-  onExit: () => void
+  /**
+   * Leaves the visualizer: the same toggle as F5 (App.tsx's `toggleVisualizerMode`),
+   * pressed on the exit box. Absent, there is no exit box: the phone leaves
+   * by the system's back gesture instead.
+   */
+  onExit?: () => void
 }
 
 /** The lit runs of the track: all of it, or the boxes before and after `gap`. */
@@ -551,6 +556,17 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
               style={{ left: originXPx, top: rowTop(spectrumRow), width: columns * box, height: spectrumRows * box }}
             />
           )}
+          {spectrumRows > 0 && (
+            // A press on the spectrum shows or hides the panels, as Escape
+            // does (panelsShown.ts): the one way a finger has to do it.
+            <div
+              className="visualizer-spectrum-hit"
+              style={{ left: originXPx, top: rowTop(spectrumRow), width: columns * box, height: spectrumRows * box }}
+              onPointerDown={(event) => {
+                if (event.button === 0) setPanelsShown(!readPanelsShown())
+              }}
+            />
+          )}
           {chromaRow !== null && (
             <canvas
               ref={chromaCanvasRef}
@@ -584,7 +600,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
           {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
           {levelArea && <LevelBars layout={layout} area={levelArea} font={glyphFont} />}
-          {layout.stripRows > 0 && layout.columns > 0 && (
+          {onExit && layout.stripRows > 0 && layout.columns > 0 && (
             // The exit box: the top strip's first full box from the right, on
             // its empty first row, an accent box laid over the middle section's
             // colour (so it reads as a bar end's does, not tinted by the
@@ -607,7 +623,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {progressArea && (
             <div
               className="visualizer-progress-hit"
-              style={{ left: progressLeftPx, top: rowTop(progressArea.row), width: progressColumns * box, height: box }}
+              style={hitFrame({ left: progressLeftPx, top: rowTop(progressArea.row), width: progressColumns * box, height: box }, box)}
               onPointerDown={handleProgressPress}
             />
           )}

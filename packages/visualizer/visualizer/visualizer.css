@@ -226,6 +226,14 @@
   pointer-events: auto;
 }
 
+/* The spectrum's press target (it shows or hides the panels): with the
+   other press targets, and live whether the panels show or not, since it is
+   how a finger brings them back. */
+.visualizer-scene > .visualizer-spectrum-hit {
+  z-index: 6;
+  pointer-events: auto;
+}
+
 /* The empty scene's solid, in a square of whole boxes: the empty state's
    plate and its stripes (editor.css, .empty-state-solid). */
 .visualizer-scene > .visualizer-cutout {

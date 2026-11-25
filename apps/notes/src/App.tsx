@@ -30,9 +30,9 @@ import { readPanelsShown, setPanelsShown } from '@thockdown/visualizer/visualize
 import { readPoolFilterFields } from '@thockdown/visualizer/visualizer/poolFilterDraft'
 import { FLAT_EQ_CURVE, sanitizeEqCurve, type EqPoint } from '@thockdown/visualizer/shared/musicEqCurve'
 import { DEFAULT_KEYSTROKE_SOUND_PREFERENCES, KEYSTROKE_CHANNEL_IDS, KEYSTROKE_SOUND_KIND, NEUTRAL_KEYSTROKE_SOUND, sanitizeKeystrokeSoundPreferences, type KeystrokeSoundPreferences, type KeystrokeSoundSettings } from './shared/keystrokeSounds'
-import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE, FACTORY_SOUNDSTAGE_IDS, isFactorySoundstageId, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, steppedFactorySoundstage, withActiveSoundstage, type FactorySoundstageId, type SoundstagePreferences, type SoundstageSettings } from '@thockdown/visualizer/shared/soundstages'
-import { activePreset, createPreset, editActivePreset, newPresetId, presetsOf, selectPreset, type PresetList } from '@thockdown/interaction/presetList'
-import { publishSoundstageControls } from '@thockdown/visualizer/sound/soundstageControls'
+import { activeSoundstage, DEFAULT_SOUNDSTAGE_PREFERENCES, NEUTRAL_SOUNDSTAGE, sameSoundstage, sanitizeSoundstagePreferences, SOUNDSTAGE_KIND, withActiveSoundstage, type SoundstagePreferences, type SoundstageSettings } from '@thockdown/visualizer/shared/soundstages'
+import { activePreset, editActivePreset, type PresetList } from '@thockdown/interaction/presetList'
+import { publishSoundstageControls, soundstageControlsFor } from '@thockdown/visualizer/sound/soundstageControls'
 import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { isTextEntryElement, keepFocusOnPress, mayHoldKeyboard } from '@thockdown/interaction/focusOwnership'
 import { focusEscapeHoldRing } from './editorSection/escapeHoldRingFocus'
@@ -6371,57 +6371,17 @@ ${markdownHtml}
   const changeSoundstageList = useCallback((list: PresetList<SoundstageSettings>) => {
     changeSoundstages({ ...soundstagePreferencesRef.current, ...list })
   }, [changeSoundstages])
-  const selectSoundstage = useCallback((id: string) => {
-    const previous = soundstagePreferencesRef.current
-    changeSoundstages({ ...previous, ...selectPreset(SOUNDSTAGE_KIND, previous, id) })
-  }, [changeSoundstages])
-  /** The custom stage: the last of the reader's own chosen, else their first, else a new copy of the one playing. */
-  const selectCustomSoundstage = useCallback(() => {
-    const previous = soundstagePreferencesRef.current
-    const id = previous.lastCustom ?? previous.custom[0]?.id
-    if (id) {
-      selectSoundstage(id)
-      return
-    }
-    const created = createPreset(SOUNDSTAGE_KIND, previous, newPresetId('stage'))
-    if (created) changeSoundstages({ ...previous, ...created })
-  }, [changeSoundstages, selectSoundstage])
   // Keystroke sounds: an edit (a slider or a channel in Options) is written
   // into the active preset, whose settings are the live ones.
   const editKeystrokeSound = useCallback((patch: Partial<KeystrokeSoundSettings>) => {
     setKeystrokeSoundPreferences((previous) => editActivePreset(KEYSTROKE_SOUND_KIND, previous, { ...activePreset(KEYSTROKE_SOUND_KIND, previous).settings, ...patch }))
   }, [])
-  // The visualizer's solid: the factory stage active, or the custom shape for
-  // a stage of the reader's own; pressing it steps through the factory stages.
-  const activeSoundstageId = soundstagePreferences.activeId
-  const soundstageFactoryEdits = soundstagePreferences.factoryEdits
-  const soundstageCustom = soundstagePreferences.custom
-  const soundstagePresets = useMemo(
-    () => presetsOf(SOUNDSTAGE_KIND, { custom: soundstageCustom, factoryEdits: soundstageFactoryEdits }),
-    [soundstageCustom, soundstageFactoryEdits],
-  )
-  const visualizerSolid: FactorySoundstageId | 'custom' = isFactorySoundstageId(activeSoundstageId) ? activeSoundstageId : 'custom'
+  // The visualizer's solid and the music bar's stage row reach the stages
+  // through these controls, whose stepping rule the phone shares
+  // (soundstageControls.ts).
   useEffect(() => {
-    publishSoundstageControls({
-      solid: visualizerSolid,
-      presets: soundstagePresets,
-      activeId: activeSoundstageId,
-      // Custom sits after the last factory stage: forward from it goes to
-      // custom, and back from custom returns to the last factory stage.
-      step: (direction) => {
-        if (visualizerSolid === 'custom') {
-          if (direction === -1) selectSoundstage(soundstagePreferencesRef.current.factory)
-          return
-        }
-        if (direction === 1 && visualizerSolid === FACTORY_SOUNDSTAGE_IDS[FACTORY_SOUNDSTAGE_IDS.length - 1]) {
-          selectCustomSoundstage()
-          return
-        }
-        selectSoundstage(steppedFactorySoundstage(visualizerSolid, direction))
-      },
-      select: selectSoundstage,
-    })
-  }, [visualizerSolid, soundstagePresets, activeSoundstageId, selectSoundstage, selectCustomSoundstage])
+    publishSoundstageControls(soundstageControlsFor(soundstagePreferences, (update) => changeSoundstages(update(soundstagePreferencesRef.current))))
+  }, [soundstagePreferences, changeSoundstages])
 
 
   const handleExportPdf = useCallback(async (scope: ExportScope) => {

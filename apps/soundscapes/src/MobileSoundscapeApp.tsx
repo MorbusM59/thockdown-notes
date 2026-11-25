@@ -89,6 +89,7 @@ import { DashboardAppSections, MobileTabSelector, VisualizerButtons } from './Mo
 import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
 import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
+import { publishSoundstageControls, soundstageControlsFor } from '@thockdown/visualizer/sound/soundstageControls'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
@@ -260,6 +261,10 @@ export function MobileSoundscapeApp() {
   const activeStage = useMemo(() => activeSoundstage(soundstages).settings, [soundstages])
   useEffect(() => {
     saveSoundstages(soundstages)
+  }, [soundstages])
+  // The visualizer's solid steps through them as on desktop (soundstageControls.ts).
+  useEffect(() => {
+    publishSoundstageControls(soundstageControlsFor(soundstages, setSoundstages))
   }, [soundstages])
   useEffect(() => {
     setMusicStage(JSON.stringify(musicStageOf(activeStage)))

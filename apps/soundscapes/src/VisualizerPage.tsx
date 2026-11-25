@@ -3,8 +3,9 @@
  * full screen over the app, reading the NATIVE music (mobileMusicPlayer.ts
  * installs nativeMusicListening.ts) and showing the music pool's songs.
  *
- * Opening it starts the music if nothing plays, from the active sets. The
- * system's back gesture leaves it for the tab it was opened from; the music
+ * Opening it plays nothing by itself: music starts from a song pressed in
+ * its song list, or from the dashboard. The system's back gesture leaves it
+ * for the tab it was opened from (so the scene draws no exit box); the music
  * plays on.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,7 +17,6 @@ import { useBeatFeedback } from '@thockdown/visualizer/beat/useBeatFeedback'
 import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 import type { VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import { setDisplayScale, setVisualizerOpen } from './display'
-import { startMusic } from './mobileMusicPlayer'
 import { measureVisualizerFrameRate } from './visualizerFrameRate'
 import { visualizerBoxPx, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
@@ -48,7 +48,6 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
     // Drawn at the screen's full resolution: the scene's shaders hold the frame rate there.
     void setDisplayScale(1)
     void setVisualizerOpen(true)
-    void startMusic()
     const stopMeasuring = measureVisualizerFrameRate()
     return () => {
       stopMeasuring()
@@ -79,7 +78,6 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
         pixelScale={1}
         sceneSeed="soundscapes"
         gridOutlineRef={gridRef}
-        onExit={onExit}
       />
       </div>
       <div ref={beatEdgeRef} className="editor-beat-edge" aria-hidden="true" />
