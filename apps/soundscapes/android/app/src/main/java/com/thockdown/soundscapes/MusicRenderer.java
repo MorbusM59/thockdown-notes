@@ -434,7 +434,15 @@ final class MusicRenderer {
                 long played = output.playheadFrame();
                 long[] step = handle(isolate.evaluateJavaScriptAsync(
                     "musicStep(" + played + ", " + MAX_CHUNKS_PER_STEP + ")").get(), played);
-                boolean wantsInput = step[1] < decodeAheadFrames && !ended;
+                // RENDERING COMES FIRST: a step that stopped at its cap has
+                // input left to render, and the output is fed before the
+                // decoder runs further ahead. Decoding after every step
+                // rendered 12 chunks (32 ms) for every half second decoded,
+                // so at a start, with nothing queued, the output was fed
+                // slower than it played until the decoder was 14 s ahead:
+                // seconds before a song was heard.
+                boolean renderable = step[0] >= MAX_CHUNKS_PER_STEP;
+                boolean wantsInput = !renderable && step[1] < decodeAheadFrames && !ended;
                 if (wantsInput) decodeSlice();
                 if (step[0] > 0 || wantsInput) continue;
                 waitForWork();
