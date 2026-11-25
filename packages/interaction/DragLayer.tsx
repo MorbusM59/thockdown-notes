@@ -1,8 +1,8 @@
 import { useCallback, useRef } from 'react'
-import { registerDragLayer } from './dragLayer'
+import { registerDragLayer } from './dragPicture'
 
 /**
- * The app's drag layer (dragLayer.ts): mount once, inside
+ * The app's drag layer (dragPicture.ts): mount once, inside
  * `.app-saturate-wrapper`, as the tooltip layer is.
  */
 export function DragLayer() {

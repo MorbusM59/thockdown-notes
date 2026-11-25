@@ -67,7 +67,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { armTouchDragHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from './holdTiming'
 import { holdTouchPanning } from './touchInput'
 import { beginCursorHold, endCursorHold } from './cursorHoldFeedback'
-import { copyInContext, dragLayerHost } from './dragLayer'
+import { copyInContext, dragLayerHost } from './dragPicture'
 
 /**
  * How far a press must travel, in screen pixels, before it is a drag rather
@@ -142,7 +142,7 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
 
   let dataTransfer: DataTransfer | null = null
   const showsOnCursor = source.getAttribute(DRAG_PICTURE_ATTRIBUTE) === 'cursor'
-  /** The drag's picture as attached (its outermost shell, dragLayer.ts) and the copy inside it that moves. */
+  /** The drag's picture as attached (its outermost shell, dragPicture.ts) and the copy inside it that moves. */
   let ghost: HTMLElement | null = null
   let ghostCopy: HTMLElement | null = null
   let ghostOffsetX = 0
@@ -182,7 +182,7 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     }
     ghostOffsetX = lastClientX - rect.left
     ghostOffsetY = lastClientY - rect.top
-    // The copy is drawn in the app's drag layer (dragLayer.ts), above every
+    // The copy is drawn in the app's drag layer (dragPicture.ts), above every
     // panel and outside every clipping box. `position: fixed` there is placed
     // against a containing block rather than the viewport (the layer's
     // filtered ancestor, or a container's shell), so where the copy lands

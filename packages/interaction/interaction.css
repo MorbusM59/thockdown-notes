@@ -1140,7 +1140,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The drag layer (dragLayer.ts): the copy of a dragged element is drawn
+/* The drag layer (dragPicture.ts): the copy of a dragged element is drawn
    here, above every panel and outside every clipping box, and under the
    glaze (.glaze-overlay-stack, 6000) so the glaze grades it like the rest of
    the app. Inside .app-saturate-wrapper, so the wrapper's filter applies. */
@@ -1158,7 +1158,7 @@
   pointer-events: none !important;
 }
 
-/* A shell (dragLayer.ts) is a copy of one of the dragged element's
+/* A shell (dragPicture.ts) is a copy of one of the dragged element's
    ancestors, there only so selectors and inherited values reach the copy as
    they reach the original. It generates no box, and its pseudo-elements (a
    chrome's sheen, a section's frame) are not drawn. */
