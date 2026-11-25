@@ -207,6 +207,10 @@ export function resolveSeekPress(
  * longer clock (room.ts's ROOM_CROSSFADE_SEC). Volume keeps its faster one.
  */
 const SETTING_GLIDE_SEC = 0.05;
+/** Where the launch fade's low-pass starts (beginFadeIn): muffled, as if through a wall. */
+const LAUNCH_LOWPASS_FROM_HZ = 150;
+/** Where it ends: the top of hearing, where the filter no longer colours anything and is removed. */
+const LAUNCH_LOWPASS_TO_HZ = 20000;
 const VOLUME_SMOOTHING_SEC = 0.02;
 
 type PlaybackEndHandler = () => void;
@@ -339,6 +343,10 @@ export class MusicPlayerService {
   }
 
   // ── Audio graph ────────────────────────────────────────────────────────────
+
+  /** The launch fade's low-pass while it sweeps (beginFadeIn); null otherwise. */
+  private launchLowpass: BiquadFilterNode | null = null;
+  private launchLowpassTimer: number | null = null;
 
   private ensureAudioContext(): AudioContext {
     const context = outputContext();
@@ -476,31 +484,52 @@ export class MusicPlayerService {
   }
 
   /**
-   * Fade in from silence + full reverb up to the current config's
-   * volume/reverbAmount over durationSec, via native Web Audio gain
-   * scheduling (sample-accurate, no polling). Used only when resuming
+   * Fade in from silence through a closing low-pass, opening up to the
+   * current config's volume over durationSec. Used only when resuming
    * playback that was already in progress when the app was last closed
-   * (see AudioControls' initialWasPlaying restore) -- ordinary play() calls
-   * (user pressing play, auto-advance) start at full volume as before.
-   * Assumes play() has already been called so the gain nodes exist.
+   * (AudioControls' initialWasPlaying restore); ordinary play() calls start
+   * at full volume. The volume rises linearly; the low-pass's cutoff sweeps
+   * exponentially (equal musical intervals per second) from
+   * LAUNCH_LOWPASS_FROM_HZ to the top of the audible range. The filter is in
+   * the chain only for the fade: it is spliced in between the foliage filter
+   * and the volume, and spliced out (and dropped) once the sweep has ended,
+   * so it costs nothing afterwards. Assumes play() has already been called
+   * so the graph exists.
    */
   beginFadeIn(durationSec: number): void {
-    if (!this.gainNode || !this.dryGain || !this.wetGain || !this.audioCtx) return;
-    const now = this.audioCtx.currentTime;
-    const { reverbAmount } = this.config;
-    const volume = this.volumeGain();
+    if (!this.gainNode || !this.foliageFilter || !this.audioCtx) return;
+    const ctx = this.audioCtx;
+    const now = ctx.currentTime;
 
     this.gainNode.gain.cancelScheduledValues(now);
     this.gainNode.gain.setValueAtTime(0, now);
-    this.gainNode.gain.linearRampToValueAtTime(volume, now + durationSec);
+    this.gainNode.gain.linearRampToValueAtTime(this.volumeGain(), now + durationSec);
 
-    this.dryGain.gain.cancelScheduledValues(now);
-    this.dryGain.gain.setValueAtTime(0, now); // full reverb = no dry signal
-    this.dryGain.gain.linearRampToValueAtTime(1 - reverbAmount, now + durationSec);
+    this.endLaunchLowpass();
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.Q.value = Math.SQRT1_2;
+    lowpass.frequency.setValueAtTime(LAUNCH_LOWPASS_FROM_HZ, now);
+    lowpass.frequency.exponentialRampToValueAtTime(Math.min(LAUNCH_LOWPASS_TO_HZ, ctx.sampleRate / 2), now + durationSec);
+    this.foliageFilter.disconnect(this.gainNode);
+    this.foliageFilter.connect(lowpass);
+    lowpass.connect(this.gainNode);
+    this.launchLowpass = lowpass;
+    this.launchLowpassTimer = window.setTimeout(() => this.endLaunchLowpass(), durationSec * 1000);
+  }
 
-    this.wetGain.gain.cancelScheduledValues(now);
-    this.wetGain.gain.setValueAtTime(1, now); // full reverb = fully wet
-    this.wetGain.gain.linearRampToValueAtTime(reverbAmount, now + durationSec);
+  /** Splice the launch fade's low-pass out of the chain, if it is in it. */
+  private endLaunchLowpass(): void {
+    if (this.launchLowpassTimer !== null) window.clearTimeout(this.launchLowpassTimer);
+    this.launchLowpassTimer = null;
+    const lowpass = this.launchLowpass;
+    if (!lowpass) return;
+    this.launchLowpass = null;
+    // A graph rebuilt meanwhile (a new context) never had it: nothing to undo.
+    if (lowpass.context !== this.audioCtx || !this.foliageFilter || !this.gainNode) return;
+    this.foliageFilter.connect(this.gainNode);
+    this.foliageFilter.disconnect(lowpass);
+    lowpass.disconnect();
   }
 
   onEnded(handler: PlaybackEndHandler): void {

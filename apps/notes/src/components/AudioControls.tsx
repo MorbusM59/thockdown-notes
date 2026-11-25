@@ -32,7 +32,7 @@ import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarS
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '@thockdown/visualizer/sound/MusicPlayerService'
 import { publishNowPlaying, type MusicAddSource, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
-// below) starts at silence and full reverb and ramps up over this span.
+// below) starts at silence behind a closed low-pass and ramps up over this span.
 import { RESTORE_FADE_IN_SEC } from '@thockdown/soundscape/audioOutputBus'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { readSoundstageControls, subscribeSoundstageControls } from '@thockdown/visualizer/sound/soundstageControls'
