@@ -17,8 +17,22 @@ export function lastVisualizerFrameRate(): FrameRateReport | null {
   return last
 }
 
-/** Counts frames from now until the returned stop, which records the report. */
+let readers = 0
+
+/** Declares that the Debugging readout is open, until the returned release. Only then does the visualizer count frames. */
+export function readVisualizerFrameRate(): () => void {
+  readers += 1
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    readers -= 1
+  }
+}
+
+/** Counts frames from now until the returned stop, which records the report; counts nothing while no readout is open. */
 export function measureVisualizerFrameRate(): () => void {
+  if (readers === 0) return () => {}
   const startMs = performance.now()
   let frames = 0
   let secondStartMs = startMs

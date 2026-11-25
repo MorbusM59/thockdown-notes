@@ -22,6 +22,8 @@ import { publishNowPlaying, type NowPlaying, type SoundLevels } from '@thockdown
 import { setMusicListening } from '@thockdown/visualizer/sound/musicListening'
 import { publishMusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
 import { createNativeMusicListening } from './nativeMusicListening'
+import { installNativeSoundscapeVisuals } from './nativeSoundscapeVisuals'
+import { nativeSoundscape } from './backgroundAudioHost'
 import {
   addScanToSet,
   createSet,
@@ -145,10 +147,22 @@ export function subscribeMusicPlaying(listener: () => void): () => void {
   return () => playingListeners.delete(listener)
 }
 
-/** Plays `songId`, starting the music first if nothing plays: choosing needs a renderer. */
+/**
+ * Plays `songId` (a song tapped in a list): a real start of playback, so the
+ * music channel is switched in and the music plays, as the dashboard's
+ * toggles then show. `play` is sent whatever this page last heard, since the
+ * native side may have paused or stopped meanwhile (the notification, the
+ * schedule) and it is a no-op on music already playing; it resolves once a
+ * renderer exists, so the `choose` after it lands.
+ */
 async function playSong(songId: number): Promise<void> {
-  await startMusic()
-  await plugin?.choose({ songId })
+  if (!plugin || stageJson === null) return
+  setMusicChannel(true)
+  setPlaying(true)
+  // choose alone starts playback natively (MusicSession.choose), silent until
+  // the chosen song is heard: a play first would let the paused song be heard.
+  await plugin.setStage({ stage: stageJson })
+  await plugin.choose({ songId })
 }
 
 function commit(next: MusicCatalog): void {
@@ -313,8 +327,15 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     getPlaylist: async (slot) => libraryOf(catalog, rotation).filter((song) => song.setIds.includes(slot)),
     getPool: async (query) => poolOf({ ...catalog, activeSetIds: query.slots, filter: query.filter }, rotation),
   })
-  // The visualizer reads the native music: its clock, its file and its spectrum (nativeMusicListening.ts).
-  setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId)))
+  // The visualizer reads the native music (its clock, its file and its
+  // spectrum, nativeMusicListening.ts) and the native soundscape (its
+  // spectrum and signals, nativeSoundscapeVisuals.ts), each at the gain it is heard at.
+  const musicHeardGain = () => (playing ? heardGain() : 0)
+  const soundscapeVisuals = nativeSoundscape && installNativeSoundscapeVisuals(nativeSoundscape, musicHeardGain)
+  setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId), soundscapeVisuals && {
+    soundscape: soundscapeVisuals,
+    musicGain: heardGain,
+  }))
   setPlaying((await native.getState()).playing)
   void native.setVolume({ volume: heardGain() })
   publish()

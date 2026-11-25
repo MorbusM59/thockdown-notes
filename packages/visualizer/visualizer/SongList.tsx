@@ -25,6 +25,7 @@
  * else. React renders this component again only when the layout does.
  */
 
+import { hitFrame } from './hitFrame'
 import { useEffect, useRef } from 'react'
 import { hasLeftHoldGrace } from '@thockdown/interaction/holdTiming'
 import { attachRowFingerPan, createRowWheel } from '../scroll/rowWheel'
@@ -293,10 +294,10 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       play(event.clientY)
     }
     const play = (clientY: number) => {
-      const rect = hit.getBoundingClientRect()
-      const row = Math.floor((clientY - rect.top) / boxPx)
-      if (row % 2 !== 0) return
-      const slot = row / 2
+      // The hit frame starts half a box above the first entry and gives each
+      // entry its row plus half the empty row either side (hitFrame.ts), so
+      // the entries' targets meet with no dead row between them.
+      const slot = Math.floor((clientY - hit.getBoundingClientRect().top) / (2 * boxPx))
       if (slot >= ring.length) return
       const song = ring[wrapListIndex(offset + slot, ring.length)]
       if (!song) return
@@ -339,7 +340,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
     <>
       <div ref={boxesRef} className="visualizer-song-list is-boxes" style={frame} />
       <div ref={lettersRef} className="visualizer-song-list is-letters" style={frame} />
-      <div ref={hitRef} className="visualizer-song-list-hit" style={frame} />
+      <div ref={hitRef} className="visualizer-song-list-hit" style={hitFrame(frame, boxPx)} />
     </>
   )
 }

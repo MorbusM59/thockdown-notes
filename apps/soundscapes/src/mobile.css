@@ -48,10 +48,17 @@ body {
 /* Every button grid is six equal columns spanning the row, with square
    cells, instead of the desktop's fixed 32px cells: a phone's row is wider
    than six of those, and a finger needs the larger target. */
-.mobile-app-shell .options-loadout-grid {
+.mobile-app-shell .options-loadout-grid,
+.mobile-app-shell .typography-grid {
   width: 100%;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-auto-rows: auto;
+}
+
+/* A font picker's cells are square too; its "Aa" stays the desktop's size, as
+   it previews the font rather than being an icon. */
+.mobile-app-shell .typography-grid > * {
+  aspect-ratio: 1;
 }
 
 .mobile-app-shell {
@@ -62,13 +69,12 @@ body {
   --sidebar-options-content-width: 100%;
 }
 
-/* The desktop centres a column one gap and a pixel wider than its six
-   buttons inside the panel's large padding (tokens.css's
-   --sidebar-options-content-width), so its grid sits a large spacing, a
-   regular one and a pixel in from the panel's edges. The phone's column is
-   the whole width, so that inset is the padding itself. */
+/* As on the desktop, the panel's content sits a large spacing in from the
+   panel on every side, and its subsections stand a regular spacing apart
+   (the shared rule's gap). The phone's column is the whole width rather than
+   the desktop's six-button column, so the subsections take what is left. */
 .mobile-app-shell .sidebar-options-content {
-  padding-inline: calc(var(--spacing-large) + var(--spacing-regular) + 1px);
+  padding: var(--spacing-large);
 }
 
 /* A shared panel that brings its own content element (the Songs tab's
@@ -111,6 +117,11 @@ body {
   aspect-ratio: auto;
 }
 
+/* A schedule entry docks its name over four cells, then delete and help. */
+.mobile-app-shell .preset-dock-row.mobile-schedule-dock-row > .options-dock-entry-name {
+  grid-column: span 4;
+}
+
 /* The open song set docks the same way: its mark, its name with its count
    over two cells, an add button, delete and help. */
 .mobile-app-shell .preset-dock-row.options-music-set-row {
@@ -141,11 +152,11 @@ body {
 }
 
 .mobile-app-shell .options-music-set-list-dock-row > .text-button {
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-font-scale));
 }
 
 /* Two cells are narrow for a name, so it breaks onto as many lines as it
-   needs, centred both ways, with the time left under it. The dashboard's
+   needs, centered both ways, with the time left under it. The dashboard's
    song is drawn the same way. */
 .mobile-app-shell .preset-dock-row > .options-curve-display.options-dock-entry-name,
 .mobile-app-shell .mobile-dock-song {
@@ -173,14 +184,14 @@ body {
 
 /* The clip button shows how far the render has got in place of its icon. */
 .mobile-clip-progress {
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-font-scale));
   font-variant-numeric: tabular-nums;
 }
 
 /* The timer (TimerRow.tsx): a duration in one line. */
 /* At the size of the soundscape's name in the dock, never wrapped. */
 .mobile-app-shell .mobile-timer-btn {
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-font-scale));
   line-height: 1;
   white-space: nowrap;
 }
@@ -188,38 +199,45 @@ body {
 /* The schedule (ScheduleRows.tsx): its entries, one under another, each six
    buttons wide; placement is each grid's own, row by row, so only the spans
    are written. */
-.mobile-schedule {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  container-type: inline-size;
+/* An entry's wrapper is what a drag moves and marks as its target (the
+   reorder's source and target attributes land on it), and it is exactly the
+   size of the subsection box inside it, so it takes that box's corners: an
+   outline follows its own element's radius, and this one had none. */
+.mobile-schedule-slot {
+  border-radius: var(--border-radius-small);
 }
 
-/* An entry's two rows on one grid of 36 columns (ScheduleRows.tsx): the top
-   row's chip columns span 3, the day row's chips 4, so both rows share the
-   gaps. Every row is one chip tall, a chip being a twelfth of the width
-   less its eleven gaps: stated rather than taken from a square chip, since
-   a time's chips in place of the top row hold none. */
+/* The entries are subsections of the tab like any other, spaced by the
+   tab's own rule: the wrapper only groups them for assistive technology. */
+.mobile-schedule {
+  display: contents;
+}
+
+/* An entry's two rows on one grid of 72 columns (ScheduleRows.tsx): a
+   button spans 12, a chip 6, a time field 9 and a day 9, so both rows share
+   the gaps. Every row is one chip tall, a chip being a twelfth of the width
+   less its eleven gaps. */
+/* Twelve chip columns whose gaps are the panel's button gap, so two chips
+   and the gap between them are exactly one of the six-wide grid's buttons. */
 .mobile-schedule-grid {
   display: grid;
-  grid-template-columns: repeat(36, minmax(0, 1fr));
-  grid-auto-rows: calc((100cqw - 11 * 3px) / 12);
-  gap: 3px;
+  grid-template-columns: repeat(72, minmax(0, 1fr));
+  grid-auto-rows: calc((100cqw - 11 * var(--toolbar-options-gap)) / 12);
+  gap: var(--toolbar-options-gap);
 }
 
-.mobile-app-shell .mobile-schedule-grid > *,
-.mobile-app-shell .mobile-schedule-times > * {
+.mobile-app-shell .mobile-schedule-grid > * {
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
   padding: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--ui-font-scale));
   font-variant-numeric: tabular-nums;
 }
 
 .mobile-schedule-chip {
-  grid-column: span 3;
+  grid-column: span 6;
 }
 
 .mobile-schedule-label {
@@ -229,77 +247,85 @@ body {
   pointer-events: none;
 }
 
-/* The on, song set and soundscape buttons (and the "+"): a regular button,
-   two chip columns by two rows, its mark at a regular button's icon size. */
+/* The on, song set, soundscape and edit buttons (and the "+"): a regular
+   button, two chips by two rows, its mark at a regular button's icon size. */
 .mobile-app-shell .mobile-schedule-grid > .mobile-schedule-button {
-  grid-column: span 6;
+  grid-column: span 12;
   grid-row: span 2;
   font-size: var(--mobile-button-icon-size);
 }
 
 .mobile-app-shell .mobile-schedule-time {
-  grid-column: span 6;
-  font-size: 14px;
-}
-
-.mobile-app-shell .mobile-schedule-grid > .mobile-schedule-grip {
-  grid-column: span 3;
-  grid-row: span 2;
+  grid-column: span 9;
+  font-size: calc(14px * var(--ui-font-scale));
 }
 
 .mobile-schedule-day,
-.mobile-schedule-calendar,
-.mobile-schedule-bin {
-  grid-column: span 4;
+.mobile-schedule-calendar {
+  grid-column: span 9;
 }
 
-/* A time's chips in place of the top row: 24 hours of one chip column,
-   or 12 minutes of two, in its two rows. */
-.mobile-schedule-times {
-  grid-column: 1 / -1;
-  grid-row: span 2;
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-template-rows: subgrid;
-}
-
-.mobile-schedule-pick.is-minute {
-  grid-column: span 6;
+/* The entry's picker, below its two rows: the panel's six-wide button grid
+   for every kind; a time's choices are its digits, at a time field's size. */
+.mobile-app-shell .mobile-schedule-pick {
+  aspect-ratio: 2;
+  font-size: calc(16px * var(--ui-font-scale));
+  font-variant-numeric: tabular-nums;
 }
 
 .mobile-schedule-entry {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--spacing-regular);
+  container-type: inline-size;
 }
 
-.mobile-schedule-grid.is-off > :not(.mobile-schedule-on) {
+/* The open picker: a box drawn as a song's cell in a song set, its choices
+   one regular spacing in from its border all round. */
+.mobile-schedule-picker {
+  box-sizing: border-box;
+  padding: var(--spacing-regular);
+  border: 1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-small);
+  background: var(--btn-bg-default);
+  container-type: inline-size;
+}
+
+.mobile-schedule-grid.is-off > :not(.mobile-schedule-on, .mobile-schedule-edit) {
   opacity: 0.4;
 }
 
 .mobile-schedule-button.is-drop-target {
-  outline: 2px solid var(--color-text-60);
-  outline-offset: 1px;
+  outline: 2px solid var(--color-text-80);
+}
+
+.mobile-schedule-button.is-drop-target > * {
+  opacity: 0.2;
 }
 
 /* The element that scrolls is the panel's own options content (a scroller
    in the desktop's styles). A finger scrolls it, but by the app's rule
    rather than the browser's (touchScroll.ts): the browser would claim every
-   first movement, before a control could say the press was its own. */
-.mobile-app-shell .sidebar-content.is-scrollbar-mode {
+   first movement, before a control could say the press was its own.
+   Declared on everything inside it too: the browser intersects touch-action
+   only up to the nearest element that could scroll, and the panel's content
+   is one (`.sidebar-options-content`'s hidden x overflow makes its y
+   overflow auto), so on the scroller alone it never reached a control, and
+   every vertical drag (a soundscape, a schedule entry) was taken for a pan
+   and cancelled. */
+.mobile-app-shell .sidebar-content.is-scrollbar-mode,
+.mobile-app-shell .sidebar-content.is-scrollbar-mode * {
   touch-action: none;
 }
 
 /* The page's scrollbar, in the frame's scrollbar slot at the right edge
-   where the system's would be, laid out as the desktop's: one regular
-   spacing from the panel, then the track. The track is wider than the
-   desktop's by the ratio the phone's buttons are (a desktop track is about
-   two thirds of a 32px button; the phone's buttons are about 55px), which
-   also makes it a fingertip wide; the whole column grabs (PageScrollbar.tsx). */
-.mobile-app-shell {
-  --sidebar-scrollbar-slot-width: calc(var(--spacing-regular) + 36px);
-}
-
+   where the system's would be, sized and laid out exactly as the desktop's
+   (tokens.css's --sidebar-scrollbar-slot-width): one regular spacing from
+   the panel, then a track as thick as the UI font makes it, so the bar
+   keeps the same proportion to the text beside it on both. It is not scaled
+   with the phone's larger buttons, which made it three times the height of
+   a heading's text where the desktop's is a third more. The whole column
+   grabs (PageScrollbar.tsx). */
 .mobile-scrollbar-slot {
   position: absolute;
   inset: 0;
@@ -321,7 +347,7 @@ body {
 }
 
 .mobile-app-shell .options-curve-cell {
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-font-scale));
 }
 
 /* The icon picker's filter: the whole width, at the field height (--mobile-field-height). */
@@ -341,8 +367,8 @@ body {
   inset: 0;
   z-index: 50;
   /* The base the desktop's scene lies on (editor.css's .editor-background:
-     the root colour, the parchment over it), which the scene's translucent
-     zone colours are mixed for. Without it the middle showed the root colour
+     the root color, the parchment over it), which the scene's translucent
+     zone colors are mixed for. Without it the middle showed the root color
      alone, black in most looks. The glaze grades all of it from above
      (.glaze-overlay-stack, z-index 6000), as on the desktop. */
   background:
@@ -435,7 +461,7 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
    its artist and album keep to two lines and one. */
 .mobile-app-shell .mobile-dock-song {
   height:    calc((100cqw - (5 * var(--toolbar-options-gap))) / 6);
-  font-size: 15px;
+  font-size: calc(15px * var(--ui-font-scale));
   overflow:  hidden;
 }
 
@@ -458,7 +484,7 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
 }
 
 .mobile-dock-transport-time {
-  font-size:            15px;
+  font-size:            calc(15px * var(--ui-font-scale));
   font-variant-numeric: tabular-nums;
 }
 
@@ -469,7 +495,7 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
    pool filter and the dashboard's sliders. The text's height plus a
    regular spacing above and below, and the field's border. */
 .mobile-app-shell {
-  --mobile-field-height: calc(15px + 2 * var(--spacing-regular) + 2px);
+  --mobile-field-height: calc(15px * var(--ui-font-scale) + 2 * var(--spacing-regular) + 2px);
 }
 
 /* The dashboard's sliders (the volumes, the song's position) at the field's
@@ -509,7 +535,7 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
 .mobile-beat-trace {
   margin:      var(--spacing-regular) 0 0;
   overflow-x:  auto;
-  font-size:   9px;
+  font-size:   calc(9px * var(--ui-font-scale));
   line-height: 1.3;
   white-space: pre;
   color:       var(--color-text-base);

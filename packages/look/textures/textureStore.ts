@@ -50,7 +50,7 @@ export function installTexturePorts(next: TexturePorts): void {
  * a surface is showing (`pinTexture`), which is never revoked under it.
  */
 
-export const TEXTURE_ALGORITHM_VERSION = 4;
+export const TEXTURE_ALGORITHM_VERSION = 5;
 export const TEXTURE_REPEAT_TILE_SIZE = 512;
 
 /** About three looks' worth of masks and composed backdrops. */

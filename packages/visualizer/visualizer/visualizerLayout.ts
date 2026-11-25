@@ -386,36 +386,47 @@ export function levelAtColumn(columns: number, column: number): number {
 export const REQUIRED_ROWS_BESIDE_CUTOUT = 2 * (STRIP_ROWS + 2)
 
 /**
- * The fewest full rows the scene may have: both strips and bars, plus enough
- * middle rows for five set entries with three empty rows before the filter.
+ * The fewest full rows a LANDSCAPE scene may have: both strips and bars, plus
+ * enough middle rows for five set entries with three empty rows before the
+ * filter. A portrait scene has no minimum beyond its strips, bars and cutout
+ * (`fitVisualizerBox`).
  */
 export const MIN_SCENE_ROWS = 31
 
 /**
- * The fewest full columns the scene may have: enough for the credits row's
- * artist and album side by side and a spectrum worth reading. It is what
- * shrinks the boxes on a phone held upright, where the width runs out first.
+ * The fewest full columns a LANDSCAPE scene may have, with the song and set
+ * lists beside the cutout: enough for the credits row's artist and album side
+ * by side and a spectrum worth reading. A portrait scene needs only one full
+ * box either side of the cutout (`fitVisualizerBox`).
  */
 export const MIN_SCENE_COLUMNS = 31
 
 /**
  * The box and font size the scene is drawn at in a `widthPx` by `heightPx` slot: the
  * reader's own when both strips, both bars, a row of padding each side and the
- * cutout all fit, with `MIN_SCENE_COLUMNS` across; otherwise the largest box that fits, reached by lowering the
- * line height first, down to 1, and then the font size with it.
+ * cutout all fit, and, in LANDSCAPE (the lists beside the cutout), the scene
+ * holds `MIN_SCENE_ROWS` rows and `MIN_SCENE_COLUMNS` columns; in PORTRAIT
+ * (the lists above and below the cutout) only one full box either side of the
+ * cutout is asked for, and the lists show what entries fit; otherwise the largest box that fits, with the font scaled
+ * by the same ratio, so the reader's line height (the box over the font size,
+ * never below 1) is kept and a letter is never cut.
  */
 export function fitVisualizerBox(widthPx: number, heightPx: number, boxPx: number, fontSizePx: number, cutoutPx: number): { boxPx: number; fontSizePx: number } {
+  const portrait = heightPx > widthPx
   // The full rows above the cutout (the grid is phased on it, so the rows
   // below are as many or one more), as computeVisualizerLayout places them.
   const fits = (box: number) => {
     const size = cutoutBoxes(cutoutPx, box)
     const above = Math.floor(Math.floor((heightPx - size * box) / 2) / box)
-    return 2 * above >= REQUIRED_ROWS_BESIDE_CUTOUT && 2 * above + size >= MIN_SCENE_ROWS && Math.floor(widthPx / box) - 1 >= MIN_SCENE_COLUMNS
+    if (2 * above < REQUIRED_ROWS_BESIDE_CUTOUT) return false
+    if (portrait) return Math.floor(Math.floor((widthPx - size * box) / 2) / box) >= 1
+    return 2 * above + size >= MIN_SCENE_ROWS && Math.floor(widthPx / box) - 1 >= MIN_SCENE_COLUMNS
   }
-  let box = Math.max(1, boxPx)
+  const asked = Math.max(1, boxPx)
+  let box = asked
   if (heightPx <= 0) return { boxPx: box, fontSizePx }
   while (box > 1 && !fits(box)) box -= 1
-  return { boxPx: box, fontSizePx: Math.min(fontSizePx, box) }
+  return { boxPx: box, fontSizePx: box === asked ? fontSizePx : Math.min(fontSizePx, fontSizePx * box / asked) }
 }
 
 /** The cutout's size in boxes for about `cutoutPx`: the nearest odd count, at least one. */

@@ -18,7 +18,7 @@ import { sanitizeSoundstagePreferences } from '@thockdown/visualizer/shared/soun
 import { sanitizeKeystrokeSoundPreferences } from '../src/shared/keystrokeSounds';
 import { resetMenuWithPreservedPresets } from '../src/shared/appStateReset';
 import { DEFAULT_TYPING_TRAIL_SETTINGS, sanitizeTypingTrailSettings } from '../src/shared/typingTrailSettings';
-import { sanitizeVisualizerFont } from '../src/shared/visualizerFont';
+import { sanitizeVisualizerFont } from '@thockdown/visualizer/shared/visualizerFont';
 import { sanitizeVisualizer } from '@thockdown/look/visualizer';
 import { sanitizeVisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets';
 import { sanitizeSpeedReadingSettings } from '../src/speedReading/speedReadingSettings';

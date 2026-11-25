@@ -37,6 +37,12 @@ final class SoundscapeRenderer {
         void onFailure(String message);
     }
 
+    /** Where the visualizer's view of the soundscape goes (`setVisuals`). */
+    interface VisualsSink {
+        /** What was computed from chunks just rendered (soundscapeRenderer.ts's soundscapeVisualsTake, as JSON), the output's playhead as it arrives, and its sample rate. */
+        void onVisuals(String visualsJson, long playheadFrame, int sampleRate);
+    }
+
     /** Chunks per call: about half a second at 48 kHz, well inside the isolate's return limit. */
     private static final int MAX_CHUNKS_PER_STEP = 12;
     /** Beyond what the device holds: a writer block of scheduling slack. */
@@ -50,6 +56,11 @@ final class SoundscapeRenderer {
     /** Settings changes not yet applied, in order: a configuration and, for a transition, its length (0 for a plain configure). */
     private final ConcurrentLinkedQueue<Object[]> pending = new ConcurrentLinkedQueue<>();
     private volatile boolean running = true;
+    /** The visualizer's view: the spectrum's bands (0 for none), whether the signals are passed on, where both go, and whether that changed since the renderer last looked. */
+    private volatile int spectrumBands = 0;
+    private volatile boolean signals = false;
+    private volatile VisualsSink visualsSink = null;
+    private volatile boolean visualsChanged = false;
     private boolean woken = false;
     /** The configuration in force; only the renderer's thread reads or writes it. */
     private String applied = null;
@@ -79,6 +90,15 @@ final class SoundscapeRenderer {
     /** Start `configurationJson` afresh, nothing of what played before carried over (RenderAhead's restart). */
     void restart(String configurationJson) {
         pending.add(new Object[] { configurationJson, RESTART });
+        wake();
+    }
+
+    /** Compute the spectrum of what is rendered in `bands` log bands (0 for none) and pass on its signals (or not), handing both to `sink`. */
+    void setVisuals(int bands, boolean withSignals, VisualsSink sink) {
+        visualsSink = sink;
+        spectrumBands = bands;
+        signals = withSignals;
+        visualsChanged = true;
         wake();
     }
 
@@ -128,12 +148,23 @@ final class SoundscapeRenderer {
                         ? "soundscapeTransition(" + JSONObject.quote(configuration) + ", " + seconds + ")"
                         : "soundscapeConfigure(" + JSONObject.quote(configuration) + ")").get();
                 }
+                if (visualsChanged) {
+                    visualsChanged = false;
+                    // The playhead first, so what is handed out again starts from now.
+                    isolate.evaluateJavaScriptAsync("soundscapeStep(" + output.playheadFrame() + ", 0)").get();
+                    isolate.evaluateJavaScriptAsync("soundscapeVisuals(" + spectrumBands + ", " + (signals ? 1 : 0) + ", " + output.sampleRate + ")").get();
+                }
                 String result = isolate.evaluateJavaScriptAsync(
                     "soundscapeStep(" + output.playheadFrame() + ", " + MAX_CHUNKS_PER_STEP + ")").get();
                 JSONArray chunks = new JSONArray(result);
                 for (int index = 0; index < chunks.length(); index += 1) {
                     JSONObject chunk = chunks.getJSONObject(index);
                     output.write(chunk.getLong("s"), SharedSandbox.decodeHalfScale(chunk.getString("d")));
+                }
+                if (chunks.length() > 0 && (spectrumBands > 0 || signals)) {
+                    String visuals = isolate.evaluateJavaScriptAsync("soundscapeVisualsTake()").get();
+                    VisualsSink sink = visualsSink;
+                    if (sink != null) sink.onVisuals(visuals, output.playheadFrame(), output.sampleRate);
                 }
                 if (chunks.length() > 0) continue;
                 synchronized (signal) {

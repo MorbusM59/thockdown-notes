@@ -33,7 +33,12 @@
 //     drag never shows.
 //   - The pointer keeps producing ordinary pointer events throughout (the
 //     browser's drag suppresses them), so the custom cursor keeps tracking.
-//   - Escape, or losing the pointer, cancels: `dragend` without `drop`.
+//   - `dragenter` and `dragleave` go to the element under the pointer as it
+//     changes, a child of a target included, as the browser's do; they carry
+//     no `relatedTarget`, so a target that tracks "over" clears on its
+//     `dragleave` and sets again on the `dragover` that follows at once.
+//   - Escape, or losing the pointer, cancels: `dragend` without `drop`, after
+//     a `dragleave` on whatever the pointer was over.
 //   - The click that follows a completed drag's release is swallowed, since
 //     the press was a drag and not a click.
 //
@@ -62,6 +67,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { armTouchDragHold, hasLeftHoldGrace, holdCompletedDuringPress, HOLD_CONFIRM_MS, HOLD_GRACE_PX } from './holdTiming'
 import { holdTouchPanning } from './touchInput'
 import { beginCursorHold, endCursorHold } from './cursorHoldFeedback'
+import { copyInContext, dragLayerHost } from './dragPicture'
 
 /**
  * How far a press must travel, in screen pixels, before it is a drag rather
@@ -79,8 +85,10 @@ export const DRAG_SOURCE_ATTRIBUTE = 'data-drag-source'
 export const DRAG_SOURCE_SELECTOR = `[${DRAG_SOURCE_ATTRIBUTE}]`
 
 /**
- * How a drag shows that it is under way. Absent, a translucent copy of the
- * source follows the pointer. `"cursor"`: nothing follows the pointer, and
+ * How a drag shows that it is under way. Absent, an identical copy of the
+ * source follows the pointer (a source that MOVES hides itself meanwhile,
+ * `useSelectorReorder`'s `data-drag-state`, so the element reads as lifted
+ * off the page rather than duplicated). `"cursor"`: nothing follows the pointer, and
  * the custom cursor shows the left-hold confirmation instead -- its halo
  * swells as for a hold of `HOLD_CONFIRM_MS` and stays up for the whole drag,
  * and a drop a target took ends it with the hold's completion twitch. For a
@@ -134,11 +142,15 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
 
   let dataTransfer: DataTransfer | null = null
   const showsOnCursor = source.getAttribute(DRAG_PICTURE_ATTRIBUTE) === 'cursor'
+  /** The drag's picture as attached (its outermost shell, dragPicture.ts) and the copy inside it that moves. */
   let ghost: HTMLElement | null = null
+  let ghostCopy: HTMLElement | null = null
   let ghostOffsetX = 0
   let ghostOffsetY = 0
   let lastClientX = event.clientX
   let lastClientY = event.clientY
+  /** The element the pointer was last over during the drag, left with a `dragleave` when it changes. */
+  let hovered: Element | null = null
 
   const dispatch = (type: string, target: EventTarget): boolean => target.dispatchEvent(new DragEvent(type, {
     bubbles: true,
@@ -153,6 +165,10 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
 
   const begin = () => {
     dataTransfer = new DataTransfer()
+    // The picture is taken before `dragstart`, so it is the source as it was
+    // picked up rather than as the drag restyles it.
+    const picture = showsOnCursor ? null : copyInContext(source)
+    const rect = source.getBoundingClientRect()
     // `dispatchEvent` returns false when a handler cancelled it: the source
     // declined to be dragged (a protected tag, say).
     if (!dispatch('dragstart', source)) {
@@ -160,47 +176,42 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
       return
     }
     document.body.classList.add(DRAG_ACTIVE_BODY_CLASS)
-    if (showsOnCursor) {
+    if (!picture) {
       beginCursorHold(HOLD_CONFIRM_MS)
       return
     }
-    const rect = source.getBoundingClientRect()
     ghostOffsetX = lastClientX - rect.left
     ghostOffsetY = lastClientY - rect.top
-    // The picture that follows the pointer is a copy of the source, placed
-    // beside it rather than under <body> so the stylesheet rules that reach
-    // it through its ancestors (a sidebar row, a bar's pill) still apply.
-    // `position: fixed` inside an ancestor with a transform is positioned
-    // against that ancestor instead of the viewport, so where the copy lands
+    // The copy is drawn in the app's drag layer (dragPicture.ts), above every
+    // panel and outside every clipping box. `position: fixed` there is placed
+    // against a containing block rather than the viewport (the layer's
+    // filtered ancestor, or a container's shell), so where the copy lands
     // with no translation is measured once and subtracted.
-    ghost = source.cloneNode(true) as HTMLElement
-    ghost.removeAttribute('id')
-    for (const name of ghost.getAttributeNames()) {
-      if (name.startsWith('data-') || name === 'tabindex' || name === 'role') ghost.removeAttribute(name)
-    }
-    ghost.setAttribute('aria-hidden', 'true')
-    Object.assign(ghost.style, {
+    ghost = picture.attach
+    Object.assign(picture.copy.style, {
       position: 'fixed',
       left: '0px',
       top: '0px',
+      right: 'auto',
+      bottom: 'auto',
       width: `${rect.width}px`,
       height: `${rect.height}px`,
       margin: '0',
-      pointerEvents: 'none',
-      opacity: '0.7',
-      zIndex: '2147483646',
+      transform: 'none',
+      translate: 'none',
       boxSizing: 'border-box',
     })
-    source.parentElement?.appendChild(ghost)
-    const origin = ghost.getBoundingClientRect()
+    ghostCopy = picture.copy
+    dragLayerHost().appendChild(ghost)
+    const origin = ghostCopy.getBoundingClientRect()
     ghostOffsetX += origin.left
     ghostOffsetY += origin.top
     placeGhost()
   }
 
   const placeGhost = () => {
-    if (!ghost) return
-    ghost.style.transform = `translate(${lastClientX - ghostOffsetX}px, ${lastClientY - ghostOffsetY}px)`
+    if (!ghostCopy) return
+    ghostCopy.style.transform = `translate(${lastClientX - ghostOffsetX}px, ${lastClientY - ghostOffsetY}px)`
   }
 
   const onPointerMove = (moveEvent: PointerEvent) => {
@@ -221,6 +232,11 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     moveEvent.preventDefault()
     placeGhost()
     const target = elementUnderPointer()
+    if (target !== hovered) {
+      if (hovered) dispatch('dragleave', hovered)
+      if (target) dispatch('dragenter', target)
+      hovered = target
+    }
     if (target) dispatch('dragover', target)
   }
 
@@ -255,13 +271,21 @@ export function armPointerDrag(event: ReactPointerEvent<HTMLElement>): void {
     window.removeEventListener('keydown', onKeyDown, true)
     if (activeDragCancel === cancel) activeDragCancel = null
     cancelTouchHold?.()
-    if (!dataTransfer) return
+    if (!dataTransfer) {
+      // A finger that picked the source up and put it down where it was did
+      // not tap it: the click its lift produces would otherwise act on the
+      // source (fold a divider held to move its entry, open a held row).
+      if (drop && isPickedUp()) swallowNextClick()
+      return
+    }
 
     ghost?.remove()
     ghost = null
+    ghostCopy = null
     document.body.classList.remove(DRAG_ACTIVE_BODY_CLASS)
     // A target takes a drop by cancelling it, which `dispatch` reports as false.
     let taken = false
+    if (!drop && hovered) dispatch('dragleave', hovered)
     if (drop) {
       const target = elementUnderPointer()
       if (target) taken = !dispatch('drop', target)

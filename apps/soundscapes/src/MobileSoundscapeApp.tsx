@@ -16,6 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
+import { setSoundscapeVisualsVolume } from './nativeSoundscapeVisuals'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
@@ -38,9 +39,10 @@ import {
   LIGHT_PRESET_THEMES,
 } from '@thockdown/look/presets'
 import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
-import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
-import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
+import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
+import { roundUiFontScale, uiScaleFactor, UI_FONT_SCALE_MAX, UI_FONT_SCALE_MIN, UI_FONT_SCALE_STEP } from '@thockdown/look/uiFontScale'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
 import { nativeSoundscape, type RegularMode, type SessionState, type SoundSource } from './backgroundAudioHost'
@@ -59,13 +61,17 @@ import {
   saveTimer,
   savePreferences,
   type MobileLook,
+  loadUiFontScale,
+  saveUiFontScale,
+  DEFAULT_PHONE_UI_FONT_SCALE,
 } from './preferencesStore'
 import { currentEntryId, currentSoundscapeName, followSession, sessionEntries } from './sessionEntries'
 import { musicScheduleEvents, sanitizeSchedule, scheduleEvents, type Schedule } from './schedule'
-import { ScheduleRows } from './ScheduleRows'
+import { ScheduleDock, ScheduleRows } from './ScheduleRows'
 import { fadeSecFor, remainingText, type TimerSettings } from './timer'
 import { TimerRow } from './TimerRow'
 import { VisualizerGlaze } from '@thockdown/visualizer/visualizer/VisualizerGlaze'
+import { DragLayer } from '@thockdown/interaction/DragLayer'
 import { prepareLookTextures } from '@thockdown/look/textures/textureStore'
 import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayoutScene'
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
@@ -90,10 +96,14 @@ import { DashboardAppSections, MobileTabSelector, VisualizerButtons } from './Mo
 import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
 import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
+import { publishSoundstageControls, soundstageControlsFor } from '@thockdown/visualizer/sound/soundstageControls'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
-import { loadBeatSettings, loadVisualizerFontSize, loadVisualizerState, PHONE_OUTPUT_DEVICE, phoneVisualizerFont, saveBeatSettings, saveVisualizerFontSize, saveVisualizerState, sanitizeVisualizerFontSize, VISUALIZER_FONT_SIZE } from './visualizerStore'
+import { loadBeatSettings, loadVisualizerDouble, loadVisualizerFont, loadVisualizerState, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerDouble, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
+import { DEFAULT_VISUALIZER_FONT } from '@thockdown/visualizer/shared/visualizerFont'
+import { VisualizerFontControls } from '@thockdown/visualizer/visualizer/VisualizerFontControls'
+import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
 import { editVisualizerState, NEUTRAL_VISUALIZER_PRESET, shownVisualizer, VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets'
 import type { VisualizerSettings } from '@thockdown/look/visualizer'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
@@ -259,6 +269,10 @@ export function MobileSoundscapeApp() {
   useEffect(() => {
     saveSoundstages(soundstages)
   }, [soundstages])
+  // The visualizer's solid steps through them as on desktop (soundstageControls.ts).
+  useEffect(() => {
+    publishSoundstageControls(soundstageControlsFor(soundstages, setSoundstages))
+  }, [soundstages])
   useEffect(() => {
     setMusicStage(JSON.stringify(musicStageOf(activeStage)))
   }, [activeStage])
@@ -278,9 +292,10 @@ export function MobileSoundscapeApp() {
   }, [])
   const [beatSettings, setBeatSettings] = useState(loadBeatSettings)
   // The visualizer's text size, outside its presets as the desktop's font is (visualizerStore.ts).
-  const [visualizerFontSize, setVisualizerFontSize] = useState(loadVisualizerFontSize)
-  useEffect(() => saveVisualizerFontSize(visualizerFontSize), [visualizerFontSize])
-  const visualizerFont = useMemo(() => phoneVisualizerFont(visualizerFontSize), [visualizerFontSize])
+  const [visualizerFont, setVisualizerFont] = useState(loadVisualizerFont)
+  useEffect(() => saveVisualizerFont(visualizerFont), [visualizerFont])
+  const [visualizerDouble, setVisualizerDouble] = useState(loadVisualizerDouble)
+  useEffect(() => saveVisualizerDouble(visualizerDouble), [visualizerDouble])
   useEffect(() => saveBeatSettings(beatSettings), [beatSettings])
   useEffect(() => {
     if (!nativeMusic) return
@@ -339,6 +354,7 @@ export function MobileSoundscapeApp() {
     soundscapeEngine.setChannel(soundscapeChannel)
   }, [soundscapeChannel])
   const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
+  useEffect(() => setSoundscapeVisualsVolume(sessionVolume), [sessionVolume])
 
   useEffect(() => {
     savePreferences(preferences)
@@ -348,6 +364,8 @@ export function MobileSoundscapeApp() {
   // The daily schedule (schedule.ts). Its events are worked out here and
   // handed to the native session, which runs them with or without this page.
   const [schedule, setSchedule] = useState<Schedule>(() => loadSchedule(soundscapePresets(preferences)))
+  // The schedule entry docked for editing (its name and delete), if any.
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   useEffect(() => saveSchedule(schedule), [schedule])
   // A deleted soundscape leaves the schedule rows that held it empty.
   useEffect(() => setSchedule((current) => sanitizeSchedule(current, presets)), [presets])
@@ -380,6 +398,15 @@ export function MobileSoundscapeApp() {
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.
   const [timer, setTimer] = useState<TimerSettings>(loadTimer)
+  // Text size: the desktop's UI Font scale, drawn the same way (--ui-font-scale on the root).
+  const [uiFontScale, setUiFontScale] = useState(loadUiFontScale)
+  // Before paint, so the first frame is already at the reader's size.
+  useLayoutEffect(() => {
+    const factor = uiScaleFactor(uiFontScale)
+    document.documentElement.style.setProperty('--ui-font-scale', String(factor))
+    installScrollTrackTokens(factor)
+    saveUiFontScale(uiFontScale)
+  }, [uiFontScale])
   useEffect(() => saveTimer(timer), [timer])
   const timerSeconds = timer.active === null ? 0 : timer.durations[timer.active]
   useEffect(() => {
@@ -569,6 +596,7 @@ export function MobileSoundscapeApp() {
                       trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
                     />
                   )
+                  : tab === 'schedules' && editingEntryId !== null ? <ScheduleDock schedule={schedule} editingId={editingEntryId} onChange={setSchedule} onEdit={setEditingEntryId} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : tab === 'visualizer' ? <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : null
@@ -584,9 +612,10 @@ export function MobileSoundscapeApp() {
             music's breath and pushes. Gloom and sheen stay as they are. */}
         <ThemeGlazeLayers glaze={{ ...theme.glaze, linear: 'none', radial: 'none' }} />
         <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} />
+        <DragLayer />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
-            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} /> : null}
+            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} double={visualizerDouble} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <MobileTabSelector tab={tab} onChange={selectTab} />
@@ -639,8 +668,21 @@ export function MobileSoundscapeApp() {
                         </button>
                       ))}
                     </div>
+                    <div className="options-slider-row">
+                      <CompactScrollbarSlider
+                        id="mobile-ui-font-scale"
+                        value={uiFontScale}
+                        min={UI_FONT_SCALE_MIN}
+                        max={UI_FONT_SCALE_MAX}
+                        step={UI_FONT_SCALE_STEP}
+                        trackLabel="size"
+                        ariaLabel="Text size"
+                        defaultValue={DEFAULT_PHONE_UI_FONT_SCALE}
+                        onCommit={(value) => setUiFontScale(Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, roundUiFontScale(value))))}
+                      />
+                    </div>
                   </OptionsFixedSection>
-                  <VisualizerButtons onOpen={() => setVisualizerOpen(true)} />
+                  <VisualizerButtons onOpen={() => setVisualizerOpen(true)} double={visualizerDouble} onDouble={setVisualizerDouble} />
                   <OptionsFixedSection heading="Tools" iconClass="fa-toolbox">
                     <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
                       <button
@@ -717,15 +759,18 @@ export function MobileSoundscapeApp() {
                   help={help}
                 />) : null}
                 {tab === 'schedules' ? (<>
-                <OptionsFixedSection heading="Schedule" iconClass="fa-clock">
-                  {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleRows
-                    schedule={schedule}
-                    presets={presets}
-                    musicSets={musicSets}
-                    currentPresetId={preferences.activePresetId}
-                    onChange={setSchedule}
-                  />}
-                </OptionsFixedSection>
+                {helpMode ? (
+                  <OptionsFixedSection heading="Schedule" iconClass="fa-clock">
+                    <SubsectionHelp paragraphs={helpFor('Schedule')!} />
+                  </OptionsFixedSection>
+                ) : <ScheduleRows
+                  schedule={schedule}
+                  presets={presets}
+                  musicSets={musicSets}
+                  onChange={setSchedule}
+                  editingId={editingEntryId}
+                  onEdit={setEditingEntryId}
+                />}
                 </>) : null}
                 {tab === 'visualizer' && !helpMode ? <>
                 <OptionsFixedSection heading="Presets" iconClass="fa-star">
@@ -734,27 +779,14 @@ export function MobileSoundscapeApp() {
                 </OptionsFixedSection>
                 <AccordionGroup>
                   <AccordionSection ariaLabel="Font" heading="Font" iconClass="fa-font">
-                    <OptionsSliderRows rows={[1]}>
-                      <CompactScrollbarSlider
-                        id="visualizer-font-size"
-                        min={VISUALIZER_FONT_SIZE.min}
-                        max={VISUALIZER_FONT_SIZE.max}
-                        step={VISUALIZER_FONT_SIZE.step}
-                        value={visualizerFontSize}
-                        trackLabel="size"
-                        ariaLabel="Visualizer text size"
-                        defaultValue={VISUALIZER_FONT_SIZE.default}
-                        formatValue={(value) => `${value}`}
-                        onCommit={(value) => setVisualizerFontSize(sanitizeVisualizerFontSize(value))}
-                      />
-                    </OptionsSliderRows>
+                    <VisualizerFontControls font={visualizerFont} onChange={setVisualizerFont} defaultSizePx={DEFAULT_VISUALIZER_FONT.sizePx} />
                   </AccordionSection>
                   <AccordionSection ariaLabel="Delay" heading="Delay" iconClass="fa-stopwatch">
                     {beatLoopPlayer ? <BeatLoopCalibration
                       loops={BEAT_LOOPS}
                       startLoop={beatLoopPlayer}
-                      fontFamily={visualizerFont.family}
-                      fontPerBox={visualizerFont.sizePx / visualizerFont.boxPx}
+                      fontFamily={monoFontFamily(visualizerFont.style)}
+                      fontPerBox={1 / visualizerFont.boxSize}
                       falls={{ edge: visualizer.edge, pane: visualizer.pane[look.mode] }}
                       delayMs={beatSettings.delayMsByDevice[PHONE_OUTPUT_DEVICE] ?? 0}
                       onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [PHONE_OUTPUT_DEVICE]: delayMs } }))}

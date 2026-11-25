@@ -87,6 +87,8 @@ final class SoundscapeSession {
          */
         void onCountdown(long endsAtMs, long remainingMs);
         void onFailure(String message);
+        /** The visualizer's view of the soundscape (SoundscapeRenderer.VisualsSink), while it asks for one (`setVisuals`). */
+        void onVisuals(String visualsJson, long playheadFrame, int sampleRate);
     }
 
     static final class State {
@@ -138,7 +140,7 @@ final class SoundscapeSession {
      * SOUNDSCAPE_SWITCH_SEC (SoundscapeEngine.ts), which the page's own
      * changes of soundscape arrive with.
      */
-    private static final double SWITCH_FADE_SEC = 2;
+    static final double SWITCH_FADE_SEC = 2;
     /** How long the hand-over takes when the listener stops regular mode: they asked for the change, so it comes promptly. */
     static final double HANDOVER_FADE_SEC = 10;
     /** A fade back from an ending that was interrupted. */
@@ -227,6 +229,27 @@ final class SoundscapeSession {
 
     synchronized void clearListener(Listener listener) {
         if (this.listener == listener) this.listener = null;
+        // With no page there is nothing to draw: the renderer stops computing for it.
+        if (this.listener == null) setVisuals(0, false);
+    }
+
+    /** What the visualizer asks of the soundscape, kept for a renderer opened later. */
+    private int spectrumBands = 0;
+    private boolean signals = false;
+
+    /** The visualizer's spectrum of the soundscape in `bands` log bands (0 for none), and its signals or not. */
+    synchronized void setVisuals(int bands, boolean withSignals) {
+        spectrumBands = bands;
+        signals = withSignals;
+        if (renderer != null) renderer.setVisuals(bands, withSignals, this::visuals);
+    }
+
+    private void visuals(String visualsJson, long playheadFrame, int sampleRate) {
+        Listener current;
+        synchronized (this) {
+            current = listener;
+        }
+        if (current != null) current.onVisuals(visualsJson, playheadFrame, sampleRate);
     }
 
     // --- State, read by the service and the plugin ---
@@ -234,7 +257,7 @@ final class SoundscapeSession {
     synchronized State state() {
         SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
         long endsAt = -1;
-        if (regular == Regular.PLAYING && timerLeftMs >= 0) {
+        if (manualPlaying() && timerLeftMs >= 0) {
             endsAt = System.currentTimeMillis() + (timerDeadline - android.os.SystemClock.elapsedRealtime());
         } else if (source() == Source.SCHEDULE) {
             endsAt = schedule.nextChangeMillis();
@@ -484,6 +507,39 @@ final class SoundscapeSession {
         }
     }
 
+    /**
+     * Whether the listener's music plays (MusicSession, not a scheduled run).
+     * THE TIMER limits manual playback, which is regular mode playing or the
+     * listener's music playing: either keeps it counting, music alone
+     * included.
+     */
+    private boolean musicPlaying = false;
+
+    private boolean manualPlaying() {
+        return regular == Regular.PLAYING || musicPlaying;
+    }
+
+    /**
+     * The listener's music started (true) or paused or stopped (false). With
+     * regular mode not playing, the countdown follows it: a start begins the
+     * whole duration, as a soundscape's start does; a pause holds it; a stop
+     * ends it.
+     */
+    synchronized void musicChanged(boolean playing, boolean stopped) {
+        if (playing == musicPlaying && !stopped) return;
+        musicPlaying = playing;
+        if (regular == Regular.PLAYING) return;
+        if (playing) {
+            startCountdown();
+        } else if (stopped) {
+            clearCountdownCallbacks();
+            timerLeftMs = -1;
+            reportCountdown();
+        } else {
+            holdCountdown();
+        }
+    }
+
     /** A play begins (a start, or a change of soundscape): the whole duration again, or none. */
     private void startCountdown() {
         clearCountdownCallbacks();
@@ -494,7 +550,7 @@ final class SoundscapeSession {
     /** Count the time left down while PLAYING: fade out over the timer's fade (or what is left of it), then stop. */
     private void runCountdown() {
         clearCountdownCallbacks();
-        if (timerLeftMs < 0 || regular != Regular.PLAYING) {
+        if (timerLeftMs < 0 || !manualPlaying()) {
             reportCountdown();
             return;
         }
@@ -505,10 +561,14 @@ final class SoundscapeSession {
             synchronized (SoundscapeSession.this) {
                 timerFade = null;
                 long left = timerDeadline - android.os.SystemClock.elapsedRealtime();
-                if (output == null || renderer == null || left <= 0) return;
+                if (left <= 0) return;
+                // The music the listener plays ends with the timer, over the same fade.
+                double fadeSec = left / 1000.0;
+                main.post(() -> MusicSession.get(context).timerFade(fadeSec));
+                if (regular != Regular.PLAYING || output == null || renderer == null) return;
                 Entry next = SoundscapeSchedule.load(context).playingAt(System.currentTimeMillis() + left);
                 if (next != null) {
-                    renderer.transition(next.configuration, left / 1000.0);
+                    renderer.transition(next.configuration, fadeSec);
                     timerHandover = next;
                 } else {
                     output.setFade(0f, left / 1000.0);
@@ -545,6 +605,12 @@ final class SoundscapeSession {
     private void clearCountdownCallbacks() {
         // A fade-out under way is undone: the play goes on after all (or
         // is paused, and a resume fades in from silence regardless).
+        if (timerFade == null && timerEnd != null) {
+            // The fade had begun: the music's is undone with it (posted, as
+            // every call into the music from here is, so the two sessions'
+            // locks are never held together).
+            main.post(() -> MusicSession.get(context).timerFadeUndone());
+        }
         if (timerFading) {
             timerFading = false;
             if (output != null) output.setFade(1f, RESTORE_FADE_SEC);
@@ -568,7 +634,15 @@ final class SoundscapeSession {
      * fades in from silence.
      */
     private void timerExpired() {
-        if (regular != Regular.PLAYING) return;
+        if (!manualPlaying()) return;
+        main.post(() -> MusicSession.get(context).timerExpired());
+        if (regular != Regular.PLAYING) {
+            // Music alone: it stops (above), and the countdown with it.
+            timerLeftMs = -1;
+            musicPlaying = false;
+            reportCountdown();
+            return;
+        }
         Entry handedTo = timerHandover;
         timerHandover = null;
         if (handedTo != null) {
@@ -700,13 +774,18 @@ final class SoundscapeSession {
             SoundscapeRenderer current = renderer;
             if (current != null) current.wake();
         });
-        renderer = new SoundscapeRenderer(context, output, this::failed);
+        // A renderer's failure counts only while it is the current one: one
+        // being closed can fail on its way out and must not end its successor.
+        final SoundscapeRenderer[] self = new SoundscapeRenderer[1];
+        renderer = self[0] = new SoundscapeRenderer(context, output, message -> failed(self[0], message));
+        if (spectrumBands > 0 || signals) renderer.setVisuals(spectrumBands, signals, this::visuals);
         if (entry != null) renderer.configure(entry.configuration);
     }
 
-    private void failed(String message) {
+    private void failed(SoundscapeRenderer from, String message) {
         Listener current;
         synchronized (this) {
+            if (renderer != from) return;
             setRegular(Regular.STOPPED);
             close();
             current = listener;

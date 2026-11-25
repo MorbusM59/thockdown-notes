@@ -4,8 +4,9 @@ import { version } from '../package.json'
 /**
  * What the phone's About (the Settings tab) shows, drawn by the shared
  * `@thockdown/interaction/AboutPanel`. The desktop's list is
- * `apps/notes/src/about/about.ts`; this app bundles none of its fonts or
- * dictionaries, so only what ships here is credited.
+ * `apps/notes/src/about/about.ts`; this app bundles only the interface font
+ * and the visualizer's fonts, and none of its dictionaries, so only what
+ * ships here is credited.
  *
  * A link is opened by handing the URL to the WebView as a navigation: an
  * address outside the app's own is passed by Capacitor to the system (browser
@@ -24,6 +25,7 @@ export const ABOUT_LINKS: readonly AboutLink[] = [
 
 export const CREDITS: readonly Credit[] = [
   { label: 'Font Awesome Free (CC BY 4.0)', usedFor: 'Icons', url: 'https://fontawesome.com/license/free' },
+  { label: 'Bundled fonts (SIL OFL 1.1)', usedFor: 'Interface and visualizer fonts; each font\'s notice is in its file', url: `${REPOSITORY_URL}/blob/main/apps/notes/src/fonts/LICENSES.md` },
   { label: 'Capacitor, React and more', usedFor: 'Every bundled library\'s license notice ships inside the app as THIRD_PARTY_NOTICES.txt', url: `${REPOSITORY_URL}/blob/main/package.json` },
 ]
 

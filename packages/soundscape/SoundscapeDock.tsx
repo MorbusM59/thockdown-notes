@@ -58,10 +58,12 @@ export function SoundscapeDock({ preferences, onChange, picking, onTogglePicker,
         name={preset.name}
         takenNames={soundscapePresets(preferences).filter((other) => other.id !== preset.id).map((other) => other.name)}
         onRename={(name) => onChange(renameSoundscape(preferences, preset.id, name))}
-        mark={<SoundscapeMark preset={preset} />}
-        picking={picking}
-        onTogglePicker={onTogglePicker}
-        onResetMark={() => onChange(setSoundscapeIcon(preferences, preset.id, null))}
+        mark={{
+          node: <SoundscapeMark preset={preset} />,
+          picking: picking,
+          onTogglePicker: onTogglePicker,
+          onResetMark: () => onChange(setSoundscapeIcon(preferences, preset.id, null)),
+        }}
         detail={detail}
       >
         <button

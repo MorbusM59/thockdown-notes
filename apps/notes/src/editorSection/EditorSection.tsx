@@ -1,5 +1,5 @@
 import type { SidebarMode } from '../shared/appState'
-import type { VisualizerFont } from '../shared/visualizerFont'
+import type { VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { useImagePreviewGestures } from './useImagePreviewGestures'
 import { useSpeedReading } from '../speedReading/useSpeedReading'
 import { isSealedNoteId } from '../shared/helpGuide'

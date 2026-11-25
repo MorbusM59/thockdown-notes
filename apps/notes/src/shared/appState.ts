@@ -7,7 +7,7 @@ import type { SoundstagePreferences } from '@thockdown/visualizer/shared/soundst
 import type { MusicBarRow, MusicPoolFilter } from '@thockdown/visualizer/shared/audioPlayer';
 import type { FeatureToggles } from './features';
 import type { TypingTrailSettings } from './typingTrailSettings';
-import type { VisualizerFont } from './visualizerFont';
+import type { VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont';
 import type { VisualizerSettings } from '@thockdown/look/visualizer';
 import type { VisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets';
 import type { SpeedReadingSettings } from '../speedReading/speedReadingSettings';

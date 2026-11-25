@@ -35,6 +35,7 @@ import { buildNoiseLoops, noiseLoopGains, type NoiseLoops } from './soundscapeNo
 import { LiveRoom } from '@thockdown/audio/liveRoom';
 import type { SoundscapePlayback, SoundscapePlaybackHandlers } from './SoundscapeEngine';
 import { connectToOutput, resumedOutputContext } from './audioOutputBus';
+import { clearSoundscapeHeardGain, publishSoundscapeSignals, setSoundscapeHeardGain, soundscapeTapNode, type GeneratorSignal } from './soundscapeTap';
 import { BRILLIANCE_GLIDE_SEC, LiveBrilliance } from '@thockdown/audio/liveBrilliance';
 import { BUS_COMPRESSOR, SOUNDSCAPE_MIX_GAIN, soundscapeSpaceGains } from './soundscapeMix';
 import type { ConfigureMessage } from './soundscapeRenderAhead';
@@ -88,8 +89,13 @@ class Voice {
         seed: (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0,
         noiseLoops: noise.loops,
         noiseGains: noise.gains,
+        // The visualizer's signals (soundscape-generator.js, SIGNALS), a message every 2048 frames.
+        postSignals: true,
       },
     });
+    this.generator.port.onmessage = (event) => {
+      if (event.data?.type === 'signals') publishSoundscapeSignals(event.data.list as GeneratorSignal[], context);
+    };
     this.generator.onprocessorerror = () => onFailure('Soundscape generator stopped unexpectedly');
     this.gain = context.createGain();
     this.gain.connect(destination);
@@ -175,6 +181,11 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
   compressor.connect(brilliance.input);
   brilliance.output.connect(volume);
   connectToOutput(volume);
+  // The visualizer's tap (soundscapeTap.ts): the mix at full scale, and the volume it is heard at.
+  const tap = soundscapeTapNode(context);
+  brilliance.output.connect(tap);
+  const readHeardGain = () => volume.gain.value;
+  setSoundscapeHeardGain(readHeardGain);
 
   let closed = false;
   const fail = (message: string) => {
@@ -215,6 +226,8 @@ export async function createLivePlayback(handlers: SoundscapePlaybackHandlers): 
       leaving.clear();
       voice.close();
       mixGain.disconnect();
+      brilliance.output.disconnect(tap);
+      clearSoundscapeHeardGain(readHeardGain);
       brilliance.dispose();
       compressor.disconnect();
       volume.disconnect();

@@ -827,6 +827,30 @@ function bandPass(filter, input) {
   return v1;
 }
 
+/**
+ * SIGNALS: what the visualizer reads of the soundscape (packages/visualizer/
+ * sound/soundscapeSignals.ts), reported while asked for -- the generator
+ * knows exactly when each event happens, so nothing has to be detected.
+ * Each is `{ frame, kind, ... }`, `frame` the generator's own frame:
+ * - a HIT (`kind` 'drip', 'drop' or 'chime'): a large drop, a drop that
+ *   stands out, or a chime struck, with `amplitude`, the peak of its
+ *   layer's output in the block it starts in (at full scale: after the
+ *   layer's gains and the soundscape's level, before the engine's mix gain
+ *   and the listener's volume), and `salience`, that peak over the layer's
+ *   own recent floor (a slow follower of its block peaks). One hit per
+ *   layer per block at most, a drip taking the block over a drop. A drop is
+ *   reported only with a salience of SIGNAL_DROP_STANDOUT: rain plays
+ *   hundreds a second, and only those clearly above the rest are events.
+ * - a GUST (`kind` 'gust'): the scene's gust signal, -1..1 (this.gust), every
+ *   SIGNAL_GUST_BLOCKS blocks.
+ * On the desktop the worklet posts them with each gust (`postSignals`); a
+ * hosted generator collects them for its host (`{ type: 'signals', on }`).
+ */
+const SIGNAL_DROP_STANDOUT = 2;
+const SIGNAL_GUST_BLOCKS = 16;
+/** The time constant of a layer's floor, in seconds. */
+const SIGNAL_FLOOR_SEC = 0.5;
+
 class SoundscapeGenerator extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -873,8 +897,13 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     // The scene's gust this block, -1..1: the weather signal x gustiness.
     this.gust = 0;
     this.stopped = false;
+    // The visualizer's signals (see SIGNALS), or null while nobody asks.
+    this.postSignals = processorOptions.postSignals === true;
+    this.signals = this.postSignals ? [] : null;
+    this.signalBlocks = 0;
     this.port.onmessage = (event) => {
       if (event.data?.type === 'stop') this.stopped = true;
+      if (event.data?.type === 'signals') this.signals = event.data.on ? (this.signals ?? []) : null;
       if (event.data?.type !== 'configure') return;
       this.configure(event.data.channels ?? [], event.data.weather ?? null, event.data.level ?? 1);
     };
@@ -1782,6 +1811,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
       const isDrip = channel.nextDripFrame < channel.nextEventFrame;
       const at = isDrip ? channel.nextDripFrame : channel.nextEventFrame;
       if (at >= blockEnd) break;
+      if (this.signals && (isDrip || !channel.signalHit)) channel.signalHit = { kind: isDrip ? 'drip' : 'drop', offset: at - blockStart };
       this.addVoice(channel, isDrip, at - blockStart, at);
       if (isDrip) channel.nextDripFrame += this.eventDelayFrames(channel.drips * RAIN_DRIPS_MAX_PER_SEC);
       else channel.nextEventFrame += this.eventDelayFrames(channel.dropsPerSecond);
@@ -3409,6 +3439,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
           : Math.min(1, (CHIME_STRIKE_FORCE[0] + ((CHIME_STRIKE_FORCE[1] - CHIME_STRIKE_FORCE[0]) * (this.random() ** CHIME_STRIKE_SKEW)))
             * (1 + (WEATHER_CHIME_FORCE * factor)));
         this.strikeTube(channel, tubes[index], force);
+        if (this.signals && !channel.signalHit) channel.signalHit = { kind: 'chime', offset };
         // The striker's tick, as bright as it is hard, as loud as the material makes it.
         // The tick rises with the square of the striker's speed (see CHIME_STRIKE_FORCE).
         const tube = tubes[index];
@@ -3467,6 +3498,13 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     const left = this.scratchLeft;
     const right = this.scratchRight;
     this.advanceWeather(length);
+    if (this.signals) {
+      this.signalBlocks += 1;
+      if (this.signalBlocks >= SIGNAL_GUST_BLOCKS) {
+        this.signalBlocks = 0;
+        this.signals.push({ frame: currentFrame, kind: 'gust', value: this.gust });
+      }
+    }
 
     for (const channel of this.channels) {
       if (!(channel.gain > 0)) {
@@ -3495,6 +3533,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
           if (channel.kind === 'thunder') this.renderThunder(channel, left, right, this.scratchSendLeft, this.scratchSendRight, length);
           else this.renderChimes(channel, left, right, this.scratchSendLeft, this.scratchSendRight, currentFrame, length);
           this.applyChannelFade(channel, [left, right, this.scratchSendLeft, this.scratchSendRight], length);
+          if (this.signals && audible) this.signalLayer(channel, left, right, length, 1);
           if (!audible) continue;
           const directLeft = direct[0];
           const directRight = direct[1] ?? directLeft;
@@ -3516,6 +3555,7 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
           continue;
       }
       this.applyChannelFade(channel, [left, right], length);
+      if (this.signals && audible) this.signalLayer(channel, left, right, length, channel.gain * channel.directGain);
       if (audible) this.placeLayer(channel, left, right, length, direct, send);
     }
     // A channel turned off is gone once it has faded out.
@@ -3524,7 +3564,36 @@ class SoundscapeGenerator extends AudioWorkletProcessor {
     }
     this.stream = this.rootStream;
     this.applyLevel(outputs, length);
+    // Posted with each gust, so about every SIGNAL_GUST_BLOCKS blocks.
+    if (this.postSignals && this.signals && this.signalBlocks === 0 && this.signals.length > 0) {
+      this.port.postMessage({ type: 'signals', list: this.signals });
+      this.signals = [];
+    }
     return true;
+  }
+
+  /**
+   * A layer's block for the signals (see SIGNALS): its peak at full scale,
+   * the salience of the hit it began, if any, against its floor, and the
+   * floor moved on by this block.
+   */
+  signalLayer(channel, left, right, length, scale) {
+    let peak = 0;
+    for (let index = 0; index < length; index += 1) {
+      const l = Math.abs(left[index]);
+      const r = Math.abs(right[index]);
+      if (l > peak) peak = l;
+      if (r > peak) peak = r;
+    }
+    peak *= scale * (this.levelTarget ?? 1);
+    const floor = channel.signalFloor ?? peak;
+    channel.signalFloor = floor + ((peak - floor) * (1 - Math.exp(-length / (SIGNAL_FLOOR_SEC * sampleRate))));
+    const hit = channel.signalHit;
+    channel.signalHit = null;
+    if (!hit || !(peak > 0)) return;
+    const salience = floor > 0 ? peak / floor : SIGNAL_DROP_STANDOUT;
+    if (hit.kind === 'drop' && salience < SIGNAL_DROP_STANDOUT) return;
+    this.signals.push({ frame: currentFrame + hit.offset, kind: hit.kind, amplitude: peak, salience });
   }
 
   applyLevel(outputs, length) {

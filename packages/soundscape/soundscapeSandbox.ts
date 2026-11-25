@@ -36,6 +36,18 @@ const rendered: RenderedChunk[] = [];
 
 const scope = globalThis as unknown as Record<string, unknown>;
 
+/** Whoever reads the rendered audio besides the output (the app's visualizer spectrum), each chunk as it is handed out. */
+let observer: ((chunk: RenderedChunk) => void) | null = null;
+
+export function observeRenderedChunks(next: ((chunk: RenderedChunk) => void) | null): void {
+  observer = next;
+}
+
+/** Hand out again what is queued from near the playhead, unchanged (renderAhead.ts's `rerender`), for an observer just started. */
+export function rerenderSoundscape(): void {
+  renderer?.rerender();
+}
+
 scope.soundscapeInit = (json: string): string => {
   const { sampleRate, seed, spliceMarginSec } = JSON.parse(json) as { sampleRate: number; seed: number; spliceMarginSec: number };
   const noiseLoops = buildNoiseLoops(sampleRate);
@@ -44,8 +56,13 @@ scope.soundscapeInit = (json: string): string => {
   // Each voice its own seed, so two voices of one soundscape are not one take.
   const createVoice = () => {
     voices += 1;
+    const generator = hostGenerator(generatorSource, sampleRate, { seed: (seed + (voices * 0x9e3779b1)) >>> 0, noiseLoops, noiseGains });
+    // Always reported: a few small objects a second, and a voice made before
+    // the visualizer asked would otherwise have none to give it. They reach
+    // the page only while it asks (soundscapeRenderer.ts).
+    generator.configure({ type: 'signals', on: true });
     return {
-      generator: hostGenerator(generatorSource, sampleRate, { seed: (seed + (voices * 0x9e3779b1)) >>> 0, noiseLoops, noiseGains }),
+      generator,
       mix: new SoundscapeMix(sampleRate),
     };
   };
@@ -85,6 +102,9 @@ scope.soundscapeStep = (playedFrame: number, maxChunks: number): string => {
   // Each task renders at most one chunk and schedules the next while the
   // lead allows; what is left waits for the next step.
   while (tasks.length > 0 && rendered.length < maxChunks) tasks.shift()!();
-  const out = rendered.splice(0).map((chunk) => ({ s: chunk.startFrame, d: encodeHalfScaleStereo(chunk.left, chunk.right) }));
+  const out = rendered.splice(0).map((chunk) => {
+    observer?.(chunk);
+    return { s: chunk.startFrame, d: encodeHalfScaleStereo(chunk.left, chunk.right) };
+  });
   return JSON.stringify(out);
 };

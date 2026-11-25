@@ -53,7 +53,13 @@ function buildGrid(cols: number, rows: number, seed: number): Float32Array {
   return grid;
 }
 
-function valueNoise(gx: number, gy: number, grid: Float32Array, cols: number, rows: number): number {
+/**
+ * Value noise on a lattice that repeats every `cols` x `rows` cells, read
+ * from `grid`, whose row length is `stride` (at least `cols`). The period is
+ * what makes a tile seamless: a sample position spanning a whole number of
+ * periods across the tile ends where it began.
+ */
+function valueNoise(gx: number, gy: number, grid: Float32Array, cols: number, rows: number, stride: number = cols): number {
   const gx0 = Math.floor(gx);
   const gy0 = Math.floor(gy);
   const gx1 = gx0 + 1;
@@ -67,10 +73,10 @@ function valueNoise(gx: number, gy: number, grid: Float32Array, cols: number, ro
   const y0 = wrap(gy0, rows);
   const y1 = wrap(gy1, rows);
 
-  const a = grid[(y0 * cols) + x0];
-  const b = grid[(y0 * cols) + x1];
-  const c = grid[(y1 * cols) + x0];
-  const d = grid[(y1 * cols) + x1];
+  const a = grid[(y0 * stride) + x0];
+  const b = grid[(y0 * stride) + x1];
+  const c = grid[(y1 * stride) + x0];
+  const d = grid[(y1 * stride) + x1];
 
   return (
     (a * (1 - tx) * (1 - ty)) +
@@ -84,9 +90,9 @@ function fbm(
   u: number,
   v: number,
   grid: Float32Array,
-  cols: number,
-  rows: number,
-  baseFrequency: number,
+  stride: number,
+  periodX: number,
+  periodY: number,
   personality: MaterialPersonality,
 ): number {
   let value = 0;
@@ -95,9 +101,11 @@ function fbm(
   let maxValue = 0;
 
   for (let octave = 0; octave < personality.octaves; octave += 1) {
-    const sampleX = fract(u) * cols * baseFrequency * frequency;
-    const sampleY = fract(v) * rows * baseFrequency * frequency;
-    value += valueNoise(sampleX, sampleY, grid, cols, rows) * amplitude;
+    // Every octave spans `frequency` (an integer) whole lattice periods
+    // across the tile, so each one repeats exactly at the tile's edge.
+    const sampleX = fract(u) * periodX * frequency;
+    const sampleY = fract(v) * periodY * frequency;
+    value += valueNoise(sampleX, sampleY, grid, periodX, periodY, stride) * amplitude;
     maxValue += amplitude;
     amplitude *= personality.persistence;
     frequency *= personality.lacunarity;
@@ -144,7 +152,14 @@ export function generateTextureRgba(params: {
   const rows = Math.max(4, Math.round(height / granularity));
   const baseFrequency = Math.max(0.25, 16 / granularity);
 
-  const spatialGrid = buildGrid(cols, rows, material.seed >>> 0);
+  // The fbm lattice's period across one tile. It must be a whole number of
+  // cells: the lattice wraps at it, so a fractional count (cols x 16/13 at
+  // granularity 13, say) left the tile's last cell cut short and drew a seam
+  // at every tile edge.
+  const periodX = Math.max(1, Math.round(cols * baseFrequency));
+  const periodY = Math.max(1, Math.round(rows * baseFrequency));
+  const stride = Math.max(cols, periodX);
+  const spatialGrid = buildGrid(stride, Math.max(rows, periodY), material.seed >>> 0);
   const personality = samplePersonality(mulberry32((material.seed ^ 0xdeadbeef) >>> 0));
 
   const out = new Uint8ClampedArray(width * height * 4);
@@ -168,6 +183,7 @@ export function generateTextureRgba(params: {
           spatialGrid,
           cols,
           rows,
+          stride,
         );
         const wy = valueNoise(
           fract(baseU + (WX1 / width)) * cols,
@@ -175,6 +191,7 @@ export function generateTextureRgba(params: {
           spatialGrid,
           cols,
           rows,
+          stride,
         );
 
         const warpU = ((wx - 0.5) * 2 * personality.warpStrength * personality.warpAxisBias[0]) / cols;
@@ -183,7 +200,7 @@ export function generateTextureRgba(params: {
         sampleV = fract(baseV + warpV);
       }
 
-      const raw = fbm(sampleU, sampleV, spatialGrid, cols, rows, baseFrequency, personality);
+      const raw = fbm(sampleU, sampleV, spatialGrid, stride, periodX, periodY, personality);
       const shaped = shapeValue(raw, personality.featureBias);
       const stepped = quantizeValue(shaped, material.vSteps);
       const idx = (y * width + x) * 4;

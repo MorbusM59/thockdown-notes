@@ -73,6 +73,15 @@ public class BackgroundAudioPlugin extends Plugin {
             data.put("message", message);
             notifyListeners("rendererFailure", data);
         }
+
+        @Override
+        public void onVisuals(String visualsJson, long playheadFrame, int sampleRate) {
+            JSObject data = new JSObject();
+            data.put("visuals", visualsJson);
+            data.put("playhead", playheadFrame);
+            data.put("sampleRate", sampleRate);
+            notifyListeners("visuals", data);
+        }
     };
 
     @Override
@@ -226,6 +235,13 @@ public class BackgroundAudioPlugin extends Plugin {
     public void configure(PluginCall call) {
         String configuration = call.getString("configuration");
         if (configuration != null) session.configure(configuration, call.getDouble("transitionSec", 0.0));
+        call.resolve();
+    }
+
+    /** `{ bands, signals }`: the visualizer's spectrum of the soundscape in this many log bands (0 for none) and its signals or not, sent as `visuals` events. */
+    @PluginMethod
+    public void setVisuals(PluginCall call) {
+        session.setVisuals(call.getInt("bands", 0), Boolean.TRUE.equals(call.getBoolean("signals", false)));
         call.resolve();
     }
 

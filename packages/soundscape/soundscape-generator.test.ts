@@ -1461,3 +1461,49 @@ describe('turning a channel off or on', () => {
     expect(fadingIn.fade).toBe(1);
   });
 });
+
+describe('signals', () => {
+  type Signal = { frame: number; kind: string; amplitude?: number; salience?: number; value?: number };
+  /** Renders `seconds` with signals on, collecting what the generator reports. */
+  function signalsOf(channels: SoundscapeChannelSettings[], seconds: number, seed = 1) {
+    const generator = createProcessor(channels, { seed, sampleRate: 8000 });
+    generator.processor.port.onmessage?.({ data: { type: 'signals', on: true } } as MessageEvent);
+    const collected: Signal[] = [];
+    const end = 8000 * seconds;
+    while (generator.frame < end) {
+      generator.render(2048 / 8000); // whole 128-frame blocks, as both hosts render
+      collected.push(...((generator.processor.signals ?? []) as Signal[]).splice(0));
+    }
+    return { collected, generator };
+  }
+
+  it('keeps nothing while signals are off', () => {
+    const generator = createProcessor([layer('rain', { drips: 1 })], { sampleRate: 8000 });
+    generator.render(2);
+    expect(generator.processor.signals).toBeNull();
+  });
+
+  it('reports every drip and chime strike, only standout drops, and the gust on a fixed cadence, each inside what was rendered', () => {
+    const { collected, generator } = signalsOf([layer('rain', { drips: 1 }), layer('chimes', { activity: 1 })], 6);
+    const kinds = new Set(collected.map((signal) => signal.kind));
+    for (const kind of ['drip', 'chime', 'gust']) expect(kinds.has(kind)).toBe(true);
+    for (const signal of collected) {
+      expect(signal.frame).toBeGreaterThanOrEqual(0);
+      expect(signal.frame).toBeLessThan(generator.frame);
+      if (signal.kind === 'gust') expect(Math.abs(signal.value as number)).toBeLessThanOrEqual(1);
+      else {
+        expect(signal.amplitude).toBeGreaterThan(0);
+        if (signal.kind === 'drop') expect(signal.salience).toBeGreaterThanOrEqual(2);
+      }
+    }
+    const gusts = collected.filter((signal) => signal.kind === 'gust').map((signal) => signal.frame);
+    for (let index = 1; index < gusts.length; index += 1) expect(gusts[index] - gusts[index - 1]).toBe(16 * 128);
+  });
+
+  it('reports the same signals for the same seed', () => {
+    const a = signalsOf([layer('rain', { drips: 1 })], 3, 7).collected;
+    const b = signalsOf([layer('rain', { drips: 1 })], 3, 7).collected;
+    expect(a.length).toBeGreaterThan(0);
+    expect(b).toEqual(a);
+  });
+});

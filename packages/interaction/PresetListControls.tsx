@@ -133,10 +133,12 @@ export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo, trailin
         name={preset.name}
         takenNames={presetsOf(kind, list).filter((other) => other.id !== preset.id).map((other) => other.name)}
         onRename={(name) => onChange(renamePreset(kind, list, preset.id, name))}
-        mark={<PresetMark preset={preset} />}
-        picking={isPickingIconFor(pick, target)}
-        onTogglePicker={() => toggleIconPick(target)}
-        onResetMark={() => onChange(setPresetIcon(kind, list, preset.id, defaultPresetIcon(kind, preset.id)))}
+        mark={{
+          node: <PresetMark preset={preset} />,
+          picking: isPickingIconFor(pick, target),
+          onTogglePicker: () => toggleIconPick(target),
+          onResetMark: () => onChange(setPresetIcon(kind, list, preset.id, defaultPresetIcon(kind, preset.id))),
+        }}
       >
         <button
           type="button"

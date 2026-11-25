@@ -30,6 +30,8 @@ function sandbox() {
     soundscapeInit(json: string): string;
     soundscapeConfigure(json: string): string;
     soundscapeStep(playedFrame: number, maxChunks: number): string;
+    soundscapeVisuals(bands: number, signals: number, sampleRate: number): string;
+    soundscapeVisualsTake(): string;
   };
 }
 
@@ -95,5 +97,42 @@ describe('soundscape renderer bundle', () => {
     const samples = decode(first.d);
     expect(samples.every(Number.isFinite)).toBe(true);
     expect(Math.max(...Array.from(samples, Math.abs))).toBeGreaterThan(1e-3);
+  });
+
+  it('turns the visuals on from near the playhead by handing out the queued audio again, unchanged', () => {
+    const renderer = sandbox();
+    renderer.soundscapeInit(JSON.stringify({ sampleRate: SAMPLE_RATE, seed: 5, spliceMarginSec: MARGIN_SEC }));
+    renderer.soundscapeConfigure(configure());
+    const sent = new Map<number, string>();
+    for (;;) {
+      const chunks = JSON.parse(renderer.soundscapeStep(0, 64)) as Array<{ s: number; d: string }>;
+      if (chunks.length === 0) break;
+      for (const chunk of chunks) sent.set(chunk.s, chunk.d);
+    }
+    const played = 2 * SAMPLE_RATE;
+    renderer.soundscapeStep(played, 0);
+    expect(renderer.soundscapeVisuals(16, 1, SAMPLE_RATE)).toBe('ok');
+    const again = JSON.parse(renderer.soundscapeStep(played, 64)) as Array<{ s: number; d: string }>;
+    expect(again.length).toBeGreaterThan(0);
+    expect(again[0].s).toBeLessThan(played + SAMPLE_RATE);
+    // The rewind reproduces what the output already holds, sample for sample.
+    for (const chunk of again) if (sent.has(chunk.s)) expect(chunk.d).toBe(sent.get(chunk.s));
+    type Visuals = {
+      spectrum: Array<{ from: number; first: number; hop: number; l: string }>;
+      signals: Array<{ from: number; list: Array<{ frame: number; kind: string }> }>;
+    };
+    const visuals = JSON.parse(renderer.soundscapeVisualsTake()) as Visuals;
+    expect(visuals.spectrum.length).toBeGreaterThan(0);
+    expect(visuals.spectrum[0].from).toBeLessThanOrEqual(again[0].s);
+    // The signals come as one run from the rewind on, each at a frame inside it, gusts among them.
+    expect(visuals.signals).toHaveLength(1);
+    expect(visuals.signals[0].from).toBe(again[0].s);
+    const signals = visuals.signals[0].list;
+    expect(signals.some((signal) => signal.kind === 'gust')).toBe(true);
+    for (const signal of signals) expect(signal.frame).toBeGreaterThanOrEqual(again[0].s);
+    expect(JSON.parse(renderer.soundscapeVisualsTake())).toEqual({ spectrum: [], signals: [] });
+    renderer.soundscapeVisuals(0, 0, SAMPLE_RATE);
+    renderer.soundscapeStep(played + SAMPLE_RATE, 64);
+    expect(JSON.parse(renderer.soundscapeVisualsTake())).toEqual({ spectrum: [], signals: [] });
   });
 });

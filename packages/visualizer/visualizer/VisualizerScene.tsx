@@ -30,7 +30,7 @@
 
 import { flushSync } from 'react-dom'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
-import { musicListening } from '../sound/musicListening'
+import { musicListening, subscribeMusicPlaying } from '../sound/musicListening'
 import { subscribeMusicMix, subscribeMusicSemitoneScore } from '../sound/musicBeat'
 import { MUSIC_SEMITONE_CONFIRM_SEC } from '../sound/musicSemitoneScore'
 import { readNowPlaying, subscribeNowPlaying } from '../sound/nowPlaying'
@@ -50,7 +50,9 @@ import {
 } from './spectrumBands'
 import { GridWave } from './GridWave'
 import { SongList } from './SongList'
-import { readPanelsShown, subscribePanelsShown } from './panelsShown'
+import { readPanelsShown, setPanelsShown, subscribePanelsShown } from './panelsShown'
+import { hitFrame } from './hitFrame'
+import { useGlyphOffset } from './glyphCentering'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
 import { FACTORY_SOUNDSTAGE_IDS } from '../shared/soundstages'
 import { CUSTOM_SOLID_INDEX, RHOMBIC_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
@@ -109,8 +111,12 @@ export type VisualizerSceneProps = {
   sceneSeed: string
   /** The grid outline layer, for the beat pane's copy (useBeatGridMirror.ts). */
   gridOutlineRef: (element: HTMLDivElement | null) => void
-  /** Leaves the visualizer: the same toggle as F5 (App.tsx's `toggleVisualizerMode`), pressed on the exit box. */
-  onExit: () => void
+  /**
+   * Leaves the visualizer: the same toggle as F5 (App.tsx's `toggleVisualizerMode`),
+   * pressed on the exit box. Absent, there is no exit box: the phone leaves
+   * by the system's back gesture instead.
+   */
+  onExit?: () => void
 }
 
 /** The lit runs of the track: all of it, or the boxes before and after `gap`. */
@@ -426,9 +432,10 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
       moveGap()
       const still = reducedMotion.matches
       setSwayBreath(breathScales(breath.step(tap ? bassPower(levels, bassBands) : 0, dt)).amplitude)
-      // Nothing left to move: the music is stopped, the bars have fallen and
-      // the glaze holds still. Woken again by the music or the motion setting.
-      if (still && !musicListening().isPlaying && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
+      // Nothing left to move: nothing is heard, the bars have fallen and the
+      // glaze holds still. Woken again by the music, the song or the motion
+      // setting; a soundscape starting meanwhile is drawn from the next wake.
+      if (still && !musicListening().isPlaying && !tap?.hearing && meter.isAtRest() && (!semitoneMeter || semitoneMeter.isAtRest())) {
         lastMs = NaN
         return
       }
@@ -439,7 +446,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
     }
     draw()
     wake()
-    const unsubscribePlaying = musicListening().subscribePlaying(wake)
+    const unsubscribePlaying = subscribeMusicPlaying(wake)
     const unsubscribeSong = subscribeNowPlaying(wake)
     reducedMotion.addEventListener('change', wake)
 
@@ -501,11 +508,14 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
   const track = trackSpan(progressColumns)
   const progressLeftPx = originXPx + (progressArea?.column ?? 0) * box
   const rowTop = (row: number) => originYPx + row * box
+  const glyphOffset = useGlyphOffset(fontFamily, fontSizePx, box)
   const style = {
     '--editor-cell-width': `${box}px`,
     '--editor-line-height': `${box}px`,
     '--visualizer-font': fontFamily,
     '--visualizer-font-size': `${fontSizePx}px`,
+    '--visualizer-glyph-dx': `${glyphOffset.dx}px`,
+    '--visualizer-glyph-dy': `${glyphOffset.dy}px`,
   } as CSSProperties
 
   const panelsShown = useSyncExternalStore(subscribePanelsShown, readPanelsShown)
@@ -551,6 +561,17 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
               style={{ left: originXPx, top: rowTop(spectrumRow), width: columns * box, height: spectrumRows * box }}
             />
           )}
+          {spectrumRows > 0 && (
+            // A press on the spectrum shows or hides the panels, as Escape
+            // does (panelsShown.ts): the one way a finger has to do it.
+            <div
+              className="visualizer-spectrum-hit"
+              style={{ left: originXPx, top: rowTop(spectrumRow), width: columns * box, height: spectrumRows * box }}
+              onPointerDown={(event) => {
+                if (event.button === 0) setPanelsShown(!readPanelsShown())
+              }}
+            />
+          )}
           {chromaRow !== null && (
             <canvas
               ref={chromaCanvasRef}
@@ -584,7 +605,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {bucketArea && <BucketList layout={layout} area={bucketArea} glyphFont={glyphFont} />}
           {filterArea && <PoolFilter layout={layout} area={filterArea} glyphFont={glyphFont} />}
           {levelArea && <LevelBars layout={layout} area={levelArea} font={glyphFont} />}
-          {layout.stripRows > 0 && layout.columns > 0 && (
+          {onExit && layout.stripRows > 0 && layout.columns > 0 && (
             // The exit box: the top strip's first full box from the right, on
             // its empty first row, an accent box laid over the middle section's
             // colour (so it reads as a bar end's does, not tinted by the
@@ -607,7 +628,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
           {progressArea && (
             <div
               className="visualizer-progress-hit"
-              style={{ left: progressLeftPx, top: rowTop(progressArea.row), width: progressColumns * box, height: box }}
+              style={hitFrame({ left: progressLeftPx, top: rowTop(progressArea.row), width: progressColumns * box, height: box }, box)}
               onPointerDown={handleProgressPress}
             />
           )}

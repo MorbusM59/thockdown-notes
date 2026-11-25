@@ -8,6 +8,7 @@
  * bar's own controls do). Re-rendered only when a level changes.
  */
 
+import { hitFrame } from './hitFrame'
 import { Fragment, useSyncExternalStore } from 'react'
 import { readNowPlaying, subscribeNowPlaying, type SoundLevels } from '../sound/nowPlaying'
 import { CutoutGlyphBox } from './CutoutGlyphBox'
@@ -78,7 +79,7 @@ export function LevelBars({ layout, area, font }: { layout: VisualizerLayout; ar
             <div className={boxClass} style={place(bar, gap + 1, bar.columns - gap - 2)} />
             <div
               className="visualizer-bucket-hit is-always"
-              style={place(bar, 0, bar.columns)}
+              style={hitFrame(place(bar, 0, bar.columns), boxPx)}
               onPointerDown={(event) => {
                 if (event.button !== 0) return
                 const column = Math.floor((event.clientX - event.currentTarget.getBoundingClientRect().left) / boxPx)

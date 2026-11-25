@@ -1,6 +1,6 @@
 # Bundled fonts
 
-Every font in this folder is licensed under the **SIL Open Font License,
+Every font this repository bundles is licensed under the **SIL Open Font License,
 Version 1.1**, reproduced in full below. Each font file carries its own
 copyright notice and Reserved Font Names in its metadata. They are bundled
 unmodified (except for Boogaloo, which is the Latin subset published by
@@ -13,9 +13,13 @@ Kelly Slab, Kode Mono, Lekton, Neuton, Noto Serif, Nova Mono, Open Sans,
 Quicksand, Red Hat Mono, Roboto Condensed, Share Tech Mono, Sniglet,
 Sour Gummy, Syne Mono, Unica One, VT323, Victor Mono, Xanh Mono.
 
-These ship with the DESKTOP app only (declared in `src/fonts.css`). The
-mobile app renders in the system font and bundles none of them; its icons
-are Font Awesome Free, whose licence notice travels inside its stylesheet.
+Most are in this folder and ship with the DESKTOP app only (declared in
+`src/fonts.css`). Geo (`packages/look/fonts/`, the interface's default) and
+the twelve monospace fonts the visualizer offers (`packages/visualizer/
+visualizer/fonts/`: Bytesized, Courier Prime, Iosevka Charon Mono, Kode Mono,
+Lekton, Nova Mono, Red Hat Mono, Share Tech Mono, Syne Mono, VT323, Victor
+Mono, Xanh Mono) ship with both apps. The icons are Font Awesome Free, whose
+license notice travels inside its stylesheet.
 
 A font added here must be under a licence that allows redistribution in a
 published app, and is added to the list above.

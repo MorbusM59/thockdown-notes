@@ -439,6 +439,48 @@
   transform: rotate(90deg);
 }
 
+/* FontControls.tsx: a picker of fonts, each shown as "Aa" in itself, above a row of sliders. */
+.typography-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--loadout-cell-size, 32px));
+  grid-auto-rows: var(--loadout-cell-size, 32px);
+  gap: var(--toolbar-options-gap);
+  width: fit-content;
+}
+
+.typography-font-btn {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  font-size: 18px; /* previews the editor/render font, not UI chrome -- unaffected by --ui-font-scale */
+  color: var(--color-text-80);
+  background: var(--btn-bg-default);
+  border: 1px solid var(--btn-border-default);
+  border-radius: var(--border-radius-regular);
+  overflow: hidden;
+}
+
+.typography-font-btn.is-active {
+  border-color: var(--btn-border-active);
+  box-shadow: var(--box-shadow-inverted-active);
+}
+
+.typography-font-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 18px; /* previews the editor/render font, not UI chrome -- unaffected by --ui-font-scale */
+  line-height: 1;
+  pointer-events: none;
+}
+
+.typography-slider {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .typography-sliders {
   display: flex;
   gap: var(--toolbar-options-gap);
@@ -1098,15 +1140,77 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A selector cell being dragged to a new place (useSelectorReorder.ts):
-   the one picked up is dimmed, the one it would land on is framed. */
-[data-drag-state='source'] {
-  opacity: 0.25;
-  filter: var(--filter-alert);
+/* The drag layer (dragPicture.ts): the copy of a dragged element is drawn
+   here, above every panel and outside every clipping box, and under the
+   glaze (.glaze-overlay-stack, 6000) so the glaze grades it like the rest of
+   the app. Inside .app-saturate-wrapper, so the wrapper's filter applies. */
+.drag-layer {
+  position:       fixed;
+  inset:          0;
+  pointer-events: none;
+  z-index:        5999;
+}
+
+/* Nothing in the layer may be hit: a drop target is found by hit-testing
+   under the pointer, and a control's own pointer-events would bring the copy
+   back into it. */
+.drag-layer * {
+  pointer-events: none !important;
+}
+
+/* A shell (dragPicture.ts) is a copy of one of the dragged element's
+   ancestors, there only so selectors and inherited values reach the copy as
+   they reach the original. It generates no box, and its pseudo-elements (a
+   chrome's sheen, a section's frame) are not drawn. */
+.drag-layer-shell:not([data-drag-shell-box]) {
+  display: contents !important;
+}
+
+.drag-layer-shell::before,
+.drag-layer-shell::after {
+  content: none !important;
+}
+
+/* A shell copied from a size container keeps a box of the container's
+   content size, so container units inside the copy measure what they did;
+   it paints nothing and moves nothing of its own. */
+.drag-layer-shell[data-drag-shell-box] {
+  display:         block !important;
+  position:        absolute !important;
+  inset:           0 auto auto 0 !important;
+  margin:          0 !important;
+  padding:         0 !important;
+  border:          0 !important;
+  background:      none !important;
+  box-shadow:      none !important;
+  outline:         none !important;
+  filter:          none !important;
+  backdrop-filter: none !important;
+  transform:       none !important;
+  opacity:         1 !important;
+  overflow:        visible !important;
+  clip-path:       none !important;
+  mask:            none !important;
+}
+
+/* An element being dragged to a new place (useSelectorReorder.ts). Where a
+   copy follows the pointer the element itself is hidden, its place kept, so
+   the copy IS the element, lifted off. Carried on the cursor instead (the
+   desktop's selectors, whose window clips a copy) the element stays where it
+   is, since nothing else would show what is being moved. The one it would
+   land on is faded to a fifth and framed. The fade is on its CONTENT and the
+   frame on the element: an element's opacity fades its own outline too,
+   which left the frame at a fifth of its colour, too faint to find. */
+[data-drag-state='source']:not([data-drag-picture='cursor']) {
+  visibility: hidden;
 }
 
 [data-drag-state='target'] {
-  filter: var(--filter-alert);
+  outline: 2px solid var(--color-text-80);
+}
+
+[data-drag-state='target'] > * {
+  opacity: 0.2;
 }
 
 /* A text button (packages/interaction/TextButton.tsx): a micro button's height, its

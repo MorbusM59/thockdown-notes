@@ -49,6 +49,8 @@ final class MusicSession {
     /** musicLibrary.ts's EMPTY_CATALOG. */
     private static final String EMPTY_CATALOG = "{\"songs\":[],\"activeSetIds\":[],\"filter\":{\"query\":\"\"}}";
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.05;
+    /** How quickly an undone timer fade returns to full. */
+    private static final double TIMER_RESTORE_FADE_SEC = 0.5;
 
     private static MusicSession instance;
 
@@ -66,6 +68,13 @@ final class MusicSession {
     private final Runnable endScheduledRun = this::endScheduledRun;
     private float volume = 1f;
     private Integer heardId = null;
+    /**
+     * A song chosen as a start of playback (from paused or stopped): the lane
+     * is held silent until this song is heard, then fades in from silence, so
+     * nothing queued before the choice (the paused song, the pool's opening
+     * pick) is heard first. Null when no such start is under way.
+     */
+    private Integer startingSong = null;
     /** The last failure that stopped the music, for the Debugging section; null for none. */
     private String lastFailure = null;
     private double heardSeconds = 0;
@@ -108,11 +117,17 @@ final class MusicSession {
     /** Play with `stageJson` (MusicStage), starting the music if it is not playing; the soundstage otherwise. */
     synchronized void play(String stageJson) {
         setStoredStage(stageJson);
+        if (startingSong != null) {
+            startingSong = null;
+            if (output != null) output.setFade(1f, TIMER_RESTORE_FADE_SEC);
+        }
         handler.removeCallbacks(endScheduledRun);
         if (renderer == null) {
             open();
         } else {
             if (output.isPaused()) output.setPaused(false);
+            // A timer fade under way is undone by playing again.
+            output.setFade(1f, TIMER_RESTORE_FADE_SEC);
             // A scheduled run the listener plays on becomes theirs: their sets, at full level.
             if (scheduledRun) {
                 renderer.setPoolSet(null, false);
@@ -153,8 +168,28 @@ final class MusicSession {
         if (renderer != null) renderer.jump(direction);
     }
 
+    /**
+     * Play `songId` now. A song chosen is a start of playback whatever the
+     * music was doing: stopped, it opens with the last soundstage (the page
+     * sends play first, but the native side must not depend on that order);
+     * paused, it resumes.
+     */
     synchronized void choose(int songId) {
-        if (renderer != null) renderer.choose(songId);
+        boolean starting = renderer == null || output.isPaused();
+        if (renderer == null) {
+            if (stage == null) stage = read(STAGE_FILE, null);
+            if (stage == null) return;
+            play(stage);
+            if (renderer == null) return;
+        }
+        if (starting) {
+            // Silent before the lane runs again; the chosen song fades in once heard (onHeard).
+            output.discardQueued();
+            output.setFade(0f, 0);
+            startingSong = songId;
+            resume();
+        }
+        renderer.choose(songId);
     }
 
     synchronized void seek(double seconds) {
@@ -221,6 +256,29 @@ final class MusicSession {
         }
     }
 
+    /**
+     * THE TIMER (SoundscapeSession's) ends the listener's music with the
+     * soundscape: it fades out over the timer's fade, and stops when the
+     * timer runs out, handing over to the schedule's music if a run is due.
+     * A scheduled run is the schedule's and is left alone.
+     */
+    synchronized void timerFade(double fadeSec) {
+        if (output == null || scheduledRun) return;
+        output.setFade(0f, fadeSec);
+    }
+
+    /** The timer's fade was undone (a pause, a new timer, a change of soundscape): back to full. */
+    synchronized void timerFadeUndone() {
+        if (output == null || scheduledRun) return;
+        output.setFade(1f, TIMER_RESTORE_FADE_SEC);
+    }
+
+    synchronized void timerExpired() {
+        if (output == null || scheduledRun) return;
+        stop();
+        applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
+    }
+
     private synchronized void endScheduledRun() {
         if (!scheduledRun) return;
         stop();
@@ -241,6 +299,8 @@ final class MusicSession {
     synchronized void resume() {
         if (output == null || !output.isPaused()) return;
         output.setPaused(false);
+        // A stream that ran out while paused starts the pool's next pick, as play does.
+        renderer.resume();
         report();
         SoundscapePlaybackService.sourceChanged(context, true);
     }
@@ -284,12 +344,24 @@ final class MusicSession {
             if (current != null) current.wake();
         });
         output.setVolume(volume, VOLUME_TIME_CONSTANT_SEC);
-        renderer = new MusicRenderer(context, output, catalog(), rotation(), new MusicRenderer.Listener() {
+        // A renderer's reports count only while it is the current one: one
+        // being closed can still be mid-callback, blocked on this session's
+        // lock while close() waits for its thread, and would otherwise report
+        // its song over the new renderer's, or close the new renderer on its
+        // own failure.
+        final MusicRenderer[] self = new MusicRenderer[1];
+        renderer = self[0] = new MusicRenderer(context, output, catalog(), rotation(), new MusicRenderer.Listener() {
             @Override
             public void onHeard(Integer songId, double seconds, long frame) {
                 synchronized (MusicSession.this) {
+                    if (renderer != self[0]) return;
                     // A new song: the notification names it.
                     if (!java.util.Objects.equals(songId, heardId)) SoundscapePlaybackService.refreshIfRunning();
+                    // Its opening second: the chosen song from its start, never the paused one heard on.
+                    if (startingSong != null && startingSong.equals(songId) && seconds < 1) {
+                        startingSong = null;
+                        output.fadeFrom(0f, 1f, SoundscapeSession.SWITCH_FADE_SEC);
+                    }
                     heardId = songId;
                     heardSeconds = seconds;
                     heardFrame = frame;
@@ -301,6 +373,7 @@ final class MusicSession {
             public void onSpectrum(String batchesJson) {
                 Listener current;
                 synchronized (MusicSession.this) {
+                    if (renderer != self[0]) return;
                     current = listener;
                 }
                 if (current != null) current.onSpectrum(batchesJson);
@@ -317,6 +390,7 @@ final class MusicSession {
             public void onFailure(String message) {
                 Listener current;
                 synchronized (MusicSession.this) {
+                    if (renderer != self[0]) return;
                     lastFailure = message;
                     close();
                     // The page hears that nothing plays: its play button
@@ -332,6 +406,7 @@ final class MusicSession {
     }
 
     private void close() {
+        startingSong = null;
         if (renderer != null) {
             renderer.close();
             renderer = null;
@@ -348,6 +423,7 @@ final class MusicSession {
      * page can run the clock on from a consistent pair.
      */
     private void report() {
+        followTimer();
         if (listener == null) return;
         if (output == null) {
             listener.onHeard(heardId, heardSeconds, heardFrame, 0, false);
@@ -356,6 +432,17 @@ final class MusicSession {
         long frame = output.playheadFrame();
         double seconds = heardId == null ? 0 : heardSeconds + (double) (frame - heardFrame) / output.sampleRate;
         listener.onHeard(heardId, seconds, frame, output.sampleRate, isPlaying());
+    }
+
+    /** What SoundscapeSession was last told about the listener's music: 0 stopped, 1 paused, 2 playing. */
+    private int toldTimer = 0;
+
+    /** The timer counts the listener's music too (SoundscapeSession.musicChanged); told on a change only, posted so the two sessions' locks are never held together. */
+    private void followTimer() {
+        int now = output == null || scheduledRun ? 0 : output.isPaused() ? 1 : 2;
+        if (now == toldTimer) return;
+        toldTimer = now;
+        handler.post(() -> SoundscapeSession.get(context).musicChanged(now == 2, now == 0));
     }
 
     private String read(String name, String fallback) {

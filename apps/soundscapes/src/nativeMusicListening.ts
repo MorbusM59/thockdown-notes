@@ -15,11 +15,17 @@
  *   (packages/visualizer/visualizer/spectrumFrames.ts), ahead of the
  *   playhead, while a spectrum is started and the page is shown; each frame
  *   is stamped with the output frame it describes, and the one drawn is the
- *   newest at or before the playhead.
+ *   newest at or before the playhead. The SOUNDSCAPE's, when the spectrum
+ *   takes it too (packages/visualizer/visualizer/spectrumMix.ts), comes from
+ *   the soundscape's visuals (nativeSoundscapeVisuals.ts), stamped with that
+ *   output's own frames, and each band's power is added to the music's at
+ *   the weights the two are heard at.
  */
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { MusicListening, SpectrumSource } from '@thockdown/visualizer/sound/musicListening'
 import { levelDb } from '@thockdown/visualizer/visualizer/spectrumFrames'
+import { addBandLevels, spectrumIncludesSoundscape, spectrumMixWeights } from '@thockdown/visualizer/visualizer/spectrumMix'
+import type { NativeSoundscapeVisuals, SpectrumBatch } from './nativeSoundscapeVisuals'
 import type { NativeMusicPlugin } from './nativeMusic'
 
 /** Must match MusicFileServer.java's PATH. */
@@ -45,13 +51,6 @@ interface Heard {
   at: number
 }
 
-interface SpectrumBatch {
-  from: number
-  first: number
-  hop: number
-  l: string
-}
-
 function decodeBase64(text: string): Uint8Array {
   const binary = atob(text)
   const bytes = new Uint8Array(binary.length)
@@ -59,7 +58,17 @@ function decodeBase64(text: string): Uint8Array {
   return bytes
 }
 
-export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: SongLookup): MusicListening {
+/**
+ * What the spectrum needs to show the soundscape beside the music: the
+ * soundscape's visuals (nativeSoundscapeVisuals.ts: its spectrum, clock and
+ * the gain it is heard at) and the gain the music is heard at.
+ */
+export interface SpectrumMixPort {
+  soundscape: Pick<NativeSoundscapeVisuals, 'requestSpectrum' | 'frameAt' | 'heardGain'>
+  musicGain(): number
+}
+
+export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: SongLookup, mix: SpectrumMixPort | null = null): MusicListening {
   let heard: Heard = { songId: null, seconds: 0, frame: 0, sampleRate: 48000, playing: false, at: 0 }
   const playingListeners = new Set<(playing: boolean) => void>()
   void plugin.addListener('heard', (data) => {
@@ -93,70 +102,30 @@ export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: So
       if (duration > 0) void plugin.seek({ seconds: duration * Math.max(0, Math.min(1, fraction)) })
     },
     outputLatencySec: () => 0,
-    createSpectrum: (edges) => new NativeSpectrum(plugin, edges.length - 1, playheadFrame),
+    createSpectrum: (edges) => new NativeSpectrum(plugin, edges.length - 1, playheadFrame, () => heard.playing, mix),
   }
 }
 
-class NativeSpectrum implements SpectrumSource {
-  /** The frames held, in stream order: their positions and their quantized levels. */
+/**
+ * The frames one renderer has sent, in stream order: their positions and
+ * their quantized levels. A batch replaces every frame held from its `from`
+ * on (a splice re-rendered them).
+ */
+class FrameQueue {
   private positions: number[] = []
   private levels: Uint8Array[] = []
-  private listener: Promise<PluginListenerHandle> | null = null
-  private readonly onVisibility = () => this.ask()
 
-  constructor(
-    private readonly plugin: NativeMusicPlugin,
-    private readonly bands: number,
-    private readonly playheadFrame: (nowSec: number) => number,
-  ) {}
+  constructor(private readonly bands: number) {}
 
-  start(): void {
-    if (this.listener) return
-    this.listener = this.plugin.addListener('spectrum', ({ batches }) => this.receive(JSON.parse(batches) as SpectrumBatch[]))
-    document.addEventListener('visibilitychange', this.onVisibility)
-    this.ask()
-  }
-
-  stop(): void {
-    if (!this.listener) return
-    void this.listener.then((handle) => handle.remove())
-    this.listener = null
-    document.removeEventListener('visibilitychange', this.onVisibility)
-    void this.plugin.setSpectrum({ bands: 0 })
+  clear(): void {
     this.positions = []
     this.levels = []
   }
 
-  sample(nowSec: number, out: Float32Array): void {
-    const at = this.playheadFrame(nowSec)
-    const index = this.lastAtOrBefore(at)
-    if (index < 0) {
-      out.fill(-Infinity)
-      return
-    }
-    const levels = this.levels[index]
-    for (let band = 0; band < this.bands; band += 1) out[band] = levelDb(levels[band])
-    // What lies behind the frame drawn is never drawn again; let go of it a second's worth at a time.
-    if (index >= PRUNE_FRAMES) {
-      this.positions.splice(0, index)
-      this.levels.splice(0, index)
-    }
-  }
-
-  /** The renderer computes only while the page is shown: a hidden page would queue frames it never draws. */
-  private ask(): void {
-    void this.plugin.setSpectrum({ bands: document.hidden ? 0 : this.bands })
-  }
-
-  private receive(batches: SpectrumBatch[]): void {
-    // Frames behind the playhead go even if nothing draws (a spectrum started but not sampled).
-    const behind = this.lastAtOrBefore(this.playheadFrame(performance.now() / 1000))
-    if (behind > 0) {
-      this.positions.splice(0, behind)
-      this.levels.splice(0, behind)
-    }
+  /** Takes `batches`, first letting go of the frames behind `playhead` (even if nothing draws: a spectrum started but not sampled). */
+  receive(batches: SpectrumBatch[], playhead: number): void {
+    this.prune(this.lastAtOrBefore(playhead))
     for (const batch of batches) {
-      // A batch replaces every frame held from its `from` on (a splice re-rendered them).
       const keep = this.lastAtOrBefore(batch.from - 1) + 1
       this.positions.length = keep
       this.levels.length = keep
@@ -166,6 +135,21 @@ class NativeSpectrum implements SpectrumSource {
         this.levels.push(levels.subarray(offset, offset + this.bands))
       }
     }
+  }
+
+  /** The levels of the newest frame at or before `position`, or null; what lies behind it is let go a second's worth at a time. */
+  at(position: number): Uint8Array | null {
+    const index = this.lastAtOrBefore(position)
+    if (index < 0) return null
+    const levels = this.levels[index]
+    if (index >= PRUNE_FRAMES) this.prune(index)
+    return levels
+  }
+
+  private prune(count: number): void {
+    if (count <= 0) return
+    this.positions.splice(0, count)
+    this.levels.splice(0, count)
   }
 
   /** The index of the newest frame at or before `position`, or -1. */
@@ -183,5 +167,92 @@ class NativeSpectrum implements SpectrumSource {
       }
     }
     return found
+  }
+}
+
+class NativeSpectrum implements SpectrumSource {
+  private readonly music: FrameQueue
+  private readonly soundscape: FrameQueue
+  private listeners: Array<Promise<PluginListenerHandle>> = []
+  private readonly onVisibility = () => this.ask()
+  /** Whether the soundscape's spectrum was last asked for, so a change of the setting asks again. */
+  private soundscapeAsked = false
+
+  constructor(
+    private readonly plugin: NativeMusicPlugin,
+    private readonly bands: number,
+    private readonly playheadFrame: (nowSec: number) => number,
+    private readonly musicPlaying: () => boolean,
+    private readonly mix: SpectrumMixPort | null,
+  ) {
+    this.music = new FrameQueue(bands)
+    this.soundscape = new FrameQueue(bands)
+  }
+
+  start(): void {
+    if (this.listeners.length > 0) return
+    this.listeners.push(this.plugin.addListener('spectrum', ({ batches }) =>
+      this.music.receive(JSON.parse(batches) as SpectrumBatch[], this.playheadFrame(performance.now() / 1000))))
+    document.addEventListener('visibilitychange', this.onVisibility)
+    this.ask()
+  }
+
+  stop(): void {
+    if (this.listeners.length === 0) return
+    for (const listener of this.listeners) void listener.then((handle) => handle.remove())
+    this.listeners = []
+    document.removeEventListener('visibilitychange', this.onVisibility)
+    void this.plugin.setSpectrum({ bands: 0 })
+    if (this.soundscapeAsked) this.mix?.soundscape.requestSpectrum(0, null)
+    this.soundscapeAsked = false
+    this.music.clear()
+    this.soundscape.clear()
+  }
+
+  get hearing(): boolean {
+    const weights = this.weights()
+    return weights.music > 0 || weights.soundscape > 0
+  }
+
+  sample(nowSec: number, out: Float32Array): void {
+    if (this.listeners.length > 0 && this.soundscapeAsked !== this.wantsSoundscape()) this.askSoundscape()
+    const weights = this.weights()
+    const music = weights.music > 0 ? this.music.at(this.playheadFrame(nowSec)) : null
+    const soundscape = weights.soundscape > 0 && this.mix ? this.soundscape.at(this.mix.soundscape.frameAt(nowSec)) : null
+    if (!soundscape) {
+      if (!music) {
+        out.fill(-Infinity)
+        return
+      }
+      const shiftDb = 20 * Math.log10(weights.music)
+      for (let band = 0; band < this.bands; band += 1) out[band] = levelDb(music[band]) + shiftDb
+      return
+    }
+    for (let band = 0; band < this.bands; band += 1) {
+      out[band] = addBandLevels(music ? levelDb(music[band]) : -Infinity, music ? weights.music : 0, levelDb(soundscape[band]), weights.soundscape)
+    }
+  }
+
+  private weights() {
+    if (!this.mix) return spectrumMixWeights(this.musicPlaying() ? 1 : 0, 0)
+    return spectrumMixWeights(this.musicPlaying() ? this.mix.musicGain() : 0, this.mix.soundscape.heardGain())
+  }
+
+  private wantsSoundscape(): boolean {
+    return this.mix !== null && spectrumIncludesSoundscape()
+  }
+
+  /** The music's renderer computes only while the page is shown: a hidden page would queue frames it never draws (the soundscape's visuals hold the same rule). */
+  private ask(): void {
+    void this.plugin.setSpectrum({ bands: document.hidden ? 0 : this.bands })
+    this.askSoundscape()
+  }
+
+  private askSoundscape(): void {
+    const soundscape = this.wantsSoundscape()
+    if (soundscape === this.soundscapeAsked) return
+    this.mix?.soundscape.requestSpectrum(soundscape ? this.bands : 0, soundscape ? (batches, playhead) => this.soundscape.receive(batches, playhead) : null)
+    if (!soundscape) this.soundscape.clear()
+    this.soundscapeAsked = soundscape
   }
 }

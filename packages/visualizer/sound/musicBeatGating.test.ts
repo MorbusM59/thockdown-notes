@@ -34,7 +34,7 @@ describe('musicBeat: the analysis runs only for readers that need it', () => {
       currentDurationSec: 100,
       setCurrentTimeFraction: () => {},
       outputLatencySec: () => 0,
-      createSpectrum: () => ({ start: () => {}, stop: () => {}, sample: () => {} }),
+      createSpectrum: () => ({ start: () => {}, stop: () => {}, hearing: false, sample: () => {} }),
     }
     // The same module instance musicBeat will import, after the reset.
     ;(await import('./musicListening')).setMusicListening(playing)

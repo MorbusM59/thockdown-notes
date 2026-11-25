@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bucketListArea, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, cutoutGapBoxes, songListArea, songListEntry, fitVisualizerBox, MIN_SCENE_ROWS, STRIP_ROWS } from './visualizerLayout'
+import { bucketListArea, levelAtColumn, levelBarsArea, levelGapColumn, columnToFraction, computeVisualizerLayout, creditsLine, fieldWindow, POOL_FILTER_MAX_COLUMNS, poolFilterArea, playheadColumn, progressBarArea, progressPress, cutoutGapBoxes, songListArea, songListEntry, fitVisualizerBox, cutoutBoxes, MIN_SCENE_ROWS, STRIP_ROWS } from './visualizerLayout'
 
 describe('computeVisualizerLayout', () => {
   it('gives both strips exactly eight rows wherever they fit', () => {
@@ -88,7 +88,7 @@ describe('fitVisualizerBox', () => {
     expect(fitVisualizerBox(1920, 1080, 22, 18, 220)).toEqual({ boxPx: 22, fontSizePx: 18 })
   })
 
-  it('shrinks the line height first, then the font, until strips, bars, padding and cutout fit', () => {
+  it('shrinks the box and the font together, keeping the line height, until strips, bars, padding and cutout fit', () => {
     for (let h = 300; h <= 1600; h += 7) {
       const { boxPx, fontSizePx } = fitVisualizerBox(1920, h, 60, 30, 220)
       const layout = computeVisualizerLayout(1920, h, boxPx, 220)
@@ -96,7 +96,7 @@ describe('fitVisualizerBox', () => {
       expect(layout.rows - layout.cutout.row - layout.cutout.size).toBeGreaterThanOrEqual(STRIP_ROWS + 2)
       expect(layout.volumeRow).toBe(layout.bottomStripRow - 1)
       expect(layout.progressRow).toBe(STRIP_ROWS)
-      expect(fontSizePx).toBe(Math.min(30, boxPx))
+      expect(fontSizePx).toBeCloseTo(30 * boxPx / 60, 9)
       // The largest box that fits: one more would not.
       expect(layout.rows).toBeGreaterThanOrEqual(MIN_SCENE_ROWS)
       if (boxPx < 60) {
@@ -104,6 +104,21 @@ describe('fitVisualizerBox', () => {
         const above = bigger.cutout.row
         expect(above < STRIP_ROWS + 2 || bigger.rows - above - bigger.cutout.size < STRIP_ROWS + 2 || bigger.rows < MIN_SCENE_ROWS).toBe(true)
       }
+    }
+  })
+
+  it('lets a portrait scene come to one full box beside the cutout, and no closer', () => {
+    for (const width of [360, 412, 480]) {
+      const { boxPx } = fitVisualizerBox(width, 915, 80, 40, 220)
+      const sideBoxes = (box: number) => Math.floor(Math.floor((width - cutoutBoxes(220, box) * box) / 2) / box)
+      expect(sideBoxes(boxPx)).toBeGreaterThanOrEqual(1)
+      // Far coarser than the 31 columns a landscape scene keeps.
+      expect(boxPx).toBeGreaterThan(Math.floor(width / 32))
+      // The largest that does: one more box either breaks a side or the rows the strips, bars and cutout need.
+      const bigger = boxPx + 1
+      const size = cutoutBoxes(220, bigger)
+      const above = Math.floor(Math.floor((915 - size * bigger) / 2) / bigger)
+      expect(sideBoxes(bigger) < 1 || 2 * above < 2 * (STRIP_ROWS + 2)).toBe(true)
     }
   })
 })

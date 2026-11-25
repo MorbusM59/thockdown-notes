@@ -51,10 +51,12 @@ export function MusicSetRow({ set, trailing }: { set: MusicSet; trailing?: React
       nameSuffix={`(${nowPlaying.pool?.counts[set.slot] ?? 0})`}
       takenNames={sets.filter((other) => other.slot !== set.slot).map((other) => other.name)}
       onRename={(name) => nowPlaying.renameMusicSet(set.slot, name)}
-      mark={<SetMark set={set} />}
-      picking={isPickingIconFor(pick, { kind: 'musicSet', slot: set.slot })}
-      onTogglePicker={() => toggleIconPick({ kind: 'musicSet', slot: set.slot })}
-      onResetMark={() => { void nowPlaying.setMusicSetIcon(set.slot, null) }}
+      mark={{
+        node: <SetMark set={set} />,
+        picking: isPickingIconFor(pick, { kind: 'musicSet', slot: set.slot }),
+        onTogglePicker: () => toggleIconPick({ kind: 'musicSet', slot: set.slot }),
+        onResetMark: () => { void nowPlaying.setMusicSetIcon(set.slot, null) },
+      }}
     >
       {nowPlaying.addSources.map((source) => (
         <button

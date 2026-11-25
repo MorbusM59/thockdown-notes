@@ -10,6 +10,7 @@
  * selection (`NowPlaying.selectSlot`). An empty set takes no press.
  */
 
+import { hitFrame } from './hitFrame'
 import { useEffect, useRef } from 'react'
 import { attachRowFingerPan, createRowWheel } from '../scroll/rowWheel'
 import { buildScrollPlanFromCurrentParams, sampleScrollPlan } from '@thockdown/interaction/ScrollCurvePlan'
@@ -204,9 +205,8 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
     }
     const onPress = (event: PointerEvent) => {
       if (event.button !== 0) return
-      const row = Math.floor((event.clientY - hit.getBoundingClientRect().top) / boxPx)
-      if (row % 2 !== 0) return
-      const slot = row / 2
+      // As the song list's: each entry's target is its row plus half the empty row either side (hitFrame.ts).
+      const slot = Math.floor((event.clientY - hit.getBoundingClientRect().top) / (2 * boxPx))
       const entry = visibleEntries[slot]
       if (!entry || entry.kind !== 'item') return
       const set = entry.value
@@ -284,7 +284,7 @@ export function BucketList({ layout, area, glyphFont }: { layout: VisualizerLayo
   return (
     <>
       <div ref={anchorRef} hidden />
-      <div ref={hitRef} className="visualizer-bucket-hit" style={{ left, top, width, height }} />
+      <div ref={hitRef} className="visualizer-bucket-hit" style={hitFrame({ left, top, width, height }, boxPx)} />
     </>
   )
 }

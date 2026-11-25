@@ -1,4 +1,5 @@
-import { kodeMonoFontUrl } from '@thockdown/visualizer/visualizer/visualizerFonts'
+import { MONO_FONTS } from '@thockdown/visualizer/visualizer/visualizerFonts'
+import { MONO_FONT_URLS } from '@thockdown/visualizer/visualizer/visualizerFontFiles'
 
 export type ExportViewStyle =
   | 'modern'
@@ -219,8 +220,6 @@ async function fetchFontAsDataUri(url: string, mimeType: string): Promise<string
 
 async function buildExportFontFaceCss(): Promise<string> {
   const [
-    syneMono,
-    redHatMono,
     robotoCond400,
     robotoCond500,
     robotoCond700,
@@ -233,16 +232,6 @@ async function buildExportFontFaceCss(): Promise<string> {
     alumniSans,
     bigShoulders,
     boogaloo,
-    shareTechMono,
-    vt323,
-    victorMono,
-    bytesized,
-    iosevkaCharonMono,
-    kodeMono,
-    xanhMono,
-    lekton,
-    novaMono,
-    courierPrime,
     openSans,
     notoSerif,
     neuton,
@@ -251,8 +240,6 @@ async function buildExportFontFaceCss(): Promise<string> {
     bubblerOne,
     carlito,
   ] = await Promise.all([
-    fetchFontAsDataUri(new URL('./fonts/SyneMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/RedHatMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/RobotoCondensed-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/RobotoCondensed-Medium.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/RobotoCondensed-Bold.woff2', import.meta.url).href, 'font/woff2'),
@@ -265,16 +252,6 @@ async function buildExportFontFaceCss(): Promise<string> {
     fetchFontAsDataUri(new URL('./fonts/AlumniSans-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/BigShoulders-ExtraLight.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/Boogaloo-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/ShareTechMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/VT323-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/VictorMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/Bytesized-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/IosevkaCharonMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(kodeMonoFontUrl, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/XanhMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/Lekton-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/NovaMono-Regular.woff2', import.meta.url).href, 'font/woff2'),
-    fetchFontAsDataUri(new URL('./fonts/CourierPrime-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/OpenSans-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/NotoSerif-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/Neuton-Regular.woff2', import.meta.url).href, 'font/woff2'),
@@ -283,22 +260,15 @@ async function buildExportFontFaceCss(): Promise<string> {
     fetchFontAsDataUri(new URL('./fonts/BubblerOne-Regular.woff2', import.meta.url).href, 'font/woff2'),
     fetchFontAsDataUri(new URL('./fonts/Carlito-Regular.woff2', import.meta.url).href, 'font/woff2'),
   ])
-
-  return `
-@font-face {
-  font-family: 'Syne Mono';
-  src: url('${syneMono}') format('woff2');
-  font-weight: normal;
+  const monoFaces = await Promise.all(MONO_FONTS.map(async (font) => `@font-face {
+  font-family: '${font.face}';
+  src: url('${await fetchFontAsDataUri(MONO_FONT_URLS[font.key], 'font/woff2')}') format('woff2');
+  font-weight: 400;
   font-style: normal;
 }
+`))
 
-@font-face {
-  font-family: 'Red Hat Mono';
-  src: url('${redHatMono}') format('woff2');
-  font-weight: normal;
-  font-style: normal;
-}
-
+  return `${monoFaces.join('\n')}
 @font-face {
   font-family: 'Roboto Condensed';
   src: url('${robotoCond400}') format('woff2');
@@ -379,76 +349,6 @@ async function buildExportFontFaceCss(): Promise<string> {
 @font-face {
   font-family: 'Boogaloo';
   src: url('${boogaloo}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Share Tech Mono';
-  src: url('${shareTechMono}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'VT323';
-  src: url('${vt323}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Victor Mono';
-  src: url('${victorMono}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Bytesized';
-  src: url('${bytesized}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Iosevka Charon Mono';
-  src: url('${iosevkaCharonMono}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Kode Mono';
-  src: url('${kodeMono}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Xanh Mono';
-  src: url('${xanhMono}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Lekton';
-  src: url('${lekton}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Nova Mono';
-  src: url('${novaMono}') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: 'Courier Prime';
-  src: url('${courierPrime}') format('woff2');
   font-weight: 400;
   font-style: normal;
 }

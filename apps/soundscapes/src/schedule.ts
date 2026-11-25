@@ -34,6 +34,8 @@ export type DayOverride = 'all' | 'none' | null
 
 export interface ScheduleEntry {
   readonly id: string
+  /** Its name, renamed in the dock; a new entry is "Schedule N", N the lowest number no other entry's name has. */
+  name: string
   /** The soundscape it plays, or null when that soundscape was deleted. */
   presetId: string | null
   /** The song set it plays (musicLibrary.ts's set slot), or null for none. */
@@ -83,10 +85,19 @@ export function effectiveDays(entry: ScheduleEntry): boolean[] {
   return entry.days
 }
 
-/** A new entry for `presetId`: 00:00 to 00:00, no days, active. */
-export function newEntry(presetId: string | null): ScheduleEntry {
+/** "Schedule N" for the lowest N from 1 that no name in `taken` already is. */
+export function nextEntryName(taken: readonly string[]): string {
+  const names = new Set(taken)
+  let number = 1
+  while (names.has(`Schedule ${number}`)) number += 1
+  return `Schedule ${number}`
+}
+
+/** A new entry for `presetId`, named after `taken` (the other entries' names): 00:00 to 00:00, no days, active. */
+export function newEntry(presetId: string | null, taken: readonly string[] = []): ScheduleEntry {
   return {
     id: `entry-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    name: nextEntryName(taken),
     presetId,
     setId: null,
     active: true,
@@ -133,14 +144,21 @@ export function sanitizeSchedule(input: unknown, presets: readonly SoundscapePre
   const known = new Set(presets.map((preset) => preset.id))
   const record = (input ?? {}) as { enabled?: unknown; entries?: unknown }
   const entries = Array.isArray(record.entries) ? record.entries : []
+  const isName = (value: unknown): value is string => typeof value === 'string' && value.trim() !== ''
+  // Names already saved first, so one given to an unnamed entry cannot repeat them.
+  const names: string[] = entries.flatMap((raw) => (isName((raw as Partial<ScheduleEntry> | null)?.name) ? [(raw as ScheduleEntry).name] : []))
   return {
     enabled: record.enabled === true,
     entries: entries.flatMap((raw): ScheduleEntry[] => {
       const entry = (raw ?? {}) as Partial<ScheduleEntry>
       if (typeof entry.id !== 'string') return []
       const days = Array.isArray(entry.days) ? entry.days : []
+      // An entry saved before names existed takes the next free one, in priority order.
+      const name = isName(entry.name) ? entry.name : nextEntryName(names)
+      if (!isName(entry.name)) names.push(name)
       return [{
         id: entry.id,
+        name,
         presetId: typeof entry.presetId === 'string' && known.has(entry.presetId) ? entry.presetId : null,
         setId: typeof entry.setId === 'number' && Number.isInteger(entry.setId) ? entry.setId : null,
         active: entry.active === true,

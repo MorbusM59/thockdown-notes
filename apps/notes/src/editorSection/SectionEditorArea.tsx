@@ -7,10 +7,11 @@ import { CM6Editor } from '../components/CM6Editor'
 import { SnapshotTimelineSlider } from '../editor/SnapshotTimelineSlider'
 import { PresentStateCircle } from '../editor/PresentStateCircle'
 import { SolidCanvas } from '@thockdown/visualizer/editor/SolidCanvas'
-import { visualizerBoxPx, type VisualizerFont } from '../shared/visualizerFont'
+import { visualizerBoxPx, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { VisualizerScene } from '@thockdown/visualizer/visualizer/VisualizerScene'
 import type { EditorAdapter, EditorBindings, EditorSelectionState } from '../editor/EditorContract'
-import { resolveEditorFontFamily, type EditorRuntimeMetrics } from '../editor/EditorTypography'
+import type { EditorRuntimeMetrics } from '../editor/EditorTypography'
+import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
 import type { UseNoteSnapshotsResult } from '../editor/useNoteSnapshots'
 import { resolvePreviewEdgePaddingPx } from '../exportStyles'
 import type { NoteSummary } from '../shared/noteLifecycle'
@@ -584,7 +585,7 @@ export function SectionEditorArea({
             {isVisualizerMode ? (
               <VisualizerScene
                 boxPx={visualizerBoxPx(visualizerFont)}
-                fontFamily={resolveEditorFontFamily(visualizerFont.style)}
+                fontFamily={monoFontFamily(visualizerFont.style)}
                 fontSizePx={visualizerFont.sizePx}
                 sceneSeed={emptyStateSceneSeed}
                 gridOutlineRef={beatGridRef}

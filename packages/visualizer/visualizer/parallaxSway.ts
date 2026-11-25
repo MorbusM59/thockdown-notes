@@ -1,4 +1,5 @@
 import { poleOrbitOffset } from '@thockdown/look/glaze'
+import { gustSpeed } from '../sound/soundscapeSignals'
 import { pulseCurve } from '@thockdown/look/visualizer'
 /**
  * The visualizer mode's swaying glaze: a slow camera drifting over glaze
@@ -187,8 +188,11 @@ let swayPhase = 0
 let driftedPx = 0
 
 export function advanceSway(beats: number): void {
-  swayPhase += beats * swayCyclesPerBeat * PERIODS_X[0]
-  driftedPx += beats * driftPxPerBeat
+  // The soundscape's gust speeds both up and its lull slows them (`gustSpeed`), through what is
+  // accumulated, so the glaze never jumps.
+  const windBeats = beats * gustSpeed(performance.now() / 1000)
+  swayPhase += windBeats * swayCyclesPerBeat * PERIODS_X[0]
+  driftedPx += windBeats * driftPxPerBeat
 }
 
 /**
@@ -257,7 +261,7 @@ export function restartPoleOrbit(): void {
 
 export function advancePoleOrbit(beats: number): void {
   // Kept within one turn so the phase never loses precision.
-  orbitTurns = (orbitTurns + beats * orbitRate) % 1
+  orbitTurns = (orbitTurns + beats * gustSpeed(performance.now() / 1000) * orbitRate) % 1
 }
 
 /** The orbit now: its radius share and where on its disc the point is. */

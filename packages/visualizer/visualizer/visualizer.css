@@ -1,12 +1,90 @@
 /* The visualizer mode (F3): the scene over the active slot (VisualizerScene.tsx)
    and the swaying glaze (VisualizerGlaze.tsx). */
 
-/* The scene's default font (shared/visualizerFont.ts), carried by the
-   package that draws it, so every app showing the scene has it; the desktop
-   also offers it as an editor font (EditorTypography.ts). */
+/* The scene's fonts (visualizerFonts.ts's MONO_FONTS), carried by the package
+   that draws them, so every app showing the scene can offer them; the desktop
+   also offers them as editor fonts. A face downloads only once something
+   uses it. Licenses: apps/notes/src/fonts/LICENSES.md. */
+@font-face {
+  font-family: 'Syne Mono';
+  src: url('./fonts/SyneMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Red Hat Mono';
+  src: url('./fonts/RedHatMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'VT323';
+  src: url('./fonts/VT323-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Victor Mono';
+  src: url('./fonts/VictorMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Bytesized';
+  src: url('./fonts/Bytesized-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Iosevka Charon Mono';
+  src: url('./fonts/IosevkaCharonMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
 @font-face {
   font-family: 'Kode Mono';
   src: url('./fonts/KodeMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Xanh Mono';
+  src: url('./fonts/XanhMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Lekton';
+  src: url('./fonts/Lekton-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Nova Mono';
+  src: url('./fonts/NovaMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Share Tech Mono';
+  src: url('./fonts/ShareTechMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Courier Prime';
+  src: url('./fonts/CourierPrime-Regular.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
 }
@@ -117,6 +195,8 @@
 .visualizer-letter {
   z-index: 5;
   text-align: center;
+  /* Onto the middle of the box by the font's own metrics (glyphCentering.ts). */
+  translate: var(--visualizer-glyph-dx, 0) var(--visualizer-glyph-dy, 0);
   font-family: var(--visualizer-font);
   font-size: var(--visualizer-font-size);
   color: var(--color-text-base);
@@ -144,6 +224,14 @@
 }
 
 .visualizer-scene > .visualizer-progress-hit {
+  z-index: 6;
+  pointer-events: auto;
+}
+
+/* The spectrum's press target (it shows or hides the panels): with the
+   other press targets, and live whether the panels show or not, since it is
+   how a finger brings them back. */
+.visualizer-scene > .visualizer-spectrum-hit {
   z-index: 6;
   pointer-events: auto;
 }
