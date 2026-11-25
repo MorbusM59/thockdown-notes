@@ -1,18 +1,27 @@
 /**
- * The weekly schedule (schedule.ts) as rows, one per entry, highest
+ * The weekly schedule (schedule.ts) as entries, one per entry, highest
  * priority first, and a "+" below them.
  *
- * A row is twelve chip columns by two chip rows, the width of six of the
- * panel's buttons:
- *   [soundscape 2x2] [play] [hh] [mm] [calendar 1x2] Mo Tu We Th
- *                    [stop] [hh] [mm]                Fr Sa Su [bin]
+ * An entry is two rows, the width of six of the panel's buttons, on one
+ * grid of 36 columns, so the top row's twelve chip columns (3 each) and the
+ * day row's nine chips (4 each) share their gaps and their row height:
+ *   [on 2x2] [song set 2x2] [soundscape 2x2] [play] [hh] [mm] [grip]
+ *                                            [stop] [hh] [mm]
+ *   [calendar] Mo Tu We Th Fr Sa Su [bin]
  *
- * - The SOUNDSCAPE button: a tap turns the entry on or off; hold, then
- *   slide onto another entry's button to move it there (the app's one
- *   reorder rule). A soundscape held and slid here from the presets below
- *   becomes the entry's.
- * - A TIME field: a tap is one step on (an hour, or five minutes, round the
- *   clock); hold, then drag up or down to step through them (useStepDrag).
+ * - The ON button: a tap turns the entry on or off (a check while on,
+ *   blank while off); off, everything else in the entry dims.
+ * - The SONG SET and SOUNDSCAPE buttons each open their own picker below
+ *   the entry. A soundscape held and slid onto the soundscape button from
+ *   the presets becomes the entry's.
+ * - The PLAY chip only shows what starts: the music icon, the soundscape
+ *   icon, or play for both (or nothing yet).
+ * - A TIME field: a tap puts its picker in place of the top row, 24 hour
+ *   chips or 12 minute chips (every MINUTE_STEP); a tap on one sets it.
+ * - An open picker, of either kind, closes on a tap on its value or
+ *   anywhere outside it.
+ * - The GRIP: hold, then slide onto another entry to move it there (the
+ *   app's one reorder rule).
  * - The CALENDAR chip: a tap plays every day, a hold no day, and a tap
  *   brings the saved days back; a day changed meanwhile saves what is shown
  *   with that change (schedule.ts).
@@ -20,7 +29,7 @@
  * - The "+": a tap adds an entry for the soundscape that plays; a soundscape
  *   slid onto it from the presets adds one for that soundscape.
  */
-import { useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { selectorDragType, useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
@@ -32,12 +41,12 @@ import {
   effectiveDays,
   moveEntry,
   newEntry,
-  stepTime,
+  MINUTE_STEP,
+  setTimePart,
   toggleDay,
   type Schedule,
   type ScheduleEntry,
 } from './schedule'
-import { useStepDrag } from './useStepDrag'
 
 /** A soundscape dragged from the presets grid (MobileSoundscapeApp's preset reorder). */
 const SOUNDSCAPE_DRAG = selectorDragType('soundscape')
@@ -81,24 +90,35 @@ function useSoundscapeDrop(onDropSoundscape: (target: string, presetId: string) 
   }
 }
 
-function TimeField({ time, unit, label, onChange }: { time: number; unit: 'hour' | 'minute'; label: string; onChange: (time: number) => void }) {
-  const { handlers } = useStepDrag({
-    begin: () => time,
-    step: (base, steps) => onChange(stepTime(base, unit, steps)),
-    tap: () => onChange(stepTime(time, unit, 1)),
-  })
-  const value = unit === 'hour' ? Math.floor(time / 60) : time % 60
-  return (
-    <button
-      type="button"
-      className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-time is-${unit}`}
-      aria-label={`${label} ${unit}: ${pad(value)}`}
-      data-secondary-press="none"
-      {...handlers}
-    >
-      {pad(value)}
-    </button>
-  )
+type TimeUnit = 'hour' | 'minute'
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
+const MINUTES = Array.from({ length: 60 / MINUTE_STEP }, (_, step) => step * MINUTE_STEP)
+
+/** What is open below or in place of an entry's row: a picker grid, or a time's chips. */
+type Open =
+  | { id: string; kind: 'set' | 'soundscape' }
+  | { id: string; kind: 'time'; which: 'start' | 'stop'; unit: TimeUnit }
+
+/**
+ * Close `open` on a press outside `inside` (the picker and, for a picker
+ * grid, the button that toggles it, whose own tap closes it). The press goes
+ * on to whatever it landed on: a tap on another time field opens that one.
+ */
+function useCloseOnPressOutside(isOpen: boolean, inside: () => Array<HTMLElement | null>, close: () => void) {
+  const insideRef = useRef(inside)
+  insideRef.current = inside
+  const closeRef = useRef(close)
+  closeRef.current = close
+  useEffect(() => {
+    if (!isOpen) return undefined
+    const onPress = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (insideRef.current().some((element) => element && target && element.contains(target))) return
+      closeRef.current()
+    }
+    window.addEventListener('pointerdown', onPress, true)
+    return () => window.removeEventListener('pointerdown', onPress, true)
+  }, [isOpen])
 }
 
 function SetMark({ set }: { set: MusicSet }) {
@@ -182,8 +202,10 @@ function HoldChip({ className, label, icon, tap, held }: { className: string; la
 }
 
 export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, onChange }: ScheduleRowsProps) {
-  // The entry whose pickers are open below it, one at a time.
-  const [pickingId, setPickingId] = useState<string | null>(null)
+  const [open, setOpen] = useState<Open | null>(null)
+  const pickerRef = useRef<HTMLDivElement | null>(null)
+  const openerRef = useRef<HTMLButtonElement | null>(null)
+  useCloseOnPressOutside(open !== null, () => [pickerRef.current, openerRef.current], () => setOpen(null))
   const reorder = useSelectorReorder('schedule-entry', (dragged, target) => onChange((current) => moveEntry(current, dragged, target)), { picture: 'copy' })
   const drop = useSoundscapeDrop((target, presetId) => onChange((current) => (target === '+'
     ? { ...current, entries: [...current.entries, newEntry(presetId)] }
@@ -192,27 +214,55 @@ export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, on
     ...current,
     entries: current.entries.map((entry) => (entry.id === id ? change(entry) : entry)),
   }))
+  const togglePicker = (id: string, kind: 'set' | 'soundscape') =>
+    setOpen((current) => (current?.id === id && current.kind === kind ? null : { id, kind }))
 
   const row = (entry: ScheduleEntry) => {
     const preset = presets.find((candidate) => candidate.id === entry.presetId) ?? null
     const set = musicSets.find((candidate) => candidate.slot === entry.setId) ?? null
-    const picking = pickingId === entry.id
+    const opened = open?.id === entry.id ? open : null
     const cell = reorder(entry.id)
     const accepts = drop.handlers(entry.id)
     const days = effectiveDays(entry)
-    const time = (which: 'start' | 'stop', unit: 'hour' | 'minute') => (
-      <TimeField
-        time={entry[which]}
-        unit={unit}
-        label={which === 'start' ? 'Start' : 'Stop'}
-        onChange={(next) => update(entry.id, (current) => ({ ...current, [which]: next }))}
-      />
-    )
+    const chip = 'btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip'
+    const time = (which: 'start' | 'stop', unit: TimeUnit) => {
+      const value = unit === 'hour' ? Math.floor(entry[which] / 60) : entry[which] % 60
+      return (
+        <button
+          type="button"
+          className={`${chip} mobile-schedule-time`}
+          aria-label={`${which === 'start' ? 'Start' : 'Stop'} ${unit}: ${pad(value)}`}
+          data-secondary-press="none"
+          onClick={() => setOpen({ id: entry.id, kind: 'time', which, unit })}
+        >
+          {pad(value)}
+        </button>
+      )
+    }
+    const timeChips = (which: 'start' | 'stop', unit: TimeUnit) => {
+      const selected = unit === 'hour' ? Math.floor(entry[which] / 60) : entry[which] % 60
+      return (unit === 'hour' ? HOURS : MINUTES).map((value) => (
+        <button
+          key={value}
+          type="button"
+          className={`${chip} mobile-schedule-pick is-${unit}${value === selected ? ' is-active' : ''}`}
+          aria-pressed={value === selected}
+          aria-label={`${which === 'start' ? 'Start' : 'Stop'} ${unit} ${pad(value)}`}
+          data-secondary-press="none"
+          onClick={() => {
+            update(entry.id, (current) => ({ ...current, [which]: setTimePart(current[which], unit, value) }))
+            setOpen(null)
+          }}
+        >
+          {pad(value)}
+        </button>
+      ))
+    }
     const day = (index: number) => (
       <button
         key={index}
         type="button"
-        className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-day${days[index] ? ' is-active' : ''}`}
+        className={`${chip} mobile-schedule-day${days[index] ? ' is-active' : ''}`}
         aria-pressed={days[index]}
         aria-label={DAY_NAMES[index]}
         data-secondary-press="none"
@@ -221,79 +271,116 @@ export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, on
         {DAY_NAMES[index]}
       </button>
     )
-    const assigned = [set?.name, preset?.name].filter(Boolean).join(' and ') || 'Nothing'
+    const pickerButton = (kind: 'set' | 'soundscape', label: string, mark: JSX.Element | null, extra: object = {}) => (
+      <button
+        type="button"
+        ref={opened?.kind === kind ? openerRef : undefined}
+        className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-button${opened?.kind === kind ? ' is-active' : ''}`}
+        aria-expanded={opened?.kind === kind}
+        aria-label={label}
+        data-secondary-press="none"
+        onClick={() => togglePicker(entry.id, kind)}
+        {...extra}
+      >
+        {mark}
+      </button>
+    )
     return (
-      <div key={entry.id} className="mobile-schedule-entry">
-      <div className={`mobile-schedule-row${entry.active ? '' : ' is-off'}`}>
-        <button
-          type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-soundscape${set && preset ? ' is-split' : ''}${picking ? ' is-active' : ''}${drop.over === entry.id ? ' is-drop-target' : ''}`}
-          aria-expanded={picking}
-          aria-label={`${assigned}: choose what plays`}
-          data-secondary-press="none"
-          onPointerDown={cell.onPointerDown}
-          {...cell.props}
-          onDragOver={(event) => { if (!accepts.onDragOver(event)) cell.props.onDragOver(event) }}
-          onDragLeave={accepts.onDragLeave}
-          onDrop={(event) => { if (!accepts.onDrop(event)) cell.props.onDrop(event) }}
-          onClick={() => setPickingId((current) => (current === entry.id ? null : entry.id))}
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          {/* Both assigned: two halves glued on the diagonal; one: its mark whole; none: empty. */}
-          {set ? <span className="mobile-schedule-assigned is-set"><SetMark set={set} /></span> : null}
-          {preset ? <span className="mobile-schedule-assigned is-soundscape"><SoundscapeMark preset={preset} /></span> : null}
-        </button>
-        <button
-          type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-start${entry.active ? ' is-active' : ''}`}
-          aria-pressed={entry.active}
-          aria-label={entry.active ? 'Turn off' : 'Turn on'}
-          data-secondary-press="none"
-          onClick={() => update(entry.id, (current) => ({ ...current, active: !current.active }))}
-        >
-          <span className={`fa-solid ${startIcon(entry)}`} aria-hidden="true" />
-        </button>
-        {time('start', 'hour')}
-        {time('start', 'minute')}
-        <HoldChip
-          className={`mobile-schedule-calendar${entry.override ? ' is-active' : ''}`}
-          label={entry.override === null ? 'Every day' : 'Back to the chosen days'}
-          icon="fa-calendar-days"
-          tap={() => update(entry.id, (current) => calendarPress(current, false))}
-          held={() => update(entry.id, (current) => calendarPress(current, true))}
-        />
-        {[0, 1, 2, 3].map(day)}
-        <button type="button" tabIndex={-1} className="btn-icon options-color-swatch options-loadout-btn mobile-schedule-chip mobile-schedule-label is-stop" aria-hidden="true"><span className="fa-solid fa-stop" /></button>
-        {time('stop', 'hour')}
-        {time('stop', 'minute')}
-        {[4, 5, 6].map(day)}
-        <HoldChip
-          className="mobile-schedule-bin"
-          label="Delete"
-          icon="fa-trash-can"
-          held={() => onChange((current) => ({ ...current, entries: current.entries.filter((candidate) => candidate.id !== entry.id) }))}
-        />
-      </div>
-      {picking ? (
-        <AccordionGroup>
-          <AccordionSection ariaLabel="Song Set" heading="Song Set" iconClass="fa-music">
-            <PickerGrid
-              label="Song set"
-              choices={musicSets.map((candidate) => ({ key: candidate.slot, name: candidate.name, mark: <SetMark set={candidate} /> }))}
-              assigned={entry.setId}
-              onPick={(setId) => update(entry.id, (current) => ({ ...current, setId }))}
-            />
-          </AccordionSection>
-          <AccordionSection ariaLabel="Soundscape" heading="Soundscape" iconClass="fa-podcast">
-            <PickerGrid
-              label="Soundscape"
-              choices={presets.map((candidate) => ({ key: candidate.id, name: candidate.name, mark: <SoundscapeMark preset={candidate} /> }))}
-              assigned={entry.presetId}
-              onPick={(presetId) => update(entry.id, (current) => ({ ...current, presetId }))}
-            />
-          </AccordionSection>
-        </AccordionGroup>
-      ) : null}
+      <div
+        key={entry.id}
+        className="mobile-schedule-entry"
+        data-drag-state={cell.props['data-drag-state']}
+        onDragOver={cell.props.onDragOver}
+        onDrop={cell.props.onDrop}
+      >
+        <div className={`mobile-schedule-grid${entry.active ? '' : ' is-off'}`}>
+          {opened?.kind === 'time' ? (
+            <div ref={pickerRef} className="mobile-schedule-times" role="group" aria-label={`${opened.which === 'start' ? 'Start' : 'Stop'} ${opened.unit}`}>
+              {timeChips(opened.which, opened.unit)}
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-button mobile-schedule-on${entry.active ? ' is-active' : ''}`}
+                aria-pressed={entry.active}
+                aria-label={entry.active ? 'Turn off' : 'Turn on'}
+                data-secondary-press="none"
+                onClick={() => update(entry.id, (current) => ({ ...current, active: !current.active }))}
+              >
+                {entry.active ? <span className="fa-solid fa-check" aria-hidden="true" /> : null}
+              </button>
+              {pickerButton('set', `Song set: ${set?.name ?? 'none'}`, set ? <SetMark set={set} /> : null)}
+              {pickerButton('soundscape', `Soundscape: ${preset?.name ?? 'none'}`, preset ? <SoundscapeMark preset={preset} /> : null, {
+                className: `btn-icon options-color-swatch options-loadout-btn mobile-schedule-button${opened?.kind === 'soundscape' ? ' is-active' : ''}${drop.over === entry.id ? ' is-drop-target' : ''}`,
+                onDragOver: accepts.onDragOver,
+                onDragLeave: accepts.onDragLeave,
+                onDrop: accepts.onDrop,
+              })}
+              <button type="button" tabIndex={-1} className={`${chip} mobile-schedule-label`} aria-hidden="true"><span className={`fa-solid ${startIcon(entry)}`} /></button>
+              {time('start', 'hour')}
+              {time('start', 'minute')}
+              <button
+                type="button"
+                className="btn-icon options-color-swatch options-loadout-btn mobile-schedule-grip"
+                aria-label="Hold and slide to move"
+                data-secondary-press="none"
+                onPointerDown={cell.onPointerDown}
+                data-drag-source={cell.props['data-drag-source']}
+                onDragStart={cell.props.onDragStart}
+                onDragEnd={cell.props.onDragEnd}
+                onContextMenu={(event) => event.preventDefault()}
+              >
+                <span className="fa-solid fa-grip-vertical" aria-hidden="true" />
+              </button>
+              <button type="button" tabIndex={-1} className={`${chip} mobile-schedule-label`} aria-hidden="true"><span className="fa-solid fa-stop" /></button>
+              {time('stop', 'hour')}
+              {time('stop', 'minute')}
+            </>
+          )}
+          <HoldChip
+            className={`mobile-schedule-calendar${entry.override ? ' is-active' : ''}`}
+            label={entry.override === null ? 'Every day' : 'Back to the chosen days'}
+            icon="fa-calendar-days"
+            tap={() => update(entry.id, (current) => calendarPress(current, false))}
+            held={() => update(entry.id, (current) => calendarPress(current, true))}
+          />
+          {DAY_NAMES.map((_, index) => day(index))}
+          <HoldChip
+            className="mobile-schedule-bin"
+            label="Delete"
+            icon="fa-trash-can"
+            held={() => onChange((current) => ({ ...current, entries: current.entries.filter((candidate) => candidate.id !== entry.id) }))}
+          />
+        </div>
+        {opened?.kind === 'set' ? (
+          <div ref={pickerRef}>
+            <AccordionGroup>
+              <AccordionSection ariaLabel="Song Set" heading="Song Set" iconClass="fa-music" defaultOpen>
+                <PickerGrid
+                  label="Song set"
+                  choices={musicSets.map((candidate) => ({ key: candidate.slot, name: candidate.name, mark: <SetMark set={candidate} /> }))}
+                  assigned={entry.setId}
+                  onPick={(setId) => update(entry.id, (current) => ({ ...current, setId }))}
+                />
+              </AccordionSection>
+            </AccordionGroup>
+          </div>
+        ) : null}
+        {opened?.kind === 'soundscape' ? (
+          <div ref={pickerRef}>
+            <AccordionGroup>
+              <AccordionSection ariaLabel="Soundscape" heading="Soundscape" iconClass="fa-podcast" defaultOpen>
+                <PickerGrid
+                  label="Soundscape"
+                  choices={presets.map((candidate) => ({ key: candidate.id, name: candidate.name, mark: <SoundscapeMark preset={candidate} /> }))}
+                  assigned={entry.presetId}
+                  onPick={(presetId) => update(entry.id, (current) => ({ ...current, presetId }))}
+                />
+              </AccordionSection>
+            </AccordionGroup>
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -302,10 +389,10 @@ export function ScheduleRows({ schedule, presets, musicSets, currentPresetId, on
   return (
     <div className="mobile-schedule" role="group" aria-label="Weekly schedule">
       {schedule.entries.map(row)}
-      <div className="mobile-schedule-row">
+      <div className="mobile-schedule-grid">
         <button
           type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-soundscape${drop.over === '+' ? ' is-drop-target' : ''}`}
+          className={`btn-icon options-color-swatch options-loadout-btn mobile-schedule-button${drop.over === '+' ? ' is-drop-target' : ''}`}
           aria-label="New schedule entry"
           data-secondary-press="none"
           onDragOver={plus.onDragOver}

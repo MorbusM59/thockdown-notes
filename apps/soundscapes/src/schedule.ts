@@ -109,12 +109,9 @@ export function calendarPress(entry: ScheduleEntry, held: boolean): ScheduleEntr
   return { ...entry, override: entry.override === null ? 'all' : null }
 }
 
-/** `time` moved by `steps` hours (`unit` hour) or five-minute steps (`unit` minute), cycling within its hour or day. */
-export function stepTime(time: number, unit: 'hour' | 'minute', steps: number): number {
-  const hour = Math.floor(time / 60)
-  const minute = time % 60
-  if (unit === 'hour') return (((hour + steps) % 24 + 24) % 24) * 60 + minute
-  return hour * 60 + ((((minute / MINUTE_STEP) + steps) % 12 + 12) % 12) * MINUTE_STEP
+/** `time` with its hour (`unit` hour, 0..23) or its minute (`unit` minute, a multiple of MINUTE_STEP) set to `value`, the other part kept. */
+export function setTimePart(time: number, unit: 'hour' | 'minute', value: number): number {
+  return unit === 'hour' ? (value * 60) + (time % 60) : (Math.floor(time / 60) * 60) + value
 }
 
 /** Move `draggedId` to `targetId`'s place, the way every reorder in the app does. */

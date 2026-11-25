@@ -8,7 +8,7 @@ import {
   musicScheduleEvents,
   newEntry,
   scheduleEvents,
-  stepTime,
+  setTimePart,
   toggleDay,
   weekMusicTimeline,
   weekTimeline,
@@ -99,10 +99,9 @@ describe('schedule', () => {
     expect(allButFriday.days).toEqual([true, true, true, true, false, true, true])
   })
 
-  it('times step and cycle; entries reorder by the universal rule', () => {
-    expect(stepTime(23 * 60 + 5, 'hour', 1)).toBe(5)
-    expect(stepTime(55, 'minute', 1)).toBe(0)
-    expect(stepTime(0, 'minute', -1)).toBe(55)
+  it('a time takes a picked hour or minute and keeps the other; entries reorder by the universal rule', () => {
+    expect(setTimePart(23 * 60 + 5, 'hour', 7)).toBe(7 * 60 + 5)
+    expect(setTimePart(23 * 60 + 5, 'minute', 30)).toBe(23 * 60 + 30)
     const s = schedule(entry('a', 0, 0, []), entry('b', 0, 0, []), entry('c', 0, 0, []))
     const ids = (next: Schedule) => next.entries.map((e) => e.presetId)
     expect(ids(moveEntry(s, s.entries[0].id, s.entries[2].id))).toEqual(['b', 'c', 'a'])

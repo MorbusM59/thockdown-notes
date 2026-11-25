@@ -185,22 +185,30 @@ body {
   white-space: nowrap;
 }
 
-/* The schedule (ScheduleRows.tsx): a row is twelve chip columns by two chip
-   rows, six buttons wide; placement is the grid's own, row by row, so only
-   the spans are written. */
+/* The schedule (ScheduleRows.tsx): its entries, one under another, each six
+   buttons wide; placement is each grid's own, row by row, so only the spans
+   are written. */
 .mobile-schedule {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  container-type: inline-size;
 }
 
-.mobile-schedule-row {
+/* An entry's two rows on one grid of 36 columns (ScheduleRows.tsx): the top
+   row's chip columns span 3, the day row's chips 4, so both rows share the
+   gaps. Every row is one chip tall, a chip being a twelfth of the width
+   less its eleven gaps: stated rather than taken from a square chip, since
+   a time's chips in place of the top row hold none. */
+.mobile-schedule-grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(36, minmax(0, 1fr));
+  grid-auto-rows: calc((100cqw - 11 * 3px) / 12);
   gap: 3px;
 }
 
-.mobile-app-shell .mobile-schedule-row > * {
+.mobile-app-shell .mobile-schedule-grid > *,
+.mobile-app-shell .mobile-schedule-times > * {
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -211,37 +219,52 @@ body {
 }
 
 .mobile-schedule-chip {
-  aspect-ratio: 1;
+  grid-column: span 3;
 }
 
-.mobile-schedule-soundscape {
-  grid-column: span 2;
-  grid-row: span 2;
-}
-
-/* Its mark (and the "+") at a regular button's icon size, not the row's chip text size. */
-.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape {
-  font-size: var(--mobile-button-icon-size);
-}
-
-.mobile-app-shell .mobile-schedule-time {
-  grid-column: span 2;
-  aspect-ratio: auto;
-  font-size: 14px;
-}
-
-.mobile-schedule-calendar {
-  grid-row: span 2;
-  aspect-ratio: auto;
-}
-
-/* The play and stop marks: labels, not buttons. */
-/* The play and stop chips label their row: drawn as chips, pressed by nothing. */
 .mobile-schedule-label {
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
+}
+
+/* The on, song set and soundscape buttons (and the "+"): a regular button,
+   two chip columns by two rows, its mark at a regular button's icon size. */
+.mobile-app-shell .mobile-schedule-grid > .mobile-schedule-button {
+  grid-column: span 6;
+  grid-row: span 2;
+  font-size: var(--mobile-button-icon-size);
+}
+
+.mobile-app-shell .mobile-schedule-time {
+  grid-column: span 6;
+  font-size: 14px;
+}
+
+.mobile-app-shell .mobile-schedule-grid > .mobile-schedule-grip {
+  grid-column: span 3;
+  grid-row: span 2;
+}
+
+.mobile-schedule-day,
+.mobile-schedule-calendar,
+.mobile-schedule-bin {
+  grid-column: span 4;
+}
+
+/* A time's chips in place of the top row: 24 hours of one chip column,
+   or 12 minutes of two, in its two rows. */
+.mobile-schedule-times {
+  grid-column: 1 / -1;
+  grid-row: span 2;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-template-rows: subgrid;
+}
+
+.mobile-schedule-pick.is-minute {
+  grid-column: span 6;
 }
 
 .mobile-schedule-entry {
@@ -250,41 +273,11 @@ body {
   gap: 6px;
 }
 
-/* The assigned button. With a song set AND a soundscape it is split on the
-   diagonal from its top right to its bottom left: two half buttons glued together, the song set's mark in the
-   top-left half and the soundscape's in the bottom-right one, each at full
-   size, centered on the button and cut along the line. With one of them,
-   its mark shows whole; with neither, the button is empty. */
-.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape {
-  position: relative;
-}
-
-.mobile-app-shell .mobile-schedule-row > .mobile-schedule-soundscape.is-split {
-  position: relative;
-  background-image: linear-gradient(to bottom right, transparent calc(50% - 0.5px), var(--color-text-40) 50%, transparent calc(50% + 0.5px));
-}
-
-.mobile-schedule-assigned {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.is-split > .mobile-schedule-assigned.is-set {
-  clip-path: polygon(0 0, 100% 0, 0 100%);
-}
-
-.is-split > .mobile-schedule-assigned.is-soundscape {
-  clip-path: polygon(100% 0, 100% 100%, 0 100%);
-}
-
-.mobile-schedule-row.is-off > :not(.mobile-schedule-soundscape, .mobile-schedule-start) {
+.mobile-schedule-grid.is-off > :not(.mobile-schedule-on) {
   opacity: 0.4;
 }
 
-.mobile-schedule-soundscape.is-drop-target {
+.mobile-schedule-button.is-drop-target {
   outline: 2px solid var(--color-text-60);
   outline-offset: 1px;
 }
