@@ -1,3 +1,4 @@
+import { roundUiFontScale, UI_FONT_SCALE_MAX, UI_FONT_SCALE_MIN } from '@thockdown/look/uiFontScale'
 /**
  * The phone's soundscape preferences, kept in the WebView's localStorage.
  * Everything read back goes through the same sanitizer the desktop app uses
@@ -137,5 +138,29 @@ export function saveClipMinutes(minutes: number): void {
     localStorage.setItem(CLIP_STORAGE_KEY, String(minutes))
   } catch (error) {
     console.error('Failed to save the clip length', error)
+  }
+}
+
+/**
+ * The phone's text size, on the desktop's UI Font scale (`@thockdown/look/uiFontScale`).
+ * 0.9 draws the stylesheets' sizes at 0.99, the size the phone had before it was a setting.
+ */
+export const DEFAULT_PHONE_UI_FONT_SCALE = 0.9
+const UI_FONT_SCALE_STORAGE_KEY = 'thockdown:ui-font-scale'
+
+export function loadUiFontScale(): number {
+  try {
+    const value = Number(localStorage.getItem(UI_FONT_SCALE_STORAGE_KEY))
+    return value >= UI_FONT_SCALE_MIN && value <= UI_FONT_SCALE_MAX ? roundUiFontScale(value) : DEFAULT_PHONE_UI_FONT_SCALE
+  } catch {
+    return DEFAULT_PHONE_UI_FONT_SCALE
+  }
+}
+
+export function saveUiFontScale(scale: number): void {
+  try {
+    localStorage.setItem(UI_FONT_SCALE_STORAGE_KEY, String(scale))
+  } catch {
+    // Storage unavailable: the size holds for this run.
   }
 }

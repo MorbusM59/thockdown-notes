@@ -4,7 +4,6 @@ import { MobileSoundscapeApp } from './MobileSoundscapeApp'
 import { keepFocusOnPress } from '@thockdown/interaction/focusOwnership'
 import { installHoverTracking } from '@thockdown/interaction/hoverTracking'
 import { installPressTracking } from '@thockdown/interaction/pressTracking'
-import { installScrollTrackTokens } from '@thockdown/interaction/scrollTrackGeometry'
 import { installTexturePorts } from '@thockdown/look/textures/textureStore'
 import { phoneTextureCache } from './textureCache'
 // The shared packages' styles: the soundscape panel is the desktop panel
@@ -19,7 +18,6 @@ import './mobile.css'
 // (focusOwnership.ts) -- without it every tapped button kept focus.
 installPressTracking()
 installHoverTracking()
-installScrollTrackTokens(1)
 // The layouts' textures, generated on the device like the desktop's and kept
 // in Cache Storage (textureCache.ts).
 installTexturePorts({ cache: phoneTextureCache })
