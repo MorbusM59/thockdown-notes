@@ -147,6 +147,20 @@ final class MusicRenderer {
         });
     }
 
+    /**
+     * Play was pressed while a renderer exists: if its stream has ended (the
+     * last song ran out with nothing after it), the pool's next pick starts,
+     * or the music stops saying why; otherwise nothing changes.
+     */
+    void resume() {
+        post(() -> {
+            if (stage == null || decoding != null) return;
+            settle();
+            configure(true);
+            startSong(next(heardId), 0);
+        });
+    }
+
     /** The visualizer's spectrum in `bands` log bands, or none (0). */
     void setSpectrum(int bands) {
         post(() -> {
@@ -266,11 +280,23 @@ final class MusicRenderer {
     /** At most this many songs in a row that cannot be decoded are passed over before the stream ends. */
     private static final int MAX_UNPLAYABLE = 8;
 
+    /**
+     * Start `song` at `seconds`, passing over songs that cannot be opened.
+     * When nothing is left: a start that was ASKED for (play, a step, a seek)
+     * stops the music, saying why; a song's natural end leaves the stream to
+     * end (`musicEnd`), so the tail already rendered still plays out.
+     */
     private void startSong(Song song, double seconds) throws Exception {
+        startSong(song, seconds, true);
+    }
+
+    private void startSong(Song song, double seconds, boolean asked) throws Exception {
         closeDecoder();
         cued = false;
         ended = false;
-        for (int attempt = 0; song != null && attempt < MAX_UNPLAYABLE; attempt += 1) {
+        Exception unplayable = null;
+        int passedOver = 0;
+        for (; song != null && passedOver < MAX_UNPLAYABLE; passedOver += 1) {
             decoding = song;
             uris.put(song.id, song.uri);
             try {
@@ -280,11 +306,26 @@ final class MusicRenderer {
             } catch (Exception error) {
                 // A song that cannot be decoded is passed over, as if it had played.
                 closeDecoder();
+                unplayable = error;
                 song = next(song.id);
                 seconds = 0;
             }
         }
         decoding = null;
+        if (!asked) return;
+        // Nothing left to play. Rendering on would play silence with the
+        // clock of the last song heard running on past its end (a playing
+        // lane, a peak of 0), so the music stops, saying why.
+        throw new NothingToPlay(unplayable == null
+            ? "Nothing to play: no song in the pool (no active set, or a filter nothing matches)"
+            : "Nothing to play: " + passedOver + " songs in a row could not be opened, the last with " + unplayable);
+    }
+
+    /** The music has nothing it can play; the renderer stops and the session reports it (MusicSession's onFailure). */
+    private static final class NothingToPlay extends Exception {
+        NothingToPlay(String message) {
+            super(message);
+        }
     }
 
     private void closeDecoder() {
@@ -348,7 +389,7 @@ final class MusicRenderer {
             }
             isolate.evaluateJavaScriptAsync("musicAppend('" + Base64.encodeToString(bytes, Base64.NO_WRAP) + "')").get();
         }
-        if (decoder.finished()) startSong(next(decoding.id), 0);
+        if (decoder.finished()) startSong(next(decoding.id), 0, false);
     }
 
     /** Write a step's chunks into the output and report what is heard at `played`, the playhead the step was told; returns how much input is held ahead. */
@@ -403,7 +444,9 @@ final class MusicRenderer {
         } catch (Exception error) {
             // Where it was thrown, so a failure read off the Debugging section names its line.
             StackTraceElement[] trace = error.getStackTrace();
-            if (running) listener.onFailure("Music renderer stopped: " + error + (trace.length > 0 ? " at " + trace[0] : ""));
+            if (running) listener.onFailure(error instanceof NothingToPlay
+                ? error.getMessage()
+                : "Music renderer stopped: " + error + (trace.length > 0 ? " at " + trace[0] : ""));
         } finally {
             closeDecoder();
             if (isolate != null) SharedSandbox.close(isolate);

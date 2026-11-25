@@ -1,9 +1,8 @@
 // AccordionSection — animated details/summary accordion.
 //
 // Height animation uses the same ScrollCurvePlan bell-curve engine as the
-// editor scroll, but with fixed internal parameters that are not exposed to
-// the user. The accordion feel is intentionally crisp and independent of
-// the scroll dynamics settings.
+// editor scroll, with a fixed curve; its duration is the page scroll's for
+// the share of the screen the fold moves (accordionDurationSec).
 //
 // Left-click: opens this section, closes all siblings.
 // Right-click: opens this section without closing siblings.
@@ -21,24 +20,40 @@
 import { type MouseEvent, type ReactNode, type RefObject, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { AccordionSectionOpenContext } from './accordionSectionOpen'
-import { buildCurvePlan, buildScrollPlan, sampleScrollPlan } from './ScrollCurvePlan'
+import { buildCurvePlan, buildScrollPlan, getRenderScrollTotalTimeSec, sampleScrollPlan } from './ScrollCurvePlan'
 import { type OptionsSearchSection, applyOptionsSelection, indexOptionsSection, selectOptions } from './optionsSearch'
 
-// Fixed accordion animation parameters — not user-configurable.
+// Accordion animation parameters: the curve is fixed, its duration is not.
 const ACCORDION_DYNAMIC        = 4
 const ACCORDION_RESPONSIVENESS = 2
-const ACCORDION_DURATION_SEC   = 0.12
+/** The shortest fold: a short one stays crisp. */
+const ACCORDION_MIN_DURATION_SEC = 0.12
 const ACCORDION_MAX_SPEED      = 20000
 const ACCORDION_SKEW           = 1
 
+/**
+ * A fold takes the time the reader's own page scroll takes
+ * (`getRenderScrollTotalTimeSec`) for the share of the screen it moves, and
+ * never less than ACCORDION_MIN_DURATION_SEC. A fixed 0.12 s was seven frames
+ * at 60 Hz whatever the distance: crisp for a desktop sidebar section, a
+ * fraction of the window, and a handful of big jumps for a phone's section,
+ * which is about a screen tall. Measured against the screen, a fold that
+ * moves a whole screen moves it at the pace a page scroll does.
+ */
+const accordionDurationSec = (signedDistance: number) => {
+  const screenShare = Math.min(1, Math.abs(signedDistance) / Math.max(1, window.innerHeight))
+  return Math.max(ACCORDION_MIN_DURATION_SEC, getRenderScrollTotalTimeSec() * screenShare)
+}
+
 const buildAccordionPlan = (signedDistance: number) => {
+  const durationSec = accordionDurationSec(signedDistance)
   const curve = buildCurvePlan(
     ACCORDION_DYNAMIC,
     ACCORDION_RESPONSIVENESS,
-    ACCORDION_DURATION_SEC,
+    durationSec,
     ACCORDION_SKEW,
   )
-  return buildScrollPlan(curve, ACCORDION_DURATION_SEC, signedDistance, ACCORDION_MAX_SPEED)
+  return buildScrollPlan(curve, durationSec, signedDistance, ACCORDION_MAX_SPEED)
 }
 
 // ── Accordion group context ────────────────────────────────────────────────

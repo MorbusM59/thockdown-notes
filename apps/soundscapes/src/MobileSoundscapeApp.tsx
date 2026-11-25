@@ -37,7 +37,9 @@ import {
   LIGHT_PRESET_ICONS,
   LIGHT_PRESET_THEMES,
 } from '@thockdown/look/presets'
-import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
+import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
+import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
 import { applyDocumentTheme, themeFrame } from '@thockdown/look/loadoutTheme'
 import { ThemeBlendOverlays, ThemeGlazeLayers } from '@thockdown/look/ThemeLayers'
@@ -91,7 +93,7 @@ import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
-import { loadBeatSettings, loadVisualizerState, PHONE_OUTPUT_DEVICE, PHONE_VISUALIZER_FONT, saveBeatSettings, saveVisualizerState } from './visualizerStore'
+import { loadBeatSettings, loadVisualizerFontSize, loadVisualizerState, PHONE_OUTPUT_DEVICE, phoneVisualizerFont, saveBeatSettings, saveVisualizerFontSize, saveVisualizerState, sanitizeVisualizerFontSize, VISUALIZER_FONT_SIZE } from './visualizerStore'
 import { editVisualizerState, NEUTRAL_VISUALIZER_PRESET, shownVisualizer, VISUALIZER_PRESET_KIND, type VisualizerPresetPreferences } from '@thockdown/visualizer/shared/visualizerPresets'
 import type { VisualizerSettings } from '@thockdown/look/visualizer'
 import { VisualizerSceneControls } from '@thockdown/visualizer/visualizer/VisualizerSceneControls'
@@ -130,10 +132,9 @@ const TAB_HELP: Partial<Record<MobileTab, string>> = { dashboard: 'Dashboard', s
 
 function TabHelp({ heading }: { heading: string }) {
   return (
-    <div className="utility-setting-slider-stack" aria-label={`${heading} help`}>
-      <OptionsSubsectionLabel>{heading}</OptionsSubsectionLabel>
+    <OptionsFixedSection heading={heading} iconClass="fa-circle-question">
       <SubsectionHelp paragraphs={helpFor(heading)!} />
-    </div>
+    </OptionsFixedSection>
   )
 }
 
@@ -276,6 +277,10 @@ export function MobileSoundscapeApp() {
     setVisualizerState((state) => ({ ...state, presets }))
   }, [])
   const [beatSettings, setBeatSettings] = useState(loadBeatSettings)
+  // The visualizer's text size, outside its presets as the desktop's font is (visualizerStore.ts).
+  const [visualizerFontSize, setVisualizerFontSize] = useState(loadVisualizerFontSize)
+  useEffect(() => saveVisualizerFontSize(visualizerFontSize), [visualizerFontSize])
+  const visualizerFont = useMemo(() => phoneVisualizerFont(visualizerFontSize), [visualizerFontSize])
   useEffect(() => saveBeatSettings(beatSettings), [beatSettings])
   useEffect(() => {
     if (!nativeMusic) return
@@ -564,8 +569,8 @@ export function MobileSoundscapeApp() {
                       trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />}
                     />
                   )
-                  : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} />
-                  : tab === 'visualizer' ? <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} />
+                  : tab === 'soundstages' ? <SoundstagesDock preferences={soundstages} onChange={setSoundstages} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
+                  : tab === 'visualizer' ? <PresetDock kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" resetTo={NEUTRAL_VISUALIZER_PRESET} trailing={<DockHelpButton active={helpMode} onToggle={toggleHelp} />} />
                   : null
 
   // The desktop's frame, outermost first (see shared/loadoutTheme.ts), so the
@@ -581,7 +586,7 @@ export function MobileSoundscapeApp() {
         <VisualizerGlaze glaze={loadout.glaze} immersive={visualizer.immersive} />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
-            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} /> : null}
+            {visualizerOpen ? <VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} /> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <MobileTabSelector tab={tab} onChange={selectTab} />
@@ -590,15 +595,11 @@ export function MobileSoundscapeApp() {
                 contentRef={pageScrollerRef}
                 // Each dock in the desktop's dock wrapper (sidebarFrame.css's
                 // .sidebar-plain-dock), which sets it off the panel and the edge.
-                // Every dock ends with the help button at its bottom right: the
-                // dashboard's and the soundscape's in their own last row, any
-                // other in a row of its own, and a tab with no dock gets that
-                // row alone.
+                // Every dock ends with the help button at its bottom right,
+                // in the dock's own last row, and a tab with no dock gets a
+                // row holding it alone.
                 dock={<div className="sidebar-plain-dock">
-                  {tab === 'dashboard' || tab === 'soundscapes' || tab === 'songs' ? dockContent : (<div className="mobile-dock-stack">
-                    {dockContent}
-                    <DockHelpRow active={helpMode} onToggle={toggleHelp} />
-                  </div>)}
+                  {dockContent ?? <DockHelpRow active={helpMode} onToggle={toggleHelp} />}
                 </div>}
                 scrollbar={<PageScrollbar scrollerRef={pageScrollerRef} />}
               >
@@ -607,16 +608,13 @@ export function MobileSoundscapeApp() {
                 {tab === 'dashboard' && !helpMode ? (<>
                   <DashboardSets />
                   <DashboardSoundscapes preferences={preferences} onPick={pickSoundscape} />
-                  <div className="utility-setting-slider-stack" aria-label="Timer">
-                    <OptionsSubsectionLabel>Timer</OptionsSubsectionLabel>
+                  <OptionsFixedSection heading="Timer" iconClass="fa-hourglass-half">
                     <TimerRow timer={timer} onChange={setTimer} />
-                  </div>
-                  <div className="utility-setting-slider-stack" aria-label="Soundstage">
-                    <OptionsSubsectionLabel>Soundstage</OptionsSubsectionLabel>
+                  </OptionsFixedSection>
+                  <OptionsFixedSection heading="Soundstage" iconClass="fa-sliders">
                     <PresetGrid kind={SOUNDSTAGE_KIND} list={soundstages} onChange={(list) => setSoundstages(withActiveSoundstage(soundstages, list))} idPrefix="stage" label="Soundstages" plural="a soundstage" creates={false} />
-                  </div>
-                  <div className="utility-setting-slider-stack" aria-label="Layout">
-                    <OptionsSubsectionLabel>Layout</OptionsSubsectionLabel>
+                  </OptionsFixedSection>
+                  <OptionsFixedSection heading="Layout" iconClass="fa-paint-roller">
                     {/* Dark mode, then the mode's presets: a tap picks one. */}
                     <div className="options-loadout-grid" role="group" aria-label="Layout">
                       <button
@@ -641,10 +639,9 @@ export function MobileSoundscapeApp() {
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </OptionsFixedSection>
                   <VisualizerButtons onOpen={() => setVisualizerOpen(true)} />
-                  <div className="utility-setting-slider-stack" aria-label="Soundscape tools">
-                    <OptionsSubsectionLabel>Tools</OptionsSubsectionLabel>
+                  <OptionsFixedSection heading="Tools" iconClass="fa-toolbox">
                     <div className="options-loadout-grid" role="group" aria-label="Soundscape tools">
                       <button
                         type="button"
@@ -693,7 +690,7 @@ export function MobileSoundscapeApp() {
                             : <span className="fa-solid fa-circle-down" aria-hidden="true" />}
                       </button>
                     </div>
-                  </div>
+                  </OptionsFixedSection>
                   <DashboardAppSections />
                 </>) : null}
                 {/* Picking an icon (a dock's mark) replaces the page with
@@ -701,7 +698,7 @@ export function MobileSoundscapeApp() {
                 {tab === 'songs' && !helpMode ? (iconPick?.target.kind === 'musicSet' ? (<>
                   <IconFilter query={iconPick.query} />
                   <MusicSetIconPicker query={iconPick.query} />
-                </>) : <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap />) : null}
+                </>) : <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap selectorHeading={{ heading: 'Song Sets', iconClass: 'fa-compact-disc' }} />) : null}
                 {tab === 'soundscapes' ? (pickingSoundscapeIcon ? (<>
                   <IconFilter query={iconPick!.query} />
                   <IconPickerGrid
@@ -720,8 +717,7 @@ export function MobileSoundscapeApp() {
                   help={help}
                 />) : null}
                 {tab === 'schedules' ? (<>
-                <div className="utility-setting-slider-stack" aria-label="Schedule">
-                  <OptionsSubsectionLabel>Schedule</OptionsSubsectionLabel>
+                <OptionsFixedSection heading="Schedule" iconClass="fa-clock">
                   {helpMode ? <SubsectionHelp paragraphs={helpFor('Schedule')!} /> : <ScheduleRows
                     schedule={schedule}
                     presets={presets}
@@ -729,20 +725,36 @@ export function MobileSoundscapeApp() {
                     currentPresetId={preferences.activePresetId}
                     onChange={setSchedule}
                   />}
-                </div>
+                </OptionsFixedSection>
                 </>) : null}
                 {tab === 'visualizer' && !helpMode ? <>
-                <div className="utility-setting-slider-stack" aria-label="Visualizer presets">
+                <OptionsFixedSection heading="Presets" iconClass="fa-star">
                   <PresetGrid kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} idPrefix="visualizer-preset" label="Visualizer presets" plural="a visualizer preset" />
                   <PresetIconPicker kind={VISUALIZER_PRESET_KIND} list={visualizerState.presets} onChange={setVisualizerPresets} pickKind="visualizer" query="" />
-                </div>
+                </OptionsFixedSection>
                 <AccordionGroup>
+                  <AccordionSection ariaLabel="Font" heading="Font" iconClass="fa-font">
+                    <OptionsSliderRows rows={[1]}>
+                      <CompactScrollbarSlider
+                        id="visualizer-font-size"
+                        min={VISUALIZER_FONT_SIZE.min}
+                        max={VISUALIZER_FONT_SIZE.max}
+                        step={VISUALIZER_FONT_SIZE.step}
+                        value={visualizerFontSize}
+                        trackLabel="size"
+                        ariaLabel="Visualizer text size"
+                        defaultValue={VISUALIZER_FONT_SIZE.default}
+                        formatValue={(value) => `${value}`}
+                        onCommit={(value) => setVisualizerFontSize(sanitizeVisualizerFontSize(value))}
+                      />
+                    </OptionsSliderRows>
+                  </AccordionSection>
                   <AccordionSection ariaLabel="Delay" heading="Delay" iconClass="fa-stopwatch">
                     {beatLoopPlayer ? <BeatLoopCalibration
                       loops={BEAT_LOOPS}
                       startLoop={beatLoopPlayer}
-                      fontFamily={PHONE_VISUALIZER_FONT.family}
-                      fontPerBox={PHONE_VISUALIZER_FONT.sizePx / PHONE_VISUALIZER_FONT.boxPx}
+                      fontFamily={visualizerFont.family}
+                      fontPerBox={visualizerFont.sizePx / visualizerFont.boxPx}
                       falls={{ edge: visualizer.edge, pane: visualizer.pane[look.mode] }}
                       delayMs={beatSettings.delayMsByDevice[PHONE_OUTPUT_DEVICE] ?? 0}
                       onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [PHONE_OUTPUT_DEVICE]: delayMs } }))}

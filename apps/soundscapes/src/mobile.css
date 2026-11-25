@@ -427,8 +427,7 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
 /* The dashboard's dock: what plays, the volumes, the pool filter while it is
    on, then the button row, a regular spacing apart, as an options stack
    spaces its rows. */
-.mobile-dashboard-dock,
-.mobile-dock-stack {
+.mobile-dashboard-dock {
   display:        flex;
   flex-direction: column;
   gap:            var(--spacing-regular);

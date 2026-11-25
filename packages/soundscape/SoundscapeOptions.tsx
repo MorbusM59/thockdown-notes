@@ -57,6 +57,7 @@ import { useGracedWheel } from '@thockdown/interaction/useGracedWheel'
 import { toDisplayLevel } from './musicSoundOptions'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 
 /**
  * Two taps on the same channel this close together are a double tap, which
@@ -457,7 +458,7 @@ function fromPosition(spec: ControlSpec, position: number): number {
 }
 
 interface ControlGroupsProps {
-  /** Leave out the group's own label: the host already names it (the desktop's Environment subsection). */
+  /** Leave out the group's own label: the host already names it (the Environment subsection, on both platforms). */
   unlabelled?: boolean
   help?: (heading: string) => readonly string[] | null
   idPrefix: string
@@ -526,7 +527,6 @@ export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & Pi
   return (
     <SoundscapeParts
       {...props}
-      arrangement="subsections"
       arrange={({ presets, environment, channels }) => (
         <div className="options-content sidebar-options-content" aria-label="Soundscapes">
           <div className="preset-section" data-options-search-hidden={isSearching ? '' : undefined}>
@@ -547,48 +547,41 @@ export function SoundscapeView({ filter, ...props }: SoundscapeOptionsProps & Pi
 }
 
 /**
- * The same controls in one column, each part under a divider, with no
- * collapsible subsections: the mobile app (apps/soundscapes/) shows these
- * controls as its whole interface, where a heading would have nothing to
- * collapse against.
+ * The same controls with the subsections ALWAYS OPEN (OptionsFixedSection):
+ * the mobile app (apps/soundscapes/) shows these controls as a whole tab,
+ * where a fold would have nothing to collapse against, in the desktop's
+ * section look.
  */
 export function SoundscapeControls(props: SoundscapeControlsProps) {
   return (
     <SoundscapeParts
       {...props}
-      arrangement="labelled"
-      arrange={({ presets, environment, channels, presetsLabel, channelsLabel }) => (
-        <div className="utility-setting-slider-stack" aria-label="Soundscape controls">
+      arrange={({ presets, environment, channels }) => (
+        <>
           {/* The dock for the soundscape that plays (SoundscapeDock) is the
               host's, below the page as on the desktop. */}
-          {presetsLabel}
-          {presets}
-          {environment}
-          {channelsLabel}
-          {channels}
-        </div>
+          <OptionsFixedSection heading="Presets" iconClass="fa-star">{presets}</OptionsFixedSection>
+          <OptionsFixedSection heading="Environment" iconClass="fa-torii-gate">{environment}</OptionsFixedSection>
+          <OptionsFixedSection heading="Channels" iconClass="fa-chart-simple">{channels}</OptionsFixedSection>
+        </>
       )}
     />
   )
 }
 
-/** What a host lays out: the three parts, and the labels the labelled arrangement puts above two of them. */
+/** What a host lays out, each under a heading of its own: the presets, the environment and the channels. */
 interface SoundscapePartNodes {
   presets: ReactNode
   environment: ReactNode
   channels: ReactNode
-  presetsLabel: ReactNode
-  channelsLabel: ReactNode
 }
 
 interface SoundscapePartsProps extends SoundscapeControlsProps {
-  /** `labelled`: one column, each part under its own divider (the mobile app). `subsections`: the host names the environment and the channels itself. */
-  arrangement: 'labelled' | 'subsections'
   arrange: (parts: SoundscapePartNodes) => ReactNode
 }
 
 /** The soundscape's controls and their state, laid out by the host (`arrange`). */
-function SoundscapeParts({ preferences, onChange, help, framePresets = (grid) => grid, presetReorder, arrangement, arrange }: SoundscapePartsProps) {
+function SoundscapeParts({ preferences, onChange, help, framePresets = (grid) => grid, presetReorder, arrange }: SoundscapePartsProps) {
   const channelSelectorRef = useRef<HTMLDivElement | null>(null)
   const channelHoldRef = useRef<{ pointerId: number; cancel: () => void } | null>(null)
   // A right press on a channel, until its release decides what it was: a
@@ -776,8 +769,6 @@ function SoundscapeParts({ preferences, onChange, help, framePresets = (grid) =>
   const layerName = rosterEntry ? `${KIND_LOOK[rosterEntry.kind].label} layer ${rosterEntry.number}` : ''
 
   return arrange({
-    presetsLabel: <OptionsSubsectionLabel>Presets</OptionsSubsectionLabel>,
-    channelsLabel: <OptionsSubsectionLabel>Channels</OptionsSubsectionLabel>,
     presets: (<>
         {presetsHelp !== null ? <SubsectionHelp paragraphs={presetsHelp} /> : (<>
         {/* One grid: the soundscapes in the listener's order, then the plus
@@ -865,7 +856,7 @@ function SoundscapeParts({ preferences, onChange, help, framePresets = (grid) =>
             name="Environment"
             onCommit={updateEnvironment}
             help={help}
-            unlabelled={arrangement === 'subsections'}
+            unlabelled
           />
         </div>
     </>),

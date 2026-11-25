@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { TextButton } from '@thockdown/interaction/TextButton'
 import { AccordionCount, AccordionDivider, AccordionGroup, AccordionSection } from '@thockdown/interaction/AccordionSection'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { songListTitleText, type MusicSet, type MusicSongEntry, type PlaylistSlot } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   groupMusicSetList, type MusicSetListGrouping,
@@ -13,7 +14,7 @@ import { SelectorRows } from '@thockdown/interaction/SelectorRows'
 import { IconPicker } from '@thockdown/interaction/iconPicker/IconPicker'
 import { closeIconPick } from '@thockdown/interaction/iconPicker/iconPick'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
-import { readMusicIndexing, subscribeMusicIndexing } from '@thockdown/visualizer/sound/musicIndexing'
+import { readMusicIndexing, subscribeMusicIndexing, type MusicProgress } from '@thockdown/visualizer/sound/musicIndexing'
 import { useSelectorReorder } from '@thockdown/interaction/useSelectorReorder'
 import { MUSIC_SET_DROP_NEW_ATTRIBUTE, MUSIC_SET_DROP_SLOT_ATTRIBUTE, readMusicLibrarySlot, selectMusicLibrarySet, subscribeMusicLibrarySlot } from './musicLibraryView'
 import { musicLibraryReads } from '@thockdown/visualizer/shared/musicLibraryReads'
@@ -157,11 +158,21 @@ export function MusicSetIconPicker({ query }: { query: string }) {
   )
 }
 
-export function MusicLibraryPanel({ grouping, filter, editsOnTap = false }: {
+/** Where the set selector stands: bare, as the desktop view's section selector, or under an always-open heading (the phone's tab). */
+type SelectorHeading = { heading: string; iconClass: string } | null
+
+function SelectorSection({ heading, children }: { heading: SelectorHeading; children: ReactNode }) {
+  return heading
+    ? <OptionsFixedSection heading={heading.heading} iconClass={heading.iconClass}>{children}</OptionsFixedSection>
+    : <div className="preset-section">{children}</div>
+}
+
+export function MusicLibraryPanel({ grouping, filter, editsOnTap = false, selectorHeading = null }: {
   grouping: MusicSetListGrouping
   filter: string
   /** A tap on a set's button opens it for editing, and the pool is left to another view (the phone's dashboard). */
   editsOnTap?: boolean
+  selectorHeading?: SelectorHeading
 }) {
   const set = useOpenMusicSet()
   // With no set yet (the phone starts with none) the selector is still
@@ -169,16 +180,16 @@ export function MusicLibraryPanel({ grouping, filter, editsOnTap = false }: {
   if (!set) {
     return (
       <div className="options-content sidebar-options-content" aria-label="Songs">
-        <div className="preset-section">
+        <SelectorSection heading={selectorHeading}>
           <SetSelector slot={null} editsOnTap={editsOnTap} />
-        </div>
+        </SelectorSection>
       </div>
     )
   }
-  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} editsOnTap={editsOnTap} />
+  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} editsOnTap={editsOnTap} selectorHeading={selectorHeading} />
 }
 
-function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; editsOnTap: boolean }) {
+function MusicLibrarySet({ set, grouping, filter, editsOnTap, selectorHeading }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; editsOnTap: boolean; selectorHeading: SelectorHeading }) {
   const { slot, name } = set
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
@@ -187,9 +198,9 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet;
 
   return (
     <div className="options-content sidebar-options-content" aria-label={`Songs in ${name}`}>
-      <div className="preset-section">
+      <SelectorSection heading={selectorHeading}>
         <SetSelector slot={slot} editsOnTap={editsOnTap} />
-      </div>
+      </SelectorSection>
       {/* Keyed on the set shown and the grouping, so a new list starts folded. */}
       <AccordionGroup key={`${shownSlot}:${grouping}`}>
         {groups.map((group) => (
@@ -261,10 +272,32 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap }: { set: MusicSet;
 
 /**
  * The Music Library's dock, below the sidebar where the colour picker docks:
- * while songs are being read in, a bar of how many (MusicIndexing); the two
+ * while a folder is added, a bar for each of its two phases, one under the
+ * other, scanning and then indexing (MusicIndexing); the two
  * groupings of the open set's songs; and last, as every dock ends, the open
  * set's row (MusicSetRow). `trailing` ends that row (the phone's help).
  */
+/** One phase of adding a folder; a phase not yet begun is an empty bar, so the second bar is there from the start and the layout does not jump. */
+function IndexingBar({ id, name, unit, progress }: { id: string; name: string; unit: string; progress: MusicProgress | null }) {
+  const done = progress?.done ?? 0
+  const total = progress?.total ?? 0
+  return (
+    <div className="options-slider-row options-music-indexing" role="group" aria-label={name}>
+      <CompactScrollbarSlider
+        id={id}
+        value={done}
+        min={0}
+        max={Math.max(1, total)}
+        step={1}
+        trackLabel={progress ? `${name} ${done} / ${total}` : name}
+        ariaLabel={unit}
+        readOnly
+        onCommit={() => {}}
+      />
+    </div>
+  )
+}
+
 export function MusicLibraryDock({ grouping, onGroupingChange, trailing }: {
   grouping: MusicSetListGrouping
   onGroupingChange: (grouping: MusicSetListGrouping) => void
@@ -274,21 +307,10 @@ export function MusicLibraryDock({ grouping, onGroupingChange, trailing }: {
   const indexing = useSyncExternalStore(subscribeMusicIndexing, readMusicIndexing)
   return (
     <div className="options-curve-rows options-music-set-list-dock">
-      {indexing ? (
-        <div className="options-slider-row options-music-indexing" role="group" aria-label="Reading songs">
-          <CompactScrollbarSlider
-            id="music-library-indexing"
-            value={indexing.done}
-            min={0}
-            max={Math.max(1, indexing.total)}
-            step={1}
-            trackLabel={`${indexing.done} / ${indexing.total}`}
-            ariaLabel="Songs read"
-            readOnly
-            onCommit={() => {}}
-          />
-        </div>
-      ) : null}
+      {indexing ? (<>
+        <IndexingBar id="music-library-scanning" name="Scanning" unit="Folders listed" progress={indexing.scanning} />
+        <IndexingBar id="music-library-indexing" name="Indexing" unit="Songs read" progress={indexing.indexing} />
+      </>) : null}
       <div className="options-curve-row options-music-set-list-dock-row" role="radiogroup" aria-label="Song grouping">
         {(['folder', 'artist'] as const).map((option) => (
           <TextButton

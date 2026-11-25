@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 
 import { DockEntryRow } from '@thockdown/interaction/DockEntryRow'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
@@ -109,9 +109,11 @@ export function PresetIconPicker<S>({ kind, list, onChange, pickKind, query }: P
  * The active entry's dock. `resetTo` is what the reset writes into it (as an
  * edit like any other).
  */
-export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo }: PresetListHostProps<S> & {
+export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo, trailing }: PresetListHostProps<S> & {
   pickKind: PresetPickKind
   resetTo: S
+  /** A cell after the dock's own actions (the phone's help button), or nothing. */
+  trailing?: ReactNode
 }) {
   const pick = useSyncExternalStore(subscribeIconPick, readIconPick)
   const preset = activePreset(kind, list)
@@ -172,6 +174,7 @@ export function PresetDock<S>({ kind, list, onChange, pickKind, resetTo }: Prese
         >
           <span className={`fa-solid ${factory ? 'fa-rotate-left' : 'fa-trash-can'}`} aria-hidden="true" />
         </button>
+        {trailing}
       </DockEntryRow>
     </div>
   )

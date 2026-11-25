@@ -8,7 +8,7 @@
  * is a button of its own here.
  */
 import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { OptionsSubsectionLabel } from '@thockdown/interaction/OptionsSubsectionLabel'
+import { OptionsFixedSection } from '@thockdown/interaction/OptionsFixedSection'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
 import { armHold, HOLD_CONFIRM_MS } from '@thockdown/interaction/holdTiming'
 import { SetMark } from '@thockdown/visualizer/library/MusicSetRow'
@@ -28,8 +28,7 @@ export function DashboardSets() {
   const active = nowPlaying.pool?.active ?? []
   if (nowPlaying.musicSets.length === 0) return null
   return (
-    <div className="utility-setting-slider-stack" aria-label="Music sets">
-      <OptionsSubsectionLabel>Music</OptionsSubsectionLabel>
+    <OptionsFixedSection heading="Music" iconClass="fa-compact-disc">
       <div className="options-loadout-grid" role="group" aria-label="Music sets">
         {nowPlaying.musicSets.map((set) => {
           const isActive = active.includes(set.slot)
@@ -52,15 +51,14 @@ export function DashboardSets() {
           )
         })}
       </div>
-    </div>
+    </OptionsFixedSection>
   )
 }
 
 /** The soundscapes: a tap picks the one the play button starts, and crossfades into it while a soundscape is heard. */
 export function DashboardSoundscapes({ preferences, onPick }: { preferences: SoundscapePreferences; onPick: (preset: SoundscapePreset) => void }) {
   return (
-    <div className="utility-setting-slider-stack" aria-label="Soundscapes">
-      <OptionsSubsectionLabel>Soundscape</OptionsSubsectionLabel>
+    <OptionsFixedSection heading="Soundscape" iconClass="fa-podcast">
       <div className="options-loadout-grid" role="group" aria-label="Soundscapes">
         {orderedSoundscapePresets(preferences).map((preset) => {
           const isActive = preferences.activePresetId === preset.id
@@ -78,7 +76,7 @@ export function DashboardSoundscapes({ preferences, onPick }: { preferences: Sou
           )
         })}
       </div>
-    </div>
+    </OptionsFixedSection>
   )
 }
 
