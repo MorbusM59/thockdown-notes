@@ -159,7 +159,9 @@ async function playSong(songId: number): Promise<void> {
   if (!plugin || stageJson === null) return
   setMusicChannel(true)
   setPlaying(true)
-  await plugin.play({ stage: stageJson })
+  // choose alone starts playback natively (MusicSession.choose), silent until
+  // the chosen song is heard: a play first would let the paused song be heard.
+  await plugin.setStage({ stage: stageJson })
   await plugin.choose({ songId })
 }
 

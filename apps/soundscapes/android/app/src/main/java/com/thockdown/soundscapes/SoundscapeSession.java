@@ -140,7 +140,7 @@ final class SoundscapeSession {
      * SOUNDSCAPE_SWITCH_SEC (SoundscapeEngine.ts), which the page's own
      * changes of soundscape arrive with.
      */
-    private static final double SWITCH_FADE_SEC = 2;
+    static final double SWITCH_FADE_SEC = 2;
     /** How long the hand-over takes when the listener stops regular mode: they asked for the change, so it comes promptly. */
     static final double HANDOVER_FADE_SEC = 10;
     /** A fade back from an ending that was interrupted. */
