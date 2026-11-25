@@ -326,10 +326,17 @@ final class MusicSession {
             if (current != null) current.wake();
         });
         output.setVolume(volume, VOLUME_TIME_CONSTANT_SEC);
-        renderer = new MusicRenderer(context, output, catalog(), rotation(), new MusicRenderer.Listener() {
+        // A renderer's reports count only while it is the current one: one
+        // being closed can still be mid-callback, blocked on this session's
+        // lock while close() waits for its thread, and would otherwise report
+        // its song over the new renderer's, or close the new renderer on its
+        // own failure.
+        final MusicRenderer[] self = new MusicRenderer[1];
+        renderer = self[0] = new MusicRenderer(context, output, catalog(), rotation(), new MusicRenderer.Listener() {
             @Override
             public void onHeard(Integer songId, double seconds, long frame) {
                 synchronized (MusicSession.this) {
+                    if (renderer != self[0]) return;
                     // A new song: the notification names it.
                     if (!java.util.Objects.equals(songId, heardId)) SoundscapePlaybackService.refreshIfRunning();
                     heardId = songId;
@@ -343,6 +350,7 @@ final class MusicSession {
             public void onSpectrum(String batchesJson) {
                 Listener current;
                 synchronized (MusicSession.this) {
+                    if (renderer != self[0]) return;
                     current = listener;
                 }
                 if (current != null) current.onSpectrum(batchesJson);
@@ -359,6 +367,7 @@ final class MusicSession {
             public void onFailure(String message) {
                 Listener current;
                 synchronized (MusicSession.this) {
+                    if (renderer != self[0]) return;
                     lastFailure = message;
                     close();
                     // The page hears that nothing plays: its play button
