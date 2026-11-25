@@ -47,9 +47,19 @@
  * milliseconds, far more over Bluetooth), so every tracker is answered for the
  * heard moment rather than the reported one.
  *
+ * THE SOUNDSCAPE feeds the same trackers (`soundscapeSignals.ts`): each of
+ * its hits heard since the last frame is a tracker instance too (a drip
+ * the tick, a drop the pierce, a chime the thump), with its own response,
+ * already masked by the music, and so not scaled by the music's loudness
+ * gain. With no music playing the soundscape alone keeps the trackers
+ * running, and the analysis is left idle.
+ *
+ * Each element's fall is timed on the frame clock (performance time), not
+ * the music's: the soundscape has no media time, and a seek is not a fall.
+ *
  * Runs only while there is a subscriber that needs it (a mix, a clock or the
  * semitone row; a tempo reader alone does not, `analysisReaderCount`), the
- * music is playing and the window is visible: the frame loop is started by the play-state and visibility
+ * music is playing or the soundscape is reporting, and the window is visible: the frame loop is started by the play-state and visibility
  * events and stops itself otherwise. A subscriber is told of every change
  * of at least `MIN_STEP` (finer than a subscriber's own output resolution,
  * which decides what is worth writing), and of 0 when the loop stops.
@@ -64,6 +74,7 @@ import { musicListening, subscribeMusicPlaying } from './musicListening'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
 import { loudnessGain } from './peakWindow'
 import { flashLevelAt, flashPhaseAt, FLASH_BEATS_REPEAT } from '../shared/flashing'
+import { HIT_TRACKER, soundscapeHitResponse, soundscapeSignalsActive, soundscapeSignalWeights, subscribeSoundscapeSignals, takeSoundscapeHits } from './soundscapeSignals'
 
 /** A listener this far from where its clock put it has jumped (a seek, a stall), and the analysis starts over. */
 const RESYNC_SEC = 0.75
@@ -122,7 +133,7 @@ type BeatListener = (response: number) => void
 interface Band {
   channel: MusicMixChannel
   listener: BeatListener
-  /** The last peak of the response and the listener time it was reached at, for the fall (`pulseCurve`). */
+  /** The last peak of the response and the frame time it was reached at, for the fall (`pulseCurve`). */
   peak: number
   peakTime: number
   published: number
@@ -204,11 +215,18 @@ function analysisReaderCount(): number {
 }
 let frame: number | null = null
 let unsubscribePlaying: (() => void) | null = null
+let unsubscribeSignals: (() => void) | null = null
 
 /** The loudness gain the last frame read (`tick`). */
 let gain = 1
 /** How far below full scale a window's peak may be and still give a full response (`loudnessGain`); the reader's Response setting. */
 let headroomDb = 5
+/** The music's peak around the listener (the analysis's window, linear, full scale), which a soundscape hit is masked by; 0 with no music. */
+let musicPeak = 0
+/** Each tracker's response to the soundscape's hits since the last frame, in `trackerRaw`'s order. */
+const soundscapeRaw = new Float64Array(VISUALIZER_TRACKERS.length)
+/** A hit this much older than the frame that takes it was heard while nothing ran, and is not shown late. */
+const HIT_LATE_SEC = 0.25
 
 /** The analysis worker, created with the first subscriber and ended with the last. */
 let worker: Worker | null = null
@@ -331,7 +349,10 @@ function receive(answer: AnalysisAnswer): void {
   }
   // Until the decoding has reached the listener there is no peak to read:
   // the last gain holds rather than reading as silence.
-  if (!Number.isNaN(answer.peak)) gain = loudnessGain(answer.peak, headroomDb)
+  if (!Number.isNaN(answer.peak)) {
+    gain = loudnessGain(answer.peak, headroomDb)
+    musicPeak = answer.peak
+  }
   for (const line of answer.traceLines) appendBeatTrace(line)
   if (semitoneSubscribers.size > 0) {
     for (const subscriber of semitoneSubscribers) {
@@ -473,8 +494,14 @@ function pulse(subscriber: Clock, listenerTime: number): number {
 }
 
 /** The tempo's frame: the time heard and the map's beat `TEMPO_GLIDE_SEC` ahead of it (NaN while there is none), glided onto once for every reader. */
-function countTempo(listenerTime: number): void {
+function countTempo(listenerTime: number, now: number): void {
   if (counters.size === 0) return
+  // With no music there is no media time and no beat: the follower runs on the frame clock, as `idleTick` does.
+  if (Number.isNaN(listenerTime)) {
+    const idle = tempo(now, NaN, NaN)
+    for (const counter of counters) counter.listener(idle.beats, idle.beatsPerSec, idle.count)
+    return
+  }
   const at = listenerTime + TEMPO_GLIDE_SEC
   const ahead = Number.isNaN(aheadPhase) || !(aheadPeriod > 0) ? NaN : aheadPhase + (at - aheadTime) / aheadPeriod
   const { beats, beatsPerSec, count } = tempo(listenerTime, ahead - Math.floor(ahead), aheadPeriod)
@@ -514,13 +541,45 @@ export function heardLagSec(): number {
 
 const listenerClock = new SmoothClock()
 
+/** The soundscape's hits heard by `now`, each tracker's strongest response into `soundscapeRaw`. */
+function takeSoundscape(now: number): void {
+  soundscapeRaw.fill(0)
+  const hits = takeSoundscapeHits(now)
+  if (hits.length === 0) return
+  const weights = soundscapeSignalWeights()
+  const reads = readsOf()
+  const peak = musicListening().isPlaying ? musicPeak : 0
+  for (const hit of hits) {
+    if (now - hit.at > HIT_LATE_SEC) continue
+    const name = HIT_TRACKER[hit.kind]
+    const index = TRACKER_INDEX[name]
+    if ((reads & (1 << index)) === 0) continue
+    soundscapeRaw[index] = Math.max(soundscapeRaw[index], soundscapeHitResponse(hit, peak, weights, trackers[name].contrast))
+  }
+}
+
+/** Whether there is anything to run for: music playing, or the soundscape reporting. */
+function heard(now: number): boolean {
+  return musicListening().isPlaying || soundscapeSignalsActive(now)
+}
+
 function tick(frameTimeMs: number): void {
   frame = null
-  if (!musicListening().isPlaying || document.hidden || analysisReaderCount() === 0) {
+  const now = frameTimeMs / 1000
+  if (!heard(now) || document.hidden || analysisReaderCount() === 0) {
     stop()
     return
   }
-  const now = frameTimeMs / 1000
+  takeSoundscape(now)
+  if (!musicListening().isPlaying) {
+    // The soundscape alone: its hits, the 60 BPM tempo, no beat for a clock.
+    const [thump, pierce, ticks] = soundscapeRaw
+    for (const band of bands) publish(band, respond(band, mixResponse(band.channel.mix, thump, pierce, ticks), now, 1))
+    for (const subscriber of clocks) publish(subscriber, pulse(subscriber, NaN))
+    countTempo(NaN, now)
+    frame = requestAnimationFrame(tick)
+    return
+  }
   const listenerTime = listenerClock.read(musicListening().currentTime, now)
   // Where the listener would be had nothing jumped: carried on by the
   // clock from the last frame, or where it was when the music stopped.
@@ -536,14 +595,21 @@ function tick(frameTimeMs: number): void {
   trackerRaw.set(pendingRaw)
   pendingRaw.fill(0)
   const [thump, pierce, ticks] = trackerRaw
-  for (const band of bands) publish(band, respond(band, mixResponse(band.channel.mix, thump, pierce, ticks), heardTime, gain))
+  // The soundscape's response is already its own level against the music's (`maskingShare`), so the music's loudness
+  // gain is divided back out of it: what is shown of it is exactly its response.
+  const [soundThump, soundPierce, soundTicks] = soundscapeRaw
+  const unscale = 1 / Math.max(gain, 1e-3)
+  for (const band of bands) {
+    const raw = Math.max(mixResponse(band.channel.mix, thump, pierce, ticks), mixResponse(band.channel.mix, soundThump, soundPierce, soundTicks) * unscale)
+    publish(band, respond(band, raw, now, gain))
+  }
   for (const subscriber of clocks) {
     const response = pulse(subscriber, heardTime)
     // A dip as DRAWN: the response jumping up, which is a beat starting on screen.
     if (response - subscriber.published > 0.3) drawnDips++
     publish(subscriber, response)
   }
-  countTempo(heardTime)
+  countTempo(heardTime, now)
   framesSinceTrace++
   traceCaret(listenerTime, heardTime)
   // Asked one frame AHEAD: the answer is back before the next frame, which
@@ -590,7 +656,7 @@ function stopIdleTempo(): void {
 }
 
 function start(): void {
-  if (frame === null && analysisReaderCount() > 0 && musicListening().isPlaying && !document.hidden) {
+  if (frame === null && analysisReaderCount() > 0 && heard(performance.now() / 1000) && !document.hidden) {
     stopIdleTempo()
     frame = requestAnimationFrame(tick)
     return
@@ -608,6 +674,8 @@ function stop(): void {
   // An answer to the last ask before the stop describes a moment that has passed.
   pendingRaw.fill(0)
   trackerRaw.fill(0)
+  soundscapeRaw.fill(0)
+  musicPeak = 0
   for (const band of bands) publish(band, 0)
   for (const subscriber of clocks) {
     publish(subscriber, 0)
@@ -643,7 +711,12 @@ function added(): void {
   if ((readsOf() & ~analysedTrackers) !== 0 || (needsDrums() && !analysedDrums)) stale = true
   if (analysisReaderCount() > 0) ensureWorker()
   if (subscriberCount() === 1) {
-    unsubscribePlaying = subscribeMusicPlaying((playing) => (playing ? start() : stop()))
+    // The music stopping ends its frame; the soundscape, if it is still reporting, starts one of its own.
+    unsubscribePlaying = subscribeMusicPlaying((playing) => {
+      if (!playing) stop()
+      start()
+    })
+    unsubscribeSignals = subscribeSoundscapeSignals(start)
     document.addEventListener('visibilitychange', onVisibility)
   }
   start()
@@ -672,6 +745,8 @@ function removed(): void {
   stopIdleTempo()
   unsubscribePlaying?.()
   unsubscribePlaying = null
+  unsubscribeSignals?.()
+  unsubscribeSignals = null
   document.removeEventListener('visibilitychange', onVisibility)
 }
 

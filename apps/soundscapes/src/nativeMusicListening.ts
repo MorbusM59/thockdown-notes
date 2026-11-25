@@ -16,16 +16,16 @@
  *   playhead, while a spectrum is started and the page is shown; each frame
  *   is stamped with the output frame it describes, and the one drawn is the
  *   newest at or before the playhead. The SOUNDSCAPE's, when the spectrum
- *   takes it too (packages/visualizer/visualizer/spectrumMix.ts), is computed
- *   the same way by the soundscape's renderer (soundscapeRenderer.ts), stamped
- *   with that output's own frames, and each band's power is added to the
- *   music's at the weights the two are heard at.
+ *   takes it too (packages/visualizer/visualizer/spectrumMix.ts), comes from
+ *   the soundscape's visuals (nativeSoundscapeVisuals.ts), stamped with that
+ *   output's own frames, and each band's power is added to the music's at
+ *   the weights the two are heard at.
  */
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { MusicListening, SpectrumSource } from '@thockdown/visualizer/sound/musicListening'
 import { levelDb } from '@thockdown/visualizer/visualizer/spectrumFrames'
 import { addBandLevels, spectrumIncludesSoundscape, spectrumMixWeights } from '@thockdown/visualizer/visualizer/spectrumMix'
-import type { NativeSoundscapePlugin, SessionState } from './backgroundAudioHost'
+import type { NativeSoundscapeVisuals, SpectrumBatch } from './nativeSoundscapeVisuals'
 import type { NativeMusicPlugin } from './nativeMusic'
 
 /** Must match MusicFileServer.java's PATH. */
@@ -51,13 +51,6 @@ interface Heard {
   at: number
 }
 
-interface SpectrumBatch {
-  from: number
-  first: number
-  hop: number
-  l: string
-}
-
 function decodeBase64(text: string): Uint8Array {
   const binary = atob(text)
   const bytes = new Uint8Array(binary.length)
@@ -67,28 +60,13 @@ function decodeBase64(text: string): Uint8Array {
 
 /**
  * What the spectrum needs to show the soundscape beside the music: the
- * soundscape session (its spectrum and whether it is heard) and the gains
- * the page has each heard at (its volume sliders and channel switches).
+ * soundscape's visuals (nativeSoundscapeVisuals.ts: its spectrum, clock and
+ * the gain it is heard at) and the gain the music is heard at.
  */
 export interface SpectrumMixPort {
-  soundscape: Pick<NativeSoundscapePlugin, 'setSpectrum' | 'getState' | 'addListener'>
+  soundscape: Pick<NativeSoundscapeVisuals, 'requestSpectrum' | 'frameAt' | 'heardGain'>
   musicGain(): number
-  soundscapeGain(): number
 }
-
-/** The gain the page has the soundscape at (its volume slider and channel switch), set by MobileSoundscapeApp. */
-let soundscapeVolume = 0
-
-export function setSoundscapeSpectrumVolume(gain: number): void {
-  soundscapeVolume = gain
-}
-
-export function soundscapeSpectrumVolume(): number {
-  return soundscapeVolume
-}
-
-/** Without a port the spectrum is the music's alone, at full scale. */
-const MUSIC_ALONE = { musicGain: () => 1, soundscapeGain: () => 0 }
 
 export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: SongLookup, mix: SpectrumMixPort | null = null): MusicListening {
   let heard: Heard = { songId: null, seconds: 0, frame: 0, sampleRate: 48000, playing: false, at: 0 }
@@ -124,7 +102,7 @@ export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: So
       if (duration > 0) void plugin.seek({ seconds: duration * Math.max(0, Math.min(1, fraction)) })
     },
     outputLatencySec: () => 0,
-    createSpectrum: (edges) => new NativeSpectrum(plugin, edges.length - 1, playheadFrame, () => heard.playing, () => heard.sampleRate, mix),
+    createSpectrum: (edges) => new NativeSpectrum(plugin, edges.length - 1, playheadFrame, () => heard.playing, mix),
   }
 }
 
@@ -192,23 +170,11 @@ class FrameQueue {
   }
 }
 
-/** How far the soundscape's playhead is run on past its last report: the renderer reports on every chunk while it plays. */
-const SOUNDSCAPE_RUN_ON_SEC = 1
-
-/** Whether the soundscape session is heard: the listener's choice while it plays, or the schedule's run. */
-function soundscapeHeard(state: SessionState): boolean {
-  return state.source === 'regular' ? state.regular === 'playing' : state.source === 'schedule'
-}
-
 class NativeSpectrum implements SpectrumSource {
   private readonly music: FrameQueue
   private readonly soundscape: FrameQueue
   private listeners: Array<Promise<PluginListenerHandle>> = []
   private readonly onVisibility = () => this.ask()
-  /** The soundscape output's playhead as last reported, when (performance clock, seconds), and whether its session is heard. */
-  private soundscapePlayhead = 0
-  private soundscapeReportedAt = -Infinity
-  private soundscapePlaying = false
   /** Whether the soundscape's spectrum was last asked for, so a change of the setting asks again. */
   private soundscapeAsked = false
 
@@ -217,7 +183,6 @@ class NativeSpectrum implements SpectrumSource {
     private readonly bands: number,
     private readonly playheadFrame: (nowSec: number) => number,
     private readonly musicPlaying: () => boolean,
-    private readonly sampleRate: () => number,
     private readonly mix: SpectrumMixPort | null,
   ) {
     this.music = new FrameQueue(bands)
@@ -228,16 +193,6 @@ class NativeSpectrum implements SpectrumSource {
     if (this.listeners.length > 0) return
     this.listeners.push(this.plugin.addListener('spectrum', ({ batches }) =>
       this.music.receive(JSON.parse(batches) as SpectrumBatch[], this.playheadFrame(performance.now() / 1000))))
-    const session = this.mix?.soundscape
-    if (session) {
-      this.listeners.push(session.addListener('spectrum', ({ batches, playhead }) => {
-        this.soundscapePlayhead = playhead
-        this.soundscapeReportedAt = performance.now() / 1000
-        this.soundscape.receive(JSON.parse(batches) as SpectrumBatch[], playhead)
-      }))
-      this.listeners.push(session.addListener('sessionChanged', (state) => { this.soundscapePlaying = soundscapeHeard(state) }))
-      void session.getState().then((state) => { this.soundscapePlaying = soundscapeHeard(state) })
-    }
     document.addEventListener('visibilitychange', this.onVisibility)
     this.ask()
   }
@@ -248,7 +203,7 @@ class NativeSpectrum implements SpectrumSource {
     this.listeners = []
     document.removeEventListener('visibilitychange', this.onVisibility)
     void this.plugin.setSpectrum({ bands: 0 })
-    if (this.soundscapeAsked) void this.mix?.soundscape.setSpectrum({ bands: 0 })
+    if (this.soundscapeAsked) this.mix?.soundscape.requestSpectrum(0, null)
     this.soundscapeAsked = false
     this.music.clear()
     this.soundscape.clear()
@@ -263,7 +218,7 @@ class NativeSpectrum implements SpectrumSource {
     if (this.listeners.length > 0 && this.soundscapeAsked !== this.wantsSoundscape()) this.askSoundscape()
     const weights = this.weights()
     const music = weights.music > 0 ? this.music.at(this.playheadFrame(nowSec)) : null
-    const soundscape = weights.soundscape > 0 ? this.soundscape.at(this.soundscapeFrame(nowSec)) : null
+    const soundscape = weights.soundscape > 0 && this.mix ? this.soundscape.at(this.mix.soundscape.frameAt(nowSec)) : null
     if (!soundscape) {
       if (!music) {
         out.fill(-Infinity)
@@ -279,24 +234,15 @@ class NativeSpectrum implements SpectrumSource {
   }
 
   private weights() {
-    const mix = this.mix ?? MUSIC_ALONE
-    return spectrumMixWeights(
-      this.musicPlaying() ? mix.musicGain() : 0,
-      this.mix && this.soundscapePlaying ? mix.soundscapeGain() : 0,
-    )
-  }
-
-  /** The soundscape output's frame at `nowSec`: its last report run on by the clock, for at most `SOUNDSCAPE_RUN_ON_SEC`. */
-  private soundscapeFrame(nowSec: number): number {
-    const since = Math.min(SOUNDSCAPE_RUN_ON_SEC, Math.max(0, nowSec - this.soundscapeReportedAt))
-    return this.soundscapePlayhead + since * this.sampleRate()
+    if (!this.mix) return spectrumMixWeights(this.musicPlaying() ? 1 : 0, 0)
+    return spectrumMixWeights(this.musicPlaying() ? this.mix.musicGain() : 0, this.mix.soundscape.heardGain())
   }
 
   private wantsSoundscape(): boolean {
-    return this.mix !== null && spectrumIncludesSoundscape() && !document.hidden
+    return this.mix !== null && spectrumIncludesSoundscape()
   }
 
-  /** The renderers compute only while the page is shown: a hidden page would queue frames it never draws. The soundscape's only while the spectrum takes it. */
+  /** The music's renderer computes only while the page is shown: a hidden page would queue frames it never draws (the soundscape's visuals hold the same rule). */
   private ask(): void {
     void this.plugin.setSpectrum({ bands: document.hidden ? 0 : this.bands })
     this.askSoundscape()
@@ -305,7 +251,7 @@ class NativeSpectrum implements SpectrumSource {
   private askSoundscape(): void {
     const soundscape = this.wantsSoundscape()
     if (soundscape === this.soundscapeAsked) return
-    void this.mix?.soundscape.setSpectrum({ bands: soundscape ? this.bands : 0 })
+    this.mix?.soundscape.requestSpectrum(soundscape ? this.bands : 0, soundscape ? (batches, playhead) => this.soundscape.receive(batches, playhead) : null)
     if (!soundscape) this.soundscape.clear()
     this.soundscapeAsked = soundscape
   }

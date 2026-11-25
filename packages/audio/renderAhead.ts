@@ -118,6 +118,19 @@ export interface RenderedChunk {
   startFrame: number;
   left: Float32Array;
   right: Float32Array;
+  /**
+   * What the voices reported of this chunk (`RenderVoice.takeSignals`), each
+   * at its absolute frame; absent when none did. A chunk re-sent after a
+   * rewind carries them again, so a reader replaces what it held from the
+   * chunk's start on, as the output does with the audio.
+   */
+  signals?: RenderSignal[];
+}
+
+/** Something a voice reports about what it rendered (the soundscape's events, for the visualizer), at an absolute frame. */
+export interface RenderSignal {
+  frame: number;
+  [key: string]: unknown;
 }
 
 /**
@@ -139,6 +152,8 @@ export interface RenderVoice<C> {
   readonly ready?: boolean;
   /** One RENDER_CHUNK_FRAMES chunk into `left`/`right` (overwritten). */
   render(left: Float32Array, right: Float32Array): void;
+  /** What the last `render` reported, `offset` frames into its chunk; optional, and empty when nothing did. */
+  takeSignals?(): Array<{ offset: number; [key: string]: unknown }>;
   /** The whole state at this chunk, room requests included (see THE REWIND above). */
   snapshot(): unknown;
   /** Return to a `snapshot`, which stays usable. */
@@ -152,8 +167,8 @@ export interface RenderVoice<C> {
 interface AudioSource {
   /** The next chunk can be rendered now. */
   readonly ready: boolean;
-  /** The chunk from absolute frame `start` into `left`/`right`. */
-  read(start: number, left: Float32Array, right: Float32Array): void;
+  /** The chunk from absolute frame `start` into `left`/`right`, adding what its voices report to `signals`. */
+  read(start: number, left: Float32Array, right: Float32Array, signals: RenderSignal[]): void;
   /** Go back to `frame` (on the grid): render from there as from there the first time, forgetting what came after. */
   rewind(frame: number): void;
   /** Nothing will be rewound to before `frame`. */
@@ -178,7 +193,7 @@ class VoiceSource<C> implements AudioSource {
     return this.voice.ready ?? true;
   }
 
-  read(start: number, left: Float32Array, right: Float32Array): void {
+  read(start: number, left: Float32Array, right: Float32Array, signals: RenderSignal[]): void {
     if (this.next !== null && start !== this.next) {
       throw new Error(`A voice at frame ${this.next} was asked for frame ${start}`);
     }
@@ -186,6 +201,8 @@ class VoiceSource<C> implements AudioSource {
       this.checkpoints.set(start, this.voice.snapshot());
     }
     this.voice.render(left, right);
+    const taken = this.voice.takeSignals?.();
+    if (taken) for (const { offset, ...signal } of taken) signals.push({ ...signal, frame: start + offset });
     this.next = start + RENDER_CHUNK_FRAMES;
   }
 
@@ -225,12 +242,12 @@ class BlendSource<C> implements AudioSource {
     return frame >= this.start + this.frames;
   }
 
-  read(start: number, left: Float32Array, right: Float32Array): void {
-    this.to.read(start, left, right);
+  read(start: number, left: Float32Array, right: Float32Array, signals: RenderSignal[]): void {
+    this.to.read(start, left, right, signals);
     if (this.done(start)) return;
     const oldLeft = new Float32Array(left.length);
     const oldRight = new Float32Array(right.length);
-    this.from.read(start, oldLeft, oldRight);
+    this.from.read(start, oldLeft, oldRight, signals);
     for (let index = 0; index < left.length; index += 1) {
       // Equal-power: the two soundscapes are uncorrelated.
       const t = Math.min(1, Math.max(0, (start + index - this.start + 1) / this.frames));
@@ -522,7 +539,8 @@ export class RenderAheadEngine<C> {
     const start = this.writeFrame;
     const left = new Float32Array(RENDER_CHUNK_FRAMES);
     const right = new Float32Array(RENDER_CHUNK_FRAMES);
-    this.source.read(start, left, right);
+    const signals: RenderSignal[] = [];
+    this.source.read(start, left, right, signals);
 
     const size = this.historyLeft.length;
     for (let index = 0; index < RENDER_CHUNK_FRAMES; index += 1) {
@@ -541,6 +559,8 @@ export class RenderAheadEngine<C> {
     if (this.fade && start + RENDER_CHUNK_FRAMES >= this.fade.from + this.fade.frames) this.fade = null;
     this.writeFrame += RENDER_CHUNK_FRAMES;
     this.sentEnd = Math.max(this.sentEnd, this.writeFrame);
-    this.send({ type: 'chunk', startFrame: start, left, right }, [left.buffer, right.buffer]);
+    const chunk: RenderedChunk = { type: 'chunk', startFrame: start, left, right };
+    if (signals.length > 0) chunk.signals = signals;
+    this.send(chunk, [left.buffer, right.buffer]);
   }
 }

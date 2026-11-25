@@ -37,10 +37,10 @@ final class SoundscapeRenderer {
         void onFailure(String message);
     }
 
-    /** Where the visualizer's spectrum of the soundscape goes (`setSpectrum`). */
-    interface SpectrumSink {
-        /** Frames computed from chunks just rendered (soundscapeRenderer.ts's batches, as a JSON array), and the output's playhead as they arrive. */
-        void onSpectrum(String batchesJson, long playheadFrame);
+    /** Where the visualizer's view of the soundscape goes (`setVisuals`). */
+    interface VisualsSink {
+        /** What was computed from chunks just rendered (soundscapeRenderer.ts's soundscapeVisualsTake, as JSON), the output's playhead as it arrives, and its sample rate. */
+        void onVisuals(String visualsJson, long playheadFrame, int sampleRate);
     }
 
     /** Chunks per call: about half a second at 48 kHz, well inside the isolate's return limit. */
@@ -56,10 +56,11 @@ final class SoundscapeRenderer {
     /** Settings changes not yet applied, in order: a configuration and, for a transition, its length (0 for a plain configure). */
     private final ConcurrentLinkedQueue<Object[]> pending = new ConcurrentLinkedQueue<>();
     private volatile boolean running = true;
-    /** The visualizer's spectrum: its bands (0 for none), where it goes, and whether that changed since the renderer last looked. */
+    /** The visualizer's view: the spectrum's bands (0 for none), whether the signals are passed on, where both go, and whether that changed since the renderer last looked. */
     private volatile int spectrumBands = 0;
-    private volatile SpectrumSink spectrumSink = null;
-    private volatile boolean spectrumChanged = false;
+    private volatile boolean signals = false;
+    private volatile VisualsSink visualsSink = null;
+    private volatile boolean visualsChanged = false;
     private boolean woken = false;
     /** The configuration in force; only the renderer's thread reads or writes it. */
     private String applied = null;
@@ -92,11 +93,12 @@ final class SoundscapeRenderer {
         wake();
     }
 
-    /** Compute the spectrum of what is rendered in `bands` log bands and hand it to `sink`, or stop (0). */
-    void setSpectrum(int bands, SpectrumSink sink) {
-        spectrumSink = sink;
+    /** Compute the spectrum of what is rendered in `bands` log bands (0 for none) and pass on its signals (or not), handing both to `sink`. */
+    void setVisuals(int bands, boolean withSignals, VisualsSink sink) {
+        visualsSink = sink;
         spectrumBands = bands;
-        spectrumChanged = true;
+        signals = withSignals;
+        visualsChanged = true;
         wake();
     }
 
@@ -146,11 +148,11 @@ final class SoundscapeRenderer {
                         ? "soundscapeTransition(" + JSONObject.quote(configuration) + ", " + seconds + ")"
                         : "soundscapeConfigure(" + JSONObject.quote(configuration) + ")").get();
                 }
-                if (spectrumChanged) {
-                    spectrumChanged = false;
+                if (visualsChanged) {
+                    visualsChanged = false;
                     // The playhead first, so what is handed out again starts from now.
                     isolate.evaluateJavaScriptAsync("soundscapeStep(" + output.playheadFrame() + ", 0)").get();
-                    isolate.evaluateJavaScriptAsync("soundscapeSpectrum(" + spectrumBands + ", " + output.sampleRate + ")").get();
+                    isolate.evaluateJavaScriptAsync("soundscapeVisuals(" + spectrumBands + ", " + (signals ? 1 : 0) + ", " + output.sampleRate + ")").get();
                 }
                 String result = isolate.evaluateJavaScriptAsync(
                     "soundscapeStep(" + output.playheadFrame() + ", " + MAX_CHUNKS_PER_STEP + ")").get();
@@ -159,10 +161,10 @@ final class SoundscapeRenderer {
                     JSONObject chunk = chunks.getJSONObject(index);
                     output.write(chunk.getLong("s"), SharedSandbox.decodeHalfScale(chunk.getString("d")));
                 }
-                if (chunks.length() > 0 && spectrumBands > 0) {
-                    String batches = isolate.evaluateJavaScriptAsync("soundscapeSpectrumTake()").get();
-                    SpectrumSink sink = spectrumSink;
-                    if (sink != null && !"[]".equals(batches)) sink.onSpectrum(batches, output.playheadFrame());
+                if (chunks.length() > 0 && (spectrumBands > 0 || signals)) {
+                    String visuals = isolate.evaluateJavaScriptAsync("soundscapeVisualsTake()").get();
+                    VisualsSink sink = visualsSink;
+                    if (sink != null) sink.onVisuals(visuals, output.playheadFrame(), output.sampleRate);
                 }
                 if (chunks.length() > 0) continue;
                 synchronized (signal) {

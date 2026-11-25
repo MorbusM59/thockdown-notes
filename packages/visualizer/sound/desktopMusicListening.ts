@@ -4,6 +4,9 @@
  * processed output read by analysers (`visualizer/spectrumTap.ts`).
  */
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
+import { setSoundscapeSignalSink, soundscapeHeardGain } from '@thockdown/soundscape/soundscapeTap'
+import { heardLagSec } from './musicBeat'
+import { receiveSoundscapeSignals, setSoundscapeSignalGains, type SoundscapeSignal } from './soundscapeSignals'
 import { SpectrumTap } from '../visualizer/spectrumTap'
 import { musicPlayerService } from './MusicPlayerService'
 import type { MusicListening } from './musicListening'
@@ -31,4 +34,29 @@ export const desktopMusicListening: MusicListening = {
   setCurrentTimeFraction: (fraction) => { void musicPlayerService.setCurrentTimeFraction(fraction) },
   outputLatencySec,
   createSpectrum: (edges) => new SpectrumTap(musicPlayerService, edges),
+}
+
+/**
+ * The desktop's half of `soundscapeSignals.ts`: the live soundscape's
+ * signals as its worklet posts them (`soundscapeTap.ts`), each frame of the
+ * output context's clock turned into the moment it is HEARD on the page's
+ * clock -- the graph is handling `context.currentTime` now, and the listener
+ * hears it `heardLagSec()` later, as with the music -- and the gains both
+ * are heard at.
+ */
+export function installDesktopSoundscapeSignals(): void {
+  setSoundscapeSignalGains(() => ({ music: musicPlayerService.heardGain(), soundscape: soundscapeHeardGain() }))
+  setSoundscapeSignalSink((list, context) => {
+    const now = performance.now() / 1000
+    const offset = now - context.currentTime + heardLagSec()
+    const signals: SoundscapeSignal[] = []
+    for (const signal of list) {
+      const at = (signal.frame / context.sampleRate) + offset
+      if (signal.kind === 'gust') signals.push({ at, kind: 'gust', value: signal.value as number })
+      else if (signal.kind === 'drip' || signal.kind === 'drop' || signal.kind === 'chime') {
+        signals.push({ at, kind: signal.kind, amplitude: signal.amplitude as number, salience: signal.salience as number })
+      }
+    }
+    receiveSoundscapeSignals(signals, now)
+  })
 }
