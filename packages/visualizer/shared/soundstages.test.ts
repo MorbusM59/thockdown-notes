@@ -59,4 +59,11 @@ describe('soundstages', () => {
     expect(out.custom[0].name).toBe('Soundstage A')
     expect(sanitizeSoundstagePreferences(undefined)).toEqual(DEFAULT_SOUNDSTAGE_PREFERENCES)
   })
+  it('remembers the last stage chosen other than the flat one, so the EQ toggle can return to it', () => {
+    const pick = (from: typeof DEFAULT_SOUNDSTAGE_PREFERENCES, id: string) => withActiveSoundstage(from, selectPreset(SOUNDSTAGE_KIND, from, id))
+    const thocky = pick(DEFAULT_SOUNDSTAGE_PREFERENCES, 'thocky')
+    expect(thocky.lastShaped).toBe('thocky')
+    expect(pick(thocky, 'neutral').lastShaped).toBe('thocky')
+    expect(sanitizeSoundstagePreferences({ ...pick(thocky, 'neutral'), lastShaped: 'gone' }).lastShaped).toBe('muted')
+  })
 })

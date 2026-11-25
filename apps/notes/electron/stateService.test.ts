@@ -472,7 +472,7 @@ describe('StateService app-state field round-trip', () => {
         musicReverbFoliage: 0.4,
         musicStereoWidth: 1.3,
         musicEqCurve: [{ hz: 20, db: 1, handle: 0 }, { hz: 300, db: -2, handle: 0.5 }, { hz: 20000, db: 0, handle: 0.2 }],
-        musicSoundstages: { activeId: 's1', factory: 'wide', lastCustom: 's1', factoryEdits: [{ id: 'wide', name: 'Wider', icon: 'fa-wind', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 } }], custom: [{ id: 's1', name: 'Mine', icon: null, settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
+        musicSoundstages: { activeId: 's1', factory: 'wide', lastCustom: 's1', lastShaped: 's1', factoryEdits: [{ id: 'wide', name: 'Wider', icon: 'fa-wind', settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 2, handle: 0 }], width: 1.1, reverb: 0.2, size: 0.4, room: 0.3 } }], custom: [{ id: 's1', name: 'Mine', icon: null, settings: { eq: [{ hz: 20, db: 0, handle: 0 }, { hz: 20000, db: 0, handle: 0 }], width: 0.9, reverb: 0.5, size: 0.6, room: 0.7 } }] },
         musicMuted: true,
         musicReverbBypassed: true,
         musicBarRow: 'filter',

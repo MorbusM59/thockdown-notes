@@ -4,8 +4,9 @@
  * by.
  *
  * - Five DURATIONS the listener sets (each one of DURATIONS_SEC, 1 minute to 24 hours,
- *   stepped through by `stepDuration`), and at most one of them ACTIVE;
- *   none active is the infinity button, playing until stopped.
+ *   stepped through by `stepDuration`), one of them SELECTED, and the timer
+ *   ENABLED or not: disabled plays until stopped, and keeps the selection
+ *   for when it is enabled again (`activeTimerSeconds`).
  * - The countdown runs in the native session (SoundscapeSession.java), which
  *   is handed the active duration and its fade: it starts when a soundscape
  *   is started or switched to, stops while paused, and ends in a STOP, which
@@ -25,13 +26,21 @@ const FADE_SHARE = 0.1
 export interface TimerSettings {
   /** The five durations, in seconds. */
   durations: number[]
-  /** The index of the active one, or null for none (infinity). */
-  active: number | null
+  /** The index of the selected one. */
+  selected: number
+  /** The timer runs; off, a soundscape plays until stopped. */
+  enabled: boolean
 }
 
 export const DEFAULT_TIMER: TimerSettings = {
   durations: [5 * 60, 15 * 60, 60 * 60, 2 * 60 * 60, 8 * 60 * 60],
-  active: null,
+  selected: 1,
+  enabled: false,
+}
+
+/** How long the timer runs, in seconds, or 0 when it is off. */
+export function activeTimerSeconds(timer: TimerSettings): number {
+  return timer.enabled ? timer.durations[timer.selected] : 0
 }
 
 /** The fade an end takes, for something set to play `playSec`: 10% of it, at most five minutes. */
@@ -52,13 +61,13 @@ function snapDuration(value: unknown, fallback: number): number {
 }
 
 export function sanitizeTimer(input: unknown): TimerSettings {
-  const record = (input ?? {}) as { durations?: unknown; active?: unknown }
+  const record = (input ?? {}) as { durations?: unknown; selected?: unknown; enabled?: unknown }
   const stored = Array.isArray(record.durations) ? record.durations : []
   const durations = DEFAULT_TIMER.durations.map((fallback, index) => snapDuration(stored[index], fallback))
-  const active = typeof record.active === 'number' && Number.isInteger(record.active) && record.active >= 0 && record.active < durations.length
-    ? record.active
-    : null
-  return { durations, active }
+  const selected = typeof record.selected === 'number' && Number.isInteger(record.selected) && record.selected >= 0 && record.selected < durations.length
+    ? record.selected
+    : DEFAULT_TIMER.selected
+  return { durations, selected, enabled: record.enabled === true }
 }
 
 /** A duration as its button shows it: minutes up to 90, hours from 2. */

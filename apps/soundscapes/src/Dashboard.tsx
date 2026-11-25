@@ -81,7 +81,7 @@ export function DashboardSoundscapes({ preferences, onPick }: { preferences: Sou
 }
 
 /** A button whose tap does one thing and whose hold another; the click after a hold is swallowed. */
-function TapHoldButton({ label, active, className = '', onTap, onHold, children }: { label: string; active: boolean; className?: string; onTap: () => void; onHold: () => void; children: ReactNode }) {
+export function TapHoldButton({ label, active, className = '', onTap, onHold, children }: { label: string; active: boolean; className?: string; onTap: () => void; onHold: () => void; children: ReactNode }) {
   const holdRef = useRef<(() => void) | null>(null)
   const swallowRef = useRef(false)
   useEffect(() => () => holdRef.current?.(), [])
@@ -314,7 +314,9 @@ function DashboardFilter() {
  * the soundscape in and out of the mix: switched out, a channel is silent
  * whoever plays it, and carries on unheard.
  */
-export function DashboardDock({ timeLeft, soundscape, onSoundscapeTransport, onStop, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
+export function DashboardDock({ toggles, timeLeft, soundscape, onSoundscapeTransport, onStop, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
+  /** The toggle row (DashboardToggleRow.tsx), above the volumes. */
+  toggles: ReactNode
   /** The timer's time left (h:mm:ss), or null without one. */
   timeLeft: string | null
   /** The schedule is on; it plays now (it is what is heard). */
@@ -341,6 +343,7 @@ export function DashboardDock({ timeLeft, soundscape, onSoundscapeTransport, onS
   const mix = musicPlaying || soundscape === 'playing' ? 'playing' : soundscape === 'stopped' ? 'stopped' : 'paused'
   return (
     <div className="mobile-dashboard-dock">
+      {toggles}
       <div className="options-slider-row mobile-dock-slider-row">
         <CompactScrollbarSlider
           id="mobile-dashboard-music-volume"
