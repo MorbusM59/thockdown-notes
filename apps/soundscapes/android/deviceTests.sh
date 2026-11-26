@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP=com.thockdown.soundscapes
 RUNNER=$APP.test/androidx.test.runner.AndroidJUnitRunner
 
-./gradlew installDebug installDebugAndroidTest --no-daemon
+./gradlew :app:installDebug :app:installDebugAndroidTest --no-daemon
 
 run() {
   echo "== $1"
