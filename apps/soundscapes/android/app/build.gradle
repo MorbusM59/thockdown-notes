@@ -88,7 +88,8 @@ dependencies {
 
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    // The test libraries pull an older kotlin-stdlib-jdk7/jdk8 beside the app's kotlin-stdlib, whose classes overlap: one version for all of them.
+    androidTestImplementation platform("org.jetbrains.kotlin:kotlin-bom:1.8.22")
     implementation project(':capacitor-cordova-android-plugins')
 }
 
