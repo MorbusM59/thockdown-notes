@@ -3,21 +3,22 @@
  * (`@thockdown/visualizer/beat/beatLoops.ts`): the loop is decoded here at
  * the output's rate and handed to the native output (CalibrationLoop.java),
  * which plays it the way it plays the music, so the delay set against it is
- * the music's. Where in the loop the listener is comes from the frame the
- * native side reports as heard, run on by this page's clock between reports,
- * exactly as the music's position is (nativeMusicListening.ts).
+ * the music's. Where in the loop the listener is comes from a frame the
+ * native side reports with the moment it is heard (nativeClock.ts), run on by
+ * this page's clock, exactly as the music's position is (nativeMusicListening.ts).
  */
 import type { BeatLoopPlayer } from '@thockdown/visualizer/beat/beatLoops'
 import { encodeHalfScaleStereo } from '@thockdown/soundscape/halfScalePcm'
 import type { NativeMusicPlugin } from './nativeMusic'
+import { heardAtSec } from './nativeClock'
 
 export function createNativeBeatLoopPlayer(plugin: NativeMusicPlugin): BeatLoopPlayer {
   return (loop, onFailed) => {
     let over = false
-    // The latest report: the frame heard, its rate, and when it arrived (performance clock, seconds).
+    // The latest report: a frame, its rate, and when it is heard (performance clock, seconds; nativeClock.ts).
     let heard: { frame: number; sampleRate: number; at: number } | null = null
     const listener = plugin.addListener('loopHeard', (data) => {
-      heard = { ...data, at: performance.now() / 1000 }
+      heard = { frame: data.frame, sampleRate: data.sampleRate, at: heardAtSec(data) }
     })
     void (async () => {
       try {
@@ -40,7 +41,7 @@ export function createNativeBeatLoopPlayer(plugin: NativeMusicPlugin): BeatLoopP
     return {
       heardBarSec(frameTimeMs, delaySec) {
         if (!heard) return NaN
-        const sec = (heard.frame / heard.sampleRate) + Math.max(0, frameTimeMs / 1000 - heard.at) - delaySec
+        const sec = (heard.frame / heard.sampleRate) + (frameTimeMs / 1000 - heard.at) - delaySec
         return sec - (Math.floor(sec / loop.barSec) * loop.barSec)
       },
       stop() {
