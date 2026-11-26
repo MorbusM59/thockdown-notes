@@ -67,6 +67,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MusicPlugin.class);
         registerPlugin(LaunchPlugin.class);
         registerPlugin(DisplayPlugin.class);
+        registerPlugin(AudioRoutePlugin.class);
         super.onCreate(savedInstanceState);
         // The music files, served to the page for the visualizer's beat analysis.
         getBridge().setWebViewClient(new MusicFileServer(getBridge()));

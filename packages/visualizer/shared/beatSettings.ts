@@ -17,7 +17,7 @@ export interface BeatSettings {
 }
 
 export const BEAT_DELAY_MIN_MS = -200
-export const BEAT_DELAY_MAX_MS = 500
+export const BEAT_DELAY_MAX_MS = 2000
 
 export const DEFAULT_BEAT_SETTINGS: BeatSettings = {
   delayMsByDevice: {},

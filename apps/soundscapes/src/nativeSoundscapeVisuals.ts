@@ -25,6 +25,7 @@
  */
 import { receiveSoundscapeSignals, setSoundscapeHeardGain, type SoundscapeSignal } from '@thockdown/visualizer/sound/soundscapeSignals'
 import { appendBeatTrace, isBeatTraceOn } from '@thockdown/visualizer/sound/beatTrace'
+import { heardLagSec } from '@thockdown/visualizer/sound/musicBeat'
 import type { NativeSoundscapePlugin, SessionState } from './backgroundAudioHost'
 
 /** A batch of spectrum frames as the renderer sends it (spectrumFrames.ts's SpectrumFrameBatch, levels in base64). */
@@ -82,9 +83,9 @@ export class NativeSoundscapeVisuals {
     return heardGain
   }
 
-  /** The soundscape output's frame at `nowSec` (performance clock, seconds): its last report run on, for at most `RUN_ON_SEC`. */
+  /** The soundscape output's frame at `nowSec` (performance clock, seconds): its last report run on, for at most `RUN_ON_SEC`, or back (a delayed reader asks for a moment before it). */
   frameAt(nowSec: number): number {
-    const since = Math.min(RUN_ON_SEC, Math.max(0, nowSec - this.reportedAt))
+    const since = Math.min(RUN_ON_SEC, nowSec - this.reportedAt)
     return this.playhead + since * this.sampleRate
   }
 
@@ -97,8 +98,9 @@ export class NativeSoundscapeVisuals {
 
   /** Drops every signal still ahead: what was rendered for later is no longer going to be heard. */
   private dropAhead(): void {
+    // What was heard before this moment is still drawn, the reader's delay later.
     const now = performance.now() / 1000
-    receiveSoundscapeSignals([], now, now)
+    receiveSoundscapeSignals([], now, now + heardLagSec())
   }
 
   private receive(data: { visuals: string; playhead: number; sampleRate: number }): void {
@@ -110,7 +112,9 @@ export class NativeSoundscapeVisuals {
     this.spectrumReceiver?.(visuals.spectrum, data.playhead)
     this.trace(now, visuals.signals)
     if (!(heardGain > 0)) return
-    const at = (frame: number) => now + (frame - data.playhead) / data.sampleRate
+    // Heard at the playhead's frame now; drawn the reader's delay later, as the desktop's are.
+    const drawn = now + heardLagSec()
+    const at = (frame: number) => drawn + (frame - data.playhead) / data.sampleRate
     for (const batch of visuals.signals) {
       const signals: SoundscapeSignal[] = []
       for (const signal of batch.list) {

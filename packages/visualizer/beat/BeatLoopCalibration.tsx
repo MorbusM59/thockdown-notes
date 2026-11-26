@@ -12,14 +12,15 @@ import './beat.css'
 /** The step Up and Down take, in ms; Left and Right take 1 and speed up while held. */
 const COARSE_STEP_MS = 10
 /** The step a horizontal swipe over the strip takes, in ms, every DRAG_STEP_PX. */
-const SWIPE_STEP_MS = 5
+const SWIPE_STEP_MS = 10
 /**
- * Seconds a held arrow takes to cross the whole delay range: about 100 ms of
- * delay a second at full speed, so a hold covers ground and a release still
- * lands near where the eye said stop. The hold's default (a volume's hundred
- * steps) would cross these seven hundred seven times as fast.
+ * Seconds a held arrow takes to cross the whole delay range: about 200 ms of
+ * delay a second at full speed, so a hold covers the two seconds a slow
+ * wireless output can need in about ten and a release still lands near where
+ * the eye said stop. The hold's default (a volume's hundred steps) would
+ * cross these 2200 steps twenty-two times as fast.
  */
-const HOLD_TRAVEL_SEC = (BEAT_DELAY_MAX_MS - BEAT_DELAY_MIN_MS) / 100
+const HOLD_TRAVEL_SEC = (BEAT_DELAY_MAX_MS - BEAT_DELAY_MIN_MS) / 200
 
 /** Boxes to the strip's height: half a row, a whole row and half a row. */
 const ROWS = 2

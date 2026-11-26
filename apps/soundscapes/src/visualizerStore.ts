@@ -2,8 +2,8 @@
  * The phone's visualizer state (`VisualizerState`, the desktop's shape: the
  * settings outside a preset and the visualizer presets, sanitized by the same
  * rules) and its beat settings, kept in the
- * WebView's localStorage like its other preferences. The phone has one
- * output as far as the page can tell, so the beat delay is kept under ''.
+ * WebView's localStorage like its other preferences.
+ * The beat delay is kept per output device, named by audioRoute.ts.
  */
 import { sanitizeVisualizer } from '@thockdown/look/visualizer'
 import { sanitizeVisualizerPresetPreferences, type VisualizerState } from '@thockdown/visualizer/shared/visualizerPresets'
@@ -15,9 +15,6 @@ const VISUALIZER_PRESETS_KEY = 'thockdown:visualizer-presets'
 const BEAT_KEY = 'thockdown:beat'
 const VISUALIZER_FONT_KEY = 'thockdown:visualizer-font'
 const VISUALIZER_DOUBLE_KEY = 'thockdown:visualizer-double'
-
-/** The output device the phone keeps its beat delay under. */
-export const PHONE_OUTPUT_DEVICE = ''
 
 /** The visualizer's font (Visualizer tab > Font), the desktop's setting and ranges; the phone has one size mode, the desktop's regular one. */
 function sanitizePhoneVisualizerFont(input: unknown): VisualizerFont {
