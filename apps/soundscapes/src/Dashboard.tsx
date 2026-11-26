@@ -400,9 +400,9 @@ export function DashboardDock({ toggles, timeLeft, soundscape, onSoundscapeTrans
           aria-pressed={musicChannel}
           aria-label={`Music channel ${musicChannel ? 'on' : 'off'}`}
           onClick={() => {
-            // Switched in while the mix plays, the music joins it at once.
-            if (!musicChannel && mix === 'playing') void startMusic()
+            // Switched out, the music pauses; switched in while the mix plays, it joins it at once.
             setMusicChannel(!musicChannel)
+            if (!musicChannel && mix === 'playing') void startMusic()
           }}
         >
           <span className="fa-solid fa-compact-disc" aria-hidden="true" />

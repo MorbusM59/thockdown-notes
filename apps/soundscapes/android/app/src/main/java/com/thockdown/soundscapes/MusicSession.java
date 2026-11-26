@@ -46,6 +46,8 @@ final class MusicSession {
     private static final String ROTATION_FILE = "music-rotation.json";
     /** The last soundstage, so a scheduled run with no page plays with it. */
     private static final String STAGE_FILE = "music-stage.json";
+    /** The music channel's switch ("on"/"off"), so a scheduled run with no page follows it. */
+    private static final String CHANNEL_FILE = "music-channel.txt";
     /** musicLibrary.ts's EMPTY_CATALOG. */
     private static final String EMPTY_CATALOG = "{\"songs\":[],\"activeSetIds\":[],\"filter\":{\"query\":\"\"}}";
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.05;
@@ -67,6 +69,14 @@ final class MusicSession {
     private final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable endScheduledRun = this::endScheduledRun;
     private float volume = 1f;
+    /**
+     * THE MUSIC CHANNEL: whether music is part of the mix at all. Switched
+     * out, nothing plays it: what played pauses (its position kept, the
+     * renderer idle, nothing rendered or decoded), and play, resume, a
+     * chosen song and the schedule all do nothing until it is switched in.
+     * Read from its file once; the page sends it on every change.
+     */
+    private Boolean channel = null;
     private Integer heardId = null;
     /**
      * A song chosen as a start of playback (from paused or stopped): the lane
@@ -117,6 +127,7 @@ final class MusicSession {
     /** Play with `stageJson` (MusicStage), starting the music if it is not playing; the soundstage otherwise. */
     synchronized void play(String stageJson) {
         setStoredStage(stageJson);
+        if (!channelOn()) return;
         if (startingSong != null) {
             startingSong = null;
             if (output != null) output.setFade(1f, TIMER_RESTORE_FADE_SEC);
@@ -175,6 +186,7 @@ final class MusicSession {
      * paused, it resumes.
      */
     synchronized void choose(int songId) {
+        if (!channelOn()) return;
         boolean starting = renderer == null || output.isPaused();
         if (renderer == null) {
             if (stage == null) stage = read(STAGE_FILE, null);
@@ -206,6 +218,28 @@ final class MusicSession {
         if (renderer != null) renderer.setSpectrum(bands);
     }
 
+    /** Switch the music channel in or out of the mix (MUSIC CHANNEL above). */
+    synchronized void setChannel(boolean on) {
+        if (channelOn() == on) return;
+        channel = on;
+        write(CHANNEL_FILE, on ? "on" : "off");
+        if (on) {
+            // A scheduled run due now starts; the listener's music waits for play, as from a pause.
+            applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
+            return;
+        }
+        if (scheduledRun) {
+            stop();
+            return;
+        }
+        pause();
+    }
+
+    private boolean channelOn() {
+        if (channel == null) channel = !"off".equals(read(CHANNEL_FILE, "on").trim());
+        return channel;
+    }
+
     synchronized void setVolume(float volume) {
         this.volume = volume;
         if (output != null) output.setVolume(volume, VOLUME_TIME_CONSTANT_SEC);
@@ -228,6 +262,7 @@ final class MusicSession {
      * started is left alone.
      */
     synchronized void applySchedule(double fadeSec) {
+        if (!channelOn()) return;
         if (output != null && !scheduledRun) return;
         SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
         Integer set = schedule.musicSetAt(System.currentTimeMillis());
@@ -294,14 +329,14 @@ final class MusicSession {
         write(STAGE_FILE, stageJson);
     }
 
-    /** Whether there is music, playing or paused (the service and its controls follow it). */
+    /** Whether there is music, playing or paused, in the mix (the service and its controls follow it). */
     synchronized boolean isActive() {
-        return output != null;
+        return output != null && channelOn();
     }
 
-    /** Resume paused music (the media controls); nothing without music. */
+    /** Resume paused music (the media controls); nothing without music or with its channel switched out. */
     synchronized void resume() {
-        if (output == null || !output.isPaused()) return;
+        if (output == null || !output.isPaused() || !channelOn()) return;
         output.setPaused(false);
         // A stream that ran out while paused starts the pool's next pick, as play does.
         renderer.resume();

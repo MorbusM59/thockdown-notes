@@ -36,6 +36,8 @@ export interface NativeMusicPlugin {
   jump(options: { direction: -1 | 1 }): Promise<void>
   choose(options: { songId: number }): Promise<void>
   seek(options: { seconds: number }): Promise<void>
+  /** The music channel in or out of the mix: out, the music pauses and nothing starts it until it is switched in. */
+  setChannel(options: { on: boolean }): Promise<void>
   /** A gain, 0..1: the app's volume curve is applied before it is sent. */
   setVolume(options: { volume: number }): Promise<void>
   /** The visualizer's spectrum in `bands` log bands, sent as `spectrum` events while it is on; 0 stops it. */
