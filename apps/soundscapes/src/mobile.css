@@ -309,18 +309,19 @@ body {
   opacity: 0.2;
 }
 
-/* The element that scrolls is the panel's own options content (a scroller
-   in the desktop's styles). A finger scrolls it, but by the app's rule
-   rather than the browser's (touchScroll.ts): the browser would claim every
-   first movement, before a control could say the press was its own.
-   Declared on everything inside it too: the browser intersects touch-action
-   only up to the nearest element that could scroll, and the panel's content
-   is one (`.sidebar-options-content`'s hidden x overflow makes its y
-   overflow auto), so on the scroller alone it never reached a control, and
-   every vertical drag (a soundscape, a schedule entry) was taken for a pan
-   and cancelled. */
-.mobile-app-shell .sidebar-content.is-scrollbar-mode,
-.mobile-app-shell .sidebar-content.is-scrollbar-mode * {
+/* The browser pans nothing on the phone. The page's content scrolls by the
+   app's rule rather than the browser's (touchScroll.ts), and every other
+   surface (the dock, the tab selector, the visualizer) either does not
+   scroll or turns its own rows: left to the browser, it claims every first
+   movement for a pan before a control can say the press was its own, and
+   cancels the press. Declared on everything, not on the shell alone: the
+   browser intersects touch-action only up to the nearest element that could
+   scroll, and the panel's content is one (`.sidebar-options-content`'s hidden
+   x overflow makes its y overflow auto). Declared only on the scroller, it
+   left the dock to the browser, and a duration in the timer picker could
+   not be dragged by a finger. */
+.mobile-app-shell,
+.mobile-app-shell * {
   touch-action: none;
 }
 
