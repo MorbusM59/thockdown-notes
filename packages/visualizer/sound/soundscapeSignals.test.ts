@@ -3,9 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 type Signals = typeof import('./soundscapeSignals')
 let signals: Signals
 
+let musicGain = 0
+
 beforeEach(async () => {
   vi.resetModules()
   signals = await import('./soundscapeSignals')
+  musicGain = 0
+  // The same module instance soundscapeSignals imports, after the reset.
+  const listening = await import('./musicListening')
+  listening.setMusicListening({ ...listening.musicListening(), heardGain: () => musicGain })
 })
 
 const drip = (salience: number, amplitude = 0.05) => ({ at: 0, kind: 'drip' as const, amplitude, salience })
@@ -34,8 +40,8 @@ describe('soundscape signals', () => {
   })
 
   it('doubles the motion in a full gust and halves it in a full lull, by the soundscape\'s share, gliding there', () => {
-    let gains = { music: 0, soundscape: 1 }
-    signals.setSoundscapeSignalGains(() => gains)
+    let soundscapeGain = 1
+    signals.setSoundscapeHeardGain(() => soundscapeGain)
     const gustFrom = (from: number, value: number) => {
       const list = Array.from({ length: 100 }, (_, index) => ({ at: from + index * 0.1, kind: 'gust' as const, value }))
       signals.receiveSoundscapeSignals(list, from, from)
@@ -47,7 +53,8 @@ describe('soundscape signals', () => {
     expect(signals.gustSpeed(5.01)).toBeGreaterThan(1.9) // and glides from there
     expect(signals.gustSpeed(12)).toBeCloseTo(0.5, 2)
     // Music twice as loud as the soundscape: the gust counts for half.
-    gains = { music: 1, soundscape: 0.5 }
+    musicGain = 1
+    soundscapeGain = 0.5
     gustFrom(13, -1)
     expect(signals.gustSpeed(21)).toBeCloseTo(2 ** -0.5, 2)
     // Gone stale (nothing reported): the motion returns to its own pace.

@@ -6,6 +6,7 @@ function fakeListening(): MusicListening & { set(playing: boolean): void } {
   let playing = false
   return {
     get isPlaying() { return playing },
+    heardGain: () => (playing ? 1 : 0),
     subscribePlaying(listener) {
       listeners.add(listener)
       return () => { listeners.delete(listener) }

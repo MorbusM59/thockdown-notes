@@ -41,7 +41,7 @@ describe('native music listening', () => {
     vi.stubGlobal('document', { hidden: false, addEventListener: () => {}, removeEventListener: () => {} })
     vi.stubGlobal('location', { origin: 'https://localhost' })
     const { plugin, emit } = fakePlugin()
-    const listening = createNativeMusicListening(plugin, () => ({ filePath: 'content://x/tree/a/document/b', durationSec: 100 }))
+    const listening = createNativeMusicListening(plugin, () => ({ filePath: 'content://x/tree/a/document/b', durationSec: 100 }), () => 1)
     const spectrum = listening.createSpectrum(new Float64Array(2))
     spectrum.start()
     emit('heard', { songId: 1, seconds: 3, frame: 1000, sampleRate: 1000, playing: true })
@@ -66,7 +66,7 @@ describe('native music listening', () => {
     const visuals = new NativeSoundscapeVisuals(session.plugin)
     await Promise.resolve()
     let musicGain = 0.5
-    const listening = createNativeMusicListening(music.plugin, () => null, { soundscape: visuals, musicGain: () => musicGain })
+    const listening = createNativeMusicListening(music.plugin, () => null, () => musicGain, visuals)
     const spectrum = listening.createSpectrum(new Float64Array(2))
     setSpectrumIncludesSoundscape(true)
     spectrum.start()

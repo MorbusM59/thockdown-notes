@@ -330,12 +330,8 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
   // The visualizer reads the native music (its clock, its file and its
   // spectrum, nativeMusicListening.ts) and the native soundscape (its
   // spectrum and signals, nativeSoundscapeVisuals.ts), each at the gain it is heard at.
-  const musicHeardGain = () => (playing ? heardGain() : 0)
-  const soundscapeVisuals = nativeSoundscape && installNativeSoundscapeVisuals(nativeSoundscape, musicHeardGain)
-  setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId), soundscapeVisuals && {
-    soundscape: soundscapeVisuals,
-    musicGain: heardGain,
-  }))
+  const soundscapeVisuals = nativeSoundscape && installNativeSoundscapeVisuals(nativeSoundscape)
+  setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId), heardGain, soundscapeVisuals))
   setPlaying((await native.getState()).playing)
   void native.setVolume({ volume: heardGain() })
   publish()

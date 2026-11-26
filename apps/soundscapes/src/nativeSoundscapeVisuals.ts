@@ -18,7 +18,7 @@
  *   spectrum while one is started and takes the soundscape; nothing while
  *   hidden, where nothing draws.
  */
-import { receiveSoundscapeSignals, setSoundscapeSignalGains, type SoundscapeSignal } from '@thockdown/visualizer/sound/soundscapeSignals'
+import { receiveSoundscapeSignals, setSoundscapeHeardGain, type SoundscapeSignal } from '@thockdown/visualizer/sound/soundscapeSignals'
 import type { NativeSoundscapePlugin, SessionState } from './backgroundAudioHost'
 
 /** A batch of spectrum frames as the renderer sends it (spectrumFrames.ts's SpectrumFrameBatch, levels in base64). */
@@ -130,12 +130,12 @@ export class NativeSoundscapeVisuals {
 
 /**
  * Starts reading the native soundscape's visuals, and has the trackers
- * weigh its signals against the music at the gains both are heard at
- * (`musicGain`: 0 while the music does not play).
+ * weigh its signals at the gain it is heard at (the music's is the
+ * listening's, nativeMusicListening.ts).
  */
-export function installNativeSoundscapeVisuals(session: SoundscapeVisualsSession, musicGain: () => number): NativeSoundscapeVisuals {
+export function installNativeSoundscapeVisuals(session: SoundscapeVisualsSession): NativeSoundscapeVisuals {
   const visuals = new NativeSoundscapeVisuals(session)
-  setSoundscapeSignalGains(() => ({ music: musicGain(), soundscape: visuals.heardGain() }))
+  setSoundscapeHeardGain(() => visuals.heardGain())
   return visuals
 }
 

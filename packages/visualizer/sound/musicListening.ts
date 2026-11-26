@@ -27,6 +27,14 @@ export interface SpectrumSource {
 
 export interface MusicListening {
   readonly isPlaying: boolean
+  /**
+   * The linear gain the music is HEARD at now: its volume, and its channel
+   * where the app has one, while it plays; 0 otherwise. Music can play on
+   * unheard (a channel switched out, a volume at nothing), and what the
+   * visualizer reads of it (the trackers, the spectrum, the masking of the
+   * soundscape's signals) goes by this rather than by `isPlaying`.
+   */
+  heardGain(): number
   /** Calls `listener` whenever playback starts or stops; returns the unsubscribe. */
   subscribePlaying(listener: (playing: boolean) => void): () => void
   /**
@@ -49,6 +57,7 @@ export interface MusicListening {
 
 const silence: MusicListening = {
   isPlaying: false,
+  heardGain: () => 0,
   subscribePlaying: () => () => {},
   trackUrl: null,
   currentTime: 0,
