@@ -94,8 +94,59 @@ export function CompactScrollbarSlider({
   formatValue,
   secondaryPress = 'reset',
   dimmed = false,
-  onCommit,
+  onCommit: onCommitToHost,
 }: CompactScrollbarSliderProps) {
+  /**
+   * The value the reader has asked for and the host has not yet shown back.
+   *
+   * The thumb, the tooltip and every relative input (wheel, arrows) read
+   * this before `value`, so the slider follows the hand on the frame the
+   * input arrives instead of waiting for the host's round trip (on the phone
+   * a volume goes through the native service and back, and the thumb moved
+   * in steps of that latency). It is let go once the host shows the value
+   * back, or shows a value the reader never sent (a change from elsewhere,
+   * or a host that clamped it); a late echo of an earlier value from the same
+   * gesture is ignored, so the thumb never steps back along its own path.
+   */
+  const [requested, setRequested] = useState<number | null>(null)
+  const sentRef = useRef(new Set<number>())
+  const onCommitRef = useRef(onCommitToHost)
+  useEffect(() => { onCommitRef.current = onCommitToHost })
+  /**
+   * Commits are coalesced to at most one per frame: a pointer can report
+   * several moves a frame and the host gains nothing from the ones it would
+   * overwrite before anything is heard. The frame is requested only when a
+   * value is waiting, so nothing runs while the slider is still.
+   */
+  const pendingRef = useRef<number | null>(null)
+  const frameRef = useRef(0)
+  const flushCommit = useCallback(() => {
+    if (frameRef.current) cancelAnimationFrame(frameRef.current)
+    frameRef.current = 0
+    const pending = pendingRef.current
+    if (pending === null) return
+    pendingRef.current = null
+    sentRef.current.add(pending)
+    onCommitRef.current(pending)
+  }, [])
+  const onCommit = useCallback((next: number) => {
+    setRequested(next)
+    pendingRef.current = next
+    if (!frameRef.current) frameRef.current = requestAnimationFrame(flushCommit)
+  }, [flushCommit])
+  useEffect(() => flushCommit, [flushCommit])
+  useEffect(() => {
+    if (requested === null) return
+    if (value === requested || !sentRef.current.has(value)) {
+      setRequested(null)
+      sentRef.current.clear()
+    }
+    // Only a change of the host's value can release the request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  const hostValue = value
+  value = requested ?? hostValue
+
   /** Input is ignored both when the setting is out of play and when it is a gauge. */
   const inert = disabled || readOnly
   const [entry, setEntry] = useState<string | null>(null)
@@ -267,10 +318,12 @@ export function CompactScrollbarSlider({
           touchPendingRef.current = false
           applyPointerValue(event.clientX)
         } else if (!isDragging) return
+        flushCommit()
         event.currentTarget.releasePointerCapture(event.pointerId)
         setIsDragging(false)
       }}
       onPointerCancel={() => {
+        flushCommit()
         touchPendingRef.current = false
         setIsDragging(false)
       }}
