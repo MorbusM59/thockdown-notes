@@ -71,6 +71,7 @@ import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKE
 import { SmoothClock } from './smoothClock'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicListening, subscribeMusicPlaying } from './musicListening'
+import { SILENT_GAIN } from '../visualizer/spectrumMix'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
 import { loudnessGain } from './peakWindow'
 import { flashLevelAt, flashPhaseAt, FLASH_BEATS_REPEAT } from '../shared/flashing'
@@ -548,7 +549,7 @@ function takeSoundscape(now: number): void {
   if (hits.length === 0) return
   const weights = soundscapeSignalWeights()
   const reads = readsOf()
-  const peak = musicListening().isPlaying ? musicPeak : 0
+  const peak = musicHeard() ? musicPeak : 0
   for (const hit of hits) {
     if (now - hit.at > HIT_LATE_SEC) continue
     const name = HIT_TRACKER[hit.kind]
@@ -558,7 +559,16 @@ function takeSoundscape(now: number): void {
   }
 }
 
-/** Whether there is anything to run for: music playing, or the soundscape reporting. */
+/**
+ * Whether the music is HEARD: playing, at a gain above silence. Music that plays on unheard feeds nothing, so the
+ * soundscape's signals are what the trackers read. The frame loop still runs while it plays (`heard`), so it is
+ * taken up again the frame it is heard, with nothing having to announce a change of volume or channel.
+ */
+function musicHeard(): boolean {
+  return musicListening().heardGain() > SILENT_GAIN
+}
+
+/** Whether there is anything to run for: music playing (heard or not), or the soundscape reporting. */
 function heard(now: number): boolean {
   return musicListening().isPlaying || soundscapeSignalsActive(now)
 }
@@ -571,7 +581,10 @@ function tick(frameTimeMs: number): void {
     return
   }
   takeSoundscape(now)
-  if (!musicListening().isPlaying) {
+  if (!musicHeard()) {
+    // Music that is not HEARD (stopped, or playing on with its channel switched out or its volume at nothing) is
+    // left out as stopped music is: what it was doing is forgotten, so hearing it again resyncs as a play does.
+    if (!Number.isNaN(lastNow)) forgetMusic()
     // The soundscape alone: its hits, the 60 BPM tempo, no beat for a clock.
     const [thump, pierce, ticks] = soundscapeRaw
     for (const band of bands) publish(band, respond(band, mixResponse(band.channel.mix, thump, pierce, ticks), now, 1))
@@ -668,19 +681,22 @@ function stop(): void {
   if (frame !== null) cancelAnimationFrame(frame)
   frame = null
   startIdleTempo()
+  forgetMusic()
+  soundscapeRaw.fill(0)
+  for (const band of bands) publish(band, 0)
+  for (const subscriber of clocks) publish(subscriber, 0)
+}
+
+/** Drops everything read from the music: its clock, its answers, its peak, the clocks' lock and the semitone row. */
+function forgetMusic(): void {
   lastNow = NaN
   listenerClock.reset()
   latestSemitoneScore = null
   // An answer to the last ask before the stop describes a moment that has passed.
   pendingRaw.fill(0)
   trackerRaw.fill(0)
-  soundscapeRaw.fill(0)
   musicPeak = 0
-  for (const band of bands) publish(band, 0)
-  for (const subscriber of clocks) {
-    publish(subscriber, 0)
-    setLocked(subscriber, false)
-  }
+  for (const subscriber of clocks) setLocked(subscriber, false)
   for (const subscriber of semitoneSubscribers) subscriber.listener(NaN, null, null, NaN)
 }
 

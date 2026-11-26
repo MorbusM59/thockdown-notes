@@ -58,17 +58,15 @@ function decodeBase64(text: string): Uint8Array {
   return bytes
 }
 
-/**
- * What the spectrum needs to show the soundscape beside the music: the
- * soundscape's visuals (nativeSoundscapeVisuals.ts: its spectrum, clock and
- * the gain it is heard at) and the gain the music is heard at.
- */
-export interface SpectrumMixPort {
-  soundscape: Pick<NativeSoundscapeVisuals, 'requestSpectrum' | 'frameAt' | 'heardGain'>
-  musicGain(): number
-}
+/** What the spectrum needs to show the soundscape beside the music (nativeSoundscapeVisuals.ts: its spectrum, clock and the gain it is heard at). */
+export type SoundscapeSpectrumPort = Pick<NativeSoundscapeVisuals, 'requestSpectrum' | 'frameAt' | 'heardGain'>
 
-export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: SongLookup, mix: SpectrumMixPort | null = null): MusicListening {
+/**
+ * The native music as the visualizer reads it. `volumeGain` is the gain the
+ * page gives the player (its slider and channel switch); the music is heard
+ * at it while the player reports playing.
+ */
+export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: SongLookup, volumeGain: () => number, soundscape: SoundscapeSpectrumPort | null = null): MusicListening {
   let heard: Heard = { songId: null, seconds: 0, frame: 0, sampleRate: 48000, playing: false, at: 0 }
   const playingListeners = new Set<(playing: boolean) => void>()
   void plugin.addListener('heard', (data) => {
@@ -81,8 +79,11 @@ export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: So
   const playheadFrame = (nowSec: number): number =>
     heard.playing ? heard.frame + Math.max(0, nowSec - heard.at) * heard.sampleRate : heard.frame
 
+  const heardGain = () => (heard.playing ? volumeGain() : 0)
+
   return {
     get isPlaying() { return heard.playing },
+    heardGain,
     subscribePlaying(listener) {
       playingListeners.add(listener)
       return () => { playingListeners.delete(listener) }
@@ -102,7 +103,7 @@ export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: So
       if (duration > 0) void plugin.seek({ seconds: duration * Math.max(0, Math.min(1, fraction)) })
     },
     outputLatencySec: () => 0,
-    createSpectrum: (edges) => new NativeSpectrum(plugin, edges.length - 1, playheadFrame, () => heard.playing, mix),
+    createSpectrum: (edges) => new NativeSpectrum(plugin, edges.length - 1, playheadFrame, heardGain, soundscape),
   }
 }
 
@@ -182,8 +183,8 @@ class NativeSpectrum implements SpectrumSource {
     private readonly plugin: NativeMusicPlugin,
     private readonly bands: number,
     private readonly playheadFrame: (nowSec: number) => number,
-    private readonly musicPlaying: () => boolean,
-    private readonly mix: SpectrumMixPort | null,
+    private readonly musicGain: () => number,
+    private readonly soundscapePort: SoundscapeSpectrumPort | null,
   ) {
     this.music = new FrameQueue(bands)
     this.soundscape = new FrameQueue(bands)
@@ -203,7 +204,7 @@ class NativeSpectrum implements SpectrumSource {
     this.listeners = []
     document.removeEventListener('visibilitychange', this.onVisibility)
     void this.plugin.setSpectrum({ bands: 0 })
-    if (this.soundscapeAsked) this.mix?.soundscape.requestSpectrum(0, null)
+    if (this.soundscapeAsked) this.soundscapePort?.requestSpectrum(0, null)
     this.soundscapeAsked = false
     this.music.clear()
     this.soundscape.clear()
@@ -218,7 +219,7 @@ class NativeSpectrum implements SpectrumSource {
     if (this.listeners.length > 0 && this.soundscapeAsked !== this.wantsSoundscape()) this.askSoundscape()
     const weights = this.weights()
     const music = weights.music > 0 ? this.music.at(this.playheadFrame(nowSec)) : null
-    const soundscape = weights.soundscape > 0 && this.mix ? this.soundscape.at(this.mix.soundscape.frameAt(nowSec)) : null
+    const soundscape = weights.soundscape > 0 && this.soundscapePort ? this.soundscape.at(this.soundscapePort.frameAt(nowSec)) : null
     if (!soundscape) {
       if (!music) {
         out.fill(-Infinity)
@@ -234,12 +235,11 @@ class NativeSpectrum implements SpectrumSource {
   }
 
   private weights() {
-    if (!this.mix) return spectrumMixWeights(this.musicPlaying() ? 1 : 0, 0)
-    return spectrumMixWeights(this.musicPlaying() ? this.mix.musicGain() : 0, this.mix.soundscape.heardGain())
+    return spectrumMixWeights(this.musicGain(), this.soundscapePort?.heardGain() ?? 0)
   }
 
   private wantsSoundscape(): boolean {
-    return this.mix !== null && spectrumIncludesSoundscape()
+    return this.soundscapePort !== null && spectrumIncludesSoundscape()
   }
 
   /** The music's renderer computes only while the page is shown: a hidden page would queue frames it never draws (the soundscape's visuals hold the same rule). */
@@ -251,7 +251,7 @@ class NativeSpectrum implements SpectrumSource {
   private askSoundscape(): void {
     const soundscape = this.wantsSoundscape()
     if (soundscape === this.soundscapeAsked) return
-    this.mix?.soundscape.requestSpectrum(soundscape ? this.bands : 0, soundscape ? (batches, playhead) => this.soundscape.receive(batches, playhead) : null)
+    this.soundscapePort?.requestSpectrum(soundscape ? this.bands : 0, soundscape ? (batches, playhead) => this.soundscape.receive(batches, playhead) : null)
     if (!soundscape) this.soundscape.clear()
     this.soundscapeAsked = soundscape
   }

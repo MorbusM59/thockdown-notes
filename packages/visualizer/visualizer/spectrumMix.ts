@@ -35,7 +35,7 @@ export interface SpectrumMixWeights {
 }
 
 /** Below this a source counts as not heard. */
-const SILENT_GAIN = 1e-3
+export const SILENT_GAIN = 1e-3
 
 /**
  * The weights for sources heard at linear gains `musicGain` and

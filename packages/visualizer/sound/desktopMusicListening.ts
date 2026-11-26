@@ -6,7 +6,7 @@
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import { setSoundscapeSignalSink, soundscapeHeardGain } from '@thockdown/soundscape/soundscapeTap'
 import { heardLagSec } from './musicBeat'
-import { receiveSoundscapeSignals, setSoundscapeSignalGains, type SoundscapeSignal } from './soundscapeSignals'
+import { receiveSoundscapeSignals, setSoundscapeHeardGain, type SoundscapeSignal } from './soundscapeSignals'
 import { SpectrumTap } from '../visualizer/spectrumTap'
 import { musicPlayerService } from './MusicPlayerService'
 import type { MusicListening } from './musicListening'
@@ -27,6 +27,7 @@ export function outputLatencySec(): number {
 
 export const desktopMusicListening: MusicListening = {
   get isPlaying() { return musicPlayerService.isPlaying },
+  heardGain: () => musicPlayerService.heardGain(),
   subscribePlaying: (listener) => musicPlayerService.subscribePlaying(listener),
   get trackUrl() { return musicPlayerService.trackUrl },
   get currentTime() { return musicPlayerService.currentTime },
@@ -45,7 +46,7 @@ export const desktopMusicListening: MusicListening = {
  * are heard at.
  */
 export function installDesktopSoundscapeSignals(): void {
-  setSoundscapeSignalGains(() => ({ music: musicPlayerService.heardGain(), soundscape: soundscapeHeardGain() }))
+  setSoundscapeHeardGain(soundscapeHeardGain)
   setSoundscapeSignalSink((list, context) => {
     const now = performance.now() / 1000
     const offset = now - context.currentTime + heardLagSec()

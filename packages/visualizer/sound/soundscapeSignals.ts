@@ -31,6 +31,7 @@ import type { VisualizerTrackerName } from '@thockdown/look/visualizer'
 import { spectrumMixWeights, type SpectrumMixWeights } from '../visualizer/spectrumMix'
 import { SOUNDSCAPE_MIX_GAIN } from '@thockdown/soundscape/soundscapeMix'
 import { instanceResponse } from './instanceResponse'
+import { musicListening } from './musicListening'
 
 export type SoundscapeHitKind = 'drip' | 'drop' | 'chime'
 
@@ -67,17 +68,16 @@ let gusts: Array<{ at: number; value: number }> = []
 let lastReceived = -Infinity
 const wakers = new Set<() => void>()
 
-/** The linear gains music and soundscape are heard at now, supplied by each app (`setSoundscapeSignalGains`). */
-let gainsOf: () => { music: number; soundscape: number } = () => ({ music: 0, soundscape: 0 })
+/** The linear gain the soundscape is heard at now, supplied by each app (`setSoundscapeHeardGain`); the music's is the listening's (`musicListening.ts`). */
+let soundscapeGain: () => number = () => 0
 
-export function setSoundscapeSignalGains(read: () => { music: number; soundscape: number }): void {
-  gainsOf = read
+export function setSoundscapeHeardGain(read: () => number): void {
+  soundscapeGain = read
 }
 
 /** The weights music and soundscape are heard at, the louder at full scale (`spectrumMix.ts`), the soundscape always counted. */
 export function soundscapeSignalWeights(): SpectrumMixWeights {
-  const { music, soundscape } = gainsOf()
-  return spectrumMixWeights(music, soundscape, true)
+  return spectrumMixWeights(musicListening().heardGain(), soundscapeGain(), true)
 }
 
 /**

@@ -8,19 +8,22 @@ import type { MusicListening } from './musicListening'
  * fallback rather than keeping the whole music analysed for it.
  */
 describe('musicBeat: the analysis runs only for readers that need it', () => {
-  const workers: Array<{ terminated: boolean }> = []
+  const workers: Array<{ terminated: boolean; posted: Array<{ type: string }> }> = []
+  let musicGain = 1
   let frames: Array<(time: number) => void> = []
 
   beforeEach(async () => {
     vi.resetModules()
     workers.length = 0
     frames = []
+    musicGain = 1
     vi.stubGlobal('Worker', class {
       terminated = false
+      posted: Array<{ type: string }> = []
       onmessage = null
       onerror = null
       constructor() { workers.push(this) }
-      postMessage() {}
+      postMessage(message: { type: string }) { this.posted.push(message) }
       terminate() { this.terminated = true }
     })
     vi.stubGlobal('requestAnimationFrame', (callback: (time: number) => void) => frames.push(callback))
@@ -28,6 +31,7 @@ describe('musicBeat: the analysis runs only for readers that need it', () => {
     vi.stubGlobal('document', { hidden: false, addEventListener() {}, removeEventListener() {} })
     const playing: MusicListening = {
       isPlaying: true,
+      heardGain: () => musicGain,
       subscribePlaying: () => () => {},
       trackUrl: 'song',
       currentTime: 0,
@@ -74,5 +78,24 @@ describe('musicBeat: the analysis runs only for readers that need it', () => {
     runFrames(3)
     expect(beats.length).toBeGreaterThan(before)
     unsubscribeTempo()
+  })
+
+  it('leaves music that plays on unheard out of the trackers, and takes it up again the frame it is heard', async () => {
+    const beat = await import('./musicBeat')
+    const mix = beat.subscribeMusicMix({ mix: { thump: 1, pierce: 0, tick: 0 }, shape: 0, fallSec: 0.2 }, () => {})
+    const asks = () => workers[0].posted.filter((message) => message.type === 'ask').length
+    runFrames(3)
+    expect(asks()).toBeGreaterThan(0)
+    // The channel switched out: the song plays on, the frame loop runs, nothing of it is asked for.
+    musicGain = 0
+    runFrames(1)
+    const before = asks()
+    runFrames(5)
+    expect(asks()).toBe(before)
+    expect(frames.length).toBe(1)
+    musicGain = 1
+    runFrames(2)
+    expect(asks()).toBeGreaterThan(before)
+    mix.unsubscribe()
   })
 })
