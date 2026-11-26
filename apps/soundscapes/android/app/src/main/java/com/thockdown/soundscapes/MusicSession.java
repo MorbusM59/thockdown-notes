@@ -187,6 +187,8 @@ final class MusicSession {
             output.discardQueued();
             output.setFade(0f, 0);
             startingSong = songId;
+            // Its opening is silent until the lane reports it heard, so the report comes at the quick pace.
+            output.setResponsive(true);
             resume();
         }
         renderer.choose(songId);
@@ -199,6 +201,8 @@ final class MusicSession {
     /** The visualizer's spectrum in `bands` log bands, or none (0). */
     synchronized void setSpectrum(int bands) {
         spectrumBands = bands;
+        // The visualizer reads the spectrum and the heard clock at the quick pace; otherwise the lane refills at its idle one.
+        if (output != null) output.setResponsive(bands > 0 || startingSong != null);
         if (renderer != null) renderer.setSpectrum(bands);
     }
 
@@ -344,6 +348,7 @@ final class MusicSession {
             if (current != null) current.wake();
         });
         output.setVolume(volume, VOLUME_TIME_CONSTANT_SEC);
+        output.setResponsive(spectrumBands > 0 || startingSong != null);
         // A renderer's reports count only while it is the current one: one
         // being closed can still be mid-callback, blocked on this session's
         // lock while close() waits for its thread, and would otherwise report
@@ -361,6 +366,7 @@ final class MusicSession {
                     if (startingSong != null && startingSong.equals(songId) && seconds < 1) {
                         startingSong = null;
                         output.fadeFrom(0f, 1f, SoundscapeSession.SWITCH_FADE_SEC);
+                        output.setResponsive(spectrumBands > 0);
                     }
                     heardId = songId;
                     heardSeconds = seconds;
