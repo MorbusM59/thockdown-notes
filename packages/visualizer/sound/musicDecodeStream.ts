@@ -56,6 +56,51 @@ async function readBytes(url: string, from: number, count: number): Promise<Uint
   return new Uint8Array(await response.arrayBuffer())
 }
 
+/**
+ * Bytes `start` up to (not including) `end`, asked of `fetchFrom` (a range
+ * request from a byte to `end`). A response may end SHORT of its range (the
+ * phone's WebView cuts a long streamed body, or the body breaks off with
+ * "Failed to fetch"), so the rest is asked for from where the answer
+ * stopped, as a read(2) caller continues a short read. A continuation that
+ * brings nothing means the file really ends there or cannot be read, and is a
+ * failure: a local file is never worth asking twice for the same byte.
+ */
+export async function readFullRange(fetchFrom: (from: number) => Promise<Response>, start: number, end: number, counted: (bytes: number) => void = () => {}): Promise<Uint8Array> {
+  const bytes = new Uint8Array(end - start)
+  let filled = 0
+  while (filled < bytes.length) {
+    const from = start + filled
+    const response = await fetchFrom(from)
+    if (response.status !== 206) throw new Error(`range ${from}-${end - 1} answered ${response.status}`)
+    const before = filled
+    const read = await readInto(response, bytes, filled)
+    filled = read.filled
+    counted(filled - before)
+    if (filled === before) throw read.error ?? new Error(`range ${from}-${end - 1} answered no bytes`)
+  }
+  return bytes
+}
+
+/** Copies `response`'s body into `bytes` from `filled` on, as far as either goes: the new fill, and the error if the body broke off (what came before it is copied). */
+async function readInto(response: Response, bytes: Uint8Array, filled: number): Promise<{ filled: number; error: unknown }> {
+  const reader = response.body?.getReader()
+  if (!reader) return { filled, error: null }
+  try {
+    while (filled < bytes.length) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const taken = Math.min(value.length, bytes.length - filled)
+      bytes.set(value.subarray(0, taken), filled)
+      filled += taken
+    }
+  } catch (error) {
+    return { filled, error }
+  } finally {
+    void reader.cancel().catch(() => {})
+  }
+  return { filled, error: null }
+}
+
 async function open(url: string, input: Input): Promise<Opened | null> {
   const track = await input.getPrimaryAudioTrack()
   if (!track || !(await track.canDecode())) return null
@@ -146,13 +191,9 @@ export class MusicDecodeStream {
     return total
   }
 
-  /** Bytes `start` up to (not including) `end`. A local file: a failed read is a missing or unreadable file, never one worth retrying. */
+  /** Bytes `start` up to (not including) `end` (`readFullRange`). */
   private async readRange(start: number, end: number): Promise<Uint8Array> {
-    const response = await this.fetchRange(start, end)
-    if (response.status !== 206) throw new Error(`range ${start}-${end - 1} answered ${response.status}`)
-    const bytes = new Uint8Array(await response.arrayBuffer())
-    this.bytesRead += bytes.length
-    return bytes
+    return readFullRange((from) => this.fetchRange(from, end), start, end, (count) => { this.bytesRead += count })
   }
 
   private async fetchRange(start: number, end: number): Promise<Response> {
