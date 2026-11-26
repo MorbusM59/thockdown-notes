@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createNativeMusicListening } from './nativeMusicListening'
 import { setSpectrumIncludesSoundscape } from '@thockdown/visualizer/visualizer/spectrumMix'
 import { soundscapeSignalsActive, takeSoundscapeHits } from '@thockdown/visualizer/sound/soundscapeSignals'
-import { NativeSoundscapeVisuals, setSoundscapeVisualsVolume, type SoundscapeVisualsSession } from './nativeSoundscapeVisuals'
+import { NativeSoundscapeVisuals, setSoundscapeVisualsHeardGain, type SoundscapeVisualsSession } from './nativeSoundscapeVisuals'
 import type { NativeMusicPlugin } from './nativeMusic'
 import { toBase64 } from '@thockdown/soundscape/halfScalePcm'
 
@@ -22,13 +22,12 @@ function fakePlugin() {
   return { plugin, emit }
 }
 
-/** A soundscape session that is heard, answering `setVisuals`. */
+/** A soundscape session answering `setVisuals`; whether it is heard is the page's (`setSoundscapeVisualsHeardGain`). */
 function fakeSession() {
   const { plugin, emit } = fakePlugin()
   const session = {
     ...(plugin as object),
     setVisuals: vi.fn(() => Promise.resolve()),
-    getState: vi.fn(() => Promise.resolve({ source: 'regular', regular: 'playing' })),
   } as unknown as SoundscapeVisualsSession & { setVisuals: ReturnType<typeof vi.fn> }
   return { plugin: session, emit }
 }
@@ -62,7 +61,7 @@ describe('native music listening', () => {
     vi.stubGlobal('document', { hidden: false, addEventListener: () => {}, removeEventListener: () => {} })
     const music = fakePlugin()
     const session = fakeSession()
-    setSoundscapeVisualsVolume(0.25)
+    setSoundscapeVisualsHeardGain(0.25)
     const visuals = new NativeSoundscapeVisuals(session.plugin)
     await Promise.resolve()
     let musicGain = 0.5
@@ -99,6 +98,8 @@ describe('native soundscape visuals', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => now * 1000)
     vi.stubGlobal('document', { hidden: false, addEventListener: () => {}, removeEventListener: () => {} })
     const session = fakeSession()
+    // Heard because the page says so: the session never reports a play the page made itself.
+    setSoundscapeVisualsHeardGain(0.25)
     new NativeSoundscapeVisuals(session.plugin)
     await Promise.resolve()
     const hit = (frame: number) => ({ frame, kind: 'drip', amplitude: 0.1, salience: 3 })
@@ -107,7 +108,7 @@ describe('native soundscape visuals', () => {
     expect(soundscapeSignalsActive(now)).toBe(true)
     now = 10.6
     expect(takeSoundscapeHits(now).map((taken) => taken.at)).toEqual([10.5])
-    session.emit('sessionChanged', { source: 'regular', regular: 'paused' })
+    setSoundscapeVisualsHeardGain(0)
     now = 12.5
     expect(takeSoundscapeHits(now)).toEqual([])
     // Not heard: what arrives is not taken.

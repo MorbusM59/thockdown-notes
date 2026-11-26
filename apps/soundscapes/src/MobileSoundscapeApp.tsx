@@ -16,7 +16,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
-import { setSoundscapeVisualsVolume } from './nativeSoundscapeVisuals'
+import { sessionHeard, setSoundscapeVisualsHeardGain } from './nativeSoundscapeVisuals'
 import { resumedOutputContext } from '@thockdown/soundscape/audioOutputBus'
 import {
   activeSoundscape,
@@ -365,7 +365,10 @@ export function MobileSoundscapeApp() {
     soundscapeEngine.setChannel(soundscapeChannel)
   }, [soundscapeChannel])
   const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
-  useEffect(() => setSoundscapeVisualsVolume(sessionVolume), [sessionVolume])
+  // The gain the visualizer weighs the soundscape's signals at: its volume while it is heard. Here, because this page
+  // is the one place that knows both its own play and pause and the session's (`follow`, below).
+  const soundscapeHeardGain = sessionHeard({ regular, source }) ? sessionVolume : 0
+  useEffect(() => setSoundscapeVisualsHeardGain(soundscapeHeardGain), [soundscapeHeardGain])
 
   useEffect(() => {
     savePreferences(preferences)

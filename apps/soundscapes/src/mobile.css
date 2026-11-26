@@ -538,12 +538,12 @@ html[data-beat-pane] .visualizer-page > .editor-beat-pane.has-grid {
   text-align: left;
 }
 
-/* Settings > Debugging's beat trace (MusicDiagnostics.tsx): its newest lines, small and unwrapped, scrolled sideways. */
+/* Settings > Debugging's beat trace (MusicDiagnostics.tsx): its newest lines, small, each wrapped to the panel's width. */
 .mobile-beat-trace {
   margin:      var(--spacing-regular) 0 0;
-  overflow-x:  auto;
   font-size:   calc(9px * var(--ui-font-scale));
   line-height: 1.3;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   color:       var(--color-text-base);
 }
