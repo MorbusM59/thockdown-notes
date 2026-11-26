@@ -172,6 +172,20 @@ public class BackgroundAudioPlugin extends Plugin {
         }
         JSObject result = new JSObject();
         result.put("granted", granted);
+        // A scheduled run starts with no page, so its notification is the
+        // only way to see or stop it: ask for it here too, not only on play.
+        if (granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && getPermissionState("notifications") == com.getcapacitor.PermissionState.PROMPT) {
+            requestPermissionForAlias("notifications", call, "afterScheduleNotificationPermission");
+            return;
+        }
+        call.resolve(result);
+    }
+
+    @com.getcapacitor.annotation.PermissionCallback
+    private void afterScheduleNotificationPermission(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("granted", true);
         call.resolve(result);
     }
 
