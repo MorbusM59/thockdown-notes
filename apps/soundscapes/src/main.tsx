@@ -9,7 +9,8 @@ import { phoneTextureCache } from './textureCache'
 // The shared packages' styles: the soundscape panel is the desktop panel
 // unchanged, and each package carries the rules for what it renders.
 import './app.css'
-import '@fortawesome/fontawesome-free/css/all.min.css'
+import '@fortawesome/fontawesome-free/css/fontawesome.min.css'
+import '@fortawesome/fontawesome-free/css/solid.min.css'
 import './mobile.css'
 
 // The desktop's rules for every button, so the shared panel behaves the

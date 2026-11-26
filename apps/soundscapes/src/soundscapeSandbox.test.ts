@@ -135,4 +135,26 @@ describe('soundscape renderer bundle', () => {
     renderer.soundscapeStep(played + SAMPLE_RATE, 64);
     expect(JSON.parse(renderer.soundscapeVisualsTake())).toEqual({ spectrum: [], signals: [] });
   });
+  it('keeps rendering with the visuals on across takes, each take opening a new run where the last ended', () => {
+    // The Java loop takes after every step that rendered; the step after a
+    // take used to throw (no open run to add to) and fail the renderer.
+    const renderer = sandbox();
+    renderer.soundscapeInit(JSON.stringify({ sampleRate: SAMPLE_RATE, seed: 7, spliceMarginSec: MARGIN_SEC }));
+    renderer.soundscapeConfigure(configure());
+    renderer.soundscapeVisuals(16, 1, SAMPLE_RATE);
+    let played = 0;
+    let next = -1;
+    for (let step = 0; step < 40; step += 1) {
+      const chunks = JSON.parse(renderer.soundscapeStep(played, 4)) as Array<{ s: number; d: string }>;
+      const visuals = JSON.parse(renderer.soundscapeVisualsTake()) as { signals: Array<{ from: number }> };
+      if (chunks.length > 0) {
+        expect(visuals.signals).toHaveLength(1);
+        expect(visuals.signals[0].from).toBe(chunks[0].s);
+        if (next >= 0) expect(chunks[0].s).toBe(next);
+        next = chunks[chunks.length - 1].s + RENDER_CHUNK_FRAMES;
+      }
+      played += SAMPLE_RATE / 10;
+    }
+    expect(next).toBeGreaterThan(0);
+  });
 });
