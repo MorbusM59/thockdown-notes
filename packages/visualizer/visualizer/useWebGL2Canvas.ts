@@ -1,3 +1,4 @@
+import { reportFailure } from '@thockdown/audio/healthLog'
 import { useEffect, useRef, useState, type DependencyList, type RefObject } from 'react'
 
 /**
@@ -37,9 +38,14 @@ export function useWebGL2Canvas(
   useEffect(() => {
     const canvas = ref.current
     if (!canvas) return
+    let releasing = false
     const onLost = (event: Event) => {
       event.preventDefault()
       lossSeenRef.current = true
+      // A loss this component did not cause (the GPU process reset, the
+      // driver took it back) is a failure; the browser restores it, and
+      // `onRestored` sets the scene up again.
+      if (!releasing) reportFailure('visualizer', `WebGL context lost on a ${canvas.width}x${canvas.height} canvas`)
       // The browser decides whether the loss may be restored once this
       // listener has RETURNED (by whether it cancelled the event), so the
       // pending restore is asked for after the dispatch, not inside it (a
@@ -61,6 +67,7 @@ export function useWebGL2Canvas(
       // event was cancelled may be restored, so releasing after removing it
       // left a remount's context dead for good.
       const gl = canvas.getContext('webgl2')
+      releasing = true
       if (gl && !gl.isContextLost()) loseRef.current?.loseContext()
       canvas.removeEventListener('webglcontextlost', onLost)
       canvas.removeEventListener('webglcontextrestored', onRestored)

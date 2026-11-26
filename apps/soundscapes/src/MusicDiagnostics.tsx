@@ -5,9 +5,11 @@
  * the visualizer's frame rate on its last visit (visualizerFrameRate.ts);
  * and the BEAT TRACE (@thockdown/visualizer/sound/beatTrace.ts), the
  * desktop's console trace of what the visualizer's analysis reads, switched
- * on here and its latest lines shown, since a phone has no console.
+ * on here and its latest lines shown, since a phone has no console; and the
+ * health log of the playback's failures (HealthLogPanel).
  */
 import { useEffect, useState } from 'react'
+import { HealthLogPanel } from '@thockdown/interaction/HealthLogPanel'
 import { useAccordionSectionOpen } from '@thockdown/interaction/accordionSectionOpen'
 import { nativeMusic } from './nativeMusic'
 import { lastVisualizerFrameRate, readVisualizerFrameRate } from './visualizerFrameRate'
@@ -81,5 +83,6 @@ export function MusicDiagnostics() {
       </button>
     </div>
     {trace ? <pre className="mobile-beat-trace">{trace}</pre> : null}
+    <HealthLogPanel />
   </>)
 }

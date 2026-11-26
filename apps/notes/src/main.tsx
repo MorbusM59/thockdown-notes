@@ -1,4 +1,5 @@
 import ReactDOM from 'react-dom/client'
+import { installUncaughtFailureLog } from '@thockdown/audio/healthLog'
 import App from './App'
 import { installBrowserMockBridges } from './dev/installBrowserMockBridges.ts'
 import { installHoverTracking } from '@thockdown/interaction/hoverTracking'
@@ -41,6 +42,7 @@ installTexturePorts({
   beginWork: () => beginBackgroundWork('texture'),
 })
 installPressTracking()
+installUncaughtFailureLog()
 installHoverTracking()
 installScrollTrackTokens(1)
 installEntryFieldOutsidePress()

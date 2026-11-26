@@ -10,6 +10,7 @@
  * rotation is the native renderer's, re-read whenever the song heard changes
  * (every pick moves it, and only then).
  */
+import { createRecovery, reportFailure } from '@thockdown/audio/healthLog'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import {
   getNextActiveSlotsForSelection,
@@ -351,8 +352,21 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
       publish()
     })
   })
+  // The renderer died (MusicRenderer's onFailure): logged, and the music
+  // started again once, where the session left it. Nothing to play is logged
+  // and left: starting again would find the same nothing.
+  const recovery = createRecovery('music', async () => {
+    setPlaying((await native.getState()).playing)
+    await startMusic()
+  })
+  const failure = await native.addListener('failure', ({ message }) => {
+    if (message.startsWith('Music renderer stopped')) recovery.fail(message)
+    else reportFailure('music', message)
+  })
   return () => {
+    recovery.cancel()
     void handle.remove()
+    void failure.remove()
     setMusicLibraryReads(null)
     plugin = null
   }

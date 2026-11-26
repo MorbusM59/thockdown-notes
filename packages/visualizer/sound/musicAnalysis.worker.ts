@@ -1,8 +1,11 @@
 /** The beat pulse's analysis off the page's thread (`musicAnalysis.ts`): each request handled in order, each ask answered. */
 
-import { MusicAnalysis, type AnalysisRequest } from './musicAnalysis'
+import { MusicAnalysis, type AnalysisFailure, type AnalysisRequest } from './musicAnalysis'
 
-const analysis = new MusicAnalysis()
+const analysis = new MusicAnalysis(undefined, (message) => {
+  const failure: AnalysisFailure = { type: 'failure', message }
+  self.postMessage(failure)
+})
 
 self.onmessage = (event: MessageEvent<AnalysisRequest>) => {
   const answer = analysis.handle(event.data)

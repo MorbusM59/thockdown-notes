@@ -1,3 +1,4 @@
+import { HealthLogPanel } from '@thockdown/interaction/HealthLogPanel'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import { IS_LINUX_DESKTOP } from '../shared/platform'
@@ -2826,6 +2827,7 @@ export function SidebarOptionsPanel({
             <span className="fa-solid fa-trash-can" aria-hidden="true" />
           </button>
         </div>
+        <HealthLogPanel />
       </AccordionSection>
 
       {/* THOCKQUEST'S OWN SETTINGS. Four sliders in a two-by-two, then the

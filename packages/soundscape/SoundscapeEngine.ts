@@ -26,6 +26,7 @@
  * The playback exists only while something is audible: it is opened on the
  * first audible `apply` and closed after a short fade once nothing is.
  */
+import { createRecovery, describeFailure } from '@thockdown/audio/healthLog';
 import {
   isSoundscapeAudible,
   type SoundscapePreferences,
@@ -103,6 +104,14 @@ export class SoundscapeEngine {
   private preferences: SoundscapePreferences | null = null;
   private starting: Promise<void> | null = null;
   private disconnectTimer: number | null = null;
+  /**
+   * A playback that failed (its renderer died, its audio could not open) is
+   * reopened by applying the latest preferences again, on the health log's
+   * recovery (once); a deliberate silence cancels the pending restart.
+   */
+  private readonly recovery = createRecovery('soundscape', () => {
+    if (this.preferences && !this.playback) this.apply(this.preferences);
+  });
 
   /** Play through `factory`'s playbacks from the next start on (the mobile app's native one). */
   usePlayback(factory: SoundscapePlaybackFactory): void {
@@ -134,6 +143,7 @@ export class SoundscapeEngine {
   apply(preferences: SoundscapePreferences): void {
     this.preferences = preferences;
     if (!isSoundscapeAudible(preferences)) {
+      this.recovery.cancel();
       this.startFadeSec = null;
       this.fadeOutAndClose();
       return;
@@ -158,7 +168,7 @@ export class SoundscapeEngine {
     try {
       playback = await this.playbackFactory({
         onFailure: (message) => {
-          console.error(message);
+          this.recovery.fail(message);
           // It does not play again, so it is torn down now rather than after
           // a fade: with it gone, the next apply() opens a new one.
           if (this.playback === playback) this.teardown();
@@ -175,7 +185,7 @@ export class SoundscapeEngine {
       this.update(preferences);
     } catch (error) {
       playback?.close();
-      console.error(`Unable to start soundscape audio: ${String(error)}`);
+      this.recovery.fail(`could not start: ${describeFailure(error)}`);
     }
   }
 
