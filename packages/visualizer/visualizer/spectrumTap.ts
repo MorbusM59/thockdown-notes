@@ -22,6 +22,7 @@
 
 import type { MusicPlayerService } from '../sound/MusicPlayerService'
 import { heardLagSec } from '../sound/musicBeat'
+import { BEAT_DELAY_MAX_MS } from '../shared/beatSettings'
 import type { SpectrumSource } from '../sound/musicListening'
 import { outputContext } from '@thockdown/soundscape/audioOutputBus'
 import { soundscapeHeardGain, soundscapeTapNode } from '@thockdown/soundscape/soundscapeTap'
@@ -37,8 +38,12 @@ import {
   type BandLevelPlan,
 } from './spectrumBands'
 
-/** Frames of history: about two seconds at 60 Hz, more than any device's lag. */
-const HISTORY = 128
+/**
+ * Frames of history: enough to reach back the longest delay a reader can set
+ * (`BEAT_DELAY_MAX_MS`) plus a second of reported output latency, at a 144 Hz
+ * display. A frame is one band array, so this is a few hundred kilobytes.
+ */
+const HISTORY = Math.ceil((BEAT_DELAY_MAX_MS / 1000 + 1) * 144)
 
 type Frame = { timeSec: number; levels: Float32Array }
 

@@ -62,7 +62,7 @@ export function BeatDelayControl({ beatSettings, outputDevice, onBeatSettings }:
           id="beat-delay"
           min={BEAT_DELAY_MIN_MS}
           max={BEAT_DELAY_MAX_MS}
-          step={5}
+          step={10}
           value={beatSettings.delayMsByDevice[outputDevice] ?? 0}
           trackLabel="delay"
           tooltipLabel={`Additional ms to draw the pulse later than its built-in timing offset, for ${outputDevice || 'this output device'}: kept per device and picked up again when you switch back. Raise it if the pulse leads the music, as a wireless headset often makes it`}

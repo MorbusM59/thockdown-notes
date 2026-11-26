@@ -24,6 +24,7 @@
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { MusicListening, SpectrumSource } from '@thockdown/visualizer/sound/musicListening'
 import { levelDb } from '@thockdown/visualizer/visualizer/spectrumFrames'
+import { heardLagSec } from '@thockdown/visualizer/sound/musicBeat'
 import { addBandLevels, spectrumIncludesSoundscape, spectrumMixWeights } from '@thockdown/visualizer/visualizer/spectrumMix'
 import type { NativeSoundscapeVisuals, SpectrumBatch } from './nativeSoundscapeVisuals'
 import type { NativeMusicPlugin } from './nativeMusic'
@@ -75,9 +76,9 @@ export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: So
     if (heard.playing !== wasPlaying) for (const listener of playingListeners) listener(heard.playing)
   })
 
-  /** The output frame at the playhead at `nowSec` (performance clock). */
+  /** The output frame at the playhead at `nowSec` (performance clock), which may be before the last report (a delayed reader's). */
   const playheadFrame = (nowSec: number): number =>
-    heard.playing ? heard.frame + Math.max(0, nowSec - heard.at) * heard.sampleRate : heard.frame
+    heard.playing ? heard.frame + (nowSec - heard.at) * heard.sampleRate : heard.frame
 
   const heardGain = () => (heard.playing ? volumeGain() : 0)
 
@@ -171,6 +172,16 @@ class FrameQueue {
   }
 }
 
+/**
+ * The moment whose sound is drawn at `nowSec`: the playheads report what is
+ * heard, so only the reader's delay (`heardLagSec`, the output latency being
+ * 0 here) is taken off. Frames behind it are what a delay still has to draw,
+ * so the queues let go only of what lies behind it.
+ */
+function drawnAt(nowSec: number): number {
+  return nowSec - heardLagSec()
+}
+
 class NativeSpectrum implements SpectrumSource {
   private readonly music: FrameQueue
   private readonly soundscape: FrameQueue
@@ -193,7 +204,7 @@ class NativeSpectrum implements SpectrumSource {
   start(): void {
     if (this.listeners.length > 0) return
     this.listeners.push(this.plugin.addListener('spectrum', ({ batches }) =>
-      this.music.receive(JSON.parse(batches) as SpectrumBatch[], this.playheadFrame(performance.now() / 1000))))
+      this.music.receive(JSON.parse(batches) as SpectrumBatch[], this.playheadFrame(drawnAt(performance.now() / 1000)))))
     document.addEventListener('visibilitychange', this.onVisibility)
     this.ask()
   }
@@ -218,8 +229,9 @@ class NativeSpectrum implements SpectrumSource {
   sample(nowSec: number, out: Float32Array): void {
     if (this.listeners.length > 0 && this.soundscapeAsked !== this.wantsSoundscape()) this.askSoundscape()
     const weights = this.weights()
-    const music = weights.music > 0 ? this.music.at(this.playheadFrame(nowSec)) : null
-    const soundscape = weights.soundscape > 0 && this.soundscapePort ? this.soundscape.at(this.soundscapePort.frameAt(nowSec)) : null
+    const at = drawnAt(nowSec)
+    const music = weights.music > 0 ? this.music.at(this.playheadFrame(at)) : null
+    const soundscape = weights.soundscape > 0 && this.soundscapePort ? this.soundscape.at(this.soundscapePort.frameAt(at)) : null
     if (!soundscape) {
       if (!music) {
         out.fill(-Infinity)
@@ -251,7 +263,7 @@ class NativeSpectrum implements SpectrumSource {
   private askSoundscape(): void {
     const soundscape = this.wantsSoundscape()
     if (soundscape === this.soundscapeAsked) return
-    this.soundscapePort?.requestSpectrum(soundscape ? this.bands : 0, soundscape ? (batches, playhead) => this.soundscape.receive(batches, playhead) : null)
+    this.soundscapePort?.requestSpectrum(soundscape ? this.bands : 0, soundscape ? (batches) => this.soundscape.receive(batches, this.soundscapePort!.frameAt(drawnAt(performance.now() / 1000))) : null)
     if (!soundscape) this.soundscape.clear()
     this.soundscapeAsked = soundscape
   }

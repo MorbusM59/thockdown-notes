@@ -14,6 +14,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactElement } from 'react'
 import { readNowPlaying, subscribeNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
+import { useOutputDevice } from '@thockdown/visualizer/sound/outputDevice'
 import { soundscapeConfiguration, soundscapeEngine } from '@thockdown/soundscape/SoundscapeEngine'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { sessionHeard, setSoundscapeVisualsHeardGain } from './nativeSoundscapeVisuals'
@@ -111,7 +112,7 @@ import { publishSoundstageControls, soundstageControlsFor } from '@thockdown/vis
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
-import { loadBeatSettings, loadVisualizerDouble, loadVisualizerFont, loadVisualizerState, PHONE_OUTPUT_DEVICE, saveBeatSettings, saveVisualizerDouble, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
+import { loadBeatSettings, loadVisualizerDouble, loadVisualizerFont, loadVisualizerState, saveBeatSettings, saveVisualizerDouble, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
 import { DEFAULT_VISUALIZER_FONT } from '@thockdown/visualizer/shared/visualizerFont'
 import { VisualizerFontControls } from '@thockdown/visualizer/visualizer/VisualizerFontControls'
 import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
@@ -302,6 +303,8 @@ export function MobileSoundscapeApp() {
     setVisualizerState((state) => ({ ...state, presets }))
   }, [])
   const [beatSettings, setBeatSettings] = useState(loadBeatSettings)
+  // The output the delay is kept for, followed while the app runs (audioRoute.ts).
+  const outputDevice = useOutputDevice(true)
   // The visualizer's text size, outside its presets as the desktop's font is (visualizerStore.ts).
   const [visualizerFont, setVisualizerFont] = useState(loadVisualizerFont)
   useEffect(() => saveVisualizerFont(visualizerFont), [visualizerFont])
@@ -876,10 +879,10 @@ export function MobileSoundscapeApp() {
                       fontFamily={monoFontFamily(visualizerFont.style)}
                       fontPerBox={1 / visualizerFont.boxSize}
                       falls={{ edge: visualizer.edge, pane: visualizer.pane[look.mode] }}
-                      delayMs={beatSettings.delayMsByDevice[PHONE_OUTPUT_DEVICE] ?? 0}
-                      onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [PHONE_OUTPUT_DEVICE]: delayMs } }))}
+                      delayMs={beatSettings.delayMsByDevice[outputDevice] ?? 0}
+                      onChange={(delayMs) => setBeatSettings((prev) => ({ ...prev, delayMsByDevice: { ...prev.delayMsByDevice, [outputDevice]: delayMs } }))}
                     /> : null}
-                    <BeatDelayControl beatSettings={beatSettings} outputDevice={PHONE_OUTPUT_DEVICE} onBeatSettings={setBeatSettings} />
+                    <BeatDelayControl beatSettings={beatSettings} outputDevice={outputDevice} onBeatSettings={setBeatSettings} />
                   </AccordionSection>
                   <AccordionSection ariaLabel="Signal" heading="Signal" iconClass="fa-wave-square">
                     <BeatSignalControls visualizer={visualizer} setVisualizer={setVisualizer} />
