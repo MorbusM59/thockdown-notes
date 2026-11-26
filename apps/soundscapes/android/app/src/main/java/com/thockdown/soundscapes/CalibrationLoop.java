@@ -43,6 +43,8 @@ final class CalibrationLoop {
         aheadFrames = Math.round(AHEAD_SEC * lane.sampleRate);
         lane.setVolume(1f, FADE_IN_TIME_CONSTANT_SEC);
         lane.setSolo(true);
+        // On screen, and filled only a little ahead: reported at the quick pace.
+        lane.setResponsive(true);
         fill();
     }
 

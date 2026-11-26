@@ -17,9 +17,12 @@ package com.thockdown.soundscapes;
  * THE PLAYHEAD (playheadFrame) is how far the output has taken audio from
  * this lane and handed it to the device, which is as far as a splice can no
  * longer reach. It starts at the lane's first write and moves with the
- * output's clock: what is not queued is played as silence. Every
- * REPORT_FRAMES the lane calls its listener, which is what lets its renderer
- * render more.
+ * output's clock: what is not queued is played as silence. Every half
+ * second (every RESPONSIVE_REPORT_FRAMES while the page draws from the
+ * renderer, `setResponsive`) the lane calls its listener, which is what lets
+ * its renderer render more. The renderer keeps seconds of lead, so a slow
+ * report only refills in larger batches; it exists for the screen-off case,
+ * where each report wakes the renderer and a round trip to its sandbox.
  *
  * THE VOLUME is the listener's, glided so a change is not heard as a step.
  * A FADE is a second gain, linear over a set time, for a schedule's fade in
@@ -36,7 +39,10 @@ final class OutputLane {
     }
 
     private static final double CAPACITY_SEC = 12;
-    private static final int REPORT_FRAMES = 2048;
+    /** About 43 ms at 48 kHz: what the visualizer's spectrum and signals arrive at. */
+    private static final int RESPONSIVE_REPORT_FRAMES = 2048;
+    /** Half a second: the refill pace while nothing on screen reads the renderer's output. */
+    private static final double IDLE_REPORT_SEC = 0.5;
     /** Renderers encode samples at 1/HEADROOM of their value. */
     static final float HEADROOM = 2f;
     /** Below this gain a paused lane is silent enough to hold. */
@@ -53,6 +59,7 @@ final class OutputLane {
     private boolean started = false;
     private boolean closed = false;
     private int sinceReport = 0;
+    private int reportFrames;
 
     private float volume = 0f;
     private float volumeTarget = 0f;
@@ -73,6 +80,20 @@ final class OutputLane {
         sampleRate = output.sampleRate;
         capacity = (int) Math.ceil(CAPACITY_SEC * sampleRate);
         ring = new short[capacity * 2];
+        reportFrames = idleReportFrames();
+    }
+
+    private int idleReportFrames() {
+        return (int) Math.round(IDLE_REPORT_SEC * sampleRate);
+    }
+
+    /** Report at the visualizer's pace (true) or the idle refill pace (false); a change to responsive reports at the next block. */
+    void setResponsive(boolean responsive) {
+        synchronized (output) {
+            int next = responsive ? RESPONSIVE_REPORT_FRAMES : idleReportFrames();
+            if (next < reportFrames) sinceReport = Math.max(sinceReport, next);
+            reportFrames = next;
+        }
     }
 
     /** How far audio has been handed to the device: as far as a splice can no longer reach. */
@@ -227,7 +248,7 @@ final class OutputLane {
         // Silence still moves the playhead: positions are time.
         playhead += frames;
         sinceReport += frames;
-        if (sinceReport < REPORT_FRAMES) return false;
+        if (sinceReport < reportFrames) return false;
         sinceReport = 0;
         return true;
     }

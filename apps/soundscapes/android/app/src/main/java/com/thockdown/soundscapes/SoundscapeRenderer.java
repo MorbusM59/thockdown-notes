@@ -20,7 +20,7 @@ import org.json.JSONObject;
  * a page's lifecycle reaches this isolate.
  *
  * Its thread waits for something to do rather than polling: the output's
- * progress (every REPORT_FRAMES played) or a new configuration wakes it; it
+ * progress (OutputLane's report, every half second or faster) or a new configuration wakes it; it
  * then steps the renderer with the true playhead, writes what comes back
  * into the output, and waits again once the renderer returns nothing (the
  * lead is full). Settings changes are spliced against that same playhead,
@@ -98,6 +98,7 @@ final class SoundscapeRenderer {
         visualsSink = sink;
         spectrumBands = bands;
         signals = withSignals;
+        output.setResponsive(bands > 0 || withSignals);
         visualsChanged = true;
         wake();
     }
