@@ -10,9 +10,11 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
+import java.io.FileInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -88,10 +90,10 @@ final class MusicFileServer extends BridgeWebViewClient {
                 return new WebResourceResponse(null, null, 416, "Range Not Satisfiable", headers, null);
             }
         }
-        InputStream in = resolver.openInputStream(document);
+        InputStream in = open(resolver, document, first);
         if (in == null) return status(404, "Not Found");
-        // Skipped rather than positioned: a provider's stream may keep its own offset.
-        for (long skipped = 0; skipped < first; ) {
+        long skipped = position(in);
+        for (; skipped < first; ) {
             long step = in.skip(first - skipped);
             if (step <= 0) {
                 if (in.read() < 0) break;
@@ -113,6 +115,44 @@ final class MusicFileServer extends BridgeWebViewClient {
             headers,
             new Limited(in, count)
         );
+    }
+
+    /**
+     * The file's stream, POSITIONED at `first` when the provider hands out a
+     * seekable descriptor (a local file does), so a range deep into a long
+     * track costs nothing to reach. Read past instead, the stream had to walk
+     * every byte before it, every request: tens of megabytes deep into a long
+     * mix, slow enough for the WebView to give up on the response ("Failed to
+     * fetch"). A provider whose descriptor is a pipe gets a plain stream,
+     * walked by the caller (`position` says how far it already is).
+     */
+    private static InputStream open(ContentResolver resolver, Uri document, long first) throws IOException {
+        AssetFileDescriptor file = resolver.openAssetFileDescriptor(document, "r");
+        if (file == null) return null;
+        FileInputStream stream = file.createInputStream();
+        try {
+            FileChannel channel = stream.getChannel();
+            channel.position(file.getStartOffset() + first);
+            return new Positioned(stream, first);
+        } catch (IOException notSeekable) {
+            stream.close();
+            return resolver.openInputStream(document);
+        }
+    }
+
+    /** How far into the file `in` already stands. */
+    private static long position(InputStream in) {
+        return in instanceof Positioned ? ((Positioned) in).at : 0;
+    }
+
+    /** A stream already standing at byte `at` of its file. */
+    private static final class Positioned extends FilterInputStream {
+        final long at;
+
+        Positioned(InputStream in, long at) {
+            super(in);
+            this.at = at;
+        }
     }
 
     private static WebResourceResponse status(int code, String reason) {
