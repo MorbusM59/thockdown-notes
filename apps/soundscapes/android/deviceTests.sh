@@ -10,7 +10,9 @@ cd "$(dirname "$0")"
 APP=com.thockdown.soundscapes
 RUNNER=$APP.test/androidx.test.runner.AndroidJUnitRunner
 
-./gradlew :app:installDebug :app:installDebugAndroidTest --no-daemon
+# Signed with the machine's own debug key: the emulator starts empty, so the
+# shared key the published APK needs buys nothing here.
+env -u SOUNDSCAPES_KEYSTORE ./gradlew :app:installDebug :app:installDebugAndroidTest --no-daemon
 
 run() {
   echo "== $1"
