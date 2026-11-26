@@ -120,11 +120,29 @@ final class SoundscapeSchedule {
             events, musicEvents, Collections.unmodifiableList(entries));
     }
 
+    /**
+     * Whether a schedule switched on is IN FORCE: only while exact alarms are
+     * granted, since without them it can start nothing on time (and an
+     * inexact alarm may not start the playback service from the background).
+     * The grant is lost without the schedule being told -- revoked in the
+     * system settings, or never restored with the app's data after a
+     * reinstall -- and a schedule that stayed "on" then showed on, never
+     * asked again and never played. So the stored switch is read through
+     * this, by every reader at once (load): the page sees it off, and turning
+     * it on asks for the grant again.
+     */
+    static boolean inForce(boolean switchedOn, boolean exactAlarms) {
+        return switchedOn && exactAlarms;
+    }
+
+    /** The stored schedule, switched off while it cannot be in force (inForce). */
     static SoundscapeSchedule load(Context context) {
         String stored = preferences(context).getString(KEY, null);
         if (stored != null) {
             try {
-                return fromJson(new JSONObject(stored));
+                SoundscapeSchedule schedule = fromJson(new JSONObject(stored));
+                return inForce(schedule.enabled, canArm(context)) == schedule.enabled ? schedule
+                    : new SoundscapeSchedule(false, schedule.masterVolume, schedule.events, schedule.musicEvents, schedule.entries);
             } catch (Exception ignored) {
                 // Unreadable: as if there were none.
             }
@@ -259,7 +277,7 @@ final class SoundscapeSchedule {
      */
     static void armApplyState(Context context) {
         Context app = context.getApplicationContext();
-        if (!load(app).enabled || !canArm(app)) return;
+        if (!load(app).enabled) return;
         Intent intent = new Intent(app, ScheduleReceiver.class).setAction(ACTION_APPLY_STATE);
         app.getSystemService(AlarmManager.class).setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
             System.currentTimeMillis() + APPLY_STATE_DELAY_MS,
@@ -277,7 +295,7 @@ final class SoundscapeSchedule {
         List<Event> all = new ArrayList<>(schedule.events);
         all.addAll(schedule.musicEvents);
         all.sort((a, b) -> Integer.compare(a.at, b.at));
-        if (!schedule.enabled || all.isEmpty() || !canArm(app)) {
+        if (!schedule.enabled || all.isEmpty()) {
             alarms.cancel(PendingIntent.getBroadcast(app, 0, intent, flags));
             return;
         }
