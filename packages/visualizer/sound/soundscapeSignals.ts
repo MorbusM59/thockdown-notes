@@ -99,9 +99,20 @@ export function receiveSoundscapeSignals(signals: readonly SoundscapeSignal[], n
   for (const signal of signals) {
     if (signal.kind === 'gust') gusts.push({ at: signal.at, value: signal.value })
     else hits.push(signal)
+    received[signal.kind]++
   }
   lastReceived = nowSec
   for (const wake of wakers) wake()
+}
+
+/** Signals received since the beat trace last read them (`takeReceivedCounts`), by kind. */
+const received: Record<SoundscapeSignal['kind'], number> = { drip: 0, drop: 0, chime: 0, gust: 0 }
+
+/** The signals received since the last call, by kind, for the beat trace's `soundscape` line; the counts start over. */
+export function takeReceivedCounts(): Record<SoundscapeSignal['kind'], number> {
+  const counts = { ...received }
+  received.drip = received.drop = received.chime = received.gust = 0
+  return counts
 }
 
 /** Calls `wake` whenever signals arrive (the trackers' frame loop, stopped without music). */

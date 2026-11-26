@@ -75,7 +75,7 @@ import { SILENT_GAIN } from '../visualizer/spectrumMix'
 import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
 import { loudnessGain } from './peakWindow'
 import { flashLevelAt, flashPhaseAt, FLASH_BEATS_REPEAT } from '../shared/flashing'
-import { HIT_TRACKER, soundscapeHitResponse, soundscapeSignalsActive, soundscapeSignalWeights, subscribeSoundscapeSignals, takeSoundscapeHits } from './soundscapeSignals'
+import { HIT_TRACKER, soundscapeHitResponse, soundscapeSignalsActive, soundscapeSignalWeights, subscribeSoundscapeSignals, takeReceivedCounts, takeSoundscapeHits } from './soundscapeSignals'
 
 /** A listener this far from where its clock put it has jumped (a seek, a stall), and the analysis starts over. */
 const RESYNC_SEC = 0.75
@@ -551,12 +551,41 @@ function takeSoundscape(now: number): void {
   const reads = readsOf()
   const peak = musicHeard() ? musicPeak : 0
   for (const hit of hits) {
-    if (now - hit.at > HIT_LATE_SEC) continue
+    if (now - hit.at > HIT_LATE_SEC) {
+      soundscapeTrace.late++
+      continue
+    }
     const name = HIT_TRACKER[hit.kind]
     const index = TRACKER_INDEX[name]
-    if ((reads & (1 << index)) === 0) continue
-    soundscapeRaw[index] = Math.max(soundscapeRaw[index], soundscapeHitResponse(hit, peak, weights, trackers[name].contrast))
+    if ((reads & (1 << index)) === 0) {
+      soundscapeTrace.unread++
+      continue
+    }
+    const response = soundscapeHitResponse(hit, peak, weights, trackers[name].contrast)
+    soundscapeTrace.taken++
+    soundscapeTrace.peak[index] = Math.max(soundscapeTrace.peak[index], response)
+    soundscapeRaw[index] = Math.max(soundscapeRaw[index], response)
   }
+}
+
+/** What the soundscape's hits came to since the last `soundscape` trace line: taken, too late, read by no mix, and each tracker's highest response. */
+const soundscapeTrace = { taken: 0, late: 0, unread: 0, peak: [0, 0, 0], frames: 0, lastAt: -Infinity }
+
+/**
+ * One trace line a second while the beat trace is on and the trackers run: the signals received by kind, what the
+ * hits came to, the weights the two sources are heard at, and the frames ticked. With the soundscape alone this is the
+ * only line the trackers write, so a log with none of it means their frame loop did not run.
+ */
+function traceSoundscape(now: number): void {
+  soundscapeTrace.frames++
+  if (!isBeatTraceOn() || now - soundscapeTrace.lastAt < 1) return
+  soundscapeTrace.lastAt = now
+  const received = takeReceivedCounts()
+  const weights = soundscapeSignalWeights()
+  const [thump, pierce, tick] = soundscapeTrace.peak
+  appendBeatTrace(`soundscape recv drip=${received.drip} drop=${received.drop} chime=${received.chime} gust=${received.gust} taken=${soundscapeTrace.taken} late=${soundscapeTrace.late} unread=${soundscapeTrace.unread} peak thump=${thump.toFixed(2)} pierce=${pierce.toFixed(2)} tick=${tick.toFixed(2)} weight sc=${weights.soundscape.toFixed(2)} music=${weights.music.toFixed(2)} reads=${readsOf()} frames=${soundscapeTrace.frames}`)
+  soundscapeTrace.taken = soundscapeTrace.late = soundscapeTrace.unread = soundscapeTrace.frames = 0
+  soundscapeTrace.peak.fill(0)
 }
 
 /**
@@ -581,6 +610,7 @@ function tick(frameTimeMs: number): void {
     return
   }
   takeSoundscape(now)
+  traceSoundscape(now)
   if (!musicHeard()) {
     // Music that is not HEARD (stopped, or playing on with its channel switched out or its volume at nothing) is
     // left out as stopped music is: what it was doing is forgotten, so hearing it again resyncs as a play does.

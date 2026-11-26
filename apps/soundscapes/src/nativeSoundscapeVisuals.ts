@@ -19,6 +19,7 @@
  *   hidden, where nothing draws.
  */
 import { receiveSoundscapeSignals, setSoundscapeHeardGain, type SoundscapeSignal } from '@thockdown/visualizer/sound/soundscapeSignals'
+import { appendBeatTrace, isBeatTraceOn } from '@thockdown/visualizer/sound/beatTrace'
 import type { NativeSoundscapePlugin, SessionState } from './backgroundAudioHost'
 
 /** A batch of spectrum frames as the renderer sends it (spectrumFrames.ts's SpectrumFrameBatch, levels in base64). */
@@ -104,6 +105,7 @@ export class NativeSoundscapeVisuals {
     this.reportedAt = now
     const visuals = JSON.parse(data.visuals) as { spectrum: SpectrumBatch[]; signals: SignalBatch[] }
     this.spectrumReceiver?.(visuals.spectrum, data.playhead)
+    this.trace(now, visuals.signals)
     if (!this.heard) return
     const at = (frame: number) => now + (frame - data.playhead) / data.sampleRate
     for (const batch of visuals.signals) {
@@ -117,6 +119,23 @@ export class NativeSoundscapeVisuals {
       // A batch re-sent after a rewind replaces everything held from its first frame on.
       receiveSoundscapeSignals(signals, now, at(batch.from))
     }
+  }
+
+  /** What arrived since the last `soundscape visuals` trace line: events, signals in them, and the latest heard. */
+  private traced = { events: 0, signals: 0, lastAt: -Infinity }
+
+  /**
+   * One beat-trace line a second while the trace is on: the `visuals` events the renderer sent, the signals in them,
+   * whether the session counts as heard and at what gain. It is written whether or not the trackers run, so a log
+   * shows the delivery apart from what the trackers made of it (musicBeat.ts's `soundscape recv` line).
+   */
+  private trace(now: number, batches: SignalBatch[]): void {
+    this.traced.events++
+    for (const batch of batches) this.traced.signals += batch.list.length
+    if (!isBeatTraceOn() || now - this.traced.lastAt < 1) return
+    this.traced.lastAt = now
+    appendBeatTrace(`soundscape visuals events=${this.traced.events} signals=${this.traced.signals} heard=${this.heard} gain=${this.heardGain().toFixed(2)} asked=${this.asked.signals ? 'signals' : 'none'}/${this.asked.bands}`)
+    this.traced.events = this.traced.signals = 0
   }
 
   private ask(): void {

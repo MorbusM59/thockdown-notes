@@ -11,6 +11,11 @@
 // - `score thump` / `score pierce` / `score tick`: every instance a tracker
 //   took, with its strength and the response it gave.
 // - `caret`: once a second, the caret's beat (`musicBeat.ts`'s `traceCaret`).
+// - `soundscape recv`: once a second while the trackers run, the soundscape's
+//   signals received by kind and what its hits came to (`musicBeat.ts`'s
+//   `traceSoundscape`); with the soundscape alone, the only line they write.
+// - `soundscape visuals`: once a second on the phone, the native renderer's
+//   deliveries, whether or not the trackers run (`nativeSoundscapeVisuals.ts`).
 // - `beat RESYNC`: the analysis started over at the listener (a seek, a new
 //   track, a tracker newly read), decoding the window around it afresh.
 
