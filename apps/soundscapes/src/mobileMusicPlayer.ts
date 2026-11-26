@@ -87,6 +87,8 @@ function heardGain(): number {
 }
 
 let plugin: NativeMusicPlugin | null = null
+/** Drops a pending restart after a renderer failure (a pause means the reader wants it silent). */
+let cancelMusicRecovery: () => void = () => {}
 // Whether the music is heard playing (the native player's `heard` reports).
 let playing = false
 // The active soundstage as the native processing takes it (musicStageOf), sent with every start.
@@ -110,6 +112,7 @@ export async function startMusic(): Promise<void> {
 
 /** Pauses the music if it plays. */
 export function pauseMusic(): void {
+  cancelMusicRecovery()
   if (!plugin || !playing) return
   setPlaying(false)
   void plugin.pause()
@@ -359,12 +362,15 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     setPlaying((await native.getState()).playing)
     await startMusic()
   })
+  cancelMusicRecovery = () => recovery.cancel()
   const failure = await native.addListener('failure', ({ message }) => {
-    if (message.startsWith('Music renderer stopped')) recovery.fail(message)
+    // Restarted only if it was heard playing: a renderer that died while paused stays paused.
+    if (playing && message.startsWith('Music renderer stopped')) recovery.fail(message)
     else reportFailure('music', message)
   })
   return () => {
     recovery.cancel()
+    cancelMusicRecovery = () => {}
     void handle.remove()
     void failure.remove()
     setMusicLibraryReads(null)

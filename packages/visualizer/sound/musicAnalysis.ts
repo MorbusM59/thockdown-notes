@@ -99,6 +99,7 @@ export type AnalysisRequest = AnalysisRestart | AnalysisAsk | AnalysisDropDrums 
 /** Sent unasked when the analysis cannot read the song (`MusicAnalysis`'s `onFailure`). */
 export interface AnalysisFailure {
   type: 'failure'
+  run: number
   message: string
 }
 
@@ -218,7 +219,7 @@ export class MusicAnalysis {
   constructor(
     private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url),
     /** A file that could not be opened or stopped decoding short of its end: the page's health log hears of it. */
-    private readonly onFailure: (message: string) => void = () => {},
+    private readonly onFailure: (run: number, message: string) => void = () => {},
   ) {}
 
   /** Handles one request; an ask is answered, everything else returns null. */
@@ -270,7 +271,7 @@ export class MusicAnalysis {
     void stream.sampleRate().then((sampleRate) => {
       if (id !== this.run) return
       if (sampleRate === null) {
-        this.onFailure(`could not open the song for analysis: ${stream.openFailed ?? 'not decodable'}`)
+        this.onFailure(id, `could not open the song for analysis: ${stream.openFailed ?? 'not decodable'}`)
         return
       }
       this.map = request.drums ? new BeatMap(sampleRate) : null
@@ -291,7 +292,7 @@ export class MusicAnalysis {
         // A decode that stops short of the file's end leaves the score to run dry; the trace is where that shows.
         if (id !== this.run) return
         this.decodeEnded = `ended@${atSec.toFixed(1)} ${error ?? 'end of file'}`
-        if (error) this.onFailure(`decoding stopped at ${atSec.toFixed(1)} s: ${error}`)
+        if (error) this.onFailure(id, `decoding stopped at ${atSec.toFixed(1)} s: ${error}`)
       })
     })
     this.listenerTime = NaN

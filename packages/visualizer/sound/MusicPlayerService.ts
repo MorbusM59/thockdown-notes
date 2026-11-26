@@ -549,6 +549,12 @@ export class MusicPlayerService {
 
   // ── Playback ───────────────────────────────────────────────────────────────
 
+  /** Anything that silences the music on purpose drops a pending resume, so a failure never restarts what the reader stopped. */
+  private cancelRecovery(): void {
+    this.resumeAfterFailure = null;
+    this.recovery.cancel();
+  }
+
   async play(filePath: string): Promise<void> {
     this.cancelSeekFade()
     if (this.resumeAfterFailure && this.resumeAfterFailure.filePath !== filePath) this.resumeAfterFailure = null
@@ -639,6 +645,7 @@ export class MusicPlayerService {
   }
 
   pause(): void {
+    this.cancelRecovery();
     if (!this.element) return;
     this.cancelSeekFade()
     this.setPlaying(false);
@@ -655,8 +662,7 @@ export class MusicPlayerService {
   }
 
   stop(): void {
-    this.resumeAfterFailure = null;
-    this.recovery.cancel();
+    this.cancelRecovery();
     if (!this.element) return;
     this.cancelSeekFade()
     this.setPlaying(false);
@@ -675,6 +681,7 @@ export class MusicPlayerService {
 
   /** Fade to silence over 100 ms then pause.  Resolves when the fade completes. */
   fadeOut(): Promise<void> {
+    this.cancelRecovery();
     this.cancelSeekFade()
     return new Promise((resolve) => {
       if (!this.element) { resolve(); return; }

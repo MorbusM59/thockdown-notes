@@ -186,10 +186,14 @@ export function installUncaughtFailureLog(): void {
   window.addEventListener('error', (event) => {
     // A resource that failed to load fires a non-ErrorEvent here; only script errors are failures of the app.
     if (!(event instanceof ErrorEvent)) return
+    // Chromium reports a ResizeObserver whose callbacks resized again as an error; it is layout churn, not a fault.
+    if (event.message.startsWith('ResizeObserver loop')) return
     const where = event.filename ? ` at ${event.filename.split('/').pop()}:${event.lineno}` : ''
     reportFailure('app', `${event.error ? describeFailure(event.error) : event.message}${where}`)
   })
   window.addEventListener('unhandledrejection', (event) => {
+    // An interrupted play() (a song switched while starting) rejects with AbortError by design.
+    if (event.reason instanceof DOMException && event.reason.name === 'AbortError') return
     reportFailure('app', `unhandled rejection: ${describeFailure(event.reason)}`)
   })
 }

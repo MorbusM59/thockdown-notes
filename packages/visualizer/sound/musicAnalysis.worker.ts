@@ -2,8 +2,8 @@
 
 import { MusicAnalysis, type AnalysisFailure, type AnalysisRequest } from './musicAnalysis'
 
-const analysis = new MusicAnalysis(undefined, (message) => {
-  const failure: AnalysisFailure = { type: 'failure', message }
+const analysis = new MusicAnalysis(undefined, (run, message) => {
+  const failure: AnalysisFailure = { type: 'failure', run, message }
   self.postMessage(failure)
 })
 

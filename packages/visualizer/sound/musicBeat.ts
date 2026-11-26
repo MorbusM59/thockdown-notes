@@ -65,7 +65,7 @@
  * which decides what is worth writing), and of 0 when the loop stops.
  */
 
-import { createRecovery } from '@thockdown/audio/healthLog'
+import { createRecovery, reportFailure } from '@thockdown/audio/healthLog'
 import { createTempoFollower, TEMPO_GLIDE_SEC } from './musicTempo'
 import type { VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
@@ -389,8 +389,10 @@ function ensureWorker(): void {
   if (worker) return
   worker = new Worker(new URL('./musicAnalysis.worker.ts', import.meta.url), { type: 'module' })
   worker.onmessage = (event: MessageEvent<AnalysisAnswer | AnalysisFailure>) => {
-    if (event.data.type === 'failure') analysisRecovery.fail(event.data.message)
-    else receive(event.data)
+    // A song the analysis cannot read is logged and not restarted: the same file fails the same way.
+    // A failure from a run since replaced (a seek, another song) is not this song's.
+    if (event.data.type !== 'failure') receive(event.data)
+    else if (event.data.run === run) reportFailure('beat', event.data.message)
   }
   // A worker that fails (to load, or later) answers nothing and the pulse would
   // go flat with no word why: it is logged, dropped, and a new one started once by
@@ -403,7 +405,7 @@ function ensureWorker(): void {
   }
 }
 
-/** Restarting is a fresh worker if the last one died, and a new analysis run from the listener either way. */
+/** Restarting the worker that died: a fresh one, and a new analysis run from the listener. */
 const analysisRecovery = createRecovery('beat', () => {
   if (analysisReaderCount() === 0) return
   stale = true
