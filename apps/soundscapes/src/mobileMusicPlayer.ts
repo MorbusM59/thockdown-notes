@@ -64,8 +64,11 @@ function loadVolume(): number {
 const CHANNEL_KEY = 'thockdown:music-channel'
 
 /**
- * The music CHANNEL's switch (the dashboard's CD button): switched out, the
- * music is silent whoever plays it, the volume slider kept for its return.
+ * The music CHANNEL's switch (the dashboard's CD button): whether music is
+ * part of the mix at all. Switched out, the music PAUSES (its position kept)
+ * and nothing starts it, here or natively (MusicSession.setChannel: the
+ * notification, the schedule), so no song is decoded, rendered or analysed
+ * for a mix that leaves it out.
  */
 let channelOn = loadChannel()
 
@@ -77,9 +80,9 @@ function loadChannel(): boolean {
   }
 }
 
-/** The gain the native player is given: the slider's, or silence while the channel is switched out. */
+/** The gain the native player is given: the slider's. */
 function heardGain(): number {
-  return channelOn ? volumeGain(levels.volume) : 0
+  return volumeGain(levels.volume)
 }
 
 let plugin: NativeMusicPlugin | null = null
@@ -99,7 +102,7 @@ export function setMusicStage(stage: string): void {
  * pool), and resolves once a renderer exists, so a `choose` after it lands.
  */
 export async function startMusic(): Promise<void> {
-  if (!plugin || playing || stageJson === null) return
+  if (!plugin || playing || !channelOn || stageJson === null) return
   setPlaying(true)
   await plugin.play({ stage: stageJson })
 }
@@ -111,11 +114,12 @@ export function pauseMusic(): void {
   void plugin.pause()
 }
 
-/** Switch the music channel in or out of the mix. */
+/** Switch the music channel in or out of the mix: out, the music pauses. */
 export function setMusicChannel(on: boolean): void {
   if (on === channelOn) return
   channelOn = on
-  void plugin?.setVolume({ volume: heardGain() })
+  if (!on) setPlaying(false)
+  void plugin?.setChannel({ on })
   try {
     localStorage.setItem(CHANNEL_KEY, on ? 'on' : 'off')
   } catch {
@@ -332,6 +336,8 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
   // spectrum and signals, nativeSoundscapeVisuals.ts), each at the gain it is heard at.
   const soundscapeVisuals = nativeSoundscape && installNativeSoundscapeVisuals(nativeSoundscape)
   setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId), heardGain, soundscapeVisuals))
+  // The channel first, so a session left playing with it switched out is paused before its state is read.
+  await native.setChannel({ on: channelOn })
   setPlaying((await native.getState()).playing)
   void native.setVolume({ volume: heardGain() })
   publish()

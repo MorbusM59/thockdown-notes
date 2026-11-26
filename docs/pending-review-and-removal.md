@@ -576,3 +576,19 @@ module). Only `presetOrder` (drag reordering) has no counterpart in
 `presetList.ts` yet.
 
 **Noticed.** While porting the soundscape dock to Soundstages (2026-11-14).
+
+## The desktop music bar's mute (`musicMuted`)
+
+`App.tsx`'s `musicMuted`, persisted through `sanitizeMenu`, is passed to
+`AudioControls` as `isMuted`, which plays the music at volume 0 while it is
+set. Nothing sets it any more: the only writes are the saved state's restore
+and `unmuteForAdjust` (a slider touched while muted). A state saved while a
+mute control still existed comes back muted, with the song playing on
+silent and no control that says so, short of moving the volume.
+
+**To remove.** Delete the state, the prop pair, `effectiveVolume`'s mute
+branch, `unmuteForAdjust` and the `sanitizeMenu` line with its test, unless
+the desktop is to get a music channel like the phone's (which pauses the
+music rather than silencing it, `MusicSession.setChannel`).
+
+**Noticed.** While making the phone's music channel pause the music (2026-11-26).

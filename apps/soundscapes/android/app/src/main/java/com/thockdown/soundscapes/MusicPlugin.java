@@ -236,6 +236,13 @@ public class MusicPlugin extends Plugin {
         call.resolve();
     }
 
+    /** `{ on }`: the music channel in or out of the mix; out, the music pauses and nothing starts it (MusicSession.setChannel). */
+    @PluginMethod
+    public void setChannel(PluginCall call) {
+        session.setChannel(Boolean.TRUE.equals(call.getBoolean("on", true)));
+        call.resolve();
+    }
+
     /** `{ volume }`: 0..1 as a gain (the page applies the app's volume curve). */
     @PluginMethod
     public void setVolume(PluginCall call) {
