@@ -1,4 +1,5 @@
 import { volumeGain } from '@thockdown/audio/volumeLaw';
+import { createRecovery } from '@thockdown/audio/healthLog';
 import { LiveRoom } from '@thockdown/audio/liveRoom';
 import { foliageNearCutoffHz, type RoomShape } from '@thockdown/audio/room';
 import { StereoWidth } from '@thockdown/audio/stereoWidth';
@@ -241,6 +242,16 @@ export class MusicPlayerService {
   private processedTaps = new Set<GainNode>();
 
   get isPlaying(): boolean { return this._isPlaying; }
+
+  /** The song a playback failure stopped, and where, for the one restart; cleared by anything played meanwhile. */
+  private resumeAfterFailure: { filePath: string; at: number } | null = null;
+  private readonly recovery = createRecovery('music', async () => {
+    const resume = this.resumeAfterFailure;
+    this.resumeAfterFailure = null;
+    if (!resume || this.element) return;
+    await this.play(resume.filePath);
+    this.setCurrentTime(resume.at);
+  });
 
   private setPlaying(playing: boolean): void {
     if (this._isPlaying === playing) return;
@@ -538,8 +549,15 @@ export class MusicPlayerService {
 
   // ── Playback ───────────────────────────────────────────────────────────────
 
+  /** Anything that silences the music on purpose drops a pending resume, so a failure never restarts what the reader stopped. */
+  private cancelRecovery(): void {
+    this.resumeAfterFailure = null;
+    this.recovery.cancel();
+  }
+
   async play(filePath: string): Promise<void> {
     this.cancelSeekFade()
+    if (this.resumeAfterFailure && this.resumeAfterFailure.filePath !== filePath) this.resumeAfterFailure = null
     if (this.element && (this.currentFilePath !== filePath || this.element.ended)) {
       this.teardownSource();
     }
@@ -562,6 +580,19 @@ export class MusicPlayerService {
       });
       el.addEventListener('loadedmetadata', () => {
         this.currentDuration = el.duration ?? 0;
+      });
+      // An error while the song PLAYS (a read the transport refused, a decode
+      // fault part-way) stops the element with no 'ended', so the music fell
+      // silent with nothing said. It is logged and the song resumed where it
+      // broke, once (`healthLog.ts`). A failure to START is play()'s own
+      // listener's, which is why this one waits for playing to be true.
+      el.addEventListener('error', () => {
+        if (el !== this.element || !this._isPlaying) return;
+        const at = el.currentTime;
+        const reason = el.error ? `media error ${el.error.code}${el.error.message ? `: ${el.error.message}` : ''}` : 'unknown media error';
+        this.teardownSource();
+        this.resumeAfterFailure = { filePath, at };
+        this.recovery.fail(`stopped at ${at.toFixed(1)} s in ${filePath.split(/[\\/]/).pop()}: ${reason}`);
       });
 
       // Wire element into the Web Audio graph.
@@ -614,6 +645,7 @@ export class MusicPlayerService {
   }
 
   pause(): void {
+    this.cancelRecovery();
     if (!this.element) return;
     this.cancelSeekFade()
     this.setPlaying(false);
@@ -630,6 +662,7 @@ export class MusicPlayerService {
   }
 
   stop(): void {
+    this.cancelRecovery();
     if (!this.element) return;
     this.cancelSeekFade()
     this.setPlaying(false);
@@ -648,6 +681,7 @@ export class MusicPlayerService {
 
   /** Fade to silence over 100 ms then pause.  Resolves when the fade completes. */
   fadeOut(): Promise<void> {
+    this.cancelRecovery();
     this.cancelSeekFade()
     return new Promise((resolve) => {
       if (!this.element) { resolve(); return; }

@@ -29,6 +29,7 @@ import {
 } from '@thockdown/interaction/useHoldToAdjust'
 import { openMusicLibrary } from '@thockdown/visualizer/library/musicLibraryView'
 import { CompactScrollbarSlider } from '@thockdown/interaction/CompactScrollbarSlider'
+import { reportFailure } from '@thockdown/audio/healthLog'
 import { musicPlayerService, MissingFileError, resolveSeekPress } from '@thockdown/visualizer/sound/MusicPlayerService'
 import { publishNowPlaying, type MusicAddSource, type SoundLevels } from '@thockdown/visualizer/sound/nowPlaying'
 // Playback resumed from the previous session (the initialWasPlaying restore
@@ -307,6 +308,7 @@ export const AudioControls = memo(function AudioControls({
 
   /** Drop a song that no longer exists from both the database and the tally. */
   const purgeMissingSong = useCallback(async (songId: number) => {
+    reportFailure('music', `song ${songId} could not be played and was removed from the library`)
     await window.thockdownAudioPlayer?.purgeSong(songId)
     historyRef.current = forgetSong(historyRef.current, songId)
     await refreshCountsRef.current()

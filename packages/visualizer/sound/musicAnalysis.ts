@@ -96,6 +96,13 @@ export interface AnalysisDispose {
 
 export type AnalysisRequest = AnalysisRestart | AnalysisAsk | AnalysisDropDrums | AnalysisDispose
 
+/** Sent unasked when the analysis cannot read the song (`MusicAnalysis`'s `onFailure`). */
+export interface AnalysisFailure {
+  type: 'failure'
+  run: number
+  message: string
+}
+
 export interface AnalysisAnswer {
   type: 'answer'
   run: number
@@ -209,7 +216,11 @@ export class MusicAnalysis {
   /** How this run's decoding ended, if it did: kept for the trace's once-a-second line, which a single line would scroll past. */
   private decodeEnded: string | null = null
 
-  constructor(private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url)) {}
+  constructor(
+    private readonly createStream: (url: string) => MusicDecodeStream = (url) => new MusicDecodeStream(url),
+    /** A file that could not be opened or stopped decoding short of its end: the page's health log hears of it. */
+    private readonly onFailure: (run: number, message: string) => void = () => {},
+  ) {}
 
   /** Handles one request; an ask is answered, everything else returns null. */
   handle(request: AnalysisRequest): AnalysisAnswer | null {
@@ -258,7 +269,11 @@ export class MusicAnalysis {
     if (!stream) return
     stream.halt()
     void stream.sampleRate().then((sampleRate) => {
-      if (id !== this.run || sampleRate === null) return
+      if (id !== this.run) return
+      if (sampleRate === null) {
+        this.onFailure(id, `could not open the song for analysis: ${stream.openFailed ?? 'not decodable'}`)
+        return
+      }
       this.map = request.drums ? new BeatMap(sampleRate) : null
       this.delay = this.map ? new DelayRing(sampleRate) : null
       this.started = id
@@ -275,7 +290,9 @@ export class MusicAnalysis {
         this.releaseUpTo(at + LEAD_SEC + DECODE_MARGIN_SEC)
       }, (atSec, error) => {
         // A decode that stops short of the file's end leaves the score to run dry; the trace is where that shows.
-        if (id === this.run) this.decodeEnded = `ended@${atSec.toFixed(1)} ${error ?? 'end of file'}`
+        if (id !== this.run) return
+        this.decodeEnded = `ended@${atSec.toFixed(1)} ${error ?? 'end of file'}`
+        if (error) this.onFailure(id, `decoding stopped at ${atSec.toFixed(1)} s: ${error}`)
       })
     })
     this.listenerTime = NaN

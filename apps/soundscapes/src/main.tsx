@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { installUncaughtFailureLog } from '@thockdown/audio/healthLog'
 import { MobileSoundscapeApp } from './MobileSoundscapeApp'
 import { keepFocusOnPress } from '@thockdown/interaction/focusOwnership'
 import { installHoverTracking } from '@thockdown/interaction/hoverTracking'
@@ -18,6 +19,7 @@ import './mobile.css'
 // stylesheet uses :active), and a press does not move focus
 // (focusOwnership.ts) -- without it every tapped button kept focus.
 installPressTracking()
+installUncaughtFailureLog()
 installHoverTracking()
 // The layouts' textures, generated on the device like the desktop's and kept
 // in Cache Storage (textureCache.ts).

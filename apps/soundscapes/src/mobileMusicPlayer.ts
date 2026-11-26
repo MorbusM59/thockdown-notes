@@ -10,6 +10,7 @@
  * rotation is the native renderer's, re-read whenever the song heard changes
  * (every pick moves it, and only then).
  */
+import { createRecovery, reportFailure } from '@thockdown/audio/healthLog'
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import {
   getNextActiveSlotsForSelection,
@@ -86,6 +87,8 @@ function heardGain(): number {
 }
 
 let plugin: NativeMusicPlugin | null = null
+/** Drops a pending restart after a renderer failure (a pause means the reader wants it silent). */
+let cancelMusicRecovery: () => void = () => {}
 // Whether the music is heard playing (the native player's `heard` reports).
 let playing = false
 // The active soundstage as the native processing takes it (musicStageOf), sent with every start.
@@ -109,6 +112,7 @@ export async function startMusic(): Promise<void> {
 
 /** Pauses the music if it plays. */
 export function pauseMusic(): void {
+  cancelMusicRecovery()
   if (!plugin || !playing) return
   setPlaying(false)
   void plugin.pause()
@@ -351,8 +355,24 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
       publish()
     })
   })
+  // The renderer died (MusicRenderer's onFailure): logged, and the music
+  // started again once, where the session left it. Nothing to play is logged
+  // and left: starting again would find the same nothing.
+  const recovery = createRecovery('music', async () => {
+    setPlaying((await native.getState()).playing)
+    await startMusic()
+  })
+  cancelMusicRecovery = () => recovery.cancel()
+  const failure = await native.addListener('failure', ({ message }) => {
+    // Restarted only if it was heard playing: a renderer that died while paused stays paused.
+    if (playing && message.startsWith('Music renderer stopped')) recovery.fail(message)
+    else reportFailure('music', message)
+  })
   return () => {
+    recovery.cancel()
+    cancelMusicRecovery = () => {}
     void handle.remove()
+    void failure.remove()
     setMusicLibraryReads(null)
     plugin = null
   }

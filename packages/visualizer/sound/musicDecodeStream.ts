@@ -85,7 +85,8 @@ export class MusicDecodeStream {
   private runStartedMs = NaN
   private firstChunkSec = NaN
   /** Why the file could not be opened, for the trace; null while it opens or once it has. */
-  private openFailed: string | null = null
+  /** Why the file could not be opened, or null. */
+  openFailed: string | null = null
 
   constructor(url: string) {
     this.url = url

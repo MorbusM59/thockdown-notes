@@ -65,6 +65,7 @@
  * which decides what is worth writing), and of 0 when the loop stops.
  */
 
+import { createRecovery, reportFailure } from '@thockdown/audio/healthLog'
 import { createTempoFollower, TEMPO_GLIDE_SEC } from './musicTempo'
 import type { VisualizerMix, VisualizerTrackerName, VisualizerTrackers } from '@thockdown/look/visualizer'
 import { DEFAULT_VISUALIZER_TRACKERS, mixResponse, pulseCurve, VISUALIZER_TRACKERS } from '@thockdown/look/visualizer'
@@ -72,7 +73,7 @@ import { SmoothClock } from './smoothClock'
 import { appendBeatTrace, isBeatTraceOn } from './beatTrace'
 import { musicListening, subscribeMusicPlaying } from './musicListening'
 import { SILENT_GAIN } from '../visualizer/spectrumMix'
-import type { AnalysisAnswer, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
+import type { AnalysisAnswer, AnalysisFailure, AnalysisRequest, ReaderSettings, ReaderSource } from './musicAnalysis'
 import { loudnessGain } from './peakWindow'
 import { flashLevelAt, flashPhaseAt, FLASH_BEATS_REPEAT } from '../shared/flashing'
 import { HIT_TRACKER, soundscapeHitResponse, soundscapeSignalsActive, soundscapeSignalWeights, subscribeSoundscapeSignals, takeReceivedCounts, takeSoundscapeHits } from './soundscapeSignals'
@@ -387,9 +388,38 @@ function receive(answer: AnalysisAnswer): void {
 function ensureWorker(): void {
   if (worker) return
   worker = new Worker(new URL('./musicAnalysis.worker.ts', import.meta.url), { type: 'module' })
-  worker.onmessage = (event: MessageEvent<AnalysisAnswer>) => receive(event.data)
-  // A worker that fails to load answers nothing, and the pulse would go flat with no word why.
-  worker.onerror = (event) => console.error('beat analysis worker failed', event.message)
+  worker.onmessage = (event: MessageEvent<AnalysisAnswer | AnalysisFailure>) => {
+    // A song the analysis cannot read is logged and not restarted: the same file fails the same way.
+    // A failure from a run since replaced (a seek, another song) is not this song's.
+    if (event.data.type !== 'failure') receive(event.data)
+    else if (event.data.run === run) reportFailure('beat', event.data.message)
+  }
+  // A worker that fails (to load, or later) answers nothing and the pulse would
+  // go flat with no word why: it is logged, dropped, and a new one started once by
+  // the health log's recovery, which the next frame then re-plans from the
+  // listener's position (`stale`).
+  worker.onerror = (event) => {
+    event.preventDefault()
+    dropWorker()
+    analysisRecovery.fail(`analysis worker failed: ${event.message || 'no message'}`)
+  }
+}
+
+/** Restarting the worker that died: a fresh one, and a new analysis run from the listener. */
+const analysisRecovery = createRecovery('beat', () => {
+  if (analysisReaderCount() === 0) return
+  stale = true
+  ensureWorker()
+})
+
+function dropWorker(): void {
+  if (!worker) return
+  run++
+  worker.terminate()
+  worker = null
+  analysedUrl = undefined
+  stale = true
+  lastListener = NaN
 }
 
 /** The trackers some element's mix reads, as a bit mask by `TRACKER_INDEX`. */
@@ -778,14 +808,10 @@ function removed(): void {
     return
   }
   stop()
+  analysisRecovery.cancel()
   if (worker) {
-    run++
     send({ type: 'dispose' })
-    worker.terminate()
-    worker = null
-    analysedUrl = undefined
-    stale = true
-    lastListener = NaN
+    dropWorker()
   }
   if (subscriberCount() > 0) return
   stopIdleTempo()
