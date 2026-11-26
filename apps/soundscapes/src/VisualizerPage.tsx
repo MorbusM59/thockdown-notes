@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBeatGridMirror } from '@thockdown/visualizer/beat/useBeatGridMirror'
 import { liveStyleTarget } from '@thockdown/visualizer/shared/liveStyle'
 import { VisualizerScene } from '@thockdown/visualizer/visualizer/VisualizerScene'
+import type { OrbGestures } from '@thockdown/visualizer/visualizer/orbGestures'
 import { useBeatFeedback } from '@thockdown/visualizer/beat/useBeatFeedback'
 import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 import type { VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
@@ -22,7 +23,7 @@ import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts
 import { nativeSoundscape } from './backgroundAudioHost'
 import { holdFrameWhileTyping } from './keyboardSteadyFrame'
 
-export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings, font, double }: {
+export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings, font, double, orbGestures }: {
   onExit: () => void
   colors: VisualizerColors
   mode: 'light' | 'dark'
@@ -31,6 +32,8 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
   font: VisualizerFont
   /** Double size: boxes and letters at twice the font setting's (visualizerStore.ts). */
   double: boolean
+  /** What a finger on the orb does (MobileSoundscapeApp's `orbGestures`). */
+  orbGestures: OrbGestures
 }) {
   // The phone's visualizer and beat settings (visualizerStore.ts) and the
   // look preset's own colors, fed exactly as the desktop feeds them.
@@ -79,6 +82,7 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
         pixelScale={1}
         sceneSeed="soundscapes"
         gridOutlineRef={gridRef}
+        orbGestures={orbGestures}
       />
       </div>
       <div ref={beatEdgeRef} className="editor-beat-edge" aria-hidden="true" />

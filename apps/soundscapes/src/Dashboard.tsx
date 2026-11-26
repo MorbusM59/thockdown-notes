@@ -20,7 +20,8 @@ import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
 import { commitPoolFilterDraft, readShownPoolFilter, setPoolFilterQuery, subscribePoolFilterDraft, togglePoolFilter } from '@thockdown/visualizer/visualizer/poolFilterDraft'
 import { songAlbumText, songArtistText, songTitleText, type MusicSongEntry } from '@thockdown/visualizer/shared/audioPlayer'
 import { musicListening } from '@thockdown/visualizer/sound/musicListening'
-import { pauseMusic, readMusicChannel, readMusicPlaying, setMusicChannel, startMusic, subscribeMusicPlaying } from './mobileMusicPlayer'
+import { mixStateOf, stopMix, switchSoundscapeChannel, toggleMix } from './mixTransport'
+import { readMusicChannel, readMusicPlaying, setMusicChannel, startMusic, subscribeMusicPlaying } from './mobileMusicPlayer'
 
 /** The music sets: a tap puts a set in the pool or takes it out, a hold makes it the only one (setPress.ts, as everywhere); neither starts playback. */
 export function DashboardSets() {
@@ -340,7 +341,7 @@ export function DashboardDock({ toggles, timeLeft, soundscape, onSoundscapeTrans
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const filter = useSyncExternalStore(subscribePoolFilterDraft, readShownPoolFilter)
   // The mix plays while either does; it is stopped only with the soundscape stopped and the music not playing.
-  const mix = musicPlaying || soundscape === 'playing' ? 'playing' : soundscape === 'stopped' ? 'stopped' : 'paused'
+  const mix = mixStateOf(musicPlaying, soundscape)
   return (
     <div className="mobile-dashboard-dock">
       {toggles}
@@ -411,19 +412,8 @@ export function DashboardDock({ toggles, timeLeft, soundscape, onSoundscapeTrans
           label={`Playback ${mix}${timeLeft ? `, ${timeLeft} left` : ''}: tap to ${mix === 'playing' ? 'pause' : 'play'}${mix === 'stopped' ? '' : ', hold to stop'}`}
           active={mix === 'playing'}
           className="mobile-dock-transport"
-          onTap={() => {
-            if (mix === 'playing') {
-              pauseMusic()
-              if (soundscape === 'playing') onSoundscapeTransport('paused')
-            } else {
-              void startMusic()
-              onSoundscapeTransport('playing')
-            }
-          }}
-          onHold={() => {
-            pauseMusic()
-            onStop()
-          }}
+          onTap={() => toggleMix(mix, soundscape, onSoundscapeTransport)}
+          onHold={() => stopMix(onStop)}
         >
           {mix === 'playing' && timeLeft
             ? <span className="mobile-dock-transport-time" aria-hidden="true">{timeLeft}</span>
@@ -434,12 +424,7 @@ export function DashboardDock({ toggles, timeLeft, soundscape, onSoundscapeTrans
           className={`btn-icon options-color-swatch options-loadout-btn${soundscapeChannel ? ' is-active' : ''}`}
           aria-pressed={soundscapeChannel}
           aria-label={`Soundscape channel ${soundscapeChannel ? 'on' : 'off'}`}
-          onClick={() => {
-            // Switched in while the mix plays, the soundscape joins it at once
-            // rather than waiting for the next press of play.
-            if (!soundscapeChannel && mix === 'playing' && soundscape !== 'playing') onSoundscapeTransport('playing')
-            onSoundscapeChannel(!soundscapeChannel)
-          }}
+          onClick={() => switchSoundscapeChannel(!soundscapeChannel, mix, soundscape, onSoundscapeTransport, onSoundscapeChannel)}
         >
           <span className="fa-solid fa-podcast" aria-hidden="true" />
         </button>

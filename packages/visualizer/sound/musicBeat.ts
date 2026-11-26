@@ -227,6 +227,26 @@ let headroomDb = 5
 let musicPeak = 0
 /** Each tracker's response to the soundscape's hits since the last frame, in `trackerRaw`'s order. */
 const soundscapeRaw = new Float64Array(VISUALIZER_TRACKERS.length)
+/**
+ * Hits the app CUES itself, at full strength, for something the reader just did (the phone's orb: a pause, a play, a
+ * stop, `cueTrackerHit`): taken by the next frame as a soundscape hit is, and keeping the frame loop running until the
+ * longest fall has played out, so a hit cued as the music stops still falls rather than being cut off.
+ */
+const cuedRaw = new Float64Array(VISUALIZER_TRACKERS.length)
+let cuedUntil = -Infinity
+
+/** Shows a hit of `name` at full strength on the next frame, through every mix that reads it. */
+export function cueTrackerHit(name: VisualizerTrackerName): void {
+  cuedRaw[TRACKER_INDEX[name]] = 1
+  let longestFall = 0
+  for (const band of bands) longestFall = Math.max(longestFall, band.channel.fallSec)
+  cuedUntil = performance.now() / 1000 + longestFall + CUE_MARGIN_SEC
+  start()
+}
+
+/** Frames run past a cue's longest fall, so the last one publishes the fall's end. */
+const CUE_MARGIN_SEC = 0.1
+
 /** A hit this much older than the frame that takes it was heard while nothing ran, and is not shown late. */
 const HIT_LATE_SEC = 0.25
 
@@ -574,7 +594,8 @@ const listenerClock = new SmoothClock()
 
 /** The soundscape's hits heard by `now`, each tracker's strongest response into `soundscapeRaw`. */
 function takeSoundscape(now: number): void {
-  soundscapeRaw.fill(0)
+  soundscapeRaw.set(cuedRaw)
+  cuedRaw.fill(0)
   const hits = takeSoundscapeHits(now)
   if (hits.length === 0) return
   const weights = soundscapeSignalWeights()
@@ -629,7 +650,7 @@ function musicHeard(): boolean {
 
 /** Whether there is anything to run for: music playing (heard or not), or the soundscape reporting. */
 function heard(now: number): boolean {
-  return musicListening().isPlaying || soundscapeSignalsActive(now)
+  return musicListening().isPlaying || soundscapeSignalsActive(now) || now < cuedUntil
 }
 
 function tick(frameTimeMs: number): void {
@@ -789,7 +810,9 @@ function added(): void {
   if (subscriberCount() === 1) {
     // The music stopping ends its frame; the soundscape, if it is still reporting, starts one of its own.
     unsubscribePlaying = subscribeMusicPlaying((playing) => {
-      if (!playing) stop()
+      // Stopped music is forgotten by the next frame (`tick`) while something else keeps the loop running; stopping
+      // here would cut short whatever is falling, such as the hit cued for the very press that paused it.
+      if (!playing && !heard(performance.now() / 1000)) stop()
       start()
     })
     unsubscribeSignals = subscribeSoundscapeSignals(start)

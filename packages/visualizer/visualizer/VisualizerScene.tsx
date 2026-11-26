@@ -54,6 +54,7 @@ import { readPanelsShown, setPanelsShown, subscribePanelsShown } from './panelsS
 import { hitFrame } from './hitFrame'
 import { useGlyphOffset } from './glyphCentering'
 import { readSoundstageControls, subscribeSoundstageControls } from '../sound/soundstageControls'
+import { useOrbGestures, type OrbGestures } from './orbGestures'
 import { FACTORY_SOUNDSTAGE_IDS } from '../shared/soundstages'
 import { CUSTOM_SOLID_INDEX, RHOMBIC_SOLID_INDEX, solidSeed } from '../editor/EmptyStateScene'
 import { BucketList } from './BucketList'
@@ -117,7 +118,17 @@ export type VisualizerSceneProps = {
    * by the system's back gesture instead.
    */
   onExit?: () => void
+  /**
+   * What a finger on the orb (the cutout) does: a tap, a hold and four
+   * swipes (`orbGestures.ts`), supplied by the phone. Absent, the cutout
+   * keeps the desktop's presses: a left press steps the soundstage forward,
+   * a right press back.
+   */
+  orbGestures?: OrbGestures
 }
+
+/** The hooks' stand-in while the scene keeps the desktop's presses. */
+const NO_ORB_GESTURES: OrbGestures = { tap: () => {}, hold: () => {}, swipe: () => {} }
 
 /** The lit runs of the track: all of it, or the boxes before and after `gap`. */
 function trackRuns(track: { first: number; count: number }, gap: number | null): Array<{ first: number; count: number }> {
@@ -195,7 +206,7 @@ function subscribeSolidThump(listener: (thump: SolidThump) => void): () => void 
   })
 }
 
-export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef, onExit, solidMaxPixelRatio, pixelScale = 1 }: VisualizerSceneProps) {
+export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: readerFontSizePx, sceneSeed, gridOutlineRef, onExit, orbGestures, solidMaxPixelRatio, pixelScale = 1 }: VisualizerSceneProps) {
   const [scene, setScene] = useState<HTMLDivElement | null>(null)
   const { width, height } = useBoxSize(scene)
   const cutoutPx = EMPTY_SCENE_DIAMETER_PX / pixelScale
@@ -530,6 +541,18 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
       ? RHOMBIC_SOLID_INDEX
       : FACTORY_SOUNDSTAGE_IDS.filter((id) => id !== 'crisp').indexOf(soundstage.solid)
   const solid = solidSeed(sceneSeed, solidIndex)
+  const orbHandlers = useOrbGestures(orbGestures ?? NO_ORB_GESTURES)
+  const orbPresses = orbGestures
+    ? { ...orbHandlers, className: 'visualizer-cutout is-touch-orb', 'data-secondary-press': 'none' as const, onContextMenu: (event: ReactMouseEvent) => event.preventDefault() }
+    : {
+      className: 'visualizer-cutout',
+      onClick: () => soundstage.step(1),
+      onContextMenu: (event: ReactMouseEvent) => {
+        event.preventDefault()
+        soundstage.step(-1)
+      },
+      'data-secondary-press': 'action' as const,
+    }
   return (
     <div ref={setScene} className={panelsShown ? 'visualizer-scene' : 'visualizer-scene is-panels-hidden'} tabIndex={-1} data-visualizer-scene="" style={style}>
       {width > 0 && (
@@ -635,7 +658,7 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
 
           {cutout.size > 0 && (
             <div
-              className="visualizer-cutout"
+              {...orbPresses}
               style={{
                 left: cutoutRect.left,
                 top: cutoutRect.top,
@@ -643,12 +666,6 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
                 height: cutoutRect.size,
                 '--visualizer-face-radius': `${closure?.faceRadiusPx ?? 0}px`,
               } as CSSProperties}
-              onClick={() => soundstage.step(1)}
-              onContextMenu={(event: ReactMouseEvent) => {
-                event.preventDefault()
-                soundstage.step(-1)
-              }}
-              data-secondary-press="action"
             >
               <div className="visualizer-cutout-face">
                 <SolidCanvas className="empty-state-solid" seed={solid} animateTo={solid} active subscribeThump={subscribeSolidThump} maxPixelRatio={solidMaxPixelRatio} cornerRadiusPx={closure?.faceRadiusPx ?? 0} />

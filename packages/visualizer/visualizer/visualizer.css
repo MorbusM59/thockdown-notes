@@ -555,3 +555,8 @@
   /* Corners rounded by the canvas itself (SolidCanvas's cornerRadiusPx). */
 }
 
+
+/* The phone's orb takes swipes itself (orbGestures.ts): the browser must not pan or zoom on it. */
+.visualizer-scene > .visualizer-cutout.is-touch-orb {
+  touch-action: none;
+}

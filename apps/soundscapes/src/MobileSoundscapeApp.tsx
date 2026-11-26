@@ -108,10 +108,13 @@ import { useVisualizerLandscape } from './useVisualizerLandscape'
 import { SoundstagesDock, SoundstagesTab } from './SoundstagesTab'
 import { loadSoundstages, saveSoundstages } from './soundstageStore'
 import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
-import { publishSoundstageControls, soundstageControlsFor } from '@thockdown/visualizer/sound/soundstageControls'
+import { publishSoundstageControls, soundstageControlsFor, steppedSoundstagePreferences } from '@thockdown/visualizer/sound/soundstageControls'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
-import { setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
+import { readMusicPlaying, setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
+import { mixStateOf, stopMix, switchSoundscapeChannel, toggleMix } from './mixTransport'
+import { cueTrackerHit } from '@thockdown/visualizer/sound/musicBeat'
+import type { OrbGestures } from '@thockdown/visualizer/visualizer/orbGestures'
 import { loadBeatSettings, loadVisualizerDouble, loadVisualizerFont, loadVisualizerState, saveBeatSettings, saveVisualizerDouble, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
 import { DEFAULT_VISUALIZER_FONT } from '@thockdown/visualizer/shared/visualizerFont'
 import { VisualizerFontControls } from '@thockdown/visualizer/visualizer/VisualizerFontControls'
@@ -553,6 +556,36 @@ export function MobileSoundscapeApp() {
     setSource('regular')
   }
 
+  // The visualizer's ORB (orbGestures.ts): a swipe right or left steps the
+  // soundstage as a press on the desktop's solid does; down switches the
+  // soundscape's channel out, up switches it in and, once in, picks the next
+  // soundscape (round the list); a tap plays or pauses the mix and a hold stops
+  // it, as the dashboard's transport does, each shown as a strong hit (a play
+  // or pause the PIERCE, a stop the THUMP).
+  const orbGestures: OrbGestures = {
+    tap: () => {
+      toggleMix(mixStateOf(readMusicPlaying(), regular), regular, setRegularMode)
+      cueTrackerHit('pierce')
+    },
+    hold: () => {
+      stopMix(stopRegular)
+      cueTrackerHit('thump')
+    },
+    swipe: (direction) => {
+      if (direction === 'right' || direction === 'left') {
+        setSoundstages((current) => steppedSoundstagePreferences(current, direction === 'right' ? 1 : -1))
+        return
+      }
+      const mix = mixStateOf(readMusicPlaying(), regular)
+      if (direction === 'down' || !soundscapeChannel) {
+        switchSoundscapeChannel(direction === 'up', mix, regular, setRegularMode, setSoundscapeChannel)
+        return
+      }
+      const index = presets.findIndex((preset) => preset.id === activeSoundscape(preferences).id)
+      pickSoundscape(presets[(index + 1) % presets.length])
+    },
+  }
+
   // The files button: a tap imports, a long press exports (with the same
   // swallowed click after it as the power button).
   const filesHoldRef = useRef<(() => void) | null>(null)
@@ -802,7 +835,7 @@ export function MobileSoundscapeApp() {
         <DragLayer />
         <div className="app-sheen">
           <div className={`app-shell mobile-app-shell${theme.shadowFlip ? ' shadow-flip' : ''}`} style={shellStyle}>
-            {visualizerOpen ? <Suspense fallback={null}><VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} double={visualizerDouble} /></Suspense> : null}
+            {visualizerOpen ? <Suspense fallback={null}><VisualizerPage onExit={closeVisualizer} colors={loadout.visualizerColors} mode={look.mode} visualizer={visualizer} beatSettings={beatSettings} font={visualizerFont} double={visualizerDouble} orbGestures={orbGestures} /></Suspense> : null}
             <div className="mobile-page">
             <div className="mobile-soundscape-shell notes-sidebar">
               <MobileTabSelector tab={tab} onChange={selectTab} />
