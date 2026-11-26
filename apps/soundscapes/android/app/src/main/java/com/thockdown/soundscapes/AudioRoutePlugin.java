@@ -1,11 +1,9 @@
 package com.thockdown.soundscapes;
 
 import android.content.Context;
-import android.media.AudioAttributes;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import com.getcapacitor.JSObject;
@@ -13,7 +11,6 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import java.util.List;
 
 /**
  * The Android side of src/audioRoute.ts: the name of the output the app's
@@ -23,18 +20,13 @@ import java.util.List;
  * (AudioDeviceCallback), which is when the media route changes; nothing is
  * polled.
  *
- * Which output plays media: from Android 13 the system says so
- * (getDevicesForAttributes); before it, the first present of the kinds media
- * is routed to ahead of the built-in speaker, in the system's own order of
- * preference (Bluetooth, then USB, then a wired headset).
+ * Which output plays media: the first present of the kinds media is routed
+ * to ahead of the built-in speaker, in the system's own order of preference
+ * (Bluetooth, then USB, then a wired headset). The exact route query
+ * (getDevicesForAttributes) is a system API an app cannot call.
  */
 @CapacitorPlugin(name = "AudioRoute")
 public class AudioRoutePlugin extends Plugin {
-
-    private static final AudioAttributes MEDIA = new AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build();
 
     /** The kinds media is routed to before the built-in speaker, most preferred first. */
     private static final int[] PREFERENCE = {
@@ -96,32 +88,17 @@ public class AudioRoutePlugin extends Plugin {
 
     private String resolve() {
         AudioDeviceInfo device = null;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            List<android.media.AudioDeviceAttributes> routed = audio.getDevicesForAttributes(MEDIA);
-            if (!routed.isEmpty()) device = find(routed.get(0).getType(), routed.get(0).getAddress());
-        }
-        if (device == null) {
-            AudioDeviceInfo[] outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-            for (int type : PREFERENCE) {
-                for (AudioDeviceInfo output : outputs) {
-                    if (output.getType() == type) {
-                        device = output;
-                        break;
-                    }
+        AudioDeviceInfo[] outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+        for (int type : PREFERENCE) {
+            for (AudioDeviceInfo output : outputs) {
+                if (output.getType() == type) {
+                    device = output;
+                    break;
                 }
-                if (device != null) break;
             }
+            if (device != null) break;
         }
         return device == null ? "Phone speaker" : nameOf(device);
-    }
-
-    /** The present output of `type` at `address` (any address when it is empty). */
-    private AudioDeviceInfo find(int type, String address) {
-        for (AudioDeviceInfo output : audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
-            if (output.getType() != type) continue;
-            if (address == null || address.isEmpty() || address.equals(output.getAddress())) return output;
-        }
-        return null;
     }
 
     /** A name a reader recognizes and two devices do not share: the kind, and the product for an external one. */
