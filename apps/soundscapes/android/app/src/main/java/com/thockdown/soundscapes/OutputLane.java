@@ -55,6 +55,8 @@ final class OutputLane {
     private final short[] ring;
     private final int capacity;
     private long playhead = 0;
+    /** The playhead minus the output's mixed count, as of the lane's last mixed block: maps a lane frame to the output's count. */
+    private long anchor = 0;
     private long end = 0;
     private boolean started = false;
     private boolean closed = false;
@@ -101,6 +103,19 @@ final class OutputLane {
         synchronized (output) {
             return playhead;
         }
+    }
+
+    /**
+     * When this lane's `frame` is heard, on System.nanoTime's clock: what a
+     * report sends beside a frame, so the page times the frame by when it is
+     * heard rather than by when the report reached it.
+     */
+    long heardNanos(long frame) {
+        long mapped;
+        synchronized (output) {
+            mapped = frame - anchor;
+        }
+        return output.heardNanos(mapped);
     }
 
     /** What the device holds beyond the playhead: the least a splice must leave. */
@@ -247,6 +262,7 @@ final class OutputLane {
         if (!started) return false;
         // Silence still moves the playhead: positions are time.
         playhead += frames;
+        anchor = playhead - output.mixedFrames;
         sinceReport += frames;
         if (sinceReport < reportFrames) return false;
         sinceReport = 0;

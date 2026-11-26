@@ -75,8 +75,10 @@ public class BackgroundAudioPlugin extends Plugin {
         }
 
         @Override
-        public void onVisuals(String visualsJson, long playheadFrame, int sampleRate) {
+        public void onVisuals(String visualsJson, long playheadFrame, int sampleRate, long heardNanos) {
             JSObject data = new JSObject();
+            data.put("heardNanos", heardNanos);
+            data.put("sentNanos", System.nanoTime());
             data.put("visuals", visualsJson);
             data.put("playhead", playheadFrame);
             data.put("sampleRate", sampleRate);

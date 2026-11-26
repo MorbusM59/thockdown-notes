@@ -8,7 +8,7 @@
  * soundscape output's own frames, with that output's playhead as sent.
  *
  * - The CLOCK: a frame is heard `(frame - playhead) / sampleRate` after the
- *   report, the playhead being what is heard (no output latency to add).
+ *   moment the report says its playhead is heard (nativeClock.ts).
  * - HEARD: the gain the session is heard at, which the page sets
  *   (`setSoundscapeVisualsHeardGain`): its volume for it (slider and channel
  *   switch) while the listener plays it or the schedule runs it, else 0. The
@@ -26,6 +26,7 @@
 import { receiveSoundscapeSignals, setSoundscapeHeardGain, type SoundscapeSignal } from '@thockdown/visualizer/sound/soundscapeSignals'
 import { appendBeatTrace, isBeatTraceOn } from '@thockdown/visualizer/sound/beatTrace'
 import { heardLagSec } from '@thockdown/visualizer/sound/musicBeat'
+import { heardAtSec } from './nativeClock'
 import type { NativeSoundscapePlugin, SessionState } from './backgroundAudioHost'
 
 /** A batch of spectrum frames as the renderer sends it (spectrumFrames.ts's SpectrumFrameBatch, levels in base64). */
@@ -103,17 +104,19 @@ export class NativeSoundscapeVisuals {
     receiveSoundscapeSignals([], now, now + heardLagSec())
   }
 
-  private receive(data: { visuals: string; playhead: number; sampleRate: number }): void {
+  private receive(data: { visuals: string; playhead: number; sampleRate: number; heardNanos: number; sentNanos: number }): void {
     const now = performance.now() / 1000
+    // When the playhead's frame is heard (nativeClock.ts), which the output's buffer and route put ahead of now.
+    const heardAt = heardAtSec(data)
     this.playhead = data.playhead
     this.sampleRate = data.sampleRate
-    this.reportedAt = now
+    this.reportedAt = heardAt
     const visuals = JSON.parse(data.visuals) as { spectrum: SpectrumBatch[]; signals: SignalBatch[] }
     this.spectrumReceiver?.(visuals.spectrum, data.playhead)
     this.trace(now, visuals.signals)
     if (!(heardGain > 0)) return
-    // Heard at the playhead's frame now; drawn the reader's delay later, as the desktop's are.
-    const drawn = now + heardLagSec()
+    // Drawn the reader's delay after it is heard, as the desktop's are.
+    const drawn = heardAt + heardLagSec()
     const at = (frame: number) => drawn + (frame - data.playhead) / data.sampleRate
     for (const batch of visuals.signals) {
       const signals: SoundscapeSignal[] = []

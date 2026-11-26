@@ -34,7 +34,8 @@ import java.nio.charset.StandardCharsets;
 final class MusicSession {
     interface Listener {
         /** What is heard: a song and the seconds into it (null for nothing) at the output's playhead `frame`, at `sampleRate`. */
-        void onHeard(Integer songId, double seconds, long frame, int sampleRate, boolean playing);
+        /** `heardNanos`: when `frame` is heard, on System.nanoTime's clock. */
+        void onHeard(Integer songId, double seconds, long frame, int sampleRate, boolean playing, long heardNanos);
 
         /** Spectrum frames for the visualizer (MusicRenderer.Listener.onSpectrum). */
         void onSpectrum(String batchesJson);
@@ -467,12 +468,12 @@ final class MusicSession {
         followTimer();
         if (listener == null) return;
         if (output == null) {
-            listener.onHeard(heardId, heardSeconds, heardFrame, 0, false);
+            listener.onHeard(heardId, heardSeconds, heardFrame, 0, false, System.nanoTime());
             return;
         }
         long frame = output.playheadFrame();
         double seconds = heardId == null ? 0 : heardSeconds + (double) (frame - heardFrame) / output.sampleRate;
-        listener.onHeard(heardId, seconds, frame, output.sampleRate, isPlaying());
+        listener.onHeard(heardId, seconds, frame, output.sampleRate, isPlaying(), output.heardNanos(frame));
     }
 
     /** What SoundscapeSession was last told about the listener's music: 0 stopped, 1 paused, 2 playing. */

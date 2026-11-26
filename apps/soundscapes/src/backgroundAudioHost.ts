@@ -93,8 +93,8 @@ export interface NativeSoundscapePlugin {
   /** The timer's countdown started, held or ended, for any reason (the page's own changes included). */
   addListener(event: 'countdown', listener: (data: { endsAtMs: number; remainingMs: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'back', listener: () => void): Promise<PluginListenerHandle>
-  /** What soundscapeRenderer.ts computed (its soundscapeVisualsTake, as JSON), the soundscape output's playhead as it was sent, and its sample rate. */
-  addListener(event: 'visuals', listener: (data: { visuals: string; playhead: number; sampleRate: number }) => void): Promise<PluginListenerHandle>
+  /** What soundscapeRenderer.ts computed (its soundscapeVisualsTake, as JSON), the soundscape output's playhead as it was sent, its sample rate, and when that playhead is heard (nativeClock.ts). */
+  addListener(event: 'visuals', listener: (data: { visuals: string; playhead: number; sampleRate: number; heardNanos: number; sentNanos: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'rendererFailure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'clipProgress', listener: (data: { fraction: number }) => void): Promise<PluginListenerHandle>
   /** The clip is done: `saved` is false when it failed or was cancelled (the dialog included). */

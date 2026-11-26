@@ -16,7 +16,7 @@ package com.thockdown.soundscapes;
 final class CalibrationLoop {
     interface Listener {
         /** The frame heard now, at `sampleRate`. */
-        void onHeard(long frame, int sampleRate);
+        void onHeard(long frame, int sampleRate, long heardNanos);
     }
 
     /** How far ahead of the playhead the loop is kept written. */
@@ -59,7 +59,7 @@ final class CalibrationLoop {
             fill();
             playhead = lane.playheadFrame();
         }
-        listener.onHeard(playhead, lane.sampleRate);
+        listener.onHeard(playhead, lane.sampleRate, lane.heardNanos(playhead));
     }
 
     /** Writes the loop on, copy after copy, until AHEAD_SEC past the playhead. */

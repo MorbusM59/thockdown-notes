@@ -25,6 +25,7 @@ import type { PluginListenerHandle } from '@capacitor/core'
 import type { MusicListening, SpectrumSource } from '@thockdown/visualizer/sound/musicListening'
 import { levelDb } from '@thockdown/visualizer/visualizer/spectrumFrames'
 import { heardLagSec } from '@thockdown/visualizer/sound/musicBeat'
+import { heardAtSec } from './nativeClock'
 import { addBandLevels, spectrumIncludesSoundscape, spectrumMixWeights } from '@thockdown/visualizer/visualizer/spectrumMix'
 import type { NativeSoundscapeVisuals, SpectrumBatch } from './nativeSoundscapeVisuals'
 import type { NativeMusicPlugin } from './nativeMusic'
@@ -48,7 +49,7 @@ interface Heard {
   frame: number
   sampleRate: number
   playing: boolean
-  /** `performance.now()` when it arrived, in seconds. */
+  /** `performance.now()` seconds when `frame` (and `seconds`) is heard (nativeClock.ts); may be ahead of now. */
   at: number
 }
 
@@ -72,7 +73,7 @@ export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: So
   const playingListeners = new Set<(playing: boolean) => void>()
   void plugin.addListener('heard', (data) => {
     const wasPlaying = heard.playing
-    heard = { ...data, at: performance.now() / 1000 }
+    heard = { songId: data.songId, seconds: data.seconds, frame: data.frame, sampleRate: data.sampleRate, playing: data.playing, at: heardAtSec(data) }
     if (heard.playing !== wasPlaying) for (const listener of playingListeners) listener(heard.playing)
   })
 
@@ -94,7 +95,7 @@ export function createNativeMusicListening(plugin: NativeMusicPlugin, lookup: So
       return song ? songUrl(song.filePath) : null
     },
     get currentTime() {
-      return heard.playing ? heard.seconds + Math.max(0, performance.now() / 1000 - heard.at) : heard.seconds
+      return heard.playing ? heard.seconds + (performance.now() / 1000 - heard.at) : heard.seconds
     },
     get currentDurationSec() {
       return heard.songId === null ? 0 : lookup(heard.songId)?.durationSec ?? 0

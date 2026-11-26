@@ -49,11 +49,11 @@ export interface NativeMusicPlugin {
   playLoop(options: { pcm: string }): Promise<void>
   stopLoop(): Promise<void>
   /** The calibration loop's frame heard now (its first frame is 0). */
-  addListener(event: 'loopHeard', listener: (data: { frame: number; sampleRate: number }) => void): Promise<PluginListenerHandle>
+  addListener(event: 'loopHeard', listener: (data: { frame: number; sampleRate: number; heardNanos: number; sentNanos: number }) => void): Promise<PluginListenerHandle>
   /** What the music's output is doing, as text, for the Debugging section. */
   getDiagnostics(): Promise<{ text: string }>
   /** What is heard changed (a new song, another second, play or pause): the song and the seconds into it at the output's playhead `frame`. */
-  addListener(event: 'heard', listener: (data: { songId: number | null; seconds: number; frame: number; sampleRate: number; playing: boolean }) => void): Promise<PluginListenerHandle>
+  addListener(event: 'heard', listener: (data: { songId: number | null; seconds: number; frame: number; sampleRate: number; playing: boolean; heardNanos: number; sentNanos: number }) => void): Promise<PluginListenerHandle>
   /** Spectrum frames (spectrumFrames.ts's batches, as JSON text; nativeMusicListening.ts reads them). */
   addListener(event: 'spectrum', listener: (data: { batches: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'failure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>

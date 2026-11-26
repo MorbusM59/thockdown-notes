@@ -6,6 +6,12 @@ import { NativeSoundscapeVisuals, setSoundscapeVisualsHeardGain, type Soundscape
 import type { NativeMusicPlugin } from './nativeMusic'
 import { toBase64 } from '@thockdown/soundscape/halfScalePcm'
 
+/** A report's clock stamps for a frame heard the moment it arrives (nativeClock.ts). */
+function heardNow() {
+  const nanos = performance.now() * 1e6
+  return { heardNanos: nanos, sentNanos: nanos }
+}
+
 type Listener = (data: never) => void
 
 function fakePlugin() {
@@ -43,7 +49,7 @@ describe('native music listening', () => {
     const listening = createNativeMusicListening(plugin, () => ({ filePath: 'content://x/tree/a/document/b', durationSec: 100 }), () => 1)
     const spectrum = listening.createSpectrum(new Float64Array(2))
     spectrum.start()
-    emit('heard', { songId: 1, seconds: 3, frame: 1000, sampleRate: 1000, playing: true })
+    emit('heard', { songId: 1, seconds: 3, frame: 1000, sampleRate: 1000, playing: true, ...heardNow() })
     // One band: frames at 900, 1000, 1100, 1200 at 0, -1, -2, -3 dB (two steps a dB).
     emit('spectrum', { batches: JSON.stringify([batch(900, 900, [0, 2, 4, 6])]) })
     const out = new Float32Array(1)
@@ -70,9 +76,9 @@ describe('native music listening', () => {
     setSpectrumIncludesSoundscape(true)
     spectrum.start()
     expect(session.plugin.setVisuals).toHaveBeenLastCalledWith({ bands: 1, signals: true })
-    music.emit('heard', { songId: 1, seconds: 0, frame: 1000, sampleRate: 1000, playing: true })
+    music.emit('heard', { songId: 1, seconds: 0, frame: 1000, sampleRate: 1000, playing: true, ...heardNow() })
     music.emit('spectrum', { batches: JSON.stringify([batch(1000, 1000, [40])]) }) // -20 dB
-    session.emit('visuals', { visuals: JSON.stringify({ spectrum: [batch(500, 500, [40])], signals: [] }), playhead: 500, sampleRate: 1000 }) // -20 dB
+    session.emit('visuals', { visuals: JSON.stringify({ spectrum: [batch(500, 500, [40])], signals: [] }), playhead: 500, sampleRate: 1000, ...heardNow() }) // -20 dB
     const out = new Float32Array(1)
     spectrum.sample(0, out)
     // Music at 1, soundscape at half its amplitude: powers 1 + 1/4 of -20 dB.
@@ -104,7 +110,7 @@ describe('native soundscape visuals', () => {
     await Promise.resolve()
     const hit = (frame: number) => ({ frame, kind: 'drip', amplitude: 0.1, salience: 3 })
     // Playhead at 1000 of a 1000 Hz output: frame 1500 is heard half a second on, 3000 two seconds on.
-    session.emit('visuals', { visuals: JSON.stringify({ spectrum: [], signals: [{ from: 1000, list: [hit(1500), hit(3000)] }] }), playhead: 1000, sampleRate: 1000 })
+    session.emit('visuals', { visuals: JSON.stringify({ spectrum: [], signals: [{ from: 1000, list: [hit(1500), hit(3000)] }] }), playhead: 1000, sampleRate: 1000, ...heardNow() })
     expect(soundscapeSignalsActive(now)).toBe(true)
     now = 10.6
     expect(takeSoundscapeHits(now).map((taken) => taken.at)).toEqual([10.5])
@@ -112,7 +118,7 @@ describe('native soundscape visuals', () => {
     now = 12.5
     expect(takeSoundscapeHits(now)).toEqual([])
     // Not heard: what arrives is not taken.
-    session.emit('visuals', { visuals: JSON.stringify({ spectrum: [], signals: [{ from: 3000, list: [hit(3100)] }] }), playhead: 3000, sampleRate: 1000 })
+    session.emit('visuals', { visuals: JSON.stringify({ spectrum: [], signals: [{ from: 3000, list: [hit(3100)] }] }), playhead: 3000, sampleRate: 1000, ...heardNow() })
     now = 13
     expect(takeSoundscapeHits(now)).toEqual([])
   })

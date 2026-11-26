@@ -3,6 +3,7 @@ package com.thockdown.soundscapes;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioManager;
+import android.media.AudioTimestamp;
 import android.media.AudioTrack;
 import android.os.Process;
 import java.util.ArrayList;
@@ -42,7 +43,15 @@ final class AudioOutput {
     private static AudioOutput shared;
 
     final int sampleRate;
-    private AudioTrack track;
+    private volatile AudioTrack track;
+    /**
+     * Frames mixed so far, counted across tracks; `trackBase` is the count
+     * the current track's first frame has. A lane's frame maps to this count
+     * by the lane's `anchor`, so a lane frame is a track frame, and the
+     * track's timestamp says when that frame is heard.
+     */
+    long mixedFrames = 0;
+    private long trackBase = 0;
     private final int bufferBytes;
     private final Thread writer;
     private final OutputLimiter limiter;
@@ -96,6 +105,28 @@ final class AudioOutput {
     /** Frames the device buffer and one writer block hold beyond a playhead: the least a splice must leave. */
     double committedSec() {
         return ((double) bufferBytes / 4 + BLOCK_FRAMES) / sampleRate;
+    }
+
+    /**
+     * When the frame with mixed count `mixedFrame` is (or was) HEARD, on
+     * System.nanoTime's clock: from the track's presentation timestamp, which
+     * includes what the device and the route (a Bluetooth headset) hold, or,
+     * before the track has one, from its playback head, which does not.
+     */
+    long heardNanos(long mixedFrame) {
+        AudioTrack current;
+        long base;
+        synchronized (this) {
+            current = track;
+            base = trackBase;
+        }
+        long trackFrame = mixedFrame - base;
+        AudioTimestamp stamp = new AudioTimestamp();
+        if (current.getTimestamp(stamp)) {
+            return stamp.nanoTime + (trackFrame - stamp.framePosition) * 1_000_000_000L / sampleRate;
+        }
+        long head = current.getPlaybackHeadPosition() & 0xffffffffL;
+        return System.nanoTime() + (trackFrame - head) * 1_000_000_000L / sampleRate;
     }
 
     /** Hear `lane` alone, or (null) every lane again, each from where it stood. */
@@ -155,6 +186,7 @@ final class AudioOutput {
                     track.play();
                 }
                 java.util.Arrays.fill(mix, 0f);
+                mixedFrames += BLOCK_FRAMES;
                 for (OutputLane lane : lanes) {
                     if (solo != null && lane != solo) continue;
                     if (lane.mixInto(mix, BLOCK_FRAMES)) due.add(lane);
@@ -173,8 +205,13 @@ final class AudioOutput {
                     } catch (RuntimeException ignored) {
                         // Already unusable; it is being replaced.
                     }
-                    track = buildTrack();
-                    track.play();
+                    AudioTrack rebuilt = buildTrack();
+                    synchronized (this) {
+                        // The dropped block's frames never reached a track: the new one starts after them.
+                        trackBase = mixedFrames;
+                        track = rebuilt;
+                    }
+                    rebuilt.play();
                     // The block is dropped rather than retried into the new
                     // track: positions are time, and it is already late.
                     break;

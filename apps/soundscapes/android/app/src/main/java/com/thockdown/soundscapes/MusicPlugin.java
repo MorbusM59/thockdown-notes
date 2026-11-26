@@ -31,8 +31,10 @@ public class MusicPlugin extends Plugin {
 
     private final MusicSession.Listener listener = new MusicSession.Listener() {
         @Override
-        public void onHeard(Integer songId, double seconds, long frame, int sampleRate, boolean playing) {
+        public void onHeard(Integer songId, double seconds, long frame, int sampleRate, boolean playing, long heardNanos) {
             JSObject data = new JSObject();
+            data.put("heardNanos", heardNanos);
+            data.put("sentNanos", System.nanoTime());
             data.put("songId", songId);
             data.put("seconds", seconds);
             data.put("frame", frame);
@@ -267,8 +269,10 @@ public class MusicPlugin extends Plugin {
     public void playLoop(PluginCall call) {
         stopLoopNow();
         short[] pcm = SharedSandbox.decodeHalfScale(call.getString("pcm", ""));
-        loop = new CalibrationLoop(pcm, (frame, sampleRate) -> {
+        loop = new CalibrationLoop(pcm, (frame, sampleRate, heardNanos) -> {
             JSObject data = new JSObject();
+            data.put("heardNanos", heardNanos);
+            data.put("sentNanos", System.nanoTime());
             data.put("frame", frame);
             data.put("sampleRate", sampleRate);
             notifyListeners("loopHeard", data);
