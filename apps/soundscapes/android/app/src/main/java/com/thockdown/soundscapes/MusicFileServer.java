@@ -10,11 +10,9 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeWebViewClient;
-import java.io.FileInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -47,7 +45,7 @@ final class MusicFileServer extends BridgeWebViewClient {
         String song = url.getQueryParameter("uri");
         if (song == null || !granted(Uri.parse(song))) return status(404, "Not Found");
         try {
-            return serve(Uri.parse(song), request.getRequestHeaders().get("Range"));
+            return respond(context.getContentResolver(), Uri.parse(song), request.getRequestHeaders().get("Range"));
         } catch (Exception unreadable) {
             return status(404, "Not Found");
         }
@@ -62,8 +60,8 @@ final class MusicFileServer extends BridgeWebViewClient {
         return false;
     }
 
-    private WebResourceResponse serve(Uri document, String range) throws IOException {
-        ContentResolver resolver = context.getContentResolver();
+    /** The response to a request for `document` with Range header `range` (null for the whole file). */
+    static WebResourceResponse respond(ContentResolver resolver, Uri document, String range) throws IOException {
         long length;
         try (AssetFileDescriptor file = resolver.openAssetFileDescriptor(document, "r")) {
             if (file == null) return status(404, "Not Found");
@@ -90,17 +88,13 @@ final class MusicFileServer extends BridgeWebViewClient {
                 return new WebResourceResponse(null, null, 416, "Range Not Satisfiable", headers, null);
             }
         }
-        InputStream in = open(resolver, document, first);
+        // The stream is handed over at the file's START: the WebView applies the
+        // request's Range to an intercepted response's stream itself (it skips
+        // to the first byte), so a stream we had positioned was skipped twice
+        // and every range came from twice as deep (MusicFileServerRangeTest).
+        // It ends after the range's last byte.
+        InputStream in = resolver.openInputStream(document);
         if (in == null) return status(404, "Not Found");
-        long skipped = position(in);
-        for (; skipped < first; ) {
-            long step = in.skip(first - skipped);
-            if (step <= 0) {
-                if (in.read() < 0) break;
-                step = 1;
-            }
-            skipped += step;
-        }
         long count = last - first + 1;
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept-Ranges", "bytes");
@@ -113,46 +107,8 @@ final class MusicFileServer extends BridgeWebViewClient {
             partial ? 206 : 200,
             partial ? "Partial Content" : "OK",
             headers,
-            new Limited(in, count)
+            new Limited(in, last + 1)
         );
-    }
-
-    /**
-     * The file's stream, POSITIONED at `first` when the provider hands out a
-     * seekable descriptor (a local file does), so a range deep into a long
-     * track costs nothing to reach. Read past instead, the stream had to walk
-     * every byte before it, every request: tens of megabytes deep into a long
-     * mix, slow enough for the WebView to give up on the response ("Failed to
-     * fetch"). A provider whose descriptor is a pipe gets a plain stream,
-     * walked by the caller (`position` says how far it already is).
-     */
-    private static InputStream open(ContentResolver resolver, Uri document, long first) throws IOException {
-        AssetFileDescriptor file = resolver.openAssetFileDescriptor(document, "r");
-        if (file == null) return null;
-        FileInputStream stream = file.createInputStream();
-        try {
-            FileChannel channel = stream.getChannel();
-            channel.position(file.getStartOffset() + first);
-            return new Positioned(stream, first);
-        } catch (IOException notSeekable) {
-            stream.close();
-            return resolver.openInputStream(document);
-        }
-    }
-
-    /** How far into the file `in` already stands. */
-    private static long position(InputStream in) {
-        return in instanceof Positioned ? ((Positioned) in).at : 0;
-    }
-
-    /** A stream already standing at byte `at` of its file. */
-    private static final class Positioned extends FilterInputStream {
-        final long at;
-
-        Positioned(InputStream in, long at) {
-            super(in);
-            this.at = at;
-        }
     }
 
     private static WebResourceResponse status(int code, String reason) {
@@ -174,6 +130,18 @@ final class MusicFileServer extends BridgeWebViewClient {
             int value = super.read();
             if (value >= 0) remaining -= 1;
             return value;
+        }
+
+        @Override
+        public int available() throws IOException {
+            return (int) Math.min(super.available(), Math.max(0, remaining));
+        }
+
+        @Override
+        public long skip(long count) throws IOException {
+            long skipped = super.skip(Math.min(count, Math.max(0, remaining)));
+            if (skipped > 0) remaining -= skipped;
+            return skipped;
         }
 
         @Override

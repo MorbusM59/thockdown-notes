@@ -83,6 +83,6 @@ export function MusicDiagnostics() {
       </button>
     </div>
     {trace ? <pre className="mobile-beat-trace">{trace}</pre> : null}
-    <HealthLogPanel />
+    <HealthLogPanel build={__BUILD_MARK__} />
   </>)
 }

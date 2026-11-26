@@ -15,9 +15,11 @@ function snapshot(): number {
   return last ? log.length * 1e13 + last.time + last.count : 0
 }
 
-export function HealthLogPanel() {
+/** `build`: what this build was made from, shown and copied above the log so a pasted log says which build wrote it. */
+export function HealthLogPanel({ build }: { build?: string } = {}) {
   useSyncExternalStore(subscribeHealthLog, snapshot)
-  const text = healthLogText()
+  const log = healthLogText()
+  const text = build ? `${build}\n${log || 'No failures'}` : log
   return (<>
     <div className="options-loadout-grid" role="group" aria-label="Failure log">
       <button
@@ -25,7 +27,7 @@ export function HealthLogPanel() {
         className="btn-icon options-color-swatch options-loadout-btn"
         data-tooltip="Copy the failure log"
         aria-label="Copy the failure log"
-        disabled={!text}
+        disabled={!log}
         onClick={() => { void navigator.clipboard?.writeText(text) }}
       >
         <span className="fa-solid fa-copy" aria-hidden="true" />
@@ -35,7 +37,7 @@ export function HealthLogPanel() {
         className="btn-icon options-color-swatch options-loadout-btn"
         data-tooltip="Clear the failure log"
         aria-label="Clear the failure log"
-        disabled={!text}
+        disabled={!log}
         onClick={clearHealthLog}
       >
         <span className="fa-solid fa-broom" aria-hidden="true" />
