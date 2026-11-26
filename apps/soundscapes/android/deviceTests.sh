@@ -22,9 +22,9 @@ run() {
 }
 
 # A fresh install: Android 14 denies exact alarms until the listener grants them.
-run ScheduleWithoutExactAlarmsTest
+run ScheduleWithoutExactAlarmsTest || { adb shell dumpsys alarm | grep -n -i "soundscapes\|history" | head -40; exit 1; }
 adb shell appops set "$APP" SCHEDULE_EXACT_ALARM allow
 run ScheduleWithExactAlarmsTest
 # Revoked in the system settings: the system cancels the alarm, and the schedule must read off.
 adb shell appops set "$APP" SCHEDULE_EXACT_ALARM deny
-run ScheduleWithoutExactAlarmsTest
+run ScheduleWithoutExactAlarmsTest || { adb shell dumpsys alarm | grep -n -i "soundscapes\|history" | head -40; exit 1; }

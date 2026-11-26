@@ -36,6 +36,11 @@ final class ScheduleDevice {
             while ((read = in.read(buffer)) > 0) bytes.write(buffer, 0, read);
         }
         out.close();
-        return bytes.toString("UTF-8").contains(SoundscapeSchedule.ACTION_ALARM);
+        // The dump also keeps a history of REMOVED alarms, which names a
+        // cancelled one too: only what is listed before it is pending.
+        String dump = bytes.toString("UTF-8");
+        int history = dump.indexOf("emoval history");
+        if (history >= 0) dump = dump.substring(0, history);
+        return dump.contains(SoundscapeSchedule.ACTION_ALARM);
     }
 }
