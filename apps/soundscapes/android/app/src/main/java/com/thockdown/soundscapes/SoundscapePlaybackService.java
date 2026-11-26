@@ -124,8 +124,24 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         });
         session.setActive(true);
         setSessionToken(session.getSessionToken());
+        androidx.core.content.ContextCompat.registerReceiver(this, becomingNoisy,
+            new android.content.IntentFilter(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED);
         refresh();
     }
+
+    /**
+     * Headphones unplugged or a Bluetooth headset disconnected: the system
+     * moves the output to the loudspeaker on its own, so what was private
+     * would carry on out loud. Everything pauses, as every media app does;
+     * play resumes it on the new route.
+     */
+    private final android.content.BroadcastReceiver becomingNoisy = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context context, Intent intent) {
+            if (android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())) pause();
+        }
+    };
 
     // --- Browsing (Android Auto) ---
 
@@ -373,6 +389,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     @Override
     public void onDestroy() {
         if (running == this) running = null;
+        unregisterReceiver(becomingNoisy);
         session.setActive(false);
         session.release();
         holdWakeLock(false);

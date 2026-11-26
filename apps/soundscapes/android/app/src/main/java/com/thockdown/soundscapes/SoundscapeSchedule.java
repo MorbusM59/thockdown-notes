@@ -167,13 +167,17 @@ final class SoundscapeSchedule {
         Event current = current();
         if (current == null || "stop".equals(current.kind)) return -1;
         int best = Integer.MAX_VALUE;
+        Event nearest = null;
         for (Event event : events) {
             if (event == current) continue;
             int distance = Math.floorMod(event.minute * 60 - nowSec, SECONDS_PER_WEEK);
-            if (distance > 0 && distance < best) best = distance;
+            if (distance > 0 && distance < best) {
+                best = distance;
+                nearest = event;
+            }
         }
-        if (best == Integer.MAX_VALUE) return -1;
-        return now.getTimeInMillis() - (now.getTimeInMillis() % 1000) + best * 1000L;
+        if (nearest == null) return -1;
+        return wallClockMillis(now, nearest.minute * 60);
     }
 
     private static SharedPreferences preferences(Context context) {
@@ -262,6 +266,31 @@ final class SoundscapeSchedule {
         return (day * MINUTES_PER_DAY) + (calendar.get(Calendar.HOUR_OF_DAY) * 60) + calendar.get(Calendar.MINUTE);
     }
 
+    /**
+     * The next moment after `now` whose WALL-CLOCK time is second `at` of
+     * the week, in `now`'s time zone. Counted in calendar days and then set
+     * to the event's hour, minute and second, never as `now` plus a number of
+     * seconds: across a daylight-saving change a day is 23 or 25 hours long,
+     * and adding seconds put the alarm an hour off the event's time (no
+     * broadcast tells the app the offset changed, so nothing re-armed it). A
+     * time the change skips (02:30 on a spring-forward night) is read
+     * leniently, as the same distance past the gap (03:30).
+     */
+    static long wallClockMillis(Calendar now, int at) {
+        int nowSec = secondOfWeek(now);
+        int days = Math.floorMod(at / 86400 - nowSec / 86400, 7);
+        if (days == 0 && at <= nowSec) days = 7;
+        Calendar target = (Calendar) now.clone();
+        target.setLenient(true);
+        target.add(Calendar.DAY_OF_MONTH, days);
+        int ofDay = at % 86400;
+        target.set(Calendar.HOUR_OF_DAY, ofDay / 3600);
+        target.set(Calendar.MINUTE, (ofDay / 60) % 60);
+        target.set(Calendar.SECOND, ofDay % 60);
+        target.set(Calendar.MILLISECOND, 0);
+        return target.getTimeInMillis();
+    }
+
     /** Whether alarms can be exact here: granted by the listener on Android 12 and later. */
     static boolean canArm(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true;
@@ -309,13 +338,8 @@ final class SoundscapeSchedule {
                 break;
             }
         }
-        int ahead = Math.floorMod(next.at - nowSec, SECONDS_PER_WEEK);
-        if (ahead == 0) ahead = SECONDS_PER_WEEK;
-        Calendar at = (Calendar) now.clone();
-        at.set(Calendar.MILLISECOND, 0);
-        at.add(Calendar.SECOND, ahead);
         intent.putExtra(EXTRA_AT, next.at);
-        alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at.getTimeInMillis(),
+        alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, wallClockMillis(now, next.at),
             PendingIntent.getBroadcast(app, 0, intent, flags));
     }
 }

@@ -52,6 +52,8 @@ final class AudioOutput {
      */
     long mixedFrames = 0;
     private long trackBase = 0;
+    /** System.nanoTime when the track last began playing (created, resumed or rebuilt): a timestamp from before it is stale. */
+    private long playedNanos = 0;
     private final int bufferBytes;
     private final Thread writer;
     private final OutputLimiter limiter;
@@ -81,6 +83,7 @@ final class AudioOutput {
         // A small device buffer: the long ones are the lanes' queues.
         bufferBytes = Math.max(minimum * 2, BLOCK_FRAMES * 4 * 4);
         track = buildTrack();
+        playedNanos = System.nanoTime();
         track.play();
         writer = new Thread(this::run, "AudioOutput");
         writer.start();
@@ -116,17 +119,32 @@ final class AudioOutput {
     long heardNanos(long mixedFrame) {
         AudioTrack current;
         long base;
+        long played;
         synchronized (this) {
             current = track;
             base = trackBase;
+            played = playedNanos;
         }
-        long trackFrame = mixedFrame - base;
         AudioTimestamp stamp = new AudioTimestamp();
-        if (current.getTimestamp(stamp)) {
-            return stamp.nanoTime + (trackFrame - stamp.framePosition) * 1_000_000_000L / sampleRate;
-        }
+        boolean stamped = current.getTimestamp(stamp);
         long head = current.getPlaybackHeadPosition() & 0xffffffffL;
-        return System.nanoTime() + (trackFrame - head) * 1_000_000_000L / sampleRate;
+        return heardNanos(mixedFrame - base, stamped, stamp.nanoTime, stamp.framePosition, played, head, System.nanoTime(), sampleRate);
+    }
+
+    /**
+     * heardNanos's arithmetic, apart from the track so it can be tested. A
+     * timestamp is used only when it was taken after the track last began
+     * playing: AudioTrack keeps handing back the stamp from before a pause
+     * until the device reports a new one, and extrapolated from there every
+     * frame after the pause read as heard earlier by the whole pause, so the
+     * visuals ran ahead of the sound after every resume.
+     */
+    static long heardNanos(long trackFrame, boolean stamped, long stampNanos, long stampFrame,
+            long playedNanos, long head, long nowNanos, int sampleRate) {
+        if (stamped && stampNanos >= playedNanos) {
+            return stampNanos + (trackFrame - stampFrame) * 1_000_000_000L / sampleRate;
+        }
+        return nowNanos + (trackFrame - head) * 1_000_000_000L / sampleRate;
     }
 
     /** Hear `lane` alone, or (null) every lane again, each from where it stood. */
@@ -183,6 +201,7 @@ final class AudioOutput {
                         return;
                     }
                     if (!running) return;
+                    playedNanos = System.nanoTime();
                     track.play();
                 }
                 java.util.Arrays.fill(mix, 0f);
@@ -210,6 +229,7 @@ final class AudioOutput {
                         // The dropped block's frames never reached a track: the new one starts after them.
                         trackBase = mixedFrames;
                         track = rebuilt;
+                        playedNanos = System.nanoTime();
                     }
                     rebuilt.play();
                     // The block is dropped rather than retried into the new
