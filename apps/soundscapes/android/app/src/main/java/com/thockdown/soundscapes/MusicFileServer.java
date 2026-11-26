@@ -47,7 +47,7 @@ final class MusicFileServer extends BridgeWebViewClient {
         String song = url.getQueryParameter("uri");
         if (song == null || !granted(Uri.parse(song))) return status(404, "Not Found");
         try {
-            return serve(Uri.parse(song), request.getRequestHeaders().get("Range"));
+            return respond(context.getContentResolver(), Uri.parse(song), request.getRequestHeaders().get("Range"));
         } catch (Exception unreadable) {
             return status(404, "Not Found");
         }
@@ -62,8 +62,8 @@ final class MusicFileServer extends BridgeWebViewClient {
         return false;
     }
 
-    private WebResourceResponse serve(Uri document, String range) throws IOException {
-        ContentResolver resolver = context.getContentResolver();
+    /** The response to a request for `document` with Range header `range` (null for the whole file). */
+    static WebResourceResponse respond(ContentResolver resolver, Uri document, String range) throws IOException {
         long length;
         try (AssetFileDescriptor file = resolver.openAssetFileDescriptor(document, "r")) {
             if (file == null) return status(404, "Not Found");

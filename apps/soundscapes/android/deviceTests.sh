@@ -28,3 +28,6 @@ run ScheduleWithExactAlarmsTest
 # Revoked in the system settings: the system cancels the alarm, and the schedule must read off.
 adb shell appops set "$APP" SCHEDULE_EXACT_ALARM deny
 run ScheduleWithoutExactAlarmsTest || { adb shell dumpsys alarm | grep -n -i "soundscapes\|history" | head -40; exit 1; }
+
+# The music files the beat analysis reads by range, through a real WebView.
+run MusicFileServerRangeTest
