@@ -24,7 +24,7 @@ export interface SessionEntry {
   configuration: string
 }
 
-/** Regular mode: the soundscape the listener chose, which overrules the schedule while playing or paused. */
+/** Regular mode: the soundscape the listener chose, which overrules the schedule while playing; paused, it is silence kept ready to resume. */
 export type RegularMode = 'stopped' | 'playing' | 'paused'
 
 /** What is heard: the listener's choice, the schedule's run, or nothing. */
@@ -39,8 +39,6 @@ export interface SessionState {
   scheduleEnabled: boolean
   /** When what is heard ends (wall clock, ms): the timer's end, or the scheduled run's next change; -1 for none. */
   endsAtMs: number
-  /** The timer's time left while paused (ms); -1 for none. */
-  remainingMs: number
 }
 
 /** The schedule as the native side runs it (schedule.ts works it out). */
@@ -72,10 +70,10 @@ export interface NativeSoundscapePlugin {
   ensureExactAlarms(): Promise<{ granted: boolean }>
   /** Regular mode PLAYING; idempotent. */
   play(): Promise<void>
-  /** Regular mode PAUSED, from PLAYING only (a stop that came first stands). */
+  /** Regular mode PAUSED because the engine closed, from PLAYING only (a listener's pause that came first stands); never touches the schedule. */
   pause(): Promise<void>
-  /** Regular mode STOPPED: the schedule takes over, or the session ends. Resolves the outcome. */
-  stop(): Promise<SessionState>
+  /** The listener's pause of music and soundscape together; during a scheduled run it switches the schedule off. Resolves the outcome. */
+  pauseAll(): Promise<SessionState>
   /** `configuration` is a ConfigureMessage as JSON; `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */
   configure(options: { configuration: string; transitionSec: number }): Promise<void>
   setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>
@@ -90,8 +88,8 @@ export interface NativeSoundscapePlugin {
   takeBack(options: { taken: boolean }): Promise<void>
   /** A media control or the schedule changed what plays. */
   addListener(event: 'sessionChanged', listener: (state: SessionState) => void): Promise<PluginListenerHandle>
-  /** The timer's countdown started, held or ended, for any reason (the page's own changes included). */
-  addListener(event: 'countdown', listener: (data: { endsAtMs: number; remainingMs: number }) => void): Promise<PluginListenerHandle>
+  /** The timer's countdown started or ended, for any reason (the page's own changes included). */
+  addListener(event: 'countdown', listener: (data: { endsAtMs: number }) => void): Promise<PluginListenerHandle>
   addListener(event: 'back', listener: () => void): Promise<PluginListenerHandle>
   /** What soundscapeRenderer.ts computed (its soundscapeVisualsTake, as JSON), the soundscape output's playhead as it was sent, its sample rate, and when that playhead is heard (nativeClock.ts). */
   addListener(event: 'visuals', listener: (data: { visuals: string; playhead: number; sampleRate: number; heardNanos: number; sentNanos: number }) => void): Promise<PluginListenerHandle>

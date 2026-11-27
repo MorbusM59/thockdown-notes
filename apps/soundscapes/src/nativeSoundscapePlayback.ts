@@ -7,10 +7,11 @@
  * forwards settings and the volume, and passes failures back.
  *
  * Opening is regular mode PLAYING and closing is regular mode PAUSED: the
- * engine plays exactly while regular mode does. A STOP is not the engine's
- * to express, so the page makes it as its own call, first; the session then
- * ignores the pause (and the fade-out to silence) the engine's closing sends
- * after it, which would otherwise silence the schedule taking over.
+ * engine plays exactly while regular mode does. The LISTENER's pause, which
+ * may also switch the schedule off, is not the engine's to express (the
+ * engine closes for other reasons too), so the page makes it as its own call,
+ * first (`pauseAll`); the session then ignores the pause the engine's closing
+ * sends after it.
  */
 import type { SoundscapePlaybackFactory } from '@thockdown/soundscape/SoundscapeEngine'
 import type { NativeSoundscapePlugin } from './backgroundAudioHost'

@@ -156,6 +156,32 @@ final class SoundscapeSchedule {
     }
 
     /**
+     * Whether a run of either channel is under way at this moment: what a
+     * pause has to switch the schedule off for, since the schedule would
+     * otherwise carry on playing it (SoundscapePlaybackService.pauseAll).
+     */
+    boolean runInForce() {
+        if (!enabled) return false;
+        Event current = current();
+        if (current != null && !"stop".equals(current.kind)) return true;
+        return musicSetAt(System.currentTimeMillis()) != null;
+    }
+
+    /** Switch the stored schedule off, its entries untouched, and cancel its alarm. The page follows through the session's state. */
+    static void switchOff(Context context) {
+        String stored = preferences(context).getString(KEY, null);
+        if (stored == null) return;
+        try {
+            JSONObject json = new JSONObject(stored);
+            json.put("enabled", false);
+            save(context, json);
+        } catch (Exception ignored) {
+            // Unreadable: load() already reads it as off.
+        }
+        arm(context);
+    }
+
+    /**
      * The wall-clock time the run under way next changes (its stop, or a
      * switch to another entry), at the event's own minute rather than where
      * its fade begins; -1 outside a run or with no events.

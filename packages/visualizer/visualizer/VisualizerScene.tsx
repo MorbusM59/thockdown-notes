@@ -119,7 +119,7 @@ export type VisualizerSceneProps = {
    */
   onExit?: () => void
   /**
-   * What a finger on the orb (the cutout) does: a tap, a hold and four
+   * What a finger on the orb (the cutout) does: a tap and four
    * swipes (`orbGestures.ts`), supplied by the phone. Absent, the cutout
    * keeps the desktop's presses: a left press steps the soundstage forward,
    * a right press back.
@@ -128,11 +128,10 @@ export type VisualizerSceneProps = {
 }
 
 /** The hooks' stand-in while the scene keeps the desktop's presses. */
-const NO_ORB_GESTURES: OrbGestures = { tap: () => {}, hold: () => {}, swipe: () => {} }
+const NO_ORB_GESTURES: OrbGestures = { tap: () => {}, swipe: () => {} }
 
 const SPECTRUM_GESTURES: OrbGestures = {
   tap: () => setPanelsShown(!readPanelsShown()),
-  hold: () => {},
   swipe: (direction) => {
     if (direction !== 'left' && direction !== 'right') return
     const { song, likeSong } = readNowPlaying()

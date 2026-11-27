@@ -27,10 +27,10 @@ const HELP: Record<string, string[]> = {
     'Filter field: Leaving the field applies what you typed and plays the first song that matches, unless the playing song does. The button at its end applies it while you type, and clears the filter otherwise.',
     'Song: The title of the song that plays, then its artist and album.',
     'Position: Shows how far into the song playback is, and its length. Tap or drag to move through the song. The buttons at its ends play the previous and the next song.',
-    'Play button: Plays or pauses the music and the soundscape together. Hold it to stop both. While playback runs with a timer, it shows the time left.',
+    'Play button: Shows what a tap does: play, or pause the music and the soundscape together. While playback runs with a timer, it shows the time left instead.',
     'Playback modes: Soundscapes play in one of two modes, manual or scheduled. Both are controlled from the Dashboard.',
-    'Manual: Starts when you tap the play button, or choose a soundscape while one plays, and overrides the schedule while in effect. Tapping that button pauses and resumes playback but keeps manual control. Holding it stops playback and ends manual control, so a scheduled soundscape can take over. An expired timer does the same.',
-    'Scheduled: Active whenever manual playback is stopped, while the clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; hold the heading of a row and drag it to change the order.',
+    'Manual: Starts when you tap the play button, or choose a soundscape while one plays, and overrides the schedule while it plays. Pausing during a schedule row switches the clock button off. An expired timer hands over to the schedule.',
+    'Scheduled: Active whenever manual playback is not playing, while the clock button is on. Each schedule row plays during its time slot. Where rows compete for a time slot, the top one plays; hold the heading of a row and drag it to change the order.',
     'Help button: Explains the tab you are on. Tap it again to return.',
   ],
   Songs: [
@@ -44,7 +44,7 @@ const HELP: Record<string, string[]> = {
     'Presets: Tap one to use it; the plus copies the one in use. Every setting on this tab belongs to the preset in use, except the delay. The dock renames it, changes its icon, resets it, and a hold on the trash deletes it.',
     'Delay: Play a calibration loop and set the delay until the flashes land on the beat you hear.',
     'Signal: How loud the music must be for a full response, and what counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
-    'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',    'Orb: In the visualizer, tap the orb to pause or play, hold it to stop. Swipe right or left for the next or previous soundstage, down to mute the soundscape, up to bring it back, and up again for the next soundscape.',
+    'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',    'Orb: In the visualizer, tap the orb to play or pause. Swipe right or left for the next or previous soundstage, down to mute the soundscape, up to bring it back, and up again for the next soundscape.',
     'Spectrum: Swipe right on it to like the playing song more, left to like it less. A song you like comes back sooner in the mix.',
   ],
   Soundstages: [
@@ -66,7 +66,7 @@ const HELP: Record<string, string[]> = {
   ],
   Timer: [
     'Timer buttons: Tap a length to limit playback to it. Tap the active length again to turn the timer off; playback is then continuous, shown by the active infinity button. Hold a length and drag up or down to change it, from 1 minute to 24 hours.',
-    'Countdown: The timer counts while a soundscape or your music plays, restarts whenever you start or switch a soundscape or start the music, and holds while paused. Playback fades out at the end, music included, over a tenth of the length, at most five minutes, then stops; a schedule row due then crossfades in instead.',
+    'Countdown: The timer counts while a soundscape or your music plays, restarts whenever you start or switch a soundscape or start the music, and ends when you pause. Playback fades out at the end, music included, over a tenth of the length, at most five minutes, then stops; a schedule row due then crossfades in instead.',
     'Time left: Shown in brackets under the name of the playing soundscape, for a timer or a schedule row.',
   ],
   Presets: [
