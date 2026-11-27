@@ -44,8 +44,9 @@ const HELP: Record<string, string[]> = {
     'Presets: Tap one to use it; the plus copies the one in use. Every setting on this tab belongs to the preset in use, except the delay. The dock renames it, changes its icon, resets it, and a hold on the trash deletes it.',
     'Delay: Play a calibration loop and set the delay until the flashes land on the beat you hear.',
     'Signal: How loud the music must be for a full response, and what counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
-    'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',    'Orb: In the visualizer, tap the orb to play or pause. Swipe right or left for the next or previous soundstage, down to mute the soundscape, up to bring it back, and up again for the next soundscape.',
-    'Spectrum: Swipe right on it to like the playing song more, left to like it less. A song you like comes back sooner in the mix.',
+    'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',
+    'Orb: In the visualizer, tap the orb to play or pause. Swipe right or left for the next or previous soundstage, down to mute the soundscape, up to bring it back, and up again for the next soundscape.',
+    'Spectrum: Tap it to show or hide the song and the lists. Swipe right on it to like the playing song more, left to like it less. A song you like comes back sooner in the mix.',
   ],
   Soundstages: [
     'Soundstages: Create and edit the soundstages the Dashboard picks from. The active one shows in the dock.',
