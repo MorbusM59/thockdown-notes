@@ -318,10 +318,45 @@ final class AudioOutput {
                 while (running && !resyncWanted && deep()) {
                     long spare = queuedFrames() - (depthFrames / 4);
                     if (spare <= 0) return;
+                    // Wake for a marker being heard too, so it is reported on time.
+                    long marker = nextMarkerMixed();
+                    if (marker >= 0) {
+                        long until = marker - heardMixed();
+                        if (until <= 0) return;
+                        spare = Math.min(spare, until);
+                    }
                     wait(Math.max(1, spare * 1000 / sampleRate));
                 }
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /** The mixed count the track's head has reached. Called with this locked. */
+    private long heardMixed() {
+        return trackBase + (track.getPlaybackHeadPosition() & 0xffffffffL);
+    }
+
+    /** The earliest marker a lane waits to hear (OutputLane's `reportAt`), or -1. Called with this locked. */
+    private long nextMarkerMixed() {
+        long next = -1;
+        for (OutputLane lane : lanes) {
+            long marker = lane.markerMixed();
+            if (marker >= 0 && (next < 0 || marker < next)) next = marker;
+        }
+        return next;
+    }
+
+    /** Add to `due` every lane whose marker the track's head has passed. */
+    private void reportHeardMarkers(List<OutputLane> due) {
+        synchronized (this) {
+            long heard = heardMixed();
+            for (OutputLane lane : lanes) {
+                long marker = lane.markerMixed();
+                if (marker < 0 || marker > heard) continue;
+                lane.clearMarker();
+                if (!due.contains(lane)) due.add(lane);
             }
         }
     }
@@ -395,8 +430,9 @@ final class AudioOutput {
                 }
                 offset += written;
             }
-            for (OutputLane lane : due) lane.reportProgress();
             if (deep()) sleepWhileFull();
+            reportHeardMarkers(due);
+            for (OutputLane lane : due) lane.reportProgress();
         }
     }
 }

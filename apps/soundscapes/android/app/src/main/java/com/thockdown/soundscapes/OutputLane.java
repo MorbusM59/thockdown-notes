@@ -120,11 +120,32 @@ final class OutputLane {
         }
     }
 
-    /** Report once the playhead reaches `frame` (-1: nothing to wait for), besides the usual pace. */
+    /**
+     * Report once `frame` is HEARD (-1: nothing to wait for), besides the
+     * usual pace. Heard, not handed to the device: with the screen off the
+     * device holds seconds, and the lock screen would name the next song
+     * that much early. The output watches the track's head for it
+     * (`markerMixed`, AudioOutput's `reportHeardMarkers`).
+     */
     void reportAt(long frame) {
         synchronized (output) {
+            // A marker already handed over waits to be heard: the renderer
+            // has moved past it, so its next ask names a later frame or none.
+            // (A stale one, after a skip, costs one extra report.)
+            if (markerMixed() >= 0) return;
             reportFrame = frame;
         }
+    }
+    }
+
+    /** The pending `reportAt` frame on the output's mixed count, once it has been handed over, else -1. Called with the output locked. */
+    long markerMixed() {
+        return reportFrame >= 0 && started && playhead >= reportFrame ? reportFrame - anchor : -1;
+    }
+
+    /** The marker was heard: report it once. Called with the output locked. */
+    void clearMarker() {
+        reportFrame = -1;
     }
 
     /** Report at the visualizer's pace (true) or the idle refill pace (false); a change to responsive reports at the next block. */
@@ -317,11 +338,6 @@ final class OutputLane {
         playhead += frames;
         anchor = playhead - output.mixedFrames;
         sinceReport += frames;
-        if (reportFrame >= 0 && playhead >= reportFrame) {
-            reportFrame = -1;
-            sinceReport = 0;
-            return true;
-        }
         if (sinceReport < reportFrames) return false;
         if (bursts && !responsive && (burstsInForeground || AudioOutput.inBackground()) && end - playhead >= refillBelowFrames) return false;
         sinceReport = 0;
