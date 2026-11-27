@@ -17,8 +17,9 @@
  *   the last position reported;
  * - soundscapeTransition(json, seconds): a ConfigureMessage reached by a
  *   crossfade of `seconds` from what is playing (RenderAhead's transition);
- * - soundscapeStep(playedFrame, maxChunks): report how far the output has
- *   played, render what the lead allows (at most `maxChunks`), and return
+ * - soundscapeStep(playedFrame, maxChunks, spliceMarginSec?): report how
+ *   far the output has played (and, when given, how far past it the output
+ *   has now committed audio, RenderAheadEngine's setMargin), render what the lead allows (at most `maxChunks`), and return
  *   them as JSON `[{ "s": startFrame, "d": base64 }]`, the samples 16-bit
  *   interleaved stereo at half scale (the output applies the volume and
  *   doubles them back). An empty array means the lead is full.
@@ -96,8 +97,9 @@ scope.soundscapeRestart = (json: string): string => {
   return 'ok';
 };
 
-scope.soundscapeStep = (playedFrame: number, maxChunks: number): string => {
+scope.soundscapeStep = (playedFrame: number, maxChunks: number, spliceMarginSec?: number): string => {
   if (!renderer) return '[]';
+  if (spliceMarginSec !== undefined) renderer.setMargin(spliceMarginSec);
   renderer.played(playedFrame);
   // Each task renders at most one chunk and schedules the next while the
   // lead allows; what is left waits for the next step.

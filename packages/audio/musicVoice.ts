@@ -110,6 +110,12 @@ export class MusicInput {
     while (this.cues.length > 1 && this.cues[1].frame <= frame) this.cues.shift();
   }
 
+  /** The stream frame of the first cue after `frame`, or null. */
+  nextCue(frame: number): number | null {
+    for (const cue of this.cues) if (cue.frame > frame) return cue.frame;
+    return null;
+  }
+
   /** The song playing at stream frame `frame` and how far into it, or null before the first cue. */
   at(frame: number): { songId: number; offsetFrames: number } | null {
     for (let index = this.cues.length - 1; index >= 0; index -= 1) {

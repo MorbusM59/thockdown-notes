@@ -412,6 +412,9 @@ final class MusicRenderer {
             if (java.util.Objects.equals(id, steppedId)) steppedId = null;
             listener.onHeard(id, at == null ? 0 : (double) at.getLong("offsetFrames") / output.sampleRate, played);
         }
+        // The lane refills in bursts, so it is asked to report when the next
+        // song is heard: that is when the lock screen must name it.
+        output.reportAt(step.optLong("next", -1));
         return new long[] { chunks.length(), step.getLong("ahead") };
     }
 
@@ -434,7 +437,7 @@ final class MusicRenderer {
                 }
                 long played = output.playheadFrame();
                 long[] step = handle(isolate.evaluateJavaScriptAsync(
-                    "musicStep(" + played + ", " + MAX_CHUNKS_PER_STEP + ")").get(), played);
+                    "musicStep(" + played + ", " + MAX_CHUNKS_PER_STEP + ", " + (output.committedSec() + SPLICE_SLACK_SEC) + ")").get(), played);
                 // RENDERING COMES FIRST: a step that stopped at its cap has
                 // input left to render, and the output is fed before the
                 // decoder runs further ahead. Decoding after every step

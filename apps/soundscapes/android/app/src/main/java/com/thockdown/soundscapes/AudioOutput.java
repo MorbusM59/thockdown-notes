@@ -32,6 +32,21 @@ import java.util.List;
  * is full. When every lane holds (paused and faded out) it pauses the track
  * and waits.
  *
+ * THE DEVICE BUFFER has two depths. In the foreground it is small, so a
+ * splice, a pause or a volume change is heard at once. In the background
+ * (MainActivity stopped: the screen off, another app in front) it is
+ * DEEP_BUFFER_SEC deep, so the writer fills it in long bursts and sleeps in
+ * between instead of waking for every few tens of milliseconds of audio.
+ * The track asks for PERFORMANCE_MODE_POWER_SAVING, which lets the platform
+ * route it to its deep-buffer output, where the audio hardware plays long
+ * periods without the processor. A deep buffer commits more audio than a
+ * splice margin used to leave, so `committedSec` follows the depth (the
+ * renderers hand it to their sandboxes with every step), and anything that
+ * must be heard at once (a pause, the return to the foreground) RESYNCS:
+ * the track is paused and flushed, and every lane is rewound to the frame
+ * that was actually heard, so nothing is skipped and nothing waits behind
+ * a second of audio already handed over.
+ *
  * A write the AudioTrack refuses (a negative result: ERROR_DEAD_OBJECT when
  * the audio system has invalidated the track, for instance on a route
  * change or a restart of the audio server) is not the end of playback: the
@@ -39,6 +54,10 @@ import java.util.List;
  */
 final class AudioOutput {
     private static final int BLOCK_FRAMES = 1024;
+    /** How much the device holds while the app is in the background. */
+    private static final double DEEP_BUFFER_SEC = 4;
+    /** Whether the app is in the background (MainActivity stopped), for an output opened later. */
+    private static volatile boolean background = false;
 
     private static AudioOutput shared;
 
@@ -54,7 +73,19 @@ final class AudioOutput {
     private long trackBase = 0;
     /** System.nanoTime when the track last began playing (created, resumed or rebuilt): a timestamp from before it is stale. */
     private long playedNanos = 0;
+    /** The track's allocated capacity, which the deep depth uses whole. */
     private final int bufferBytes;
+    /** The small depth, in frames: the foreground's. */
+    private final int shallowFrames;
+    /** The depth the track is set to now, in frames (what a splice must leave). */
+    private volatile int depthFrames;
+    /** The depth wanted, applied by the writer between blocks. */
+    private int wantedFrames;
+    /** Whether the track plays OFFLOADED (see THE DEVICE BUFFER), and whether it should. */
+    private boolean offloaded = false;
+    private final boolean offloadSupported;
+    /** Pause, flush and rewind before the next block (see THE DEVICE BUFFER). */
+    private boolean resyncWanted = false;
     private final Thread writer;
     private final OutputLimiter limiter;
     private final List<OutputLane> lanes = new ArrayList<>();
@@ -80,8 +111,11 @@ final class AudioOutput {
         sampleRate = AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC);
         limiter = new OutputLimiter(sampleRate);
         int minimum = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
-        // A small device buffer: the long ones are the lanes' queues.
-        bufferBytes = Math.max(minimum * 2, BLOCK_FRAMES * 4 * 4);
+        // A small device buffer in the foreground: the long ones are the lanes' queues.
+        shallowFrames = Math.max(minimum * 2, BLOCK_FRAMES * 4 * 4) / 4;
+        bufferBytes = Math.max(shallowFrames, (int) Math.round(DEEP_BUFFER_SEC * sampleRate)) * 4;
+        wantedFrames = background ? Integer.MAX_VALUE : shallowFrames;
+        offloadSupported = AudioManager.isOffloadedPlaybackSupported(format(), attributes());
         track = buildTrack();
         playedNanos = System.nanoTime();
         track.play();
@@ -89,25 +123,113 @@ final class AudioOutput {
         writer.start();
     }
 
-    private AudioTrack buildTrack() {
-        return new AudioTrack.Builder()
-            .setAudioAttributes(new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build())
-            .setAudioFormat(new AudioFormat.Builder()
-                .setSampleRate(sampleRate)
-                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                .build())
-            .setBufferSizeInBytes(bufferBytes)
-            .setTransferMode(AudioTrack.MODE_STREAM)
+    private static AudioAttributes attributes() {
+        return new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
             .build();
     }
 
-    /** Frames the device buffer and one writer block hold beyond a playhead: the least a splice must leave. */
+    private AudioFormat format() {
+        return new AudioFormat.Builder()
+            .setSampleRate(sampleRate)
+            .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .build();
+    }
+
+    private boolean deep() {
+        return wantedFrames > shallowFrames;
+    }
+
+    /** A track for the present depth: offloaded when deep and the device can, otherwise a power-saving PCM track. */
+    private AudioTrack buildTrack() {
+        boolean offload = deep() && offloadSupported;
+        AudioTrack built = null;
+        if (offload) {
+            try {
+                built = builder().setOffloadedPlayback(true).build();
+            } catch (RuntimeException refused) {
+                // The device said it could and then could not: play as PCM.
+                built = null;
+            }
+        }
+        offloaded = built != null;
+        if (built == null) built = builder().build();
+        // The capacity is the deep depth; the depth in use is set here. An
+        // offloaded track's buffer is the platform's to size.
+        depthFrames = offloaded ? built.getBufferSizeInFrames() : built.setBufferSizeInFrames(wantedFrames);
+        return built;
+    }
+
+    private AudioTrack.Builder builder() {
+        return new AudioTrack.Builder()
+            .setAudioAttributes(attributes())
+            .setAudioFormat(format())
+            .setBufferSizeInBytes(bufferBytes)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_POWER_SAVING);
+    }
+
+    static boolean inBackground() {
+        return background;
+    }
+
+    /** The app went to the background (true) or came back (false); MainActivity's onStop and onStart. */
+    static void setBackground(boolean inBackground) {
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            background = inBackground;
+            output = shared;
+        }
+        if (output == null) return;
+        synchronized (output) {
+            output.wantedFrames = inBackground ? Integer.MAX_VALUE : output.shallowFrames;
+            // Deepening needs nothing undone unless the track is to become
+            // offloaded; a return must be heard at once.
+            if (!inBackground || output.offloadSupported) output.resyncWanted = true;
+            output.notifyAll();
+        }
+    }
+
+    /** A lane is pausing: while the buffer is deep, what it holds is dropped so the pause is heard now. */
+    synchronized void pauseHeardNow() {
+        if (depthFrames > shallowFrames) {
+            resyncWanted = true;
+            notifyAll();
+        }
+    }
+
+    /**
+     * Pause and flush the track, rewind every lane to the frame actually
+     * heard, apply the wanted depth and play on. Called by the writer, with
+     * this locked, between blocks: the track's head then counts every frame
+     * mixed since `trackBase`.
+     */
+    private void resync() {
+        resyncWanted = false;
+        track.pause();
+        long heard = trackBase + (track.getPlaybackHeadPosition() & 0xffffffffL);
+        track.flush();
+        if (heard < mixedFrames) {
+            mixedFrames = heard;
+            for (OutputLane lane : lanes) lane.rewindTo(mixedFrames);
+        }
+        // A flush starts the head from zero.
+        trackBase = mixedFrames;
+        if (offloaded != (deep() && offloadSupported)) {
+            track.release();
+            track = buildTrack();
+        } else if (!offloaded) {
+            depthFrames = track.setBufferSizeInFrames(wantedFrames);
+        }
+        playedNanos = System.nanoTime();
+        track.play();
+    }
+
+    /** Frames the device buffer (at its present depth) and one writer block hold beyond a playhead: the least a splice must leave. */
     double committedSec() {
-        return ((double) bufferBytes / 4 + BLOCK_FRAMES) / sampleRate;
+        return ((double) depthFrames + BLOCK_FRAMES) / sampleRate;
     }
 
     /**
@@ -179,6 +301,34 @@ final class AudioOutput {
         track.release();
     }
 
+    /**
+     * In the background, once the device buffer is full, sleep until it is
+     * down to a quarter rather than topping it up a block at a time: a
+     * blocking write returns as soon as one block fits, which woke this
+     * thread every BLOCK_FRAMES whatever the depth. The wait is computed
+     * from the track's own head, and anything that must be heard sooner (a
+     * pause, the return to the foreground) notifies.
+     */
+    private void sleepWhileFull() {
+        synchronized (this) {
+            if (queuedFrames() < depthFrames - BLOCK_FRAMES) return;
+            try {
+                while (running && !resyncWanted && deep()) {
+                    long spare = queuedFrames() - (depthFrames / 4);
+                    if (spare <= 0) return;
+                    wait(Math.max(1, spare * 1000 / sampleRate));
+                }
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /** Frames handed to the track and not yet played. */
+    private long queuedFrames() {
+        return (mixedFrames - trackBase) - (track.getPlaybackHeadPosition() & 0xffffffffL);
+    }
+
     private boolean allHolding() {
         for (OutputLane lane : lanes) if (!lane.holding()) return false;
         return true;
@@ -203,6 +353,11 @@ final class AudioOutput {
                     if (!running) return;
                     playedNanos = System.nanoTime();
                     track.play();
+                }
+                if (resyncWanted) {
+                    resync();
+                } else if (!offloaded && wantedFrames > depthFrames) {
+                    depthFrames = track.setBufferSizeInFrames(wantedFrames);
                 }
                 java.util.Arrays.fill(mix, 0f);
                 mixedFrames += BLOCK_FRAMES;
@@ -239,6 +394,7 @@ final class AudioOutput {
                 offset += written;
             }
             for (OutputLane lane : due) lane.reportProgress();
+            if (deep()) sleepWhileFull();
         }
     }
 }

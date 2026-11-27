@@ -276,7 +276,7 @@ class BlendSource<C> implements AudioSource {
 export class RenderAheadEngine<C> {
   private readonly sampleRate: number;
   private readonly leadFrames: number;
-  private readonly marginFrames: number;
+  private marginFrames: number;
   private readonly crossfadeFrames: number;
   // What has been sent, by absolute frame, for crossfading from on a splice.
   private readonly historyLeft: Float32Array;
@@ -312,6 +312,15 @@ export class RenderAheadEngine<C> {
    * @param createVoice builds a fresh voice for a `transition`; without it
    *   a transition is an ordinary `configure`.
    */
+  /**
+   * A new margin from the next splice on: the output's commitment grows
+   * when it plays from a deep device buffer (the app in the background) and
+   * shrinks back when it returns.
+   */
+  setMargin(spliceMarginSec: number): void {
+    this.marginFrames = Math.round(spliceMarginSec * this.sampleRate);
+  }
+
   constructor(
     voice: RenderVoice<C>,
     sampleRate: number,

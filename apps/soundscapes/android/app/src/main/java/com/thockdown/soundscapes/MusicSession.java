@@ -406,6 +406,7 @@ final class MusicSession {
             MusicRenderer current = renderer;
             if (current != null) current.wake();
         });
+        output.refillInBursts(false);
         output.setVolume(volume, VOLUME_TIME_CONSTANT_SEC);
         output.setResponsive(spectrumBands > 0 || startingSong != null);
         // A renderer's reports count only while it is the current one: one
