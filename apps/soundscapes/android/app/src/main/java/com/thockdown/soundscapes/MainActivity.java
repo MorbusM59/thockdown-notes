@@ -57,6 +57,20 @@ public class MainActivity extends BridgeActivity {
     private boolean visualizerOpen = false;
 
     @Override
+    public void onStart() {
+        super.onStart();
+        AudioOutput.setBackground(false);
+    }
+
+    @Override
+    public void onStop() {
+        // Screen off or another app in front: the output plays from a deep
+        // buffer (AudioOutput, THE DEVICE BUFFER).
+        AudioOutput.setBackground(true);
+        super.onStop();
+    }
+
+    @Override
     public void onCreate(Bundle savedInstanceState) {
         // Before super.onCreate, as the splash library requires. The system
         // splash (launch_background, no icon) is released on the app's first

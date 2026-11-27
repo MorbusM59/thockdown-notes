@@ -19,7 +19,7 @@ package com.thockdown.soundscapes;
  * longer reach. It starts at the lane's first write and moves with the
  * output's clock: what is not queued is played as silence. Every half
  * second (only once the queue is below IDLE_REFILL_BELOW_SEC on a lane that
- * `refillInBursts`; every RESPONSIVE_REPORT_FRAMES while the page draws
+ * `refillInBursts`, and at a frame its renderer asked for, `reportAt`; every RESPONSIVE_REPORT_FRAMES while the page draws
  * from the renderer, `setResponsive`) the lane calls its listener, which is
  * what lets
  * its renderer render more. The renderer keeps seconds of lead, so a slow
@@ -70,6 +70,9 @@ final class OutputLane {
     private long end = 0;
     private boolean responsive = false;
     private boolean bursts = false;
+    private boolean burstsInForeground = false;
+    /** A frame to report at once the playhead reaches it, whatever the pace (`reportAt`), or -1. */
+    private long reportFrame = -1;
     private final long refillBelowFrames;
     private boolean started = false;
     private boolean closed = false;
@@ -104,16 +107,44 @@ final class OutputLane {
     }
 
     /**
-     * Idle reports only once the queue is below IDLE_REFILL_BELOW_SEC. For a
-     * lane whose renderer learns nothing else from a report (the
-     * soundscape's); the music's reports also tell it which song is heard,
-     * and a burst would leave the lock screen naming the last one for
-     * seconds.
+     * Idle reports only once the queue is below IDLE_REFILL_BELOW_SEC. A
+     * renderer that must hear of a moment in between (the music's, when the
+     * next song is heard) asks for it with `reportAt`. `inForeground` false
+     * keeps the half-second pace while the app is in front, for a lane whose
+     * reports also move something on screen (the music's position).
      */
-    void refillInBursts() {
+    void refillInBursts(boolean inForeground) {
         synchronized (output) {
             bursts = true;
+            burstsInForeground = inForeground;
         }
+    }
+
+    /**
+     * Report once `frame` is HEARD (-1: nothing to wait for), besides the
+     * usual pace. Heard, not handed to the device: with the screen off the
+     * device holds seconds, and the lock screen would name the next song
+     * that much early. The output watches the track's head for it
+     * (`markerMixed`, AudioOutput's `reportHeardMarkers`).
+     */
+    void reportAt(long frame) {
+        synchronized (output) {
+            // A marker already handed over waits to be heard: the renderer
+            // has moved past it, so its next ask names a later frame or none.
+            // (A stale one, after a skip, costs one extra report.)
+            if (markerMixed() >= 0) return;
+            reportFrame = frame;
+        }
+    }
+
+    /** The pending `reportAt` frame on the output's mixed count, once it has been handed over, else -1. Called with the output locked. */
+    long markerMixed() {
+        return reportFrame >= 0 && started && playhead >= reportFrame ? reportFrame - anchor : -1;
+    }
+
+    /** The marker was heard: report it once. Called with the output locked. */
+    void clearMarker() {
+        reportFrame = -1;
     }
 
     /** Report at the visualizer's pace (true) or the idle refill pace (false); a change to responsive reports at the next block. */
@@ -123,6 +154,13 @@ final class OutputLane {
             if (next < reportFrames) sinceReport = Math.max(sinceReport, next);
             reportFrames = next;
             this.responsive = responsive;
+        }
+    }
+
+    /** The frame the track's head has reached: what is being heard, up to the device's own latency. */
+    long heardFrame() {
+        synchronized (output) {
+            return started ? Math.min(playhead, output.heardMixed() + anchor) : playhead;
         }
     }
 
@@ -182,6 +220,19 @@ final class OutputLane {
         }
     }
 
+    /**
+     * The output dropped what it had handed to the device past mixed count
+     * `mixedFrame` (AudioOutput's resync): move the playhead back to the
+     * frame heard there, so the dropped audio is played again rather than
+     * skipped. Never further back than the ring still holds.
+     */
+    void rewindTo(long mixedFrame) {
+        if (!started) return;
+        long heard = Math.max(mixedFrame + anchor, end - capacity);
+        if (heard < playhead) playhead = heard;
+        anchor = playhead - mixedFrame;
+    }
+
     /** Drop everything queued past the playhead: it plays as silence until new audio is written. */
     void discardQueued() {
         synchronized (output) {
@@ -228,6 +279,7 @@ final class OutputLane {
         synchronized (output) {
             if (pause == paused) return;
             paused = pause;
+            if (pause) output.pauseHeardNow();
             glideTo(pause ? 0f : listenerVolume, PAUSE_FADE_SEC);
             output.notifyAll();
         }
@@ -293,7 +345,7 @@ final class OutputLane {
         anchor = playhead - output.mixedFrames;
         sinceReport += frames;
         if (sinceReport < reportFrames) return false;
-        if (bursts && !responsive && end - playhead >= refillBelowFrames) return false;
+        if (bursts && !responsive && (burstsInForeground || AudioOutput.inBackground()) && end - playhead >= refillBelowFrames) return false;
         sinceReport = 0;
         return true;
     }

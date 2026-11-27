@@ -38,11 +38,14 @@
  *   played (musicPlayHistory.ts, the desktop's), null when there is none;
  * - musicRotationJson(): the rotation, for the service to store after a
  *   musicNext, musicJump or musicChoose;
- * - musicStep(playedFrame, maxChunks): report how far the output has played,
- *   render what the lead allows (at most `maxChunks`), and return
- *   `{ "chunks": [{ "s", "d" }], "ahead": frames of input held past the
- *   playhead, "at": { "songId", "offsetFrames" } | null }`, `at` being what
- *   is heard at the playhead, and, while the spectrum is on, `"spectrum"`:
+ * - musicStep(playedFrame, maxChunks, spliceMarginSec?, heardFrame?): report
+ *   how far the output has played (and, when given, its committed margin,
+ *   as the soundscape's step takes it, and the frame its device is playing,
+ *   which `at` describes), render what the lead allows (at most
+ *   `maxChunks`), and return `{ "chunks": [{ "s", "d" }], "ahead": frames
+ *   of input held past the playhead, "at": { "songId", "offsetFrames" } |
+ *   null, "next": output frame the next queued song is heard from, or -1 }`,
+ *   `at` being what is heard at `heardFrame` (else the playhead), and, while the spectrum is on, `"spectrum"`:
  *   the frames computed from those chunks, `[{ "from", "first", "hop",
  *   "l" }]` (spectrumFrames.ts's SpectrumFrameBatch, `l` its levels in
  *   base64);
@@ -127,8 +130,9 @@ scope.musicEnd = (): string => {
   return 'ok';
 };
 
-scope.musicStep = (playedFrame: number, maxChunks: number): string => {
-  if (!engine || !voice) return '{"chunks":[],"ahead":0,"at":null}';
+scope.musicStep = (playedFrame: number, maxChunks: number, spliceMarginSec?: number, heardFrame?: number): string => {
+  if (!engine || !voice) return '{"chunks":[],"ahead":0,"at":null,"next":-1}';
+  if (spliceMarginSec !== undefined) engine.setMargin(spliceMarginSec);
   engine.played(playedFrame);
   // The stream frame heard at the playhead: the voice reads the stream in
   // order, one chunk per chunk rendered, so the two differ by a constant
@@ -140,14 +144,20 @@ scope.musicStep = (playedFrame: number, maxChunks: number): string => {
   while (tasks.length > 0 && rendered.length < maxChunks) tasks.shift()!();
   const done = rendered.splice(0);
   const chunks = done.map((chunk) => ({ s: chunk.startFrame, d: encodeHalfScaleStereo(chunk.left, chunk.right) }));
-  const at = voice.input.at(heard);
-  if (!spectrum) return JSON.stringify({ chunks, ahead: voice.input.end - heard, at });
+  // What is HEARD, which a deep device buffer puts seconds behind the
+  // playhead: the song the lock screen names, and its position.
+  const at = voice.input.at(heard - (playedFrame - Math.min(heardFrame ?? playedFrame, playedFrame)));
+  // The output frame the next song is heard from, so the output can report
+  // exactly then rather than by polling (-1: none queued).
+  const cue = voice.input.nextCue(heard);
+  const next = cue === null ? -1 : playedFrame + (cue - heard);
+  if (!spectrum) return JSON.stringify({ chunks, ahead: voice.input.end - heard, at, next });
   const frames = [];
   for (const chunk of done) {
     const batch = spectrum.push(chunk.startFrame, chunk.left, chunk.right);
     if (batch) frames.push({ from: batch.from, first: batch.first, hop: batch.hop, l: toBase64(batch.levels) });
   }
-  return JSON.stringify({ chunks, ahead: voice.input.end - heard, at, spectrum: frames });
+  return JSON.stringify({ chunks, ahead: voice.input.end - heard, at, next, spectrum: frames });
 };
 
 scope.musicSpectrum = (bands: number): string => {

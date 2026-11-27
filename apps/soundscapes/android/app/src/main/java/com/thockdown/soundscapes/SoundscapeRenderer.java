@@ -156,7 +156,7 @@ final class SoundscapeRenderer {
                     isolate.evaluateJavaScriptAsync("soundscapeVisuals(" + spectrumBands + ", " + (signals ? 1 : 0) + ", " + output.sampleRate + ")").get();
                 }
                 String result = isolate.evaluateJavaScriptAsync(
-                    "soundscapeStep(" + output.playheadFrame() + ", " + MAX_CHUNKS_PER_STEP + ")").get();
+                    "soundscapeStep(" + output.playheadFrame() + ", " + MAX_CHUNKS_PER_STEP + ", " + (output.committedSec() + SPLICE_SLACK_SEC) + ")").get();
                 JSONArray chunks = new JSONArray(result);
                 for (int index = 0; index < chunks.length(); index += 1) {
                     JSONObject chunk = chunks.getJSONObject(index);

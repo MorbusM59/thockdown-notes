@@ -774,7 +774,7 @@ final class SoundscapeSession {
             SoundscapeRenderer current = renderer;
             if (current != null) current.wake();
         });
-        output.refillInBursts();
+        output.refillInBursts(true);
         // A renderer's failure counts only while it is the current one: one
         // being closed can fail on its way out and must not end its successor.
         final SoundscapeRenderer[] self = new SoundscapeRenderer[1];
