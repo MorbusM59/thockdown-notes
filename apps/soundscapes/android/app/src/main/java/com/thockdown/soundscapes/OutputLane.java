@@ -158,6 +158,20 @@ final class OutputLane {
         }
     }
 
+    /** The frame the track's head has reached: what is being heard, up to the device's own latency. */
+    long heardFrame() {
+        synchronized (output) {
+            return started ? Math.min(playhead, output.heardMixed() + anchor) : playhead;
+        }
+    }
+
+    /** The frame the track's head has reached: what is being heard, up to the device's own latency. */
+    long heardFrame() {
+        synchronized (output) {
+            return started ? Math.min(playhead, output.heardMixed() + anchor) : playhead;
+        }
+    }
+
     /** How far audio has been handed to the device: as far as a splice can no longer reach. */
     long playheadFrame() {
         synchronized (output) {

@@ -334,7 +334,7 @@ final class AudioOutput {
     }
 
     /** The mixed count the track's head has reached. Called with this locked. */
-    private long heardMixed() {
+    long heardMixed() {
         return trackBase + (track.getPlaybackHeadPosition() & 0xffffffffL);
     }
 
