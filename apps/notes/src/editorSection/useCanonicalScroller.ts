@@ -1,4 +1,5 @@
 import { SCROLL_TRACK_EDGE_GAP_PX } from '@thockdown/interaction/scrollTrackGeometry'
+import { isFoldMovingWithin, subscribeFoldSettled } from '@thockdown/interaction/foldMotion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MouseEvent, MutableRefObject, PointerEvent } from 'react'
 import type { PreviewDocumentPositionApi } from './usePreviewMarkdownRendering'
@@ -184,6 +185,11 @@ export function useCanonicalScroller({
     }
 
     if (!track) return
+    // While a fold inside this scroller animates, the content height is on
+    // its way somewhere: the thumb waits and is drawn once, in the frame the
+    // fold settles (foldMotion.ts, subscribed below). The texture above still
+    // follows every scroll, since it is printed on the moving text.
+    if (!options?.force && isFoldMovingWithin(scroller)) return
 
     const viewportHeight = scroller.clientHeight
     const contentHeight = scroller.scrollHeight
@@ -413,13 +419,12 @@ export function useCanonicalScroller({
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    // Coalesced, not debounced: a request while one is pending joins it.
-    // Cancelling the pending frame and asking for the next one never ran
-    // while something mutated the content every frame (an accordion section
-    // animating its height writes a style each frame from its own rAF
-    // callback), so the thumb stood still for the whole animation.
+    // Coalesced, not debounced: a request while one is pending joins it, so
+    // content changing every frame still draws the thumb once a frame.
     const scheduleSync = () => {
-      if (scrollbarRafRef.current !== null) return
+      // A fold's size changes need no frame of their own: its settle draws
+      // the thumb (below), and until then the sync would only decline.
+      if (scrollbarRafRef.current !== null || isFoldMovingWithin(scroller)) return
       scrollbarRafRef.current = requestAnimationFrame(() => {
         scrollbarRafRef.current = null
         syncScrollbar()
@@ -463,7 +468,14 @@ export function useCanonicalScroller({
     }
     scroller.addEventListener('toggle', onDetailsToggle, true)
 
+    // Synchronously, inside the fold's own frame callback, so the thumb is
+    // drawn in the frame the content settles rather than one after.
+    const unsubscribeFold = subscribeFoldSettled((element) => {
+      if (scroller.contains(element) && !isFoldMovingWithin(scroller)) syncScrollbar()
+    })
+
     return () => {
+      unsubscribeFold()
       scroller.removeEventListener('toggle', onDetailsToggle, true)
       mutationObserver.disconnect()
       resizeObserver.disconnect()

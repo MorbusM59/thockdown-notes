@@ -20,6 +20,7 @@
 import { type MouseEvent, type ReactNode, type RefObject, createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { AccordionSectionOpenContext } from './accordionSectionOpen'
+import { beginFoldMotion } from './foldMotion'
 import { buildCurvePlan, buildScrollPlan, getRenderScrollTotalTimeSec, sampleScrollPlan } from './ScrollCurvePlan'
 import { type OptionsSearchSection, applyOptionsSelection, indexOptionsSection, selectOptions } from './optionsSearch'
 
@@ -203,6 +204,15 @@ function useFold({ open: controlledOpen, onRequestOpenChange, exclusive = false,
   const summaryRef = useRef<HTMLElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<AnimState | null>(null)
+  // Ends this fold's entry in the motion register (foldMotion.ts). Kept across
+  // a reversal (a close turned into an open mid-fold): the fold has not
+  // settled, so the scrollbar must not be told it has.
+  const endMotionRef = useRef<(() => void) | null>(null)
+  const settleMotion = useCallback(() => {
+    const end = endMotionRef.current
+    endMotionRef.current = null
+    end?.()
+  }, [])
 
   const cancelAnim = useCallback(() => {
     if (animRef.current) {
@@ -214,12 +224,13 @@ function useFold({ open: controlledOpen, onRequestOpenChange, exclusive = false,
   const animateTo = useCallback((fromPx: number, toPx: number, onDone?: () => void) => {
     cancelAnim()
     const content = contentRef.current
-    if (!content) { onDone?.(); return }
+    if (!content) { onDone?.(); settleMotion(); return }
 
     const distance = toPx - fromPx
     if (Math.abs(distance) < 0.5) {
       content.style.height = `${toPx}px`
       onDone?.()
+      settleMotion()
       return
     }
 
@@ -227,6 +238,7 @@ function useFold({ open: controlledOpen, onRequestOpenChange, exclusive = false,
     const totalMs = plan.totalDurationSec * 1000
     const state: AnimState = { rafId: 0, startTimeMs: null, fromPx, toPx }
     animRef.current = state
+    endMotionRef.current ??= beginFoldMotion(content)
 
     const frame = (nowMs: number) => {
       if (state.startTimeMs === null) state.startTimeMs = nowMs
@@ -235,6 +247,9 @@ function useFold({ open: controlledOpen, onRequestOpenChange, exclusive = false,
         content.style.height = `${toPx}px`
         animRef.current = null
         onDone?.()
+        // After onDone has handed the height back to the content, so a
+        // scrollbar measuring now measures what stays.
+        settleMotion()
         return
       }
       content.style.height = `${fromPx + sampleScrollPlan(plan, elapsed / 1000)}px`
@@ -243,7 +258,7 @@ function useFold({ open: controlledOpen, onRequestOpenChange, exclusive = false,
     }
 
     state.rafId = requestAnimationFrame(frame)
-  }, [cancelAnim])
+  }, [cancelAnim, settleMotion])
 
   // Exposed close — used by siblings via the group registry.
   const close = useCallback(() => {
@@ -321,7 +336,7 @@ function useFold({ open: controlledOpen, onRequestOpenChange, exclusive = false,
     else openCloseRef.current.close()
   }, [controlledOpen])
 
-  useEffect(() => () => cancelAnim(), [cancelAnim])
+  useEffect(() => () => { cancelAnim(); settleMotion() }, [cancelAnim, settleMotion])
 
   const onOpenChangeRef = useRef(onOpenChange)
   onOpenChangeRef.current = onOpenChange

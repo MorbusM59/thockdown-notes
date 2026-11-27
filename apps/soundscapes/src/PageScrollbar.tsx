@@ -14,6 +14,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { scrollThumbFor, scrollTopForThumb } from '@thockdown/interaction/scrollTrackGeometry'
+import { isFoldMovingWithin, subscribeFoldSettled } from '@thockdown/interaction/foldMotion'
 import { scrollToNonQuantizedSmooth } from '@thockdown/interaction/NonQuantizedSmoothScroll'
 
 export function PageScrollbar({ scrollerRef }: { scrollerRef: RefObject<HTMLElement | null> }) {
@@ -31,6 +32,9 @@ export function PageScrollbar({ scrollerRef }: { scrollerRef: RefObject<HTMLElem
     const track = trackRef.current
     const thumb = thumbRef.current
     if (!scroller || !track || !thumb) return
+    // A fold animating inside the page: the thumb is drawn once, in the frame
+    // it settles (foldMotion.ts), not for every height on the way.
+    if (isFoldMovingWithin(scroller)) return
     const next = scrollThumbFor(scroller, track.clientHeight, thumb.offsetWidth)
     thumbHeightRef.current = next.height
     thumb.style.top = `${next.top}px`
@@ -48,7 +52,11 @@ export function PageScrollbar({ scrollerRef }: { scrollerRef: RefObject<HTMLElem
     const observer = new ResizeObserver(sync)
     observer.observe(scroller)
     for (const child of Array.from(scroller.children)) observer.observe(child)
+    const unsubscribeFold = subscribeFoldSettled((element) => {
+      if (scroller.contains(element)) sync()
+    })
     return () => {
+      unsubscribeFold()
       scroller.removeEventListener('scroll', sync)
       observer.disconnect()
     }
