@@ -556,7 +556,8 @@
 }
 
 
-/* The phone's orb takes swipes itself (orbGestures.ts): the browser must not pan or zoom on it. */
-.visualizer-scene > .visualizer-cutout.is-touch-orb {
+/* The phone's orb and the spectrum take swipes themselves (orbGestures.ts): the browser must not pan or zoom on them. */
+.visualizer-scene > .visualizer-cutout.is-touch-orb,
+.visualizer-scene > .visualizer-spectrum-hit {
   touch-action: none;
 }

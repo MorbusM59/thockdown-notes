@@ -3,7 +3,8 @@
  *
  * Each toggle is a button with a TAP of its own (the timer on and off, dark
  * mode, the EQ, the visualizer) and a HOLD that replaces the row with the
- * toggle's PICKER: up to five cells, then a return button in the sixth.
+ * toggle's PICKER: up to five cells, then a return button in the sixth. A
+ * toggle that is only a menu (the play mode) opens its picker on a tap too.
  * The row comes back when
  *
  * - an option is picked (the picker calls `close`),
@@ -26,8 +27,8 @@ export interface DashboardToggle {
   face: ReactNode
   /** Extra classes on the button (a text face's sizing). */
   className?: string
-  /** What a tap does; nothing without it. */
-  onTap?: () => void
+  /** What a tap does: its own action, or 'picker' to open the picker as a hold does; nothing without it. */
+  onTap?: (() => void) | 'picker'
   /** The picker's cells, at most five; `close` returns to the row. */
   picker: (close: () => void) => ReactNode
 }
@@ -80,7 +81,10 @@ export function DashboardToggleRow({ toggles }: { toggles: readonly DashboardTog
           label={toggle.label}
           active={toggle.active}
           className={toggle.className}
-          onTap={() => toggle.onTap?.()}
+          onTap={() => {
+            if (toggle.onTap === 'picker') setOpenId(toggle.id)
+            else toggle.onTap?.()
+          }}
           onHold={() => {
             swallowClickRef.current = true
             setOpenId(toggle.id)

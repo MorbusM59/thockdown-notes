@@ -167,11 +167,17 @@ function SelectorSection({ heading, children }: { heading: SelectorHeading; chil
     : <div className="preset-section">{children}</div>
 }
 
-export function MusicLibraryPanel({ grouping, filter, editsOnTap = false, selectorHeading = null }: {
+export function MusicLibraryPanel({ grouping, filter, editsOnTap = false, showLikes = false, selectorHeading = null }: {
   grouping: MusicSetListGrouping
   filter: string
   /** A tap on a set's button opens it for editing, and the pool is left to another view (the phone's dashboard). */
   editsOnTap?: boolean
+  /**
+   * Each song's card in two rows, the title above and below it how much the
+   * song is liked (`SongLikes`) and its duration (the phone, whose cards are
+   * tall enough for two).
+   */
+  showLikes?: boolean
   selectorHeading?: SelectorHeading
 }) {
   const set = useOpenMusicSet()
@@ -186,10 +192,10 @@ export function MusicLibraryPanel({ grouping, filter, editsOnTap = false, select
       </div>
     )
   }
-  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} editsOnTap={editsOnTap} selectorHeading={selectorHeading} />
+  return <MusicLibrarySet set={set} grouping={grouping} filter={filter} editsOnTap={editsOnTap} showLikes={showLikes} selectorHeading={selectorHeading} />
 }
 
-function MusicLibrarySet({ set, grouping, filter, editsOnTap, selectorHeading }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; editsOnTap: boolean; selectorHeading: SelectorHeading }) {
+function MusicLibrarySet({ set, grouping, filter, editsOnTap, showLikes, selectorHeading }: { set: MusicSet; grouping: MusicSetListGrouping; filter: string; editsOnTap: boolean; showLikes: boolean; selectorHeading: SelectorHeading }) {
   const { slot, name } = set
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const loaded = useSetSongs(slot, nowPlaying.pool?.counts[slot])
@@ -242,7 +248,7 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap, selectorHeading }:
                     return (
                       // One cell, as an image's card is one: a click plays the
                       // song, and on hover its remove action takes the end of the row.
-                      <div key={song.id} className="options-curve-row options-music-song-row">
+                      <div key={song.id} className={`options-curve-row options-music-song-row${showLikes ? ' is-two-row' : ''}`}>
                         <div
                           role="button"
                           className="options-curve-cell options-curve-display options-music-set-name"
@@ -251,10 +257,20 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap, selectorHeading }:
                           onClick={() => nowPlaying.playFromPool(song.id, song)}
                         >
                           <span className="options-music-song-title">{title}</span>
-                          <HoverActions
-                            rest={song.durationSec > 0 ? <span className="options-music-song-duration">{formatSongDuration(song.durationSec)}</span> : null}
-                            actions={[{ icon: 'fa-xmark', label: `Remove ${title} from ${name}`, onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) } }]}
-                          />
+                          {showLikes ? (
+                            <span className="options-music-song-facts">
+                              <SongLikes likes={song.likes} />
+                              <HoverActions
+                                rest={song.durationSec > 0 ? <span className="options-music-song-duration">{formatSongDuration(song.durationSec)}</span> : null}
+                                actions={[{ icon: 'fa-xmark', label: `Remove ${title} from ${name}`, onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) } }]}
+                              />
+                            </span>
+                          ) : (
+                            <HoverActions
+                              rest={song.durationSec > 0 ? <span className="options-music-song-duration">{formatSongDuration(song.durationSec)}</span> : null}
+                              actions={[{ icon: 'fa-xmark', label: `Remove ${title} from ${name}`, onHold: () => { void nowPlaying.removeFromMusicSet(shownSlot, [song.id]) } }]}
+                            />
+                          )}
                         </div>
                       </div>
                     )
@@ -267,6 +283,21 @@ function MusicLibrarySet({ set, grouping, filter, editsOnTap, selectorHeading }:
         ))}
       </AccordionGroup>
     </div>
+  )
+}
+
+/**
+ * How much a song is liked (`musicPool.ts`'s likes): a heart and the number
+ * of steps, a broken heart and the number of steps down, nothing for a song
+ * neither liked nor disliked.
+ */
+function SongLikes({ likes }: { likes: number }) {
+  if (likes === 0) return <span className="options-music-song-likes" />
+  return (
+    <span className="options-music-song-likes" aria-label={likes > 0 ? `Liked ${likes}` : `Disliked ${-likes}`}>
+      <span className={`fa-solid ${likes > 0 ? 'fa-heart' : 'fa-heart-crack'}`} aria-hidden="true" />
+      <span aria-hidden="true">{Math.abs(likes)}</span>
+    </span>
   )
 }
 

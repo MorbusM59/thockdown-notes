@@ -32,6 +32,12 @@ function sandbox() {
     musicAppend(base64: string): string;
     musicEnd(): string;
     musicStep(playedFrame: number, maxChunks: number): string;
+    musicCatalog(json: string): string;
+    musicRotation(json: string): string;
+    musicRotationJson(): string;
+    musicNext(previousId: number): string;
+    musicJump(currentId: number, direction: number): string;
+    musicChoose(songId: number): string;
   };
   api.musicInit(JSON.stringify({ sampleRate: OUTPUT_RATE, spliceMarginSec: 0.15}));
   return { ...api, step: (played: number, max = 1000) => JSON.parse(api.musicStep(played, max)) as Step };
@@ -84,4 +90,26 @@ describe('the music sandbox', () => {
     expect(splice).toBeLessThan(2 * OUTPUT_RATE);
     expect(music.step(splice + 100, 0).at).toEqual({ songId: 2, offsetFrames: (3 * OUTPUT_RATE) + 100 });
   });
+
+  it('walks the queue: next, previous through what played, and a chosen song', () => {
+    const music = sandbox();
+    const songs = [1, 2, 3, 4].map((id) => ({ id, filePath: `content://music/${id}`, setIds: [1], title: '', artist: '', album: '', durationSec: 0, likes: 0 }));
+    music.musicCatalog(JSON.stringify({ songs, sets: [{ slot: 1, name: 'One', icon: null }], folders: [], activeSetIds: [1], filter: { query: '', enabled: true }, playMode: 'mix' }));
+    // A rotation written by the priority rotation this replaced: its songs are placed afresh.
+    music.musicRotation(JSON.stringify([{ id: 1, priority: 4, favorability: 1 }]));
+    const id = (json: string) => (JSON.parse(json) as { id: number } | null)?.id ?? null;
+    const first = id(music.musicNext(-1))!;
+    const order = (JSON.parse(music.musicRotationJson()) as Array<{ id: number; due: number }>).sort((a, b) => a.due - b.due).map((entry) => entry.id);
+    expect(order).toHaveLength(4);
+    expect(first).toBe(order[0]);
+    const second = id(music.musicNext(first))!;
+    expect(second).toBe(order[1]);
+    // Previous goes back to what played, and next returns to the song interrupted.
+    expect(id(music.musicJump(second, -1))).toBe(first);
+    expect(id(music.musicJump(first, 1))).toBe(second);
+    // A chosen song plays at once; nothing before the first song played is behind it.
+    expect(id(music.musicChoose(order[3]))).toBe(order[3]);
+    expect(id(music.musicNext(order[3]))).toBe(order[2]);
+  });
 });
+

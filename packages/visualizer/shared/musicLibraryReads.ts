@@ -1,6 +1,6 @@
 /**
  * What the shared music views READ of the music library -- a set's songs (the
- * Songs panel) and the pool in pick order (the visualizer's song list and
+ * Songs panel) and the pool in queue order (the visualizer's song list and
  * pool filter) -- as a port each app supplies: the desktop its main process's
  * library (`window.thockdownAudioPlayer`), the phone its catalog
  * (apps/soundscapes/src/mobileMusicPlayer.ts). Everything the views CHANGE goes

@@ -1,5 +1,5 @@
 /**
- * The visualizer's song list: a ring in pick order (`shared/musicPool.ts`),
+ * The visualizer's song list: a ring in queue order (`shared/musicPool.ts`),
  * initially cut at the playing song and laid out top to bottom, in the
  * rectangle `songListArea` gives, one entry on every other row. It wraps
  * endlessly when the pool is larger than the visible list. For a smaller
@@ -100,7 +100,7 @@ export function SongList({ layout, area, glyphFont }: { layout: VisualizerLayout
       slots.push({ plate, open, close, letters, shown: '' })
     }
 
-    /** The pool in pick order from the playing song on (or from its head, when the playing song is not in it). */
+    /** The pool in queue order from the playing song on (or from its head, when the playing song is not in it). */
     let songs: MusicSongEntry[] = []
     let ring = listRing(songs)
     /** The entry in the top slot. */

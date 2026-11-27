@@ -31,6 +31,8 @@ import {
   deleteSet,
   EMPTY_CATALOG,
   libraryOf,
+  likeSong,
+  sanitizeRotation,
   moveSet,
   poolOf,
   purgeSet,
@@ -43,6 +45,7 @@ import {
 } from './musicLibrary'
 import { loadMusicLibrary, type NativeMusicPlugin, type ScannedSong } from './nativeMusic'
 import { scanFolder } from './folderScan'
+import type { PlayMode } from '@thockdown/visualizer/shared/musicPool'
 
 let catalog: MusicCatalog = EMPTY_CATALOG
 let rotation: MusicRotation = []
@@ -298,6 +301,9 @@ const actions = {
   setPoolFilter(filter: MusicPoolFilter) {
     commit({ ...catalog, filter })
   },
+  likeSong(id: number, steps: number) {
+    commit(likeSong(catalog, id, steps))
+  },
   setLevel(level: keyof SoundLevels, fraction: number) {
     if (level !== 'volume') return
     levels = { ...levels, volume: fraction }
@@ -311,7 +317,25 @@ const actions = {
   },
 }
 
+/** How the pool plays (musicPool.ts's PlayMode): the dashboard's play mode menu. */
+export function readPlayMode(): PlayMode {
+  return catalog.playMode
+}
+
+export function setPlayMode(playMode: PlayMode): void {
+  if (playMode !== catalog.playMode) commit({ ...catalog, playMode })
+}
+
+const playModeListeners = new Set<() => void>()
+
+/** Called whenever the catalog is published, the play mode included. */
+export function subscribePlayMode(listener: () => void): () => void {
+  playModeListeners.add(listener)
+  return () => playModeListeners.delete(listener)
+}
+
 function publish(): void {
+  for (const listener of playModeListeners) listener()
   const slots = catalog.sets.map((set) => set.slot)
   publishNowPlaying({
     ...actions,
@@ -351,7 +375,7 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     heardSongId = heard.songId
     // A new song means the renderer picked (or was told to): its rotation moved.
     void native.getLibrary().then((library) => {
-      rotation = JSON.parse(library.rotation) as MusicRotation
+      rotation = sanitizeRotation(JSON.parse(library.rotation || '[]'))
       publish()
     })
   })

@@ -12,6 +12,10 @@
  * dashboard's transport hold that does the same thing; anything else lifted
  * is a TAP. A swipe abandons the hold (`armHold` watches the grace radius
  * itself), and a completed hold takes the press, so its lift is nothing.
+ *
+ * The spectrum takes its presses by the same rules (`VisualizerScene`'s
+ * `SPECTRUM_GESTURES`), so a tap and a swipe mean the same distance and the
+ * same time on both.
  */
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import { armHold, hasLeftHoldGrace, HOLD_CONFIRM_MS, type PressOrigin } from '@thockdown/interaction/holdTiming'

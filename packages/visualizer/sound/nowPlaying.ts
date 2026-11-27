@@ -11,7 +11,7 @@ import type { MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistCountsResult, P
 
 export type NowPlaying = {
   song: MusicSongEntry | null
-  /** Move one song backward or forward through the active pool's pick order, wrapping at either end. */
+  /** Back through the history of what played, or forward to the queue's next song (`shared/musicPool.ts`). */
   jumpSong: (direction: -1 | 1) => void
   /**
    * What the pool is drawn from: the active slots, the filter the next pick
@@ -24,7 +24,7 @@ export type NowPlaying = {
   pool: { slots: readonly PlaylistSlot[]; active: readonly PlaylistSlot[]; counts: PlaylistCountsResult; filter: MusicPoolFilter } | null
   /** The user's ordered sets; the first five are quick access in the player. */
   musicSets: readonly MusicSet[]
-  /** Play a song of the pool now, rotating the pool's order to it (`shared/musicPool.ts`). */
+  /** Play a song of the pool now: it goes to the queue's head, the other songs keeping their places (`shared/musicPool.ts`'s `choose`). */
   playFromPool: (id: number, entry?: MusicSongEntry) => void
   /** Change the activated sets (`SetSelection`), as the music bar does. */
   selectSlot: (slot: PlaylistSlot, selection: SetSelection) => void
@@ -53,6 +53,12 @@ export type NowPlaying = {
   setLevel: (level: keyof SoundLevels, fraction: number) => void
   /** Commit a filter: the next pick, and a song chosen from the pool, read it. The song playing plays on. */
   setPoolFilter: (filter: MusicPoolFilter) => void
+  /**
+   * Like a song `steps` more (fewer when negative; `musicPool.ts`'s likes),
+   * the visualizer's swipe across its spectrum. Null where the app offers
+   * no way to say it yet.
+   */
+  likeSong: ((id: number, steps: number) => void) | null
 }
 
 /** What an add button picks: songs one by one, or a folder and everything under it. */
@@ -78,6 +84,7 @@ let current: NowPlaying = {
   addSources: [],
   addPathsToMusicSet: async () => false,
   setPoolFilter: () => {},
+  likeSong: null,
   levels: { volume: 0, reverb: 0, room: 0 },
   setLevel: () => {},
 }
@@ -103,6 +110,7 @@ export function publishNowPlaying(next: NowPlaying): void {
     && next.addSources === current.addSources
     && next.addPathsToMusicSet === current.addPathsToMusicSet
     && next.setPoolFilter === current.setPoolFilter
+    && next.likeSong === current.likeSong
     && next.levels === current.levels
     && next.setLevel === current.setLevel
   ) return
