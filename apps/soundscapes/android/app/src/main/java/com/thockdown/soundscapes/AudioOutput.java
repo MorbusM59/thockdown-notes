@@ -115,7 +115,9 @@ final class AudioOutput {
         shallowFrames = Math.max(minimum * 2, BLOCK_FRAMES * 4 * 4) / 4;
         bufferBytes = Math.max(shallowFrames, (int) Math.round(DEEP_BUFFER_SEC * sampleRate)) * 4;
         wantedFrames = background ? Integer.MAX_VALUE : shallowFrames;
-        offloadSupported = AudioManager.isOffloadedPlaybackSupported(format(), attributes());
+        // PCM offload exists from Android 10 (API 29).
+        offloadSupported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
+            && AudioManager.isOffloadedPlaybackSupported(format(), attributes());
         track = buildTrack();
         playedNanos = System.nanoTime();
         track.play();
@@ -146,7 +148,7 @@ final class AudioOutput {
     private AudioTrack buildTrack() {
         boolean offload = deep() && offloadSupported;
         AudioTrack built = null;
-        if (offload) {
+        if (offload && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             try {
                 built = builder().setOffloadedPlayback(true).build();
             } catch (RuntimeException refused) {
