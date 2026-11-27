@@ -18,8 +18,10 @@ package com.thockdown.soundscapes;
  * this lane and handed it to the device, which is as far as a splice can no
  * longer reach. It starts at the lane's first write and moves with the
  * output's clock: what is not queued is played as silence. Every half
- * second (every RESPONSIVE_REPORT_FRAMES while the page draws from the
- * renderer, `setResponsive`) the lane calls its listener, which is what lets
+ * second (only once the queue is below IDLE_REFILL_BELOW_SEC on a lane that
+ * `refillInBursts`; every RESPONSIVE_REPORT_FRAMES while the page draws
+ * from the renderer, `setResponsive`) the lane calls its listener, which is
+ * what lets
  * its renderer render more. The renderer keeps seconds of lead, so a slow
  * report only refills in larger batches; it exists for the screen-off case,
  * where each report wakes the renderer and a round trip to its sandbox.
@@ -43,6 +45,14 @@ final class OutputLane {
     private static final int RESPONSIVE_REPORT_FRAMES = 2048;
     /** Half a second: the refill pace while nothing on screen reads the renderer's output. */
     private static final double IDLE_REPORT_SEC = 0.5;
+    /**
+     * While idle, a report is due only once the queue has run down below
+     * this. The renderer fills its whole lead (renderAhead.ts's
+     * RENDER_LEAD_SEC, 10 s) on any report, so the lane asks for audio in
+     * one burst of about six seconds instead of a sliver every half second,
+     * and the CPU (and the sandbox round trips) can sleep in between.
+     */
+    private static final double IDLE_REFILL_BELOW_SEC = 4;
     /** Renderers encode samples at 1/HEADROOM of their value. */
     static final float HEADROOM = 2f;
     /** Below this gain a paused lane is silent enough to hold. */
@@ -58,6 +68,9 @@ final class OutputLane {
     /** The playhead minus the output's mixed count, as of the lane's last mixed block: maps a lane frame to the output's count. */
     private long anchor = 0;
     private long end = 0;
+    private boolean responsive = false;
+    private boolean bursts = false;
+    private final long refillBelowFrames;
     private boolean started = false;
     private boolean closed = false;
     private int sinceReport = 0;
@@ -83,10 +96,24 @@ final class OutputLane {
         capacity = (int) Math.ceil(CAPACITY_SEC * sampleRate);
         ring = new short[capacity * 2];
         reportFrames = idleReportFrames();
+        refillBelowFrames = Math.round(IDLE_REFILL_BELOW_SEC * sampleRate);
     }
 
     private int idleReportFrames() {
         return (int) Math.round(IDLE_REPORT_SEC * sampleRate);
+    }
+
+    /**
+     * Idle reports only once the queue is below IDLE_REFILL_BELOW_SEC. For a
+     * lane whose renderer learns nothing else from a report (the
+     * soundscape's); the music's reports also tell it which song is heard,
+     * and a burst would leave the lock screen naming the last one for
+     * seconds.
+     */
+    void refillInBursts() {
+        synchronized (output) {
+            bursts = true;
+        }
     }
 
     /** Report at the visualizer's pace (true) or the idle refill pace (false); a change to responsive reports at the next block. */
@@ -95,6 +122,7 @@ final class OutputLane {
             int next = responsive ? RESPONSIVE_REPORT_FRAMES : idleReportFrames();
             if (next < reportFrames) sinceReport = Math.max(sinceReport, next);
             reportFrames = next;
+            this.responsive = responsive;
         }
     }
 
@@ -265,6 +293,7 @@ final class OutputLane {
         anchor = playhead - output.mixedFrames;
         sinceReport += frames;
         if (sinceReport < reportFrames) return false;
+        if (bursts && !responsive && end - playhead >= refillBelowFrames) return false;
         sinceReport = 0;
         return true;
     }
