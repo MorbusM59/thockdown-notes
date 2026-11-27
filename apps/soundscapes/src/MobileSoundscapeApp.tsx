@@ -112,7 +112,7 @@ import { publishSoundstageControls, soundstageControlsFor, steppedSoundstagePref
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
 import { readMusicPlaying, readPlayMode, setMusicStage, setPlayMode, startMobileMusicPlayer, subscribePlayMode } from './mobileMusicPlayer'
-import { mixStateOf, stopMix, switchSoundscapeChannel, toggleMix } from './mixTransport'
+import { mixHeard, switchSoundscapeChannel, toggleMix } from './mixTransport'
 import { cueTrackerHit } from '@thockdown/visualizer/sound/musicBeat'
 import type { OrbGestures } from '@thockdown/visualizer/visualizer/orbGestures'
 import { loadBeatSettings, loadVisualizerDouble, loadVisualizerFont, loadVisualizerState, saveBeatSettings, saveVisualizerDouble, saveVisualizerFont, saveVisualizerState } from './visualizerStore'
@@ -373,7 +373,8 @@ export function MobileSoundscapeApp() {
   const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
   // The gain the visualizer weighs the soundscape's signals at: its volume while it is heard. Here, because this page
   // is the one place that knows both its own play and pause and the session's (`follow`, below).
-  const soundscapeHeardGain = sessionHeard({ regular, source }) ? sessionVolume : 0
+  const soundscapeHeard = sessionHeard({ regular, source })
+  const soundscapeHeardGain = soundscapeHeard ? sessionVolume : 0
   useEffect(() => setSoundscapeVisualsHeardGain(soundscapeHeardGain), [soundscapeHeardGain])
 
   useEffect(() => {
@@ -402,7 +403,10 @@ export function MobileSoundscapeApp() {
   const events = useMemo(() => scheduleEvents(schedule), [schedule])
   const musicEvents = useMemo(() => musicScheduleEvents(schedule), [schedule])
   useEffect(() => {
-    if (!native) return
+    // Not before the page has followed the session: the session may have
+    // switched the schedule off (a pause from the lock screen) while this
+    // page was gone, and sending the stored copy first would switch it back on.
+    if (!native || !hydrated) return
     const named = new Set(events.map((event) => event.presetId))
     void nativeSoundscape!.setSchedule({
       enabled: schedule.enabled,
@@ -413,7 +417,7 @@ export function MobileSoundscapeApp() {
         .filter((preset) => named.has(preset.id))
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
-  }, [native, schedule.enabled, events, musicEvents, presets, sessionVolume])
+  }, [native, hydrated, schedule.enabled, events, musicEvents, presets, sessionVolume])
 
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.
@@ -433,7 +437,7 @@ export function MobileSoundscapeApp() {
     if (!native) return
     void nativeSoundscape!.setTimer({ seconds: timerSeconds, fadeSec: fadeSecFor(timerSeconds) })
   }, [native, timerSeconds])
-  const [countdown, setCountdown] = useState<{ endsAtMs: number; remainingMs: number }>({ endsAtMs: -1, remainingMs: -1 })
+  const [countdown, setCountdown] = useState<{ endsAtMs: number }>({ endsAtMs: -1 })
   const editedId = activeSoundscape(editingView).id
   const pickingSoundscapeIcon = isPickingIconFor(iconPick, { kind: 'soundscape', id: editedId })
   useEffect(() => closeIconPick(), [editedId, tab])
@@ -457,7 +461,7 @@ export function MobileSoundscapeApp() {
     const follow = (state: SessionState) => {
       setRegular(state.regular)
       setSource(state.source)
-      setCountdown({ endsAtMs: state.endsAtMs, remainingMs: state.remainingMs })
+      setCountdown({ endsAtMs: state.endsAtMs })
       setPreferences((current) => followSession(current, state))
       setSchedule((current) => (current.enabled === state.scheduleEnabled ? current : { ...current, enabled: state.scheduleEnabled }))
     }
@@ -559,26 +563,22 @@ export function MobileSoundscapeApp() {
   // The visualizer's ORB (orbGestures.ts): a swipe right or left steps the
   // soundstage as a press on the desktop's solid does; down switches the
   // soundscape's channel out, up switches it in and, once in, picks the next
-  // soundscape (round the list); a tap plays or pauses the mix and a hold stops
-  // it, as the dashboard's transport does, each shown as a strong hit (a play
-  // or pause the PIERCE, a stop the THUMP).
+  // soundscape (round the list); a tap plays or pauses the mix, as the
+  // dashboard's transport does, shown as a strong hit (a play the PIERCE, a
+  // pause the THUMP).
   const orbGestures: OrbGestures = {
     tap: () => {
-      toggleMix(mixStateOf(readMusicPlaying(), regular), regular, setRegularMode)
-      cueTrackerHit('pierce')
-    },
-    hold: () => {
-      stopMix(stopRegular)
-      cueTrackerHit('thump')
+      const heard = mixHeard(readMusicPlaying(), soundscapeHeard)
+      toggleMix(heard, setRegularMode, pauseSoundscape)
+      cueTrackerHit(heard ? 'thump' : 'pierce')
     },
     swipe: (direction) => {
       if (direction === 'right' || direction === 'left') {
         setSoundstages((current) => steppedSoundstagePreferences(current, direction === 'right' ? 1 : -1))
         return
       }
-      const mix = mixStateOf(readMusicPlaying(), regular)
       if (direction === 'down' || !soundscapeChannel) {
-        switchSoundscapeChannel(direction === 'up', mix, regular, setRegularMode, setSoundscapeChannel)
+        switchSoundscapeChannel(direction === 'up', mixHeard(readMusicPlaying(), soundscapeHeard), regular, setRegularMode, setSoundscapeChannel)
         return
       }
       const index = presets.findIndex((preset) => preset.id === activeSoundscape(preferences).id)
@@ -591,12 +591,13 @@ export function MobileSoundscapeApp() {
   const filesHoldRef = useRef<(() => void) | null>(null)
   const swallowFilesClickRef = useRef(false)
   useEffect(() => () => filesHoldRef.current?.(), [])
-  const stopRegular = () => {
-    if (regular === 'stopped') return
-    setRegularMode('stopped')
-    // What takes over is the session's to work out (the schedule's run, or
-    // nothing); it answers with the outcome.
-    if (native) void nativeSoundscape!.stop().then((state) => followRef.current?.(state))
+  // The listener's pause: the session silences whatever is heard and, during
+  // a scheduled run, switches the schedule off (SoundscapePlaybackService's
+  // pauseAll); it answers with the outcome, which the page follows. Asked
+  // before the engine closes, so the engine's own pause after it changes nothing.
+  const pauseSoundscape = () => {
+    if (native) void nativeSoundscape!.pauseAll().then((state) => followRef.current?.(state))
+    if (regular === 'playing') setRegularMode('paused')
   }
   const toggleSchedule = async () => {
     if (schedule.enabled) {
@@ -804,8 +805,9 @@ export function MobileSoundscapeApp() {
                       toggles={<DashboardToggleRow toggles={dashboardToggles} />}
                       timeLeft={timeLeftMs >= 0 ? remainingText(timeLeftMs) : null}
                       soundscape={regular}
+                      soundscapeHeard={soundscapeHeard}
                       onSoundscapeTransport={setRegularMode}
-                      onStop={stopRegular}
+                      onPause={pauseSoundscape}
                       soundscapeChannel={soundscapeChannel}
                       onSoundscapeChannel={setSoundscapeChannel}
                       soundscapeVolume={preferences.masterVolume}
@@ -974,7 +976,7 @@ function IconFilter({ query }: { query: string }) {
  * re-renders each second: held in the app, it re-rendered every tab and the
  * glaze once a second for as long as a timer ran.
  */
-function CountdownDock({ countdown, render }: { countdown: { endsAtMs: number; remainingMs: number }; render: (timeLeftMs: number) => ReactElement }) {
+function CountdownDock({ countdown, render }: { countdown: { endsAtMs: number }; render: (timeLeftMs: number) => ReactElement }) {
   const [clock, setClock] = useState(() => Date.now())
   useEffect(() => {
     if (countdown.endsAtMs < 0) return undefined
@@ -982,5 +984,5 @@ function CountdownDock({ countdown, render }: { countdown: { endsAtMs: number; r
     setClock(Date.now())
     return () => window.clearInterval(tick)
   }, [countdown.endsAtMs])
-  return render(countdown.endsAtMs >= 0 ? countdown.endsAtMs - clock : countdown.remainingMs)
+  return render(countdown.endsAtMs >= 0 ? countdown.endsAtMs - clock : -1)
 }

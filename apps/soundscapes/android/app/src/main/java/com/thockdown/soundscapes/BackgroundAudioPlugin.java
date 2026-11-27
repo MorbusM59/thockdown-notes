@@ -60,10 +60,9 @@ public class BackgroundAudioPlugin extends Plugin {
         }
 
         @Override
-        public void onCountdown(long endsAtMs, long remainingMs) {
+        public void onCountdown(long endsAtMs) {
             JSObject data = new JSObject();
             data.put("endsAtMs", endsAtMs);
-            data.put("remainingMs", remainingMs);
             notifyListeners("countdown", data);
         }
 
@@ -114,7 +113,6 @@ public class BackgroundAudioPlugin extends Plugin {
         data.put("currentId", state.currentId);
         data.put("scheduleEnabled", state.scheduleEnabled);
         data.put("endsAtMs", state.endsAtMs);
-        data.put("remainingMs", state.remainingMs);
         return data;
     }
 
@@ -142,10 +140,11 @@ public class BackgroundAudioPlugin extends Plugin {
         try {
             JSObject json = call.getData();
             SoundscapeSchedule.fromJson(json);
+            boolean wasOn = SoundscapeSchedule.load(getContext()).enabled;
             SoundscapeSchedule.save(getContext(), json);
             // Turned on or off, or its slots changed under a run: either way
             // what is heard may have changed.
-            session.applyScheduleState();
+            session.applyScheduleState(wasOn);
             MusicSession.get(getContext()).applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
             SoundscapeSchedule.arm(getContext());
             call.resolve();
@@ -240,10 +239,10 @@ public class BackgroundAudioPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Regular mode stops and the schedule takes over: resolves the outcome, which the page did not cause and cannot work out. */
+    /** The listener's pause (SoundscapePlaybackService.pauseAll): resolves the outcome, which may have switched the schedule off. */
     @PluginMethod
-    public void stop(PluginCall call) {
-        call.resolve(toJs(session.stop()));
+    public void pauseAll(PluginCall call) {
+        call.resolve(toJs(SoundscapePlaybackService.pauseAll(getContext(), false)));
     }
 
     /** New settings: `configuration` is a ConfigureMessage as JSON; `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */

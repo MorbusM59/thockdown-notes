@@ -4,6 +4,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.media.MediaDescription;
@@ -119,7 +120,8 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             @Override public void onPause() { pause(); }
             @Override public void onSkipToNext() { skip(1); }
             @Override public void onSkipToPrevious() { skip(-1); }
-            @Override public void onStop() { stop(); }
+            // Pause is the only way to silence (SoundscapeSession): a stop from a media controller is one.
+            @Override public void onStop() { pause(); }
             @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { soundscape.controlPlayFrom(mediaId); }
         });
         session.setActive(true);
@@ -222,8 +224,28 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     }
 
     private void pause() {
+        pauseAll(this, true);
+    }
+
+    /**
+     * THE LISTENER'S PAUSE, from any control (the app's transport and orb,
+     * the notification, the lock screen, headphones): the music and the
+     * soundscape fall silent together and, when a scheduled run is under way,
+     * the schedule is switched OFF -- visibly, the app's schedule button
+     * following -- since a run that carried on would not be a pause, and one
+     * held back unseen would be a blocker the listener cannot find. The
+     * music's run is handed to the listener first, so play resumes it.
+     * Returns the soundscape's outcome; `announce` as in controlPause.
+     */
+    static SoundscapeSession.State pauseAll(Context context, boolean announce) {
+        MusicSession music = MusicSession.get(context);
+        SoundscapeSession soundscape = SoundscapeSession.get(context);
+        boolean runInForce = SoundscapeSchedule.load(context).runInForce();
         music.pause();
-        soundscape.controlPause();
+        if (runInForce) music.adoptRun();
+        if (runInForce) SoundscapeSchedule.switchOff(context);
+        // Paused after the switch, so the outcome (and its announcement) carries the schedule off.
+        return soundscape.controlPause(announce);
     }
 
     private void skip(int direction) {
@@ -297,7 +319,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             .build());
         session.setPlaybackState(new PlaybackState.Builder()
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
-                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS | PlaybackState.ACTION_STOP
+                | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS
                 | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID)
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? 1f : 0f)
@@ -379,7 +401,6 @@ public class SoundscapePlaybackService extends MediaBrowserService {
                 ? action(android.R.drawable.ic_media_pause, "Pause", control(ACTION_PAUSE, 2))
                 : action(android.R.drawable.ic_media_play, "Play", control(ACTION_PLAY, 3)))
             .addAction(action(android.R.drawable.ic_media_next, "Next", control(ACTION_NEXT, 4)))
-            .addAction(action(android.R.drawable.ic_menu_close_clear_cancel, "Stop", control(ACTION_STOP, 5)))
             .setStyle(new Notification.MediaStyle()
                 .setMediaSession(session.getSessionToken())
                 .setShowActionsInCompactView(0, 1, 2))

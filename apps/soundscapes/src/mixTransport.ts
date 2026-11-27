@@ -1,38 +1,37 @@
 /**
- * The MIX's transport: the music and the soundscape played, paused and stopped
+ * The MIX's transport: the music and the soundscape played and paused
  * together, as the dashboard's transport button and the visualizer's orb both
  * drive them (one rule, so the two cannot disagree about what a tap does).
+ *
+ * A button shows what a press WILL DO, not what is: play while nothing is
+ * heard, pause while anything is. There is no stop: pausing during a
+ * scheduled run switches the schedule off, visibly, rather than holding it
+ * back unseen (SoundscapePlaybackService.pauseAll).
  */
 import { pauseMusic, startMusic } from './mobileMusicPlayer'
+import type { RegularMode } from './backgroundAudioHost'
 
-export type MixState = 'playing' | 'paused' | 'stopped'
 /** Regular mode as this page sets it (MobileSoundscapeApp's `setRegularMode`). */
 export type SoundscapeTransport = (mode: 'playing' | 'paused') => void
 
-/** The mix plays while either does; it is stopped only with the soundscape stopped and the music not playing. */
-export function mixStateOf(musicPlaying: boolean, soundscape: MixState): MixState {
-  return musicPlaying || soundscape === 'playing' ? 'playing' : soundscape === 'stopped' ? 'stopped' : 'paused'
+/** Whether the transport has anything to pause: the listener's music, or a soundscape heard (theirs or the schedule's). */
+export function mixHeard(musicPlaying: boolean, soundscapeHeard: boolean): boolean {
+  return musicPlaying || soundscapeHeard
 }
 
-/** A tap: pauses a playing mix, else plays both. */
-export function toggleMix(mix: MixState, soundscape: MixState, setSoundscape: SoundscapeTransport): void {
-  if (mix === 'playing') {
+/** A tap: pauses whatever is heard (`pauseSoundscape`), else plays both. */
+export function toggleMix(heard: boolean, setSoundscape: SoundscapeTransport, pauseSoundscape: () => void): void {
+  if (heard) {
     pauseMusic()
-    if (soundscape === 'playing') setSoundscape('paused')
+    pauseSoundscape()
   } else {
     void startMusic()
     setSoundscape('playing')
   }
 }
 
-/** A hold: stops both (the soundscape hands back to the schedule). */
-export function stopMix(stopSoundscape: () => void): void {
-  pauseMusic()
-  stopSoundscape()
-}
-
 /** Switches the soundscape's channel; switched in while the mix plays, the soundscape joins it at once rather than waiting for the next play. */
-export function switchSoundscapeChannel(on: boolean, mix: MixState, soundscape: MixState, setSoundscape: SoundscapeTransport, setChannel: (on: boolean) => void): void {
-  if (on && mix === 'playing' && soundscape !== 'playing') setSoundscape('playing')
+export function switchSoundscapeChannel(on: boolean, heard: boolean, soundscape: RegularMode, setSoundscape: SoundscapeTransport, setChannel: (on: boolean) => void): void {
+  if (on && heard && soundscape !== 'playing') setSoundscape('playing')
   setChannel(on)
 }
