@@ -81,13 +81,11 @@ import { buildNextAutoImageId, IMAGE_REFERENCE_SCANNER_VERSION, normalizeImageId
 import { sniffImage } from './imageSniff';
 import type { ReviewFlagEntry, ReviewFlagWrite, ReviewFlagRemap } from '../src/shared/reviewFlags';
 import {
-  afterPlay,
-  favorited,
-  pickFromPool,
-  rotatePoolTo,
-  skipped,
-  unfavorited,
-  type LibrarySong,
+  advance,
+  choose,
+  settleDues,
+  stepBack,
+  type DueChanges,
 } from '@thockdown/visualizer/shared/musicPool';
 import {
   AUDIO_EXTENSIONS,
@@ -3552,8 +3550,8 @@ export class DatabaseService {
       setIds:       typeof storedSetIds === 'string'
         ? storedSetIds.split(',').map(Number).filter(isPlaylistSlot)
         : [],
-      priority:     row['priority'] as number,
-      favorability: row['favorability'] as number,
+      due:          row['due'] as number,
+      likes:        row['likes'] as number,
       title:        row['title'] as string,
       artist:       row['artist'] as string,
       album:        (row['album'] as string | undefined) ?? '',
@@ -3652,7 +3650,7 @@ export class DatabaseService {
       `SELECT ${this.musicSongSelectColumns()}
        FROM music_songs
        WHERE id IN (SELECT songId FROM music_set_songs WHERE setId = ?)
-       ORDER BY priority ASC, id ASC`
+       ORDER BY due ASC, id ASC`
     ).all(slot) as Record<string, unknown>[];
     return rows.map((r) => this.rowToSongEntry(r));
   }
@@ -3688,6 +3686,7 @@ export class DatabaseService {
       }
     });
     tx();
+    this.settleMusicQueue();
     return this.getMusicPlaylist(slot);
   }
 
@@ -3729,18 +3728,14 @@ export class DatabaseService {
   }
 
   /**
-   * The rows of the music pool, in pick order (`shared/musicPool.ts`). The ONE
-   * definition of which songs are in the pool: the next pick, the list the
-   * visualizer draws and a chosen song all read it, so the visualizer's
-   * search reaches all three at once.
+   * THE POOL, in queue order (`shared/musicPool.ts`), as rows with their
+   * entries: the songs of the active slots that pass the filter. The ONE
+   * definition of which songs are in it: the next song, the list the
+   * visualizer draws and a chosen song all read it. It searches title,
+   * artist and album tags, so the filter is applied here rather than in SQL;
+   * with no filter nothing is tested. The desktop plays the mix.
    */
-  /**
-   * THE POOL, in pick order, as rows with their entries: the songs of the
-   * active slots that pass the filter. It searches title, artist and album
-   * tags (read on first use), so it is applied here rather than in SQL; with
-   * no filter nothing is tested.
-   */
-  private musicPool(query: MusicPoolQuery): Array<{ row: Record<string, unknown>; song: MusicSongEntry }> {
+  private musicPool(query: MusicPoolQuery): MusicSongEntry[] {
     const slots = query.slots.filter(isPlaylistSlot);
     if (slots.length === 0) return [];
     const filter = sanitizePoolFilter(query.filter);
@@ -3751,83 +3746,60 @@ export class DatabaseService {
        WHERE id IN (
          SELECT songId FROM music_set_songs WHERE setId IN (${placeholders})
        )
-       ORDER BY priority ASC, id ASC`
+       ORDER BY due ASC, id ASC`
     ).all(...slots) as Record<string, unknown>[];
-    const pool = rows.map((row) => ({ row, song: this.rowToSongEntry(row) }));
+    const pool = rows.map((row) => this.rowToSongEntry(row));
     if (poolFilterPassesAll(filter)) return pool;
     const matches = createPoolFilterMatcher(filter);
-    return pool.filter(({ song }) => matches(song));
+    return pool.filter((song) => matches(song));
   }
 
   getMusicPool(query: MusicPoolQuery): MusicSongEntry[] {
-    return this.musicPool(query).map(({ song }) => song);
+    return this.musicPool(query);
   }
 
-  pickNextMusicSong(query: MusicPoolQuery): MusicSongEntry | null {
-    const pool = this.musicPool(query).map(({ row, song }) => ({ id: row['id'] as number, priority: row['priority'] as number, song }));
-    return pickFromPool(pool)?.song ?? null;
+  private writeDues(changes: DueChanges): void {
+    if (changes.length === 0) return;
+    const update = this.requireDb().prepare('UPDATE music_songs SET due = ? WHERE id = ?');
+    for (const [songId, due] of changes) update.run(due, songId);
   }
 
-  /** Rotate the pool so `id` is the unique next pick, keeping its order (`shared/musicPool.ts`). */
-  rotateMusicPoolTo(query: MusicPoolQuery, id: number): MusicSongEntry | null {
-    const db = this.requireDb();
-    let chosen: MusicSongEntry | null = null;
-    db.transaction(() => {
-      const pool = this.musicPool(query);
-      const changes = rotatePoolTo(pool.map(({ row }) => ({ id: row['id'] as number, priority: row['priority'] as number })), id);
-      if (!changes) return;
-      const update = db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?');
-      for (const [songId, priority] of changes) update.run(priority, songId);
-      const row = db.prepare(
-        `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
-      ).get(id) as Record<string, unknown> | undefined;
-      chosen = row ? this.rowToSongEntry(row) : null;
-    })();
-    return chosen;
-  }
-
-  /** Every song's place in the rotation (`shared/musicPool.ts`'s rules read the whole library). */
-  private musicLibrary(): LibrarySong[] {
-    return this.requireDb().prepare('SELECT id, priority, favorability FROM music_songs').all() as LibrarySong[];
-  }
-
-  private writeMusicSong(song: LibrarySong): void {
-    this.requireDb().prepare('UPDATE music_songs SET priority = ?, favorability = ? WHERE id = ?').run(song.priority, song.favorability, song.id);
-  }
-
-  /** Apply one of the rotation's single-song rules to `id`, returning the song as it now is. */
-  private changeMusicSong(id: number, rule: (song: LibrarySong, librarySize: number) => LibrarySong): MusicSongEntry | null {
+  /** Dues for the songs that have none (`musicPool.ts`'s `settleDues`): run on open and after songs are added. */
+  settleMusicQueue(): void {
     const db = this.requireDb();
     db.transaction(() => {
-      const library = this.musicLibrary();
-      const song = library.find((entry) => entry.id === id);
-      if (song) this.writeMusicSong(rule(song, library.length));
-    })();
-    const row = db.prepare(
-      `SELECT ${this.musicSongSelectColumns()} FROM music_songs WHERE id = ?`
-    ).get(id) as Record<string, unknown> | undefined;
-    return row ? this.rowToSongEntry(row) : null;
-  }
-
-  afterMusicPlay(id: number): void {
-    const db = this.requireDb();
-    db.transaction(() => {
-      const update = db.prepare('UPDATE music_songs SET priority = ? WHERE id = ?');
-      for (const [songId, priority] of afterPlay(this.musicLibrary(), id)) update.run(priority, songId);
+      const library = db.prepare('SELECT id, likes, due FROM music_songs').all() as Array<{ id: number; likes: number; due: number | null }>;
+      this.writeDues(settleDues(library));
     })();
   }
 
-  favoriteMusicSong(id: number): MusicSongEntry | null {
-    return this.changeMusicSong(id, favorited);
+  /** NEXT (`musicPool.ts`'s `advance`): `currentId` goes back in, and the head is returned. */
+  nextMusicSong(query: MusicPoolQuery, currentId: number | null): MusicSongEntry | null {
+    let song: MusicSongEntry | null = null;
+    this.requireDb().transaction(() => {
+      const move = advance(this.musicPool(query), 'mix', currentId);
+      this.writeDues(move.changes);
+      song = move.song;
+    })();
+    return song;
   }
 
-  /** Off the replay marker, to the back, as liked as before (`shared/musicPool.ts`'s `unfavorited`). */
-  unfavoriteMusicSong(id: number): MusicSongEntry | null {
-    return this.changeMusicSong(id, unfavorited);
+  /** A song chosen from the list (`musicPool.ts`'s `choose`). */
+  chooseMusicSong(query: MusicPoolQuery, currentId: number | null, id: number): MusicSongEntry | null {
+    let song: MusicSongEntry | null = null;
+    this.requireDb().transaction(() => {
+      const move = choose(this.musicPool(query), 'mix', currentId, id);
+      this.writeDues(move.changes);
+      song = move.song;
+    })();
+    return song;
   }
 
-  skipMusicSong(id: number): void {
-    this.changeMusicSong(id, skipped);
+  /** PREVIOUS (`musicPool.ts`'s `stepBack`). */
+  stepBackMusicQueue(query: MusicPoolQuery, currentId: number | null, previousId: number): void {
+    this.requireDb().transaction(() => {
+      this.writeDues(stepBack(this.musicPool(query), 'mix', currentId, previousId));
+    })();
   }
 
   getMusicPlaylistCounts(): PlaylistCountsResult {
@@ -3978,8 +3950,8 @@ export class DatabaseService {
       CREATE TABLE IF NOT EXISTS music_songs (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
         filePath    TEXT    NOT NULL UNIQUE,
-        priority    INTEGER NOT NULL DEFAULT 1,
-        favorability INTEGER NOT NULL DEFAULT 1,
+        due         REAL,
+        likes       INTEGER NOT NULL DEFAULT 0,
         title       TEXT    NOT NULL DEFAULT '',
         artist      TEXT    NOT NULL DEFAULT '',
         durationSec REAL    NOT NULL DEFAULT 0,
@@ -4004,7 +3976,6 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_music_sets_position ON music_sets(position);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_music_sets_name ON music_sets(name);
       CREATE INDEX IF NOT EXISTS idx_music_set_songs_song ON music_set_songs(songId);
-      CREATE INDEX IF NOT EXISTS idx_music_songs_priority ON music_songs(priority);
 
       CREATE TABLE IF NOT EXISTS editor_sections (
         id               TEXT PRIMARY KEY,
@@ -4258,6 +4229,15 @@ export class DatabaseService {
     // Older databases may not yet have these tag columns.
     this.ensureMusicSongsColumn('album', "TEXT NOT NULL DEFAULT ''");
     this.ensureMusicSongsColumn('tagsRead', 'INTEGER NOT NULL DEFAULT 0');
+    // The queue (`shared/musicPool.ts`) replaced the priority rotation: a song's
+    // place is its due and its liking is likes, and the rotation's two columns
+    // go, so nothing can start believing them again.
+    this.ensureMusicSongsColumn('due', 'REAL');
+    this.ensureMusicSongsColumn('likes', 'INTEGER NOT NULL DEFAULT 0');
+    this.requireDb().exec('DROP INDEX IF EXISTS idx_music_songs_priority');
+    this.dropMusicSongsColumn('priority');
+    this.dropMusicSongsColumn('favorability');
+    this.settleMusicQueue();
     this.ensureMusicSetsColumn('icon', 'TEXT');
     this.ensureLoadoutColumn('name', 'TEXT');
     this.ensureLoadoutColumn('icon', 'TEXT');
@@ -4374,6 +4354,13 @@ export class DatabaseService {
     }
 
     db.exec(`ALTER TABLE note_snapshots ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private dropMusicSongsColumn(columnName: string): void {
+    const db = this.requireDb();
+    const columns = db.prepare('PRAGMA table_info(music_songs)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === columnName)) return;
+    db.exec(`ALTER TABLE music_songs DROP COLUMN ${columnName}`);
   }
 
   private ensureMusicSongsColumn(columnName: string, columnDefinition: string): void {

@@ -18,9 +18,11 @@
  * the sequence a listener is most likely to want back. Truncating keeps the
  * invariant that back always returns to what you actually just listened to.
  *
- * Forward is deliberately NOT a movement through this list: right-clicking
- * forward always picks a fresh random song, as if the current one had ended.
- * That is why nothing here restores a truncated tail.
+ * Forward is deliberately NOT a movement through this list: next always
+ * takes the queue's next song (`musicPool.ts`'s `advance`), as if the current
+ * one had ended. That is why nothing here restores a truncated tail. Both
+ * apps keep one: the desktop in AudioControls, the phone in its music
+ * renderer (`musicSandbox.ts`).
  */
 
 /** How many songs back the listener can walk. */
@@ -54,8 +56,8 @@ export function canStepBack(history: MusicPlayHistory): boolean {
  * park the cursor on it.
  *
  * Re-recording the song already at the cursor is a no-op, so a song that
- * repeats (favouriting sets priority 0, which can pick the same track again)
- * does not occupy two slots and make one "back" press do nothing visible.
+ * plays again straight away (a pool of one) does not occupy two slots and
+ * make one "back" press do nothing visible.
  */
 export function pushPlayed(history: MusicPlayHistory, songId: number): MusicPlayHistory {
   if (currentHistorySongId(history) === songId) return history;

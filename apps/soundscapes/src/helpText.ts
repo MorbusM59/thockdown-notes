@@ -17,6 +17,7 @@ const HELP: Record<string, string[]> = {
     'Layout: The moon switches dark mode. Hold to choose a look.',
     'Visualizer: The eye opens the visualizer; the back gesture closes it. Hold for the phone button, which shows it upright or sideways, and double size.',
     'Tools: Hold to open them. The files button loads soundscapes from a file; hold it to save your own soundscapes to a file. The record button saves the soundscape you picked as an audio file; hold it and drag up or down to set the length: 2, 5, 15, 30 or 60 minutes. The text size button: drag up or down to change the size, tap for the default.',
+    'Play mode: Tap to open it. With Mix on, the songs play in a shuffled list, and a song you like comes back sooner. With Mix off, they play in folder order.',
     'Debugging: Tools for tracing problems.',
     'About: The version, licenses and credits.',
     'Sliders: The music volume, then the soundscape volume.',
@@ -36,6 +37,7 @@ const HELP: Record<string, string[]> = {
     'Song sets: Tap a set to edit it: its songs show below. Which sets play is chosen on the Dashboard. The plus button creates a set.',
     'Open set: Shown in the dock with its song count. Tap its icon to choose another; hold the name to rename it. The folder button adds a folder and everything under it, with a bar above the dock while its songs are read; a hold on the trash deletes the set, or restores a factory set.',
     'Songs: Tap a song to play it; the music then carries on with the sets chosen on the Dashboard. Hold its cross to remove it from the set; the cross on a group removes the whole group.',
+    'Hearts: How much you like a song, set in the visualizer. A broken heart means less.',
     'Grouping: The dock groups the songs by folder or by artist.',
   ],
   Visualizer: [
@@ -43,6 +45,7 @@ const HELP: Record<string, string[]> = {
     'Delay: Play a calibration loop and set the delay until the flashes land on the beat you hear.',
     'Signal: How loud the music must be for a full response, and what counts as a hit: the low end, sharp sounds cutting through, and the busy top.',
     'Scene settings: The sections below tune the visualizer: its edge, pane, glaze, wave, pulse and spectrum. It is opened from the Dashboard.',    'Orb: In the visualizer, tap the orb to pause or play, hold it to stop. Swipe right or left for the next or previous soundstage, down to mute the soundscape, up to bring it back, and up again for the next soundscape.',
+    'Spectrum: Swipe right on it to like the playing song more, left to like it less. A song you like comes back sooner in the mix.',
   ],
   Soundstages: [
     'Soundstages: Create and edit the soundstages the Dashboard picks from. The active one shows in the dock.',

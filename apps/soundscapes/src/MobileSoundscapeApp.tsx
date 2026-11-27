@@ -111,7 +111,7 @@ import { activeSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { publishSoundstageControls, soundstageControlsFor, steppedSoundstagePreferences } from '@thockdown/visualizer/sound/soundstageControls'
 import { loadTab, saveTab, type MobileTab } from './mobileTabList'
 import { musicStageOf, nativeMusic } from './nativeMusic'
-import { readMusicPlaying, setMusicStage, startMobileMusicPlayer } from './mobileMusicPlayer'
+import { readMusicPlaying, readPlayMode, setMusicStage, setPlayMode, startMobileMusicPlayer, subscribePlayMode } from './mobileMusicPlayer'
 import { mixStateOf, stopMix, switchSoundscapeChannel, toggleMix } from './mixTransport'
 import { cueTrackerHit } from '@thockdown/visualizer/sound/musicBeat'
 import type { OrbGestures } from '@thockdown/visualizer/visualizer/orbGestures'
@@ -614,6 +614,7 @@ export function MobileSoundscapeApp() {
   const activeStagePreset = activeSoundstage(soundstages)
   const pickStage = (id: string) => setSoundstages((current) => withActiveSoundstage(current, selectPreset(SOUNDSTAGE_KIND, current, id)))
   const eqOn = soundstages.activeId !== FLAT_SOUNDSTAGE
+  const playMode = useSyncExternalStore(subscribePlayMode, readPlayMode)
   const dashboardToggles: DashboardToggle[] = [
     {
       id: 'timer',
@@ -705,6 +706,25 @@ export function MobileSoundscapeApp() {
           <span className="fa-solid fa-voicemail fa-rotate-180" aria-hidden="true" />
         </button>
       </>),
+    },
+    {
+      id: 'playMode',
+      // Only a menu: a tap opens it, and Mix is the toggle in it (musicPool.ts's play modes).
+      label: playMode === 'mix' ? 'Play mode: mix; tap to change' : 'Play mode: folder order; tap to change',
+      active: playMode === 'mix',
+      face: <span className={playMode === 'mix' ? 'fa-solid fa-shuffle' : 'fa-solid fa-arrow-down-1-9'} aria-hidden="true" />,
+      onTap: 'picker',
+      picker: () => (
+        <button
+          type="button"
+          className={`btn-icon options-color-swatch options-loadout-btn${playMode === 'mix' ? ' is-active' : ''}`}
+          aria-label={playMode === 'mix' ? 'Mix on: tap to play in folder order' : 'Mix off: tap to mix'}
+          aria-pressed={playMode === 'mix'}
+          onClick={() => setPlayMode(playMode === 'mix' ? 'order' : 'mix')}
+        >
+          <span className="fa-solid fa-shuffle" aria-hidden="true" />
+        </button>
+      ),
     },
     {
       id: 'tools',
@@ -864,7 +884,7 @@ export function MobileSoundscapeApp() {
                 {tab === 'songs' && !helpMode ? (iconPick?.target.kind === 'musicSet' ? (<>
                   <IconFilter query={iconPick.query} />
                   <MusicSetIconPicker query={iconPick.query} />
-                </>) : <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap selectorHeading={{ heading: 'Song Sets', iconClass: 'fa-compact-disc' }} />) : null}
+                </>) : <MusicLibraryPanel grouping={songsGrouping} filter="" editsOnTap showLikes selectorHeading={{ heading: 'Song Sets', iconClass: 'fa-compact-disc' }} />) : null}
                 {tab === 'soundscapes' ? (pickingSoundscapeIcon ? (<>
                   <IconFilter query={iconPick!.query} />
                   <IconPickerGrid

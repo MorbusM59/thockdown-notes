@@ -1369,26 +1369,17 @@ function registerIpcHandlers() {
     removeSong: async (_event, id: number) => {
       databaseService!.removeMusicSong(id);
     },
-    pickNextSong: async (_event, query: MusicPoolQuery) => {
-      return databaseService!.pickNextMusicSong(query);
+    nextSong: async (_event, query: MusicPoolQuery, currentId: number | null) => {
+      return databaseService!.nextMusicSong(query, currentId);
     },
     getPool: async (_event, query: MusicPoolQuery) => {
       return databaseService!.getMusicPool(query);
     },
-    rotatePoolTo: async (_event, query: MusicPoolQuery, id: number) => {
-      return databaseService!.rotateMusicPoolTo(query, id);
+    chooseSong: async (_event, query: MusicPoolQuery, currentId: number | null, id: number) => {
+      return databaseService!.chooseMusicSong(query, currentId, id);
     },
-    afterPlay: async (_event, id: number) => {
-      databaseService!.afterMusicPlay(id);
-    },
-    favoriteSong: async (_event, id: number) => {
-      return databaseService!.favoriteMusicSong(id);
-    },
-    unfavoriteSong: async (_event, id: number) => {
-      return databaseService!.unfavoriteMusicSong(id);
-    },
-    skipSong: async (_event, id: number) => {
-      databaseService!.skipMusicSong(id);
+    stepBackTo: async (_event, query: MusicPoolQuery, currentId: number | null, previousId: number) => {
+      databaseService!.stepBackMusicQueue(query, currentId, previousId);
     },
     purgeSong: async (_event, id: number) => {
       databaseService!.purgeMusicSong(id);

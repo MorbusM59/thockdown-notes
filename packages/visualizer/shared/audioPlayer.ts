@@ -12,13 +12,10 @@ export const AUDIO_PLAYER_CHANNELS = {
   clearPlaylist:        'audio-player:clear-playlist',
   removeFromSet:        'audio-player:remove-from-set',
   removeSong:           'audio-player:remove-song',
-  pickNextSong:         'audio-player:pick-next-song',
+  nextSong:             'audio-player:next-song',
   getPool:              'audio-player:get-pool',
-  rotatePoolTo:         'audio-player:rotate-pool-to',
-  afterPlay:            'audio-player:after-play',
-  favoriteSong:         'audio-player:favorite-song',
-  unfavoriteSong:       'audio-player:unfavorite-song',
-  skipSong:             'audio-player:skip-song',
+  chooseSong:           'audio-player:choose-song',
+  stepBackTo:           'audio-player:step-back-to',
   purgeSong:            'audio-player:purge-song',
   getPlaylistCounts:    'audio-player:get-playlist-counts',
   getSongById:          'audio-player:get-song-by-id',
@@ -102,10 +99,10 @@ export type MusicSongEntry = {
   filePath: string;
   /** Every set containing this song. A song can belong to several sets. */
   setIds: PlaylistSlot[];
-  /** Lower value = higher priority. 1 is the highest (just added / least recently played). */
-  priority: number;
-  /** 1–10; affects how quickly the song regains priority. */
-  favorability: number;
+  /** Its place in the mix: the pool plays lowest first (`musicPool.ts`). */
+  due: number;
+  /** How much it is liked, in steps of -MAX_LIKES..MAX_LIKES (`musicPool.ts`'s `favorabilityOf`). */
+  likes: number;
   /** From the file's tags (shared/audioTags.ts); empty when the file has none. Shown through `songTitleText`. */
   title: string;
   /** From the file's tags; empty when the file has none. Shown through `songArtistText`. */
@@ -117,8 +114,6 @@ export type MusicSongEntry = {
 };
 
 export type IndexedMusicFile = Pick<MusicSongEntry, 'filePath' | 'title' | 'artist' | 'album' | 'durationSec'>;
-
-export type PickNextSongResult = MusicSongEntry | null;
 
 export type PlaylistCountsResult = Record<number, number>;
 
@@ -153,42 +148,25 @@ export type AudioPlayerApi = {
   removeFromSet(slot: PlaylistSlot, songIds: number[]): Promise<void>;
   /** Remove a single song by its DB id. */
   removeSong(id: number): Promise<void>;
-  /** Pick the next song to play from the pool `query` describes. */
-  pickNextSong(query: MusicPoolQuery): Promise<PickNextSongResult>;
-  /** Every song in the pool `query` describes, in pick order (`shared/musicPool.ts`). */
+  /**
+   * NEXT (`musicPool.ts`'s `advance`, in a mix): the song `currentId` is left,
+   * going back into the list by its favorability, and the song now at the
+   * head is returned. Null `currentId` reads the head. Null when the pool is empty.
+   */
+  nextSong(query: MusicPoolQuery, currentId: number | null): Promise<MusicSongEntry | null>;
+  /** Every song in the pool `query` describes, in queue order (`shared/musicPool.ts`). */
   getPool(query: MusicPoolQuery): Promise<MusicSongEntry[]>;
   /**
-   * Make `id` the next pick by rotating the pool's order to it, keeping that
-   * order (`shared/musicPool.ts`). Returns the song, or null when it is not
-   * in the pool.
+   * A song chosen from the list (`musicPool.ts`'s `choose`): `id` goes to the
+   * head and `currentId` back in as NEXT would put it. Returns the song, or
+   * null when the pool does not hold it.
    */
-  rotatePoolTo(query: MusicPoolQuery, id: number): Promise<MusicSongEntry | null>;
+  chooseSong(query: MusicPoolQuery, currentId: number | null, id: number): Promise<MusicSongEntry | null>;
   /**
-   * Called by the renderer after a song finishes playing naturally.
-   * Updates priority + favorability counters across the database.
+   * PREVIOUS (`musicPool.ts`'s `stepBack`): `currentId` goes to the head and
+   * `previousId`, the song gone back to, in front of it.
    */
-  afterPlay(id: number): Promise<void>;
-  /**
-   * "Favourite" the current song: set its priority to 0 (replay immediately)
-   * and increment its favorability by 1 (capped at 10).
-   */
-  favoriteSong(id: number): Promise<MusicSongEntry | null>;
-  /**
-   * Clear the replay marker a favourite carries: priority drops back to the
-   * bottom of the rotation, exactly where finishing the song would have put
-   * it, and favorability is left alone.
-   *
-   * Deliberately not `skipSong`, which also resets favorability to 1: taking
-   * the marker off a song says "not right now", not "I was wrong to like
-   * this", and a listener toggling the button off should not silently undo
-   * however many times they have favourited it before.
-   */
-  unfavoriteSong(id: number): Promise<MusicSongEntry | null>;
-  /**
-   * "Skip" the current song: set its priority to the current max and reset
-   * its favorability to 1.
-   */
-  skipSong(id: number): Promise<void>;
+  stepBackTo(query: MusicPoolQuery, currentId: number | null, previousId: number): Promise<void>;
   /** Permanently delete a song from the database. */
   purgeSong(id: number): Promise<void>;
   /** Return the total song count for each set id. */

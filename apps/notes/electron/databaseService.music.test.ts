@@ -111,4 +111,41 @@ describe('DatabaseService music sets', () => {
     expect(db.getMusicSets().some((set) => set.slot === userSet.slot)).toBe(false)
   })
 
+  it('plays the pool as a queue that keeps its order, across a restart', async () => {
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    const slot = db.getMusicSets()[0].slot
+    db.addMusicSongs(slot, ['a', 'b', 'c', 'd'].map((name) => indexedFile(`/music/${name}.mp3`)))
+    const query = { slots: [slot], filter: EMPTY_POOL_FILTER }
+    const order = db.getMusicPool(query).map((song) => song.id)
+    expect(new Set(order).size).toBe(4)
+
+    // NEXT: the head plays, and the song left goes to the end; nothing else moves.
+    expect(db.nextMusicSong(query, null)?.id).toBe(order[0])
+    expect(db.nextMusicSong(query, order[0])?.id).toBe(order[1])
+    expect(db.getMusicPool(query).map((song) => song.id)).toEqual([...order.slice(1), order[0]])
+
+    // A song chosen from the list plays now; the songs jumped over keep their places.
+    expect(db.chooseMusicSong(query, order[1], order[3])?.id).toBe(order[3])
+    expect(db.getMusicPool(query).map((song) => song.id)).toEqual([order[3], order[2], order[0], order[1]])
+
+    // PREVIOUS: the song gone back to plays, with the interrupted one next.
+    db.stepBackMusicQueue(query, order[3], order[1])
+    expect(db.getMusicPool(query).map((song) => song.id).slice(0, 2)).toEqual([order[1], order[3]])
+
+    const kept = db.getMusicPool(query).map((song) => song.id)
+    db.close()
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    expect(db.getMusicPool(query).map((song) => song.id)).toEqual(kept)
+  })
+
+  it('places a song added later somewhere in the queue', async () => {
+    db = new DatabaseService(dataRoot)
+    await db.initialize()
+    const slot = db.getMusicSets()[0].slot
+    db.addMusicSongs(slot, [indexedFile('/music/a.mp3'), indexedFile('/music/b.mp3')])
+    const songs = db.addMusicSongs(slot, [indexedFile('/music/c.mp3')])
+    expect(songs.every((song) => Number.isFinite(song.due) && song.likes === 0)).toBe(true)
+  })
 })

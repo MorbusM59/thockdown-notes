@@ -7,20 +7,28 @@
  *   content URI, its tags read natively), the SETS they are in, which sets
  *   are active and the pool filter. The page edits it and hands the whole of
  *   it to the native service, which stores it and gives it to the renderer.
- * - The ROTATION is the renderer's: each song's priority and favorability,
+ *   A song's LIKES (how much it is liked, set from the visualizer) and the
+ *   PLAY MODE (mix or folder order) are the catalog's too: only the reader
+ *   changes them.
+ * - The ROTATION is the renderer's: each song's DUE, its place in the mix,
  *   moved by what plays (packages/visualizer/shared/musicPool.ts's rules,
  *   the desktop's own). It changes while the page may be paused, so only the
  *   music renderer writes it; the page reads it to show the pool's order.
  *
- * A song the rotation does not know yet is new: priority 1, favorability 1,
- * as the desktop gives a song just added.
+ * A song the rotation does not know yet has no due: the renderer places it
+ * (`settleRotation`), and until it has, the page shows it last.
  */
 import {
-  afterPlay,
-  comparePoolOrder,
-  pickFromPool,
-  rotatePoolTo,
-  type LibrarySong,
+  advance,
+  choose,
+  clampLikes,
+  queueOrder,
+  sanitizePlayMode,
+  settleDues,
+  stepBack,
+  type DueChanges,
+  type PlayMode,
+  type QueueMove,
 } from '@thockdown/visualizer/shared/musicPool';
 import {
   createPoolFilterMatcher,
@@ -35,7 +43,7 @@ import {
   type PlaylistSlot,
 } from '@thockdown/visualizer/shared/audioPlayer';
 
-export type CatalogSong = Omit<MusicSongEntry, 'priority' | 'favorability'>;
+export type CatalogSong = Omit<MusicSongEntry, 'due'>;
 
 /** A folder the reader added to a set: its tree URI, whose read grant the app holds while some set has it. */
 export interface CatalogFolder {
@@ -55,21 +63,36 @@ export interface MusicCatalog {
   /** The sets that play: a song is in the pool when it is in one of them and passes the filter. */
   activeSetIds: number[];
   filter: MusicPoolFilter;
+  /** How the pool plays: the mix, or folder order. */
+  playMode: PlayMode;
 }
 
-export type MusicRotation = LibrarySong[];
+/** Each song's place in the mix. */
+export type MusicRotation = Array<{ id: number; due: number }>;
 
-export const EMPTY_CATALOG: MusicCatalog = { songs: [], sets: [], folders: [], activeSetIds: [], filter: EMPTY_POOL_FILTER };
+export const EMPTY_CATALOG: MusicCatalog = { songs: [], sets: [], folders: [], activeSetIds: [], filter: EMPTY_POOL_FILTER, playMode: 'mix' };
+
+/**
+ * A stored rotation; an entry without a due (written by the priority
+ * rotation this replaced) is dropped, so its song is placed afresh.
+ */
+export function sanitizeRotation(input: unknown): MusicRotation {
+  if (!Array.isArray(input)) return [];
+  return input.filter((entry): entry is { id: number; due: number } =>
+    !!entry && typeof entry === 'object' && Number.isInteger(entry.id) && Number.isFinite(entry.due),
+  ).map(({ id, due }) => ({ id, due }));
+}
 
 /** A stored catalog, any field a catalog written before it existed lacks taken as empty. */
 export function sanitizeCatalog(input: unknown): MusicCatalog {
   const stored = (input && typeof input === 'object' ? input : {}) as Partial<MusicCatalog>;
   return {
-    songs: Array.isArray(stored.songs) ? stored.songs : [],
+    songs: Array.isArray(stored.songs) ? stored.songs.map((song) => ({ ...song, likes: clampLikes(song.likes ?? 0) })) : [],
     sets: Array.isArray(stored.sets) ? stored.sets : [],
     folders: Array.isArray(stored.folders) ? stored.folders : [],
     activeSetIds: Array.isArray(stored.activeSetIds) ? stored.activeSetIds : [],
     filter: sanitizePoolFilter(stored.filter),
+    playMode: sanitizePlayMode(stored.playMode),
   };
 }
 
@@ -142,7 +165,7 @@ export function addScanToSet(
   slot: PlaylistSlot,
   uri: string,
   paths: readonly string[],
-  added: ReadonlyArray<Omit<CatalogSong, 'id' | 'setIds'>>,
+  added: ReadonlyArray<Omit<CatalogSong, 'id' | 'setIds' | 'likes'>>,
 ): MusicCatalog {
   const inFolder = new Set(paths);
   let nextId = Math.max(0, ...catalog.songs.map((song) => song.id)) + 1;
@@ -153,7 +176,7 @@ export function addScanToSet(
   for (const song of added) {
     if (known.has(song.filePath)) continue;
     known.add(song.filePath);
-    songs.push({ ...song, id: nextId, setIds: [slot] });
+    songs.push({ ...song, id: nextId, setIds: [slot], likes: 0 });
     nextId += 1;
   }
   const folders = catalog.folders.some((folder) => folder.uri === uri && folder.setId === slot)
@@ -170,47 +193,68 @@ export function setCounts(catalog: MusicCatalog): Record<number, number> {
   return counts;
 }
 
-/** Every catalog song with its place in the rotation (new songs at the front). */
-export function libraryOf(catalog: MusicCatalog, rotation: MusicRotation): MusicSongEntry[] {
-  const places = new Map(rotation.map((song) => [song.id, song]));
-  return catalog.songs.map((song) => {
-    const place = places.get(song.id);
-    return { ...song, priority: place?.priority ?? 1, favorability: place?.favorability ?? 1 };
-  });
+/** `songId` liked `steps` more (fewer when negative), held to the range (`musicPool.ts`'s `clampLikes`). */
+export function likeSong(catalog: MusicCatalog, songId: number, steps: number): MusicCatalog {
+  const song = catalog.songs.find((entry) => entry.id === songId);
+  if (!song) return catalog;
+  const likes = clampLikes(song.likes + steps);
+  if (likes === song.likes) return catalog;
+  return { ...catalog, songs: catalog.songs.map((entry) => (entry.id === songId ? { ...entry, likes } : entry)) };
 }
 
-/** The pool in pick order: the active sets' songs that pass the filter. */
+/** Every catalog song with its place in the mix; a song not placed yet comes last. */
+export function libraryOf(catalog: MusicCatalog, rotation: MusicRotation): MusicSongEntry[] {
+  const dues = new Map(rotation.map((entry) => [entry.id, entry.due]));
+  return catalog.songs.map((song) => ({ ...song, due: dues.get(song.id) ?? Number.POSITIVE_INFINITY }));
+}
+
+/** The pool in queue order: the active sets' songs that pass the filter, as the play mode orders them. */
 export function poolOf(catalog: MusicCatalog, rotation: MusicRotation): MusicSongEntry[] {
   const active = new Set(catalog.activeSetIds);
   const matches = poolFilterPassesAll(catalog.filter) ? () => true : createPoolFilterMatcher(catalog.filter);
-  return libraryOf(catalog, rotation)
-    .filter((song) => song.setIds.some((id) => active.has(id)) && matches(song))
-    .sort(comparePoolOrder);
-}
-
-/** The rotation written out in full for the catalog's songs, with `changes` ([id, priority]) applied. */
-function withPriorities(library: readonly MusicSongEntry[], changes: Array<[number, number]>): MusicRotation {
-  const next = new Map(changes);
-  return library.map((song) => ({ id: song.id, priority: next.get(song.id) ?? song.priority, favorability: song.favorability }));
+  const pool = libraryOf(catalog, rotation).filter((song) => song.setIds.some((id) => active.has(id)) && matches(song));
+  return queueOrder(pool, catalog.playMode);
 }
 
 /**
- * The song to play after `previousId` (null at the start), and the rotation
- * once `previousId` has counted as played.
+ * The rotation for exactly the catalog's songs, every song placed
+ * (`musicPool.ts`'s `settleDues`): songs gone from the catalog are dropped.
  */
-export function nextSong(
-  catalog: MusicCatalog,
-  rotation: MusicRotation,
-  previousId: number | null,
-  random: () => number = Math.random,
-): { song: MusicSongEntry | null; rotation: MusicRotation } {
-  let next = rotation;
-  if (previousId !== null) next = withPriorities(libraryOf(catalog, rotation), afterPlay(libraryOf(catalog, rotation), previousId));
-  return { song: pickFromPool(poolOf(catalog, next), random), rotation: next };
+export function settleRotation(catalog: MusicCatalog, rotation: MusicRotation, random: () => number = Math.random): MusicRotation {
+  const dues = new Map(rotation.map((entry) => [entry.id, entry.due]));
+  const library = catalog.songs.map((song) => ({ id: song.id, likes: song.likes, due: dues.get(song.id) ?? null }));
+  const placed = new Map(settleDues(library, random));
+  return library.map((song) => ({ id: song.id, due: placed.get(song.id) ?? (song.due as number) }));
 }
 
-/** The rotation with `songId` made the pool's unique next pick, its order kept (a song chosen from the list). */
-export function chooseSong(catalog: MusicCatalog, rotation: MusicRotation, songId: number): MusicRotation {
-  const changes = rotatePoolTo(poolOf(catalog, rotation), songId);
-  return changes ? withPriorities(libraryOf(catalog, rotation), changes) : rotation;
+function withDues(rotation: MusicRotation, changes: DueChanges): MusicRotation {
+  if (changes.length === 0) return rotation;
+  const next = new Map(changes);
+  return rotation.map((entry) => (next.has(entry.id) ? { id: entry.id, due: next.get(entry.id)! } : entry));
+}
+
+/** A queue move (`musicPool.ts`) over a settled rotation, and the rotation after it. */
+export interface RotationMove {
+  song: MusicSongEntry | null;
+  rotation: MusicRotation;
+}
+
+function applied(move: QueueMove<MusicSongEntry>, rotation: MusicRotation): RotationMove {
+  return { song: move.song, rotation: withDues(rotation, move.changes) };
+}
+
+/** NEXT: `currentId` (null at the start) is left and the queue's next song plays (`musicPool.ts`'s `advance`). */
+export function nextSong(catalog: MusicCatalog, rotation: MusicRotation, currentId: number | null): RotationMove {
+  return applied(advance(poolOf(catalog, rotation), catalog.playMode, currentId), rotation);
+}
+
+/** A song chosen from the list plays now (`musicPool.ts`'s `choose`); one the pool does not hold is played as given. */
+export function chooseSong(catalog: MusicCatalog, rotation: MusicRotation, currentId: number | null, songId: number): RotationMove {
+  const move = applied(choose(poolOf(catalog, rotation), catalog.playMode, currentId, songId), rotation);
+  return move.song ? move : { ...move, song: libraryOf(catalog, rotation).find((song) => song.id === songId) ?? null };
+}
+
+/** PREVIOUS: the rotation once `currentId` was interrupted to go back to `previousId` (`musicPool.ts`'s `stepBack`). */
+export function stepBackRotation(catalog: MusicCatalog, rotation: MusicRotation, currentId: number | null, previousId: number): MusicRotation {
+  return withDues(rotation, stepBack(poolOf(catalog, rotation), catalog.playMode, currentId, previousId));
 }

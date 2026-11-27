@@ -130,6 +130,16 @@ export type VisualizerSceneProps = {
 /** The hooks' stand-in while the scene keeps the desktop's presses. */
 const NO_ORB_GESTURES: OrbGestures = { tap: () => {}, hold: () => {}, swipe: () => {} }
 
+const SPECTRUM_GESTURES: OrbGestures = {
+  tap: () => setPanelsShown(!readPanelsShown()),
+  hold: () => {},
+  swipe: (direction) => {
+    if (direction !== 'left' && direction !== 'right') return
+    const { song, likeSong } = readNowPlaying()
+    if (song && likeSong) likeSong(song.id, direction === 'right' ? 1 : -1)
+  },
+}
+
 /** The lit runs of the track: all of it, or the boxes before and after `gap`. */
 function trackRuns(track: { first: number; count: number }, gap: number | null): Array<{ first: number; count: number }> {
   const end = track.first + track.count
@@ -542,6 +552,11 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
       : FACTORY_SOUNDSTAGE_IDS.filter((id) => id !== 'crisp').indexOf(soundstage.solid)
   const solid = solidSeed(sceneSeed, solidIndex)
   const orbHandlers = useOrbGestures(orbGestures ?? NO_ORB_GESTURES)
+  // The spectrum takes presses by the orb's rules: a tap shows or hides the
+  // panels, as Escape does (panelsShown.ts), the one way a finger has to do
+  // it; a swipe right or left likes the playing song one step more or less
+  // (`musicPool.ts`'s likes), where the app offers it (NowPlaying's `likeSong`).
+  const spectrumHandlers = useOrbGestures(SPECTRUM_GESTURES)
   const orbPresses = orbGestures
     ? { ...orbHandlers, className: 'visualizer-cutout is-touch-orb', 'data-secondary-press': 'none' as const, onContextMenu: (event: ReactMouseEvent) => event.preventDefault() }
     : {
@@ -585,14 +600,10 @@ export function VisualizerScene({ boxPx: readerBoxPx, fontFamily, fontSizePx: re
             />
           )}
           {spectrumRows > 0 && (
-            // A press on the spectrum shows or hides the panels, as Escape
-            // does (panelsShown.ts): the one way a finger has to do it.
             <div
               className="visualizer-spectrum-hit"
               style={{ left: originXPx, top: rowTop(spectrumRow), width: columns * box, height: spectrumRows * box }}
-              onPointerDown={(event) => {
-                if (event.button === 0) setPanelsShown(!readPanelsShown())
-              }}
+              {...spectrumHandlers}
             />
           )}
           {chromaRow !== null && (

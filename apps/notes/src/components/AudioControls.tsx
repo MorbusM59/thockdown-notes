@@ -10,7 +10,6 @@ import {
   type SetSelection,
   isFactoryMusicSet,
 } from '@thockdown/visualizer/shared/audioPlayer'
-import { adjacentSongInPool } from '@thockdown/visualizer/shared/musicPool'
 import { activeSoundscape, applySoundscapePreset, nextSoundscapePreset, type SoundscapePreferences } from '@thockdown/soundscape/soundscape'
 import {
   fromDisplayLevel,
@@ -22,7 +21,7 @@ import {
   forgetSong,
   pushPlayed,
   stepBack,
-} from '../shared/musicPlayHistory'
+} from '@thockdown/visualizer/shared/musicPlayHistory'
 import {
   useHoldToAdjust,
   type HoldToAdjustKeyboardController,
@@ -258,13 +257,9 @@ export const AudioControls = memo(function AudioControls({
     currentSongRef.current = currentSong
   }, [currentSong])
 
-  // Register "song ended" → auto-advance.
+  // Register "song ended" → auto-advance (the song ended goes back into the queue there).
   useEffect(() => {
     musicPlayerService.onEnded(() => {
-      const finished = currentSongRef.current
-      if (finished) {
-        void window.thockdownAudioPlayer?.afterPlay(finished.id)
-      }
       void advanceToNextSong()
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -314,6 +309,11 @@ export const AudioControls = memo(function AudioControls({
     await refreshCountsRef.current()
   }, [])
 
+  /**
+   * NEXT (`shared/musicPool.ts`'s `advance`): the song playing is left, going
+   * back into the queue by its favorability whether it ended or the listener
+   * moved on, and the song now at the queue's head plays.
+   */
   const advanceToNextSong = useCallback(async (
     slotsOverride?: PlaylistSlot[],
     startAtSec = 0,
@@ -327,8 +327,12 @@ export const AudioControls = memo(function AudioControls({
 
     // Safety limit: avoid an infinite loop if every song in the pool is missing.
     const MAX_ATTEMPTS = 50
+    // Only the first request leaves the song playing; after a missing file is
+    // purged the head is simply read again.
+    let leftId = currentSongRef.current?.id ?? null
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const next = await window.thockdownAudioPlayer?.pickNextSong({ slots, filter: filterRef.current })
+      const next = await window.thockdownAudioPlayer?.nextSong({ slots, filter: filterRef.current }, leftId)
+      leftId = null
       if (!next) {
         setIsPlaying(false)
         setCurrentSong(null)
@@ -374,6 +378,9 @@ export const AudioControls = memo(function AudioControls({
         continue
       }
 
+      // The interrupted song goes to the queue's head and the one gone back
+      // to in front of it, so NEXT returns to the interrupted song.
+      await window.thockdownAudioPlayer?.stepBackTo({ slots: poolSlotsRef.current, filter: filterRef.current }, currentSongRef.current?.id ?? null, song.id)
       // Commit the cursor move before playing, so playSong does not re-record
       // (and thereby truncate) the entries being walked.
       historyRef.current = step.history
@@ -487,8 +494,8 @@ export const AudioControls = memo(function AudioControls({
    * with whatever the track could not absorb.
    *
    * The forward crossing is deliberately the same path a song ending takes,
-   * afterPlay included, because running off the end of a track IS that track
-   * finishing as far as the library's priority bookkeeping is concerned.
+   * because running off the end of a track IS that track finishing as far as
+   * the queue is concerned.
    */
   const seekBy = useCallback(async (fraction: number) => {
     const overshootSec = musicPlayerService.seek(fraction)
@@ -500,8 +507,6 @@ export const AudioControls = memo(function AudioControls({
     isCrossingSongRef.current = true
     try {
       if (overshootSec > 0) {
-        const finished = currentSongRef.current
-        if (finished) await window.thockdownAudioPlayer?.afterPlay(finished.id)
         await advanceToNextSong(undefined, overshootSec)
       } else {
         // No previous song: the playhead stays pinned at 0, which is where
@@ -514,67 +519,34 @@ export const AudioControls = memo(function AudioControls({
   }, [advanceToNextSong, playPreviousSong])
 
   /**
-   * Play the adjacent song in the active pool's displayed order. The pool is
-   * read ONCE and walked in `direction` from the current song: a song whose
-   * file is gone is purged and the walk moves on to the next candidate of the
-   * same list, so the walk is bounded by the pool itself and never re-reads it.
-   */
-  const playAdjacentSong = useCallback(async (direction: SeekDirection) => {
-    const query = { slots: poolSlotsRef.current, filter: filterRef.current }
-    const pool = await window.thockdownAudioPlayer?.getPool(query) ?? []
-    const currentId = currentSongRef.current?.id
-    let purgedMissingSong = false
-    let candidateId = currentId
-    for (let step = 0; step < pool.length; step += 1) {
-      const target = adjacentSongInPool(pool, candidateId, direction)
-      if (!target || target.id === currentId) break
-      candidateId = target.id
-      const song = await window.thockdownAudioPlayer?.rotatePoolTo(query, target.id)
-      if (!song) continue
-      try {
-        await playSong(song)
-        return
-      } catch (err) {
-        if (!(err instanceof MissingFileError)) throw err
-        purgedMissingSong = true
-        await purgeMissingSong(song.id)
-        musicPlayerService.stop()
-      }
-    }
-    if (purgedMissingSong) {
-      setIsPlaying(false)
-      setCurrentSong(null)
-    }
-  }, [playSong, purgeMissingSong])
-
-  /**
    * Right-click, media keys and the visualizer's repeated arrow press all use
-   * this command, so they move through the same active-pool ring.
+   * this command: forward is NEXT, back walks the history of what played.
    */
   const jumpSong = useCallback(async (direction: SeekDirection) => {
     if (isCrossingSongRef.current) return
     isCrossingSongRef.current = true
     try {
-      await playAdjacentSong(direction)
+      if (direction > 0) await advanceToNextSong()
+      else await playPreviousSong()
     } finally {
       isCrossingSongRef.current = false
     }
-  }, [playAdjacentSong])
+  }, [advanceToNextSong, playPreviousSong])
 
   /**
    * Play a song chosen from the pool (the visualizer's song list, a song
-   * clicked in the Music Library). The pool's order is rotated to it first
-   * (`shared/musicPool.ts`), so the song that was playing and those skipped
-   * over keep their places in the ring; nothing is counted as played, which
-   * is why there is no afterPlay here. A song the pool does not hold (the
-   * filter leaves it out) is played as given: the song playing belongs to the
-   * pool while it plays, and the next pick comes from the pool as usual.
+   * clicked in the Music Library): it goes to the queue's head and the song
+   * that was playing back in as NEXT would put it, every other song keeping
+   * its place (`shared/musicPool.ts`'s `choose`). A song the pool does not
+   * hold (the filter leaves it out) is played as given: the song playing
+   * belongs to the pool while it plays, and the next song comes from the
+   * pool as usual.
    */
   const playFromPool = useCallback(async (id: number, entry?: MusicSongEntry) => {
     if (isCrossingSongRef.current || currentSongRef.current?.id === id) return
     isCrossingSongRef.current = true
     try {
-      const song = await window.thockdownAudioPlayer?.rotatePoolTo({ slots: poolSlotsRef.current, filter: filterRef.current }, id) ?? entry
+      const song = await window.thockdownAudioPlayer?.chooseSong({ slots: poolSlotsRef.current, filter: filterRef.current }, currentSongRef.current?.id ?? null, id) ?? entry
       if (!song) return
       try {
         await playSong(song)
@@ -646,8 +618,6 @@ export const AudioControls = memo(function AudioControls({
     isCrossingSongRef.current = true
     try {
       if (outcome.kind === 'next-song') {
-        const finished = currentSongRef.current
-        if (finished) await window.thockdownAudioPlayer?.afterPlay(finished.id)
         await advanceToNextSong()
         return
       }
@@ -875,6 +845,8 @@ export const AudioControls = memo(function AudioControls({
       addSources: DESKTOP_ADD_SOURCES,
       addPathsToMusicSet,
       setPoolFilter,
+      // The desktop's way to like a song is still to be designed.
+      likeSong: null,
       levels: publishedLevels,
       setLevel: publishedSetLevel,
     })
@@ -908,7 +880,7 @@ export const AudioControls = memo(function AudioControls({
   // ---------------------------------------------------------------- song label
 
   const songLabel = currentSong
-    ? `${currentSong.favorability} | ${songTitleText(currentSong)} (${songArtistText(currentSong)})`
+    ? `${songTitleText(currentSong)} (${songArtistText(currentSong)})`
     : 'No song'
 
   // ---------------------------------------------------------------- music button

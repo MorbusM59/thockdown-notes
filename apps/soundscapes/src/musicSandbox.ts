@@ -27,12 +27,15 @@
  *   rotation as stored;
  * - musicPoolSet(setId): the song set the schedule plays, the pool while
  *   it is set (-1 for none: the catalog's own sets);
- * - musicNext(previousId): the song to play after `previousId` (-1 at the
- *   start), counting it as played, as `{ "id", "uri" }` or null;
- * - musicChoose(songId): the same for a song chosen from the list, which
- *   rotates the pool to it rather than counting anything as played;
- * - musicJump(currentId, direction): the same for the previous (-1) or next
- *   (1) song of the playing pool's ring from `currentId`;
+ * - musicNext(previousId): NEXT, the song to play after `previousId` (-1 at
+ *   the start), which goes back into the queue (musicLibrary.ts's
+ *   `nextSong`), as `{ "id", "uri" }` or null;
+ * - musicChoose(songId, currentId): the same for a song chosen from the
+ *   list (`chooseSong`), `currentId` (-1 for none) going back in as NEXT
+ *   would put it;
+ * - musicJump(currentId, direction): NEXT from `currentId` (1), or
+ *   PREVIOUS (-1): the song before it in the history of what this renderer
+ *   played (musicPlayHistory.ts, the desktop's), null when there is none;
  * - musicRotationJson(): the rotation, for the service to store after a
  *   musicNext, musicJump or musicChoose;
  * - musicStep(playedFrame, maxChunks): report how far the output has played,
@@ -53,8 +56,8 @@ import { MusicVoice, type MusicSettings } from '@thockdown/audio/musicVoice';
 import { RenderAheadEngine, type RenderedChunk } from '@thockdown/audio/renderAhead';
 import { StreamResampler } from '@thockdown/audio/resampler';
 import { EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q } from '@thockdown/visualizer/shared/musicEqCurve';
-import { chooseSong, EMPTY_CATALOG, nextSong, poolOf, type MusicCatalog, type MusicRotation } from './musicLibrary';
-import { adjacentSongInPool } from '@thockdown/visualizer/shared/musicPool';
+import { chooseSong, EMPTY_CATALOG, nextSong, sanitizeCatalog, sanitizeRotation, settleRotation, stepBackRotation, type MusicCatalog, type MusicRotation, type RotationMove } from './musicLibrary';
+import { currentHistorySongId, emptyPlayHistory, forgetSong, pushPlayed, stepBack as stepBackHistory } from '@thockdown/visualizer/shared/musicPlayHistory';
 import { decodeFullScaleStereo, encodeHalfScaleStereo, toBase64 } from '@thockdown/soundscape/halfScalePcm';
 import { SpectrumFrames } from '@thockdown/visualizer/visualizer/spectrumFrames';
 import { logBandEdges } from '@thockdown/visualizer/visualizer/spectrumBands';
@@ -154,12 +157,12 @@ scope.musicSpectrum = (bands: number): string => {
 };
 
 scope.musicCatalog = (json: string): string => {
-  catalog = JSON.parse(json) as MusicCatalog;
+  catalog = sanitizeCatalog(JSON.parse(json));
   return 'ok';
 };
 
 scope.musicRotation = (json: string): string => {
-  rotation = JSON.parse(json) as MusicRotation;
+  rotation = sanitizeRotation(JSON.parse(json));
   return 'ok';
 };
 
@@ -178,23 +181,55 @@ scope.musicPoolSet = (setId: number): string => {
 
 const poolCatalog = (): MusicCatalog => (poolSet < 0 ? catalog : { ...catalog, activeSetIds: [poolSet], filter: EMPTY_CATALOG.filter });
 
+/**
+ * What this renderer played, for PREVIOUS: kept for as long as the renderer
+ * lives, as the desktop keeps its for a session.
+ */
+let history = emptyPlayHistory();
+
+/** The rotation with every catalog song placed, before any move reads it. */
+function settle(): void {
+  rotation = settleRotation(catalog, rotation);
+}
+
+/** A move's rotation kept and its song recorded as playing. */
+function played(move: RotationMove): string {
+  rotation = move.rotation;
+  if (!move.song) return 'null';
+  history = pushPlayed(history, move.song.id);
+  return JSON.stringify({ id: move.song.id, uri: move.song.filePath });
+}
+
 scope.musicNext = (previousId: number): string => {
-  const next = nextSong(poolCatalog(), rotation, previousId < 0 ? null : previousId);
-  rotation = next.rotation;
-  return JSON.stringify(next.song ? { id: next.song.id, uri: next.song.filePath } : null);
+  settle();
+  return played(nextSong(poolCatalog(), rotation, previousId < 0 ? null : previousId));
 };
 
-/** The previous (-1) or next (1) song of the pool's ring from `currentId` (-1 for none), the ring rotated to it. */
 scope.musicJump = (currentId: number, direction: number): string => {
-  const playing = poolCatalog();
-  const target = adjacentSongInPool(poolOf(playing, rotation), currentId < 0 ? undefined : currentId, direction < 0 ? -1 : 1);
-  if (!target) return 'null';
-  rotation = chooseSong(playing, rotation, target.id);
-  return JSON.stringify({ id: target.id, uri: target.filePath });
+  settle();
+  const current = currentId < 0 ? null : currentId;
+  if (direction > 0) return played(nextSong(poolCatalog(), rotation, current));
+  // The renderer picks the next song as soon as the current one is decoded,
+  // so the history can already hold a song not yet heard: back is measured
+  // from the song heard, so those are stepped past first.
+  const heardAt = current === null ? -1 : history.entries.lastIndexOf(current);
+  if (heardAt >= 0 && currentHistorySongId(history) !== current) history = { entries: history.entries, cursor: heardAt };
+  // Back through the history; a song no longer in the catalog is stepped over.
+  for (;;) {
+    const step = stepBackHistory(history);
+    if (!step) return 'null';
+    const song = catalog.songs.find((entry) => entry.id === step.songId);
+    if (!song) {
+      history = forgetSong(history, step.songId);
+      continue;
+    }
+    history = step.history;
+    rotation = stepBackRotation(poolCatalog(), rotation, current, song.id);
+    return JSON.stringify({ id: song.id, uri: song.filePath });
+  }
 };
 
-scope.musicChoose = (songId: number): string => {
-  rotation = chooseSong(catalog, rotation, songId);
-  const song = catalog.songs.find((entry) => entry.id === songId);
-  return JSON.stringify(song ? { id: song.id, uri: song.filePath } : null);
+scope.musicChoose = (songId: number, currentId: number): string => {
+  settle();
+  return played(chooseSong(poolCatalog(), rotation, currentId < 0 ? null : currentId, songId));
 };

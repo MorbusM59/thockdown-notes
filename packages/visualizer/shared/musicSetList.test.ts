@@ -4,7 +4,7 @@ import { groupMusicSetList, sanitizeMusicSetListGrouping } from './musicSetList'
 
 let nextId = 1
 function song(filePath: string, tags: Partial<Pick<MusicSongEntry, 'title' | 'artist' | 'album'>> = {}): MusicSongEntry {
-  return { id: nextId++, filePath, setIds: [2], priority: 1, favorability: 5, title: '', artist: '', album: '', durationSec: 0, ...tags }
+  return { id: nextId++, filePath, setIds: [2], due: 0, likes: 0, title: '', artist: '', album: '', durationSec: 0, ...tags }
 }
 
 const songs = [
@@ -63,7 +63,7 @@ describe('a phone song (a content URI)', () => {
     expect(songPathParts(uri)).toEqual(['Music', 'House', 'Deep', 'track.MP3'])
   })
   it('groups by the folder the song is in', () => {
-    const song = { id: 1, filePath: uri, setIds: [], priority: 1, favorability: 5, title: '', artist: '', album: '', durationSec: 0 }
+    const song = { id: 1, filePath: uri, setIds: [], due: 0, likes: 0, title: '', artist: '', album: '', durationSec: 0 }
     const groups = groupMusicSetList([song], 'folder', '')
     expect(groups.map((group) => group.label)).toEqual(['Deep'])
   })
