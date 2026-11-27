@@ -136,7 +136,6 @@ final class OutputLane {
             reportFrame = frame;
         }
     }
-    }
 
     /** The pending `reportAt` frame on the output's mixed count, once it has been handed over, else -1. Called with the output locked. */
     long markerMixed() {
@@ -155,13 +154,6 @@ final class OutputLane {
             if (next < reportFrames) sinceReport = Math.max(sinceReport, next);
             reportFrames = next;
             this.responsive = responsive;
-        }
-    }
-
-    /** The frame the track's head has reached: what is being heard, up to the device's own latency. */
-    long heardFrame() {
-        synchronized (output) {
-            return started ? Math.min(playhead, output.heardMixed() + anchor) : playhead;
         }
     }
 
