@@ -472,12 +472,12 @@ final class SoundscapeSession {
     // --- From the schedule ---
 
     /** The schedule changed (turned on or off, or its entries edited), or the device rebooted: apply its state at this moment. */
-    synchronized void applyScheduleState() {
+    synchronized void applyScheduleState(boolean wasOn) {
         State before = state();
         SoundscapeSchedule schedule = SoundscapeSchedule.load(context);
         SoundscapeSchedule.Event current = schedule.current();
         // Switched on while paused: its run, if one is under way, is heard.
-        if (schedule.enabled && !before.scheduleEnabled && regular == Regular.PAUSED) setRegular(Regular.STOPPED);
+        if (schedule.enabled && !wasOn && regular == Regular.PAUSED && scheduledNow(schedule) != null) setRegular(Regular.STOPPED);
         // Turned on in a run: it fades in over its fade. Turned off: what it
         // played goes like a stop, which the listener asked for.
         double fade = !schedule.enabled ? HANDOVER_FADE_SEC

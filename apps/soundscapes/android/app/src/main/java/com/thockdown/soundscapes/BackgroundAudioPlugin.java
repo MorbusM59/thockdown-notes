@@ -140,10 +140,11 @@ public class BackgroundAudioPlugin extends Plugin {
         try {
             JSObject json = call.getData();
             SoundscapeSchedule.fromJson(json);
+            boolean wasOn = SoundscapeSchedule.load(getContext()).enabled;
             SoundscapeSchedule.save(getContext(), json);
             // Turned on or off, or its slots changed under a run: either way
             // what is heard may have changed.
-            session.applyScheduleState();
+            session.applyScheduleState(wasOn);
             MusicSession.get(getContext()).applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
             SoundscapeSchedule.arm(getContext());
             call.resolve();

@@ -403,7 +403,10 @@ export function MobileSoundscapeApp() {
   const events = useMemo(() => scheduleEvents(schedule), [schedule])
   const musicEvents = useMemo(() => musicScheduleEvents(schedule), [schedule])
   useEffect(() => {
-    if (!native) return
+    // Not before the page has followed the session: the session may have
+    // switched the schedule off (a pause from the lock screen) while this
+    // page was gone, and sending the stored copy first would switch it back on.
+    if (!native || !hydrated) return
     const named = new Set(events.map((event) => event.presetId))
     void nativeSoundscape!.setSchedule({
       enabled: schedule.enabled,
@@ -414,7 +417,7 @@ export function MobileSoundscapeApp() {
         .filter((preset) => named.has(preset.id))
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
-  }, [native, schedule.enabled, events, musicEvents, presets, sessionVolume])
+  }, [native, hydrated, schedule.enabled, events, musicEvents, presets, sessionVolume])
 
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.

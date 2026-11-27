@@ -41,7 +41,7 @@ public class ScheduleReceiver extends BroadcastReceiver {
                 }
             }
         } else if (SoundscapeSchedule.ACTION_APPLY_STATE.equals(action)) {
-            session.applyScheduleState();
+            session.applyScheduleState(true);
             MusicSession.get(context).applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
         } else if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             SoundscapeSchedule.armApplyState(context);
