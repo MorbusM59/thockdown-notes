@@ -179,7 +179,7 @@ final class MusicRenderer {
         });
     }
 
-    /** The previous (-1) or next (1) song of the pool's ring from the song playing (musicPool.ts's adjacentSongInPool), now. */
+    /** PREVIOUS (-1), through the history of what played, or NEXT (1) from the song playing (musicPool.ts), now. */
     void jump(int direction) {
         post(() -> {
             if (stage == null) return;
@@ -193,13 +193,14 @@ final class MusicRenderer {
         });
     }
 
-    /** Play `songId`, chosen from the list, now: the pool is rotated to it (musicPool.ts's rotatePoolTo). */
+    /** Play `songId`, chosen from the list, now: it goes to the queue's head and the song left back in (musicPool.ts's choose). */
     void choose(int songId) {
         post(() -> {
             if (stage == null) return;
             settle();
             configure(true);
-            stepTo(songFrom(isolate.evaluateJavaScriptAsync("musicChoose(" + songId + ")").get()));
+            Integer from = current();
+            stepTo(songFrom(isolate.evaluateJavaScriptAsync("musicChoose(" + songId + ", " + (from == null ? -1 : from) + ")").get()));
             rotated();
         });
     }

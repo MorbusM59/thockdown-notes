@@ -134,6 +134,8 @@ describe('the mix', () => {
     expect(settleDues(library, () => 0.5).map(([id]) => id)).toEqual([2, 1, 3])
     const placed = settleDues([{ id: 1, likes: 0, due: 0 }, { id: 2, likes: 0, due: 9 }, { id: 3, likes: 0, due: null }], () => 0.5)
     expect(placed).toEqual([[3, 5]])
+    // Never ahead of the head, whatever the draw.
+    expect(settleDues([{ id: 1, likes: 0, due: 0 }, { id: 2, likes: 0, due: null }], () => 0.999999)[0][1]).toBeGreaterThan(0)
   })
 })
 

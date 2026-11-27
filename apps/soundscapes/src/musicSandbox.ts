@@ -30,8 +30,9 @@
  * - musicNext(previousId): NEXT, the song to play after `previousId` (-1 at
  *   the start), which goes back into the queue (musicLibrary.ts's
  *   `nextSong`), as `{ "id", "uri" }` or null;
- * - musicChoose(songId): the same for a song chosen from the list
- *   (`chooseSong`), the song playing going back in as NEXT would put it;
+ * - musicChoose(songId, currentId): the same for a song chosen from the
+ *   list (`chooseSong`), `currentId` (-1 for none) going back in as NEXT
+ *   would put it;
  * - musicJump(currentId, direction): NEXT from `currentId` (1), or
  *   PREVIOUS (-1): the song before it in the history of what this renderer
  *   played (musicPlayHistory.ts, the desktop's), null when there is none;
@@ -56,7 +57,7 @@ import { RenderAheadEngine, type RenderedChunk } from '@thockdown/audio/renderAh
 import { StreamResampler } from '@thockdown/audio/resampler';
 import { EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q } from '@thockdown/visualizer/shared/musicEqCurve';
 import { chooseSong, EMPTY_CATALOG, nextSong, sanitizeCatalog, sanitizeRotation, settleRotation, stepBackRotation, type MusicCatalog, type MusicRotation, type RotationMove } from './musicLibrary';
-import { emptyPlayHistory, forgetSong, pushPlayed, stepBack as stepBackHistory } from '@thockdown/visualizer/shared/musicPlayHistory';
+import { currentHistorySongId, emptyPlayHistory, forgetSong, pushPlayed, stepBack as stepBackHistory } from '@thockdown/visualizer/shared/musicPlayHistory';
 import { decodeFullScaleStereo, encodeHalfScaleStereo, toBase64 } from '@thockdown/soundscape/halfScalePcm';
 import { SpectrumFrames } from '@thockdown/visualizer/visualizer/spectrumFrames';
 import { logBandEdges } from '@thockdown/visualizer/visualizer/spectrumBands';
@@ -208,6 +209,11 @@ scope.musicJump = (currentId: number, direction: number): string => {
   settle();
   const current = currentId < 0 ? null : currentId;
   if (direction > 0) return played(nextSong(poolCatalog(), rotation, current));
+  // The renderer picks the next song as soon as the current one is decoded,
+  // so the history can already hold a song not yet heard: back is measured
+  // from the song heard, so those are stepped past first.
+  const heardAt = current === null ? -1 : history.entries.lastIndexOf(current);
+  if (heardAt >= 0 && currentHistorySongId(history) !== current) history = { entries: history.entries, cursor: heardAt };
   // Back through the history; a song no longer in the catalog is stepped over.
   for (;;) {
     const step = stepBackHistory(history);
@@ -223,7 +229,7 @@ scope.musicJump = (currentId: number, direction: number): string => {
   }
 };
 
-scope.musicChoose = (songId: number): string => {
+scope.musicChoose = (songId: number, currentId: number): string => {
   settle();
-  return played(chooseSong(poolCatalog(), rotation, history.cursor >= 0 ? history.entries[history.cursor] : null, songId));
+  return played(chooseSong(poolCatalog(), rotation, currentId < 0 ? null : currentId, songId));
 };

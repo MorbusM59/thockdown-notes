@@ -37,7 +37,7 @@ function sandbox() {
     musicRotationJson(): string;
     musicNext(previousId: number): string;
     musicJump(currentId: number, direction: number): string;
-    musicChoose(songId: number): string;
+    musicChoose(songId: number, currentId: number): string;
   };
   api.musicInit(JSON.stringify({ sampleRate: OUTPUT_RATE, spliceMarginSec: 0.15}));
   return { ...api, step: (played: number, max = 1000) => JSON.parse(api.musicStep(played, max)) as Step };
@@ -108,8 +108,13 @@ describe('the music sandbox', () => {
     expect(id(music.musicJump(second, -1))).toBe(first);
     expect(id(music.musicJump(first, 1))).toBe(second);
     // A chosen song plays at once; nothing before the first song played is behind it.
-    expect(id(music.musicChoose(order[3]))).toBe(order[3]);
+    expect(id(music.musicChoose(order[3], second))).toBe(order[3]);
     expect(id(music.musicNext(order[3]))).toBe(order[2]);
+    // Decoded ahead: the next song is picked while this one is still heard;
+    // back from the song heard is the one before it, not the song heard.
+    const heard = order[2];
+    music.musicNext(heard);
+    expect(id(music.musicJump(heard, -1))).toBe(order[3]);
   });
 });
 

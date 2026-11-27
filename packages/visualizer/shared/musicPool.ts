@@ -191,7 +191,9 @@ export function settleDues(
   }
   const low = smallest(placed, (due) => due)
   const high = -smallest(placed, (due) => -due)
-  return unplaced.map((song) => [song.id, low + random() * (high - low + 1)])
+  // Strictly after the lowest due: the head is the song playing, and a song
+  // added while it plays must not take its place.
+  return unplaced.map((song) => [song.id, low + (1 - random()) * (high - low + 1)])
 }
 
 /**
