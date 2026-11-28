@@ -1,7 +1,7 @@
 import { volumeGain } from '@thockdown/audio/volumeLaw'
 import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { DEFAULT_VISUALIZER_STATE, NEUTRAL_VISUALIZER_PRESET, VISUALIZER_PRESET_KIND, editVisualizerState, sanitizeVisualizerPresetPreferences, shownVisualizer, type VisualizerPresetPreferences, type VisualizerState } from '@thockdown/visualizer/shared/visualizerPresets'
-import { DEFAULT_VISUALIZER_FONT, DEFAULT_VISUALIZER_FONT_SIZE_PX, sanitizeVisualizerFont, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
+import { DEFAULT_VISUALIZER_FONT, sanitizeVisualizerFont, visualizerFontForMode, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { SidebarFrame } from '@thockdown/interaction/SidebarFrame'
 import { CanonicalScrollRail } from './components/CanonicalScrollRail'
 import { scrollerIdentity } from './shared/scrollerIdentity'
@@ -390,8 +390,6 @@ interface FontSizeSet {
   editorFontSize: number
   viewFontSize: number
   uiFontScale: number
-  /** The visualizer's font size (Options > Visualizer (its font)); its font and box size are one value for both modes. */
-  visualizerFontSize: number
 }
 interface FontSizesByMode {
   regular: FontSizeSet
@@ -403,13 +401,11 @@ const DEFAULT_FONT_SIZES_BY_MODE: FontSizesByMode = {
     editorFontSize: DEFAULT_EDITOR_FONT_SIZE_PX,
     viewFontSize: DEFAULT_EDITOR_FONT_SIZE_PX,
     uiFontScale: DEFAULT_UI_FONT_SCALE,
-    visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.regular,
   },
   double: {
     editorFontSize: DEFAULT_DOUBLE_SIZE_EDITOR_FONT_SIZE_PX,
     viewFontSize: DEFAULT_DOUBLE_SIZE_EDITOR_FONT_SIZE_PX,
     uiFontScale: DEFAULT_DOUBLE_SIZE_UI_FONT_SCALE,
-    visualizerFontSize: DEFAULT_VISUALIZER_FONT_SIZE_PX.double,
   },
 }
 
@@ -425,13 +421,11 @@ function resolvePersistedFontSizesByMode(menu: PersistedMenuState): FontSizesByM
       editorFontSize: resolvePersistedFontSizePx(menu.editorFontSize, regularDefaults.editorFontSize),
       viewFontSize: resolvePersistedFontSizePx(menu.viewFontSize, regularDefaults.viewFontSize),
       uiFontScale: resolvePersistedUiFontScale(menu.uiFontScale, regularDefaults.uiFontScale),
-      visualizerFontSize: resolvePersistedFontSizePx(menu.visualizerFont?.sizePx, regularDefaults.visualizerFontSize),
     },
     double: {
       editorFontSize: resolvePersistedFontSizePx(menu.doubleSizeEditorFontSize, doubleDefaults.editorFontSize),
       viewFontSize: resolvePersistedFontSizePx(menu.doubleSizeViewFontSize, doubleDefaults.viewFontSize),
       uiFontScale: resolvePersistedUiFontScale(menu.doubleSizeUiFontScale, doubleDefaults.uiFontScale),
-      visualizerFontSize: resolvePersistedFontSizePx(menu.doubleSizeVisualizerFontSize, doubleDefaults.visualizerFontSize),
     },
   }
 }
@@ -1489,11 +1483,8 @@ function App() {
   const [viewLetterSpacingEm, setViewLetterSpacingEm] = useState<number>(DEFAULT_VIEW_LETTER_SPACING_EM)
   const [editorStyle, setEditorStyle] = useState<MonoFontKey>(DEFAULT_EDITOR_STYLE)
   const [editorSpacing, setEditorSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
-  // The visualizer's font and box size; its size is per size mode, in fontSizesByMode.
-  const [visualizerFontShared, setVisualizerFontShared] = useState<Omit<VisualizerFont, 'sizePx'>>(() => ({
-    style: DEFAULT_VISUALIZER_FONT.style,
-    boxSize: DEFAULT_VISUALIZER_FONT.boxSize,
-  }))
+  // The visualizer's font: one setting for both size modes; double size mode draws it at half its size (visualizerFontForMode).
+  const [visualizerFontSetting, setVisualizerFont] = useState<VisualizerFont>(DEFAULT_VISUALIZER_FONT)
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [uiFontStyle, setUiFontStyle] = useState<UiFontKey>(DEFAULT_UI_FONT_KEY)
   const [borderRadiusRegularPx, setBorderRadiusRegularPx] = useState<number>(DEFAULT_BORDER_RADIUS_REGULAR_PX)
@@ -1551,7 +1542,7 @@ function App() {
   // of the mode on screen (isDoubleSizeApplied), and their setters write into
   // that mode's set only.
   const [fontSizesByMode, setFontSizesByMode] = useState<FontSizesByMode>(DEFAULT_FONT_SIZES_BY_MODE)
-  const { editorFontSize, viewFontSize, uiFontScale, visualizerFontSize } = isDoubleSizeApplied ? fontSizesByMode.double : fontSizesByMode.regular
+  const { editorFontSize, viewFontSize, uiFontScale } = isDoubleSizeApplied ? fontSizesByMode.double : fontSizesByMode.regular
   // What the stylesheets' sizes are multiplied by; uiFontScale is the reader's number.
   const uiScale = uiScaleFactor(uiFontScale)
 
@@ -1833,14 +1824,10 @@ function App() {
   const setEditorFontSize = useCallback((px: number) => setActiveModeFontSize('editorFontSize', px), [setActiveModeFontSize])
   const setViewFontSize = useCallback((px: number) => setActiveModeFontSize('viewFontSize', px), [setActiveModeFontSize])
   const setUiFontScale = useCallback((scale: number) => setActiveModeFontSize('uiFontScale', scale), [setActiveModeFontSize])
-  const visualizerFont = useMemo<VisualizerFont>(
-    () => ({ ...visualizerFontShared, sizePx: visualizerFontSize }),
-    [visualizerFontShared, visualizerFontSize],
+  const visualizerFont = useMemo(
+    () => visualizerFontForMode(visualizerFontSetting, isDoubleSizeApplied),
+    [visualizerFontSetting, isDoubleSizeApplied],
   )
-  const setVisualizerFont = useCallback((font: VisualizerFont) => {
-    setVisualizerFontShared({ style: font.style, boxSize: font.boxSize })
-    setActiveModeFontSize('visualizerFontSize', font.sizePx)
-  }, [setActiveModeFontSize])
   useTypographyWheel(
     {
       edit: { size: editorFontSize, spacing: editorGlyphPaddingPx, height: editorSpacing },
@@ -3180,8 +3167,7 @@ function App() {
       editorSpacing,
       editorGlyphPaddingPx,
       // The regular mode's size is the one stored inside; double size mode's has its own field.
-      visualizerFont: { ...visualizerFontShared, sizePx: fontSizesByMode.regular.visualizerFontSize },
-      doubleSizeVisualizerFontSize: fontSizesByMode.double.visualizerFontSize,
+      visualizerFont: visualizerFontSetting,
       visualizer,
       visualizerPresets: visualizerPresetPreferences,
       uiFontStyle,
@@ -3346,7 +3332,7 @@ function App() {
     boxShadowAlphaPercent,
     editorSpacing,
     editorStyle,
-    visualizerFontShared,
+    visualizerFontSetting,
     visualizer,
     visualizerPresetPreferences,
     exportFolder,
@@ -5057,8 +5043,7 @@ ${markdownHtml}
             setEditorStyle(appState.menu.editorStyle ?? DEFAULT_EDITOR_STYLE)
             setEditorSpacing(resolvePersistedLineHeightMultiplier(appState.menu.editorSpacing, DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER))
             {
-              const { style, boxSize } = sanitizeVisualizerFont(appState.menu.visualizerFont) ?? DEFAULT_VISUALIZER_FONT
-              setVisualizerFontShared({ style, boxSize })
+              setVisualizerFont(sanitizeVisualizerFont(appState.menu.visualizerFont) ?? DEFAULT_VISUALIZER_FONT)
             }
             setVisualizerState({
               base: appState.menu.visualizer ?? DEFAULT_VISUALIZER,
@@ -8731,7 +8716,7 @@ ${markdownHtml}
                         editorSpacing={editorSpacing}
                         setEditorSpacing={setEditorSpacing}
                         scheduleFocusEditorInEditMode={() => getActiveSection()?.scheduleFocusEditorInEditMode()}
-                        visualizerFont={visualizerFont}
+                        visualizerFont={visualizerFontSetting}
                         setVisualizerFont={setVisualizerFont}
                         fontSizeDefaults={DEFAULT_FONT_SIZES_BY_MODE[isDoubleSizeApplied ? 'double' : 'regular']}
                         uiFontStyle={uiFontStyle}

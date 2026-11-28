@@ -20,7 +20,7 @@ import { FontSection } from './FontSection'
 import { VisualizerFontControls } from '@thockdown/visualizer/visualizer/VisualizerFontControls'
 import { OptionsSectionBar } from './OptionsSectionBar'
 import type { OptionsSectionId, PresetSubsectionId } from '../shared/optionsSections'
-import type { VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
+import { DEFAULT_VISUALIZER_FONT, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { OptionsSliderRows } from '@thockdown/interaction/OptionsSliderRows'
 import { readNowPlaying } from '@thockdown/visualizer/sound/nowPlaying'
 import type { EqPoint } from '@thockdown/visualizer/shared/musicEqCurve'
@@ -433,7 +433,7 @@ export interface SidebarOptionsPanelProps {
   visualizerFont: VisualizerFont
   setVisualizerFont: (font: VisualizerFont) => void
   /** The font size sliders' reset values, which differ between size modes. */
-  fontSizeDefaults: { editorFontSize: number; viewFontSize: number; uiFontScale: number; visualizerFontSize: number }
+  fontSizeDefaults: { editorFontSize: number; viewFontSize: number; uiFontScale: number }
   uiFontStyle: UiFontKey
   setUiFontStyle: (key: UiFontKey) => void
   uiFontScale: number
@@ -2244,7 +2244,7 @@ export function SidebarOptionsPanel({
             label="Visualizer presets"
             plural="a visualizer preset"
           />
-          <VisualizerFontControls font={visualizerFont} onChange={setVisualizerFont} defaultSizePx={fontSizeDefaults.visualizerFontSize} />
+          <VisualizerFontControls font={visualizerFont} onChange={setVisualizerFont} defaultSizePx={DEFAULT_VISUALIZER_FONT.sizePx} />
           <VisualizerSceneControls visualizer={visualizer} setVisualizer={setVisualizer} uiMode={uiMode} />
       </AccordionSection>
       </>) : null}

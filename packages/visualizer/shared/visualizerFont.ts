@@ -24,14 +24,21 @@ export const VISUALIZER_FONT_SIZE_PX = { min: 6, max: 24, step: 0.5 } as const
 export const VISUALIZER_BOX_SIZE = { min: 1, max: 3, step: 0.05 } as const
 
 export const DEFAULT_VISUALIZER_STYLE: MonoFontKey = 'kodemono'
-/** The default size in each size mode (double size mode then doubles the page, so 12 there draws at 24); the phone has only the regular one. */
-export const DEFAULT_VISUALIZER_FONT_SIZE_PX = { regular: 18, double: 12 } as const
 export const DEFAULT_VISUALIZER_BOX_SIZE = 1.2
 
 export const DEFAULT_VISUALIZER_FONT: VisualizerFont = {
   style: DEFAULT_VISUALIZER_STYLE,
-  sizePx: DEFAULT_VISUALIZER_FONT_SIZE_PX.regular,
+  sizePx: 18,
   boxSize: DEFAULT_VISUALIZER_BOX_SIZE,
+}
+
+/**
+ * The font the scene draws with in a size mode. The setting is one for both
+ * modes; double size mode doubles the page, so it draws at half the size and
+ * the letters stay as large on screen as in regular mode.
+ */
+export function visualizerFontForMode(font: VisualizerFont, isDoubleSize: boolean): VisualizerFont {
+  return isDoubleSize ? { ...font, sizePx: font.sizePx / 2 } : font
 }
 
 /** A font size on its 0.5px step, inside its range. */

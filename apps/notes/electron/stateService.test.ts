@@ -60,11 +60,10 @@ describe('StateService app-state field round-trip', () => {
 
     await new StateService(dataRoot).saveAppState({
       selectedNoteId: null,
-      menu: { ...menu, visualizerFont: { style: 'vt323', sizePx: 20.5, boxSize: 1.4 }, doubleSizeVisualizerFontSize: 23 },
+      menu: { ...menu, visualizerFont: { style: 'vt323', sizePx: 20.5, boxSize: 1.4 } },
     })
     const loaded = await new StateService(dataRoot).loadAppState()
     expect(loaded.menu?.visualizerFont).toEqual({ style: 'vt323', sizePx: 20.5, boxSize: 1.4 })
-    expect(loaded.menu?.doubleSizeVisualizerFontSize).toBe(23)
   })
 
   it('persists the spell checker\'s active dictionaries and spell-check colour across a restart', async () => {
