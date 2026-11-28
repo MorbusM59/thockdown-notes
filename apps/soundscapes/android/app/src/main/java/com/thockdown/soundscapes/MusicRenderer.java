@@ -495,7 +495,7 @@ final class MusicRenderer {
      * held (seconds with the deep buffer).
      */
     static long reportedFrame(OutputLane output) {
-        return output.playheadFrame();
+        return output.heardFrame();
     }
 
     /** Write a step's chunks into the output and report what is heard at `heard`, the frame the step's `at` describes (reportedFrame); returns how much input is held ahead. */
