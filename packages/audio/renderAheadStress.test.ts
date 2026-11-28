@@ -68,6 +68,10 @@ function run(seed: number): void {
     } else if (roll < 0.85) {
       voice.input.ended = true;
       engine.poke();
+    } else if (roll < 0.92) {
+      // The output's depth changes (AudioOutput: a deep background buffer, collapsed on a press):
+      // a narrow margin after a wide one must still find its checkpoint.
+      engine.setMargin(rand() < 0.5 ? MARGIN_SEC : 4);
     }
     // The renderer's step: render what the lead allows.
     for (let ran = 0; tasks.length > 0 && ran < 50; ran += 1) tasks.shift()!();
