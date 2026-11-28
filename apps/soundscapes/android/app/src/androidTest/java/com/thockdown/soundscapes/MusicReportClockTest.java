@@ -4,18 +4,22 @@ import static org.junit.Assert.assertTrue;
 
 import android.media.AudioManager;
 import android.media.AudioTrack;
-import android.util.Log;
+import android.os.Bundle;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
  * The frame the music reports its position with is the frame the device is
  * playing NOW, through a REAL AudioTrack: the page times a reported position
- * by that frame's heard time (OutputLane.heardNanos), so the frame must be
- * heard within a few blocks of the moment it is reported, at a start, after
- * a seek (a splice written over what is queued), with the deep buffer, after
- * a press collapses it (a resync) and while it drains on a return.
+ * by that frame's heard time (OutputLane.heardNanos). Heard time minus the
+ * moment of the report is then the route's own presentation latency, which
+ * the platform's timestamp measures and the page rightly waits out: a
+ * CONSTANT. What would put the visuals off the sound is that difference
+ * MOVING, so the test asserts its spread over a start, a seek (a splice
+ * written over what is queued), the deep buffer, a press collapsing it (a
+ * resync) and the drain on a return stays within TOLERANCE_NANOS.
  *
  * Reporting the playhead instead (what was last handed to the device) put
  * the visuals ahead of the sound by whatever the device buffer held: seconds
@@ -24,10 +28,12 @@ import org.junit.runner.RunWith;
  */
 @RunWith(AndroidJUnit4.class)
 public class MusicReportClockTest {
-    private static final String LOG = "MusicReportClockTest";
+    /** How far the reported frame's latency may move: below the 20 to 40 ms at which an audio-visual offset is noticed, about one writer block (1024 frames) plus the timestamp's granularity. */
+    private static final long TOLERANCE_NANOS = 30_000_000L;
 
-    /** How far from now the reported frame may be heard: the route's own latency and a few writer blocks, far below a deep buffer's seconds. */
-    private static final long TOLERANCE_NANOS = 250_000_000L;
+    private long least = Long.MAX_VALUE;
+    private long most = Long.MIN_VALUE;
+    private final StringBuilder phases = new StringBuilder();
 
     /** How far ahead of the playhead the feeder keeps the lane, below the lane's 12 s ring and above the 4 s deep buffer. */
     private static final double FEED_AHEAD_SEC = 8;
@@ -61,6 +67,12 @@ public class MusicReportClockTest {
             Thread.sleep(16000);
             AudioOutput.setBackground(false);
             check(lane, "drain", 3000);
+
+            Bundle status = new Bundle();
+            status.putString("stream", "latency " + (least / 1_000_000.0) + " to " + (most / 1_000_000.0) + " ms;" + phases + "\n");
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, status);
+            assertTrue("the reported frame's latency moved from " + (least / 1_000_000.0) + " to " + (most / 1_000_000.0) + " ms;" + phases,
+                most - least <= TOLERANCE_NANOS);
         } finally {
             feeding = false;
             feeder.join(2000);
@@ -69,20 +81,22 @@ public class MusicReportClockTest {
         }
     }
 
-    /** Sample the reported frame's heard time against now for `millis`, every 50 ms. */
-    private static void check(OutputLane lane, String phase, long millis) throws InterruptedException {
+    /** Sample the reported frame's heard time minus now for `millis`, every 20 ms, after the phase's first half second (the change itself settling). */
+    private void check(OutputLane lane, String phase, long millis) throws InterruptedException {
+        Thread.sleep(500);
         long until = System.nanoTime() + millis * 1_000_000L;
-        long worst = 0;
+        long low = Long.MAX_VALUE;
+        long high = Long.MIN_VALUE;
         while (System.nanoTime() < until) {
             long frame = MusicRenderer.reportedFrame(lane);
             long off = lane.heardNanos(frame) - System.nanoTime();
-            if (Math.abs(off) > Math.abs(worst)) worst = off;
-            Thread.sleep(50);
+            low = Math.min(low, off);
+            high = Math.max(high, off);
+            Thread.sleep(20);
         }
-        Log.i(LOG, phase + ": worst " + (worst / 1_000_000L) + " ms, playhead ahead of the reported frame by "
-            + (lane.playheadFrame() - MusicRenderer.reportedFrame(lane)) + " frames");
-        assertTrue(phase + ": the reported frame is heard " + (worst / 1_000_000L) + " ms from now",
-            Math.abs(worst) <= TOLERANCE_NANOS);
+        least = Math.min(least, low);
+        most = Math.max(most, high);
+        phases.append(' ').append(phase).append(' ').append(low / 1_000_000.0).append('/').append(high / 1_000_000.0);
     }
 
     /** Keep the lane FEED_AHEAD_SEC of a quiet tone ahead of its playhead, as the renderer keeps it ahead. */
