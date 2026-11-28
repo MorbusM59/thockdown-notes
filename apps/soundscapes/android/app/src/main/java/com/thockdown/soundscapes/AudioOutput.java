@@ -73,6 +73,12 @@ final class AudioOutput {
      * where it was heard.
      */
     private boolean halted = false;
+    /** What every block is scaled by: 1, or DUCK_GAIN while another app speaks briefly (AudioConnection's audio focus). */
+    private volatile float duckTarget = 1f;
+    private float duckGain = 1f;
+    static final float DUCK_GAIN = 0.2f;
+    /** Told (on the main thread) whenever the output starts to be heard, so audio focus is asked for then. */
+    static volatile Runnable onHeard = null;
     /** Whether the halt has already flushed the track (done once, by the writer). */
     private boolean haltFlushed = false;
 
@@ -148,6 +154,7 @@ final class AudioOutput {
         track.play();
         writer = new Thread(this::run, "AudioOutput");
         writer.start();
+        announceHeard();
     }
 
     private static AudioAttributes attributes() {
@@ -264,6 +271,20 @@ final class AudioOutput {
             output.haltFlushed = false;
             output.notifyAll();
         }
+    }
+
+    /** Lower everything heard (another app's short sound) or bring it back. */
+    static void setDucked(boolean ducked) {
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            output = shared;
+        }
+        if (output != null) output.duckTarget = ducked ? DUCK_GAIN : 1f;
+    }
+
+    private static void announceHeard() {
+        Runnable hook = onHeard;
+        if (hook != null) new android.os.Handler(android.os.Looper.getMainLooper()).post(hook);
     }
 
     /** Play through `device`, or (null) wherever the system routes media; applied to the present track at once. */
@@ -592,6 +613,7 @@ final class AudioOutput {
                     if (!running) return;
                     playedNanos = System.nanoTime();
                     track.play();
+                    announceHeard();
                 }
                 if (retired != null && System.nanoTime() >= retiredUntilNanos) releaseRetired();
                 if (interactiveUntilNanos != 0 && System.nanoTime() >= interactiveUntilNanos) {
@@ -614,6 +636,17 @@ final class AudioOutput {
                     if (solo != null && lane != solo) continue;
                     if (lane.mixInto(mix, BLOCK_FRAMES)) due.add(lane);
                 }
+            }
+            float target = duckTarget;
+            if (target != 1f || duckGain != 1f) {
+                // Glide to the duck's level over about a block, so the change has no click.
+                float step = (target - duckGain) / BLOCK_FRAMES;
+                for (int frame = 0; frame < BLOCK_FRAMES; frame += 1) {
+                    duckGain += step;
+                    mix[frame * 2] *= duckGain;
+                    mix[frame * 2 + 1] *= duckGain;
+                }
+                duckGain = target;
             }
             limiter.process(mix, BLOCK_FRAMES);
             for (int index = 0; index < block.length; index += 1) {

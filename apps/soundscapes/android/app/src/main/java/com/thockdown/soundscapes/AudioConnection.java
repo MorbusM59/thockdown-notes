@@ -34,6 +34,15 @@ import java.util.List;
  * Bluetooth device reconnected), which resumes on it; or the listener's
  * `resume` (the play button, the lock screen's play), which resumes on the
  * output they picked, or with none picked on whatever the system routes to.
+ * AUDIO FOCUS (Joe, 2026-11-28: halt, but duck short sounds) is the second
+ * reason to halt, through the same state: focus is asked for whenever the
+ * output starts to be heard (AudioOutput.onHeard). A call or another app's
+ * transient focus HALTS until focus comes back (AUDIOFOCUS_GAIN), which
+ * resumes; a short sound that allows ducking (navigation, a notification)
+ * only lowers everything heard to AudioOutput.DUCK_GAIN until it is over;
+ * a permanent loss (another media app playing) halts until the listener
+ * presses play, which asks for focus again. The play button shows halted
+ * for either reason alike: `isConnected` is false while halted.
  * Everything halted carries on from where it was heard; whatever the
  * listener changed meanwhile (a pause, a schedule switched off) stands,
  * because it changed the states and the halt never did.
@@ -90,7 +99,12 @@ final class AudioConnection {
 
     private final AudioManager audio;
     private final List<Listener> listeners = new ArrayList<>();
+    /** The output device went away and nothing has replaced it. */
     private boolean connected = true;
+    /** Another app holds audio focus. */
+    private boolean focusLost = false;
+    private final android.media.AudioFocusRequest focusRequest;
+    private boolean focusHeld = false;
     /** The output the listener picked (its device id), or -1 for the system's choice. */
     private int picked = -1;
     private List<Output> outputs = new ArrayList<>();
@@ -103,6 +117,16 @@ final class AudioConnection {
     private AudioConnection(Context context) {
         audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         outputs = listOutputs();
+        focusRequest = new android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(new android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build())
+            // The duck is ours (a share of the level), not the system's.
+            .setWillPauseWhenDucked(true)
+            .setOnAudioFocusChangeListener(this::focusChanged, MAIN)
+            .build();
+        AudioOutput.onHeard = this::requestFocus;
         audio.registerAudioDeviceCallback(new AudioDeviceCallback() {
             @Override
             public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
@@ -130,8 +154,61 @@ final class AudioConnection {
         listeners.remove(listener);
     }
 
+    /** Whether output may be heard: the device is connected and no other app holds focus. */
     synchronized boolean isConnected() {
-        return connected;
+        return connected && !focusLost;
+    }
+
+    /** Ask for focus (main thread). Refused (a call is up) is a focus loss. */
+    private void requestFocus() {
+        synchronized (this) {
+            if (focusHeld) return;
+        }
+        int result = audio.requestAudioFocus(focusRequest);
+        boolean granted = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+        Log.i(LOG, "focus: requested, " + (granted ? "granted" : "refused"));
+        synchronized (this) {
+            focusHeld = granted;
+            if (granted) return;
+            focusLost = true;
+        }
+        AudioOutput.setHalted(true);
+        notifyChanged();
+    }
+
+    private void focusChanged(int change) {
+        Log.i(LOG, "focus: change " + change);
+        boolean halt;
+        switch (change) {
+            case AudioManager.AUDIOFOCUS_GAIN:
+                AudioOutput.setDucked(false);
+                synchronized (this) {
+                    focusHeld = true;
+                    focusLost = false;
+                    halt = !connected;
+                }
+                AudioOutput.setHalted(halt);
+                break;
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+                AudioOutput.setDucked(true);
+                return;
+            case AudioManager.AUDIOFOCUS_LOSS:
+                // Another media app: no GAIN will follow, so play asks again.
+                synchronized (this) {
+                    focusHeld = false;
+                }
+                // fall through
+            case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+                AudioOutput.setDucked(false);
+                synchronized (this) {
+                    focusLost = true;
+                }
+                AudioOutput.setHalted(true);
+                break;
+            default:
+                return;
+        }
+        notifyChanged();
     }
 
     synchronized List<Output> outputs() {
@@ -169,9 +246,15 @@ final class AudioConnection {
                 }
             }
             connected = true;
+            focusLost = false;
+        }
+        AudioOutput.setPreferredDevice(device);
+        requestFocus();
+        synchronized (this) {
+            // Refused (a call is up): requestFocus has already halted and told.
+            if (focusLost) return;
         }
         Log.i(LOG, "connection: resumed by the listener on " + (device == null ? "the system's route" : device.getProductName()));
-        AudioOutput.setPreferredDevice(device);
         AudioOutput.setHalted(false);
         notifyChanged();
     }
@@ -208,6 +291,8 @@ final class AudioConnection {
                 connected = true;
                 picked = -1;
             }
+            // Still halted while another app holds focus.
+            if (resume && focusLost) resume = false;
         }
         if (resume) {
             Log.i(LOG, "connection: an output was connected, resuming");
