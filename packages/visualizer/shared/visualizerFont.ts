@@ -34,13 +34,13 @@ export const DEFAULT_VISUALIZER_FONT: VisualizerFont = {
 
 /**
  * The font the scene draws with in double size mode, where the page itself is
- * drawn at twice the size. The BOXES double with the page, and the TEXT keeps
- * its regular on-screen size: the font is halved and the box-to-font ratio
- * doubled, so the box in CSS px is the setting's own. The phone, whose page is
- * not doubled, applies the same rule directly (VisualizerPage.tsx).
+ * drawn at twice the size. The TEXT keeps its regular on-screen size and only
+ * the box's SPACING (box minus font) doubles: the font is halved, and the ratio
+ * becomes 1 + 2 x (boxSize - 1), so a box grows only by its spacing. The phone,
+ * whose page is not doubled, doubles this font's box itself (VisualizerPage.tsx).
  */
 export function visualizerFontForMode(font: VisualizerFont, isDoubleSize: boolean): VisualizerFont {
-  return isDoubleSize ? { ...font, sizePx: font.sizePx / 2, boxSize: font.boxSize * 2 } : font
+  return isDoubleSize ? { ...font, sizePx: font.sizePx / 2, boxSize: 2 * font.boxSize - 1 } : font
 }
 
 /** A font size on its 0.5px step, inside its range. */

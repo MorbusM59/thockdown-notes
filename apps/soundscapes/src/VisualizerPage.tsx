@@ -18,7 +18,7 @@ import type { BeatSettings } from '@thockdown/visualizer/shared/beatSettings'
 import type { VisualizerColors, VisualizerSettings } from '@thockdown/look/visualizer'
 import { setDisplayScale, setVisualizerOpen } from './display'
 import { measureVisualizerFrameRate } from './visualizerFrameRate'
-import { visualizerBoxPx, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
+import { visualizerBoxPx, visualizerFontForMode, type VisualizerFont } from '@thockdown/visualizer/shared/visualizerFont'
 import { monoFontFamily } from '@thockdown/visualizer/visualizer/visualizerFonts'
 import { nativeSoundscape } from './backgroundAudioHost'
 import { holdFrameWhileTyping } from './keyboardSteadyFrame'
@@ -75,9 +75,9 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
     <div ref={pageRef} className="visualizer-page">
       <div className="editor-stage is-visualizer">
       <VisualizerScene
-        boxPx={visualizerBoxPx(font) * (double ? 2 : 1)}
+        boxPx={double ? 2 * visualizerBoxPx(visualizerFontForMode(font, true)) : visualizerBoxPx(font)}
         fontFamily={monoFontFamily(font.style)}
-        fontSizePx={font.sizePx /* double size doubles the boxes, the text keeps its size (visualizerFontForMode) */}
+        fontSizePx={font.sizePx /* double size keeps the text size and doubles only the box spacing (visualizerFontForMode) */}
         solidMaxPixelRatio={1.5}
         pixelScale={1}
         sceneSeed="soundscapes"
