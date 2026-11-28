@@ -279,7 +279,8 @@ final class OutputLane {
         synchronized (output) {
             if (pause == paused) return;
             paused = pause;
-            if (pause) output.pauseHeardNow();
+            // Either way it must be heard now, not after what the device holds.
+            output.heardNow();
             glideTo(pause ? 0f : listenerVolume, PAUSE_FADE_SEC);
             output.notifyAll();
         }

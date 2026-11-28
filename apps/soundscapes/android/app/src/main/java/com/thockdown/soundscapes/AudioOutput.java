@@ -42,7 +42,7 @@ import java.util.List;
  * periods without the processor. A deep buffer commits more audio than a
  * splice margin used to leave, so `committedSec` follows the depth (the
  * renderers hand it to their sandboxes with every step), and anything that
- * must be heard at once (a pause, the return to the foreground) RESYNCS:
+ * must be heard at once (a pause or resume, the return to the foreground) RESYNCS:
  * the track is paused and flushed, and every lane is rewound to the frame
  * that was actually heard, so nothing is skipped and nothing waits behind
  * a second of audio already handed over.
@@ -194,8 +194,14 @@ final class AudioOutput {
         }
     }
 
-    /** A lane is pausing: while the buffer is deep, what it holds is dropped so the pause is heard now. */
-    synchronized void pauseHeardNow() {
+    /**
+     * A lane is pausing or resuming: while the buffer is deep, what it holds
+     * is dropped so the change is heard now. A resume needs it as much as a
+     * pause: while one lane is paused, another that is not (a soundscape
+     * lane with nothing started, for one) keeps the writer filling the
+     * device with seconds of silence, which a resume would wait behind.
+     */
+    synchronized void heardNow() {
         if (depthFrames > shallowFrames) {
             resyncWanted = true;
             notifyAll();
