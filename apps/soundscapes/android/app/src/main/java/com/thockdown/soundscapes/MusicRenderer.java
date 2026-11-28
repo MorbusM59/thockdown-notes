@@ -127,6 +127,7 @@ final class MusicRenderer {
         post(() -> {
             isolate.evaluateJavaScriptAsync("musicCatalog(" + JSONObject.quote(catalogJson) + ")").get();
             queued();
+            followPool();
         });
     }
 
@@ -138,7 +139,32 @@ final class MusicRenderer {
         post(() -> {
             listener.onCatalogEdited(isolate.evaluateJavaScriptAsync("musicEditCatalog(" + JSONObject.quote(editJson) + ")").get());
             queued();
+            followPool();
         });
+    }
+
+    /**
+     * THE POOL IS WHAT PLAYS, at once: after the pool changed (a set, the
+     * filter, a song added or removed), while the music plays, a song the
+     * pool no longer holds is left for the pool's next pick (none left:
+     * the music stops, as at the end of a stream), and a stream that ran
+     * out for want of songs starts again once the pool holds one. Paused,
+     * nothing moves: play resumes the song paused, or picks.
+     */
+    private void followPool() throws Exception {
+        if (stage == null || output.isPaused()) return;
+        if (decoder == null) {
+            if (!"true".equals(isolate.evaluateJavaScriptAsync("musicPoolHolds(-1)").get())) return;
+            settle();
+            configure(true);
+            startSong(next(heardId), 0);
+            return;
+        }
+        Integer playing = current();
+        if (playing == null || "true".equals(isolate.evaluateJavaScriptAsync("musicPoolHolds(" + playing + ")").get())) return;
+        settle();
+        configure(true);
+        stepTo(next(playing));
     }
 
     /**

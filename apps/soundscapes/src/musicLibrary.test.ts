@@ -76,6 +76,7 @@ describe('the Android music library', () => {
   it('adds a folder to a set, sharing songs already known, and deletes a set with its orphans', () => {
     const created = createSet(catalog);
     const slot = created.slot;
+    expect(created.catalog.activeSetIds).toEqual([...catalog.activeSetIds, slot]);
     const scanned = addScanToSet(created.catalog, slot, 'tree://a', ['content://music/3', 'content://new'], [
       { filePath: 'content://new', title: 'New', artist: '', album: '', durationSec: 1 },
     ]);

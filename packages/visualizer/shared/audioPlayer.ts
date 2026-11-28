@@ -340,6 +340,18 @@ export function poolFilterPassesAll(filter: MusicPoolFilter): boolean {
   return !filter.enabled || !filter.query.trim();
 }
 
+/**
+ * Whether a song is in the pool `query` describes: in one of its sets and
+ * passing its filter. The one statement of pool membership, read by the
+ * phone's pool and by both players' rule that the pool is what plays
+ * (a song that leaves it while playing is left for the next pick).
+ */
+export function createPoolMatcher(query: MusicPoolQuery): (song: Pick<MusicSongEntry, 'setIds' | 'title' | 'artist' | 'album' | 'filePath'>) => boolean {
+  const slots = new Set(query.slots);
+  const passes = createPoolFilterMatcher(query.filter);
+  return (song) => song.setIds.some((id) => slots.has(id)) && passes(song);
+}
+
 export function samePoolFilter(a: MusicPoolFilter, b: MusicPoolFilter): boolean {
   return a.query === b.query && a.enabled === b.enabled;
 }

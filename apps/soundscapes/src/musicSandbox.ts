@@ -36,6 +36,8 @@
  * - musicJump(currentId, direction): NEXT from `currentId` (1), or
  *   PREVIOUS (-1): the song before it in the history of what this renderer
  *   played (musicPlayHistory.ts, the desktop's), null when there is none;
+ * - musicQueueJson(limit), musicPoolHolds(songId), musicEditCatalog(json):
+ *   the queue, whether the pool holds a song, and the car's edits (below);
  * - musicRotationJson(): the rotation, for the service to store after a
  *   musicNext, musicJump or musicChoose;
  * - musicStep(playedFrame, maxChunks, spliceMarginSec?, heardFrame?): report
@@ -195,6 +197,15 @@ scope.musicQueueJson = (limit: number): string =>
     title: songTitleText(song),
     artist: songArtistText(song),
   })));
+
+/**
+ * Whether the pool holds the song `songId`, or any song at all (-1):
+ * MusicRenderer.java's followPool, which plays what the pool holds.
+ */
+scope.musicPoolHolds = (songId: number): string => {
+  const pool = poolOf(poolCatalog(), rotation);
+  return String(songId < 0 ? pool.length > 0 : pool.some((song) => song.id === songId));
+};
 
 /**
  * A change to the listener's choice made away from the page (Android

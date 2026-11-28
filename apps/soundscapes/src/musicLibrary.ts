@@ -31,11 +31,10 @@ import {
   type QueueMove,
 } from '@thockdown/visualizer/shared/musicPool';
 import {
-  createPoolFilterMatcher,
+  createPoolMatcher,
   defaultMusicSetName,
   EMPTY_POOL_FILTER,
   sanitizePoolFilter,
-  poolFilterPassesAll,
   MAX_FACTORY_PLAYLIST_SLOT,
   type MusicPoolFilter,
   type MusicSet,
@@ -128,7 +127,8 @@ export function sanitizeCatalog(input: unknown): MusicCatalog {
 export function createSet(catalog: MusicCatalog): { catalog: MusicCatalog; slot: PlaylistSlot } {
   const slot = Math.max(MAX_FACTORY_PLAYLIST_SLOT, ...catalog.sets.map((set) => set.slot)) + 1;
   const set: MusicSet = { slot, name: defaultMusicSetName(catalog.sets), icon: null };
-  return { catalog: { ...catalog, sets: [...catalog.sets, set] }, slot };
+  // A new set is active at once: whatever is added to it plays (the desktop activates a set as it fills).
+  return { catalog: { ...catalog, sets: [...catalog.sets, set], activeSetIds: [...catalog.activeSetIds, slot] }, slot };
 }
 
 /** A set renamed; refused (unchanged) when another set has the name or it is blank. */
@@ -233,9 +233,7 @@ export function libraryOf(catalog: MusicCatalog, rotation: MusicRotation): Music
 
 /** The pool in queue order: the active sets' songs that pass the filter, as the play mode orders them. */
 export function poolOf(catalog: MusicCatalog, rotation: MusicRotation): MusicSongEntry[] {
-  const active = new Set(catalog.activeSetIds);
-  const matches = poolFilterPassesAll(catalog.filter) ? () => true : createPoolFilterMatcher(catalog.filter);
-  const pool = libraryOf(catalog, rotation).filter((song) => song.setIds.some((id) => active.has(id)) && matches(song));
+  const pool = libraryOf(catalog, rotation).filter(createPoolMatcher({ slots: catalog.activeSetIds, filter: catalog.filter }));
   return queueOrder(pool, catalog.playMode);
 }
 

@@ -40,6 +40,7 @@ function sandbox() {
     musicChoose(songId: number, currentId: number): string;
     musicQueueJson(limit: number): string;
     musicEditCatalog(json: string): string;
+    musicPoolHolds(songId: number): string;
   };
   api.musicInit(JSON.stringify({ sampleRate: OUTPUT_RATE, spliceMarginSec: 0.15}));
   return { ...api, step: (played: number, max = 1000) => JSON.parse(api.musicStep(played, max)) as Step };
@@ -135,6 +136,7 @@ describe('the car\'s view of the library', () => {
     expect(filtered.filter).toEqual({ query: 'Song 3', enabled: true });
     expect(filtered.recentFilters).toEqual(['Song 3']);
     expect(queued()).toEqual([3]);
+    expect([music.musicPoolHolds(3), music.musicPoolHolds(1), music.musicPoolHolds(-1)]).toEqual(['true', 'false', 'true']);
     expect(JSON.parse(music.musicEditCatalog(JSON.stringify({ filter: '' }))).filter.enabled).toBe(false);
     // The last set playing stays on: a toggle never empties the pool.
     music.musicEditCatalog(JSON.stringify({ set: 2 }));
