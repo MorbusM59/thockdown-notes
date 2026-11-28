@@ -164,6 +164,7 @@ public class BackgroundAudioPlugin extends Plugin {
         if (!granted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Intent settings = new Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                 Uri.parse("package:" + getContext().getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            SoundscapeSchedule.wantOnGrant(getContext());
             try {
                 getContext().startActivity(settings);
             } catch (android.content.ActivityNotFoundException missing) {
