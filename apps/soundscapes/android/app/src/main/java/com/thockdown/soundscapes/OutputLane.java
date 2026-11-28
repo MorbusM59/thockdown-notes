@@ -53,6 +53,15 @@ final class OutputLane {
      * and the CPU (and the sandbox round trips) can sleep in between.
      */
     private static final double IDLE_REFILL_BELOW_SEC = 4;
+    /**
+     * Beyond IDLE_REFILL_BELOW_SEC, what the device takes in one burst (its
+     * depth, AudioOutput's `committedSec`): a deep device buffer refilled
+     * from a lane at the bottom of its threshold would take the lane dry
+     * mid-burst and play the gap as silence, heard as crackling.
+     */
+    private long refillBelowFrames() {
+        return refillBelowFrames + Math.round(output.committedSec() * sampleRate);
+    }
     /** Renderers encode samples at 1/HEADROOM of their value. */
     static final float HEADROOM = 2f;
     /** Below this gain a paused lane is silent enough to hold. */
@@ -346,7 +355,7 @@ final class OutputLane {
         anchor = playhead - output.mixedFrames;
         sinceReport += frames;
         if (sinceReport < reportFrames) return false;
-        if (bursts && !responsive && (burstsInForeground || AudioOutput.inBackground()) && end - playhead >= refillBelowFrames) return false;
+        if (bursts && !responsive && (burstsInForeground || AudioOutput.inBackground()) && end - playhead >= refillBelowFrames()) return false;
         sinceReport = 0;
         return true;
     }
