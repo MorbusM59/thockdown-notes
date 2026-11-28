@@ -146,6 +146,10 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             // Pause is the only way to silence (SoundscapeSession): a stop from a media controller is one.
             @Override public void onStop() { pause(); }
             @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { playFrom(mediaId); }
+            @Override public void onSeekTo(long positionMs) {
+                AudioOutput.interact();
+                music.seek(positionMs / 1000.0);
+            }
             @Override public void onSkipToQueueItem(long id) {
                 AudioOutput.interact();
                 music.choose((int) id);
@@ -437,11 +441,25 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         String status = withMusic
             ? (playing ? "Playing" : "Paused") + (soundscape.isActive() ? " with " + soundscape.title() : "")
             : statusText(playing);
-        session.setMetadata(new MediaMetadata.Builder()
+        MediaMetadata.Builder metadata = new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, title)
-            .putString(MediaMetadata.METADATA_KEY_ARTIST, status)
-            .putBitmap(MediaMetadata.METADATA_KEY_ART, artwork())
-            .build());
+            .putBitmap(MediaMetadata.METADATA_KEY_ART, artwork());
+        org.json.JSONObject song = withMusic ? music.heardEntry() : null;
+        if (song != null) {
+            // The song as its file tags it: artist (with the soundscape heard beside it), album and length,
+            // so the lock screen and a car show its position. The status line stays the notification's.
+            String artist = song.optString("artist", "").trim();
+            String beside = soundscape.isActive() ? soundscape.title() : "";
+            String line = artist.isEmpty() ? status : beside.isEmpty() ? artist : artist + "  |  " + beside;
+            metadata.putString(MediaMetadata.METADATA_KEY_ARTIST, line);
+            String album = song.optString("album", "").trim();
+            if (!album.isEmpty()) metadata.putString(MediaMetadata.METADATA_KEY_ALBUM, album);
+            double durationSec = song.optDouble("durationSec", 0);
+            if (durationSec > 0) metadata.putLong(MediaMetadata.METADATA_KEY_DURATION, Math.round(durationSec * 1000));
+        } else {
+            metadata.putString(MediaMetadata.METADATA_KEY_ARTIST, status);
+        }
+        session.setMetadata(metadata.build());
         Integer heardSong = withMusic ? music.heardSong() : null;
         showQueue(withMusic ? music.queue() : "[]");
         PlaybackState.Builder state = new PlaybackState.Builder();
@@ -452,10 +470,11 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
                 | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS
                 | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID | PlaybackState.ACTION_PLAY_FROM_SEARCH
-                | (withMusic ? PlaybackState.ACTION_SKIP_TO_QUEUE_ITEM : 0))
+                | (withMusic ? PlaybackState.ACTION_SKIP_TO_QUEUE_ITEM | PlaybackState.ACTION_SEEK_TO : 0))
             .setActiveQueueItemId(heardSong == null ? MediaSession.QueueItem.UNKNOWN_ID : heardSong)
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-                PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? 1f : 0f)
+                song != null ? Math.round(music.heardPosition() * 1000) : PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                playing ? 1f : 0f, android.os.SystemClock.elapsedRealtime())
             .build());
         startForegroundWith(buildNotification(title, status, playing));
         holdWakeLock(playing);
