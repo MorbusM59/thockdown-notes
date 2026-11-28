@@ -207,7 +207,8 @@ final class AudioOutput {
         synchronized (output) {
             long now = System.nanoTime();
             output.interactiveUntilNanos = now + (long) (INTERACTIVE_HOLD_SEC * 1e9);
-            if (!output.deep() && !output.resyncWanted) return;
+            // Nothing to collapse: shallow already, and not draining a deep buffer (drain).
+            if (!output.deep() && !output.offloaded && output.depthFrames <= output.shallowFrames && !output.resyncWanted) return;
             Log.i(LOG, "interact: collapsing depth " + output.depthFrames);
             output.wantedFrames = output.shallowFrames;
             output.resyncWanted = true;
@@ -243,8 +244,14 @@ final class AudioOutput {
             if (inBackground && System.nanoTime() < output.interactiveUntilNanos) return;
             output.wantedFrames = inBackground ? Integer.MAX_VALUE : output.shallowFrames;
             // Deepening needs nothing undone unless the track is to become
-            // offloaded; a return must be heard at once.
-            if (!inBackground || output.offloadSupported) output.resyncWanted = true;
+            // offloaded. A RETURN is not a resync either: flushing the track
+            // stops the sound for as long as a restarted track takes to be
+            // heard, an audible hiccup on every return to the app. The deep
+            // buffer DRAINS instead (the writer holds off until it is down to
+            // the shallow depth, `drain`), which plays on without a seam; a
+            // press in the meantime collapses it at once (interact), where
+            // the change it makes covers the seam.
+            // Going into or out of offload is a handover to a new track (drain), not a flush.
             output.notifyAll();
         }
     }
@@ -292,6 +299,67 @@ final class AudioOutput {
         track.play();
         // A press waiting for the collapse (interact) goes on.
         notifyAll();
+    }
+
+    /** A track playing out what it still held after the output left offload (`drain`), released at `retiredUntilNanos`. */
+    private AudioTrack retired = null;
+    private long retiredUntilNanos = 0;
+    /** How little an offloaded track may hold when it is handed over to a PCM one: about what a new track takes to be heard. */
+    private static final int HANDOVER_FRAMES = BLOCK_FRAMES * 2;
+
+    /**
+     * A change of depth without a seam (see setBackground): shallow wanted
+     * and deep held, the device plays the deep buffer down rather than it
+     * being flushed; a change into or out of offload hands over to a new
+     * track once the old one is nearly played out. Returns false while it is
+     * still above the shallow depth (having waited for it to play down), true
+     * once the writer may go on: a PCM track's buffer is then set shallow, and
+     * an offloaded track, which cannot be made shallow, is handed over to a
+     * new PCM track when it holds only HANDOVER_FRAMES, which it plays out
+     * (stop() plays a streaming track's remaining data) while the new one
+     * starts. Called by the writer with this locked.
+     */
+    private boolean needsHandover() {
+        return offloaded != (deep() && offloadSupported);
+    }
+
+    private boolean drain() {
+        long queued = queuedFrames();
+        boolean handover = needsHandover();
+        long floor = handover ? HANDOVER_FRAMES : shallowFrames;
+        if (queued > floor) {
+            try {
+                wait(Math.max(1, (queued - floor) * 1000 / sampleRate));
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+            return false;
+        }
+        if (handover) {
+            Log.i(LOG, "drained: handing over to a new track (offloaded now " + offloaded + ") with " + queued + " frames left");
+            track.stop();
+            releaseRetired();
+            retired = track;
+            retiredUntilNanos = System.nanoTime() + 1_000_000_000L;
+            track = buildTrack();
+            trackBase = mixedFrames;
+            playedNanos = System.nanoTime();
+            track.play();
+        } else {
+            depthFrames = track.setBufferSizeInFrames(shallowFrames);
+            Log.i(LOG, "drained: depth " + depthFrames);
+        }
+        return true;
+    }
+
+    private void releaseRetired() {
+        if (retired == null) return;
+        try {
+            retired.release();
+        } catch (RuntimeException ignored) {
+            // Already released.
+        }
+        retired = null;
     }
 
     /** Frames the device buffer (at its present depth) and one writer block hold beyond a playhead: the least a splice must leave. */
@@ -366,6 +434,9 @@ final class AudioOutput {
         }
         track.stop();
         track.release();
+        synchronized (this) {
+            releaseRetired();
+        }
     }
 
     /**
@@ -458,16 +529,18 @@ final class AudioOutput {
                     playedNanos = System.nanoTime();
                     track.play();
                 }
+                if (retired != null && System.nanoTime() >= retiredUntilNanos) releaseRetired();
                 if (interactiveUntilNanos != 0 && System.nanoTime() >= interactiveUntilNanos) {
                     // A press's hold has passed: in the background the buffer deepens again.
                     interactiveUntilNanos = 0;
                     if (background && !deep()) {
                         wantedFrames = Integer.MAX_VALUE;
-                        if (offloadSupported) resyncWanted = true;
                     }
                 }
                 if (resyncWanted) {
                     resync();
+                } else if (needsHandover() || (!deep() && depthFrames > shallowFrames)) {
+                    if (!drain()) continue;
                 } else if (!offloaded && wantedFrames > depthFrames) {
                     depthFrames = track.setBufferSizeInFrames(wantedFrames);
                 }

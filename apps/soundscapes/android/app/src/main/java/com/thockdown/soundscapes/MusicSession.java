@@ -58,6 +58,8 @@ final class MusicSession {
     /** musicLibrary.ts's EMPTY_CATALOG. */
     private static final String EMPTY_CATALOG = "{\"songs\":[],\"activeSetIds\":[],\"filter\":{\"query\":\"\"}}";
     private static final double VOLUME_TIME_CONSTANT_SEC = 0.05;
+    /** A report this far from where the last one ran on to is a jump (a seek), shown on the lock screen at once. */
+    private static final double SEEK_NOTICED_SEC = 1.5;
     /** How quickly an undone timer fade returns to full. */
     private static final double TIMER_RESTORE_FADE_SEC = 0.5;
 
@@ -399,21 +401,34 @@ final class MusicSession {
 
     /** The song heard, for the notification: its title, else its file's name; "Music" with none. */
     synchronized String title() {
-        if (heardId == null) return "Music";
+        org.json.JSONObject song = heardEntry();
+        if (song == null) return "Music";
+        String title = song.optString("title", "");
+        if (!title.isEmpty()) return title;
+        String path = android.net.Uri.decode(song.optString("filePath", ""));
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+
+    /** The heard song's catalog entry (musicLibrary.ts's CatalogSong: title, artist, album, durationSec), or null. */
+    synchronized org.json.JSONObject heardEntry() {
+        if (heardId == null) return null;
         try {
             org.json.JSONArray songs = new org.json.JSONObject(catalog()).getJSONArray("songs");
             for (int index = 0; index < songs.length(); index += 1) {
                 org.json.JSONObject song = songs.getJSONObject(index);
-                if (song.getInt("id") != heardId) continue;
-                String title = song.optString("title", "");
-                if (!title.isEmpty()) return title;
-                String path = android.net.Uri.decode(song.optString("filePath", ""));
-                return path.substring(path.lastIndexOf('/') + 1);
+                if (song.getInt("id") == heardId) return song;
             }
         } catch (org.json.JSONException unreadable) {
             // An unreadable catalog names nothing.
         }
-        return "Music";
+        return null;
+    }
+
+    /** How far into the heard song the music is now, in seconds (the last report carried to the playhead). */
+    synchronized double heardPosition() {
+        if (heardId == null) return 0;
+        if (output == null || output.isPaused()) return heardSeconds;
+        return heardSeconds + (double) Math.max(0, output.heardFrame() - heardFrame) / output.sampleRate;
     }
 
     /** What the music's output is doing, for the app's Debugging section. */
@@ -449,8 +464,11 @@ final class MusicSession {
             public void onHeard(Integer songId, double seconds, long frame) {
                 synchronized (MusicSession.this) {
                     if (renderer != self[0]) return;
-                    // A new song: the notification names it.
-                    if (!java.util.Objects.equals(songId, heardId)) SoundscapePlaybackService.refreshIfRunning();
+                    // A new song, or a jump within one (a seek): the notification and the lock
+                    // screen's position follow. Between those the system runs the position on itself.
+                    boolean sameSong = java.util.Objects.equals(songId, heardId);
+                    double expected = heardSeconds + (double) (frame - heardFrame) / output.sampleRate;
+                    if (!sameSong || Math.abs(seconds - expected) > SEEK_NOTICED_SEC) SoundscapePlaybackService.refreshIfRunning();
                     // Its opening second: the chosen song from its start, never the paused one heard on.
                     if (startingSong != null && startingSong.equals(songId) && seconds < 1) {
                         startingSong = null;
@@ -479,6 +497,30 @@ final class MusicSession {
                 synchronized (MusicSession.this) {
                     write(ROTATION_FILE, rotationJson);
                 }
+            }
+
+            @Override
+            public void onPoolEmptied() {
+                synchronized (MusicSession.this) {
+                    if (renderer != self[0] || output == null) return;
+                    // A pause's fade, so nothing clicks; the song heard is gone from the screen.
+                    output.setPaused(true);
+                    heardId = null;
+                    heardSeconds = 0;
+                    report();
+                }
+                SoundscapePlaybackService.refreshIfRunning();
+                SoundscapePlaybackService.sourceChanged(context, false);
+            }
+
+            @Override
+            public void onPoolRefilled() {
+                synchronized (MusicSession.this) {
+                    if (renderer != self[0] || output == null || !channelOn()) return;
+                    output.setPaused(false);
+                    report();
+                }
+                SoundscapePlaybackService.sourceChanged(context, true);
             }
 
             @Override

@@ -55,6 +55,16 @@ final class MusicRenderer {
         void onCatalogEdited(String catalogJson);
 
         void onFailure(String message);
+
+        /**
+         * The pool has no song left while the music played: the renderer has
+         * stopped decoding and waits for one. The session falls silent the way
+         * a pause does (a fade, the song heard cleared) and keeps the renderer.
+         */
+        void onPoolEmptied();
+
+        /** The pool has songs again after `onPoolEmptied`: its next pick is cued; the session plays it. */
+        void onPoolRefilled();
     }
 
     static final class Song {
@@ -152,9 +162,30 @@ final class MusicRenderer {
      * nothing moves: play resumes the song paused, or picks.
      */
     private void followPool() throws Exception {
-        if (stage == null || output.isPaused()) return;
+        if (stage == null) return;
+        boolean any = "true".equals(isolate.evaluateJavaScriptAsync("musicPoolHolds(-1)").get());
+        if (waitingForPool) {
+            if (!any) return;
+            waitingForPool = false;
+            // Cued while the lane is still paused and silent, so nothing of the old song is heard.
+            settle();
+            configure(true);
+            startSong(next(null), 0);
+            listener.onPoolRefilled();
+            return;
+        }
+        if (output.isPaused()) return;
+        if (!any) {
+            // Not a failure: an empty pool is a choice the listener can make
+            // (every set switched off), and music comes back with the pool.
+            waitingForPool = true;
+            closeDecoder();
+            decoding = null;
+            steppedId = null;
+            listener.onPoolEmptied();
+            return;
+        }
         if (decoder == null) {
-            if (!"true".equals(isolate.evaluateJavaScriptAsync("musicPoolHolds(-1)").get())) return;
             settle();
             configure(true);
             startSong(next(heardId), 0);
@@ -166,6 +197,10 @@ final class MusicRenderer {
         configure(true);
         stepTo(next(playing));
     }
+
+    /** The pool emptied while the music played (followPool): it starts again when the pool has a song. */
+    private boolean waitingForPool = false;
+
 
     /**
      * The song set the schedule plays (null for none: the catalog's own
