@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addScanToSet, chooseSong, createSet, deleteSet, likeSong, nextSong, poolOf, removeFromSet, sanitizeCatalog, sanitizeRotation, setCounts, settleRotation, stepBackRotation, type MusicCatalog } from './musicLibrary';
+import { addScanToSet, chooseSong, createSet, deleteSet, likeSong, nextSong, poolOf, removeFromSet, sanitizeCatalog, sanitizeRotation, setCounts, withPoolFilter, RECENT_FILTER_LIMIT, settleRotation, stepBackRotation, type MusicCatalog } from './musicLibrary';
 
 function song(id: number, setIds: number[], title = `Song ${id}`) {
   return { id, filePath: `content://music/${id}`, setIds, title, artist: '', album: '', durationSec: 0, likes: 0 };
@@ -12,6 +12,7 @@ const catalog: MusicCatalog = {
   activeSetIds: [1],
   filter: { query: '', enabled: true },
   playMode: 'mix',
+  recentFilters: [],
 };
 
 const rotation = [{ id: 1, due: 0 }, { id: 2, due: 1 }, { id: 3, due: 2 }, { id: 4, due: 3 }];
@@ -84,5 +85,26 @@ describe('the Android music library', () => {
     expect(deleted.released).toEqual(['tree://a']);
     expect(deleted.catalog.songs.map((entry) => entry.id)).toEqual([1, 2, 3, 4]);
     expect(removeFromSet(catalog, 2, [3]).songs.map((entry) => entry.id)).toEqual([1, 2, 4]);
+  });
+});
+
+describe('recent filters', () => {
+  it('keeps each query switched on once, newest first, at most the limit', () => {
+    let edited = catalog;
+    for (let i = 0; i < RECENT_FILTER_LIMIT + 2; i++) edited = withPoolFilter(edited, { query: `q${i}`, enabled: true });
+    edited = withPoolFilter(edited, { query: ' q5 ', enabled: true });
+    expect(edited.recentFilters[0]).toBe('q5');
+    expect(edited.recentFilters).toHaveLength(RECENT_FILTER_LIMIT);
+    expect(new Set(edited.recentFilters).size).toBe(RECENT_FILTER_LIMIT);
+  });
+
+  it('leaves the list alone for a filter switched off or empty', () => {
+    const used = withPoolFilter(catalog, { query: 'Blue', enabled: true });
+    expect(withPoolFilter(used, { query: 'Blue', enabled: false }).recentFilters).toEqual(['Blue']);
+    expect(withPoolFilter(used, { query: '  ', enabled: true }).recentFilters).toEqual(['Blue']);
+  });
+
+  it('survives storage', () => {
+    expect(sanitizeCatalog(JSON.parse(JSON.stringify(withPoolFilter(catalog, { query: 'Blue', enabled: true })))).recentFilters).toEqual(['Blue']);
   });
 });

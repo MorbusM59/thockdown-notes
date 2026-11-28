@@ -41,6 +41,12 @@ final class MusicSession {
         void onSpectrum(String batchesJson);
 
         void onFailure(String message);
+
+        /** The car's "next soundstage" chose the stage `id` (`nextStage`). */
+        void onStage(String id);
+
+        /** The catalog changed away from the page (`editCatalog`): the page reloads it. */
+        void onCatalog(String catalogJson);
     }
 
     private static final String CATALOG_FILE = "music-catalog.json";
@@ -123,6 +129,7 @@ final class MusicSession {
     synchronized void setCatalog(String catalogJson) {
         write(CATALOG_FILE, catalogJson);
         if (renderer != null) renderer.setCatalog(catalogJson);
+        SoundscapePlaybackService.catalogChanged();
     }
 
     /** Play with `stageJson` (MusicStage), starting the music if it is not playing; the soundstage otherwise. */
@@ -157,6 +164,28 @@ final class MusicSession {
             lastFailure = "Music could not start in the background";
             if (listener != null) listener.onFailure(lastFailure);
         }
+    }
+
+    // The soundstages "next soundstage" cycles through (Android Auto), as the page published them.
+    private String[] cycleIds = new String[0];
+    private String[] cycleStages = new String[0];
+    private String cycleActiveId = null;
+
+    /** The page's soundstages in cycle order, each with its stage, and the active one (MusicPlugin's setStageCycle). */
+    synchronized void setStageCycle(String[] ids, String[] stages, String activeId) {
+        cycleIds = ids;
+        cycleStages = stages;
+        cycleActiveId = activeId;
+    }
+
+    /** Step to the next soundstage of the cycle, wrapping round, heard at once; the page follows (`onStage`). */
+    synchronized void nextStage() {
+        if (cycleIds.length == 0) return;
+        int at = java.util.Arrays.asList(cycleIds).indexOf(cycleActiveId);
+        int next = (at + 1) % cycleIds.length;
+        cycleActiveId = cycleIds[next];
+        setStage(cycleStages[next]);
+        if (listener != null) listener.onStage(cycleActiveId);
     }
 
     /** A new soundstage, heard at once if music plays. */
@@ -453,6 +482,28 @@ final class MusicSession {
             }
 
             @Override
+            public void onQueue(String json) {
+                synchronized (MusicSession.this) {
+                    if (renderer != self[0] || json.equals(queueJson)) return;
+                    queueJson = json;
+                }
+                SoundscapePlaybackService.refreshIfRunning();
+            }
+
+            @Override
+            public void onCatalogEdited(String catalogJson) {
+                Listener current;
+                synchronized (MusicSession.this) {
+                    if (renderer != self[0]) return;
+                    write(CATALOG_FILE, catalogJson);
+                    current = listener;
+                }
+                SoundscapePlaybackService.refreshIfRunning();
+                SoundscapePlaybackService.catalogChanged();
+                if (current != null) current.onCatalog(catalogJson);
+            }
+
+            @Override
             public void onFailure(String message) {
                 Listener current;
                 synchronized (MusicSession.this) {
@@ -471,8 +522,37 @@ final class MusicSession {
         if (spectrumBands > 0) renderer.setSpectrum(spectrumBands);
     }
 
+    /** The pool in queue order while a renderer plays (musicSandbox.ts's musicQueueJson), "[]" otherwise. */
+    private String queueJson = "[]";
+
+    /** The song heard, or null. */
+    synchronized Integer heardSong() {
+        return heardId;
+    }
+
+    synchronized String queue() {
+        return queueJson;
+    }
+
+    /**
+     * A change to the listener's choice from Android Auto, made by the
+     * renderer's copy of the page's rules (MusicRenderer.editCatalog): a
+     * set toggled, or a filter chosen. Choosing what to hear from the car is
+     * a request to hear it, so with nothing playing the music starts first.
+     */
+    synchronized void editCatalog(String editJson) {
+        if (renderer == null) {
+            if (stage == null) stage = read(STAGE_FILE, null);
+            if (stage != null) play(stage);
+        } else if (output.isPaused()) {
+            resume();
+        }
+        if (renderer != null) renderer.editCatalog(editJson);
+    }
+
     private void close() {
         startingSong = null;
+        queueJson = "[]";
         if (renderer != null) {
             renderer.close();
             renderer = null;

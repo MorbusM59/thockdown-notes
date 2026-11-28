@@ -56,6 +56,22 @@ public class MusicPlugin extends Plugin {
             data.put("message", message);
             notifyListeners("failure", data);
         }
+
+        @Override
+        public void onStage(String id) {
+            JSObject data = new JSObject();
+            data.put("id", id);
+            // Retained: the page is paused while the car steps, and reads it on its return.
+            notifyListeners("stage", data, true);
+        }
+
+        @Override
+        public void onCatalog(String catalogJson) {
+            JSObject data = new JSObject();
+            data.put("catalog", catalogJson);
+            // Retained, as a stage: the car changes the sets with the page paused.
+            notifyListeners("catalog", data, true);
+        }
     };
 
     /** The delay calibration's loop while it plays (CalibrationLoop), or null. */
@@ -186,6 +202,24 @@ public class MusicPlugin extends Plugin {
     }
 
     /** `{ stage }`: the soundstage, heard at once if music plays. */
+    @PluginMethod
+    public void setStageCycle(PluginCall call) {
+        try {
+            JSArray ids = call.getArray("ids", new JSArray());
+            JSArray stages = call.getArray("stages", new JSArray());
+            String[] idList = new String[Math.min(ids.length(), stages.length())];
+            String[] stageList = new String[idList.length];
+            for (int index = 0; index < idList.length; index += 1) {
+                idList[index] = ids.getString(index);
+                stageList[index] = stages.getString(index);
+            }
+            session.setStageCycle(idList, stageList, call.getString("activeId", ""));
+            call.resolve();
+        } catch (org.json.JSONException unreadable) {
+            call.reject("Unreadable stage cycle");
+        }
+    }
+
     @PluginMethod
     public void setStage(PluginCall call) {
         session.setStage(call.getString("stage", ""));

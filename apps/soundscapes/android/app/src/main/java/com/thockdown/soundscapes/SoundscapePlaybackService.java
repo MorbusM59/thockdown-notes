@@ -68,6 +68,19 @@ import java.util.List;
 public class SoundscapePlaybackService extends MediaBrowserService {
     private static final String ROOT_ID = "root";
     private static final String SOUNDSCAPES_ID = "soundscapes";
+    private static final String SETS_ID = "sets";
+    private static final String FILTERS_ID = "filters";
+    private static final String CONTROLS_ID = "controls";
+    /** Playable ids that are not soundscapes: a set to toggle, a filter to use ("filter:" alone switches it off), a control. */
+    private static final String SET_PREFIX = "set:";
+    private static final String FILTER_PREFIX = "filter:";
+    private static final String CONTROL_PREFIX = "control:";
+    // The browse content styles a car honours (Android Auto's media browse extras).
+    private static final String CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED";
+    private static final String CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT";
+    private static final String CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT";
+    private static final int CONTENT_STYLE_LIST = 1;
+    private static final int CONTENT_STYLE_GRID = 2;
 
     private static final String ACTION_PLAY = "com.thockdown.soundscapes.PLAY";
     private static final String ACTION_PAUSE = "com.thockdown.soundscapes.PAUSE";
@@ -80,6 +93,11 @@ public class SoundscapePlaybackService extends MediaBrowserService {
 
     private static SoundscapePlaybackService running;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    /** The two extra buttons a car (Android Auto) and the media controls show beside the transport. */
+    private static final String ACTION_NEXT_SOUNDSTAGE = "next_soundstage";
+    private static final String ACTION_NEXT_SOUNDSCAPE = "next_soundscape";
+    /** The artwork the car and the lock screen show: the splash, decoded once. */
+    private android.graphics.Bitmap artwork;
 
     private SoundscapeSession soundscape;
     private MusicSession music;
@@ -117,12 +135,23 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         session = new MediaSession(this, "ThockdownSoundscape");
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { play(); }
+            @Override public void onCustomAction(String action, Bundle extras) {
+                if (ACTION_NEXT_SOUNDSTAGE.equals(action)) music.nextStage();
+                else if (ACTION_NEXT_SOUNDSCAPE.equals(action)) soundscape.controlSkip(1);
+            }
             @Override public void onPause() { pause(); }
             @Override public void onSkipToNext() { skip(1); }
             @Override public void onSkipToPrevious() { skip(-1); }
             // Pause is the only way to silence (SoundscapeSession): a stop from a media controller is one.
             @Override public void onStop() { pause(); }
-            @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { soundscape.controlPlayFrom(mediaId); }
+            @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { playFrom(mediaId); }
+            @Override public void onSkipToQueueItem(long id) { music.choose((int) id); }
+            // A voice search ("play ... in Thockdown") is the pool filter; nothing said plays.
+            // (Typed search needs MediaBrowserServiceCompat's onSearch, which the framework service lacks.)
+            @Override public void onPlayFromSearch(String query, Bundle extras) {
+                if (query == null || query.trim().isEmpty()) play();
+                else editCatalog("filter", query.trim());
+            }
         });
         session.setActive(true);
         setSessionToken(session.getSessionToken());
@@ -149,29 +178,112 @@ public class SoundscapePlaybackService extends MediaBrowserService {
 
     @Override
     public BrowserRoot onGetRoot(String clientPackageName, int clientUid, Bundle rootHints) {
-        // Every browser may see the list: it names soundscapes, nothing more.
-        return new BrowserRoot(ROOT_ID, null);
+        // Every browser may see the lists: they name soundscapes, sets and filters, nothing more.
+        Bundle extras = new Bundle();
+        extras.putBoolean(CONTENT_STYLE_SUPPORTED, true);
+        extras.putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_LIST);
+        extras.putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_LIST);
+        return new BrowserRoot(ROOT_ID, extras);
     }
 
     @Override
     public void onLoadChildren(String parentId, Result<List<MediaBrowser.MediaItem>> result) {
         List<MediaBrowser.MediaItem> items = new ArrayList<>();
         if (ROOT_ID.equals(parentId)) {
-            // One browsable node rather than playable items at the root: Android
-            // Auto shows a root's browsable children as its tabs.
-            items.add(new MediaBrowser.MediaItem(new MediaDescription.Builder()
-                .setMediaId(SOUNDSCAPES_ID)
-                .setTitle("Soundscapes")
-                .build(), MediaBrowser.MediaItem.FLAG_BROWSABLE));
+            // Browsable nodes rather than playable items at the root: Android
+            // Auto shows a root's browsable children as its tabs. Controls
+            // is drawn as a grid of large tiles, the rest as lists.
+            items.add(node(CONTROLS_ID, "Controls", CONTENT_STYLE_GRID));
+            items.add(node(SOUNDSCAPES_ID, "Soundscapes", CONTENT_STYLE_LIST));
+            items.add(node(SETS_ID, "Sets", CONTENT_STYLE_LIST));
+            items.add(node(FILTERS_ID, "Filters", CONTENT_STYLE_LIST));
         } else if (SOUNDSCAPES_ID.equals(parentId)) {
-            for (SoundscapeSession.Entry entry : soundscape.entries()) {
-                items.add(new MediaBrowser.MediaItem(new MediaDescription.Builder()
-                    .setMediaId(entry.id)
-                    .setTitle(entry.name)
-                    .build(), MediaBrowser.MediaItem.FLAG_PLAYABLE));
+            for (SoundscapeSession.Entry entry : soundscape.entries()) items.add(playable(entry.id, entry.name, null, null));
+        } else if (SETS_ID.equals(parentId)) {
+            LibraryView library = LibraryView.of(music.catalog());
+            for (LibraryView.SetRow set : library.sets) {
+                items.add(playable(SET_PREFIX + set.id, set.name, set.active ? "In the mix" : null, null));
             }
+        } else if (FILTERS_ID.equals(parentId)) {
+            LibraryView library = LibraryView.of(music.catalog());
+            items.add(playable(FILTER_PREFIX, "Filter off", library.filterOn ? null : "In use", null));
+            for (String query : library.recentFilters) {
+                items.add(playable(FILTER_PREFIX + query, query, library.filterOn && query.equals(library.filterQuery) ? "In use" : null, null));
+            }
+        } else if (CONTROLS_ID.equals(parentId)) {
+            items.add(playable(CONTROL_PREFIX + ACTION_NEXT_SOUNDSTAGE, "Next soundstage", null, tile(R.drawable.ic_action_soundstage)));
+            items.add(playable(CONTROL_PREFIX + ACTION_NEXT_SOUNDSCAPE, "Next soundscape", null, tile(R.drawable.ic_action_soundscape)));
         }
         result.sendResult(items);
+    }
+
+    private static MediaBrowser.MediaItem node(String id, String title, int childStyle) {
+        Bundle extras = new Bundle();
+        extras.putInt(CONTENT_STYLE_PLAYABLE_HINT, childStyle);
+        return new MediaBrowser.MediaItem(new MediaDescription.Builder()
+            .setMediaId(id).setTitle(title).setExtras(extras).build(), MediaBrowser.MediaItem.FLAG_BROWSABLE);
+    }
+
+    private static MediaBrowser.MediaItem playable(String id, String title, String subtitle, android.graphics.Bitmap icon) {
+        MediaDescription.Builder description = new MediaDescription.Builder().setMediaId(id).setTitle(title);
+        if (subtitle != null) description.setSubtitle(subtitle);
+        if (icon != null) description.setIconBitmap(icon);
+        return new MediaBrowser.MediaItem(description.build(), MediaBrowser.MediaItem.FLAG_PLAYABLE);
+    }
+
+    /** A control's tile: its vector icon drawn once into a bitmap, which every browser can show. */
+    private final java.util.Map<Integer, android.graphics.Bitmap> tiles = new java.util.HashMap<>();
+
+    private android.graphics.Bitmap tile(int drawable) {
+        android.graphics.Bitmap cached = tiles.get(drawable);
+        if (cached != null) return cached;
+        android.graphics.drawable.Drawable icon = androidx.core.content.ContextCompat.getDrawable(this, drawable);
+        android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(TILE_PX, TILE_PX, android.graphics.Bitmap.Config.ARGB_8888);
+        if (icon != null) {
+            icon.setBounds(0, 0, TILE_PX, TILE_PX);
+            icon.draw(new android.graphics.Canvas(bitmap));
+        }
+        tiles.put(drawable, bitmap);
+        return bitmap;
+    }
+
+    private static final int TILE_PX = 256;
+
+    /** A browsed item played: a set toggled, a filter used, a control pressed, else a soundscape. */
+    private void playFrom(String mediaId) {
+        if (mediaId.startsWith(SET_PREFIX)) {
+            try {
+                editCatalog("set", Integer.parseInt(mediaId.substring(SET_PREFIX.length())));
+            } catch (NumberFormatException ignored) {
+                // Not an id this service wrote.
+            }
+        } else if (mediaId.startsWith(FILTER_PREFIX)) {
+            editCatalog("filter", mediaId.substring(FILTER_PREFIX.length()));
+        } else if (mediaId.equals(CONTROL_PREFIX + ACTION_NEXT_SOUNDSTAGE)) {
+            music.nextStage();
+        } else if (mediaId.equals(CONTROL_PREFIX + ACTION_NEXT_SOUNDSCAPE)) {
+            soundscape.controlSkip(1);
+        } else {
+            soundscape.controlPlayFrom(mediaId);
+        }
+    }
+
+    private void editCatalog(String key, Object value) {
+        try {
+            music.editCatalog(new org.json.JSONObject().put(key, value).toString());
+        } catch (org.json.JSONException ignored) {
+            // A string or an int always serialises.
+        }
+    }
+
+    /** The catalog changed (the page's or the car's edit): a browser showing sets or filters re-reads them. */
+    static void catalogChanged() {
+        MAIN.post(() -> {
+            SoundscapePlaybackService service = running;
+            if (service == null) return;
+            service.notifyChildrenChanged(SETS_ID);
+            service.notifyChildrenChanged(FILTERS_ID);
+        });
     }
 
     @Override
@@ -252,7 +364,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     private void skip(int direction) {
         if (!music.isActive()) soundscape.controlSkip(direction);
         else if (direction > 0) music.skip();
-        else music.seek(0);
+        else music.jump(-1);
     }
 
     private void stop() {
@@ -301,6 +413,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             session.setMetadata(null);
             session.setPlaybackState(new PlaybackState.Builder()
                 .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PLAY_PAUSE | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID
+                    | PlaybackState.ACTION_PLAY_FROM_SEARCH
                     | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS)
                 .setState(PlaybackState.STATE_STOPPED, PlaybackState.PLAYBACK_POSITION_UNKNOWN, 0f)
                 .build());
@@ -317,11 +430,20 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         session.setMetadata(new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, status)
+            .putBitmap(MediaMetadata.METADATA_KEY_ART, artwork())
             .build());
-        session.setPlaybackState(new PlaybackState.Builder()
+        Integer heardSong = withMusic ? music.heardSong() : null;
+        showQueue(withMusic ? music.queue() : "[]");
+        PlaybackState.Builder state = new PlaybackState.Builder();
+        // Next soundstage only with music (a soundstage shapes the music alone).
+        if (withMusic) state.addCustomAction(new PlaybackState.CustomAction.Builder(ACTION_NEXT_SOUNDSTAGE, "Next soundstage", R.drawable.ic_action_soundstage).build());
+        state.addCustomAction(new PlaybackState.CustomAction.Builder(ACTION_NEXT_SOUNDSCAPE, "Next soundscape", R.drawable.ic_action_soundscape).build());
+        session.setPlaybackState(state
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
                 | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS
-                | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID)
+                | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID | PlaybackState.ACTION_PLAY_FROM_SEARCH
+                | (withMusic ? PlaybackState.ACTION_SKIP_TO_QUEUE_ITEM : 0))
+            .setActiveQueueItemId(heardSong == null ? MediaSession.QueueItem.UNKNOWN_ID : heardSong)
             .setState(playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
                 PlaybackState.PLAYBACK_POSITION_UNKNOWN, playing ? 1f : 0f)
             .build());
@@ -355,6 +477,48 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     }
 
     @SuppressWarnings("deprecation")
+    /**
+     * The splash (launch_image), as the car's and lock screen's artwork:
+     * decoded once, at most ARTWORK_PX on its longer side (the car scales it;
+     * a full-size bitmap would cross the session's binder for nothing).
+     */
+    /** The queue last given to the session, so a refresh with the same one sends nothing. */
+    private String shownQueue = null;
+
+    /** The music's queue (musicSandbox.ts's musicQueueJson) as the session's: Android Auto's Up next. */
+    private void showQueue(String queueJson) {
+        if (queueJson.equals(shownQueue)) return;
+        shownQueue = queueJson;
+        List<MediaSession.QueueItem> queue = new ArrayList<>();
+        try {
+            org.json.JSONArray songs = new org.json.JSONArray(queueJson);
+            for (int i = 0; i < songs.length(); i++) {
+                org.json.JSONObject song = songs.getJSONObject(i);
+                queue.add(new MediaSession.QueueItem(new MediaDescription.Builder()
+                    .setMediaId(Integer.toString(song.getInt("id")))
+                    .setTitle(song.getString("title"))
+                    .setSubtitle(song.optString("artist", ""))
+                    .build(), song.getInt("id")));
+            }
+        } catch (org.json.JSONException ignored) {
+            // The renderer wrote it; an unreadable one shows no queue.
+        }
+        session.setQueue(queue.isEmpty() ? null : queue);
+    }
+
+    private android.graphics.Bitmap artwork() {
+        if (artwork != null) return artwork;
+        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeResource(getResources(), R.drawable.launch_image, bounds);
+        android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+        options.inSampleSize = Math.max(1, Integer.highestOneBit(Math.max(bounds.outWidth, bounds.outHeight) / ARTWORK_PX));
+        artwork = android.graphics.BitmapFactory.decodeResource(getResources(), R.drawable.launch_image, options);
+        return artwork;
+    }
+
+    private static final int ARTWORK_PX = 512;
+
     private Notification.Action action(int icon, String title, PendingIntent intent) {
         return new Notification.Action.Builder(icon, title, intent).build();
     }

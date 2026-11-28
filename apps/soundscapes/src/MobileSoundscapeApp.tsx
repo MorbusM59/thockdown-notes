@@ -80,7 +80,7 @@ import { usePublishLayoutScene } from '@thockdown/visualizer/shared/publishLayou
 import { lookTextureRequests, useLookTextures } from '@thockdown/look/textures/useLookTextures'
 import { DashboardDock, DashboardSets, DashboardSoundscapes, DockHelpButton, DockHelpRow } from './Dashboard'
 import { PresetDock, PresetGrid, PresetIconPicker } from '@thockdown/interaction/PresetListControls'
-import { FLAT_SOUNDSTAGE, isFactorySoundstageId, SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
+import { FACTORY_SOUNDSTAGE_IDS, FLAT_SOUNDSTAGE, isFactorySoundstageId, SOUNDSTAGE_KIND, withActiveSoundstage } from '@thockdown/visualizer/shared/soundstages'
 import { helpFor } from './helpText'
 import { SoundscapeControls, SubsectionHelp } from '@thockdown/soundscape/SoundscapeOptions'
 import { SoundscapeDock } from '@thockdown/soundscape/SoundscapeDock'
@@ -291,6 +291,27 @@ export function MobileSoundscapeApp() {
   useEffect(() => {
     setMusicStage(JSON.stringify(musicStageOf(activeStage)))
   }, [activeStage])
+  // The car's "next soundstage" (Android Auto) cycles the factory stages and
+  // then the reader's own stage chosen last, as the solid steps forward,
+  // wrapping round: the native side steps by itself and reports the choice.
+  useEffect(() => {
+    if (!nativeMusic) return
+    const ownId = soundstages.lastCustom ?? soundstages.custom[0]?.id
+    const ids: string[] = [...FACTORY_SOUNDSTAGE_IDS, ...(ownId ? [ownId] : [])]
+    const presets = presetsOf(SOUNDSTAGE_KIND, soundstages)
+    const stages = ids.map((id) => {
+      const preset = presets.find((entry) => entry.id === id)
+      return JSON.stringify(musicStageOf(preset ? preset.settings : activeStage))
+    })
+    void nativeMusic.setStageCycle({ ids, stages, activeId: soundstages.activeId })
+  }, [soundstages, activeStage])
+  useEffect(() => {
+    if (!nativeMusic) return
+    const handle = nativeMusic.addListener('stage', ({ id }) => {
+      setSoundstages((previous) => (previous.activeId === id ? previous : withActiveSoundstage(previous, selectPreset(SOUNDSTAGE_KIND, previous, id))))
+    })
+    return () => { void handle.then((listener) => listener.remove()) }
+  }, [])
   // The music library and player the shared music views read (mobileMusicPlayer.ts).
   const [libraryLoaded, setLibraryLoaded] = useState(false)
   // The visualizer's settings and presets, and beat detection's delay

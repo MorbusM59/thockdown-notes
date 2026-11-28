@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Next soundstage (Android Auto's extra button): a diamond, the solid the visualizer turns. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M12,2L22,12L12,22L2,12Z M12,5.5L5.5,12L12,18.5L18.5,12Z" android:fillType="evenOdd"/>
+</vector>

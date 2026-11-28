@@ -29,6 +29,14 @@ export interface NativeMusicPlugin {
   setCatalog(options: { catalog: string }): Promise<void>
   play(options: { stage: string }): Promise<void>
   setStage(options: { stage: string }): Promise<void>
+  /**
+   * The soundstages the car's "next soundstage" button cycles through
+   * (Android Auto, SoundscapePlaybackService): ids in order with each one's
+   * stage (as `setStage` takes it), and the active one. The native side steps
+   * through them by itself, the page being paused there, and says so with a
+   * `stage` event.
+   */
+  setStageCycle(options: { ids: string[]; stages: string[]; activeId: string }): Promise<void>
   pause(): Promise<void>
   stop(): Promise<void>
   skip(): Promise<void>
@@ -56,6 +64,10 @@ export interface NativeMusicPlugin {
   addListener(event: 'heard', listener: (data: { songId: number | null; seconds: number; frame: number; sampleRate: number; playing: boolean; heardNanos: number; sentNanos: number }) => void): Promise<PluginListenerHandle>
   /** Spectrum frames (spectrumFrames.ts's batches, as JSON text; nativeMusicListening.ts reads them). */
   addListener(event: 'spectrum', listener: (data: { batches: string }) => void): Promise<PluginListenerHandle>
+  /** The car's "next soundstage" chose `id` (setStageCycle). */
+  /** The catalog changed away from the page (Android Auto chose a set or a filter), by the page's own rules: reload it. */
+  addListener(event: 'catalog', listener: (data: { catalog: string }) => void): Promise<PluginListenerHandle>;
+  addListener(event: 'stage', listener: (data: { id: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'failure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
 }
 
