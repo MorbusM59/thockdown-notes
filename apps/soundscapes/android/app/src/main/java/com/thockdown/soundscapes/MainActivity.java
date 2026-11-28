@@ -46,6 +46,8 @@ public class MainActivity extends BridgeActivity {
      * rasterizes at the screen's own resolution.
      */
     private int displayScale = MIN_DISPLAY_SCALE;
+    private static final android.graphics.Paint UNFILTERED_LAYER = new android.graphics.Paint();
+    static { UNFILTERED_LAYER.setFilterBitmap(false); }
     private static final String LANDSCAPE_KEY = "landscape";
     /**
      * The visualizer's orientation, a switch the reader turns rather than the
@@ -178,7 +180,9 @@ public class MainActivity extends BridgeActivity {
         webView.setScaleY(n);
         // Without a layer of its own the WebView would rasterize through the
         // scale at full resolution and save nothing.
-        webView.setLayerType(n == 1 ? View.LAYER_TYPE_NONE : View.LAYER_TYPE_HARDWARE, null);
+        // The layer is drawn up with filtering off, so each of its pixels
+        // becomes an n x n block of screen pixels with no interpolation.
+        webView.setLayerType(n == 1 ? View.LAYER_TYPE_NONE : View.LAYER_TYPE_HARDWARE, n == 1 ? null : UNFILTERED_LAYER);
     }
 
     private void addLaunchOverlay() {
