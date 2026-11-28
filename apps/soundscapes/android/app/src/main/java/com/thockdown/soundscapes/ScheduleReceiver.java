@@ -43,6 +43,13 @@ public class ScheduleReceiver extends BroadcastReceiver {
         } else if (SoundscapeSchedule.ACTION_APPLY_STATE.equals(action)) {
             session.applyScheduleState(true);
             MusicSession.get(context).applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
+        } else if (android.app.AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED.equals(action)) {
+            // Granted after the listener tapped the schedule on: it is on now,
+            // and the page follows the session's report.
+            if (SoundscapeSchedule.switchOnIfWanted(context)) {
+                session.applyScheduleState(false);
+                MusicSession.get(context).applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
+            }
         } else if (Intent.ACTION_BOOT_COMPLETED.equals(action) || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             SoundscapeSchedule.armApplyState(context);
         }

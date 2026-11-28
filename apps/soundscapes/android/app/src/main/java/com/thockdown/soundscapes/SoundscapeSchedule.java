@@ -150,6 +150,37 @@ final class SoundscapeSchedule {
         return new SoundscapeSchedule(false, 1f, Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
     }
 
+    private static final String WANTED_KEY = "scheduleWantedOnGrant";
+
+    /**
+     * The listener asked to turn the schedule on and was sent to grant exact
+     * alarms: remembered, so the grant itself turns it on (switchOnIfWanted)
+     * rather than asking them to tap again.
+     */
+    static void wantOnGrant(Context context) {
+        preferences(context).edit().putBoolean(WANTED_KEY, true).apply();
+    }
+
+    /**
+     * Exact alarms granted after wantOnGrant: the stored schedule is switched
+     * on, once. Whether it was (the caller applies the new state).
+     */
+    static boolean switchOnIfWanted(Context context) {
+        SharedPreferences prefs = preferences(context);
+        if (!prefs.getBoolean(WANTED_KEY, false) || !canArm(context)) return false;
+        prefs.edit().remove(WANTED_KEY).apply();
+        String stored = prefs.getString(KEY, null);
+        if (stored == null) return false;
+        try {
+            JSONObject json = new JSONObject(stored);
+            json.put("enabled", true);
+            save(context, json);
+            return true;
+        } catch (Exception unreadable) {
+            return false;
+        }
+    }
+
     /** Store `json` (a schedule as fromJson reads it). */
     static void save(Context context, JSONObject json) {
         preferences(context).edit().putString(KEY, json.toString()).apply();
