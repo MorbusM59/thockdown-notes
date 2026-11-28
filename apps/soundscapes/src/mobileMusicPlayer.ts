@@ -67,24 +67,16 @@ function loadVolume(): number {
     return 1
   }
 }
-const CHANNEL_KEY = 'thockdown:music-channel'
-
 /**
  * The music CHANNEL's switch (the dashboard's CD button): whether music is
  * part of the mix at all. Switched out, the music PAUSES (its position kept)
  * and nothing starts it, here or natively (MusicSession.setChannel: the
  * notification, the schedule), so no song is decoded, rendered or analysed
- * for a mix that leaves it out.
+ * for a mix that leaves it out. The native session holds it, since the car
+ * switches it with this page paused: this is its copy, adopted at start and
+ * followed through `channel` events.
  */
-let channelOn = loadChannel()
-
-function loadChannel(): boolean {
-  try {
-    return localStorage.getItem(CHANNEL_KEY) !== 'off'
-  } catch {
-    return true
-  }
-}
+let channelOn = true
 
 /** The gain the native player is given: the slider's. */
 function heardGain(): number {
@@ -127,13 +119,15 @@ export function pauseMusic(): void {
 export function setMusicChannel(on: boolean): void {
   if (on === channelOn) return
   channelOn = on
-  if (!on) setPlaying(false)
+  followChannel(on)
   void plugin?.setChannel({ on })
-  try {
-    localStorage.setItem(CHANNEL_KEY, on ? 'on' : 'off')
-  } catch {
-    // Storage refused: the switch holds until the app is closed.
-  }
+}
+
+/** The channel as the native session reports it (the page's own switch, or the car's). */
+function followChannel(on: boolean): void {
+  if (on === channelOn) return
+  channelOn = on
+  if (!on) setPlaying(false)
   for (const listener of playingListeners) listener()
 }
 
@@ -366,9 +360,9 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
   // spectrum and signals, nativeSoundscapeVisuals.ts), each at the gain it is heard at.
   const soundscapeVisuals = nativeSoundscape && installNativeSoundscapeVisuals(nativeSoundscape)
   setMusicListening(createNativeMusicListening(native, (songId) => entryOf(songId), heardGain, soundscapeVisuals))
-  // The channel first, so a session left playing with it switched out is paused before its state is read.
-  await native.setChannel({ on: channelOn })
-  setPlaying((await native.getState()).playing)
+  const state = await native.getState()
+  followChannel(state.channel)
+  setPlaying(state.playing)
   void native.setVolume({ volume: heardGain() })
   publish()
   const handle = await native.addListener('heard', (heard) => {
@@ -394,6 +388,7 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     catalog = sanitizeCatalog(JSON.parse(json))
     publish()
   })
+  const switched = await native.addListener('channel', ({ on }) => followChannel(on))
   const failure = await native.addListener('failure', ({ message }) => {
     // Restarted only if it was heard playing: a renderer that died while paused stays paused.
     if (playing && message.startsWith('Music renderer stopped')) recovery.fail(message)
@@ -405,6 +400,7 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     void handle.remove()
     void failure.remove()
     void edited.remove()
+    void switched.remove()
     setMusicLibraryReads(null)
     plugin = null
   }

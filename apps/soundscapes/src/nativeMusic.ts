@@ -50,7 +50,7 @@ export interface NativeMusicPlugin {
   setVolume(options: { volume: number }): Promise<void>
   /** The visualizer's spectrum in `bands` log bands, sent as `spectrum` events while it is on; 0 stops it. */
   setSpectrum(options: { bands: number }): Promise<void>
-  getState(): Promise<{ playing: boolean }>
+  getState(): Promise<{ playing: boolean; channel: boolean }>
   /** The output's sample rate: the beat delay calibration's loop is decoded at it. */
   getOutputRate(): Promise<{ sampleRate: number }>
   /** Play the calibration loop (base64 of interleaved 16-bit stereo at half scale, at the output's rate) over and over, heard alone; `loopHeard` reports it. */
@@ -67,6 +67,8 @@ export interface NativeMusicPlugin {
   /** The car's "next soundstage" chose `id` (setStageCycle). */
   /** The catalog changed away from the page (Android Auto chose a set or a filter), by the page's own rules: reload it. */
   addListener(event: 'catalog', listener: (data: { catalog: string }) => void): Promise<PluginListenerHandle>;
+  /** The music channel was switched (MusicSession.setChannel), the car's switch included. */
+  addListener(event: 'channel', listener: (data: { on: boolean }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'stage', listener: (data: { id: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'failure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
 }

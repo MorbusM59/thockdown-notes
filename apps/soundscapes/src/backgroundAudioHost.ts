@@ -39,6 +39,8 @@ export interface SessionState {
   scheduleEnabled: boolean
   /** When what is heard ends (wall clock, ms): the timer's end, or the scheduled run's next change; -1 for none. */
   endsAtMs: number
+  /** The soundscape's channel: switched out of the mix, it plays on silent. The session's record is the only one. */
+  channel: boolean
 }
 
 /** The schedule as the native side runs it (schedule.ts works it out). */
@@ -77,6 +79,8 @@ export interface NativeSoundscapePlugin {
   /** `configuration` is a ConfigureMessage as JSON; `transitionSec` 0 for a settings change, else a change of soundscape crossfaded that long. */
   configure(options: { configuration: string; transitionSec: number }): Promise<void>
   setVolume(options: { volume: number; timeConstantSec: number }): Promise<void>
+  /** Switch the soundscape's channel in or out of the mix; answered by `sessionChanged`. */
+  setChannel(options: { on: boolean }): Promise<void>
   /** The visualizer's view of the soundscape, sent as `visuals` events: its spectrum in `bands` log bands (0 for none) and its signals or not (nativeSoundscapeVisuals.ts). */
   setVisuals(options: { bands: number; signals: boolean }): Promise<void>
   /** Ask where to save `<name>.m4a` (the system's "Save as" dialog), then render `seconds` of `configuration` into it. */

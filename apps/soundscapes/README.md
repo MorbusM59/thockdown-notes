@@ -187,10 +187,22 @@ session, controls, clips or saving to files.
 ### Android Auto (and other media browsers)
 
 `SoundscapePlaybackService` is also a platform `MediaBrowserService`: a
-browser binds it and sees one browsable node, "Soundscapes", holding the
-session's entries (the same list next and previous step through) as
-playable items. Choosing one is `controlPlayFrom`; play with no session
-plays the soundscape last chosen, or the first. Because the car may connect
+browser binds it and sees four browsable nodes, which Android Auto shows as
+tabs: CONTROLS (a grid: the music and soundscape channel switches, each
+named by what a press does, next soundstage, next soundscape, and Filter off
+while a song filter is on), SOUNDSCAPES (the session's entries, the same
+list next and previous step through; choosing one is `controlPlayFrom`),
+SETS and FILTERS (recent queries, and Filter off). **Both CHANNELS are held
+natively** (`MusicSession.setChannel`, `SoundscapeSession.setChannel`, whose
+output volume passes through `heard()`), never in the page, because the car
+acts with the page paused: the page's toggles follow them (`channel` events,
+`SessionState.channel`). The car's PLAY is the app's transport
+(`mixTransport.ts`'s `toggleMix`): it starts the music when its channel is
+in, rather than only resuming music already open, and plays the soundscape;
+"playing" is what is HEARD, so a soundscape switched out of the mix does not
+read as playing. A set or a filter chosen in the car switches the music in,
+since its rules run in the music renderer. Play with no session plays the
+soundscape last chosen, or the first. Because the car may connect
 before the page has run since the process started, the session STORES the
 published list and the last choice (`saveLibrary`/`loadLibrary`). Before
 anything has been published (a fresh install), it reads the factory

@@ -163,25 +163,6 @@ function TabHelp({ heading }: { heading: string }) {
   )
 }
 
-const SOUNDSCAPE_CHANNEL_KEY = 'thockdown:soundscape-channel'
-
-/** Whether the soundscape's channel is switched into the mix: on unless switched out before. */
-function loadSoundscapeChannel(): boolean {
-  try {
-    return localStorage.getItem(SOUNDSCAPE_CHANNEL_KEY) !== 'off'
-  } catch {
-    return true
-  }
-}
-
-function saveSoundscapeChannel(on: boolean): void {
-  try {
-    localStorage.setItem(SOUNDSCAPE_CHANNEL_KEY, on ? 'on' : 'off')
-  } catch {
-    // Storage refused: the switch holds until the app is closed.
-  }
-}
-
 function clipLengthLabel(minutes: number): string {
   return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`
 }
@@ -383,15 +364,16 @@ export function MobileSoundscapeApp() {
   }, [])
 
   // The soundscape's CHANNEL in the mix (the dashboard's podcast button):
-  // switched out, it plays on silent, by the engine's channel switch and,
-  // for what the session plays without this page (the schedule), the volume
-  // the session is given.
-  const [soundscapeChannel, setSoundscapeChannel] = useState(loadSoundscapeChannel)
-  useEffect(() => {
-    saveSoundscapeChannel(soundscapeChannel)
-    soundscapeEngine.setChannel(soundscapeChannel)
-  }, [soundscapeChannel])
-  const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
+  // switched out, it plays on silent. The native session holds it
+  // (SoundscapeSession.setChannel), since the car and the notification act
+  // with this page paused: the toggle follows its state (`follow` below)
+  // and a press is sent there, never kept here.
+  const [soundscapeChannel, setSoundscapeChannelState] = useState(true)
+  const setSoundscapeChannel = useCallback((on: boolean) => {
+    setSoundscapeChannelState(on)
+    void nativeSoundscape?.setChannel({ on })
+  }, [])
+  const sessionVolume = volumeGain(preferences.masterVolume)
   // While the volume slider is dragged, only the engine follows it (its
   // setVolume is one small native call a frame). Storing the preferences and
   // handing the session its volume for runs without this page both carry
@@ -405,7 +387,7 @@ export function MobileSoundscapeApp() {
   // The gain the visualizer weighs the soundscape's signals at: its volume while it is heard. Here, because this page
   // is the one place that knows both its own play and pause and the session's (`follow`, below).
   const soundscapeHeard = sessionHeard({ regular, source })
-  const soundscapeHeardGain = soundscapeHeard ? sessionVolume : 0
+  const soundscapeHeardGain = soundscapeHeard && soundscapeChannel ? sessionVolume : 0
   useEffect(() => setSoundscapeVisualsHeardGain(soundscapeHeardGain), [soundscapeHeardGain])
 
   useEffect(() => {
@@ -494,6 +476,7 @@ export function MobileSoundscapeApp() {
     const follow = (state: SessionState) => {
       setRegular(state.regular)
       setSource(state.source)
+      setSoundscapeChannelState(state.channel)
       setCountdown({ endsAtMs: state.endsAtMs })
       setPreferences((current) => followSession(current, state))
       setSchedule((current) => (current.enabled === state.scheduleEnabled ? current : { ...current, enabled: state.scheduleEnabled }))

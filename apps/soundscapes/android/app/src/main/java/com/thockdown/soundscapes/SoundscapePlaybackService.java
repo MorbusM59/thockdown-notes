@@ -96,6 +96,10 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     /** The two extra buttons a car (Android Auto) and the media controls show beside the transport. */
     private static final String ACTION_NEXT_SOUNDSTAGE = "next_soundstage";
     private static final String ACTION_NEXT_SOUNDSCAPE = "next_soundscape";
+    /** The car's Controls: the two channels switched, and the filter switched off (each tile shows what a press will do). */
+    private static final String ACTION_MUSIC_CHANNEL = "music_channel";
+    private static final String ACTION_SOUNDSCAPE_CHANNEL = "soundscape_channel";
+    private static final String ACTION_FILTER_OFF = "filter_off";
     /** The artwork the car and the lock screen show: the splash, decoded once. */
     private android.graphics.Bitmap artwork;
 
@@ -207,8 +211,19 @@ public class SoundscapePlaybackService extends MediaBrowserService {
                 items.add(playable(FILTER_PREFIX + query, query, library.filterOn && query.equals(library.filterQuery) ? "In use" : null, null));
             }
         } else if (CONTROLS_ID.equals(parentId)) {
+            // The channels as the dashboard's toggles, named by what a press does.
+            boolean musicOn = music.channelOn();
+            boolean soundscapeOn = soundscape.channelOn();
+            items.add(playable(CONTROL_PREFIX + ACTION_MUSIC_CHANNEL, musicOn ? "Music off" : "Music on", null,
+                tile(musicOn ? R.drawable.ic_action_music_off : R.drawable.ic_action_music)));
+            items.add(playable(CONTROL_PREFIX + ACTION_SOUNDSCAPE_CHANNEL, soundscapeOn ? "Soundscape off" : "Soundscape on", null,
+                tile(soundscapeOn ? R.drawable.ic_action_soundscape_off : R.drawable.ic_action_soundscape)));
             items.add(playable(CONTROL_PREFIX + ACTION_NEXT_SOUNDSTAGE, "Next soundstage", null, tile(R.drawable.ic_action_soundstage)));
             items.add(playable(CONTROL_PREFIX + ACTION_NEXT_SOUNDSCAPE, "Next soundscape", null, tile(R.drawable.ic_action_soundscape)));
+            LibraryView library = LibraryView.of(music.catalog());
+            if (library.filterOn) {
+                items.add(playable(CONTROL_PREFIX + ACTION_FILTER_OFF, "Filter off", library.filterQuery, tile(R.drawable.ic_action_filter_off)));
+            }
         }
         result.sendResult(items);
     }
@@ -256,6 +271,12 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             }
         } else if (mediaId.startsWith(FILTER_PREFIX)) {
             editCatalog("filter", mediaId.substring(FILTER_PREFIX.length()));
+        } else if (mediaId.equals(CONTROL_PREFIX + ACTION_MUSIC_CHANNEL)) {
+            switchMusicChannel(!music.channelOn());
+        } else if (mediaId.equals(CONTROL_PREFIX + ACTION_SOUNDSCAPE_CHANNEL)) {
+            switchSoundscapeChannel(!soundscape.channelOn());
+        } else if (mediaId.equals(CONTROL_PREFIX + ACTION_FILTER_OFF)) {
+            editCatalog("filter", "");
         } else if (mediaId.equals(CONTROL_PREFIX + ACTION_NEXT_SOUNDSTAGE)) {
             music.nextStage();
         } else if (mediaId.equals(CONTROL_PREFIX + ACTION_NEXT_SOUNDSCAPE)) {
@@ -263,6 +284,31 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         } else {
             soundscape.controlPlayFrom(mediaId);
         }
+    }
+
+    /**
+     * The dashboard's channel toggles (Dashboard.tsx, mixTransport.ts's
+     * switchSoundscapeChannel), for the car: switched out, a channel falls
+     * silent; switched in while the mix is heard, it joins at once rather
+     * than waiting for the next play.
+     */
+    private void switchMusicChannel(boolean on) {
+        boolean heard = mixHeard();
+        music.setChannel(on);
+        if (on && heard) music.start();
+        showControls();
+    }
+
+    private void switchSoundscapeChannel(boolean on) {
+        boolean heard = mixHeard();
+        soundscape.setChannel(on);
+        if (on && heard && !soundscape.isAudible()) soundscape.controlPlay();
+        showControls();
+    }
+
+    /** Whether anything is heard: the transport's pause, as mixTransport.ts's mixHeard. */
+    private boolean mixHeard() {
+        return (music.isActive() && music.isPlaying()) || soundscape.isHeard();
     }
 
     private void editCatalog(String key, Object value) {
@@ -280,6 +326,8 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             if (service == null) return;
             service.notifyChildrenChanged(SETS_ID);
             service.notifyChildrenChanged(FILTERS_ID);
+            // The Filter off tile comes and goes with the filter.
+            service.notifyChildrenChanged(CONTROLS_ID);
         });
     }
 
@@ -334,10 +382,12 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             return;
         }
         AudioOutput.interact();
-        boolean withMusic = music.isActive();
-        android.util.Log.i("ThockdownAudio", "media play: music active " + withMusic + ", soundscape active " + soundscape.isActive());
-        if (withMusic) music.resume();
-        if (soundscape.isActive() || !withMusic) soundscape.controlPlay();
+        // The app's transport (mixTransport.ts's toggleMix): both channels
+        // play together, the music started rather than only resumed, so a
+        // play from the car is the same press as the app's.
+        android.util.Log.i("ThockdownAudio", "media play: music channel " + music.channelOn() + ", soundscape channel " + soundscape.channelOn());
+        if (music.channelOn()) music.start();
+        soundscape.controlPlay();
     }
 
     private void pause() {
@@ -406,8 +456,21 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         }
     }
 
+    /** The channels last shown on the Controls tab, so a refresh with the same ones re-reads nothing. */
+    private String shownControls = null;
+
+    /** The car's Controls name each channel by what a press does: re-read when a channel was switched. */
+    private void showControls() {
+        String now = music.channelOn() + "|" + soundscape.channelOn();
+        if (now.equals(shownControls)) return;
+        boolean first = shownControls == null;
+        shownControls = now;
+        if (!first) notifyChildrenChanged(CONTROLS_ID);
+    }
+
     private void refresh() {
         if (running != this) return;
+        showControls();
         if (!started || !active()) {
             if (started) {
                 // Everything ended while started: the service ends too.
@@ -429,11 +492,13 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         }
         boolean withMusic = music.isActive();
         boolean disconnected = !connection.isConnected();
-        boolean playing = !disconnected && ((withMusic && music.isPlaying()) || soundscape.isAudible());
+        // What is HEARD, not what runs: a soundscape switched out of the mix plays on silent.
+        boolean soundscapeHeard = soundscape.isActive() && soundscape.channelOn();
+        boolean playing = !disconnected && ((withMusic && music.isPlaying()) || soundscape.isHeard());
         String title = withMusic ? music.title() : soundscape.title();
         String status = disconnected ? "Disconnected: play resumes" : withMusic
-            ? (playing ? "Playing" : "Paused") + (soundscape.isActive() ? " with " + soundscape.title() : "")
-            : statusText(playing);
+            ? (playing ? "Playing" : "Paused") + (soundscapeHeard ? " with " + soundscape.title() : "")
+            : soundscape.channelOn() ? statusText(playing) : "Soundscape switched off";
         MediaMetadata.Builder metadata = new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, title)
             .putBitmap(MediaMetadata.METADATA_KEY_ART, artwork());
@@ -442,7 +507,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             // The song as its file tags it: artist (with the soundscape heard beside it), album and length,
             // so the lock screen and a car show its position. The status line stays the notification's.
             String artist = song.optString("artist", "").trim();
-            String beside = soundscape.isActive() ? soundscape.title() : "";
+            String beside = soundscapeHeard ? soundscape.title() : "";
             String line = artist.isEmpty() ? status : beside.isEmpty() ? artist : artist + "  |  " + beside;
             metadata.putString(MediaMetadata.METADATA_KEY_ARTIST, line);
             String album = song.optString("album", "").trim();

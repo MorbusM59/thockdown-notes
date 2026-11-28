@@ -113,6 +113,7 @@ public class BackgroundAudioPlugin extends Plugin {
         data.put("currentId", state.currentId);
         data.put("scheduleEnabled", state.scheduleEnabled);
         data.put("endsAtMs", state.endsAtMs);
+        data.put("channel", state.channel);
         return data;
     }
 
@@ -258,6 +259,13 @@ public class BackgroundAudioPlugin extends Plugin {
     @PluginMethod
     public void setVisuals(PluginCall call) {
         session.setVisuals(call.getInt("bands", 0), Boolean.TRUE.equals(call.getBoolean("signals", false)));
+        call.resolve();
+    }
+
+    /** `{ on }`: the soundscape's channel in or out of the mix; out, it plays on silent (SoundscapeSession.setChannel). */
+    @PluginMethod
+    public void setChannel(PluginCall call) {
+        session.setChannel(Boolean.TRUE.equals(call.getBoolean("on", true)));
         call.resolve();
     }
 

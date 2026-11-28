@@ -97,8 +97,6 @@ export class SoundscapeEngine {
   /** The preset the sent settings last matched (kept through edits off it): another one is a change of soundscape, not of settings. */
   private sentPresetId: string | null = null;
   private volumeTarget = -1;
-  /** The soundscape's channel in the host's mix (setChannel): switched out, it plays on silent. */
-  private channelOn = true;
   /** A slow fade from silence for the next start (fadeInNextStart); null for the usual quick one. */
   private startFadeSec: number | null = null;
   private preferences: SoundscapePreferences | null = null;
@@ -126,18 +124,6 @@ export class SoundscapeEngine {
    */
   fadeInNextStart(seconds: number): void {
     this.startFadeSec = seconds;
-  }
-
-  /**
-   * Switch the soundscape's channel in or out of the host's mix (the phone
-   * dashboard's soundscape button). Switched out, it is silent but keeps
-   * playing, so switching it back in carries on rather than starting over;
-   * nothing else about playback changes.
-   */
-  setChannel(on: boolean): void {
-    if (on === this.channelOn) return;
-    this.channelOn = on;
-    if (this.preferences && this.playback) this.update(this.preferences);
   }
 
   apply(preferences: SoundscapePreferences): void {
@@ -192,7 +178,7 @@ export class SoundscapeEngine {
   private update(preferences: SoundscapePreferences): void {
     const playback = this.playback;
     if (!playback) return;
-    const volume = this.channelOn ? preferences.masterVolume : 0;
+    const volume = preferences.masterVolume;
     if (this.volumeTarget !== volume) {
       // A glide reaching ~98% of the target in four time constants.
       const fade = this.volumeTarget < 0 && this.startFadeSec !== null ? this.startFadeSec / 4 : VOLUME_TIME_CONSTANT_SEC;

@@ -106,8 +106,11 @@ final class SoundscapeSession {
         final boolean scheduleEnabled;
         /** When what is heard ends (wall clock, ms): the timer's end, or the scheduled run's next change; -1 for none. */
         final long endsAtMs;
+        /** The soundscape's channel: switched out, the session plays on silent. */
+        final boolean channel;
 
-        State(Regular regular, Source source, String currentId, boolean scheduleEnabled, long endsAtMs) {
+        State(Regular regular, Source source, String currentId, boolean scheduleEnabled, long endsAtMs, boolean channel) {
+            this.channel = channel;
             this.regular = regular;
             this.source = source;
             this.currentId = currentId;
@@ -118,7 +121,8 @@ final class SoundscapeSession {
         /** The same in what it says is heard; when it ends follows from that and is not compared. */
         boolean sameAs(State other) {
             return regular == other.regular && source == other.source
-                && java.util.Objects.equals(currentId, other.currentId) && scheduleEnabled == other.scheduleEnabled;
+                && java.util.Objects.equals(currentId, other.currentId) && scheduleEnabled == other.scheduleEnabled
+                && channel == other.channel;
         }
     }
 
@@ -153,6 +157,7 @@ final class SoundscapeSession {
     private static final long PAUSE_STOP_MS = 30L * 60 * 1000;
     private static final String LIBRARY_PREFERENCES = "soundscape-library";
     private static final String LIBRARY_KEY = "library";
+    private static final String CHANNEL_KEY = "channel";
     private static SoundscapeSession instance;
 
     private final Context context;
@@ -266,7 +271,7 @@ final class SoundscapeSession {
         } else if (source() == Source.SCHEDULE) {
             endsAt = schedule.nextChangeMillis();
         }
-        return new State(regular, source(), currentId(), schedule.enabled, endsAt);
+        return new State(regular, source(), currentId(), schedule.enabled, endsAt, channelOn());
     }
 
     synchronized Source source() {
@@ -279,8 +284,44 @@ final class SoundscapeSession {
         return output != null && (regular == Regular.PLAYING || (regular == Regular.STOPPED && scheduled != null));
     }
 
+    /** Whether the soundscape is actually heard: audible, with its channel switched into the mix. */
+    synchronized boolean isHeard() {
+        return isAudible() && channelOn();
+    }
+
     synchronized boolean isActive() {
         return output != null;
+    }
+
+    // --- The channel ---
+
+    /**
+     * THE SOUNDSCAPE'S CHANNEL: whether it is part of the mix. Switched out,
+     * the session plays on SILENT (so switching it back in carries on rather
+     * than starting over), every volume given to the output passing through
+     * heard(). Kept here, not in the page, because the car and the
+     * notification act with the page paused: this is the one record of it,
+     * which the page's toggle follows (State.channel).
+     */
+    private Boolean channel = null;
+
+    synchronized boolean channelOn() {
+        if (channel == null) channel = preferences().getBoolean(CHANNEL_KEY, true);
+        return channel;
+    }
+
+    private float heard(float volume) {
+        return channelOn() ? volume : 0f;
+    }
+
+    /** Switch the channel in or out of the mix (the page's toggle or the car's). */
+    synchronized void setChannel(boolean on) {
+        if (channelOn() == on) return;
+        channel = on;
+        preferences().edit().putBoolean(CHANNEL_KEY, on).apply();
+        if (output != null && isAudible()) output.setVolume(heard(masterVolume), VOLUME_TIME_CONSTANT_SEC);
+        refreshService();
+        report();
     }
 
     synchronized String currentId() {
@@ -314,7 +355,7 @@ final class SoundscapeSession {
         SoundscapePlaybackService.libraryChanged();
         // What the schedule plays is not reached by the page's engine, which
         // is closed then: its volume is followed here.
-        if (source() == Source.SCHEDULE) output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+        if (source() == Source.SCHEDULE) output.setVolume(heard(masterVolume), VOLUME_TIME_CONSTANT_SEC);
         refreshService();
     }
 
@@ -373,7 +414,7 @@ final class SoundscapeSession {
 
     /** The engine's volume: regular mode's alone. A fade-out it sends while handing over must not silence the schedule. */
     synchronized void setVolume(float volume, double timeConstantSec) {
-        if (output != null && regular == Regular.PLAYING) output.setVolume(volume, timeConstantSec);
+        if (output != null && regular == Regular.PLAYING) output.setVolume(heard(volume), timeConstantSec);
     }
 
     // --- From the media controls and the system ---
@@ -391,7 +432,7 @@ final class SoundscapeSession {
         fadeIn(SWITCH_FADE_SEC);
         startCountdown();
         // The page may have faded the output to silence before it paused it.
-        output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+        output.setVolume(heard(masterVolume), VOLUME_TIME_CONSTANT_SEC);
         refreshService();
         report();
     }
@@ -456,7 +497,7 @@ final class SoundscapeSession {
         } else {
             renderer.transition(entry.configuration, SWITCH_FADE_SEC);
         }
-        output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+        output.setVolume(heard(masterVolume), VOLUME_TIME_CONSTANT_SEC);
         saveLibrary();
         refreshService();
         report();
@@ -647,7 +688,7 @@ final class SoundscapeSession {
             setRegular(Regular.STOPPED);
             scheduled = scheduledNow(SoundscapeSchedule.load(context));
             if (scheduled == null || !scheduled.id.equals(handedTo.id)) settle(SWITCH_FADE_SEC, SWITCH_FADE_SEC);
-            else output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+            else output.setVolume(heard(masterVolume), VOLUME_TIME_CONSTANT_SEC);
             refreshService();
             report();
             return;
@@ -697,7 +738,7 @@ final class SoundscapeSession {
             renderer.transition(scheduled.configuration, fadeSec);
             output.setFade(1f, RESTORE_FADE_SEC);
         }
-        output.setVolume(masterVolume, VOLUME_TIME_CONSTANT_SEC);
+        output.setVolume(heard(masterVolume), VOLUME_TIME_CONSTANT_SEC);
         refreshService();
     }
 
