@@ -106,6 +106,11 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/soundscapes.p12"
           echo "SOUNDSCAPES_KEYSTORE=$RUNNER_TEMP/soundscapes.p12" >> "$GITHUB_ENV"
           SOUNDSCAPES_KEYSTORE="$RUNNER_TEMP/soundscapes.p12" ./gradlew assembleDebug testDebugUnitTest --no-daemon
+          # Kept aside: the device tests below rebuild app-debug.apk with the
+          # runner's own debug key (their test APK must match it), and that
+          # copy, published, made every build refuse to install over the last.
+          mkdir -p "$RUNNER_TEMP/signed"
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/signed/thockdown-soundscapes.apk"
 
       # The device tests (apps/soundscapes/android/deviceTests.sh) run on an
       # emulator, which costs minutes: only when the native project changed,
@@ -166,14 +171,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: thockdown-soundscapes-debug-apk
-          path: apps/soundscapes/android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ runner.temp }}/signed/thockdown-soundscapes.apk
 
       - name: Publish to the android-latest prerelease
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp apps/soundscapes/android/app/build/outputs/apk/debug/app-debug.apk thockdown-soundscapes.apk
+          cp "$RUNNER_TEMP/signed/thockdown-soundscapes.apk" thockdown-soundscapes.apk
           # Move the tag to this commit, so the release says what it was built from.
           git tag -f android-latest
           git push -f origin refs/tags/android-latest
