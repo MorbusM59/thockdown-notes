@@ -67,6 +67,18 @@ public class SongDecoderSeekTest {
             sequential = read(whole, Math.round(SEEK_SEC * rate), COMPARED);
         }
         short[] seeked;
+        // The cost of stepping, measured: an open at SEEK_SEC, reported per packet
+        // stepped and extrapolated to a resume 30 minutes into a 128 kbps 44.1 kHz
+        // MP3 (38.3 packets a second). Read from the instrumentation log in CI.
+        long began = System.nanoTime();
+        try (SongDecoder timed = new SongDecoder(app, uri, (long) (SEEK_SEC * 1_000_000))) {
+            long openNanos = System.nanoTime() - began;
+            double packets = SEEK_SEC * rate / 576.0;
+            double perPacketMs = openNanos / 1e6 / packets;
+            android.util.Log.i("SongDecoderSeekTest", String.format(java.util.Locale.ROOT,
+                    "open at %.0f s: %.1f ms for %.0f packets, %.4f ms a packet; a resume at 30 min would take %.0f ms",
+                    SEEK_SEC, openNanos / 1e6, packets, perPacketMs, perPacketMs * 1800 * 38.28));
+        }
         try (SongDecoder jumped = new SongDecoder(app, uri, (long) (SEEK_SEC * 1_000_000))) {
             seeked = read(jumped, 0, COMPARED);
         }
