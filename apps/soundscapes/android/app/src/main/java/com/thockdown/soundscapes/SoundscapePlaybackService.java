@@ -136,6 +136,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { play(); }
             @Override public void onCustomAction(String action, Bundle extras) {
+                AudioOutput.interact();
                 if (ACTION_NEXT_SOUNDSTAGE.equals(action)) music.nextStage();
                 else if (ACTION_NEXT_SOUNDSCAPE.equals(action)) soundscape.controlSkip(1);
             }
@@ -145,10 +146,14 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             // Pause is the only way to silence (SoundscapeSession): a stop from a media controller is one.
             @Override public void onStop() { pause(); }
             @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { playFrom(mediaId); }
-            @Override public void onSkipToQueueItem(long id) { music.choose((int) id); }
+            @Override public void onSkipToQueueItem(long id) {
+                AudioOutput.interact();
+                music.choose((int) id);
+            }
             // A voice search ("play ... in Thockdown") is the pool filter; nothing said plays.
             // (Typed search needs MediaBrowserServiceCompat's onSearch, which the framework service lacks.)
             @Override public void onPlayFromSearch(String query, Bundle extras) {
+                AudioOutput.interact();
                 if (query == null || query.trim().isEmpty()) play();
                 else editCatalog("filter", query.trim());
             }
@@ -251,6 +256,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
 
     /** A browsed item played: a set toggled, a filter used, a control pressed, else a soundscape. */
     private void playFrom(String mediaId) {
+        AudioOutput.interact();
         if (mediaId.startsWith(SET_PREFIX)) {
             try {
                 editCatalog("set", Integer.parseInt(mediaId.substring(SET_PREFIX.length())));
@@ -329,7 +335,9 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     }
 
     /** Resume what is paused; with nothing at all, the soundscape last heard (as before there was music). */
+    // Every press is the listener's, to be heard at once rather than after a deep background buffer (AudioOutput.interact).
     private void play() {
+        AudioOutput.interact();
         boolean withMusic = music.isActive();
         android.util.Log.i("ThockdownAudio", "media play: music active " + withMusic + ", soundscape active " + soundscape.isActive());
         if (withMusic) music.resume();
@@ -337,6 +345,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     }
 
     private void pause() {
+        AudioOutput.interact();
         pauseAll(this, true);
     }
 
@@ -362,6 +371,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     }
 
     private void skip(int direction) {
+        AudioOutput.interact();
         if (!music.isActive()) soundscape.controlSkip(direction);
         else if (direction > 0) music.skip();
         else music.jump(-1);

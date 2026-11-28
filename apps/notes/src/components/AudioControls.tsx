@@ -2,7 +2,7 @@ import { encodeTooltip } from '@thockdown/interaction/tooltipContent'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { FieldActionButton } from '@thockdown/interaction/FieldActionButton'
 import type { MusicBarRow, MusicPoolFilter, MusicSet, MusicSongEntry, PlaylistSlot, PlaylistCountsResult } from '@thockdown/visualizer/shared/audioPlayer'
-import { samePoolFilter, songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
+import { createPoolMatcher, samePoolFilter, songAlbumText, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer'
 import {
   AUDIO_GRID_COLUMNS,
   emptyPlaylistCounts,
@@ -633,10 +633,7 @@ export const AudioControls = memo(function AudioControls({
 
   // ---------------------------------------------------------------- playlist buttons
 
-  /**
-   * Change the activated sets. The song playing plays on whatever the change:
-   * it belongs to the pool while it plays, and the next pick reads the new pool.
-   */
+  /** Change the activated sets; the pool-following effect below moves on from a song the change leaves out. */
   const selectSlot = useCallback(async (slot: PlaylistSlot, selection: SetSelection) => {
     // An empty set cannot be active (see refreshCountsRef).
     if ((countsRef.current?.[slot] ?? 0) === 0) return
@@ -645,6 +642,26 @@ export const AudioControls = memo(function AudioControls({
     activeSlotsRef.current = next
     onActiveSlotsChange(next)
   }, [onActiveSlotsChange])
+
+  /**
+   * THE POOL IS WHAT PLAYS, at once (the phone's MusicRenderer.followPool
+   * states the same rule): while music plays, a change that leaves the song
+   * playing out of the pool (its set deactivated, the filter, the song
+   * removed) moves on to the pool's next pick, and stops the music when the
+   * pool is empty. Paused, nothing moves. The desktop has no "playing with
+   * nothing to play" state for a filling pool to restart: play with an empty
+   * pool does not start.
+   */
+  const currentSongSetIds = currentSong?.setIds
+  useEffect(() => {
+    // Keyed on what can change membership (the sets, the filter, the song's own sets), not on the song:
+    // a song chosen from outside the pool plays until the pool next changes.
+    const song = currentSongRef.current
+    if (!isPlaying || !song) return
+    if (createPoolMatcher({ slots: activeSlots, filter: poolFilter })(song)) return
+    void advanceToNextSong()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isPlaying and the song are read, not watched (above)
+  }, [activeSlots, poolFilter, currentSongSetIds, advanceToNextSong])
 
   const addPathsToMusicSet = useCallback(async (slot: PlaylistSlot, paths: string[]): Promise<boolean> => {
     if (paths.length === 0) return false
@@ -677,7 +694,7 @@ export const AudioControls = memo(function AudioControls({
 
   /**
    * Take a set out of the activated sets (deactivated, purged or deleted) and
-   * refresh the counts. The song playing plays on.
+   * refresh the counts.
    */
   const leaveSet = useCallback(async (slot: PlaylistSlot) => {
     const nextActiveSlots = activeSlotsRef.current.filter((activeSlot) => activeSlot !== slot)
@@ -687,7 +704,7 @@ export const AudioControls = memo(function AudioControls({
     await refreshCountsRef.current()
   }, [onActiveSlotsChange])
 
-  /** Songs out of one set. The song playing plays on, even when it was among them. */
+  /** Songs out of one set; the song playing follows the pool like any other change. */
   const removeFromMusicSet = useCallback(async (slot: PlaylistSlot, songIds: number[]) => {
     await window.thockdownAudioPlayer?.removeFromSet(slot, songIds)
     await refreshCountsRef.current()
@@ -817,7 +834,7 @@ export const AudioControls = memo(function AudioControls({
   const publishedSelectSlot = useCallback((slot: PlaylistSlot, selection: SetSelection) => {
     void mediaActionsRef.current.selectSlot(slot, selection)
   }, [])
-  // A new filter applies from the next pick: the song playing plays on.
+  // A new filter is a new pool: the pool-following effect moves on from a song it leaves out.
   const setPoolFilter = useCallback((filter: MusicPoolFilter) => {
     if (samePoolFilter(filter, filterRef.current)) return
     filterRef.current = filter

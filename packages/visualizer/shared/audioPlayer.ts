@@ -177,9 +177,9 @@ export type AudioPlayerApi = {
 
 /**
  * How a set joins or leaves the activated sets: `solo` plays from it alone,
- * `add` puts it in, `toggle` puts it in or takes it out (never the last one:
- * a pool with nothing in it plays nothing, and taking the last set out is
- * not what a click on it means).
+ * `add` puts it in, `toggle` puts it in or takes it out, the last one
+ * included: an empty pool plays nothing, and the music stops (the pool is
+ * what plays).
  */
 export type SetSelection = 'solo' | 'add' | 'toggle'
 
@@ -190,7 +190,7 @@ export function getNextActiveSlotsForSelection(
 ): PlaylistSlot[] {
   if (selection === 'solo') return [selectedSlot]
   if (!activeSlots.includes(selectedSlot)) return [...activeSlots, selectedSlot]
-  if (selection === 'add' || activeSlots.length === 1) return activeSlots
+  if (selection === 'add') return activeSlots
   return activeSlots.filter((slot) => slot !== selectedSlot)
 }
 
@@ -338,6 +338,18 @@ export type MusicPoolQuery = { slots: PlaylistSlot[]; filter: MusicPoolFilter };
 /** Whether the filter lets every song through: switched off, or with nothing to match. */
 export function poolFilterPassesAll(filter: MusicPoolFilter): boolean {
   return !filter.enabled || !filter.query.trim();
+}
+
+/**
+ * Whether a song is in the pool `query` describes: in one of its sets and
+ * passing its filter. The one statement of pool membership, read by the
+ * phone's pool and by both players' rule that the pool is what plays
+ * (a song that leaves it while playing is left for the next pick).
+ */
+export function createPoolMatcher(query: MusicPoolQuery): (song: Pick<MusicSongEntry, 'setIds' | 'title' | 'artist' | 'album' | 'filePath'>) => boolean {
+  const slots = new Set(query.slots);
+  const passes = createPoolFilterMatcher(query.filter);
+  return (song) => song.setIds.some((id) => slots.has(id)) && passes(song);
 }
 
 export function samePoolFilter(a: MusicPoolFilter, b: MusicPoolFilter): boolean {
