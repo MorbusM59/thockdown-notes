@@ -48,9 +48,11 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
     beatPaneRef(el)
     mirrorRef(el)
   }, [beatPaneRef, mirrorRef])
+  // Double size draws the page at half the screen's resolution and scales it
+  // up 2x, a quarter of the pixels (MainActivity's x n mode), as the desktop's
+  // window zoom doubles its page; the font is halved inside it.
+  useEffect(() => { void setDisplayScale(double ? 2 : 1) }, [double])
   useEffect(() => {
-    // Drawn at the screen's full resolution: the scene's shaders hold the frame rate there.
-    void setDisplayScale(1)
     void setVisualizerOpen(true)
     const stopMeasuring = measureVisualizerFrameRate()
     return () => {
@@ -70,16 +72,16 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
   }, [onExit])
   // The keyboard must not relayout the scene (keyboardSteadyFrame.ts).
   const pageRef = useRef<HTMLDivElement | null>(null)
+  const pageFont = visualizerFontForMode(font, double)
   useEffect(() => holdFrameWhileTyping(pageRef.current!), [])
   return (
     <div ref={pageRef} className="visualizer-page">
       <div className="editor-stage is-visualizer">
       <VisualizerScene
-        boxPx={double ? 2 * visualizerBoxPx(visualizerFontForMode(font, true)) : visualizerBoxPx(font)}
+        boxPx={visualizerBoxPx(pageFont)}
         fontFamily={monoFontFamily(font.style)}
-        fontSizePx={font.sizePx /* double size keeps the text size and doubles only the box spacing (visualizerFontForMode) */}
+        fontSizePx={pageFont.sizePx}
         solidMaxPixelRatio={1.5}
-        pixelScale={1}
         sceneSeed="soundscapes"
         gridOutlineRef={gridRef}
         orbGestures={orbGestures}

@@ -34,13 +34,14 @@ export const DEFAULT_VISUALIZER_FONT: VisualizerFont = {
 
 /**
  * The font the scene draws with in double size mode, where the page itself is
- * drawn at twice the size. The TEXT keeps its regular on-screen size and only
- * the box's SPACING (box minus font) doubles: the font is halved, and the ratio
- * becomes 1 + 2 x (boxSize - 1), so a box grows only by its spacing. The phone,
- * whose page is not doubled, doubles this font's box itself (VisualizerPage.tsx).
+ * drawn at twice the size (desktop: the window's zoom; phone: the WebView
+ * laid out at half the screen and scaled up 2x, MainActivity's x n mode). The
+ * box keeps the setting's size in page pixels, so on screen it doubles with
+ * everything else, and only the font is halved, so the text keeps its regular
+ * on-screen size. Both apps call this; there is no second rule.
  */
 export function visualizerFontForMode(font: VisualizerFont, isDoubleSize: boolean): VisualizerFont {
-  return isDoubleSize ? { ...font, sizePx: font.sizePx / 2, boxSize: 2 * font.boxSize - 1 } : font
+  return isDoubleSize ? { ...font, sizePx: font.sizePx / 2, boxSize: font.boxSize * 2 } : font
 }
 
 /** A font size on its 0.5px step, inside its range. */
