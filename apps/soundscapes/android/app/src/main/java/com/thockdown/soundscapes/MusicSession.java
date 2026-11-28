@@ -619,7 +619,13 @@ final class MusicSession {
         }
         long frame = output.playheadFrame();
         double seconds = heardId == null ? 0 : heardSeconds + (double) (frame - heardFrame) / output.sampleRate;
-        listener.onHeard(heardId, seconds, frame, output.sampleRate, isPlaying(), output.heardNanos(frame));
+        // Halted (AudioConnection), the song stands where it was heard: reported as not playing, so the page's clock stops there too.
+        listener.onHeard(heardId, seconds, frame, output.sampleRate, isPlaying() && !AudioOutput.isHalted(), output.heardNanos(frame));
+    }
+
+    /** The output was halted or resumed: the page is told where the song stands and whether its clock runs. */
+    synchronized void haltChanged() {
+        report();
     }
 
     /** Whether SoundscapeSession was last told the listener's music plays. */
