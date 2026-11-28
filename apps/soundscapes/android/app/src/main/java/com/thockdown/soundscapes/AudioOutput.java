@@ -79,6 +79,8 @@ final class AudioOutput {
     static final float DUCK_GAIN = 0.2f;
     /** Told (on the main thread) whenever the output starts to be heard, so audio focus is asked for then. */
     static volatile Runnable onHeard = null;
+    /** Told (on the main thread) once a halt has flushed the track and rewound every lane to the frame heard: where everything stands is then exact. */
+    static volatile Runnable onHalted = null;
     /** Whether the halt has already flushed the track (done once, by the writer). */
     private boolean haltFlushed = false;
 
@@ -255,6 +257,18 @@ final class AudioOutput {
         if (output == null) return false;
         synchronized (output) {
             return !output.halted && !output.allHolding();
+        }
+    }
+
+    /** Whether the output is halted (AudioConnection): nothing is heard and every playhead stands still. */
+    static boolean isHalted() {
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            output = shared;
+        }
+        if (output == null) return false;
+        synchronized (output) {
+            return output.halted;
         }
     }
 
@@ -601,6 +615,8 @@ final class AudioOutput {
                         // What the device still held would be heard on the route the system moved to.
                         haltFlushed = true;
                         resync(false);
+                        Runnable hook = onHalted;
+                        if (hook != null) new android.os.Handler(android.os.Looper.getMainLooper()).post(hook);
                     }
                     track.pause();
                     Log.i(LOG, (halted ? "halted" : "all lanes holding") + ": track paused");

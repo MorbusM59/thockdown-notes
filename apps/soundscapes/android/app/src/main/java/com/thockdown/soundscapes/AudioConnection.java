@@ -114,7 +114,10 @@ final class AudioConnection {
         return shared;
     }
 
+    private final Context context;
+
     private AudioConnection(Context context) {
+        this.context = context;
         audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         outputs = listOutputs();
         focusRequest = new android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
@@ -127,6 +130,8 @@ final class AudioConnection {
             .setOnAudioFocusChangeListener(this::focusChanged, MAIN)
             .build();
         AudioOutput.onHeard = this::requestFocus;
+        // Reported once the halt has rewound the lanes, so the song's position is the one heard, not one a deep buffer ahead.
+        AudioOutput.onHalted = () -> MusicSession.get(context).haltChanged();
         audio.registerAudioDeviceCallback(new AudioDeviceCallback() {
             @Override
             public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
@@ -310,6 +315,7 @@ final class AudioConnection {
             copy = new ArrayList<>(listeners);
         }
         MAIN.post(() -> {
+            MusicSession.get(context).haltChanged();
             for (Listener listener : copy) listener.changed();
         });
         SoundscapePlaybackService.refreshIfRunning();
