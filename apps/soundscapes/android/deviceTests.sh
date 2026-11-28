@@ -31,3 +31,6 @@ run ScheduleWithoutExactAlarmsTest || { adb shell dumpsys alarm | grep -n -i "so
 
 # The music files the beat analysis reads by range, through a real WebView.
 run MusicFileServerRangeTest
+
+# The frame the music reports its position with is heard now, through a real AudioTrack.
+run MusicReportClockTest
