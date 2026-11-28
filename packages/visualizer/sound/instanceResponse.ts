@@ -13,10 +13,12 @@ const TOP_SHARE = 0.02
  */
 const MIN_SPAN = Math.log(1.5)
 /**
- * The fewest instances a response is ranked against. Fewer is no evidence of how strong the channel runs: right
- * after a restart (entering the visualizer, a seek, a new track) the music's score holds its first one or two onsets,
- * and the soundscape's history starts empty, so the first instance, however faint, ranked as its own top and showed
- * at full strength. Below this many the channel answers nothing.
+ * How many instances it takes to trust a ranking. Fewer is weak evidence of how strong the channel runs: right after
+ * a restart (entering the visualizer, a seek, a new track) the music's score holds its first one or two onsets, and
+ * the soundscape's history starts empty, so the first instance, however faint, ranked as its own top and showed at
+ * full strength. Below this many a response is scaled by the share of it held (`n / MIN_RANKED_INSTANCES`), so the
+ * first hits show, faintly, and the channel reaches full scale as the evidence does: never a blown-out first hit,
+ * never a dropped one.
  */
 export const MIN_RANKED_INSTANCES = 8
 
@@ -30,10 +32,11 @@ export const MIN_RANKED_INSTANCES = 8
  * a snare's slight thump is among the thumps' weakest.
  */
 export function instanceResponse(strength: number, strengths: readonly number[], contrast: number): number {
-  if (strengths.length < MIN_RANKED_INSTANCES) return 0
+  if (strengths.length === 0) return 0
+  const confidence = Math.min(1, strengths.length / MIN_RANKED_INSTANCES)
   const at = (share: number) => strengths[Math.min(strengths.length - 1, Math.floor(share * strengths.length))]
   const top = at(1 - TOP_SHARE)
   // At least MIN_SPAN below the top, measured DOWN from it: instances of one loudness are all full.
   const floor = Math.min(at(contrast), top - MIN_SPAN)
-  return Math.max(0, Math.min(1, (strength - floor) / (top - floor)))
+  return confidence * Math.max(0, Math.min(1, (strength - floor) / (top - floor)))
 }
