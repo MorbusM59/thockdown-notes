@@ -63,6 +63,24 @@ final class AudioOutput {
     private static volatile boolean background = false;
 
     private static AudioOutput shared;
+    /** The output the listener picked (AudioConnection), or null for the system's route; applied to every track built. */
+    private static volatile android.media.AudioDeviceInfo preferred = null;
+    /**
+     * HALTED (AudioConnection: the device the output was heard on went
+     * away): nothing is mixed and the track is paused and flushed, every
+     * lane rewound to the frame heard, exactly as if every lane held. The
+     * lanes' own states are untouched, so lifting the halt plays on from
+     * where it was heard.
+     */
+    private boolean halted = false;
+    /** What every block is scaled by: 1, or DUCK_GAIN while another app speaks briefly (AudioConnection's audio focus). */
+    private volatile float duckTarget = 1f;
+    private float duckGain = 1f;
+    static final float DUCK_GAIN = 0.2f;
+    /** Told (on the main thread) whenever the output starts to be heard, so audio focus is asked for then. */
+    static volatile Runnable onHeard = null;
+    /** Whether the halt has already flushed the track (done once, by the writer). */
+    private boolean haltFlushed = false;
 
     final int sampleRate;
     private volatile AudioTrack track;
@@ -136,6 +154,7 @@ final class AudioOutput {
         track.play();
         writer = new Thread(this::run, "AudioOutput");
         writer.start();
+        announceHeard();
     }
 
     private static AudioAttributes attributes() {
@@ -172,6 +191,7 @@ final class AudioOutput {
         offloaded = built != null;
         Log.i(LOG, "track built: offloaded " + offloaded + ", background " + background);
         if (built == null) built = builder().build();
+        if (preferred != null) built.setPreferredDevice(preferred);
         // The capacity is the deep depth; the depth in use is set here. An
         // offloaded track's buffer is the platform's to size.
         depthFrames = offloaded ? built.getBufferSizeInFrames() : built.setBufferSizeInFrames(wantedFrames);
@@ -215,7 +235,7 @@ final class AudioOutput {
             output.notifyAll();
             long deadline = now + INTERACT_WAIT_MS * 1_000_000L;
             try {
-                while (output.running && output.resyncWanted && !output.allHolding()) {
+                while (output.running && output.resyncWanted && !output.halted && !output.allHolding()) {
                     long left = (deadline - System.nanoTime()) / 1_000_000L;
                     if (left <= 0) break;
                     output.wait(left);
@@ -223,6 +243,60 @@ final class AudioOutput {
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }
+        }
+    }
+
+    /** Whether anything is heard now: an output exists, is not halted, and some lane does not hold. */
+    static boolean isHeard() {
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            output = shared;
+        }
+        if (output == null) return false;
+        synchronized (output) {
+            return !output.halted && !output.allHolding();
+        }
+    }
+
+    /** Halt (true) or resume (false) everything the output plays; AudioConnection's. */
+    static void setHalted(boolean halt) {
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            output = shared;
+        }
+        if (output == null) return;
+        synchronized (output) {
+            if (output.halted == halt) return;
+            output.halted = halt;
+            output.haltFlushed = false;
+            output.notifyAll();
+        }
+    }
+
+    /** Lower everything heard (another app's short sound) or bring it back. */
+    static void setDucked(boolean ducked) {
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            output = shared;
+        }
+        if (output != null) output.duckTarget = ducked ? DUCK_GAIN : 1f;
+    }
+
+    private static void announceHeard() {
+        Runnable hook = onHeard;
+        if (hook != null) new android.os.Handler(android.os.Looper.getMainLooper()).post(hook);
+    }
+
+    /** Play through `device`, or (null) wherever the system routes media; applied to the present track at once. */
+    static void setPreferredDevice(android.media.AudioDeviceInfo device) {
+        preferred = device;
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            output = shared;
+        }
+        if (output == null) return;
+        synchronized (output) {
+            output.track.setPreferredDevice(device);
         }
     }
 
@@ -278,6 +352,10 @@ final class AudioOutput {
      * mixed since `trackBase`.
      */
     private void resync() {
+        resync(true);
+    }
+
+    private void resync(boolean play) {
         resyncWanted = false;
         Log.i(LOG, "resync: background " + background + ", depth " + depthFrames + ", queued " + queuedFrames() + ", play state " + track.getPlayState());
         track.pause();
@@ -295,8 +373,10 @@ final class AudioOutput {
         } else if (!offloaded) {
             depthFrames = track.setBufferSizeInFrames(wantedFrames);
         }
-        playedNanos = System.nanoTime();
-        track.play();
+        if (play) {
+            playedNanos = System.nanoTime();
+            track.play();
+        }
         // A press waiting for the collapse (interact) goes on.
         notifyAll();
     }
@@ -451,7 +531,7 @@ final class AudioOutput {
         synchronized (this) {
             if (queuedFrames() < depthFrames - BLOCK_FRAMES) return;
             try {
-                while (running && !resyncWanted && deep()) {
+                while (running && !resyncWanted && !halted && deep()) {
                     long spare = queuedFrames() - (depthFrames / 4);
                     if (spare <= 0) return;
                     // Wake for a marker being heard too, so it is reported on time.
@@ -516,11 +596,16 @@ final class AudioOutput {
             due.clear();
             synchronized (this) {
                 if (!running) return;
-                if (allHolding()) {
+                if (halted || allHolding()) {
+                    if (halted && !haltFlushed) {
+                        // What the device still held would be heard on the route the system moved to.
+                        haltFlushed = true;
+                        resync(false);
+                    }
                     track.pause();
-                    Log.i(LOG, "all lanes holding: track paused");
+                    Log.i(LOG, (halted ? "halted" : "all lanes holding") + ": track paused");
                     try {
-                        while (running && allHolding()) wait();
+                        while (running && (halted || allHolding())) wait();
                     } catch (InterruptedException ignored) {
                         return;
                     }
@@ -528,6 +613,7 @@ final class AudioOutput {
                     if (!running) return;
                     playedNanos = System.nanoTime();
                     track.play();
+                    announceHeard();
                 }
                 if (retired != null && System.nanoTime() >= retiredUntilNanos) releaseRetired();
                 if (interactiveUntilNanos != 0 && System.nanoTime() >= interactiveUntilNanos) {
@@ -550,6 +636,17 @@ final class AudioOutput {
                     if (solo != null && lane != solo) continue;
                     if (lane.mixInto(mix, BLOCK_FRAMES)) due.add(lane);
                 }
+            }
+            float target = duckTarget;
+            if (target != 1f || duckGain != 1f) {
+                // Glide to the duck's level over about a block, so the change has no click.
+                float step = (target - duckGain) / BLOCK_FRAMES;
+                for (int frame = 0; frame < BLOCK_FRAMES; frame += 1) {
+                    duckGain += step;
+                    mix[frame * 2] *= duckGain;
+                    mix[frame * 2 + 1] *= duckGain;
+                }
+                duckGain = target;
             }
             limiter.process(mix, BLOCK_FRAMES);
             for (int index = 0; index < block.length; index += 1) {

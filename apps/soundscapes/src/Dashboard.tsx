@@ -22,6 +22,7 @@ import { songAlbumText, songArtistText, songTitleText, type MusicSongEntry } fro
 import { musicListening } from '@thockdown/visualizer/sound/musicListening'
 import { mixHeard, switchSoundscapeChannel, toggleMix } from './mixTransport'
 import type { RegularMode } from './backgroundAudioHost'
+import { audioOutputIcon, BLUETOOTH_B_PATH, readAudioConnection, resumeAudioConnection, subscribeAudioConnection } from './audioRoute'
 import { readMusicChannel, readMusicPlaying, setMusicChannel, startMusic, subscribeMusicPlaying } from './mobileMusicPlayer'
 
 /** The music sets: a tap puts a set in the pool or takes it out, a hold makes it the only one (setPress.ts, as everywhere); neither starts playback. */
@@ -316,6 +317,15 @@ function DashboardFilter() {
  * play while nothing is. The CHANNEL buttons switch the music and
  * the soundscape in and out of the mix: switched out, a channel is silent
  * whoever plays it, and carries on unheard.
+ *
+ * The transport also carries the AUDIO DEVICE CONNECTION (audioRoute.ts):
+ * while the output it was heard on is disconnected, everything heard is
+ * halted, whatever plays, and the button shows a broken link; a tap
+ * resumes on the output available, and changes nothing else. A HOLD
+ * replaces the button row with the outputs present (the speaker, a cable,
+ * Bluetooth, HDMI, a hearing aid), the active one lit, and a way back;
+ * a tap on one plays through it (resuming, if disconnected). Past five
+ * outputs the row wraps onto a second.
  */
 export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, onSoundscapeTransport, onPause, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, onSoundscapeVolumeDragging, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
   /** The toggle row (DashboardToggleRow.tsx), above the volumes. */
@@ -345,7 +355,11 @@ export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, 
   const musicChannel = useSyncExternalStore(subscribeMusicPlaying, readMusicChannel)
   const nowPlaying = useSyncExternalStore(subscribeNowPlaying, readNowPlaying)
   const filter = useSyncExternalStore(subscribePoolFilterDraft, readShownPoolFilter)
+  const connection = useSyncExternalStore(subscribeAudioConnection, readAudioConnection)
+  const [picking, setPicking] = useState(false)
+  const swallowClickRef = useRef(false)
   const heard = mixHeard(musicPlaying, soundscapeHeard)
+  const disconnected = !connection.connected
   return (
     <div className="mobile-dashboard-dock">
       {toggles}
@@ -390,6 +404,41 @@ export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, 
         <SongName song={nowPlaying.song} />
         <SongProgress key={nowPlaying.song?.id ?? 'none'} playing={musicPlaying} jumpSong={nowPlaying.jumpSong} />
       </>) : null}
+      {picking ? (
+        <div className="options-loadout-grid" role="group" aria-label="Audio output" onClickCapture={(event) => {
+          // The click that ends the hold opening this row is not a choice.
+          if (!swallowClickRef.current) return
+          swallowClickRef.current = false
+          event.preventDefault()
+          event.stopPropagation()
+        }} onPointerDownCapture={() => { swallowClickRef.current = false }}>
+          {connection.outputs.map((output) => (
+            <button
+              key={output.id}
+              type="button"
+              className={`btn-icon options-color-swatch options-loadout-btn${output.active && !disconnected ? ' is-active' : ''}`}
+              aria-pressed={output.active && !disconnected}
+              aria-label={output.name}
+              onClick={() => {
+                resumeAudioConnection(output.id)
+                setPicking(false)
+              }}
+            >
+              {output.kind === 'bluetooth'
+                ? <svg className="svg-inline--fa" viewBox="0 0 256 512" width="0.5em" height="1em" fill="currentColor" aria-hidden="true"><path d={BLUETOOTH_B_PATH} /></svg>
+                : <span className={`fa-solid ${audioOutputIcon(output.kind)}`} aria-hidden="true" />}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="btn-icon options-color-swatch options-loadout-btn mobile-dashboard-return"
+            aria-label="Back"
+            onClick={() => setPicking(false)}
+          >
+            <span className="fa-solid fa-circle-arrow-left" aria-hidden="true" />
+          </button>
+        </div>
+      ) : (
       <div className="options-loadout-grid" role="group" aria-label="Play">
         <button
           type="button"
@@ -413,16 +462,27 @@ export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, 
         >
           <span className="fa-solid fa-compact-disc" aria-hidden="true" />
         </button>
-        <button
-          type="button"
-          className={`btn-icon options-color-swatch options-loadout-btn mobile-dock-transport${heard ? ' is-active' : ''}`}
-          aria-label={heard ? `Pause${timeLeft ? `, ${timeLeft} left` : ''}` : 'Play'}
-          onClick={() => toggleMix(heard, onSoundscapeTransport, onPause)}
+        <TapHoldButton
+          className="mobile-dock-transport"
+          active={heard && !disconnected}
+          label={disconnected
+            ? 'Disconnected: tap to resume on the output available, hold to pick one'
+            : heard ? `Pause${timeLeft ? `, ${timeLeft} left` : ''}` : 'Play'}
+          onTap={() => {
+            if (disconnected) resumeAudioConnection()
+            else toggleMix(heard, onSoundscapeTransport, onPause)
+          }}
+          onHold={() => {
+            swallowClickRef.current = true
+            setPicking(true)
+          }}
         >
-          {heard && timeLeft
-            ? <span className="mobile-dock-transport-time" aria-hidden="true">{timeLeft}</span>
-            : <span className={`fa-solid ${heard ? 'fa-pause' : 'fa-play'}`} aria-hidden="true" />}
-        </button>
+          {disconnected
+            ? <span className="fa-solid fa-link-slash" aria-hidden="true" />
+            : heard && timeLeft
+              ? <span className="mobile-dock-transport-time" aria-hidden="true">{timeLeft}</span>
+              : <span className={`fa-solid ${heard ? 'fa-pause' : 'fa-play'}`} aria-hidden="true" />}
+        </TapHoldButton>
         <button
           type="button"
           className={`btn-icon options-color-swatch options-loadout-btn${soundscapeChannel ? ' is-active' : ''}`}
@@ -434,6 +494,7 @@ export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, 
         </button>
         <DockHelpButton active={help} onToggle={onHelpToggle} />
       </div>
+      )}
     </div>
   )
 }
