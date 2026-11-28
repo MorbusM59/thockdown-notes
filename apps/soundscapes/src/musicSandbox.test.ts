@@ -138,8 +138,9 @@ describe('the car\'s view of the library', () => {
     expect(queued()).toEqual([3]);
     expect([music.musicPoolHolds(3), music.musicPoolHolds(1), music.musicPoolHolds(-1)]).toEqual(['true', 'false', 'true']);
     expect(JSON.parse(music.musicEditCatalog(JSON.stringify({ filter: '' }))).filter.enabled).toBe(false);
-    // The last set playing stays on: a toggle never empties the pool.
+    // Every set can be switched off: the pool is then empty and nothing plays.
     music.musicEditCatalog(JSON.stringify({ set: 2 }));
-    expect(JSON.parse(music.musicEditCatalog(JSON.stringify({ set: 1 }))).activeSetIds).toEqual([1]);
+    expect(JSON.parse(music.musicEditCatalog(JSON.stringify({ set: 1 }))).activeSetIds).toEqual([]);
+    expect(music.musicPoolHolds(-1)).toBe('false');
   });
 });

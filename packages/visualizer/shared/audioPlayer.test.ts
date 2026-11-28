@@ -32,7 +32,7 @@ describe('audio set selection', () => {
     expect(getNextActiveSlotsForSelection([1, 3], 2, 'add')).toEqual([1, 3, 2])
     expect(getNextActiveSlotsForSelection([1, 3], 2, 'toggle')).toEqual([1, 3, 2])
     expect(getNextActiveSlotsForSelection([1, 2, 3], 2, 'toggle')).toEqual([1, 3])
-    expect(getNextActiveSlotsForSelection([2], 2, 'toggle')).toEqual([2])
+    expect(getNextActiveSlotsForSelection([2], 2, 'toggle')).toEqual([])
   })
 
 })

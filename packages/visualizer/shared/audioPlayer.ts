@@ -177,9 +177,9 @@ export type AudioPlayerApi = {
 
 /**
  * How a set joins or leaves the activated sets: `solo` plays from it alone,
- * `add` puts it in, `toggle` puts it in or takes it out (never the last one:
- * a pool with nothing in it plays nothing, and taking the last set out is
- * not what a click on it means).
+ * `add` puts it in, `toggle` puts it in or takes it out, the last one
+ * included: an empty pool plays nothing, and the music stops (the pool is
+ * what plays).
  */
 export type SetSelection = 'solo' | 'add' | 'toggle'
 
@@ -190,7 +190,7 @@ export function getNextActiveSlotsForSelection(
 ): PlaylistSlot[] {
   if (selection === 'solo') return [selectedSlot]
   if (!activeSlots.includes(selectedSlot)) return [...activeSlots, selectedSlot]
-  if (selection === 'add' || activeSlots.length === 1) return activeSlots
+  if (selection === 'add') return activeSlots
   return activeSlots.filter((slot) => slot !== selectedSlot)
 }
 
