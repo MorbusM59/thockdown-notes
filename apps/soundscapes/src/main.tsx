@@ -13,6 +13,7 @@ import { installAudioRoute } from './audioRoute'
 import './app.css'
 import '@fortawesome/fontawesome-free/css/fontawesome.min.css'
 import '@fortawesome/fontawesome-free/css/solid.min.css'
+import '@fortawesome/fontawesome-free/css/brands.min.css'
 import './mobile.css'
 
 // The desktop's rules for every button, so the shared panel behaves the

@@ -100,6 +100,8 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     private android.graphics.Bitmap artwork;
 
     private SoundscapeSession soundscape;
+    /** The audio device connection: while disconnected nothing is heard, and play resumes it (AudioConnection). */
+    private AudioConnection connection;
     private MusicSession music;
     private MediaSession session;
     private PowerManager.WakeLock wakeLock;
@@ -164,24 +166,9 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         });
         session.setActive(true);
         setSessionToken(session.getSessionToken());
-        androidx.core.content.ContextCompat.registerReceiver(this, becomingNoisy,
-            new android.content.IntentFilter(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY),
-            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED);
+        connection = AudioConnection.get(this);
         refresh();
     }
-
-    /**
-     * Headphones unplugged or a Bluetooth headset disconnected: the system
-     * moves the output to the loudspeaker on its own, so what was private
-     * would carry on out loud. Everything pauses, as every media app does;
-     * play resumes it on the new route.
-     */
-    private final android.content.BroadcastReceiver becomingNoisy = new android.content.BroadcastReceiver() {
-        @Override
-        public void onReceive(android.content.Context context, Intent intent) {
-            if (android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())) pause();
-        }
-    };
 
     // --- Browsing (Android Auto) ---
 
@@ -341,6 +328,11 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     /** Resume what is paused; with nothing at all, the soundscape last heard (as before there was music). */
     // Every press is the listener's, to be heard at once rather than after a deep background buffer (AudioOutput.interact).
     private void play() {
+        if (!connection.isConnected()) {
+            // Play while disconnected resumes the halted output on the route available, and changes nothing else.
+            connection.resume(-1);
+            return;
+        }
         AudioOutput.interact();
         boolean withMusic = music.isActive();
         android.util.Log.i("ThockdownAudio", "media play: music active " + withMusic + ", soundscape active " + soundscape.isActive());
@@ -436,9 +428,10 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             return;
         }
         boolean withMusic = music.isActive();
-        boolean playing = (withMusic && music.isPlaying()) || soundscape.isAudible();
+        boolean disconnected = !connection.isConnected();
+        boolean playing = !disconnected && ((withMusic && music.isPlaying()) || soundscape.isAudible());
         String title = withMusic ? music.title() : soundscape.title();
-        String status = withMusic
+        String status = disconnected ? "Disconnected: play resumes" : withMusic
             ? (playing ? "Playing" : "Paused") + (soundscape.isActive() ? " with " + soundscape.title() : "")
             : statusText(playing);
         MediaMetadata.Builder metadata = new MediaMetadata.Builder()
@@ -604,7 +597,6 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     @Override
     public void onDestroy() {
         if (running == this) running = null;
-        unregisterReceiver(becomingNoisy);
         session.setActive(false);
         session.release();
         holdWakeLock(false);
