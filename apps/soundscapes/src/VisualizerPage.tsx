@@ -81,6 +81,7 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
         boxPx={visualizerBoxPx(pageFont)}
         fontFamily={monoFontFamily(font.style)}
         fontSizePx={pageFont.sizePx}
+        pixelScale={double ? 2 : 1}
         solidMaxPixelRatio={1.5}
         sceneSeed="soundscapes"
         gridOutlineRef={gridRef}
