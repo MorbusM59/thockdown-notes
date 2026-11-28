@@ -58,8 +58,9 @@
 import { MusicVoice, type MusicSettings } from '@thockdown/audio/musicVoice';
 import { RenderAheadEngine, type RenderedChunk } from '@thockdown/audio/renderAhead';
 import { StreamResampler } from '@thockdown/audio/resampler';
+import { getNextActiveSlotsForSelection, songArtistText, songTitleText } from '@thockdown/visualizer/shared/audioPlayer';
 import { EQ_BAND_FREQUENCIES_HZ, EQ_BAND_Q } from '@thockdown/visualizer/shared/musicEqCurve';
-import { chooseSong, EMPTY_CATALOG, nextSong, sanitizeCatalog, sanitizeRotation, settleRotation, stepBackRotation, type MusicCatalog, type MusicRotation, type RotationMove } from './musicLibrary';
+import { chooseSong, EMPTY_CATALOG, nextSong, poolOf, sanitizeCatalog, withPoolFilter, sanitizeRotation, settleRotation, stepBackRotation, type MusicCatalog, type MusicRotation, type RotationMove } from './musicLibrary';
 import { currentHistorySongId, emptyPlayHistory, forgetSong, pushPlayed, stepBack as stepBackHistory } from '@thockdown/visualizer/shared/musicPlayHistory';
 import { decodeFullScaleStereo, encodeHalfScaleStereo, toBase64 } from '@thockdown/soundscape/halfScalePcm';
 import { SpectrumFrames } from '@thockdown/visualizer/visualizer/spectrumFrames';
@@ -182,6 +183,35 @@ scope.musicRotation = (json: string): string => {
 };
 
 scope.musicRotationJson = (): string => JSON.stringify(rotation);
+
+/**
+ * The QUEUE as a media session shows it (Android Auto's Up next): the
+ * pool in queue order, from the song playing, at most `limit` songs, as
+ * `[{ "id", "title", "artist" }]`, the same list the page's song list draws.
+ */
+scope.musicQueueJson = (limit: number): string =>
+  JSON.stringify(poolOf(poolCatalog(), rotation).slice(0, limit).map((song) => ({
+    id: song.id,
+    title: songTitleText(song),
+    artist: songArtistText(song),
+  })));
+
+/**
+ * A change to the listener's choice made away from the page (Android
+ * Auto), by the page's own rules, returning the whole catalog for the
+ * service to store and hand to the page:
+ * `{ "set": id }` toggles a set in the pool (a click on its button), and
+ * `{ "filter": query }` makes `query` the pool filter, switched on ('' switches it off).
+ */
+scope.musicEditCatalog = (json: string): string => {
+  const edit = JSON.parse(json) as { set?: number; filter?: string };
+  if (typeof edit.set === 'number') {
+    catalog = { ...catalog, activeSetIds: getNextActiveSlotsForSelection(catalog.activeSetIds, edit.set, 'toggle') };
+  } else if (typeof edit.filter === 'string') {
+    catalog = withPoolFilter(catalog, edit.filter === '' ? { ...catalog.filter, enabled: false } : { query: edit.filter, enabled: true });
+  }
+  return JSON.stringify(catalog);
+};
 
 /**
  * The song set the SCHEDULE plays (schedule.ts's music channel), or -1 for

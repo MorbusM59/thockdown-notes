@@ -32,6 +32,7 @@ import {
   EMPTY_CATALOG,
   libraryOf,
   likeSong,
+  sanitizeCatalog,
   sanitizeRotation,
   moveSet,
   poolOf,
@@ -41,6 +42,7 @@ import {
   setCounts,
   setSetIcon,
   type MusicCatalog,
+  withPoolFilter,
   type MusicRotation,
 } from './musicLibrary'
 import { loadMusicLibrary, type NativeMusicPlugin, type ScannedSong } from './nativeMusic'
@@ -299,7 +301,7 @@ const actions = {
   // Nothing is dropped from a file manager on a phone.
   addPathsToMusicSet: async () => false,
   setPoolFilter(filter: MusicPoolFilter) {
-    commit({ ...catalog, filter })
+    commit(withPoolFilter(catalog, filter))
   },
   likeSong(id: number, steps: number) {
     commit(likeSong(catalog, id, steps))
@@ -387,6 +389,11 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     await startMusic()
   })
   cancelMusicRecovery = () => recovery.cancel()
+  // The car changed the sets or the filter: its catalog replaces this page's copy, and is not written back.
+  const edited = await native.addListener('catalog', ({ catalog: json }) => {
+    catalog = sanitizeCatalog(JSON.parse(json))
+    publish()
+  })
   const failure = await native.addListener('failure', ({ message }) => {
     // Restarted only if it was heard playing: a renderer that died while paused stays paused.
     if (playing && message.startsWith('Music renderer stopped')) recovery.fail(message)
@@ -397,6 +404,7 @@ export async function startMobileMusicPlayer(native: NativeMusicPlugin): Promise
     cancelMusicRecovery = () => {}
     void handle.remove()
     void failure.remove()
+    void edited.remove()
     setMusicLibraryReads(null)
     plugin = null
   }

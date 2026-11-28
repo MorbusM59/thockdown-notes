@@ -48,6 +48,12 @@ final class MusicRenderer {
         /** The rotation moved (a song played or was chosen): store it, to give back as `rotationJson` next time. */
         void onRotation(String rotationJson);
 
+        /** The pool in queue order changed: musicSandbox.ts's musicQueueJson, from the song playing. */
+        void onQueue(String queueJson);
+
+        /** A catalog edit made here (`editCatalog`) produced this catalog: store it and tell the page. */
+        void onCatalogEdited(String catalogJson);
+
         void onFailure(String message);
     }
 
@@ -118,7 +124,21 @@ final class MusicRenderer {
 
     /** The page's catalog (musicLibrary.ts's MusicCatalog as JSON), whenever it changes. */
     void setCatalog(String catalogJson) {
-        post(() -> isolate.evaluateJavaScriptAsync("musicCatalog(" + JSONObject.quote(catalogJson) + ")").get());
+        post(() -> {
+            isolate.evaluateJavaScriptAsync("musicCatalog(" + JSONObject.quote(catalogJson) + ")").get();
+            queued();
+        });
+    }
+
+    /**
+     * A change to the listener's choice made away from the page (musicSandbox.ts's
+     * musicEditCatalog: `{ "set": id }` or `{ "filter": query }`), by the page's own rules.
+     */
+    void editCatalog(String editJson) {
+        post(() -> {
+            listener.onCatalogEdited(isolate.evaluateJavaScriptAsync("musicEditCatalog(" + JSONObject.quote(editJson) + ")").get());
+            queued();
+        });
     }
 
     /**
@@ -128,6 +148,7 @@ final class MusicRenderer {
     void setPoolSet(Integer setId, boolean skip) {
         post(() -> {
             isolate.evaluateJavaScriptAsync("musicPoolSet(" + (setId == null ? -1 : setId) + ")").get();
+            queued();
             if (!skip || stage == null) return;
             settle();
             configure(true);
@@ -241,6 +262,14 @@ final class MusicRenderer {
 
     private void rotated() throws Exception {
         listener.onRotation(isolate.evaluateJavaScriptAsync("musicRotationJson()").get());
+        queued();
+    }
+
+    /** How many songs of the queue a media session is shown (Android Auto's Up next). */
+    private static final int QUEUE_LIMIT = 30;
+
+    private void queued() throws Exception {
+        listener.onQueue(isolate.evaluateJavaScriptAsync("musicQueueJson(" + QUEUE_LIMIT + ")").get());
     }
 
     /** Called by the output as it plays. */
@@ -426,6 +455,7 @@ final class MusicRenderer {
             init.put("spliceMarginSec", output.committedSec() + SPLICE_SLACK_SEC);
             isolate.evaluateJavaScriptAsync("musicInit(" + JSONObject.quote(init.toString()) + ")").get();
             isolate.evaluateJavaScriptAsync("musicRotation(" + JSONObject.quote(rotationJson) + ")").get();
+            queued();
             long decodeAheadFrames = Math.round(DECODE_AHEAD_SEC * output.sampleRate);
 
             while (running) {

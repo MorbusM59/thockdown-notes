@@ -38,6 +38,8 @@ function sandbox() {
     musicNext(previousId: number): string;
     musicJump(currentId: number, direction: number): string;
     musicChoose(songId: number, currentId: number): string;
+    musicQueueJson(limit: number): string;
+    musicEditCatalog(json: string): string;
   };
   api.musicInit(JSON.stringify({ sampleRate: OUTPUT_RATE, spliceMarginSec: 0.15}));
   return { ...api, step: (played: number, max = 1000) => JSON.parse(api.musicStep(played, max)) as Step };
@@ -118,3 +120,24 @@ describe('the music sandbox', () => {
   });
 });
 
+describe('the car\'s view of the library', () => {
+  const songs = [1, 2, 3].map((id) => ({ id, filePath: `content://music/${id}`, setIds: [id === 3 ? 2 : 1], title: `Song ${id}`, artist: '', album: '', durationSec: 0, likes: 0 }));
+  const sets = [{ slot: 1, name: 'One', icon: null }, { slot: 2, name: 'Two', icon: null }];
+
+  it('queues the pool and edits the sets and the filter by the page\'s rules', () => {
+    const music = sandbox();
+    music.musicCatalog(JSON.stringify({ songs, sets, folders: [], activeSetIds: [1], filter: { query: '', enabled: false }, playMode: 'mix' }));
+    const queued = () => (JSON.parse(music.musicQueueJson(30)) as Array<{ id: number }>).map((song) => song.id).sort();
+    expect(queued()).toEqual([1, 2]);
+    expect(JSON.parse(music.musicEditCatalog(JSON.stringify({ set: 2 }))).activeSetIds).toEqual([1, 2]);
+    expect(queued()).toEqual([1, 2, 3]);
+    const filtered = JSON.parse(music.musicEditCatalog(JSON.stringify({ filter: 'Song 3' })));
+    expect(filtered.filter).toEqual({ query: 'Song 3', enabled: true });
+    expect(filtered.recentFilters).toEqual(['Song 3']);
+    expect(queued()).toEqual([3]);
+    expect(JSON.parse(music.musicEditCatalog(JSON.stringify({ filter: '' }))).filter.enabled).toBe(false);
+    // The last set playing stays on: a toggle never empties the pool.
+    music.musicEditCatalog(JSON.stringify({ set: 2 }));
+    expect(JSON.parse(music.musicEditCatalog(JSON.stringify({ set: 1 }))).activeSetIds).toEqual([1]);
+  });
+});

@@ -65,6 +65,8 @@ export interface NativeMusicPlugin {
   /** Spectrum frames (spectrumFrames.ts's batches, as JSON text; nativeMusicListening.ts reads them). */
   addListener(event: 'spectrum', listener: (data: { batches: string }) => void): Promise<PluginListenerHandle>
   /** The car's "next soundstage" chose `id` (setStageCycle). */
+  /** The catalog changed away from the page (Android Auto chose a set or a filter), by the page's own rules: reload it. */
+  addListener(event: 'catalog', listener: (data: { catalog: string }) => void): Promise<PluginListenerHandle>;
   addListener(event: 'stage', listener: (data: { id: string }) => void): Promise<PluginListenerHandle>
   addListener(event: 'failure', listener: (data: { message: string }) => void): Promise<PluginListenerHandle>
 }

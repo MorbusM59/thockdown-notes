@@ -65,12 +65,32 @@ export interface MusicCatalog {
   filter: MusicPoolFilter;
   /** How the pool plays: the mix, or folder order. */
   playMode: PlayMode;
+  /**
+   * The filter queries last used, newest first, at most RECENT_FILTER_LIMIT
+   * (`withPoolFilter`): what Android Auto offers to pick from.
+   */
+  recentFilters: string[];
+}
+
+export const RECENT_FILTER_LIMIT = 10;
+
+/**
+ * The catalog with `filter` as its pool filter. A query switched on joins
+ * the recent filters (moved to the front if it is there already), so every
+ * route that sets a filter, the page's field or a voice search, keeps the
+ * list the same way.
+ */
+export function withPoolFilter(catalog: MusicCatalog, filter: MusicPoolFilter): MusicCatalog {
+  const query = filter.query.trim();
+  if (!filter.enabled || query === '') return { ...catalog, filter };
+  const recentFilters = [query, ...catalog.recentFilters.filter((entry) => entry !== query)].slice(0, RECENT_FILTER_LIMIT);
+  return { ...catalog, filter, recentFilters };
 }
 
 /** Each song's place in the mix. */
 export type MusicRotation = Array<{ id: number; due: number }>;
 
-export const EMPTY_CATALOG: MusicCatalog = { songs: [], sets: [], folders: [], activeSetIds: [], filter: EMPTY_POOL_FILTER, playMode: 'mix' };
+export const EMPTY_CATALOG: MusicCatalog = { songs: [], sets: [], folders: [], activeSetIds: [], filter: EMPTY_POOL_FILTER, playMode: 'mix', recentFilters: [] };
 
 /**
  * A stored rotation; an entry without a due (written by the priority
@@ -93,6 +113,9 @@ export function sanitizeCatalog(input: unknown): MusicCatalog {
     activeSetIds: Array.isArray(stored.activeSetIds) ? stored.activeSetIds : [],
     filter: sanitizePoolFilter(stored.filter),
     playMode: sanitizePlayMode(stored.playMode),
+    recentFilters: Array.isArray(stored.recentFilters)
+      ? stored.recentFilters.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '').slice(0, RECENT_FILTER_LIMIT)
+      : [],
   };
 }
 

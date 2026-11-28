@@ -64,6 +64,14 @@ public class MusicPlugin extends Plugin {
             // Retained: the page is paused while the car steps, and reads it on its return.
             notifyListeners("stage", data, true);
         }
+
+        @Override
+        public void onCatalog(String catalogJson) {
+            JSObject data = new JSObject();
+            data.put("catalog", catalogJson);
+            // Retained, as a stage: the car changes the sets with the page paused.
+            notifyListeners("catalog", data, true);
+        }
     };
 
     /** The delay calibration's loop while it plays (CalibrationLoop), or null. */
