@@ -19,8 +19,7 @@ import java.nio.ShortBuffer;
  * Mono is played on both sides; of more than two channels the first two are
  * taken (front left and right in every standard layout).
  *
- * A SEEK goes to the sync point at or before the time asked for (an MP3
- * steps from its start instead, its seeks being estimates), steps over
+ * A SEEK goes to the sync point at or before the time asked for, steps over
  * the packets up to a preroll before it without decoding them, and the
  * decoder then drops what precedes the time itself, so a seek lands where it
  * was asked whatever the format's sync spacing or seek index.
@@ -71,24 +70,12 @@ final class SongDecoder implements AutoCloseable {
             opened.configure(format, null, null, 0);
             opened.start();
             if (startUs > 0) {
-                // An MP3 is never SEEKED, only stepped through from its start.
-                // Its frames carry no time, so the platform's extractor places a
-                // seek by an estimate (the first frame's bitrate, or a Xing
-                // table's hundred coarse points) and then counts time on from
-                // that estimate: in a VBR file the audio after a seek is not the
-                // time the extractor reports, by up to minutes deep into a long
-                // mix, and the music's clock (and with it every visual, which
-                // decodes the file exactly, musicDecodeStream.ts) ran on a
-                // different moment from the sound. Stepped from the start, every
-                // sample time is the sum of the frames before it, which is exact.
-                // A step reads one packet without decoding it.
-                if (!"audio/mpeg".equals(format.getString(MediaFormat.KEY_MIME))) {
-                    extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
-                }
-                // A file with no seek index (a WebM without cues) can land far
-                // before the time, even at its start. The packets up to a
-                // preroll before the time are stepped over unread rather than
-                // decoded and dropped, which on a long mix took minutes of silence.
+                extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                // A file with no seek index (a VBR MP3 without a Xing table,
+                // a WebM without cues) can land far before the time, even at
+                // its start. The packets up to a preroll before the time are
+                // stepped over unread rather than decoded and dropped, which
+                // on a long mix took minutes of silence.
                 long prerollFrom = startUs - SEEK_PREROLL_US;
                 while (extractor.getSampleTime() >= 0 && extractor.getSampleTime() < prerollFrom) {
                     if (!extractor.advance()) break;
