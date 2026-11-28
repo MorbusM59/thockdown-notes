@@ -79,7 +79,6 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     private static final String CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED";
     private static final String CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT";
     private static final String CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT";
-    private static final String SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED";
     private static final int CONTENT_STYLE_LIST = 1;
     private static final int CONTENT_STYLE_GRID = 2;
 
@@ -148,6 +147,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             @Override public void onPlayFromMediaId(String mediaId, Bundle extras) { playFrom(mediaId); }
             @Override public void onSkipToQueueItem(long id) { music.choose((int) id); }
             // A voice search ("play ... in Thockdown") is the pool filter; nothing said plays.
+            // (Typed search needs MediaBrowserServiceCompat's onSearch, which the framework service lacks.)
             @Override public void onPlayFromSearch(String query, Bundle extras) {
                 if (query == null || query.trim().isEmpty()) play();
                 else editCatalog("filter", query.trim());
@@ -183,7 +183,6 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         extras.putBoolean(CONTENT_STYLE_SUPPORTED, true);
         extras.putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_LIST);
         extras.putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_LIST);
-        extras.putBoolean(SEARCH_SUPPORTED, true);
         return new BrowserRoot(ROOT_ID, extras);
     }
 
@@ -215,15 +214,6 @@ public class SoundscapePlaybackService extends MediaBrowserService {
             items.add(playable(CONTROL_PREFIX + ACTION_NEXT_SOUNDSTAGE, "Next soundstage", null, tile(R.drawable.ic_action_soundstage)));
             items.add(playable(CONTROL_PREFIX + ACTION_NEXT_SOUNDSCAPE, "Next soundscape", null, tile(R.drawable.ic_action_soundscape)));
         }
-        result.sendResult(items);
-    }
-
-    /** A voice or typed search offers the query itself as the filter to play. */
-    @Override
-    public void onSearch(String query, Bundle extras, Result<List<MediaBrowser.MediaItem>> result) {
-        List<MediaBrowser.MediaItem> items = new ArrayList<>();
-        String trimmed = query == null ? "" : query.trim();
-        if (!trimmed.isEmpty()) items.add(playable(FILTER_PREFIX + trimmed, trimmed, "Filter", null));
         result.sendResult(items);
     }
 
