@@ -317,7 +317,7 @@ function DashboardFilter() {
  * the soundscape in and out of the mix: switched out, a channel is silent
  * whoever plays it, and carries on unheard.
  */
-export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, onSoundscapeTransport, onPause, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
+export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, onSoundscapeTransport, onPause, soundscapeChannel, onSoundscapeChannel, soundscapeVolume, onSoundscapeVolume, onSoundscapeVolumeDragging, schedule, scheduleHeard, onScheduleToggle, help, onHelpToggle }: {
   /** The toggle row (DashboardToggleRow.tsx), above the volumes. */
   toggles: ReactNode
   /** The timer's time left (h:mm:ss), or null without one. */
@@ -336,6 +336,8 @@ export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, 
   onSoundscapeChannel: (on: boolean) => void
   soundscapeVolume: number
   onSoundscapeVolume: (volume: number) => void
+  /** Told when a drag of the soundscape volume starts and ends, so what only needs the resting volume waits for it. */
+  onSoundscapeVolumeDragging: (dragging: boolean) => void
   help: boolean
   onHelpToggle: () => void
 }) {
@@ -380,6 +382,7 @@ export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, 
           ariaLabel="Soundscape volume"
           formatValue={(value) => `${value}%`}
           onCommit={(value) => onSoundscapeVolume(value / 100)}
+          onDraggingChange={onSoundscapeVolumeDragging}
         />
       </div>
       {musicChannel ? (<>

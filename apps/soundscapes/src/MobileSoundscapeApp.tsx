@@ -392,6 +392,16 @@ export function MobileSoundscapeApp() {
     soundscapeEngine.setChannel(soundscapeChannel)
   }, [soundscapeChannel])
   const sessionVolume = soundscapeChannel ? volumeGain(preferences.masterVolume) : 0
+  // While the volume slider is dragged, only the engine follows it (its
+  // setVolume is one small native call a frame). Storing the preferences and
+  // handing the session its volume for runs without this page both carry
+  // every soundscape's configuration, so they wait for the slider to rest:
+  // sent every frame, they made the drag choppy.
+  const [volumeDragging, setVolumeDragging] = useState(false)
+  const [restingSessionVolume, setRestingSessionVolume] = useState(sessionVolume)
+  useEffect(() => {
+    if (!volumeDragging) setRestingSessionVolume(sessionVolume)
+  }, [sessionVolume, volumeDragging])
   // The gain the visualizer weighs the soundscape's signals at: its volume while it is heard. Here, because this page
   // is the one place that knows both its own play and pause and the session's (`follow`, below).
   const soundscapeHeard = sessionHeard({ regular, source })
@@ -399,9 +409,11 @@ export function MobileSoundscapeApp() {
   useEffect(() => setSoundscapeVisualsHeardGain(soundscapeHeardGain), [soundscapeHeardGain])
 
   useEffect(() => {
-    savePreferences(preferences)
     if (native !== null) soundscapeEngine.apply(preferences)
   }, [preferences, native])
+  useEffect(() => {
+    if (!volumeDragging) savePreferences(preferences)
+  }, [preferences, volumeDragging])
 
   // The daily schedule (schedule.ts). Its events are worked out here and
   // handed to the native session, which runs them with or without this page.
@@ -431,14 +443,14 @@ export function MobileSoundscapeApp() {
     const named = new Set(events.map((event) => event.presetId))
     void nativeSoundscape!.setSchedule({
       enabled: schedule.enabled,
-      masterVolume: sessionVolume,
+      masterVolume: restingSessionVolume,
       events,
       musicEvents,
       entries: presets
         .filter((preset) => named.has(preset.id))
         .map((preset) => ({ id: preset.id, name: preset.name, configuration: JSON.stringify(soundscapeConfiguration(preset.settings)) })),
     })
-  }, [native, hydrated, schedule.enabled, events, musicEvents, presets, sessionVolume])
+  }, [native, hydrated, schedule.enabled, events, musicEvents, presets, restingSessionVolume])
 
   // The timer (timer.ts): its active duration and fade go to the session,
   // which counts down; what it reports back is shown under the dock's name.
@@ -469,8 +481,8 @@ export function MobileSoundscapeApp() {
   const currentName = currentSoundscapeName(preferences)
   useEffect(() => {
     if (!native) return
-    void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: sessionVolume })
-  }, [native, entries, currentId, currentName, sessionVolume])
+    void nativeSoundscape!.publish({ entries, currentId, currentName, masterVolume: restingSessionVolume })
+  }, [native, entries, currentId, currentName, restingSessionVolume])
 
   // Follow the session: when a media control, the schedule or the system
   // changes it, on a stop's outcome, at startup, and on coming back to the
@@ -833,6 +845,7 @@ export function MobileSoundscapeApp() {
                       onSoundscapeChannel={setSoundscapeChannel}
                       soundscapeVolume={preferences.masterVolume}
                       onSoundscapeVolume={(volume) => setPreferences((current) => ({ ...current, masterVolume: volume }))}
+                      onSoundscapeVolumeDragging={setVolumeDragging}
                       schedule={schedule.enabled}
                       scheduleHeard={source === 'schedule'}
                       onScheduleToggle={() => { void toggleSchedule() }}
