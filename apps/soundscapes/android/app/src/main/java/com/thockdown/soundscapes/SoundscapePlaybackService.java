@@ -80,6 +80,11 @@ public class SoundscapePlaybackService extends MediaBrowserService {
 
     private static SoundscapePlaybackService running;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    /** The two extra buttons a car (Android Auto) and the media controls show beside the transport. */
+    private static final String ACTION_NEXT_SOUNDSTAGE = "next_soundstage";
+    private static final String ACTION_NEXT_SOUNDSCAPE = "next_soundscape";
+    /** The artwork the car and the lock screen show: the splash, decoded once. */
+    private android.graphics.Bitmap artwork;
 
     private SoundscapeSession soundscape;
     private MusicSession music;
@@ -117,6 +122,10 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         session = new MediaSession(this, "ThockdownSoundscape");
         session.setCallback(new MediaSession.Callback() {
             @Override public void onPlay() { play(); }
+            @Override public void onCustomAction(String action, Bundle extras) {
+                if (ACTION_NEXT_SOUNDSTAGE.equals(action)) music.nextStage();
+                else if (ACTION_NEXT_SOUNDSCAPE.equals(action)) soundscape.controlSkip(1);
+            }
             @Override public void onPause() { pause(); }
             @Override public void onSkipToNext() { skip(1); }
             @Override public void onSkipToPrevious() { skip(-1); }
@@ -252,7 +261,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     private void skip(int direction) {
         if (!music.isActive()) soundscape.controlSkip(direction);
         else if (direction > 0) music.skip();
-        else music.seek(0);
+        else music.jump(-1);
     }
 
     private void stop() {
@@ -317,8 +326,13 @@ public class SoundscapePlaybackService extends MediaBrowserService {
         session.setMetadata(new MediaMetadata.Builder()
             .putString(MediaMetadata.METADATA_KEY_TITLE, title)
             .putString(MediaMetadata.METADATA_KEY_ARTIST, status)
+            .putBitmap(MediaMetadata.METADATA_KEY_ART, artwork())
             .build());
-        session.setPlaybackState(new PlaybackState.Builder()
+        PlaybackState.Builder state = new PlaybackState.Builder();
+        // Next soundstage only with music (a soundstage shapes the music alone).
+        if (withMusic) state.addCustomAction(new PlaybackState.CustomAction.Builder(ACTION_NEXT_SOUNDSTAGE, "Next soundstage", R.drawable.ic_action_soundstage).build());
+        state.addCustomAction(new PlaybackState.CustomAction.Builder(ACTION_NEXT_SOUNDSCAPE, "Next soundscape", R.drawable.ic_action_soundscape).build());
+        session.setPlaybackState(state
             .setActions(PlaybackState.ACTION_PLAY | PlaybackState.ACTION_PAUSE | PlaybackState.ACTION_PLAY_PAUSE
                 | PlaybackState.ACTION_SKIP_TO_NEXT | PlaybackState.ACTION_SKIP_TO_PREVIOUS
                 | PlaybackState.ACTION_PLAY_FROM_MEDIA_ID)
@@ -355,6 +369,24 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     }
 
     @SuppressWarnings("deprecation")
+    /**
+     * The splash (launch_image), as the car's and lock screen's artwork:
+     * decoded once, at most ARTWORK_PX on its longer side (the car scales it;
+     * a full-size bitmap would cross the session's binder for nothing).
+     */
+    private android.graphics.Bitmap artwork() {
+        if (artwork != null) return artwork;
+        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeResource(getResources(), R.drawable.launch_image, bounds);
+        android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+        options.inSampleSize = Math.max(1, Integer.highestOneBit(Math.max(bounds.outWidth, bounds.outHeight) / ARTWORK_PX));
+        artwork = android.graphics.BitmapFactory.decodeResource(getResources(), R.drawable.launch_image, options);
+        return artwork;
+    }
+
+    private static final int ARTWORK_PX = 512;
+
     private Notification.Action action(int icon, String title, PendingIntent intent) {
         return new Notification.Action.Builder(icon, title, intent).build();
     }

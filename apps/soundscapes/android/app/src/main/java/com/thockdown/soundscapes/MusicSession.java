@@ -41,6 +41,9 @@ final class MusicSession {
         void onSpectrum(String batchesJson);
 
         void onFailure(String message);
+
+        /** The car's "next soundstage" chose the stage `id` (`nextStage`). */
+        void onStage(String id);
     }
 
     private static final String CATALOG_FILE = "music-catalog.json";
@@ -157,6 +160,28 @@ final class MusicSession {
             lastFailure = "Music could not start in the background";
             if (listener != null) listener.onFailure(lastFailure);
         }
+    }
+
+    // The soundstages "next soundstage" cycles through (Android Auto), as the page published them.
+    private String[] cycleIds = new String[0];
+    private String[] cycleStages = new String[0];
+    private String cycleActiveId = null;
+
+    /** The page's soundstages in cycle order, each with its stage, and the active one (MusicPlugin's setStageCycle). */
+    synchronized void setStageCycle(String[] ids, String[] stages, String activeId) {
+        cycleIds = ids;
+        cycleStages = stages;
+        cycleActiveId = activeId;
+    }
+
+    /** Step to the next soundstage of the cycle, wrapping round, heard at once; the page follows (`onStage`). */
+    synchronized void nextStage() {
+        if (cycleIds.length == 0) return;
+        int at = java.util.Arrays.asList(cycleIds).indexOf(cycleActiveId);
+        int next = (at + 1) % cycleIds.length;
+        cycleActiveId = cycleIds[next];
+        setStage(cycleStages[next]);
+        if (listener != null) listener.onStage(cycleActiveId);
     }
 
     /** A new soundstage, heard at once if music plays. */
