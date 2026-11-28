@@ -270,7 +270,7 @@ final class MusicRenderer {
     /** Tell the renderer where the playhead is, so a splice is measured from now. */
     private void settle() throws Exception {
         long played = output.playheadFrame();
-        handle(isolate.evaluateJavaScriptAsync("musicStep(" + played + ", 0)").get(), played);
+        handle(isolate.evaluateJavaScriptAsync("musicStep(" + played + ", 0, " + (output.committedSec() + SPLICE_SLACK_SEC) + ", " + output.heardFrame() + ")").get(), played);
     }
 
     private void configure(boolean cut) throws Exception {

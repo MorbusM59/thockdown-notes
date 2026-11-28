@@ -139,14 +139,19 @@ scope.musicStep = (playedFrame: number, maxChunks: number, spliceMarginSec?: num
   // (musicVoice.ts), which changes only where the engine resumed after the
   // output ran dry (renderAhead.ts's `played`).
   const heard = voice.position - (engine.written - playedFrame);
-  // Nothing before the playhead is read again.
-  voice.input.forget(Math.min(heard, voice.position));
+  // What is HEARD, which a deep device buffer puts seconds behind the
+  // playhead: the song the lock screen names, and its position.
+  const heardNow = heard - (playedFrame - Math.min(heardFrame ?? playedFrame, playedFrame));
+  // Nothing before what is heard is asked about again (nothing before the
+  // playhead is read again). Forgetting up to the playhead dropped the cue
+  // of the song still heard behind it, so `at` named no song for the
+  // seconds the device held past a song's end, and PREVIOUS, with no song
+  // heard, stepped back to the song playing.
+  voice.input.forget(Math.min(heardNow, voice.position));
   while (tasks.length > 0 && rendered.length < maxChunks) tasks.shift()!();
   const done = rendered.splice(0);
   const chunks = done.map((chunk) => ({ s: chunk.startFrame, d: encodeHalfScaleStereo(chunk.left, chunk.right) }));
-  // What is HEARD, which a deep device buffer puts seconds behind the
-  // playhead: the song the lock screen names, and its position.
-  const at = voice.input.at(heard - (playedFrame - Math.min(heardFrame ?? playedFrame, playedFrame)));
+  const at = voice.input.at(heardNow);
   // The output frame the next song is heard from, so the output can report
   // exactly then rather than by polling (-1: none queued).
   const cue = voice.input.nextCue(heard);
