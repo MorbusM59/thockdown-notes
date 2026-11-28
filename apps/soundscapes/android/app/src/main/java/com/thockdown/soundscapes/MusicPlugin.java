@@ -72,6 +72,14 @@ public class MusicPlugin extends Plugin {
             // Retained, as a stage: the car changes the sets with the page paused.
             notifyListeners("catalog", data, true);
         }
+
+        @Override
+        public void onChannel(boolean on) {
+            JSObject data = new JSObject();
+            data.put("on", on);
+            // Retained, as a catalog: the car switches the channel with the page paused.
+            notifyListeners("channel", data, true);
+        }
     };
 
     /** The delay calibration's loop while it plays (CalibrationLoop), or null. */
@@ -336,6 +344,7 @@ public class MusicPlugin extends Plugin {
     public void getState(PluginCall call) {
         JSObject out = new JSObject();
         out.put("playing", session.isPlaying());
+        out.put("channel", session.channelOn());
         call.resolve(out);
     }
 }

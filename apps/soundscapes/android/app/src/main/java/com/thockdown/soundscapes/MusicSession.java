@@ -47,6 +47,9 @@ final class MusicSession {
 
         /** The catalog changed away from the page (`editCatalog`): the page reloads it. */
         void onCatalog(String catalogJson);
+
+        /** The music channel was switched (the page's own switch included): the page's toggle follows. */
+        void onChannel(boolean on);
     }
 
     private static final String CATALOG_FILE = "music-catalog.json";
@@ -132,6 +135,12 @@ final class MusicSession {
         write(CATALOG_FILE, catalogJson);
         if (renderer != null) renderer.setCatalog(catalogJson);
         SoundscapePlaybackService.catalogChanged();
+    }
+
+    /** Start or resume the music with the soundstage last played (the car's play, as the page's startMusic); nothing with its channel switched out. */
+    synchronized void start() {
+        if (stage == null) stage = read(STAGE_FILE, null);
+        if (stage != null) play(stage);
     }
 
     /** Play with `stageJson` (MusicStage), starting the music if it is not playing; the soundstage otherwise. */
@@ -255,6 +264,8 @@ final class MusicSession {
         if (channelOn() == on) return;
         channel = on;
         write(CHANNEL_FILE, on ? "on" : "off");
+        if (listener != null) listener.onChannel(on);
+        SoundscapePlaybackService.refreshIfRunning();
         if (on) {
             // A scheduled run due now starts; the listener's music waits for play, as from a pause.
             applySchedule(SoundscapeSession.HANDOVER_FADE_SEC);
@@ -267,7 +278,8 @@ final class MusicSession {
         pause();
     }
 
-    private boolean channelOn() {
+    /** Whether the music channel is switched into the mix: the one record of it, which the page and the car both follow. */
+    synchronized boolean channelOn() {
         if (channel == null) channel = !"off".equals(read(CHANNEL_FILE, "on").trim());
         return channel;
     }
@@ -583,9 +595,12 @@ final class MusicSession {
      * a request to hear it, so with nothing playing the music starts first.
      */
     synchronized void editCatalog(String editJson) {
+        // The rules run in the renderer, so the music has to be in the mix for
+        // the edit to land at all: with its channel out, an edit was dropped.
+        // Asking for music from the car switches it in, as a song tapped in the app does.
+        setChannel(true);
         if (renderer == null) {
-            if (stage == null) stage = read(STAGE_FILE, null);
-            if (stage != null) play(stage);
+            start();
         } else if (output.isPaused()) {
             resume();
         }
