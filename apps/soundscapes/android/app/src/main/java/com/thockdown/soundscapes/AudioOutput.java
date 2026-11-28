@@ -6,6 +6,7 @@ import android.media.AudioManager;
 import android.media.AudioTimestamp;
 import android.media.AudioTrack;
 import android.os.Process;
+import android.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,6 +55,8 @@ import java.util.List;
  */
 final class AudioOutput {
     private static final int BLOCK_FRAMES = 1024;
+    /** One line per state change (never per block): `adb logcat -s ThockdownAudio`. */
+    private static final String LOG = "ThockdownAudio";
     /** How much the device holds while the app is in the background. */
     private static final double DEEP_BUFFER_SEC = 4;
     /** Whether the app is in the background (MainActivity stopped), for an output opened later. */
@@ -157,6 +160,7 @@ final class AudioOutput {
             }
         }
         offloaded = built != null;
+        Log.i(LOG, "track built: offloaded " + offloaded + ", background " + background);
         if (built == null) built = builder().build();
         // The capacity is the deep depth; the depth in use is set here. An
         // offloaded track's buffer is the platform's to size.
@@ -179,6 +183,7 @@ final class AudioOutput {
 
     /** The app went to the background (true) or came back (false); MainActivity's onStop and onStart. */
     static void setBackground(boolean inBackground) {
+        Log.i(LOG, "background " + inBackground);
         AudioOutput output;
         synchronized (AudioOutput.class) {
             background = inBackground;
@@ -202,6 +207,7 @@ final class AudioOutput {
      * device with seconds of silence, which a resume would wait behind.
      */
     synchronized void heardNow() {
+        Log.i(LOG, "heard now: depth " + depthFrames + ", holding " + allHolding());
         if (depthFrames > shallowFrames) {
             resyncWanted = true;
             notifyAll();
@@ -216,6 +222,7 @@ final class AudioOutput {
      */
     private void resync() {
         resyncWanted = false;
+        Log.i(LOG, "resync: background " + background + ", depth " + depthFrames + ", queued " + queuedFrames() + ", play state " + track.getPlayState());
         track.pause();
         long heard = trackBase + (track.getPlaybackHeadPosition() & 0xffffffffL);
         track.flush();
@@ -388,11 +395,13 @@ final class AudioOutput {
                 if (!running) return;
                 if (allHolding()) {
                     track.pause();
+                    Log.i(LOG, "all lanes holding: track paused");
                     try {
                         while (running && allHolding()) wait();
                     } catch (InterruptedException ignored) {
                         return;
                     }
+                    Log.i(LOG, "a lane resumed: track plays, resync " + resyncWanted);
                     if (!running) return;
                     playedNanos = System.nanoTime();
                     track.play();

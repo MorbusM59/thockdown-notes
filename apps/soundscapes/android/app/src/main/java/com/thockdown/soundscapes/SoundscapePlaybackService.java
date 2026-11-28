@@ -219,6 +219,7 @@ public class SoundscapePlaybackService extends MediaBrowserService {
     /** Resume what is paused; with nothing at all, the soundscape last heard (as before there was music). */
     private void play() {
         boolean withMusic = music.isActive();
+        android.util.Log.i("ThockdownAudio", "media play: music active " + withMusic + ", soundscape active " + soundscape.isActive());
         if (withMusic) music.resume();
         if (soundscape.isActive() || !withMusic) soundscape.controlPlay();
     }
