@@ -89,6 +89,16 @@ final class AudioOutput {
     private final boolean offloadSupported;
     /** Pause, flush and rewind before the next block (see THE DEVICE BUFFER). */
     private boolean resyncWanted = false;
+    /**
+     * Until when (System.nanoTime) the output stays SHALLOW in the
+     * background after the listener pressed something (`interact`); 0 for
+     * no such hold.
+     */
+    private long interactiveUntilNanos = 0;
+    /** How long a press keeps the background output shallow, so the presses after it are heard at once too. */
+    private static final double INTERACTIVE_HOLD_SEC = 15;
+    /** The longest a press waits for the writer to collapse the buffer (it does so between two blocks). */
+    private static final long INTERACT_WAIT_MS = 250;
     private final Thread writer;
     private final OutputLimiter limiter;
     private final List<OutputLane> lanes = new ArrayList<>();
@@ -177,6 +187,44 @@ final class AudioOutput {
             .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_POWER_SAVING);
     }
 
+    /**
+     * THE LISTENER PRESSED SOMETHING (the lock screen, the notification, a
+     * car, headphones): what they asked for must be heard now, not after the
+     * seconds a deep background buffer holds. The output returns to the
+     * foreground's shallow depth (a resync: the track flushed and every lane
+     * rewound to the frame heard) and stays there for INTERACTIVE_HOLD_SEC,
+     * after which the writer deepens it again. Returns once the collapse is
+     * done (or the writer cannot do it now: everything paused, which the
+     * resume's own resync covers), so a step decided after this call is
+     * spliced at the shallow margin.
+     */
+    static void interact() {
+        AudioOutput output;
+        synchronized (AudioOutput.class) {
+            output = shared;
+        }
+        if (output == null) return;
+        synchronized (output) {
+            long now = System.nanoTime();
+            output.interactiveUntilNanos = now + (long) (INTERACTIVE_HOLD_SEC * 1e9);
+            if (!output.deep() && !output.resyncWanted) return;
+            Log.i(LOG, "interact: collapsing depth " + output.depthFrames);
+            output.wantedFrames = output.shallowFrames;
+            output.resyncWanted = true;
+            output.notifyAll();
+            long deadline = now + INTERACT_WAIT_MS * 1_000_000L;
+            try {
+                while (output.running && output.resyncWanted && !output.allHolding()) {
+                    long left = (deadline - System.nanoTime()) / 1_000_000L;
+                    if (left <= 0) break;
+                    output.wait(left);
+                }
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
     static boolean inBackground() {
         return background;
     }
@@ -191,6 +239,8 @@ final class AudioOutput {
         }
         if (output == null) return;
         synchronized (output) {
+            // A press's hold keeps it shallow; the writer deepens it when the hold ends.
+            if (inBackground && System.nanoTime() < output.interactiveUntilNanos) return;
             output.wantedFrames = inBackground ? Integer.MAX_VALUE : output.shallowFrames;
             // Deepening needs nothing undone unless the track is to become
             // offloaded; a return must be heard at once.
@@ -240,6 +290,8 @@ final class AudioOutput {
         }
         playedNanos = System.nanoTime();
         track.play();
+        // A press waiting for the collapse (interact) goes on.
+        notifyAll();
     }
 
     /** Frames the device buffer (at its present depth) and one writer block hold beyond a playhead: the least a splice must leave. */
@@ -405,6 +457,14 @@ final class AudioOutput {
                     if (!running) return;
                     playedNanos = System.nanoTime();
                     track.play();
+                }
+                if (interactiveUntilNanos != 0 && System.nanoTime() >= interactiveUntilNanos) {
+                    // A press's hold has passed: in the background the buffer deepens again.
+                    interactiveUntilNanos = 0;
+                    if (background && !deep()) {
+                        wantedFrames = Integer.MAX_VALUE;
+                        if (offloadSupported) resyncWanted = true;
+                    }
                 }
                 if (resyncWanted) {
                     resync();
