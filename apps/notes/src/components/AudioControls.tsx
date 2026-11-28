@@ -192,6 +192,8 @@ export const AudioControls = memo(function AudioControls({
   filterRef.current = poolFilter
 
   const currentSongRef = useRef<MusicSongEntry | null>(null)
+  /** Music stopped by the pool emptying, to start again when it holds a song (the pool-following effect). */
+  const waitingForPoolRef = useRef(false)
 
   // Back-stack of what has been played, so the rewind button's right-click can
   // walk backwards more than one song. A ref, not state: nothing renders from
@@ -450,6 +452,8 @@ export const AudioControls = memo(function AudioControls({
   // ---------------------------------------------------------------- play / stop
 
   const handlePlayToggle = useCallback(async () => {
+    // The listener's own play or pause ends any wait for the pool.
+    waitingForPoolRef.current = false
     if (isPlaying) {
       musicPlayerService.pause()
       setIsPlaying(false)
@@ -648,20 +652,31 @@ export const AudioControls = memo(function AudioControls({
    * states the same rule): while music plays, a change that leaves the song
    * playing out of the pool (its set deactivated, the filter, the song
    * removed) moves on to the pool's next pick, and stops the music when the
-   * pool is empty. Paused, nothing moves. The desktop has no "playing with
-   * nothing to play" state for a filling pool to restart: play with an empty
-   * pool does not start.
+   * pool is empty. Paused, nothing moves. Music stopped BY the pool
+   * emptying (not by the listener) starts again with the pool's next pick
+   * once the pool changes to hold a song (`waitingForPoolRef`).
    */
+  // The wait ends once a song plays, whichever route started it.
+  const advanceFollowingPool = useCallback(async () => {
+    await advanceToNextSong()
+    if (currentSongRef.current) waitingForPoolRef.current = false
+  }, [advanceToNextSong])
   const currentSongSetIds = currentSong?.setIds
   useEffect(() => {
-    // Keyed on what can change membership (the sets, the filter, the song's own sets), not on the song:
-    // a song chosen from outside the pool plays until the pool next changes.
+    // Keyed on what can change membership (the sets, the filter, the song's own sets, the counts), not on the
+    // song: a song chosen from outside the pool plays until the pool next changes.
+    if (waitingForPoolRef.current && !isPlaying) {
+      // Stops again (and stays waiting) when the pool is still empty.
+      void advanceFollowingPool()
+      return
+    }
     const song = currentSongRef.current
     if (!isPlaying || !song) return
     if (createPoolMatcher({ slots: activeSlots, filter: poolFilter })(song)) return
-    void advanceToNextSong()
+    waitingForPoolRef.current = true
+    void advanceFollowingPool()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isPlaying and the song are read, not watched (above)
-  }, [activeSlots, poolFilter, currentSongSetIds, advanceToNextSong])
+  }, [activeSlots, poolFilter, currentSongSetIds, counts, advanceFollowingPool])
 
   const addPathsToMusicSet = useCallback(async (slot: PlaylistSlot, paths: string[]): Promise<boolean> => {
     if (paths.length === 0) return false

@@ -500,6 +500,30 @@ final class MusicSession {
             }
 
             @Override
+            public void onPoolEmptied() {
+                synchronized (MusicSession.this) {
+                    if (renderer != self[0] || output == null) return;
+                    // A pause's fade, so nothing clicks; the song heard is gone from the screen.
+                    output.setPaused(true);
+                    heardId = null;
+                    heardSeconds = 0;
+                    report();
+                }
+                SoundscapePlaybackService.refreshIfRunning();
+                SoundscapePlaybackService.sourceChanged(context, false);
+            }
+
+            @Override
+            public void onPoolRefilled() {
+                synchronized (MusicSession.this) {
+                    if (renderer != self[0] || output == null || !channelOn()) return;
+                    output.setPaused(false);
+                    report();
+                }
+                SoundscapePlaybackService.sourceChanged(context, true);
+            }
+
+            @Override
             public void onQueue(String json) {
                 synchronized (MusicSession.this) {
                     if (renderer != self[0] || json.equals(queueJson)) return;
