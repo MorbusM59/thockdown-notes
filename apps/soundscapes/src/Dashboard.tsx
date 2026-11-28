@@ -22,7 +22,7 @@ import { songAlbumText, songArtistText, songTitleText, type MusicSongEntry } fro
 import { musicListening } from '@thockdown/visualizer/sound/musicListening'
 import { mixHeard, switchSoundscapeChannel, toggleMix } from './mixTransport'
 import type { RegularMode } from './backgroundAudioHost'
-import { audioOutputIcon, readAudioConnection, resumeAudioConnection, subscribeAudioConnection } from './audioRoute'
+import { audioOutputIcon, BLUETOOTH_B_PATH, readAudioConnection, resumeAudioConnection, subscribeAudioConnection } from './audioRoute'
 import { readMusicChannel, readMusicPlaying, setMusicChannel, startMusic, subscribeMusicPlaying } from './mobileMusicPlayer'
 
 /** The music sets: a tap puts a set in the pool or takes it out, a hold makes it the only one (setPress.ts, as everywhere); neither starts playback. */
@@ -424,7 +424,9 @@ export function DashboardDock({ toggles, timeLeft, soundscape, soundscapeHeard, 
                 setPicking(false)
               }}
             >
-              <span className={audioOutputIcon(output.kind)} aria-hidden="true" />
+              {output.kind === 'bluetooth'
+                ? <svg className="svg-inline--fa" viewBox="0 0 256 512" width="0.5em" height="1em" fill="currentColor" aria-hidden="true"><path d={BLUETOOTH_B_PATH} /></svg>
+                : <span className={`fa-solid ${audioOutputIcon(output.kind)}`} aria-hidden="true" />}
             </button>
           ))}
           <button

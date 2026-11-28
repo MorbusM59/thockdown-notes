@@ -58,16 +58,19 @@ export function resumeAudioConnection(id?: number): void {
   void plugin?.resume(id === undefined ? {} : { id })
 }
 
-/** The Font Awesome classes of an output kind's icon (Bluetooth's is a brand glyph). */
+/** The Font Awesome solid icon of an output kind; Bluetooth's is a brand glyph, drawn by `AudioOutputIcon` from its SVG path rather than shipping the whole brands font for it. */
 export function audioOutputIcon(kind: AudioOutputKind): string {
   switch (kind) {
-    case 'speaker': return 'fa-solid fa-volume-high'
-    case 'wired': return 'fa-solid fa-plug'
-    case 'bluetooth': return 'fa-brands fa-bluetooth-b'
-    case 'hdmi': return 'fa-solid fa-tv'
-    case 'hearing': return 'fa-solid fa-ear-listen'
+    case 'speaker': return 'fa-volume-high'
+    case 'wired': return 'fa-plug'
+    case 'bluetooth': return 'fa-bluetooth-b'
+    case 'hdmi': return 'fa-tv'
+    case 'hearing': return 'fa-ear-listen'
   }
 }
+
+/** Font Awesome Free's bluetooth-b (CC BY 4.0), viewBox 0 0 256 512. */
+export const BLUETOOTH_B_PATH = 'M164.9 260L257.5 156.7 111.6 0 111.6 206.3 25.4 120.2-6 151.6 102.1 260-6 368.4 25.4 399.8 111.6 313.7 114.3 512 262.8 363.4 164.9 260zm40.9-103l-50 50-.3-100.3 50.3 50.3zm-50 156l50 50-50.3 50.3 .3-100.3z'
 
 export function installAudioRoute(): void {
   if (!Capacitor.isNativePlatform()) return
