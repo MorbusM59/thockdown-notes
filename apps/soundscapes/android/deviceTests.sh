@@ -31,3 +31,8 @@ run ScheduleWithoutExactAlarmsTest || { adb shell dumpsys alarm | grep -n -i "so
 
 # The music files the beat analysis reads by range, through a real WebView.
 run MusicFileServerRangeTest
+
+# A seek into a VBR MP3 decodes the audio at the time it reports, and what stepping there costs.
+adb logcat -c
+run SongDecoderSeekTest
+adb logcat -d -s SongDecoderSeekTest
