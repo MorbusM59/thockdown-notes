@@ -39,7 +39,7 @@ import org.json.JSONObject;
  */
 final class MusicRenderer {
     interface Listener {
-        /** What is heard now: a song and how far into it, in seconds (null for nothing), at the output's playhead `frame`. */
+        /** What is heard now: a song and how far into it, in seconds (null for nothing), at output frame `frame`, the frame the device is playing (reportedFrame), never the playhead. */
         void onHeard(Integer songId, double seconds, long frame);
 
         /** Spectrum frames for the visualizer, while it is on (`setSpectrum`): musicSandbox.ts's batches, as a JSON array. */
@@ -360,7 +360,8 @@ final class MusicRenderer {
     /** Tell the renderer where the playhead is, so a splice is measured from now. */
     private void settle() throws Exception {
         long played = output.playheadFrame();
-        handle(isolate.evaluateJavaScriptAsync("musicStep(" + played + ", 0, " + (output.committedSec() + SPLICE_SLACK_SEC) + ", " + output.heardFrame() + ")").get(), played);
+        long heard = reportedFrame(output);
+        handle(isolate.evaluateJavaScriptAsync("musicStep(" + played + ", 0, " + (output.committedSec() + SPLICE_SLACK_SEC) + ", " + heard + ")").get(), heard);
     }
 
     private void configure(boolean cut) throws Exception {
@@ -483,8 +484,22 @@ final class MusicRenderer {
         if (decoder.finished()) startSong(next(decoding.id), 0, false);
     }
 
-    /** Write a step's chunks into the output and report what is heard at `played`, the playhead the step was told; returns how much input is held ahead. */
-    private long[] handle(String result, long played) throws Exception {
+    /**
+     * The output frame a step's `at` describes, and therefore the frame its
+     * position is reported with: the ONE value handed to musicStep as its
+     * heardFrame and to onHeard as the frame, so the two cannot describe
+     * different moments. They did: `at` named the frame the device was
+     * playing while onHeard was given the playhead, the frame last handed
+     * to it, and the page timed the position by the playhead's heard time,
+     * so the visuals ran ahead of the sound by whatever the device buffer
+     * held (seconds with the deep buffer).
+     */
+    static long reportedFrame(OutputLane output) {
+        return output.playheadFrame();
+    }
+
+    /** Write a step's chunks into the output and report what is heard at `heard`, the frame the step's `at` describes (reportedFrame); returns how much input is held ahead. */
+    private long[] handle(String result, long heard) throws Exception {
         JSONObject step = new JSONObject(result);
         JSONArray chunks = step.getJSONArray("chunks");
         for (int index = 0; index < chunks.length(); index += 1) {
@@ -500,7 +515,7 @@ final class MusicRenderer {
             heardId = id;
             heardSecond = second;
             if (java.util.Objects.equals(id, steppedId)) steppedId = null;
-            listener.onHeard(id, at == null ? 0 : (double) at.getLong("offsetFrames") / output.sampleRate, played);
+            listener.onHeard(id, at == null ? 0 : (double) at.getLong("offsetFrames") / output.sampleRate, heard);
         }
         // The lane refills in bursts, so it is asked to report when the next
         // song is heard: that is when the lock screen must name it.
@@ -527,8 +542,9 @@ final class MusicRenderer {
                     continue;
                 }
                 long played = output.playheadFrame();
+                long heard = reportedFrame(output);
                 long[] step = handle(isolate.evaluateJavaScriptAsync(
-                    "musicStep(" + played + ", " + MAX_CHUNKS_PER_STEP + ", " + (output.committedSec() + SPLICE_SLACK_SEC) + ", " + output.heardFrame() + ")").get(), played);
+                    "musicStep(" + played + ", " + MAX_CHUNKS_PER_STEP + ", " + (output.committedSec() + SPLICE_SLACK_SEC) + ", " + heard + ")").get(), heard);
                 // RENDERING COMES FIRST: a step that stopped at its cap has
                 // input left to render, and the output is fed before the
                 // decoder runs further ahead. Decoding after every step
