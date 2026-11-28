@@ -77,7 +77,7 @@ export function VisualizerPage({ onExit, colors, mode, visualizer, beatSettings,
       <VisualizerScene
         boxPx={visualizerBoxPx(font) * (double ? 2 : 1)}
         fontFamily={monoFontFamily(font.style)}
-        fontSizePx={font.sizePx * (double ? 2 : 1)}
+        fontSizePx={font.sizePx /* double size doubles the boxes, the text keeps its size (visualizerFontForMode) */}
         solidMaxPixelRatio={1.5}
         pixelScale={1}
         sceneSeed="soundscapes"

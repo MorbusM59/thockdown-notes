@@ -33,12 +33,14 @@ export const DEFAULT_VISUALIZER_FONT: VisualizerFont = {
 }
 
 /**
- * The font the scene draws with in a size mode. The setting is one for both
- * modes; double size mode doubles the page, so it draws at half the size and
- * the letters stay as large on screen as in regular mode.
+ * The font the scene draws with in double size mode, where the page itself is
+ * drawn at twice the size. The BOXES double with the page, and the TEXT keeps
+ * its regular on-screen size: the font is halved and the box-to-font ratio
+ * doubled, so the box in CSS px is the setting's own. The phone, whose page is
+ * not doubled, applies the same rule directly (VisualizerPage.tsx).
  */
 export function visualizerFontForMode(font: VisualizerFont, isDoubleSize: boolean): VisualizerFont {
-  return isDoubleSize ? { ...font, sizePx: font.sizePx / 2 } : font
+  return isDoubleSize ? { ...font, sizePx: font.sizePx / 2, boxSize: font.boxSize * 2 } : font
 }
 
 /** A font size on its 0.5px step, inside its range. */

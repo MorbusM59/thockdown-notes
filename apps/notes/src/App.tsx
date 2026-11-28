@@ -1483,7 +1483,7 @@ function App() {
   const [viewLetterSpacingEm, setViewLetterSpacingEm] = useState<number>(DEFAULT_VIEW_LETTER_SPACING_EM)
   const [editorStyle, setEditorStyle] = useState<MonoFontKey>(DEFAULT_EDITOR_STYLE)
   const [editorSpacing, setEditorSpacing] = useState<number>(DEFAULT_EDITOR_LINE_HEIGHT_MULTIPLIER)
-  // The visualizer's font: one setting for both size modes; double size mode draws it at half its size (visualizerFontForMode).
+  // The visualizer's font: one setting for both size modes; double size mode doubles its boxes and keeps its text size (visualizerFontForMode).
   const [visualizerFontSetting, setVisualizerFont] = useState<VisualizerFont>(DEFAULT_VISUALIZER_FONT)
   const [editorGlyphPaddingPx, setEditorGlyphPaddingPx] = useState<number>(DEFAULT_EDITOR_GLYPH_SIDE_GAP_PX)
   const [uiFontStyle, setUiFontStyle] = useState<UiFontKey>(DEFAULT_UI_FONT_KEY)
